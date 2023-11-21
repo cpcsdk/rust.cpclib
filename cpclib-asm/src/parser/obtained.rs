@@ -2678,7 +2678,6 @@ impl LocatedListing {
     ) -> PResult<Arc<LocatedListing>, Z80ParserError> {
         let mut tokens = Vec::with_capacity(20);
 
-
         // The context is similar to the initial one ...
         let mut ctx = input_code.state.clone();
         // ... but the state can be modified to forbid some keywords
@@ -2925,8 +2924,6 @@ impl ParseToken for Token {
     }
 }
 
-
-
 impl ListingExt for LocatedListing {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
@@ -2935,7 +2932,10 @@ impl ListingExt for LocatedListing {
         panic!("Cannot be used in this context");
     }
 
-    fn to_bytes_with_options(&self, options: crate::assembler::EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes_with_options(
+        &self,
+        options: crate::assembler::EnvOptions
+    ) -> Result<Vec<u8>, AssemblerError> {
         let (_, env) =
             crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)
                 .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;

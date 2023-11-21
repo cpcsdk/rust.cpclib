@@ -180,7 +180,7 @@ fn main() -> std::io::Result<()> {
                 ) as u16;
 
                 AmsdosHeader::compute_binary_header(&filename, load, exec, &content)
-            }
+            },
             AmsdosFileType::Basic => AmsdosHeader::compute_basic_header(&filename, &content),
             _ => unimplemented!()
         };

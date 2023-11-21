@@ -70,7 +70,7 @@ impl<'a> Completer for XferInteractorHelper<'a> {
 
         // Ensure M4 completion is not used for launch
         match command {
-            Some("launch") => {}
+            Some("launch") => {},
             _ => complete.extend(m4.1)
         }
 
@@ -215,22 +215,22 @@ ls                  List the files in the current M4 directory.
 !<command>          Launch <command> on the host machine.
                     "
                     )
-                }
+                },
 
                 XferCommand::Exit => {
                     self.exit = true;
-                }
+                },
 
                 XferCommand::Pwd => {
                     match self.xfer.current_working_directory() {
                         Ok(pwd) => {
                             println!("{pwd}");
-                        }
+                        },
                         Err(e) => {
                             eprintln!("{e}");
                         }
                     }
-                }
+                },
 
                 XferCommand::Ls(_path) => {
                     let content = self.xfer.current_folder_content();
@@ -255,7 +255,7 @@ ls                  List the files in the current M4 directory.
                     };
 
                     println!("{}", grid.fit_into_width(grid_width).unwrap());
-                }
+                },
 
                 XferCommand::Cd(path) => {
                     let path = match path {
@@ -270,14 +270,14 @@ ls                  List the files in the current M4 directory.
                     else {
                         self.cwd = self.xfer.current_working_directory().unwrap()
                     }
-                }
+                },
 
                 XferCommand::Era(path) => {
                     let res = self.xfer.rm(path);
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                     }
-                }
+                },
 
                 XferCommand::Put(arg1) => {
                     let path = std::path::Path::new(&arg1);
@@ -293,7 +293,7 @@ ls                  List the files in the current M4 directory.
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                     }
-                }
+                },
 
                 XferCommand::LaunchHost(path) => {
                     if !std::path::Path::new(&path).exists() {
@@ -305,7 +305,7 @@ ls                  List the files in the current M4 directory.
                             eprintln!("{}", res.err().unwrap());
                         }
                     }
-                }
+                },
 
                 XferCommand::LaunchM4(path) => {
                     // Ensure the path is absolute (TODO check if this code is not also elswhere)
@@ -320,19 +320,19 @@ ls                  List the files in the current M4 directory.
                     if res.is_err() {
                         eprintln!("{}", res.err().unwrap());
                     }
-                }
+                },
 
                 XferCommand::LocalCommand(command) => {
                     Exec::shell(command).join(); // ignore failure
-                }
+                },
 
                 XferCommand::Reboot => {
                     self.xfer.reset_m4().unwrap();
-                }
+                },
 
                 XferCommand::Reset => {
                     self.xfer.reset_cpc().unwrap();
-                }
+                },
 
                 _ => unimplemented!()
             }
@@ -381,11 +381,11 @@ ls                  List the files in the current M4 directory.
                 Ok(line) => {
                     self.treat_line(&line);
                     rl.add_history_entry(line);
-                }
+                },
                 Err(ReadlineError::Interrupted) => {
                     println!("CTRL-C");
                     break;
-                }
+                },
                 Err(ReadlineError::Eof) => break,
                 Err(err) => {
                     println!("Error: {err:?}");

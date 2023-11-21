@@ -35,7 +35,7 @@ impl TransformationPosition {
                 else {
                     Some(idx)
                 }
-            }
+            },
         }
     }
 }
@@ -95,7 +95,7 @@ impl Transformation {
                 let mut res = matrix.clone();
                 res.remove_odd_columns();
                 res
-            }
+            },
 
             Transformation::SkipLeftPixelColumns(amount) => {
                 matrix.window(
@@ -104,7 +104,7 @@ impl Transformation {
                     matrix.width().saturating_sub(*amount as _) as _,
                     matrix.height() as _
                 )
-            }
+            },
 
             Transformation::SkipTopPixelLines(amount) => {
                 matrix.window(
@@ -113,15 +113,15 @@ impl Transformation {
                     matrix.width() as _,
                     matrix.height().saturating_sub(*amount as _) as _
                 )
-            }
+            },
 
             Transformation::KeepLeftPixelColumns(usize) => {
                 matrix.window(0, 0, *usize as _, matrix.height() as _)
-            }
+            },
 
             Transformation::KeepTopPixelLines(usize) => {
                 matrix.window(0, 0, matrix.width() as _, *usize as _)
-            }
+            },
 
             Transformation::BlankLines {
                 pattern,
@@ -146,7 +146,7 @@ impl Transformation {
                     res.add_line(position, &line);
                 });
                 res
-            }
+            },
 
             Transformation::BlankColumns {
                 pattern,
@@ -580,7 +580,7 @@ impl OutputFormat {
                         display_address.move_to_previous_word();
                     }
                 }
-            }
+            },
             _ => {}
         }
     }
@@ -784,12 +784,12 @@ impl TileHorizontalCapture {
         match self {
             Self::AlwaysFromLeftToRight => {
                 Box::new(StandardHorizontalCounter::always_from_left_to_right())
-            }
+            },
             Self::AlwaysFromRightToLeft => unimplemented!(),
             Self::StartFromRightAndFlipAtTheEndOfLine => unimplemented!(),
             Self::StartFromLeftAndFlipAtTheEndOfLine => {
                 Box::<StartFromLeftAndFlipAtTheEndOfLine>::default()
-            }
+            },
         }
     }
 }
@@ -1173,7 +1173,7 @@ impl<'a> ImageConverter<'a> {
                         bytes_width,
                         height
                     })
-                }
+                },
                 _ => unreachable!()
             }
         }
@@ -1213,7 +1213,7 @@ impl<'a> ImageConverter<'a> {
                         bytes_width,
                         height
                     })
-                }
+                },
                 _ => unreachable!()
             }
         }
@@ -1281,7 +1281,7 @@ impl<'a> ImageConverter<'a> {
                     grid_height,
                     sprite
                 )
-            }
+            },
 
             _ => unreachable!()
         }
@@ -1470,7 +1470,7 @@ impl<'a> ImageConverter<'a> {
                         match value {
                             None => {
                                 // eprintln!("Unable to access byte in {}, {}", x_coord, y_coord);
-                            }
+                            },
                             Some(byte) => {
                                 let page = current_address.page() as usize;
                                 let address = current_address.offset() as usize * 2

@@ -10,7 +10,10 @@ pub fn nop() -> Token {
 
 /// Generate org directive
 pub fn org<E: Into<Expr>>(val: E) -> Token {
-    Token::Org{val1: val.into(), val2: None}
+    Token::Org {
+        val1: val.into(),
+        val2: None
+    }
 }
 
 #[allow(missing_docs)]

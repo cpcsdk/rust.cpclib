@@ -73,7 +73,7 @@ impl Runner for BasmRunner {
                 println!("{report}");
 
                 Ok(())
-            }
+            },
             Err(e) => Err(format!("Error while assembling.\n{e}"))
         }
     }

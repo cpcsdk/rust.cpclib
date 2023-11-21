@@ -48,7 +48,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 let char = next.chars().next().unwrap();
                 match char {
                     ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
-                    '\n' => {}
+                    '\n' => {},
                     _ => panic!("char '{}' is unhandled", char)
                 }
             }
@@ -105,13 +105,13 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
                     .context(StrContext::Label("Numeric expression expected"))
             )
             .parse_next(input)?
-        }
+        },
         Kind::String => {
             cut_err(
                 parse_string_expression.context(StrContext::Label("String expression expected"))
             )
             .parse_next(input)?
-        }
+        },
     };
 
     let mut res = var.1;
@@ -591,7 +591,7 @@ pub fn parse_numeric_expression<'code>(
                     parse_float_variable
                 ))
                 .parse_next(input)
-            }
+            },
             NumericExpressionConstraint::Integer => {
                 alt((
                     parse_asc,
@@ -602,7 +602,7 @@ pub fn parse_numeric_expression<'code>(
                     parse_integer_variable
                 ))
                 .parse_next(input)
-            }
+            },
         }
     }
 }
@@ -1024,7 +1024,7 @@ mod test {
             Ok(value) => {
                 println!("{:x}", &value);
                 assert_eq!(0x1234, value);
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }
@@ -1040,7 +1040,7 @@ mod test {
                 );
                 assert_eq!(bytes[1], 0x34);
                 assert_eq!(bytes[2], 0x12);
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }
@@ -1053,7 +1053,7 @@ mod test {
             Ok(line) => {
                 println!("{:?}", &line);
                 line
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }
@@ -1065,7 +1065,7 @@ mod test {
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }
@@ -1092,7 +1092,7 @@ mod test {
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }
@@ -1104,7 +1104,7 @@ mod test {
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
-            }
+            },
             Err(e) => {
                 panic!("{:?}", e);
             }

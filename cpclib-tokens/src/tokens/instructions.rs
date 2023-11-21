@@ -1,5 +1,4 @@
-use std::borrow::Borrow;
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 
 use cpclib_common::itertools::Itertools;
@@ -85,12 +84,12 @@ impl MacroParam {
         match self {
             Self::Single(s) => {
                 Expr::do_apply_macro_labels_modification(s, seed);
-            }
+            },
             Self::List(l) => {
                 l.iter_mut().for_each(|m| {
                     m.do_apply_macro_labels_modification(seed);
                 })
-            }
+            },
         }
     }
 
@@ -350,7 +349,7 @@ is_mnemonic!(
 /// Stable ticker serves to count nops with the assembler !
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
-pub enum StableTickerAction<S: AsRef<str>>  {
+pub enum StableTickerAction<S: AsRef<str>> {
     /// Start of the ticker with its name that will contains its duration
     Start(S),
     Stop
@@ -505,7 +504,11 @@ impl ToSimpleToken for Token {
 pub enum Token {
     Align(Expr, Option<Expr>),
     Assert(Expr, Option<Vec<FormattedExpr>>),
-    Assign{label:SmolStr, expr: Expr, op: Option<BinaryOperation>},
+    Assign {
+        label: SmolStr,
+        expr: Expr,
+        op: Option<BinaryOperation>
+    },
 
     /// Configure the bank - completely incompatible with rasm behavior
     /// The expression corresponds to the GATE ARRAY value to select the bank of interest
@@ -533,7 +536,10 @@ pub enum Token {
     Export(Vec<SmolStr>),
 
     Fail(Option<Vec<FormattedExpr>>),
-    Field{label: SmolStr, expr: Expr},
+    Field {
+        label: SmolStr,
+        expr: Expr
+    },
     For {
         label: SmolStr,
         start: Expr,
@@ -566,7 +572,11 @@ pub enum Token {
     Limit(Expr),
     List,
 
-    Macro{name: SmolStr, params: Vec<SmolStr>, content: String}, // Content of the macro is parsed on use
+    Macro {
+        name: SmolStr,
+        params: Vec<SmolStr>,
+        content: String
+    }, // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */
     Map(Expr),
@@ -576,7 +586,11 @@ pub enum Token {
     // Fake push directive with several arguments
     MultiPush(Vec<DataAccess>),
 
-    Next{label: SmolStr, source: SmolStr, expr: Option<Expr>},
+    Next {
+        label: SmolStr,
+        source: SmolStr,
+        expr: Option<Expr>
+    },
     NoExport(Vec<SmolStr>),
     NoList,
 
@@ -587,7 +601,10 @@ pub enum Token {
         Option<DataAccess>,
         Option<Register8>
     ),
-    Org{val1: Expr, val2: Option<Expr>},
+    Org {
+        val1: Expr,
+        val2: Option<Expr>
+    },
     Pause,
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
@@ -622,7 +639,11 @@ pub enum Token {
     Section(SmolStr),
     SetCPC(Expr),
     SetCrtc(Expr),
-    SetN{label: SmolStr, source: SmolStr, expr: Option<Expr>},
+    SetN {
+        label: SmolStr,
+        source: SmolStr,
+        expr: Option<Expr>
+    },
     /// This directive setup a value for a given flag of the snapshot
     SnaInit(Filename),
     SnaSet(
@@ -644,7 +665,13 @@ impl Clone for Token {
         match self {
             Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
             Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
-            Token::Assign { label, expr, op }=> Token::Assign{label:label.clone(), expr:expr.clone(), op:*op},
+            Token::Assign { label, expr, op } => {
+                Token::Assign {
+                    label: label.clone(),
+                    expr: expr.clone(),
+                    op: *op
+                }
+            },
             Token::Bank(b) => Token::Bank(b.clone()),
             Token::Bankset(b) => Token::Bankset(b.clone()),
             Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),
@@ -664,7 +691,7 @@ impl Clone for Token {
                     label: label.clone(),
                     expr: expr.clone()
                 }
-            }
+            },
             Token::End => Token::End,
             Token::Export(a) => Token::Export(a.clone()),
             Token::Fail(a) => Token::Fail(a.clone()),
@@ -686,25 +713,50 @@ impl Clone for Token {
                     off: *off,
                     transformation: *transformation
                 }
-            }
+            },
             Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), *c),
             Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
             Token::Label(a) => Token::Label(a.clone()),
             Token::Let(a, b) => Token::Let(a.clone(), b.clone()),
             Token::Limit(a) => Token::Limit(a.clone()),
             Token::List => Token::List,
-            Token::Macro{name:a, params:b, content:c} => Token::Macro{name:a.clone(), params:b.clone(), content:c.clone()},
+            Token::Macro {
+                name: a,
+                params: b,
+                content: c
+            } => {
+                Token::Macro {
+                    name: a.clone(),
+                    params: b.clone(),
+                    content: c.clone()
+                }
+            },
             Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
             Token::Module(a, b) => Token::Module(a.clone(), b.clone()),
             Token::MultiPop(a) => Token::MultiPop(a.clone()),
             Token::MultiPush(b) => Token::MultiPush(b.clone()),
-            Token::Next { label, source, expr } => Token::Next{label: label.clone(), source: source.clone(), expr: expr.clone()},
+            Token::Next {
+                label,
+                source,
+                expr
+            } => {
+                Token::Next {
+                    label: label.clone(),
+                    source: source.clone(),
+                    expr: expr.clone()
+                }
+            },
             Token::NoExport(a) => Token::NoExport(a.clone()),
             Token::NoList => Token::NoList,
             Token::OpCode(mne, arg1, arg2, arg3) => {
                 Self::OpCode(*mne, arg1.clone(), arg2.clone(), *arg3)
-            }
-            Token::Org{val1, val2} => Token::Org {val1: val1.clone(), val2: val2.clone()},
+            },
+            Token::Org { val1, val2 } => {
+                Token::Org {
+                    val1: val1.clone(),
+                    val2: val2.clone()
+                }
+            },
             Token::Pause => Token::Pause,
             Token::Print(a) => Token::Print(a.clone()),
             Token::Protect(a, b) => Token::Protect(a.clone(), b.clone()),
@@ -730,11 +782,21 @@ impl Clone for Token {
                     dsk_filename: dsk_filename.clone(),
                     side: side.clone()
                 }
-            }
+            },
             Token::Section(a) => Token::Section(a.clone()),
             Token::SetCPC(b) => Token::SetCPC(b.clone()),
             Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
-            Token::SetN{label, source, expr} => Token::SetN{label: label.clone(), source: source.clone(), expr: expr.clone()},
+            Token::SetN {
+                label,
+                source,
+                expr
+            } => {
+                Token::SetN {
+                    label: label.clone(),
+                    source: source.clone(),
+                    expr: expr.clone()
+                }
+            },
             Token::SnaInit(a) => Token::SnaInit(a.clone()),
             Token::SnaSet(a, b) => Token::SnaSet(*a, b.clone()),
             Token::StableTicker(a) => Token::StableTicker(a.clone()),
@@ -758,9 +820,14 @@ impl Clone for Token {
                     step: step.clone(),
                     listing: listing.clone()
                 }
-            }
+            },
             Token::Map(e) => Token::Map(e.clone()),
-            Token::Field { label, expr } => Token::Field{label: label.clone(), expr:expr.clone()},
+            Token::Field { label, expr } => {
+                Token::Field {
+                    label: label.clone(),
+                    expr: expr.clone()
+                }
+            },
         }
     }
 }
@@ -770,7 +837,7 @@ impl PartialEq for Token {
         match (self, other) {
             (Token::OpCode(a1, b1, c1, d1), Token::OpCode(a2, b2, c2, d2)) => {
                 a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2
-            }
+            },
 
             (Token::Print(a1), Token::Print(a2)) => a1 == a2,
 
@@ -1083,7 +1150,7 @@ impl Token {
 
     pub fn macro_name(&self) -> Option<&str> {
         match self {
-            Self::Macro{name, ..}  => Some(name),
+            Self::Macro { name, .. } => Some(name),
             Self::MacroCall(name, _params) => Some(name),
             _ => None
         }
@@ -1091,14 +1158,14 @@ impl Token {
 
     pub fn macro_arguments(&self) -> Option<&[SmolStr]> {
         match self {
-            Self::Macro{params, ..} => Some(params.as_ref()),
+            Self::Macro { params, .. } => Some(params.as_ref()),
             _ => None
         }
     }
 
     pub fn macro_content(&self) -> Option<&str> {
         match self {
-            Self::Macro{content, ..} => Some(content),
+            Self::Macro { content, .. } => Some(content),
             _ => None
         }
     }
@@ -1240,7 +1307,7 @@ impl Token {
 
     pub fn expr(&self) -> Option<&Expr> {
         match self {
-            Token::Org{val1: expr, ..} | Token::Equ { expr, .. } => Some(expr),
+            Token::Org { val1: expr, .. } | Token::Equ { expr, .. } => Some(expr),
             _ => None
         }
     }

@@ -17,11 +17,10 @@
 use std::path::Path;
 use std::str::FromStr;
 
+use comfy_table::{Table, *};
 use cpclib_common::clap::{Arg, ArgAction, Command};
-use cpclib_sna::{cli, Snapshot, SnapshotFlag};
-use comfy_table::Table;
-use comfy_table::*;
 use cpclib_common::itertools::Itertools;
+use cpclib_sna::{cli, Snapshot, SnapshotFlag};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -42,17 +41,21 @@ pub fn string_to_nb(source: &str) -> u32 {
     }
 }
 
-
 pub fn print_info(sna: &Snapshot) {
-
     let mut table = Table::new();
     table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec!["Flag", "Value"]);
     table.add_rows(
-        SnapshotFlag::enumerate().iter()
-            .map(|flag| (flag.comment().lines().map(|l| l.trim()).join("\n"), sna.get_value(flag)))
-            .map(|(f,v)| vec![f.to_owned(), v.to_string()])
-        );
+        SnapshotFlag::enumerate()
+            .iter()
+            .map(|flag| {
+                (
+                    flag.comment().lines().map(|l| l.trim()).join("\n"),
+                    sna.get_value(flag)
+                )
+            })
+            .map(|(f, v)| vec![f.to_owned(), v.to_string()])
+    );
     println!("{table}");
 
     println!("# Chunks");

@@ -160,7 +160,7 @@ impl MemoryChunk {
                     None => {
                         previous.replace(current);
                         count = 1;
-                    }
+                    },
                     Some(previous_value) => {
                         // we stop when 255 are read or when current differs
                         if previous_value != current || count == 255 {
@@ -231,7 +231,7 @@ impl MemoryChunk {
                             content.push(val);
                         }
                     }
-                }
+                },
                 val => {
                     content.push(val);
                 }
@@ -314,11 +314,11 @@ impl AceSymbolChunk {
         self.add_bytes(&bytes);
 
         // update chunk size
-  //      let payload_size = self.size() - 4;
- //       self.data.data[0] = (payload_size & 0xFF) as u8;
- //       self.data.data[1] = ((payload_size >> 8) & 0xFF) as u8;
- //       self.data.data[2] = ((payload_size >> 16) & 0xFF) as u8;
- //       self.data.data[3] = ((payload_size >> 24) & 0xFF) as u8;
+        //      let payload_size = self.size() - 4;
+        //       self.data.data[0] = (payload_size & 0xFF) as u8;
+        //       self.data.data[1] = ((payload_size >> 8) & 0xFF) as u8;
+        //       self.data.data[2] = ((payload_size >> 16) & 0xFF) as u8;
+        //       self.data.data[3] = ((payload_size >> 24) & 0xFF) as u8;
     }
 
     pub fn get_symbols(&self) -> Vec<(&str, u16)> {
@@ -344,11 +344,11 @@ impl AceSymbolChunk {
         res
     }
 
-
     pub fn print_info(&self) {
-        let s = self.get_symbols()
+        let s = self
+            .get_symbols()
             .into_iter()
-            .map(|(s,v)| format!("{} = 0x{:.4x}", s, v))
+            .map(|(s, v)| format!("{} = 0x{:.4x}", s, v))
             .join("\n");
         println!("{s}")
     }
@@ -457,14 +457,12 @@ impl SnapshotChunk {
             self.code()[3] as char,
         );
 
-        if let Some(chunk) = self.memory_chunk(){
+        if let Some(chunk) = self.memory_chunk() {
             chunk.print_info();
         }
         else if let Some(chunk) = self.ace_symbol_chunk() {
             chunk.print_info();
         }
-
-        
     }
 
     pub fn is_memory_chunk(&self) -> bool {

@@ -1,16 +1,12 @@
-use winnow::Located;
-use winnow::Stateful;
 use winnow::ascii::escaped;
-use winnow::combinator::alt;
-use winnow::combinator::terminated;
+use winnow::combinator::{alt, terminated};
 use winnow::stream::UpdateSlice;
-use winnow::token::none_of;
-use winnow::token::one_of;
-use winnow::BStr;
-use winnow::PResult;
-use winnow::Parser;
+use winnow::token::{none_of, one_of};
+use winnow::{BStr, Located, PResult, Parser, Stateful};
 
-fn parse_string<'src>(input: &mut Stateful<Located<&'src BStr>, ()>) -> PResult<Stateful<Located<&'src BStr>, ()>> {
+fn parse_string<'src>(
+    input: &mut Stateful<Located<&'src BStr>, ()>
+) -> PResult<Stateful<Located<&'src BStr>, ()>> {
     let mut first = '"';
     let last = first;
     let normal = none_of(('\\', '"'));
@@ -19,13 +15,14 @@ fn parse_string<'src>(input: &mut Stateful<Located<&'src BStr>, ()>) -> PResult<
     first.parse_next(input)?;
     let content = alt((
         last.recognize(), // to be removed if any
-        terminated(escaped(normal, '\\', escapable), last),
+        terminated(escaped(normal, '\\', escapable), last)
     ))
     .parse_next(input)?;
 
     let string = if content.len() == 1 && first == (content[0] as char) {
         &content[..0] // we remove " (it is not present for the others)
-    } else {
+    }
+    else {
         &content[..]
     };
 
@@ -36,17 +33,17 @@ fn parse_string<'src>(input: &mut Stateful<Located<&'src BStr>, ()>) -> PResult<
 #[test]
 fn test_parse_string() {
     for string in &[
-		r#""kjkjhkl""#,
-		r#""kjk'jhkl""#,
-		r#""kj\"kjhkl""#,
-		r#""""#,
-		r#""fdfd\" et voila""#,
-		r#""\" et voila""#
+        r#""kjkjhkl""#,
+        r#""kjk'jhkl""#,
+        r#""kj\"kjhkl""#,
+        r#""""#,
+        r#""fdfd\" et voila""#,
+        r#""\" et voila""#
     ] {
-        let string = Stateful{
-			input: Located::new(BStr::new(string)),
-			state: ()
-		};
+        let string = Stateful {
+            input: Located::new(BStr::new(string)),
+            state: ()
+        };
         let res = parse_string.parse(string);
         assert!(dbg!(&res).is_ok());
     }

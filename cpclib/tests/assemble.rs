@@ -22,7 +22,14 @@ mod tests {
     pub fn test_visit() {
         let mut env = Env::default();
 
-        visit_token(&Token::Org{val1: Expr::Value(10), val2: None}, &mut env).unwrap();
+        visit_token(
+            &Token::Org {
+                val1: Expr::Value(10),
+                val2: None
+            },
+            &mut env
+        )
+        .unwrap();
         visit_token(
             &Token::Defb(vec![Expr::Value(10), Expr::Value(5)]),
             &mut env
@@ -85,7 +92,10 @@ mod tests {
     #[test]
     pub fn test_assemble() {
         let tokens = vec![
-            Token::Org{val1: Expr::Value(10), val2: None},
+            Token::Org {
+                val1: Expr::Value(10),
+                val2: None
+            },
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),

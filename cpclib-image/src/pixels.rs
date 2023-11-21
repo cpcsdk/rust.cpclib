@@ -235,11 +235,11 @@ pub mod mode1 {
                 PixelPosition::First => [BitMapping::FirstBit1 as u8, BitMapping::FirstBit0 as u8],
                 PixelPosition::Second => {
                     [BitMapping::SecondBit1 as u8, BitMapping::SecondBit0 as u8]
-                }
+                },
                 PixelPosition::Third => [BitMapping::ThirdBit1 as u8, BitMapping::ThirdBit0 as u8],
                 PixelPosition::Fourth => {
                     [BitMapping::FourthBit1 as u8, BitMapping::FourthBit0 as u8]
-                }
+                },
             };
             pos.reverse(); // reverse because reading order is opposite to storage order
             pos
@@ -431,7 +431,7 @@ pub mod mode0 {
                         BitMapping::FirstBit1 as u8,
                         BitMapping::FirstBit0 as u8
                     ]
-                }
+                },
 
                 PixelPosition::Second => {
                     [
@@ -440,7 +440,7 @@ pub mod mode0 {
                         BitMapping::SecondBit1 as u8,
                         BitMapping::SecondBit0 as u8
                     ]
-                }
+                },
             };
             pos.reverse();
             pos

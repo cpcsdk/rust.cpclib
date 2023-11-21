@@ -6,7 +6,7 @@ use cpclib_common::itertools::Itertools;
 
 fn main() {
     match inner_main() {
-        Ok(_) => {}
+        Ok(_) => {},
         Err(e) => {
             eprintln!("Failure\n{}", e);
             std::process::exit(-1);
@@ -77,19 +77,19 @@ fn inner_main() -> Result<(), BndBuilderError> {
         match matches.get_one::<String>("help").unwrap().as_str() {
             "bndbuild" => {
                 cmd.clone().print_long_help().unwrap();
-            }
+            },
             "basm" => {
                 BASM_RUNNER.print_help();
-            }
+            },
             "img2cpc" => {
                 IMGCONV_RUNNER.print_help();
-            }
+            },
             "rm" => {
                 RM_RUNNER.print_help();
-            }
+            },
             "xfer" => {
                 XFER_RUNNER.print_help();
-            }
+            },
             _ => unimplemented!()
         };
 
@@ -111,15 +111,16 @@ fn inner_main() -> Result<(), BndBuilderError> {
     let fname: &String = matches.get_one("file").unwrap();
     if !std::path::Path::new(fname).exists() {
         eprintln!("{fname} does not exists.");
-        if let Some(Some(fname)) = matches.get_many::<String>("target").map(|s| s.into_iter().next())  {
-            if  fname.ends_with("bndbuild.yml") {
+        if let Some(Some(fname)) = matches
+            .get_many::<String>("target")
+            .map(|s| s.into_iter().next())
+        {
+            if fname.ends_with("bndbuild.yml") {
                 eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
             }
         }
         std::process::exit(1);
     }
-
-
 
     let builder = BndBuilder::from_fname(fname)?;
 

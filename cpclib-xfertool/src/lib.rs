@@ -129,7 +129,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
                     return Err(anyhow::Error::msg("You should provide the CPCADDR argument or set the CPCIP environmeent variable"));
                 }
             }
-        }
+        },
     };
 
     let xfer = CpcXfer::new(hostname);
@@ -170,7 +170,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
                         ..
                     }) => {
                         send_and_run_file(&xfer, &fname, true);
-                    }
+                    },
                     _ => {}
                 }
             }

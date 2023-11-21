@@ -25,7 +25,7 @@ pub mod built_info {
 
 #[macro_export]
 macro_rules! specify_palette {
-    ($e: expr) => {
+    ($e:expr) => {
         $e.arg(
             Arg::new("PENS")
                 .long("pens")
@@ -233,7 +233,7 @@ macro_rules! export_palette {
 }
 
 macro_rules! do_export_palette {
-    ($arg: expr, $palette: ident) => {
+    ($arg:expr, $palette:ident) => {
         if let Some(palette_fname) = $arg.get_one::<PathBuf>("EXPORT_PALETTE") {
             let mut file = File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
@@ -633,7 +633,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
                         Some(())
                     });
-            }
+            },
             _ => unreachable!()
         }
     }
@@ -670,7 +670,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                         .expect(&format!("Unable to build {}", current_filename));
                     file.write_all(data).unwrap();
                 }
-            }
+            },
             _ => unreachable! {}
         }
     }
@@ -689,7 +689,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 std::fs::write(fname, &scr)?;
 
                 do_export_palette!(sub_scr, palette);
-            }
+            },
 
             Output::CPCMemoryOverscan(scr1, scr2, palette) => {
                 if sub_scr.contains_id("COMPRESSED") {
@@ -700,7 +700,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 buffer.write_all(scr1)?;
                 buffer.write_all(scr2)?;
                 do_export_palette!(sub_scr, palette);
-            }
+            },
 
             _ => unreachable!()
         };
@@ -713,7 +713,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             let code = match &conversion {
                 Output::CPCMemoryStandard(memory, pal) => {
                     standard_linked_code(output_mode, pal, memory)
-                }
+                },
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, _pal) => unimplemented!(),
 
@@ -771,13 +771,13 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             let (palette, code) = match &conversion {
                 Output::CPCMemoryStandard(_memory, pal) => {
                     (pal, assemble(&standard_display_code(output_mode)).unwrap())
-                }
+                },
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
                     let code =
                         assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
                     (pal, code)
-                }
+                },
 
                 _ => unreachable!()
             };
@@ -789,13 +789,13 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 Output::CPCMemoryStandard(memory, _) => {
                     sna.add_data(&memory.to_vec(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
-                }
+                },
                 Output::CPCMemoryOverscan(memory1, memory2, _) => {
                     sna.add_data(&memory1.to_vec(), 0x8000)
                         .expect("Unable to add the image in the snapshot");
                     sna.add_data(&memory2.to_vec(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
-                }
+                },
                 _ => unreachable!()
             };
 
@@ -1152,7 +1152,7 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                                 e
                             )));
                         }
-                    }
+                    },
                     _ => {}
                 }
             }

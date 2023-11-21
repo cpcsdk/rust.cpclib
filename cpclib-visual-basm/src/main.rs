@@ -14,7 +14,7 @@ fn main() {
                     .collect::<Vec<_>>();
 
                 eprintln!("{:?}", warnings);
-            }
+            },
             Err(e) => {
                 eprintln!("{}", e);
             }

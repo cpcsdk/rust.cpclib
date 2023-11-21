@@ -301,7 +301,7 @@ impl BndBuildApp {
                     self.recent_files.remove(position);
                 }
                 self.recent_files.push(path.to_path_buf());
-            }
+            },
             Err(err) => {
                 self.file_error = Some(err.to_string());
             }
@@ -600,7 +600,7 @@ impl eframe::App for BndBuildApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        //catppuccin_egui::set_theme(&ctx, catppuccin_egui::MOCHA);
+        // catppuccin_egui::set_theme(&ctx, catppuccin_egui::MOCHA);
 
         if self.job.is_some() {
             ctx.set_cursor_icon(egui::CursorIcon::Progress);
@@ -727,7 +727,7 @@ impl eframe::App for BndBuildApp {
                     if let Some(e) = res.err() {
                         self.build_error = Some(e.to_string());
                     }
-                }
+                },
                 Err(err) => {
                     // self.build_error = Some(err. ().to_string());
                     panic!("{:?}", err);

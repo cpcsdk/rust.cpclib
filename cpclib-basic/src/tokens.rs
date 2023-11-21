@@ -552,26 +552,26 @@ impl fmt::Display for BasicToken {
         match self {
             BasicToken::SimpleToken(ref tok) => {
                 write!(f, "{}", tok)?;
-            }
+            },
             BasicToken::PrefixedToken(ref tok) => {
                 write!(f, "{}", tok)?;
-            }
+            },
             BasicToken::Comment(ref tok, ref comment) => {
                 write!(f, "{}", tok)?;
                 write!(f, "{},", String::from_utf8(comment.to_vec()).unwrap())?;
-            }
+            },
             BasicToken::Constant(ref kind, ref constant) => {
                 let repr = match kind {
                     BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
                         constant.int_hexdecimal_representation().unwrap()
-                    }
+                    },
                     BasicTokenNoPrefix::ValueIntegerDecimal16bits => {
                         constant.int_decimal_representation().unwrap()
-                    }
+                    },
                     _ => unimplemented!("{:?}", kind)
                 };
                 write!(f, "{}", repr)?;
-            }
+            },
             _ => unimplemented!("{:?}", self)
         }
 
@@ -590,26 +590,26 @@ impl BasicToken {
                     BasicTokenNoPrefix::AdditionalTokenMarker.value(),
                     tok.value(),
                 ]
-            }
+            },
 
             BasicToken::Rsx(ref _name) => {
                 let encoded_name = self.rsx_encoded_name().unwrap();
                 let mut data = vec![BasicTokenNoPrefix::Pipe.value(), encoded_name.len() as u8];
                 data.extend_from_slice(&encoded_name);
                 data
-            }
+            },
 
             BasicToken::Constant(ref kind, ref constant) => {
                 let mut data = vec![kind.value()];
                 data.extend_from_slice(&constant.as_bytes());
                 data
-            }
+            },
 
             BasicToken::Comment(ref comment_type, ref comment) => {
                 let mut data = vec![comment_type.value()];
                 data.extend_from_slice(comment);
                 data
-            }
+            },
 
             _ => unimplemented!()
         }

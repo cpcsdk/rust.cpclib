@@ -217,7 +217,7 @@ impl CpcXfer {
                 unimplemented!();
                 // Need to build header and compute checksum
                 // Need to inject header
-            }
+            },
             None => {
                 // Header is already included within the file
                 // TODO check that the header is correct
@@ -365,7 +365,7 @@ impl CpcXfer {
                 Err(XferError::InternalError {
                     reason: "No path provided".into()
                 })
-            }
+            },
             Some('/') => Ok(relative.to_owned()),
             _ => {
                 let cwd = self.current_working_directory()?;

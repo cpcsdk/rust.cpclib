@@ -178,7 +178,7 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     );
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
-                }
+                },
                 Err(e) => {
                     panic!("Unable to load {fname}: {e:?}");
                 }

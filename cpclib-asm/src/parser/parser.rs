@@ -639,7 +639,7 @@ pub fn inner_code_with_state(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
-       // dbg!("Requested state", &new_state);
+        // dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state)
             .map(|l| (Arc::<LocatedListing>::try_unwrap(l).unwrap()))
     }
@@ -668,7 +668,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 
 /// TODO - limit the listing possibilities
 pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
-    //dbg!("parse_function_listing requests FunctionLimited state");
+    // dbg!("parse_function_listing requests FunctionLimited state");
     inner_code_with_state(ParsingState::FunctionLimited).parse_next(input)
 }
 
@@ -698,7 +698,8 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     .parse_next(input)?;
     let arguments = arguments.into_iter().map(|span| span.into()).collect_vec();
 
-    cut_err(preceded(my_space0, my_line_ending).context("FUNCTION: errors after parameters")).parse_next(input)?;
+    cut_err(preceded(my_space0, my_line_ending).context("FUNCTION: errors after parameters"))
+        .parse_next(input)?;
 
     let listing =
         cut_err(parse_function_listing.context("FUNCTION: invalid content")).parse_next(input)?;
@@ -1147,7 +1148,6 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
             .collect_vec()
     });
 
-
     (my_space0, opt(line_ending)).parse_next(input)?;
 
     let hidden_lines = opt(terminated(
@@ -1159,11 +1159,8 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     // TODO factorize with the the code of parse_macro
     let before_content = input.checkpoint();
     let (_, end) = cut_err(
-        repeat_till0::<_, _, (), _, _, _, _>(
-            take(1usize),
-                parse_directive_word("ENDLOCOMOTIVE"),
-        )
-        .context("BASIC: impossible to collect BASIC content")
+        repeat_till0::<_, _, (), _, _, _, _>(take(1usize), parse_directive_word("ENDLOCOMOTIVE"))
+            .context("BASIC: impossible to collect BASIC content")
     )
     .parse_next(input)?;
 
@@ -1172,7 +1169,6 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     content.reset(before_content);
     let content: &BStr = unsafe { std::mem::transmute(&content.as_bstr()[..content_length]) };
     let basic = input.clone().update_slice(content); // TODO find a way to improve that part. I'd like to not make the conversion
-
 
     let _ = my_space0.parse_next(input)?;
 
@@ -2054,7 +2050,6 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
         )
     ))
     .parse_next(input)?;
-
 
     let string = if content.len() == 1 && first == (content[0] as char) {
         &content[..0] // we remove " (it is not present for the others)
@@ -6018,7 +6013,6 @@ mod test {
         let res = parse_test(parse_buildsna(false), "BUILDSNA");
         assert!(res.is_ok(), "{:?}", &res);
 
-        
         let res = parse_test(parse_buildsna(false), "BUILDSNA V2");
         assert!(res.is_ok(), "{:?}", &res);
 

@@ -220,13 +220,13 @@ impl Snapshot {
                 for idx in 0x6D..=0xFF {
                     cloned.header[idx] = 0;
                 }
-            }
+            },
             SnapshotVersion::V2 => {
                 // for idx in 0x75..=0xFF {
                 //     cloned.header[idx] = 0;
                 // }
                 // unused but not set to 0
-            }
+            },
             SnapshotVersion::V3 => {}
         };
 
@@ -331,13 +331,13 @@ impl Snapshot {
                     self.header[offset] = value as u8;
                     Ok(())
                 }
-            }
+            },
 
             2 => {
                 self.header[offset] = (value % 256) as u8;
                 self.header[offset + 1] = (value / 256) as u8;
                 Ok(())
-            }
+            },
             _ => panic!("Unable to handle size != 1 or 2")
         }
     }
@@ -352,7 +352,7 @@ impl Snapshot {
                     FlagValue::Word(
                         u16::from(self.header[offset + 1]) * 256 + u16::from(self.header[offset])
                     )
-                }
+                },
                 _ => panic!()
             }
         }
@@ -368,8 +368,6 @@ impl Snapshot {
             FlagValue::Array(vals)
         }
     }
-
-
 }
 
 /// Memory relaterd code

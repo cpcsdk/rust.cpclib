@@ -62,7 +62,7 @@ pub fn parse_z80(tokens: TokenStream) -> TokenStream {
             let mut stream = proc_macro2::TokenStream::new();
             listing.to_tokens(&mut stream);
             stream.into()
-        }
+        },
         Err(e) => {
             panic!("[ERROR] {:?}", e);
         }
@@ -88,13 +88,13 @@ pub fn assemble(tokens: TokenStream) -> TokenStream {
                     let mut tokens = proc_macro2::TokenStream::default();
                     proc_macro2::Literal::byte_string(bytes).to_tokens(&mut tokens);
                     tokens.into()
-                }
+                },
 
                 Err(e) => {
                     panic!("Unable to assemble the provided code. {:?}", e);
                 }
             }
-        }
+        },
         Err(e) => {
             panic!("[ERROR] {:?}", e);
         }

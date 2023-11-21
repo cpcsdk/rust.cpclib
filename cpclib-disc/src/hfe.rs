@@ -136,7 +136,7 @@ impl Disc for Hfe {
                 access
                     .all_track_sectors(s, track as _, TrackEncoding::IsoIbmFm)
                     .unwrap()
-            }
+            },
         };
 
         (0..sca.nb_sectors())

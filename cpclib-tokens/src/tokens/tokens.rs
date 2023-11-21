@@ -17,7 +17,6 @@ impl ListingElement for Token {
 
     //    type Listing = BaseListing<Token>;
 
-
     fn to_token(&self) -> Cow<Token> {
         Cow::Borrowed(self)
     }
@@ -267,28 +266,28 @@ impl ListingElement for Token {
 
     fn is_macro_definition(&self) -> bool {
         match self {
-            Self::Macro{..}=> true,
+            Self::Macro { .. } => true,
             _ => false
         }
     }
 
     fn macro_definition_name(&self) -> &str {
         match self {
-            Self::Macro{name, ..} => name.as_str(),
+            Self::Macro { name, .. } => name.as_str(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
         match self {
-            Self::Macro{params,..} => params.iter().map(|a| a.as_str()).collect(),
+            Self::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
             _ => unreachable!()
         }
     }
 
     fn macro_definition_code(&self) -> &str {
         match self {
-            Self::Macro{content, ..} => content.as_str(),
+            Self::Macro { content, .. } => content.as_str(),
             _ => unreachable!()
         }
     }
@@ -326,7 +325,7 @@ impl ListingElement for Token {
             Self::If(tests, ..) => {
                 let data = &tests[idx];
                 (&data.0, &data.1)
-            }
+            },
             _ => panic!()
         }
     }
@@ -504,7 +503,7 @@ impl ListingElement for Token {
         match self {
             Self::Switch(_, cases, ..) => {
                 Box::new(cases.iter().map(|c| (&c.0, c.1.as_slice(), c.2)))
-            }
+            },
             _ => unreachable!()
         }
     }
@@ -546,7 +545,7 @@ impl ListingElement for Token {
 
     fn is_set(&self) -> bool {
         match self {
-            Self::Assign{..} => true,
+            Self::Assign { .. } => true,
             _ => false
         }
     }

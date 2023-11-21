@@ -34,7 +34,7 @@ fn get_all_args(arguments: &str) -> Vec<String> {
                 if added == 0 {
                     res.push(p);
                 }
-            }
+            },
             Err(_) => res.push(p)
         }
     }

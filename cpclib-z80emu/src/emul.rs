@@ -17,7 +17,7 @@ impl Z80 {
         match opcode {
             Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
                 self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref(), arg3.as_ref())
-            }
+            },
 
             // Transform the raw data as real opcodes
             // and indiivudally execute them
@@ -25,7 +25,7 @@ impl Z80 {
             Token::Defs(_) | Token::Defb(_) | Token::Defw(_) => {
                 let lst = opcode.disassemble_data().unwrap();
                 lst.listing().iter().map(|token| self.execute(token)).sum()
-            }
+            },
 
             _ => panic!("{:?} is not yet handled", opcode)
         }
@@ -60,7 +60,7 @@ impl Z80 {
                     (Some(&DataAccess::Register8(tokens::Register8::A)), Some(_)) => {
                         let val = self.get_value(arg1.unwrap()).unwrap();
                         self.get_register_8_mut(arg1.unwrap()).add(val as _);
-                    }
+                    },
 
                     (Some(&DataAccess::Register16(tokens::Register16::Hl)), Some(_)) => {
                         let val = self.get_value(arg2.unwrap()).unwrap();
@@ -70,36 +70,36 @@ impl Z80 {
                         else {
                             self.get_register_16_mut(arg1.unwrap()).sub(val);
                         }
-                    }
+                    },
                     _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
                 }
-            }
+            },
 
             Mnemonic::Sub => {
                 match (arg1, arg2) {
                     (Some(_), None) => {
                         let val = self.get_value(arg1.unwrap()).unwrap();
                         self.a_mut().sub(val as _);
-                    }
+                    },
                     _ => unimplemented!()
                 }
-            }
+            },
 
             Mnemonic::And => {
                 let val = self.get_value(arg1.unwrap()).unwrap() as _;
                 self.get_register_8_mut(&tokens::Register8::A.into())
                     .and(val);
-            }
+            },
 
             Mnemonic::Res => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
                 self.get_register_8_mut(arg2.unwrap()).res_bit(bit)
-            }
+            },
 
             Mnemonic::Set => {
                 let bit = self.get_value(arg1.unwrap()).unwrap() as _;
                 self.get_register_8_mut(arg2.unwrap()).set_bit(bit)
-            }
+            },
 
             Mnemonic::Ret => self.ret(),
 
@@ -107,7 +107,7 @@ impl Z80 {
                 let word = self.read_memory_word(self.sp().value());
                 self.bc_mut().set(word);
                 self.sp_mut().add(2);
-            }
+            },
 
             Mnemonic::Ldi => {
                 let byte = self.read_memory_byte(self.hl().value());
@@ -115,7 +115,7 @@ impl Z80 {
                 self.bc_mut().inc();
                 self.de_mut().inc();
                 self.hl_mut().inc();
-            }
+            },
 
             Mnemonic::ExHlDe => self.ex_de_hl(),
 
@@ -123,25 +123,25 @@ impl Z80 {
                 match arg1 {
                     Some(DataAccess::Register8(_reg)) => {
                         self.get_register_8_mut(arg1.unwrap()).inc()
-                    }
+                    },
                     Some(DataAccess::Register16(_reg)) => {
                         self.get_register_16_mut(arg1.unwrap()).inc()
-                    }
+                    },
                     _ => unreachable!()
                 }
-            }
+            },
 
             Mnemonic::Dec => {
                 match arg1 {
                     Some(DataAccess::Register8(_reg)) => {
                         self.get_register_8_mut(arg1.unwrap()).dec()
-                    }
+                    },
                     Some(DataAccess::Register16(_reg)) => {
                         self.get_register_16_mut(arg1.unwrap()).dec()
-                    }
+                    },
                     _ => unreachable!()
                 }
-            }
+            },
 
             Mnemonic::Djnz => {
                 // dec b
@@ -158,7 +158,7 @@ impl Z80 {
                                     .get_value(&DataAccess::Expression(Expr::Label("$".into())))
                                     .unwrap() as i32
                                 - 2
-                        }
+                        },
                         _ => self.get_value(arg2.unwrap()).unwrap() as i32
                     };
 
@@ -173,7 +173,7 @@ impl Z80 {
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
-            }
+            },
 
             Mnemonic::Jr => {
                 dbg!(arg2);
@@ -184,7 +184,7 @@ impl Z80 {
                                 .get_value(&DataAccess::Expression(Expr::Label("$".into())))
                                 .unwrap() as i32
                             - 2
-                    }
+                    },
                     _ => self.get_value(arg2.unwrap()).unwrap() as i32
                 };
                 if match arg1 {
@@ -204,14 +204,14 @@ impl Z80 {
                         self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                     }
                 }
-            }
+            },
 
             Mnemonic::Jp => {
                 match (arg1, arg2) {
                     (None, Some(_)) => {
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.pc_mut().set(value);
-                    }
+                    },
 
                     (Some(DataAccess::FlagTest(ref flag)), _) => {
                         if self.is_flag_active(flag) {
@@ -224,11 +224,11 @@ impl Z80 {
                         else {
                             self.pc_mut().sub(opcode.number_of_bytes().unwrap() as _);
                         }
-                    }
+                    },
 
                     _ => unreachable!()
                 }
-            }
+            },
 
             Mnemonic::Ld => {
                 match (arg1, arg2) {
@@ -238,28 +238,28 @@ impl Z80 {
                             .get_value(arg2.unwrap())
                             .unwrap_or_else(|| panic!("Unable to get value of {:?}", &arg2));
                         self.get_register_8_mut(arg1.unwrap()).set(val as u8);
-                    }
+                    },
 
                     // Load in reg16
                     (Some(DataAccess::Register16(_reg16)), Some(_)) => {
                         let val = self.get_value(arg2.unwrap()).unwrap();
                         self.get_register_16_mut(arg1.unwrap()).set(val);
-                    }
+                    },
 
                     // Write in memory
                     (Some(DataAccess::MemoryRegister16(_reg)), Some(_)) => {
                         let address = self.get_value(arg1.unwrap()).unwrap();
                         let value = self.get_value(arg2.unwrap()).unwrap();
                         self.write_memory_byte(address, value as _);
-                    }
+                    },
 
                     _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
                 }
-            }
+            },
 
             Mnemonic::Nop => {
                 // nothing to do
-            }
+            },
 
             _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
         }
@@ -292,19 +292,19 @@ impl Z80 {
             DataAccess::Memory(ref exp) => {
                 self.eval_expr(exp)
                     .map(|address| u16::from(self.read_memory_byte(address)))
-            }
+            },
             DataAccess::IndexRegister16WithIndex(..) => None,
             DataAccess::IndexRegister16(_) | &DataAccess::Register16(_) => {
                 Some(self.get_register_16(access).value())
-            }
+            },
             DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => {
                 Some(self.get_register_8(access).value().into())
-            }
+            },
             DataAccess::MemoryRegister16(ref reg) => {
                 Some(u16::from(self.read_memory_byte(
                     self.get_register_16(&DataAccess::Register16(*reg)).value()
                 )))
-            }
+            },
             DataAccess::Expression(ref expr) => self.eval_expr(expr),
             DataAccess::FlagTest(_) => panic!(),
             _ => unimplemented!()
@@ -324,7 +324,7 @@ impl Z80 {
                     IndexRegister16::Ix => self.ix(),
                     IndexRegister16::Iy => self.iy()
                 }
-            }
+            },
             DataAccess::Register16(ref reg) => {
                 match reg {
                     tokens::Register16::Af => self.af(),
@@ -333,7 +333,7 @@ impl Z80 {
                     tokens::Register16::Hl => self.hl(),
                     tokens::Register16::Sp => self.sp()
                 }
-            }
+            },
             _ => unreachable!()
         }
     }
@@ -345,7 +345,7 @@ impl Z80 {
                     IndexRegister16::Ix => self.ix_mut(),
                     IndexRegister16::Iy => self.iy_mut()
                 }
-            }
+            },
             DataAccess::Register16(ref reg) => {
                 match reg {
                     tokens::Register16::Af => self.af_mut(),
@@ -354,7 +354,7 @@ impl Z80 {
                     tokens::Register16::Hl => self.hl_mut(),
                     tokens::Register16::Sp => self.sp_mut()
                 }
-            }
+            },
             _ => unreachable!()
         }
     }
@@ -371,7 +371,7 @@ impl Z80 {
                     tokens::Register8::E => self.e(),
                     tokens::Register8::L => self.l()
                 }
-            }
+            },
 
             DataAccess::IndexRegister8(ref reg) => {
                 match reg {
@@ -380,7 +380,7 @@ impl Z80 {
                     IndexRegister8::Iyl => self.iyl(),
                     IndexRegister8::Iyh => self.iyh()
                 }
-            }
+            },
             _ => panic!()
         }
     }
@@ -398,7 +398,7 @@ impl Z80 {
                     tokens::Register8::E => self.e_mut(),
                     tokens::Register8::L => self.l_mut()
                 }
-            }
+            },
 
             DataAccess::IndexRegister8(ref reg) => {
                 match reg {
@@ -407,7 +407,7 @@ impl Z80 {
                     IndexRegister8::Iyl => self.iyl_mut(),
                     IndexRegister8::Iyh => self.iyh_mut()
                 }
-            }
+            },
             _ => panic!()
         }
     }

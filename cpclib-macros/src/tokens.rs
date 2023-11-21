@@ -152,9 +152,14 @@ where
     tokens.append(Group::new(Delimiter::Parenthesis, inside));
 }
 
-
-fn two_named_params<T1, T2>(name: &str, field1: &str,  t1: &T1, field2: &str, t2: &T2, tokens: &mut TokenStream)
-where
+fn two_named_params<T1, T2>(
+    name: &str,
+    field1: &str,
+    t1: &T1,
+    field2: &str,
+    t2: &T2,
+    tokens: &mut TokenStream
+) where
     T1: MyToTokens,
     T2: MyToTokens
 {
@@ -226,7 +231,7 @@ impl MyToTokens for Token {
         match self {
             Self::Comment(arg) => {
                 one_param("Comment", arg, tokens);
-            }
+            },
 
             Self::Defs(args) => {
                 tokens.append(Ident::new("Defs", Span::call_site()));
@@ -244,16 +249,15 @@ impl MyToTokens for Token {
                 vec_tokens.append(Group::new(Delimiter::Bracket, inner_token));
 
                 tokens.append(Group::new(Delimiter::Parenthesis, vec_tokens));
-            }
+            },
 
-            Self::Equ{label, expr} => {
+            Self::Equ { label, expr } => {
                 two_named_params("Equ", "label", label, "expr", expr, tokens);
-
-            }
+            },
 
             Self::Label(arg) => {
                 one_param("Label", arg, tokens);
-            }
+            },
 
             Self::OpCode(mnemo, arg1, arg2, arg3) => {
                 tokens.append(Ident::new("OpCode", Span::call_site()));
@@ -271,19 +275,19 @@ impl MyToTokens for Token {
                 arg3.to_tokens(&mut inner_content);
 
                 tokens.append(Group::new(Delimiter::Parenthesis, inner_content));
-            }
+            },
 
-            Self::Org{val1, val2} => {
+            Self::Org { val1, val2 } => {
                 two_named_params("Org", "val1", val1, "val2", val2, tokens);
-            }
+            },
 
             Self::StableTicker(arg) => {
                 one_param("StableTicker", arg, tokens);
-            }
+            },
 
             Self::Repeat(exp, lst, lab, count) => {
                 four_params("Repeat", exp, lst, lab, count, tokens);
-            }
+            },
 
             _ => unimplemented!("impl MyToTokens for Token {{ fn to_tokens ...}} {:?}", self)
         }
@@ -299,7 +303,7 @@ impl<S: AsRef<str>> MyToTokens for StableTickerAction<S> {
         match self {
             StableTickerAction::Start(label) => {
                 one_param("Start", label.as_ref(), tokens);
-            }
+            },
 
             StableTickerAction::Stop => {
                 no_param("Stop", tokens);
@@ -338,40 +342,40 @@ impl MyToTokens for DataAccess {
                 let mut inside = TokenStream::new();
                 exp.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
-            }
+            },
 
             DataAccess::FlagTest(arg) => {
                 one_param("FlagTest", arg, tokens);
-            }
+            },
 
             DataAccess::Memory(arg) => {
                 one_param("Memory", arg, tokens);
-            }
+            },
 
             DataAccess::PortC => {
                 no_param("PortC", tokens);
-            }
+            },
 
             DataAccess::Register8(reg) => {
                 tokens.append(Ident::new("Register8", Span::call_site()));
                 let mut inside = TokenStream::new();
                 reg.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
-            }
+            },
 
             DataAccess::Register16(reg) => {
                 tokens.append(Ident::new("Register16", Span::call_site()));
                 let mut inside = TokenStream::new();
                 reg.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
-            }
+            },
 
             DataAccess::MemoryRegister16(reg) => {
                 tokens.append(Ident::new("MemoryRegister16", Span::call_site()));
                 let mut inside = TokenStream::new();
                 reg.to_tokens(&mut inside);
                 tokens.append(Group::new(Delimiter::Parenthesis, inside))
-            }
+            },
 
             _ => unimplemented!("DataAccess::{:?}", self)
         }
@@ -444,27 +448,27 @@ impl MyToTokens for Expr {
                 }
                 inside.append(Literal::u32_unsuffixed(val.unsigned_abs()));
                 tokens.append(Group::new(Delimiter::Parenthesis, inside));
-            }
+            },
 
             Expr::String(val) => {
                 one_param("String", val, tokens);
-            }
+            },
 
             Expr::Label(val) => {
                 one_param("Label", val, tokens);
-            }
+            },
 
             Expr::Paren(val) => {
                 one_param("Paren", val, tokens);
-            }
+            },
 
             Expr::UnaryFunction(func, arg) => {
                 two_params("UnaryFunction", func, arg, tokens);
-            }
+            },
 
             Expr::BinaryFunction(func, arg1, arg2) => {
                 three_params("BinaryFunction", func, arg1, arg2, tokens);
-            }
+            },
 
             _ => unimplemented!("Expr::{:?}", self)
         }

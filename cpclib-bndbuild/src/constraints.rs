@@ -1,4 +1,7 @@
-use cpclib_common::winnow::{self, combinator::{delimited, alt}, token::tag_no_case, PResult, Parser, ascii::space0};
+use cpclib_common::winnow::ascii::space0;
+use cpclib_common::winnow::combinator::{alt, delimited};
+use cpclib_common::winnow::token::tag_no_case;
+use cpclib_common::winnow::{self, PResult, Parser};
 use serde::{self, Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash, Clone)]
@@ -17,30 +20,31 @@ pub(crate) fn deserialize_constraint<'de, D>(
 ) -> Result<Option<Constraint>, D::Error>
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
-    let cons =
-        parse_constraint.parse(&s).map_err(|e| serde::de::Error::custom(e.to_string()))?;
-
+    let cons = parse_constraint
+        .parse(&s)
+        .map_err(|e| serde::de::Error::custom(e.to_string()))?;
 
     Ok(Some(cons))
 }
 
-fn parse_constraint(input: &mut &str) -> PResult< Constraint> {
+fn parse_constraint(input: &mut &str) -> PResult<Constraint> {
     alt((parse_negated_constraint, parse_positive_constraint)).parse_next(input)
 }
 
-fn parse_negated_constraint(input: &mut &str) -> PResult< Constraint> {
+fn parse_negated_constraint(input: &mut &str) -> PResult<Constraint> {
     delimited(
         (tag_no_case("not("), space0),
         parse_positive_constraint,
         (space0, ')', space0)
-    ).parse_next(input)
+    )
+    .parse_next(input)
 }
 
-fn parse_positive_constraint(input: &mut &str) -> PResult< Constraint> {
+fn parse_positive_constraint(input: &mut &str) -> PResult<Constraint> {
     parse_leaf_constraint.parse_next(input)
 }
 
-fn parse_os_constraint(input: &mut &str) -> PResult< Constraint> {
+fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
     tag_no_case("os").parse_next(input)?;
     delimited(
         ('(', space0),
@@ -50,10 +54,11 @@ fn parse_os_constraint(input: &mut &str) -> PResult< Constraint> {
             tag_no_case("macos").value(Constraint::MacOsx)
         )),
         (space0, ')', space0)
-    ).parse_next(input)
+    )
+    .parse_next(input)
 }
 
-fn parse_leaf_constraint(input: &mut &str) -> PResult< Constraint> {
+fn parse_leaf_constraint(input: &mut &str) -> PResult<Constraint> {
     parse_os_constraint.parse_next(input)
 }
 

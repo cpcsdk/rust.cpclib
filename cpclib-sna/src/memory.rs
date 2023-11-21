@@ -121,42 +121,42 @@ impl SnapshotMemory {
                 let mut new = Self::default_128();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => {
                 let mut new = Self::default_192();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => {
                 let mut new = Self::default_256();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::TwoHundredFiftySixKb(ref mem) => {
                 let mut new = Self::default_320();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::ThreeHundredTwentyKb(ref mem) => {
                 let mut new = Self::default_384();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => {
                 let mut new = Self::default_448();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::FourHundredFortyHeightKb(ref mem) => {
                 let mut new = Self::default_512();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::FiveHundredTwelveKb(ref mem) => {
                 let mut new = Self::default_576();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
-            }
+            },
             SnapshotMemory::FiveHundredSeventySixKb(_) => unreachable!()
         }
     }

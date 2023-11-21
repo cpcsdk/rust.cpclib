@@ -137,7 +137,6 @@ pub trait ExprElement: Sized {
     fn to_expr(&self) -> Cow<Expr>;
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 /// Represents a prefix that provides information related to banks for a label
 pub enum LabelPrefix {
@@ -788,7 +787,7 @@ impl Display for Expr {
                     name,
                     args.iter().map(|e| e.to_string()).join(",")
                 )
-            }
+            },
 
             UnaryOperation(op, exp) => write!(format, "{}{}", op, exp),
             UnaryTokenOperation(op, tok) => write!(format, "{}({})", op, tok),
@@ -1024,7 +1023,7 @@ impl ExprResult {
                     "Try to convert {} as an string",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1039,7 +1038,7 @@ impl ExprResult {
                     "Try to convert {} as an int",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1054,7 +1053,7 @@ impl ExprResult {
                     "Try to convert {} as a float",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1069,7 +1068,7 @@ impl ExprResult {
                     "Try to convert {} as a char",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1084,7 +1083,7 @@ impl ExprResult {
                     "Try to convert {} as a bool",
                     self
                 )))
-            }
+            },
         }
     }
 }
@@ -1136,7 +1135,7 @@ impl ExprResult {
         match self {
             ExprResult::Matrix { .. } => {
                 self.matrix_rows().get(0).map(|r| r.list_len()).unwrap_or(0)
-            }
+            },
             _ => panic!("not a matrix")
         }
     }
@@ -1183,7 +1182,7 @@ impl ExprResult {
                     width: *height,
                     height: *width
                 }
-            }
+            },
             _ => panic!("not a matrix")
         }
     }
@@ -1204,7 +1203,7 @@ impl ExprResult {
                     "Try to apply floor to {}",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1217,7 +1216,7 @@ impl ExprResult {
                     "Try to apply ceil to {}",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1230,7 +1229,7 @@ impl ExprResult {
                     "Try to apply frac to {}",
                     self
                 )))
-            }
+            },
         }
     }
 
@@ -1285,7 +1284,7 @@ impl ExprResult {
                 Err(ExpressionTypeError(
                     "Float are not compatible with ~ operator".to_owned()
                 ))
-            }
+            },
             ExprResult::Value(i) => Ok((!*i).into()),
             ExprResult::Bool(b) => Ok((!*b).into()),
             _ => {
@@ -1293,7 +1292,7 @@ impl ExprResult {
                     "Try to apply floor to {}",
                     self
                 )))
-            }
+            },
         }
     }
 }
@@ -1325,39 +1324,32 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() + f2.into_inner()).into())
-            }
+            },
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
             (ExprResult::Value(_) | ExprResult::Char(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? + f2.into_inner()).into())
-            }
+            },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
             (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok((v1 + v2).into()),
             (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok((v1 + *v2 as i32).into()),
             (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((*v1 as i32 + *v2).into()),
 
-
-                        
-            (ExprResult::String(s), _ ) if s.len() == 1 => {
+            (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
-            }
-            (ExprResult::Char(c), _) => {
-                ExprResult::Value(*c as _) + rhs.clone()
             },
+            (ExprResult::Char(c), _) => ExprResult::Value(*c as _) + rhs.clone(),
 
             (_, ExprResult::String(s)) if s.len() == 1 => {
                 self.clone() + ExprResult::Char(s.chars().next().unwrap() as u8)
-            }
-            (_, ExprResult::Char(c)) => {
-                self.clone() + ExprResult::Value(*c as _)
             },
-
+            (_, ExprResult::Char(c)) => self.clone() + ExprResult::Value(*c as _),
 
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible addition between {} and {}",
                     self, rhs
                 )))
-            }
+            },
         }
     }
 }
@@ -1370,36 +1362,31 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() - f2.into_inner()).into())
-            }
+            },
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() - rhs.float()?).into())
-            }
+            },
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? - f2.into_inner()).into())
-            }
+            },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 - v2).into()),
 
-            
-            (ExprResult::String(s), _ ) if s.len() == 1 => {
+            (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) - rhs.clone()
-            }
-            (ExprResult::Char(c), _) => {
-                ExprResult::Value(*c as _) - rhs.clone()
             },
+            (ExprResult::Char(c), _) => ExprResult::Value(*c as _) - rhs.clone(),
 
             (_, ExprResult::String(s)) if s.len() == 1 => {
                 self.clone() - ExprResult::Char(s.chars().next().unwrap() as u8)
-            }
-            (_, ExprResult::Char(c)) => {
-                self.clone() - ExprResult::Value(*c as _)
             },
+            (_, ExprResult::Char(c)) => self.clone() - ExprResult::Value(*c as _),
 
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible substraction between {} and {}",
                     self, rhs
                 )))
-            }
+            },
         }
     }
 }
@@ -1412,13 +1399,13 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() * f2.into_inner()).into())
-            }
+            },
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() * rhs.float()?).into())
-            }
+            },
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? * f2.into_inner()).into())
-            }
+            },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((*v1 * *v2).into()),
 
             (ExprResult::Value(v1), ExprResult::Char(v2))
@@ -1429,7 +1416,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
                     "Impossible multiplication between {} and {}",
                     self, rhs
                 )))
-            }
+            },
         }
     }
 }
@@ -1442,22 +1429,22 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
         match (&self, rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() / f2.into_inner()).into())
-            }
+            },
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() / rhs.float()?).into())
-            }
+            },
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? / f2.into_inner()).into())
-            }
+            },
             (ExprResult::Value(_), ExprResult::Value(_)) => {
                 Ok((self.float()? / rhs.float()?).into())
-            }
+            },
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible division between {} and {}",
                     self, rhs
                 )))
-            }
+            },
         }
     }
 }
@@ -1470,20 +1457,20 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
         match (&self, &rhs) {
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() % f2.into_inner()).into())
-            }
+            },
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() % rhs.float()?).into())
-            }
+            },
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? % f2.into_inner()).into())
-            }
+            },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 % v2).into()),
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible reminder between {} and {}",
                     self, rhs
                 )))
-            }
+            },
         }
     }
 }
@@ -1547,7 +1534,7 @@ impl std::cmp::PartialEq for ExprResult {
                         Err(_) => false
                     }
                 })
-            }
+            },
 
             (Self::String(_), _) | (_, Self::String(_)) => false,
             (Self::List(_), _) | (_, Self::List(_)) => false,
@@ -1588,7 +1575,7 @@ impl std::fmt::Display for ExprResult {
                     "[{}]",
                     v.iter().map(|item| format!("{}", item)).join(",")
                 )
-            }
+            },
             ExprResult::Matrix { .. } => {
                 write!(
                     f,
@@ -1617,7 +1604,7 @@ impl std::fmt::LowerHex for ExprResult {
                     "[{}]",
                     v.iter().map(|item| format!("{:x}", item)).join(",")
                 )
-            }
+            },
             ExprResult::Matrix { .. } => {
                 write!(
                     f,
@@ -1646,7 +1633,7 @@ impl std::fmt::UpperHex for ExprResult {
                     "[{}]",
                     v.iter().map(|item| format!("{:X}", item)).join(",")
                 )
-            }
+            },
             ExprResult::Matrix { .. } => {
                 write!(
                     f,

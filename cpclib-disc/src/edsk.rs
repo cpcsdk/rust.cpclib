@@ -1134,7 +1134,7 @@ impl ExtendedDsk {
                     bytes.extend(sector.values().iter());
                 }
                 Some(bytes)
-            }
+            },
             _ => None
         }
     }

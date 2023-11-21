@@ -40,7 +40,7 @@ impl Runner for RmRunner {
             match std::fs::remove_file(&fname) {
                 Ok(_) => {
                     println!("\t{} removed", fname /* .display() */);
-                }
+                },
                 Err(e) => {
                     errors.push_str(&format!(
                         "Unable to remove {}:{}.\n",

@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-
 use cpclib_common::parse_value;
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited, preceded, separated1};
@@ -8,7 +7,7 @@ use cpclib_common::winnow::error::{ErrMode, ErrorKind, ParserError};
 use cpclib_common::winnow::stream::{
     AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice
 };
-use cpclib_common::winnow::token::{take_while};
+use cpclib_common::winnow::token::take_while;
 use cpclib_common::winnow::{PResult, Parser};
 
 use crate::flags::{FlagValue, SnapshotFlag};
@@ -32,7 +31,8 @@ where
 }
 
 pub fn parse_flag_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<FlagValue>
-where I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
+where
+    I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
 
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
@@ -43,8 +43,7 @@ where I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSli
     I: Stream
 {
     alt((
-        parse_value
-        .map(|val| {
+        parse_value.map(|val| {
             if val > 255 {
                 FlagValue::Word(val as _)
             }
@@ -78,26 +77,25 @@ mod tests {
     fn test_parse_flag_value() {
         let mut fortytwo = "42".as_bstr();
         assert_eq!(
-            dbg!(parse_value::<_,ContextError>.parse_next(&mut fortytwo)).unwrap(),
+            dbg!(parse_value::<_, ContextError>.parse_next(&mut fortytwo)).unwrap(),
             42
         );
 
         let mut fortytwo = "42".as_bstr();
         assert_eq!(
-            dbg!(parse_flag_value::<_,ContextError>.parse_next(&mut fortytwo)).unwrap(),
+            dbg!(parse_flag_value::<_, ContextError>.parse_next(&mut fortytwo)).unwrap(),
             FlagValue::Byte(42)
         );
 
         let mut fortytwohundred = "420".as_bstr();
         assert_eq!(
-            dbg!(parse_flag_value::<_, ContextError>.parse_next(&mut fortytwohundred))
-                .unwrap(),
+            dbg!(parse_flag_value::<_, ContextError>.parse_next(&mut fortytwohundred)).unwrap(),
             FlagValue::Word(420)
         );
 
         let mut list = "[42, 420]".as_bstr();
         assert_eq!(
-            dbg!(parse_flag_value::< _, ContextError>.parse_next(&mut list)).unwrap(),
+            dbg!(parse_flag_value::<_, ContextError>.parse_next(&mut list)).unwrap(),
             FlagValue::Array(vec![FlagValue::Byte(42), FlagValue::Word(420)])
         );
     }
@@ -109,7 +107,7 @@ mod tests {
             160
         );
         assert_eq!(
-            dbg!(parse_flag::< _, ContextError>.parse(BStr::new(b"CRTC_REG:7"))).unwrap(),
+            dbg!(parse_flag::<_, ContextError>.parse(BStr::new(b"CRTC_REG:7"))).unwrap(),
             SnapshotFlag::CRTC_REG(Some(7))
         );
     }

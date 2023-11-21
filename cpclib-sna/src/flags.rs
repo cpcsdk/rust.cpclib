@@ -163,7 +163,7 @@ impl SnapshotFlag {
         match self {
             GA_PAL(ref idx) | CRTC_REG(ref idx) | PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
                 self.base() + idx.unwrap_or(0) * self.elem_size()
-            }
+            },
             _ => self.base()
         }
     }
@@ -186,7 +186,7 @@ impl SnapshotFlag {
             | Self::GA_MULTIMODE(ref mut idx) => {
                 *idx = Some(indice);
                 Ok(())
-            }
+            },
             _ => Err(SnapshotError::InvalidIndex)
         }
     }
@@ -468,7 +468,7 @@ impl FromStr for SnapshotFlag {
 
                 "GA_PAL" | "CRTC_REG" | "PSG_REG" | "GA_MULTIMODE" => {
                     Err(format!("{} requires an indice", s))
-                }
+                },
                 _ => Err(String::from("Unable to convert string to a flag"))
             }
         }
@@ -494,14 +494,10 @@ impl fmt::Display for FlagValue {
             FlagValue::Array(ref array) => {
                 write!(f, "[")
                     .and_then(|_x| {
-                        write!(
-                            f,
-                            "{}",
-                            &array.iter().map(|b| format!("{}", b)).join(", ")
-                        )
+                        write!(f, "{}", &array.iter().map(|b| format!("{}", b)).join(", "))
                     })
                     .and_then(|_x| write!(f, "]"))
-            }
+            },
         }
     }
 }

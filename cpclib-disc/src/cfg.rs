@@ -67,14 +67,12 @@ impl FromStr for DiscConfig {
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
         match parse_config.parse(&mut config.as_bytes()) {
-            Ok(res) => {
-                Ok(res)
-            }
+            Ok(res) => Ok(res),
             Err(error) => {
                 Err(DiscConfigError::ParseError {
                     msg: format!("{:?}", error)
                 })
-            }
+            },
         }
     }
 }

@@ -270,7 +270,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                     res.to_string().to_lowercase(),
                     generated.to_string().to_lowercase()
                 );
-            }
+            },
             _ => unreachable!()
         }
     }
@@ -280,7 +280,6 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         let parsed = cpclib::disc::cfg::parse_config.parse(SINGLE_SIDED.as_bytes());
         println!("{:?}", &parsed);
         assert!(parsed.is_ok());
-
     }
 
     #[test]

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use cpclib_common::itertools::Itertools;
-#[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
 
@@ -148,9 +148,9 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
 
 // Convert inks to pens
 fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
-    #[cfg(all(not(target_arch = "wasm32"), feature="rayon"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
     let iter = inks.par_iter();
-    #[cfg(any(target_arch = "wasm32", not(feature="rayon")))]
+    #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let iter = inks.iter();
 
     iter.map(|line| {
@@ -417,7 +417,7 @@ impl ColorMatrix {
                     match strategy {
                         ColorConversionStrategy::ReplaceWrongColorByFirstColor => {
                             *ink = inks[0];
-                        }
+                        },
                         ColorConversionStrategy::ReplaceWrongColorByClosestInk => unimplemented!(),
                         ColorConversionStrategy::Fail => {
                             return Err(anyhow::anyhow!(
@@ -825,7 +825,7 @@ impl ColorMatrixList {
                     current_x += 1;
                 }
                 current_x
-            }
+            },
             _ => 0
         } as usize;
 
@@ -837,7 +837,7 @@ impl ColorMatrixList {
                     current_x -= 1;
                 }
                 current_x
-            }
+            },
             _ => self.width() - 1
         } as usize;
 
@@ -849,7 +849,7 @@ impl ColorMatrixList {
                     current_y += 1;
                 }
                 current_y
-            }
+            },
             _ => 0
         } as usize;
 
@@ -861,7 +861,7 @@ impl ColorMatrixList {
                     current_y -= 1;
                 }
                 current_y
-            }
+            },
             _ => self.height() - 1
         } as usize;
 
@@ -872,7 +872,7 @@ impl ColorMatrixList {
                 while start_x % mode.nb_pixels_per_byte() != 0 {
                     start_x -= 1;
                 }
-            }
+            },
             _ => {}
         }
 
@@ -883,7 +883,7 @@ impl ColorMatrixList {
                 while (stop_x + 1) % mode.nb_pixels_per_byte() != 0 {
                     stop_x += 1;
                 }
-            }
+            },
             _ => {}
         }
 
@@ -935,16 +935,17 @@ pub struct Sprite {
 
 #[allow(missing_docs)]
 impl Sprite {
-
     pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette>) -> Self {
-        let data = pens.iter()
+        let data = pens
+            .iter()
             .map(|line| crate::pixels::pens_to_vec(line, mode))
             .collect_vec();
         Sprite {
-            data, mode: Some(mode), palette
+            data,
+            mode: Some(mode),
+            palette
         }
     }
-
 
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
@@ -969,7 +970,7 @@ impl Sprite {
                             vec![*p.get(&pens[0]), *p.get(&pens[1])]
                         })
                         .collect::<Vec<Ink>>()
-                }
+                },
 
                 _ => unimplemented!()
             };
@@ -1215,7 +1216,7 @@ impl MultiModeSprite {
                 }
 
                 (modes, lines)
-            }
+            },
 
             _ => unimplemented!()
         };

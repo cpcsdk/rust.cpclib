@@ -3538,8 +3538,8 @@ impl Env {
                             std::str::from_utf8(slice).unwrap()
                         };
 
-
-                        let new_span = Z80Span::from(prev_span.0.clone().update_slice(txt.as_bytes()));
+                        let new_span =
+                            Z80Span::from(prev_span.0.clone().update_slice(txt.as_bytes()));
 
                         (Some(new_size), Some(new_span))
                     }

@@ -5,29 +5,22 @@ use std::fmt::Write;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::Parser;
 use cpclib_common::{parse_value, winnow};
+use line_span::LineSpanExt;
 use minus::{ExitStrategy, Pager};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
+
 use crate::cli::winnow::ascii::space1;
 use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
-use crate::cli::winnow::error::{ContextError, StrContext};
+use crate::cli::winnow::error::{
+    AddContext, ContextError, ErrMode, ParserError, StrContext, TreeError
+};
+use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
 use crate::cli::winnow::token::{tag_no_case, take_until1};
 use crate::cli::winnow::{Located, PResult};
 use crate::*;
-use crate::cli::winnow::error::ErrMode;
-use crate::cli::winnow::error::TreeError;
-use crate::cli::winnow::error::ParserError;
-use crate::cli::winnow::stream::Compare;
-use crate::cli::winnow::stream::Stream;
-use crate::cli::winnow::stream::AsChar;
-use crate::cli::winnow::stream::AsBytes;
-use crate::cli::winnow::stream::StreamIsPartial;
-use crate::cli::winnow::error::AddContext;
-use crate::cli::winnow::stream::FindSlice;
-use line_span::LineSpanExt;
 
 type Source<'src> = winnow::Located<&'src [u8]>;
-
 
 #[derive(Debug)]
 enum Command {
@@ -103,7 +96,7 @@ impl Command {
                     .map_err(|e| {
                         eprintln!("Error while loading {}. {}", path.display(), e);
                     });
-            }
+            },
             Command::Memory(from, amount) => {
                 let mut output = Pager::new();
                 output.set_exit_strategy(ExitStrategy::PagerQuit).unwrap();
@@ -123,7 +116,7 @@ impl Command {
                 }
 
                 minus::page_all(output).unwrap();
-            }
+            },
 
             Command::Disassemble(..) => todo!(),
 
@@ -136,7 +129,7 @@ impl Command {
                         v.into_iter()
                             .for_each(|(sym, addr)| println!("{sym} {addr:X}"))
                     });
-            }
+            },
 
             Command::Help => {
                 println!("DISASSEMBLE [start [amount]]: Display memory from physical address start for amount bytes");
@@ -147,14 +140,20 @@ impl Command {
     }
 }
 
-fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) ->  PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     cut_err(alt((
         parse_memory,
@@ -167,38 +166,44 @@ Error: AddContext<I, winnow::error::StrContext>
     .parse_next(input)
 }
 
-fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     (
         alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
-        opt(preceded(
-            space1,
-            parse_value
-        )),
-        opt(preceded(
-            space1,
-            parse_value
-        ))
+        opt(preceded(space1, parse_value)),
+        opt(preceded(space1, parse_value))
     )
         .map(|v| Command::Memory(v.1, v.2))
         .parse_next(input)
 }
 
-fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     (
         alt((
@@ -206,27 +211,27 @@ Error: AddContext<I, winnow::error::StrContext>
             tag_no_case("DISASS"),
             tag_no_case("DIS")
         )),
-        opt(preceded(
-            space1,
-            parse_value
-        )),
-        opt(preceded(
-            space1,
-            parse_value
-        ))
+        opt(preceded(space1, parse_value)),
+        opt(preceded(space1, parse_value))
     )
         .map(|v| Command::Disassemble(v.1, v.2))
         .parse_next(input)
 }
 
-fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     (alt((
         tag_no_case("SYMBOLS"),
@@ -237,37 +242,50 @@ Error: AddContext<I, winnow::error::StrContext>
     .parse_next(input)
 }
 
-fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I)  ->  PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     tag_no_case("HELP").map(|_| Command::Help).parse_next(input)
 }
 
-fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command,Error> 
-where I: 'i + Stream<Slice = &'i [u8]> + StreamIsPartial + for <'a> Compare<&'a str> +  for <'s> FindSlice<&'s str> + AsBytes,
-<I as Stream>::Slice: AsBytes,
-<I as Stream>::Token: AsChar,
-<I as Stream>::Token: Clone,
-I: for <'a> Compare<&'a [u8; 2]>,
-I: for <'a> Compare<&'a [u8; 1]>, 
-Error: AddContext<I, winnow::error::StrContext>
+fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+where
+    I: 'i
+        + Stream<Slice = &'i [u8]>
+        + StreamIsPartial
+        + for<'a> Compare<&'a str>
+        + for<'s> FindSlice<&'s str>
+        + AsBytes,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    Error: AddContext<I, winnow::error::StrContext>
 {
     preceded(
-        (tag_no_case("LOAD2"), cut_err(space1).context(StrContext::Label("LOAD2 expects a filename"))),
+        (
+            tag_no_case("LOAD2"),
+            cut_err(space1).context(StrContext::Label("LOAD2 expects a filename"))
+        ),
         cut_err(
             delimited('"', take_until1("\""), '"')
                 .context(StrContext::Label("Filename needs to be in a string"))
         )
     )
-    .map(|fname: &[u8]| {
-        Command::Load2(String::from_utf8_lossy(fname).into_owned())
-    })
+    .map(|fname: &[u8]| Command::Load2(String::from_utf8_lossy(fname).into_owned()))
     .parse_next(input)
 }
 
@@ -301,7 +319,6 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
                 rl.add_history_entry(line.as_str());
 
                 let line = line.as_bytes();
-                
 
                 let mut src = Source::new(line);
                 match parse_line::<Source, ContextError>.parse(src) {
@@ -309,7 +326,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
                     Err(e) => {
                         // Coded as if there ere several lines
                         let input = e.input().as_bytes();
-                        let input = unsafe{std::str::from_utf8_unchecked(input)}; 
+                        let input = unsafe { std::str::from_utf8_unchecked(input) };
                         let offset = e.offset();
 
                         let range = input.find_line_range(offset);
@@ -323,11 +340,10 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
                         }
                         eprintln!("^");
                         eprintln!("{}", e.inner());
-
-                    }
+                    },
                     _ => todo!()
                 }
-            }
+            },
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,
             Err(err) => {

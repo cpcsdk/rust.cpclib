@@ -3,14 +3,12 @@ use cpclib_asm::preamble::*;
 use cpclib_macros::*;
 
 // TODO reactivate that stuff
-/*
-#[test]
-fn test_macro_parse_z80_fname() {
-    let listing = parse_z80!(fname: "./cpclib/tests/my_path.asm");
-
-    assert_eq!(listing.len(), 3);
-}
-*/
+// #[test]
+// fn test_macro_parse_z80_fname() {
+// let listing = parse_z80!(fname: "./cpclib/tests/my_path.asm");
+//
+// assert_eq!(listing.len(), 3);
+// }
 fn test_macro_parse_z80_single_instruction() {
     let listing = parse_z80!(" ld a, 0");
 

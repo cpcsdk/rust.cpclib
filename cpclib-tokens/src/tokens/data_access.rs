@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Debug;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use paste;
 
@@ -92,7 +91,7 @@ impl fmt::Display for DataAccess {
         match self {
             DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref delta) => {
                 write!(f, "({} {} {})", reg, op, delta)
-            }
+            },
             DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
             DataAccess::Register16(ref reg) => write!(f, "{}", reg),
             DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
@@ -124,8 +123,7 @@ pub trait DataAccessElem: Sized + Debug + Display {
     fn is_address_in_register16(&self) -> bool;
     #[inline]
     fn is_address_in_hl(&self) -> bool {
-        self.is_address_in_register16() && 
-            self.get_register16() == Some(Register16::Hl) 
+        self.is_address_in_register16() && self.get_register16() == Some(Register16::Hl)
     }
     fn is_indexregister_with_index(&self) -> bool;
     fn is_indexregister16(&self) -> bool;
@@ -333,7 +331,7 @@ macro_rules! data_access_impl_most_methods {
             Self::Expression(exp, ..) |
             Self::Memory(exp, ..) |
             Self::PortN(exp,..) => Some(exp),
-            
+
             _ => None
         }
     }
@@ -396,8 +394,6 @@ impl DataAccessElem for DataAccess {
             _ => false
         }
     }
-
-
 
     fn is_register_i(&self) -> bool {
         match self {

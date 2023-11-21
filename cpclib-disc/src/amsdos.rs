@@ -315,7 +315,7 @@ impl TryFrom<&str> for AmsdosFileName {
                     u8::from_str_radix(&content[..1], 10).unwrap_or_default(),
                     &content[2..]
                 )
-            }
+            },
             _ => unreachable!()
         };
 
@@ -352,7 +352,7 @@ impl TryFrom<u8> for AmsdosFileType {
                     "{} is not a valid file type",
                     val
                 )))
-            }
+            },
         }
     }
 }
@@ -833,7 +833,7 @@ impl AmsdosEntries {
             Some(idx) => {
                 let idx = idx % 16;
                 Some([0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9][idx / 16])
-            }
+            },
             _ => None
         }
     }

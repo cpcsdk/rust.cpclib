@@ -5,7 +5,8 @@ pub mod tokens;
 
 use std::fmt::{self};
 
-use cpclib_common::winnow::{Parser, ascii::space0};
+use cpclib_common::winnow::ascii::space0;
+use cpclib_common::winnow::Parser;
 use cpclib_sna::Snapshot;
 use parser::parse_basic_program;
 use thiserror::Error;
@@ -163,7 +164,7 @@ impl BasicProgram {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {}", e)
                 })
-            }
+            },
 
             _ => unreachable!()
         }
@@ -208,7 +209,7 @@ impl BasicProgram {
                 else {
                     Some(BasicProgramLineIdx::Index(index - 1))
                 }
-            }
+            },
             Err(_e) => None,
             _ => unreachable!()
         }
@@ -232,14 +233,14 @@ impl BasicProgram {
                 else {
                     Ok(idx)
                 }
-            }
+            },
 
             BasicProgramLineIdx::Number(number) => {
                 match self.get_index_of_line_number(*number) {
                     Some(index) => Ok(BasicProgramLineIdx::Index(index)),
                     None => Err(BasicError::UnknownLine { idx })
                 }
-            }
+            },
         }
     }
 
@@ -280,7 +281,7 @@ impl BasicProgram {
                         .add_length(current_length + 1 + 2 + 2);
                     self.get_line_mut(idx).unwrap().set_length(0);
                     Ok(())
-                }
+                },
                 None => Err(BasicError::UnknownLine { idx })
             }
         }

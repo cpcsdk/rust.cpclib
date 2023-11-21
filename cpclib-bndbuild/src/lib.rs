@@ -53,7 +53,7 @@ fn expand_glob(p: &str) -> Vec<String> {
                                     else {
                                         p
                                     }
-                                }
+                                },
                                 Err(_e) => p.clone()
                             }
                         })
