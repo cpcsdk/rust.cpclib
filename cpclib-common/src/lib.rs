@@ -1,4 +1,4 @@
-use std::slice;
+
 
 #[cfg(feature = "cmdline")]
 pub use clap;
@@ -8,13 +8,13 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::ascii::{hex_digit1, space0};
-use winnow::binary::bits::take;
-use winnow::combinator::{alt, fail, opt, terminated};
+use winnow::ascii::{space0};
+
+use winnow::combinator::{alt, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
-use winnow::prelude::*;
-use winnow::stream::{AsBytes, AsChar, BStr, Compare, Stream, StreamIsPartial, UpdateSlice};
-use winnow::token::{any, one_of, tag_no_case, take_while};
+
+use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice};
+use winnow::token::{tag_no_case, take_while};
 use winnow::{PResult, Parser};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, num, resolve_path, smallvec,
