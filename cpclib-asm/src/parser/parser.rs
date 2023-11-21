@@ -3207,10 +3207,14 @@ pub fn parse_db_or_dw_or_str(
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         // STRUCT directive allows to have no arguments
         let expr = if empty_list_allowed {
-            expr_list(input).unwrap_or(Default::default())
+            expr_list.parse_next(input).unwrap_or(Default::default())
         }
         else {
-            expr_list(input)?
+            expr_list.context(match code {
+                DbDwStr::Dw => "DEFW: error in arguments",
+                DbDwStr::Db => "DEFB: error in arguments",
+                DbDwStr::Str => "STR: error in arguments"
+            }).parse_next(input)?
         };
 
         Ok(match code {
