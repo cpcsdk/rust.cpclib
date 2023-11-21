@@ -226,6 +226,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"DW",
     b"ELSE",
     b"END",
+    b"ENT",
     b"EQU",
     b"EXPORT",
     b"FAIL",
@@ -2588,6 +2589,8 @@ pub fn parse_directive_new(
             choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input)?,
 
             choice_nocase!(b"END") => Ok(LocatedTokenInner::End)?,
+            choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input)?,
+
             choice_nocase!(b"EXPORT") => parse_export(ExportKind::Export).parse_next(input)?,
 
             choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input)?,
@@ -2607,7 +2610,7 @@ pub fn parse_directive_new(
 
             choice_nocase!(b"RANGE") => parse_range.parse_next(input)?,
             choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
-            choice_nocase!(b"RUN") => parse_run.parse_next(input)?,
+            choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input)?,
 
             choice_nocase!(b"SECTION") => parse_section.parse_next(input)?,
             choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
@@ -2830,13 +2833,36 @@ pub fn parse_buildsna(
     }
 }
 
+
+#[derive(PartialEq)]
+enum RunEnt {
+    Run,
+    Ent
+}
+
 #[inline]
-pub fn parse_run(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let exp = cut_err(located_expr.context("RUN expects an expression (e.g. RUN $)"))
+pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z80ParserError> {
+
+    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    let exp = cut_err(
+        located_expr
+            .context(
+                match &kind {
+                RunEnt::Run => "RUN expects at least one expression (e.g. RUN $)",
+                RunEnt::Ent => "ENT expects one expression"
+            })
+        )
         .parse_next(input)?;
-    let ga = opt(preceded((space0, (','), space0), located_expr)).parse_next(input)?;
+
+
+    let ga = if kind == RunEnt::Ent {
+        opt(preceded((space0, (','), space0), located_expr)).parse_next(input)?
+    } else {
+        None
+    };
 
     Ok(LocatedTokenInner::Run(exp, ga))
+}
 }
 
 macro_rules! directive_with_expr {
