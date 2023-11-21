@@ -4998,7 +4998,8 @@ pub fn parse_label(
             Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Verify
-            )))
+            ).add_context(input, "You cannot use a directive or an instruction as a label")
+            ))
         }
         else {
             Ok(input.clone().update_slice(obtained_label).into())
@@ -6268,6 +6269,11 @@ mod test {
             parse_line_component,
             "for count, 0, 10, 3 : db {count} : endfor"
         );
+        assert!(res.is_ok(), "{:?}", &res);
+
+
+
+        let res = parse_test(parse_line_component, "FAIL");
         assert!(res.is_ok(), "{:?}", &res);
     }
 
