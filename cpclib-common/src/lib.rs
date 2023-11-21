@@ -8,9 +8,9 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::ascii::{space0};
+use winnow::ascii::{space0, alphanumeric1};
 
-use winnow::combinator::{alt, opt, terminated};
+use winnow::combinator::{alt, opt, terminated, not};
 use winnow::error::{AddContext, ParserError, StrContext};
 
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice};
@@ -129,6 +129,13 @@ where
         }
     };
 
+    // ensure there are no more numbers
+    if encoding == EncodingKind::Hex {
+        not(alphanumeric1)
+            .context(StrContext::Label("This is not an hexadecimal number"))
+            .parse_next(input)?;
+    }
+
     // right here encoding anddigits are compatible
     debug_assert!(encoding != EncodingKind::Unk);
     debug_assert!(encoding != EncodingKind::AmbiguousBinHex);
@@ -156,6 +163,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use winnow::BStr;
     use winnow::error::{ContextError, VerboseError};
     use winnow::stream::AsBStr;
 
@@ -235,6 +243,15 @@ mod tests {
         assert_eq!(
             dbg!(parse_value::<_, ContextError>.parse(BStr::new(b"0bh"))).unwrap(),
             0xB
+        );
+
+        assert_eq!(
+            dbg!(parse_value::<_, ContextError>.parse(BStr::new(b"CH"))).unwrap(),
+            0xC
+        );
+
+        assert!(
+            dbg!(parse_value::<_, ContextError>.parse_next(&mut BStr::new(b"CHECK"))).is_err()
         );
     }
 }

@@ -6117,6 +6117,10 @@ mod test {
 
     #[test]
     fn test_parse_line_component() {
+
+        let res = parse_test(parse_line_component, " DJNZ CHECK");
+        assert!(res.is_ok(), "{:?}", &res);
+
         let res = parse_test(parse_line_component, "ld a, d");
         assert!(res.is_ok(), "{:?}", &res);
 
@@ -6239,6 +6243,8 @@ mod test {
 
     #[test]
     fn test_parse_label() {
+        assert!(dbg!(parse_test(parse_label(false), "CHECK")).is_ok());
+
         assert!(dbg!(parse_test(parse_label(false), "label")).is_ok());
 
         assert!(dbg!(parse_test(parse_label(false), "label.label")).is_ok());
@@ -6276,8 +6282,20 @@ mod test {
     }
 
     #[test]
+    fn test_regression_check() {
+        let check= "CHECK";
+
+
+        let (ctx, mut span) = ctx_and_span("CHECK");
+        assert!(dbg!(factor.parse_next(&mut span.0)).is_ok());
+
+        assert!(dbg!(parse_test(parse_label(false), check)).is_ok());
+        assert!(dbg!(parse_test(factor, check)).is_ok());
+    }
+
+    #[test]
     fn test_parse_expr() {
-        for code in &["'o'", "'o' + 0x80", "\"\\\" et voila\""] {
+        for code in &["'o'", "'o' + 0x80", "CHECK", "\"\\\" et voila\""] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 
             assert!(dbg!(parse_test(expr_list, code)).is_ok());
