@@ -7,4 +7,12 @@
 
 	magic xor, (hl)
 	magic add, b
-	; empty line added to not break parser ...
+
+
+
+magic2	macro op, arg
+		{op} {arg}
+	endm
+
+	magic2 xor, (hl)
+	magic2 add, b

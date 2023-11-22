@@ -19,7 +19,7 @@ use cpclib_common::winnow::error::{
     AddContext, ErrMode, ErrorKind, ParserError, StrContext, VerboseError, VerboseErrorKind
 };
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Offset, Range, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Offset, Range, Stream, UpdateSlice, Checkpoint
 };
 use cpclib_common::winnow::token::{
     none_of, one_of, tag, tag_no_case, take, take_till0, take_till1, take_until0, take_while
@@ -724,10 +724,18 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     // macro name
     let name = cut_err(parse_label(false).context("MACRO: wrong name")).parse_next(input)?; // TODO use a specific function for that
 
+    parse_macro_inner(dir_start, name).parse_next(input)
+}
+
+
+fn parse_macro_inner(dir_start: Checkpoint<Checkpoint<Checkpoint<&BStr>>>, name: InnerZ80Span) -> impl FnMut(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> +'_ {
+
+    move |input: &mut InnerZ80Span | -> PResult<LocatedToken, Z80ParserError>  {
     // macro arguments
     let arguments = preceded(
         opt(parse_comma), // comma after macro name is not mandatory
-        separated0::<_, _, Vec<&[u8]>, _, _, _, _>(
+        separated::<_, _, Vec<&[u8]>, _, _, _, _>(
+            0..,
             // parse_label(false)
             delimited(
                 space0,
@@ -773,6 +781,7 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
         content: content.into()
     }
     .into_located_token_between(dir_start, input.clone()))
+}
 }
 
 /// TODO
@@ -1212,15 +1221,14 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
         })
 }
 
+
+#[inline]
 pub fn parse_line_component(
     input: &mut InnerZ80Span
 ) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
     my_space0.parse_next(input)?;
 
-    alt((
-        //   parse_line_component_macro, // probably really slow to do that here . I'm confident some refactoring is needed
-        parse_line_component_standard,
-    ))
+    parse_line_component_standard
     .parse_next(input)
 }
 
@@ -1332,6 +1340,11 @@ pub fn parse_line_component_standard(
                 || c == b'^'
                 || c == b'|'
                 || c == b'&'
+                || c == b'm' || c== b'M'
+                || c == b'a' || c== b'A'
+                || c == b'c' || c== b'C'
+                || c == b'r' || c== b'R'
+                || c == b'o' || c== b'O'
         }))
         .parse_next(input)?
     };
@@ -1340,6 +1353,7 @@ pub fn parse_line_component_standard(
     let label_modifier: Option<LabelModifier> = match label_modifier {
         Some(label_modifier) => {
             match label_modifier {
+                choice_nocase!(b"MACRO") => Some(LabelModifier::Macro),
                 choice_nocase!(b"DEFL") => Some(LabelModifier::Equ),
                 choice_nocase!(b"EQU") => Some(LabelModifier::Equ),
                 choice_nocase!(b"SETN") => Some(LabelModifier::SetN),
@@ -1392,7 +1406,13 @@ pub fn parse_line_component_standard(
     };
 
     if let Some(label_modifier) = label_modifier {
-        // we must generate a directive related to the label handling
+        if label_modifier == LabelModifier::Macro {
+            let r#macro = parse_macro_inner(before_label, label.unwrap())
+                .context("MACRO: error on macro definition")
+        .parse_next(input)?;
+            return Ok((None, Some(r#macro)));
+
+        }
 
         let expr_arg = match &label_modifier {
             LabelModifier::Equ
@@ -1471,6 +1491,8 @@ pub fn parse_line_component_standard(
                     expr: expr_arg.unwrap().into()
                 }
             },
+        LabelModifier::Macro => unreachable!("This case must have been handled before")
+
         }
         .into_located_token_between(before_label, input.clone());
 
@@ -1543,14 +1565,19 @@ fn parse_single_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
 }
 
 // TODO add struct and Macro
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum LabelModifier {
     Equ,
     Set,
     Equal(Option<BinaryOperation>),
     SetN,
     Next,
-    Field
+    Field,
+    Macro
+}
+
+pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+        parse_string(input)
 }
 
 #[inline]
@@ -1660,92 +1687,6 @@ pub fn parse_z80_line_complete(
     parse_line(r#in)
 }
 
-// TODO remove
-#[inline]
-pub fn parse_z80_line_complete_backup_to_remove(
-    r#in: &mut Vec<LocatedToken>
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
-    move |input: &mut InnerZ80Span| -> PResult<(), Z80ParserError> {
-        // Early exit if line is empty or with comment only
-        if let Some(empty) = opt(parse_line_or_with_comment).parse_next(input)? {
-            if let Some(comment) = empty {
-                r#in.push(comment);
-            }
-            return Ok(());
-        }
-
-        // get the line components
-        my_separated0_in(
-            (my_space0, ':', my_space0).value(()),
-            // Take care of the order to not break parse
-            alt((
-                // handle set/equ/ and so on
-                parse_z80_line_label_aware_directive.map(|l| Either::Left(l)),
-                // move all of these in z80_line_component and rename line_component in something else ...
-
-                // a simple token mnemonic or directive (except macro call)
-                parse_single_token.map(|t| Either::Left(t)),
-                // macros/loops/...
-                parse_z80_directive_with_block.map(|b| Either::Left(b)),
-                // a label followed by a simple token mnemonic or directive (except macro call)
-                (
-                    terminated(parse_label(false), not(line_ending)),
-                    parse_single_token
-                )
-                    .map(|t| {
-                        Either::Right(vec![
-                            LocatedTokenInner::Label(t.0.into()).into_located_token_direct(),
-                            t.1,
-                        ])
-                    }),
-                // TODO add syntax where block-like directives have there name provided in a preceding label
-                parse_macro_or_struct_call(false, false).map(|m| Either::Left(m)),
-                (space0, peek(tag(":"))).map(|_| Either::Right(vec![])), // a duplicated :
-                parse_label(false).map(|l| {
-                    Either::Left(LocatedTokenInner::Label(l.into()).into_located_token_direct())
-                })  // a single label
-            )),
-            r#in
-        )
-        .parse_next(input)?;
-
-        // we may have some space after the last component
-        // also a : that is not cpatured when there is nothing after
-        let _ = (my_space0, opt(':'), my_space0).parse_next(input)?;
-
-        // early stop in case of stop directive
-        let before_end = input.checkpoint();
-        let stop = opt(parse_end_directive).parse_next(input)?;
-        if stop.is_some() {
-            input.reset(before_end);
-            return Ok(());
-        }
-
-        // get the possible comment
-        let _ = space0(input)?;
-        let _before_comment = input.clone();
-        let _comment = opt(parse_comment).parse_next(input)?;
-        let _ = space0(input)?;
-
-        // if let Some(comment) = comment {
-        // let size = before_comment.input_len() - input.input_len();
-        // r#in.push(comment.locate(before_comment, size));
-        // }
-
-        // dbg!(&r#in);
-
-        let _ = cut_err(
-            preceded(
-                opt(':'), // we allow : as the very last char of a line
-                alt((eof.value(()), my_line_ending.value(())))
-            )
-            .context("Line ending expected")
-        )
-        .parse_next(input)?;
-
-        Ok(())
-    }
-}
 
 #[inline]
 pub fn parse_assign_operator(
@@ -1795,242 +1736,6 @@ pub fn parse_assign_operator(
     Ok(oper)
 }
 
-/// No opcodes are expected there.
-/// Initially it was supposed to manage lines with only labels, however it has been extended
-/// to labels fallowed by specific commands.
-/// TODO this complete piece of code MUST be removed and integrated within parse_z80_line_complete
-/// space before has already been removed
-#[inline]
-#[deprecated = "Replaced by parse_line_component"]
-pub fn parse_z80_line_label_aware_directive(
-    input: &mut InnerZ80Span
-) -> PResult<LocatedToken, Z80ParserError> {
-    panic!("Do not use anymore");
-
-    let before_label = input.checkpoint();
-
-    let r#let = opt(terminated(parse_directive_word("LET"), my_space0)).parse_next(input)?;
-
-    //   let _after_let = input.clone();
-    let label = parse_label(true).context("Label issue").parse_next(input)?; // here there is true because of arkos tracker 2 player
-
-    let label_modifier = opt(preceded(
-        my_space0,
-        take_while(1..5, |c| {
-            c == b'#'
-                || c == b'D'
-                || c == b'd'
-                || c == b'E'
-                || c == b'e'
-                || c == b'F'
-                || c == b'f'
-                || c == b'L'
-                || c == b'l'
-                || c == b'Q'
-                || c == b'q'
-                || c == b'U'
-                || c == b'u'
-                || c == b'S'
-                || c == b's'
-                || c == b'T'
-                || c == b't'
-                || c == b'N'
-                || c == b'n'
-                || c == b'X'
-                || c == b'X'
-                || c == b'='
-                || c == b'<'
-                || c == b'>'
-                || c == b'+'
-                || c == b'-'
-                || c == b'*'
-                || c == b'/'
-                || c == b'%'
-                || c == b'^'
-                || c == b'|'
-                || c == b'&'
-        })
-    ))
-    .parse_next(input)?;
-
-    let label_modifier: Option<LabelModifier> = match label_modifier {
-        Some(label_modifier) => {
-            match label_modifier {
-                choice_nocase!(b"DEFL") => Some(LabelModifier::Equ),
-                choice_nocase!(b"EQU") => Some(LabelModifier::Equ),
-                choice_nocase!(b"SETN") => Some(LabelModifier::SetN),
-                choice_nocase!(b"NEXT") => Some(LabelModifier::Next),
-                choice_nocase!(b"SET") => {
-                    if not((my_space0, expr, parse_comma))
-                        .parse_next(input)
-                        .is_ok()
-                    {
-                        Some(LabelModifier::Set)
-                    }
-                    else {
-                        None
-                    }
-                },
-                b"=" => Some(LabelModifier::Equal(None)),
-                choice_nocase!(b"FIELD") | b"#" => Some(LabelModifier::Field),
-                oper => {
-                    let oper = match oper {
-                        b">>=" => Some(BinaryOperation::RightShift),
-                        b"<<=" => Some(BinaryOperation::LeftShift),
-
-                        b"+=" => Some(BinaryOperation::Add),
-                        b"-=" => Some(BinaryOperation::Sub),
-                        b"*=" => Some(BinaryOperation::Mul),
-                        b"/=" => Some(BinaryOperation::Div),
-                        b"%=" => Some(BinaryOperation::Mod),
-
-                        b"&=" => Some(BinaryOperation::BinaryAnd),
-                        b"|=" => Some(BinaryOperation::BinaryOr),
-                        b"^=" => Some(BinaryOperation::BinaryXor),
-
-                        b"&&=" => Some(BinaryOperation::BooleanAnd),
-                        b"||=" => Some(BinaryOperation::BooleanOr),
-
-                        _ => None
-                    };
-
-                    if oper.is_some() {
-                        Some(LabelModifier::Equal(oper))
-                    }
-                    else {
-                        None
-                    }
-                }
-            }
-        },
-
-        None => None
-    };
-
-    // early quit if there is only one label and nothing else
-    if label_modifier.is_none() {
-        // let expect a modifier, so there is an issue
-        if r#let.is_some() {
-            input.reset(before_label);
-            return Err(ErrMode::Cut(
-                Z80ParserError::from_error_kind(input, ErrorKind::Fail)
-                    .add_context(input, "LET expects =")
-            ));
-        }
-        else {
-            // ensure there is nothing after
-            let _ = alt((
-                (my_space0, ':').value(()),
-                (my_space0, my_line_ending).value(())
-            ))
-            .context("Nothing more is expected here")
-            .parse_next(input)?;
-            return Ok(LocatedTokenInner::Label(label.into()).into_located_token_direct());
-        }
-    }
-
-    let label_modifier = label_modifier.unwrap();
-
-    // ensure let uses =
-    if r#let.is_some() {
-        if let LabelModifier::Equal(..) = &label_modifier {
-            // ok
-        }
-        else {
-            input.reset(before_label);
-            return Err(ErrMode::Cut(
-                Z80ParserError::from_error_kind(input, ErrorKind::Fail)
-                    .add_context(input, "LET expects =")
-            ));
-        }
-    }
-
-    let expr_arg = match &label_modifier {
-        LabelModifier::Equ
-        | LabelModifier::Equal(..)
-        | LabelModifier::Set
-        | LabelModifier::Field => {
-            cut_err(located_expr.map(|e| Some(e)))
-                .context("Value error")
-                .parse_next(input)?
-        },
-        _ => None
-    };
-
-    let source_label = match &label_modifier {
-        LabelModifier::Next | LabelModifier::SetN => {
-            cut_err(
-                preceded(my_space0, parse_label(false))
-                    .map(|l| Some(l))
-                    .context("Label expected")
-            )
-            .parse_next(input)?
-        },
-        _ => None
-    };
-
-    // optional expression to control the displacement
-    let additional_arg = match &label_modifier {
-        LabelModifier::Next | LabelModifier::SetN => {
-            opt(preceded(parse_comma, located_expr)).parse_next(input)?
-        },
-        _ => None
-    };
-
-    // opt!(char!(':')) >>
-
-    // Build the needed token for the label of interest
-    let token: LocatedToken = match label_modifier {
-        LabelModifier::Equ => {
-            LocatedTokenInner::Equ {
-                label: label.into(),
-                expr: expr_arg.unwrap()
-            }
-        },
-        LabelModifier::Equal(op) => {
-            LocatedTokenInner::Assign {
-                label: label.into(),
-                expr: expr_arg.unwrap(),
-                op
-            }
-        },
-        LabelModifier::Set => {
-            LocatedTokenInner::Assign {
-                label: label.into(),
-                expr: expr_arg.unwrap(),
-                op: None
-            }
-        },
-        LabelModifier::SetN => {
-            LocatedTokenInner::SetN {
-                label: label.into(),
-                source: source_label.unwrap().into(),
-                expr: additional_arg
-            }
-        },
-        LabelModifier::Next => {
-            LocatedTokenInner::Next {
-                label: label.into(),
-                source: source_label.unwrap().into(),
-                expr: additional_arg
-            }
-        },
-        LabelModifier::Field => {
-            LocatedTokenInner::Field {
-                label: label.into(),
-                expr: expr_arg.unwrap().into()
-            }
-        },
-    }
-    .into_located_token_between(before_label, input.clone());
-
-    // add it to the list
-
-    Ok(token)
-}
-pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
-    parse_string(input)
-}
 
 /// Parser for file names in appropriate directives
 #[inline]
@@ -6363,5 +6068,25 @@ mod test {
 
             assert!(dbg!(parse_test(parse_expr, string)).is_ok());
         }
+    }
+
+
+
+    #[test]
+    fn test_parse_macro() {
+        let mut tokens = Vec::new();
+        let r#macro = "macro bankm
+                call xxx
+            endm;";
+        tokens.clear();
+        assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
+
+
+        let r#macro = "bankm macro
+        call xxx
+    endm;";
+        tokens.clear();
+        assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
+
     }
 }
