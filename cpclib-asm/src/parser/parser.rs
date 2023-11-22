@@ -3374,12 +3374,24 @@ pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 /// ...
 #[inline]
 pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
-    separated(
-        1..,
-        cut_err(located_expr.context("Error in expression")),
-        (tag(","), space0)
-    )
-    .parse_next(input)
+
+    let mut exprs = Vec::new();
+    loop {
+        let expr = opt(located_expr).parse_next(input)?;
+        match expr {
+            Some(expr) => exprs.push(expr),
+            None => break
+        }
+
+        let comma = opt(parse_comma).parse_next(input)?;
+        match comma {
+            Some(_) => {},
+            None => break
+        }
+    }
+
+    Ok(exprs)
+
 }
 
 /// ...
@@ -6088,5 +6100,15 @@ mod test {
         tokens.clear();
         assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
 
+    }
+
+    #[test]
+    fn test_expression_list() {
+        assert!(dbg!(parse_test(expr_list, "1")).is_ok());
+        assert!(dbg!(parse_test(expr_list, "1,2")).is_ok());
+        assert!(dbg!(parse_test(expr_list, "1, 2")).is_ok());
+        assert!(dbg!(parse_test(expr_list, "1 ,2")).is_ok());
+        assert!(dbg!(parse_test(expr_list, "1 , 2")).is_ok());
+        assert!(dbg!(parse_test(expr_list, "1,2,")).is_ok());
     }
 }
