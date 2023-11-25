@@ -392,7 +392,7 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
     let res = LocatedListing::new_complete_source(str, builder)
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)));
 
-    dbg!(res)
+    res
 }
 
 #[inline]

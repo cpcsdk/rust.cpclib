@@ -4298,7 +4298,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
         Err(_msg) => Err(AssemblerError::UnknownAssemblingAddress),
         Ok(root) => {
             let delta = (address - i32::from(root)) - opcode_delta;
-            if delta > 128 || delta < -127 {
+            if delta > 127 || delta < -128 {
                 Err(AssemblerError::InvalidArgument {
                     msg: format!(
                         "Address 0x{:x} relative to 0x{:x} is too far {}",
