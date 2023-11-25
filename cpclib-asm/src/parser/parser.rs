@@ -4248,7 +4248,7 @@ pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80P
 /// Parse an address access `(expression)`
 #[inline]
 pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
-    let filter = |c: u8| {
+   /* let filter = |c: u8| {
         c == b'/'
             || c == b'+'
             || c == b'='
@@ -4260,16 +4260,16 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
             || c == b'&'
             || c == b'|'
     };
-
+    */
     let first_char = alt(('(', '[')).parse_next(input)?;
     let address = terminated(
         located_expr,
         (
             my_space0,
             if first_char == b'(' { b')' } else { b']' },
-            not(
+            peek(
                 // filter expressions ; they are followed by some operators
-                preceded(my_space0, one_of(filter))
+                preceded(my_space0, alt((eof.value(()), my_line_ending.value(()), ",".value(()), ":".value(()))))
             )
         )
     )
@@ -5802,6 +5802,11 @@ mod test {
     #[test]
     fn test_parse_line_component() {
 
+
+        let res = parse_test(parse_line_component, "ld      a,(2 - $b06e) and $ff");
+        assert!(res.is_ok(), "{:?}", &res);
+
+
         let res = parse_test(parse_line_component, " DJNZ CHECK");
         assert!(res.is_ok(), "{:?}", &res);
 
@@ -5993,7 +5998,7 @@ mod test {
 
     #[test]
     fn test_parse_expr() {
-        for code in &["'o'", "'o' + 0x80", "CHECK", "\"\\\" et voila\""] {
+        for code in &["(2 - $b06e) and $ff", "'o'", "'o' + 0x80", "CHECK", "\"\\\" et voila\""] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 
             assert!(dbg!(parse_test(expr_list, code)).is_ok());
