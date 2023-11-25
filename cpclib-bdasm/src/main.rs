@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
+use cpclib_common::winnow::{Parser, error::ParseError};
 use cpclib_disc::amsdos::AmsdosHeader;
 use {clap, lazy_static};
 
@@ -171,7 +172,9 @@ fn main() {
 
     // add origin if any
     if let Some(address) = matches.get_one::<String>("ORIGIN") {
-        let origin = u16::from_str_radix(address, 16).unwrap();
+        let address = address.as_bytes();
+        let origin : Result<u32, ParseError<_, ()>>= cpclib_common::parse_value.parse(address);
+        let origin = origin.expect("Unable to parse origin") as u16;
         listing.insert(0, org(origin));
     }
     else if let Some(origin) = amsdos_load {

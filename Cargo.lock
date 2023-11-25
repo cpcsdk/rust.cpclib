@@ -1263,6 +1263,7 @@ dependencies = [
  "built",
  "clap",
  "cpclib-asm",
+ "cpclib-common",
  "cpclib-disc",
  "lazy_static",
  "time",
