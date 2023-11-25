@@ -652,7 +652,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
     let rorg_start = input.checkpoint();
     let _ = alt((tag_no_case("PHASE"), tag_no_case("RORG"))).parse_next(input)?;
 
-    let exp = delimited(space1, located_expr, my_space0).parse_next(input)?;
+    let exp = delimited(my_space1, located_expr, my_space0).parse_next(input)?;
 
     let _ = my_line_ending.parse_next(input)?;
 
@@ -864,7 +864,7 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
 /// Parse the switch directive
 pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let _ =
-        my_many0_nocollect(alt((space1.value(()), my_line_ending.value(())))).parse_next(input)?;
+        my_many0_nocollect(alt((my_space1.value(()), my_line_ending.value(())))).parse_next(input)?;
     let switch_start = input.clone();
     let _ = parse_directive_word(b"SWITCH")(input)?;
 
@@ -877,10 +877,10 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     loop {
         let _ = cut_err(
             my_many0_nocollect(alt((
-                space1,
-                line_ending,
-                tag(":"),
-                parse_comment.recognize()
+                my_space1.value(()),
+                line_ending.value(()),
+                tag(":").value(()),
+                parse_comment.value(())
             )))
             .context("SWITCH: whitespace error")
         )
@@ -1191,7 +1191,7 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 pub fn parse_basic_hide_lines(
     input: &mut InnerZ80Span
 ) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
-    let _ = ((tag_no_case("HIDE_LINES"), space1)).parse_next(input)?;
+    let _ = ((tag_no_case("HIDE_LINES"), my_space1)).parse_next(input)?;
     expr_list.parse_next(input)
 }
 
@@ -1812,7 +1812,7 @@ pub fn parse_write_direct_memory(
     // filter all the stuff before
     let _ = ((
         tag_no_case("DIRECT"),
-        space1,
+        my_space1,
         tag_no_case("-1"),
         parse_comma,
         tag_no_case("-1"),
@@ -2532,7 +2532,7 @@ pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
 pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
-    preceded((tag_no_case("start"), space1), parse_label(false))
+    preceded((tag_no_case("start"), my_space1), parse_label(false))
         .map(|name| {
             LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into()))
         })
@@ -3028,9 +3028,8 @@ pub fn parse_macro_or_struct_call_inner(
                             1..,
                             alt((
                                 parse_macro_arg.with_recognized(),
-                                space1
-                                    .map(|space: &[u8]| {
-                                        let space = input2.clone().update_slice(&space[..0]);
+                                my_space1
+                                    .map(|space: InnerZ80Span| {
                                         LocatedMacroParam::Single(space.into())
                                         // string of size 0;
                                     })
@@ -3200,12 +3199,12 @@ pub fn parse_macro_or_struct_call_beckup_to_remove(
                     delimited(my_space0, tag_no_case("(void)"), my_space0).value(Default::default()),
                     alt((
                         tag_no_case("(void)").value(Vec::new()),
-                        separated1(
+                        separated(
+                            1..,
                             alt((
                                 parse_macro_arg.with_recognized(),
-                                space1
-                                    .map(|space: &[u8]| {
-                                        let space = input2.clone().update_slice(&space[..0]);
+                                my_space1
+                                    .map(|space: InnerZ80Span| {
                                         LocatedMacroParam::Single(space.into())
                                         // string of size 0;
                                     })
@@ -4459,15 +4458,15 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
             1..,
             delimited(
                 my_many0_nocollect(alt((
-                    space1,
-                    parse_comment.recognize(),
-                    line_ending,
-                    tag(":")
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                    tag(":").value(())
                 ))),
                 (
                     terminated(
                         parse_label(false),
-                        alt((((my_space0, ':', my_space0)).recognize(), space1.recognize()))
+                        alt((((my_space0, ':', my_space0)).recognize(), my_space1.recognize()))
                     )
                     .verify(|label: &InnerZ80Span| !label.eq_ignore_ascii_case(b"endstruct"))
                     .context("STRUCT: label error")
@@ -4475,10 +4474,10 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                     cut_err(parse_struct_directive.context("STRUCT: Invalid operation"))
                 ),
                 my_many0_nocollect(alt((
-                    space1,
-                    parse_comment.recognize(),
-                    line_ending,
-                    tag(":")
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                    tag(":").value(())
                 )))
             )
         )
@@ -5409,7 +5408,7 @@ mod test {
         assert!(res.is_ok());
 
         let res = parse_test(
-            (parse_conditional, line_ending, space1),
+            (parse_conditional, line_ending, my_space1),
             "if THING
                     nop
                     endif
@@ -5860,13 +5859,13 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
 
         let res = parse_test(
-            (parse_line_component, space1, parse_comment),
+            (parse_line_component, my_space1, parse_comment),
             "data1 SETN data ; comment"
         );
         assert!(res.is_ok(), "{:?}", &res);
 
         let res = parse_test(
-            (parse_line_component, space1, parse_comment),
+            (parse_line_component, my_space1, parse_comment),
             "data1 setn data ; comment"
         );
         assert!(res.is_ok(), "{:?}", &res);
