@@ -3498,7 +3498,8 @@ fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> 
             space0
         )
             .value(())
-            .context("continuated line")
+            .context("continuated line"),
+        parse_multiline_comment.value(())
     ));
 
     my_repeat1::<_, _, (), Z80ParserError, _>(spaces)
@@ -4548,6 +4549,23 @@ pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
         })
         .parse_next(input)
 }
+
+#[inline]
+pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+
+    let cloned = input.clone();
+    delimited(
+        b"/*",
+        take_until0("*/"),
+        b"*/"
+    )
+    .map(|string: &[u8]| {
+        LocatedTokenInner::Comment(cloned.update_slice(string).into())
+            .into_located_token_direct()
+    })
+    .parse_next(input)
+}
+
 
 /// Usefull later for db
 #[inline]
@@ -5788,6 +5806,14 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
 
+
+        let res = dbg!(parse_test(parse_line(&mut tokens), " hello /* :  world*/"));
+        dbg!(&tokens);
+
+        assert!(res.is_ok(), "{:?}", &res);
+        assert!(!(&tokens[0]).is_call_macro_or_build_struct());
+        tokens.clear();
+
         let res = parse_test(parse_line(&mut tokens), " hello:  set world  ");
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
@@ -5799,12 +5825,21 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
     }
 
+
+    #[test]
+    fn test_parse_multiline_comment() {
+        let res = parse_test(parse_multiline_comment,"/* fdfsdfgd */");
+        assert!(res.is_ok(), "{:?}", &res);
+
+        let res = parse_test(parse_multiline_comment,"/* fdf\n*\n*\nsdfgd */");
+        assert!(res.is_ok(), "{:?}", &res);         
+    }
     #[test]
     fn test_parse_line_component() {
 
         let res = parse_test(parse_line_component, "JP HL_div_2");
         assert!(res.is_ok(), "{:?}", &res);
-        
+
         let res = parse_test(parse_line_component, "ld      a,(2 - $b06e) and $ff");
         assert!(res.is_ok(), "{:?}", &res);
 
