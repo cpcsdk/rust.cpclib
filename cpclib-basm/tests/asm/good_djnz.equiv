@@ -1,0 +1,5 @@
+; http://julien-nevo.com/disark/index.php/examples/ (but fixed)
+ 	ld hl,4101    ;You can also ask for hex numbers!
+    ld b,4
+    djnz $
+    ret 
