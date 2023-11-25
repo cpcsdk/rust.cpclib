@@ -1619,6 +1619,13 @@ impl ListingElement for LocatedToken {
             either::Either::Right((inner, _msg)) => inner
         }
     }
+
+    fn is_assign(&self) -> bool {
+        match &self.inner {
+            either::Left(LocatedTokenInner::Assign{..}) => true,
+            _ => false
+        }
+    }
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -1787,6 +1794,13 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
+
+    fn is_assign(&self) -> bool {
+        match &self {
+            LocatedTokenInner::Assign { .. } => true,
+            _ => false
+        }
+    }
     fn equ_symbol(&self) -> &str {
         match &self {
             LocatedTokenInner::Equ { label, .. } => label.as_str(),

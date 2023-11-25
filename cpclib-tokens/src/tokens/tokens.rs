@@ -556,6 +556,13 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
+    fn is_assign(&self) -> bool {
+        match self {
+            Self::Assign { .. } => true,
+            _ => false
+        }
+    }
 }
 
 /// Standard listing is a specific implementation
