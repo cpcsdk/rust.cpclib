@@ -1824,7 +1824,7 @@ pub const TABINSTR: [&'static str; 256] = [
 pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
     let mut reverse_tokens = Vec::new();
 
-    // Generate a listing that contains the current token followed by tokens obtaines from remaining bytes
+    // Generate a listing that contains the current token followed by tokens obtained from remaining bytes
     let mut continue_disassembling = |token: Token, bytes: &'a [u8]| {
         reverse_tokens.push(token);
         bytes
@@ -1898,8 +1898,20 @@ pub fn disassemble_with_potential_argument<'stream>(
         (representation, &bytes[2..])
     }
     else if representation.contains("nn") {
-        let byte = bytes[0];
-        let representation = representation.replacen("nn", &format!("{:#01x}", byte), 1);
+        let byte = bytes[0] as i8;
+        let representation = if representation.starts_with("DJNZ") || representation.starts_with("JR") {
+            let byte = byte as i16 + 2;
+            if byte == 0 {
+                representation.replacen("nn", "$", 1)
+            } else if byte < 0{
+                representation.replacen("nn", &format!("-{}", byte.abs()), 1)
+            } else {
+                representation.replacen("nn", &format!("+{}", byte.abs()), 1)
+            }
+        } else {
+            representation.replacen("nn", &format!("{:#01x}", byte), 1)
+        };
+
         (representation.to_owned(), &bytes[1..])
     }
     else {
@@ -1945,10 +1957,7 @@ pub fn string_to_token(representation: &str) -> Result<Token, String> {
         Err("Empty opcode".to_string())
     }
     else {
-        Token::parse_token(&["\t", &representation].join("")).and_then(|mut token| {
-            token.fix_relative_jumps_after_disassembling();
-            Ok(token)
-        })
+        Token::parse_token(&representation)
     }
 }
 

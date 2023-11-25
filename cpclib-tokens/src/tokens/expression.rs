@@ -489,12 +489,12 @@ impl ExprElement for Expr {
 
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
     fn fix_relative_value(&mut self) {
+        panic!("i am planning to remove this code, it should not be called");
         if let Expr::Value(val) = self {
             let mut new_expr = Expr::RelativeDelta(*val as i8);
             std::mem::swap(self, &mut new_expr);
         }
     }
-
     fn not(&self) -> Self::ResultExpr {
         todo!()
     }

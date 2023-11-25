@@ -1059,6 +1059,10 @@ impl Token {
 
     /// When diassembling code, the token with relative information are not appropriate
     pub fn fix_relative_jumps_after_disassembling(&mut self) {
+        panic!("I plan to remove this code, it sould not be called");
+        dbg!("before", &self);
+
+
         if self.is_opcode() {
             let expression = match self {
                 Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp)), _) => Some(exp),
@@ -1072,6 +1076,9 @@ impl Token {
                 expr.fix_relative_value();
             };
         }
+
+        dbg!("after", &self);
+
     }
 
     pub fn is_opcode(&self) -> bool {
