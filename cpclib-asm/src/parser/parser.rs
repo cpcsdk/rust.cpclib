@@ -4064,7 +4064,7 @@ fn register16_parser(
 ) -> impl for<'src, 'ctx> Fn(&mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
-        let span = ((tag_no_case(representation), not(alphanumeric1)))
+        let span = ((tag_no_case(representation), not(one_of(('a'..='z', 'A'..='Z', '0'..='9', '_')))))
             .recognize()
             .parse_next(input)?;
 
@@ -5802,7 +5802,9 @@ mod test {
     #[test]
     fn test_parse_line_component() {
 
-
+        let res = parse_test(parse_line_component, "JP HL_div_2");
+        assert!(res.is_ok(), "{:?}", &res);
+        
         let res = parse_test(parse_line_component, "ld      a,(2 - $b06e) and $ff");
         assert!(res.is_ok(), "{:?}", &res);
 
@@ -5935,6 +5937,8 @@ mod test {
         assert!(res.is_ok(), "{:?}", &res);
 
 
+
+
     }
 
     #[test]
@@ -5946,6 +5950,8 @@ mod test {
 
     #[test]
     fn test_parse_label() {
+        assert!(dbg!(parse_test(parse_label(false), "HL_div_2")).is_ok());
+
         assert!(dbg!(parse_test(parse_label(false), "CHECK")).is_ok());
 
         assert!(dbg!(parse_test(parse_label(false), "label")).is_ok());
