@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::{Parser, error::ParseError};
 use cpclib_disc::amsdos::AmsdosHeader;
 use {clap, lazy_static};
@@ -25,6 +26,8 @@ lazy_static::lazy_static! {
 
 
 /// Several expressions can refere to addresses
+/// TODO move it in a public library
+/// TODO refactor with inject_labels_into_expressions to share common patterns
 fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
     let mut labels: Vec<u16> = Default::default();
 
@@ -76,6 +79,104 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
 
     labels
 }
+
+
+/// TODO refactor with collect_addresses_from_expressions to share common patterns
+fn inject_labels_into_expressions(listing: &mut Listing) {
+    let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default()).expect("Impossible to assemble the listing, there is an error somewhere");
+
+    let address_to_label = {
+        let mut address_to_label = HashMap::<u16, &str>::default();
+        for (s, v) in table.expression_symbol() {
+            if s.value() == "$" || s.value() == "$$" {
+                continue;
+            }
+
+            match v {
+                Value::Expr(expr) => {
+                    if expr.is_int() {
+                        address_to_label.insert(
+                            v.integer().unwrap() as u16, 
+                            s.value()
+                        );
+                    }
+                },
+                Value::String(_) => {},
+                Value::Address(a) => {
+                    address_to_label.insert(
+                        a.address(),
+                        s.value()
+                    );
+                },
+                Value::Macro(_) => todo!(),
+                Value::Struct(_) => todo!(),
+                Value::Counter(_) => todo!(),
+            }
+        }
+        address_to_label
+    };
+
+    let mut update_expr_address = move |e: &mut Expr, value: u16| {
+        match address_to_label.get(&value) {
+            Some(label) => {
+                *e = Expr::Label(SmolStr::from(*label));
+                return;
+            },
+            None => {},
+        }
+    };
+
+    let mut current_address: Option<u16> = None;
+    for current_instruction in listing.iter_mut() {
+
+        let next_address = if let Token::Org { val1: address, .. } = current_instruction {
+            current_address = Some(address.eval().unwrap().int().unwrap() as u16);
+            current_address.clone()
+        }
+        else {
+            let nb_bytes = current_instruction.number_of_bytes().unwrap();
+            match current_address {
+                Some(address) => Some(address + nb_bytes as u16),
+                None => {
+                    if nb_bytes != 0 {
+                        panic!("Unable to run if assembling address is unknown")
+                    }
+                    else {
+                        None
+                    }
+                },
+            }
+        };
+
+
+        if let 
+            Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), _, _) |
+            Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _)
+        = current_instruction {
+            let address = if let Expr::Label(l) = e && l == "$" {
+                current_address.clone().unwrap() // address before instruction
+            } else {
+                let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
+                (*current_address.as_ref().unwrap() as i32  + delta) as _
+            };
+
+            update_expr_address(e, address);
+        }
+
+        else if let 
+        Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), _, _) | 
+        Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) = current_instruction {
+            let address = e.eval().unwrap().int().unwrap() as u16;
+            update_expr_address(e, address);
+        }
+
+
+
+        current_address = next_address;
+    }
+}
+
+
 
 
 fn main() {
@@ -261,13 +362,18 @@ fn main() {
         let entry = labels.entry(address);
         entry.or_insert(Cow::Owned(format!("label_{:.4x}", address)));
     }
-    listing.inject_labels(dbg!(labels));
+    listing.inject_labels(labels);
+    inject_labels_into_expressions(&mut listing);
 
 
     if matches.get_flag("COMPRESS") {
         println!("{}", listing.to_string());
     }
     else {
-        println!("{}", listing.to_enhanced_string());
+        let mut options = EnvOptions::default();
+        options.write_listing_output(std::io::stdout());
+        cpclib_asm::assemble_with_options(
+            &listing.to_string(), options);
+
     }
 }
