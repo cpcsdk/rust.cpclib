@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+use std::collections::HashMap;
 use std::fmt;
 
 use cpclib_tokens::symbols::PhysicalAddress;
@@ -52,7 +54,7 @@ pub trait ListingExt {
     fn to_enhanced_string(&self) -> String;
 
     /// Modify the listing to inject labels at the given addresses
-    fn inject_labels(&mut self, labels: &[(u16, &str)]);
+    fn inject_labels<S: Borrow<str>>(&mut self, labels: HashMap<u16, S>);
 }
 
 impl ListingExt for Listing {
@@ -206,14 +208,22 @@ impl ListingExt for Listing {
     }
 
     /// Panic if Org is not one of the first instructions
-    fn inject_labels(&mut self, sorted_labels: &[(u16, &str)]) {
+    fn inject_labels<S: Borrow<str>>(&mut self, mut labels: HashMap<u16,S>) {
         use cpclib_tokens::builder::{equ, label};
 
         let mut current_address: Option<u16> = None;
         let mut current_idx = 0;
         let mut nb_labels_added = 0;
 
-        while current_idx < self.len() && nb_labels_added < sorted_labels.len() {
+        // inject labels at the appropriate address if any
+        while current_idx < self.len() && ! labels.is_empty() {
+            if let Some(current_address) = &current_address {
+                if let Some(new_label) = labels.remove(current_address) {
+                    self.listing_mut().insert(current_idx, label(new_label.borrow()));
+                    nb_labels_added += 1;
+                }
+            }
+
             let current_instruction = &self.listing()[current_idx];
 
             let next_address = if let Token::Org { val1: address, .. } = current_instruction {
@@ -235,43 +245,19 @@ impl ListingExt for Listing {
                 }
             };
 
-            let (expected, new_label) = sorted_labels[nb_labels_added];
-
-            match (current_address, next_address) {
-                (Some(current), Some(next)) => {
-                    if current == expected {
-                        self.listing_mut().insert(current_idx, label(new_label));
-                        nb_labels_added += 1;
-                    }
-                    else if current < expected && next > expected {
-                        self.listing_mut().insert(
-                            current_idx,
-                            equ(new_label, expected), // TODO check if realtive address is better or not
-                        );
-                        nb_labels_added += 1;
-                    }
-                    else {
-                        current_idx += 1;
-                    }
-                },
-                (..) => {
-                    current_idx += 1;
-                }
-            }
-
+            current_idx += 1;
             current_address = next_address;
         }
 
-        while nb_labels_added < sorted_labels.len() {
-            panic!("{} remaining", sorted_labels.len() - nb_labels_added);
+        // inject all the remaining ones
+        for (next_address, next_label) in labels.into_iter() {
             self.listing_mut().insert(
                 0,
                 equ(
-                    sorted_labels[nb_labels_added].1,
-                    sorted_labels[nb_labels_added].0
+                    next_label.borrow(),
+                    next_address
                 )
             );
-            nb_labels_added += 1;
         }
     }
 }

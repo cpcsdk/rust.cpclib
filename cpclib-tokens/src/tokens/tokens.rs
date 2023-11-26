@@ -563,6 +563,13 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
+    fn is_org(&self) -> bool {
+        match self {
+            Self::Org { .. } => true,
+            _ => false
+        }
+    }
 }
 
 /// Standard listing is a specific implementation

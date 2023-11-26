@@ -1,4 +1,7 @@
-use std::fs::File;
+#![feature(let_chains)]
+
+use std::borrow::Cow;
+use std::{fs::File, collections::HashMap};
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -19,6 +22,61 @@ lazy_static::lazy_static! {
         built_info::BUILT_TIME_UTC
     );
 }
+
+
+/// Several expressions can refere to addresses
+fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
+    let mut labels: Vec<u16> = Default::default();
+
+    let mut current_address: Option<u16> = None;
+    for current_instruction in listing.iter() {
+
+        if let 
+            Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), _, _) |
+            Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _)
+        = current_instruction {
+            let address = if let Expr::Label(l) = e && l == "$" {
+                current_address.clone().unwrap() // address before instruction
+            } else {
+                let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
+                (*current_address.as_ref().unwrap() as i32  + delta) as _
+            };
+            labels.push(address);
+        }
+
+        else if let 
+        Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), _, _) | 
+        Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) = current_instruction {
+            let address = e.eval().unwrap().int().unwrap();
+            labels.push(address as u16);
+        }
+
+
+        let next_address = if let Token::Org { val1: address, .. } = current_instruction {
+            current_address = Some(address.eval().unwrap().int().unwrap() as u16);
+            current_address.clone()
+        }
+        else {
+            let nb_bytes = current_instruction.number_of_bytes().unwrap();
+            match current_address {
+                Some(address) => Some(address + nb_bytes as u16),
+                None => {
+                    if nb_bytes != 0 {
+                        panic!("Unable to run if assembling address is unknown")
+                    }
+                    else {
+                        None
+                    }
+                },
+            }
+        };
+
+        current_address = next_address;
+    }
+
+    labels
+}
+
 
 fn main() {
     let matches = Command::new("bdasm")
@@ -51,7 +109,7 @@ fn main() {
 					)
 					.arg(
 						Arg::new("LABEL")
-						.help("Set a label at the given address. Format LABEL:ADDRESS(in hexadecimal")
+						.help("Set a label at the given address. Format LABEL=ADDRESS")
 						.short('l')
 						.long("label")
 						.action(ArgAction::Append)
@@ -182,22 +240,31 @@ fn main() {
     }
 
     // add labels
-    if let Some(labels) = matches.get_many::<&String>("LABEL") {
-        let mut labels = labels
+    let mut labels = if let Some(labels) = matches.get_many::<String>("LABEL") {
+        labels
             .map(|label| {
-                let split = label.split(':').collect::<Vec<_>>();
+                let split = label.split('=').collect::<Vec<_>>();
                 assert_eq!(2, split.len());
                 let label = split[0];
-                let address = u16::from_str_radix(split[1], 16).unwrap();
-                (address, label)
+                let address = split[1].as_bytes();
+                let address : Result<u32, ParseError<_, ()>>= cpclib_common::parse_value.parse(address);
+                let address = address.expect("Unable to parse label value") as u16;
+                (address, Cow::Borrowed(label))
             })
-            .collect::<Vec<_>>();
-        labels.sort();
+            .collect::<HashMap<u16, Cow<str>>>()
+    } else {
+        Default::default()
+    };
 
-        listing.inject_labels(&labels);
+    // get extra labels
+    for address in collect_addresses_from_expressions(&listing) {
+        let entry = labels.entry(address);
+        entry.or_insert(Cow::Owned(format!("label_{:.4x}", address)));
     }
+    listing.inject_labels(dbg!(labels));
 
-    if matches.contains_id("COMPRESS") {
+
+    if matches.get_flag("COMPRESS") {
         println!("{}", listing.to_string());
     }
     else {

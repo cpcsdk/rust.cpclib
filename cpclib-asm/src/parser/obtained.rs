@@ -1,4 +1,5 @@
-use std::borrow::Cow;
+use std::borrow::{Cow, BorrowMut, Borrow};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -1626,6 +1627,10 @@ impl ListingElement for LocatedToken {
             _ => false
         }
     }
+
+    fn is_org(&self) -> bool {
+        todo!()
+    }
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -2299,6 +2304,10 @@ impl ListingElement for LocatedTokenInner {
             _ => false
         }
     }
+
+    fn is_org(&self) -> bool {
+        todo!()
+    }
 }
 
 impl std::fmt::Display for LocatedToken {
@@ -2968,7 +2977,7 @@ impl ListingExt for LocatedListing {
         todo!()
     }
 
-    fn inject_labels(&mut self, labels: &[(u16, &str)]) {
+    fn inject_labels<S: Borrow<str>>(&mut self, labels: HashMap<u16, S>) {
         todo!()
     }
 }

@@ -27,6 +27,7 @@ where Self: Debug + Sized + Sync
         false // self.is_equ() | self.is_set()
     }
 
+    fn is_org(&self) -> bool;
     fn is_comment(&self) -> bool;
     fn is_set(&self) -> bool;
 
