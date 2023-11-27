@@ -4619,21 +4619,6 @@ pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
         .parse_next(input)
 }
 
-#[inline]
-pub fn char_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    let input_start = input.checkpoint();
-    let input_offset = input.eof_offset();
-
-    let c = alt((
-        delimited(tag("\""), winnow::token::any, tag("\"")),
-        delimited(tag("'"), winnow::token::any, tag("'"))
-    ))
-    .parse_next(input)?;
-
-    let span = build_span(input_offset, input_start, input.clone());
-    Ok(LocatedExpr::Char(c as char, span.into()))
-}
-
 /// Parse a label(label: S)
 /// TODO reimplement to never build a string
 #[inline]
@@ -4895,7 +4880,7 @@ pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 
 /// Get a factor
 #[inline]
-pub fn factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -4923,8 +4908,13 @@ pub fn factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
             parse_any_function_call,
             // manage values
             alt((positive_number, negative_number)),
-            char_expr,
-            parse_string.map(|s| LocatedExpr::String(s.into())),
+            parse_string.map(|s| {
+                if s.as_ref().len() == 1 {
+                    LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
+                } else {
+                    LocatedExpr::String(s)
+                }
+            }),
             parse_counter,
             // manage $
             tag("$$").map(|l| LocatedExpr::Label(cloned.update_slice(l).into())),
@@ -5028,11 +5018,11 @@ pub fn term(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let initial = factor(input)?;
+    let initial = parse_factor(input)?;
     let remainder = my_many0(alt((
-        parse_oper(factor, "*", BinaryOperation::Mul),
-        parse_oper(factor, "%", BinaryOperation::Mod),
-        parse_oper(factor, "/", BinaryOperation::Div)
+        parse_oper(parse_factor, "*", BinaryOperation::Mul),
+        parse_oper(parse_factor, "%", BinaryOperation::Mod),
+        parse_oper(parse_factor, "/", BinaryOperation::Div)
     )))
     .parse_next(input)?;
 
@@ -6069,10 +6059,10 @@ mod test {
 
 
         let (ctx, mut span) = ctx_and_span("CHECK");
-        assert!(dbg!(factor.parse_next(&mut span.0)).is_ok());
+        assert!(dbg!(parse_factor.parse_next(&mut span.0)).is_ok());
 
         assert!(dbg!(parse_test(parse_label(false), check)).is_ok());
-        assert!(dbg!(parse_test(factor, check)).is_ok());
+        assert!(dbg!(parse_test(parse_factor, check)).is_ok());
     }
 
     #[test]
@@ -6106,6 +6096,8 @@ mod test {
                 res.res.unwrap().1.as_bstr(),
                 (&string[1..string.len() - 1]).as_bstr()
             );
+
+            assert!(dbg!(parse_test(parse_factor, string)).is_ok());
 
 
             assert!(dbg!(parse_test(parse_expr, string)).is_ok());
