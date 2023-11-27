@@ -1062,7 +1062,6 @@ impl Token {
         panic!("I plan to remove this code, it sould not be called");
         dbg!("before", &self);
 
-
         if self.is_opcode() {
             let expression = match self {
                 Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp)), _) => Some(exp),
@@ -1078,7 +1077,6 @@ impl Token {
         }
 
         dbg!("after", &self);
-
     }
 
     pub fn is_opcode(&self) -> bool {

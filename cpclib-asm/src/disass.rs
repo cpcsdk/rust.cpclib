@@ -1899,18 +1899,22 @@ pub fn disassemble_with_potential_argument<'stream>(
     }
     else if representation.contains("nn") {
         let byte = bytes[0] as i8;
-        let representation = if representation.starts_with("DJNZ") || representation.starts_with("JR") {
-            let byte = byte as i16 + 2;
-            if byte == 0 {
-                representation.replacen("nn", "$", 1)
-            } else if byte < 0{
-                representation.replacen("nn", &format!("-{}", byte.abs()), 1)
-            } else {
-                representation.replacen("nn", &format!("+{}", byte.abs()), 1)
+        let representation =
+            if representation.starts_with("DJNZ") || representation.starts_with("JR") {
+                let byte = byte as i16 + 2;
+                if byte == 0 {
+                    representation.replacen("nn", "$", 1)
+                }
+                else if byte < 0 {
+                    representation.replacen("nn", &format!("-{}", byte.abs()), 1)
+                }
+                else {
+                    representation.replacen("nn", &format!("+{}", byte.abs()), 1)
+                }
             }
-        } else {
-            representation.replacen("nn", &format!("{:#01x}", byte), 1)
-        };
+            else {
+                representation.replacen("nn", &format!("{:#01x}", byte), 1)
+            };
 
         (representation.to_owned(), &bytes[1..])
     }

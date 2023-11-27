@@ -1,5 +1,3 @@
-
-
 #[cfg(feature = "cmdline")]
 pub use clap;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -8,11 +6,9 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::ascii::{space0, alphanumeric1};
-
-use winnow::combinator::{alt, opt, terminated, not};
+use winnow::ascii::{alphanumeric1, space0};
+use winnow::combinator::{alt, not, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
-
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice};
 use winnow::token::{tag_no_case, take_while};
 use winnow::{PResult, Parser};
@@ -163,9 +159,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use winnow::BStr;
     use winnow::error::{ContextError, VerboseError};
     use winnow::stream::AsBStr;
+    use winnow::BStr;
 
     use super::*;
 
@@ -250,8 +246,6 @@ mod tests {
             0xC
         );
 
-        assert!(
-            dbg!(parse_value::<_, ContextError>.parse_next(&mut BStr::new(b"CHECK"))).is_err()
-        );
+        assert!(dbg!(parse_value::<_, ContextError>.parse_next(&mut BStr::new(b"CHECK"))).is_err());
     }
 }

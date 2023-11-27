@@ -1,14 +1,16 @@
 #![feature(let_chains)]
 
 use std::borrow::Cow;
-use std::{fs::File, collections::HashMap};
+use std::collections::HashMap;
+use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::{Parser, error::ParseError};
+use cpclib_common::winnow::error::ParseError;
+use cpclib_common::winnow::Parser;
 use cpclib_disc::amsdos::AmsdosHeader;
 use {clap, lazy_static};
 
@@ -24,7 +26,6 @@ lazy_static::lazy_static! {
     );
 }
 
-
 /// Several expressions can refere to addresses
 /// TODO move it in a public library
 /// TODO refactor with inject_labels_into_expressions to share common patterns
@@ -33,11 +34,10 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
 
     let mut current_address: Option<u16> = None;
     for current_instruction in listing.iter() {
-
-        if let 
-            Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), _, _) |
-            Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _)
-        = current_instruction {
+        if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
+        | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
+            current_instruction
+        {
             let address = if let Expr::Label(l) = e && l == "$" {
                 current_address.clone().unwrap() // address before instruction
             } else {
@@ -46,14 +46,13 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
             };
             labels.push(address);
         }
-
-        else if let 
-        Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), _, _) | 
-        Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) = current_instruction {
+        else if let Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), ..)
+        | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
+            current_instruction
+        {
             let address = e.eval().unwrap().int().unwrap();
             labels.push(address as u16);
         }
-
 
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
             current_address = Some(address.eval().unwrap().int().unwrap() as u16);
@@ -80,10 +79,10 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
     labels
 }
 
-
 /// TODO refactor with collect_addresses_from_expressions to share common patterns
 fn inject_labels_into_expressions(listing: &mut Listing) {
-    let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default()).expect("Impossible to assemble the listing, there is an error somewhere");
+    let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
+        .expect("Impossible to assemble the listing, there is an error somewhere");
 
     let address_to_label = {
         let mut address_to_label = HashMap::<u16, &str>::default();
@@ -95,22 +94,16 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
             match v {
                 Value::Expr(expr) => {
                     if expr.is_int() {
-                        address_to_label.insert(
-                            v.integer().unwrap() as u16, 
-                            s.value()
-                        );
+                        address_to_label.insert(v.integer().unwrap() as u16, s.value());
                     }
                 },
                 Value::String(_) => {},
                 Value::Address(a) => {
-                    address_to_label.insert(
-                        a.address(),
-                        s.value()
-                    );
+                    address_to_label.insert(a.address(), s.value());
                 },
                 Value::Macro(_) => todo!(),
                 Value::Struct(_) => todo!(),
-                Value::Counter(_) => todo!(),
+                Value::Counter(_) => todo!()
             }
         }
         address_to_label
@@ -122,13 +115,12 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
                 *e = Expr::Label(SmolStr::from(*label));
                 return;
             },
-            None => {},
+            None => {}
         }
     };
 
     let mut current_address: Option<u16> = None;
     for current_instruction in listing.iter_mut() {
-
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
             current_address = Some(address.eval().unwrap().int().unwrap() as u16);
             current_address.clone()
@@ -148,11 +140,10 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
             }
         };
 
-
-        if let 
-            Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), _, _) |
-            Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _)
-        = current_instruction {
+        if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
+        | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
+            current_instruction
+        {
             let address = if let Expr::Label(l) = e && l == "$" {
                 current_address.clone().unwrap() // address before instruction
             } else {
@@ -162,22 +153,17 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
 
             update_expr_address(e, address);
         }
-
-        else if let 
-        Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), _, _) | 
-        Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) = current_instruction {
+        else if let Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), ..)
+        | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
+            current_instruction
+        {
             let address = e.eval().unwrap().int().unwrap() as u16;
             update_expr_address(e, address);
         }
 
-
-
         current_address = next_address;
     }
 }
-
-
-
 
 fn main() {
     let matches = Command::new("bdasm")
@@ -332,7 +318,7 @@ fn main() {
     // add origin if any
     if let Some(address) = matches.get_one::<String>("ORIGIN") {
         let address = address.as_bytes();
-        let origin : Result<u32, ParseError<_, ()>>= cpclib_common::parse_value.parse(address);
+        let origin: Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
         let origin = origin.expect("Unable to parse origin") as u16;
         listing.insert(0, org(origin));
     }
@@ -348,12 +334,14 @@ fn main() {
                 assert_eq!(2, split.len());
                 let label = split[0];
                 let address = split[1].as_bytes();
-                let address : Result<u32, ParseError<_, ()>>= cpclib_common::parse_value.parse(address);
+                let address: Result<u32, ParseError<_, ()>> =
+                    cpclib_common::parse_value.parse(address);
                 let address = address.expect("Unable to parse label value") as u16;
                 (address, Cow::Borrowed(label))
             })
             .collect::<HashMap<u16, Cow<str>>>()
-    } else {
+    }
+    else {
         Default::default()
     };
 
@@ -365,15 +353,12 @@ fn main() {
     listing.inject_labels(labels);
     inject_labels_into_expressions(&mut listing);
 
-
     if matches.get_flag("COMPRESS") {
         println!("{}", listing.to_string());
     }
     else {
         let mut options = EnvOptions::default();
         options.write_listing_output(std::io::stdout());
-        cpclib_asm::assemble_with_options(
-            &listing.to_string(), options);
-
+        cpclib_asm::assemble_with_options(&listing.to_string(), options);
     }
 }

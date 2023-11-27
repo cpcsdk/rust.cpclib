@@ -10,7 +10,6 @@ use ordered_float::OrderedFloat;
 use crate::tokens::Token;
 use crate::ListingElement;
 
-
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(missing_docs)]
@@ -496,6 +495,7 @@ impl ExprElement for Expr {
             std::mem::swap(self, &mut new_expr);
         }
     }
+
     fn not(&self) -> Self::ResultExpr {
         todo!()
     }

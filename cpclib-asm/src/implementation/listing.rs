@@ -100,7 +100,7 @@ impl ListingExt for Listing {
     }
 
     /// Panic if Org is not one of the first instructions
-    fn inject_labels<S: Borrow<str>>(&mut self, mut labels: HashMap<u16,S>) {
+    fn inject_labels<S: Borrow<str>>(&mut self, mut labels: HashMap<u16, S>) {
         use cpclib_tokens::builder::{equ, label};
 
         let mut current_address: Option<u16> = None;
@@ -108,10 +108,11 @@ impl ListingExt for Listing {
         let mut nb_labels_added = 0;
 
         // inject labels at the appropriate address if any
-        while current_idx < self.len() && ! labels.is_empty() {
+        while current_idx < self.len() && !labels.is_empty() {
             if let Some(current_address) = &current_address {
                 if let Some(new_label) = labels.remove(current_address) {
-                    self.listing_mut().insert(current_idx, label(new_label.borrow()));
+                    self.listing_mut()
+                        .insert(current_idx, label(new_label.borrow()));
                     nb_labels_added += 1;
                 }
             }
@@ -143,13 +144,8 @@ impl ListingExt for Listing {
 
         // inject all the remaining ones
         for (next_address, next_label) in labels.into_iter() {
-            self.listing_mut().insert(
-                0,
-                equ(
-                    next_label.borrow(),
-                    next_address
-                )
-            );
+            self.listing_mut()
+                .insert(0, equ(next_label.borrow(), next_address));
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::borrow::{Cow, BorrowMut, Borrow};
+use std::borrow::{Borrow, BorrowMut, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -44,8 +44,6 @@ use crate::{
     resolve_impl, BinaryTransformation, ExprElement, ParserContextBuilder, ParsingState, SymbolFor
 };
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedExpr {
     RelativeDelta(i8, Z80Span),
@@ -83,10 +81,7 @@ impl std::fmt::Display for LocatedExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnescapedString(
-   pub(crate) String,
-   pub(crate)  Z80Span
-);
+pub struct UnescapedString(pub(crate) String, pub(crate) Z80Span);
 
 impl AsRef<str> for UnescapedString {
     fn as_ref(&self) -> &str {
@@ -1650,7 +1645,7 @@ impl ListingElement for LocatedToken {
 
     fn is_assign(&self) -> bool {
         match &self.inner {
-            either::Left(LocatedTokenInner::Assign{..}) => true,
+            either::Left(LocatedTokenInner::Assign { .. }) => true,
             _ => false
         }
     }
@@ -1826,13 +1821,13 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-
     fn is_assign(&self) -> bool {
         match &self {
             LocatedTokenInner::Assign { .. } => true,
             _ => false
         }
     }
+
     fn equ_symbol(&self) -> &str {
         match &self {
             LocatedTokenInner::Equ { label, .. } => label.as_str(),
