@@ -1717,7 +1717,6 @@ where
 
     let mut res = String::new();
 
-    dbg!(&input);
     let start = input.checkpoint();
 
     while input.eof_offset() > 0 {
@@ -1731,9 +1730,8 @@ where
                 }
             }
             None => {
-                dbg!("None");
-                if dbg!(opt(control_char).parse_next(input))?.is_some() {
-                    let c = dbg!(escapable.parse_next(input))?;
+                if opt(control_char).parse_next(input)?.is_some() {
+                    let c = escapable.parse_next(input)?;
                     res.push(c.as_char());
                 } else {
                     return Ok(res);
@@ -2519,7 +2517,7 @@ pub fn parse_buildsna(
 
 
 #[derive(PartialEq)]
-enum RunEnt {
+pub enum RunEnt {
     Run,
     Ent
 }
@@ -2539,7 +2537,7 @@ pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z
         .parse_next(input)?;
 
 
-    let ga = if kind == RunEnt::Ent {
+    let ga = if kind == RunEnt::Run {
         opt(preceded((my_space0, (','), my_space0), located_expr)).parse_next(input)?
     } else {
         None
@@ -3133,8 +3131,6 @@ pub fn parse_macro_or_struct_call(
     for_struct: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
-        dbg!("here");
-
         my_space0(input)?;
         let input_start = input.checkpoint();
         let name = terminated(
@@ -5583,6 +5579,12 @@ mod test {
                 Some(Register8::B)
             )
         );
+    }
+
+    #[test]
+    fn test_parse_run() {
+        let res: TestResult<LocatedTokenInner> = parse_test(parse_run(RunEnt::Run),"0x50, 0xc0");
+        assert!(res.is_ok(), "{:?}", &res);
     }
 
     #[test]

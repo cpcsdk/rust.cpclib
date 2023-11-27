@@ -192,6 +192,8 @@ pub fn assemble_to_amsdos_file(
 
 #[cfg(test)]
 mod test_super {
+    use cpclib_common::winnow::{Parser, Located};
+
     use super::*;
 
     #[test]
@@ -427,7 +429,7 @@ label2
 
     #[test]
     fn test_real1() {
-        let code = "    RUN 0x50, 0xc0";
+        let code = "RUN 0x50, 0xc0";
         code_test(code);
 
         let code = r"    if {bank}$ == 0
