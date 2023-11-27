@@ -1,7 +1,7 @@
-use std::io;
+
 use std::path::Path;
 
-use camino::Utf8Path;
+
 use cpclib_common::itertools::Itertools;
 
 use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut};

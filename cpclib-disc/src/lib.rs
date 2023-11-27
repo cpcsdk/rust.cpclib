@@ -28,7 +28,7 @@ use std::str::FromStr;
 
 use custom_error::custom_error;
 
-use crate::amsdos::{AmsdosFile, AmsdosManagerMut, AmsdosManagerNonMut};
+use crate::amsdos::{AmsdosFile, AmsdosManagerNonMut};
 use crate::edsk::ExtendedDsk;
 
 pub mod built_info {

@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::{Cow};
 use std::fmt;
 
 use cpclib_common::itertools::Itertools;

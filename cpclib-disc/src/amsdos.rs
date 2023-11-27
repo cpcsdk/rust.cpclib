@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::ops::Deref;
+
 use std::path::Path;
 
 use arrayref::array_ref;
@@ -11,7 +11,7 @@ use delegate::delegate;
 use thiserror::Error;
 
 use crate::disc::Disc;
-use crate::edsk::{ExtendedDsk, Head};
+use crate::edsk::{Head};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]

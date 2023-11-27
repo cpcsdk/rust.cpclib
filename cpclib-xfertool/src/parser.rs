@@ -108,7 +108,7 @@ fn no_arg(input: &mut &str) -> PResult<XferCommand> {
         tag_no_case("reboot").value(XferCommand::Reboot),
         tag_no_case("reset").value(XferCommand::Reset),
         alt((tag_no_case("exit"), tag_no_case("quit"))).value(XferCommand::Exit),
-        rest.map({ |fname: &str| XferCommand::LaunchM4(fname.to_string()) })
+        rest.map(|fname: &str| XferCommand::LaunchM4(fname.to_string()))
     ))
     .parse_next(input)
 }

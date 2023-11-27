@@ -1,18 +1,18 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
 use std::fs::File;
-use std::io;
+
 use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
 
-use camino::Utf8Path;
+
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
 
-use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut, AmsdosManagerNonMut};
+
 use crate::disc::Disc;
 
 /// Computes the sector size as expected by the FDC from a human readable sector size

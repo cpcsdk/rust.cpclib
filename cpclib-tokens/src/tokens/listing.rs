@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use cpclib_common::smallvec::SmallVec;
 
 use crate::{
-    BinaryTransformation, CrunchType, DataAccess, DataAccessElem, ExprElement, MacroParamElement,
+    BinaryTransformation, CrunchType, DataAccessElem, ExprElement, MacroParamElement,
     Mnemonic, TestKindElement
 };
 

@@ -109,7 +109,7 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
         address_to_label
     };
 
-    let mut update_expr_address = move |e: &mut Expr, value: u16| {
+    let update_expr_address = move |e: &mut Expr, value: u16| {
         match address_to_label.get(&value) {
             Some(label) => {
                 *e = Expr::Label(SmolStr::from(*label));
