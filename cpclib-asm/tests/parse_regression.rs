@@ -3,6 +3,7 @@ use std::ops::Deref;
 use cpclib_asm::parser::ParserContext;
 use cpclib_asm::preamble::*;
 use cpclib_common::winnow;
+use cpclib_common::winnow::combinator::terminated;
 use winnow::Parser;
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
@@ -175,12 +176,11 @@ fn regression_akm1() {
                             ELSE
                             inc hl
                             inc hl
-                            ENDIF ;PLY_CFG_UseEffect_ArpeggioTable
-                            ";
+                            ENDIF";
 
     let (_ctx_, input) = ctx_and_span(input);
 
-    let bin = dbg!(parse_conditional.parse(input.into()));
+    let bin = dbg!((terminated(parse_conditional, my_space0)).parse(input.into()));
     assert!(bin.is_ok());
     dbg!(bin.unwrap().to_token());
 }
@@ -194,8 +194,7 @@ fn regression_akm2() {
         ELSE
         inc hl
         inc hl
-        ENDIF ;PLY_CFG_UseEffect_PitchTable
-";
+        ENDIF";
     let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional.parse(input.into()));
@@ -209,8 +208,7 @@ fn regression_akm3() {
         nop
     ELSE
         nop
-    ENDIF ;PLY_CFG_UseEffects
-";
+    ENDIF";
     let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional.parse(input.into()));
@@ -225,8 +223,7 @@ fn regression_akm4() {
     ELSE
 dknr3:  ld de,4
     add hl,de
-    ENDIF ;PLY_CFG_UseEffects
-";
+    ENDIF";
     let (_ctx_, input) = ctx_and_span(input);
 
     let bin = dbg!(parse_conditional.parse(input.into()));
@@ -256,9 +253,7 @@ fn regression_akm5() {
     ELSE
 dknr3:  ld de,4
     add hl,de
-    ENDIF ;PLY_CFG_UseEffects
-
-";
+    ENDIF";
     let (_ctx_, input) = ctx_and_span(input);
     let bin = dbg!(parse_conditional.parse(input.into()));
     assert!(bin.is_ok());

@@ -3464,7 +3464,7 @@ fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserE
 
 /// Handle \ in end of line
 #[inline]
-fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = input.clone();
     opt(my_space1)
         .recognize()
