@@ -8,6 +8,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{cut_err, eof, repeat_till0};
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
@@ -43,6 +44,8 @@ use crate::{
     resolve_impl, BinaryTransformation, ExprElement, ParserContextBuilder, ParsingState, SymbolFor
 };
 
+
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedExpr {
     RelativeDelta(i8, Z80Span),
@@ -51,7 +54,7 @@ pub enum LocatedExpr {
     Char(char, Z80Span),
     Bool(bool, Z80Span),
 
-    String(Z80Span),
+    String(UnescapedString),
     Label(Z80Span),
 
     List(Vec<LocatedExpr>, Z80Span),
@@ -79,6 +82,30 @@ impl std::fmt::Display for LocatedExpr {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnescapedString(
+   pub(crate) String,
+   pub(crate)  Z80Span
+);
+
+impl AsRef<str> for UnescapedString {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl Display for UnescapedString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
+impl SourceString for &UnescapedString {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 impl ExprElement for LocatedExpr {
     type ResultExpr = Expr;
     type Token = LocatedToken;
@@ -90,7 +117,7 @@ impl ExprElement for LocatedExpr {
             LocatedExpr::Float(f, _) => Expr::Float(*f),
             LocatedExpr::Char(c, _) => Expr::Char(*c),
             LocatedExpr::Bool(b, _) => Expr::Bool(*b),
-            LocatedExpr::String(s) => Expr::String(s.into()),
+            LocatedExpr::String(s) => Expr::String(s.as_ref().into()),
             LocatedExpr::Label(l) => Expr::Label(l.into()),
             LocatedExpr::List(l, _) => {
                 Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec())
@@ -236,7 +263,7 @@ impl ExprElement for LocatedExpr {
 
     fn string(&self) -> &str {
         match self {
-            Self::String(v) => v.as_str(),
+            Self::String(v) => &v.0,
             _ => unreachable!()
         }
     }
@@ -494,7 +521,7 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::Float(_, span)
             | LocatedExpr::Char(_, span)
             | LocatedExpr::Bool(_, span)
-            | LocatedExpr::String(span)
+            | LocatedExpr::String(UnescapedString(_, span))
             | LocatedExpr::Label(span)
             | LocatedExpr::List(_, span)
             | LocatedExpr::PrefixedLabel(_, _, span)
@@ -876,14 +903,14 @@ pub enum LocatedTokenInner {
         Option<LocatedListing>
     ),
     Incbin {
-        fname: Z80Span,
+        fname: UnescapedString,
         offset: Option<LocatedExpr>,
         length: Option<LocatedExpr>,
         extended_offset: Option<LocatedExpr>,
         off: bool,
         transformation: BinaryTransformation
     },
-    Include(Z80Span, Option<Z80Span>, bool),
+    Include(UnescapedString, Option<Z80Span>, bool),
     Iterate(
         Z80Span,
         either::Either<Vec<LocatedExpr>, LocatedExpr>,
@@ -942,11 +969,11 @@ pub enum LocatedTokenInner {
     Run(LocatedExpr, Option<LocatedExpr>),
 
     Save {
-        filename: Z80Span,
+        filename: UnescapedString,
         address: Option<LocatedExpr>,
         size: Option<LocatedExpr>,
         save_type: Option<SaveType>,
-        dsk_filename: Option<Z80Span>,
+        dsk_filename: Option<UnescapedString>,
         side: Option<LocatedExpr>
     },
     Section(Z80Span),
@@ -955,7 +982,7 @@ pub enum LocatedTokenInner {
         source: Z80Span,
         expr: Option<LocatedExpr>
     },
-    SnaInit(Z80Span),
+    SnaInit(UnescapedString),
     SnaSet(SnapshotFlag, FlagValue),
     StableTicker(StableTickerAction<Z80Span>),
     Str(Vec<LocatedExpr>),
@@ -1417,7 +1444,7 @@ impl ListingElement for LocatedToken {
 
     fn incbin_fname(&self) -> &str {
         match &self.inner {
-            either::Left(LocatedTokenInner::Incbin { fname, .. }) => fname.into(),
+            either::Left(LocatedTokenInner::Incbin { fname, .. }) => fname.as_ref(),
             _ => unimplemented!()
         }
     }
@@ -1445,7 +1472,7 @@ impl ListingElement for LocatedToken {
 
     fn include_fname(&self) -> &str {
         match &self.inner {
-            either::Left(LocatedTokenInner::Include(fname, ..)) => fname.into(),
+            either::Left(LocatedTokenInner::Include(fname, ..)) => fname.as_ref(),
             _ => unreachable!()
         }
     }
@@ -2129,7 +2156,7 @@ impl ListingElement for LocatedTokenInner {
 
     fn incbin_fname(&self) -> &str {
         match &self {
-            LocatedTokenInner::Incbin { fname, .. } => fname.into(),
+            LocatedTokenInner::Incbin { fname, .. } => fname.as_ref(),
             _ => unimplemented!()
         }
     }
@@ -2157,7 +2184,7 @@ impl ListingElement for LocatedTokenInner {
 
     fn include_fname(&self) -> &str {
         match &self {
-            LocatedTokenInner::Include(fname, ..) => fname.into(),
+            LocatedTokenInner::Include(fname, ..) => fname.as_ref(),
             _ => unreachable!()
         }
     }

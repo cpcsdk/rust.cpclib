@@ -1512,7 +1512,7 @@ enum LabelModifier {
     Macro
 }
 
-pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
         parse_string(input)
 }
 
@@ -1675,7 +1675,7 @@ pub fn parse_assign_operator(
 
 /// Parser for file names in appropriate directives
 #[inline]
-pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
     let first = alt(('"', '\'')).parse_next(input)? as char;
     let last = first;
     let (normal, escapable) = match first {
@@ -1684,25 +1684,68 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Parser
         _ => unreachable!()
     };
 
-    let content = alt((
-        last.recognize(),
+    let (string, slice) =
         terminated(
-            escaped(normal, '\\', escapable),
+            opt(my_escaped(normal, '\\', escapable)).map(|s| s.unwrap_or_default()).with_recognized(),
             last.context("End of string not found")
         )
-    ))
     .parse_next(input)?;
 
-    let string = if content.len() == 1 && first == (content[0] as char) {
-        &content[..0] // we remove " (it is not present for the others)
+    let slice = input.clone().update_slice(slice);
+
+    Ok(UnescapedString(string, slice.into()))
+}
+
+
+#[inline(always)]
+pub fn my_escaped<'a, I: 'a, Error, F, G, O1, O2>(
+    mut normal: F,
+    control_char: char,
+    mut escapable: G,
+) -> impl Parser<I, String, Error>
+where
+    I: crate::parser::parser::winnow::stream::StreamIsPartial,
+    I: Stream,
+    <I as Stream>::Token: AsChar + Clone,
+    F: Parser<I, O1, Error>,
+    G: Parser<I, O2, Error>,
+    Error: ParserError<I> + Debug,
+    O1: Debug + AsChar,
+    O2: Debug + AsChar
+{
+   move |input: &mut I| {
+
+    let mut res = String::new();
+
+    dbg!(&input);
+    let start = input.checkpoint();
+
+    while input.eof_offset() > 0 {
+        let current_len = input.eof_offset();
+
+        match opt(normal.by_ref()).parse_next(input)? {
+            Some(c) => {
+                res.push(c.as_char());
+                if input.eof_offset() == current_len {
+                    return Ok(res);
+                }
+            }
+            None => {
+                dbg!("None");
+                if dbg!(opt(control_char).parse_next(input))?.is_some() {
+                    let c = dbg!(escapable.parse_next(input))?;
+                    res.push(c.as_char());
+                } else {
+                    return Ok(res);
+                }
+            }
+        }
     }
-    else {
-        &content[..]
-    };
 
-    let string = input.clone().update_slice(string);
-
-    Ok(string)
+    input.reset(start);
+    input.finish();
+    return Ok(res);
+}
 }
 
 pub fn parse_charset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -1736,7 +1779,7 @@ pub fn parse_charset_start_stop_end(
 pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, Z80ParserError> {
     // manage the string format - TODO manage the others too
     let chars = parse_string.context("Missing string").parse_next(input)?;
-    let chars = unsafe { std::str::from_utf8_unchecked(&chars) };
+    let chars = unsafe { std::str::from_utf8_unchecked(chars.as_ref().as_bytes()) };
     let start = preceded(parse_comma, expr)
         .context("Missing start value")
         .parse_next(input)?;
@@ -1774,7 +1817,7 @@ pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
     .parse_next(input)?;
 
     Ok(LocatedTokenInner::Include(
-        fname.into(),
+        fname,
         namespace.map(|n| n.into()),
         once.is_some()
     ))
@@ -1794,7 +1837,7 @@ pub fn parse_incbin(
         let off = opt(preceded((my_space0, (','), my_space0), tag_no_case("OFF"))).parse_next(input)?;
 
         Ok(LocatedTokenInner::Incbin {
-            fname: fname.into(),
+            fname,
             offset,
             length,
             extended_offset: None,
@@ -1894,11 +1937,11 @@ pub fn parse_save(
         };
 
         Ok(LocatedTokenInner::Save {
-            filename: filename.into(),
+            filename,
             address: address.unwrap_or(None),
             size: size.unwrap_or(None),
             save_type,
-            dsk_filename: dsk_filename.map(|f| f.into()),
+            dsk_filename: dsk_filename.map(|f| f),
             side
         })
     }
@@ -2945,7 +2988,7 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
             my_space0,
             alt((
                 located_expr.recognize(), // TODO handle evaluation or transposition
-                string_between_quotes.recognize(),
+                parse_string.recognize(),
                 my_many0_nocollect(none_of((
                     b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
                 )))
@@ -3349,13 +3392,14 @@ pub fn parse_align(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 }
 
 pub fn parse_print_inner(input: &mut InnerZ80Span) -> PResult<Vec<FormattedExpr>, Z80ParserError> {
-    separated1(
+    separated(
+        1..,
         alt((
             formatted_expr,
             expr.map(FormattedExpr::from),
-            string_between_quotes.map({
-                |s: InnerZ80Span| {
-                    let s = unsafe { std::str::from_utf8_unchecked(s.as_bstr()) };
+            parse_string.map({
+                |s: UnescapedString| {
+                    let s = s.as_ref();
                     FormattedExpr::from(Expr::String(SmolStr::from_iter(s.chars())))
                 }
             })
@@ -4445,7 +4489,7 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
 fn parse_snainit(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let fname = parse_fname(input)?;
 
-    Ok(LocatedTokenInner::SnaInit(fname.into()))
+    Ok(LocatedTokenInner::SnaInit(fname))
 }
 
 fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -4566,17 +4610,12 @@ pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken
 }
 
 
-/// Usefull later for db
-#[inline]
-pub fn string_between_quotes(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
-    parse_string(input)
-}
 
 /// TODO
 #[inline]
 pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    string_between_quotes
-        .map(|string| LocatedExpr::String(string.into()))
+    parse_string
+        .map(|string| LocatedExpr::String(string))
         .parse_next(input)
 }
 
@@ -6049,6 +6088,7 @@ mod test {
     #[test]
     fn test_parse_string() {
         for string in &[
+            r#""\" et voila""#,
             r#""kjkjhkl""#,
             r#""kjk'jhkl""#,
             r#""kj\"kjhkl""#,
@@ -6058,15 +6098,15 @@ mod test {
             r#""""#,
             r#"''"#,
             r#""fdfd\" et voila""#,
-            r#""\" et voila""#
         ] {
             let res = parse_test(parse_string, string);
             assert!(dbg!(&res).is_ok());
 
             assert_eq!(
-                res.res.unwrap().as_bstr(),
+                res.res.unwrap().1.as_bstr(),
                 (&string[1..string.len() - 1]).as_bstr()
             );
+
 
             assert!(dbg!(parse_test(parse_expr, string)).is_ok());
         }
