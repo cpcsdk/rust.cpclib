@@ -1243,6 +1243,8 @@ impl Env {
     pub fn memory(&self, start: u16, size: u16) -> Vec<u8> {
         //     dbg!(self.ga_mmr);
         let mut mem = Vec::new();
+        let start = start as u32;
+        let size = size as u32;
         for pos in start..(start + size) {
             let address = self.logical_to_physical_address(pos as _);
             mem.push(self.peek(&address));
