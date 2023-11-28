@@ -1687,6 +1687,10 @@ impl Env {
             return Err(AssemblerError::AlreadyRenderedError(format!("It is a nonsense to define a limit of {value}")));
         }
 
+        if value > 0x10000 {
+            return Err(AssemblerError::AlreadyRenderedError(format!("It is a nonsense to define a limit of {value} that exceeds hardware limitations.")));
+        }
+
         self.active_page_info_mut().limit = value as _;
 
         if self.limit_address() <= self.maximum_address() {
