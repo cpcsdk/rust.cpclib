@@ -89,6 +89,9 @@ import_rasm_success! {
     // Moved here. no reason to crash
     #define AUTOTEST_LIMIT06	"org #FFFF : nop";
 
+#define AUTOTEST_LOCAPROX	"repeat 1: @label  nop: .prox   nop: @label2 nop: djnz @label.prox: rend";
+
+
     #define AUTOTEST_ORG
     :len(4):
     :opcode1(0x80):
@@ -319,7 +322,6 @@ import_rasm_success! {
 
 #define AUTOTEST_LZDEFERED	"lz48:defs 20:lzclose:defb $";
 #define AUTOTEST_MACROPROX	" macro unemacro: nop: endm: global_label: ld hl, .table: .table";
-#define AUTOTEST_LOCAPROX	"repeat 1: @label  nop: .prox   nop: @label2 nop: djnz @label.prox: rend";
 #define AUTOTEST_FORMULA1	"a=5:b=2:assert int(a/b)==3:assert !a+!b==0:a=a*100:b=b*100:assert a*b==100000:ld hl,a*b-65536:a=123+-5*(-6/2)-50*2<<1";
 
 
@@ -334,9 +336,14 @@ import_rasm_success! {
 "ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"
 "module grouik: plop: ifused plop : glop=1 : endif:assert glop==1";
 
+#define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose";
 
 // this one works in basm but not rasm
 #define AUTOTEST_DELAYED_RUN "run _start:nop:_start nop";
+
+// autorized because some assemblers use = for ==
+#define AUTOTEST_SETINSIDE "ld hl,0=0xC9FB";
+
 }
 
 // AUTOTEST_INSTRMUSTFAILED is not tested as expected by asm as we stop right after the first failure
@@ -344,7 +351,6 @@ import_rasm_failure! {
     #define AUTOTEST_BADINCLUDE "include 'truc\n .bin' \n nop nop";
     #define AUTOTEST_BADINCBIN "incl49 'truc\n .bin' \n nop nop";
     #define AUTOTEST_BADINCLUDE02 "read: ldir : cp ';'";
-    #define AUTOTEST_SETINSIDE "ld hl,0=0xC9FB";
     #define AUTOTEST_INSTRMUSTFAILED "ld a,b,c:ldi a: ldir bc:exx hl,de:exx de:ex bc,hl:ex hl,bc:ex af,af:ex hl,hl:ex hl:exx hl: "
     "neg b:push b:push:pop:pop c:sub ix:add ix:add:sub:di 2:ei 3:ld i,c:ld r,e:rl:rr:rlca a:sla:sll:"
     "ldd e:lddr hl:adc ix:adc b,a:xor 12,13:xor b,1:xor:or 12,13:or b,1:or:and 12,13:and b,1:and:inc:dec";
@@ -367,7 +373,6 @@ import_rasm_failure! {
 #define AUTOTEST_LIMIT05	"org #FFFF : ldir";
 #define AUTOTEST_LIMIT07	"org #ffff : Start:  equ $ :    di :     ld hl,#c9fb :  ld (#38),hl";
 #define AUTOTEST_INHIBITION	"if 0:ifused truc:ifnused glop:ifdef bidule:ifndef machin:ifnot 1:nop:endif:nop:else:nop:endif:endif:endif:endif:endif";
-#define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose";
 #define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" ;
 
 }

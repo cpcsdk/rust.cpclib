@@ -2298,9 +2298,9 @@ impl Env {
 
         if let Some(from) = &from {
             if let Some(size) = & size {
-                if from + size > (0x10000-from) {
+                if 0x10000 - *from <  *size {
                     return Err(AssemblerError::AssemblingError {
-                        msg: format!("Cannot SAVE {filename} as the address+size ({}) is out of bounds.", *from+size)
+                        msg: format!("Cannot SAVE {filename} as the address+size ({}) is out of bounds.", *from+*size)
                     }); 
                 }
             }
