@@ -98,6 +98,8 @@ import_rasm_success! {
 
 #define AUTOTEST_SWITCH		"mavar=4:switch mavar:case 1:nop:case 4:defb 4:case 3:defb 3:break:case 2:nop:case 4:defb 4:endswitch";
 
+// I have removed instructions like bit 0,(ix+#12),d 
+// seems not http://www.z80.info/z80undoc.htm
 #define AUTOTEST_OPCODES "nop::ld bc,#1234::ld (bc),a::inc bc:inc b:dec b:ld b,#12:rlca:ex af,af':add hl,bc:ld a,(bc):dec bc:"
                          "inc c:dec c:ld c,#12:rrca::djnz $:ld de,#1234:ld (de),a:inc de:inc d:dec d:ld d,#12:rla:jr $:"
                          "add hl,de:ld a,(de):dec de:inc e:dec e:ld e,#12:rra::jr nz,$:ld hl,#1234:ld (#1234),hl:inc hl:inc h:"
@@ -164,8 +166,6 @@ import_rasm_success! {
                          "sll (ix+#12),h:sll (ix+#12),l:sll (ix+#12):sll (ix+#12),a:srl (ix+#12),b:srl (ix+#12),c:"
                          "srl (ix+#12),d:srl (ix+#12),e:srl (ix+#12),h:srl (ix+#12),l:srl (ix+#12):srl (ix+#12),a::"
                          "bit 0,(ix+#12):bit 1,(ix+#12):bit 2,(ix+#12):bit 3,(ix+#12):bit 4,(ix+#12):bit 5,(ix+#12):"
-                         "bit 6,(ix+#12):bit 7,(ix+#12):bit 0,(ix+#12),d:bit 1,(ix+#12),b:bit 2,(ix+#12),c:bit 3,(ix+#12),d:"
-                         "bit 4,(ix+#12),e:bit 5,(ix+#12),h:bit 6,(ix+#12),l:bit 7,(ix+#12),a:::res 0,(ix+#12),b:"
                          "res 0,(ix+#12),c:res 0,(ix+#12),d:res 0,(ix+#12),e:res 0,(ix+#12),h:res 0,(ix+#12),l:res 0,(ix+#12):"
                          "res 0,(ix+#12),a::res 1,(ix+#12),b:res 1,(ix+#12),c:res 1,(ix+#12),d:res 1,(ix+#12),e:"
                          "res 1,(ix+#12),h:res 1,(ix+#12),l:res 1,(ix+#12):res 1,(ix+#12),a::res 2,(ix+#12),b:"
@@ -266,10 +266,11 @@ import_rasm_success! {
 "a=3 : a *= 2 : assert a==6 : repeat 2 : a *= 10 : rend : assert a==600: a=600 : a /= 2 : assert a==300 : repeat 2 : a /= 10 : rend : assert a==3 : nop";
 
 
+// x replaced by {x}
 #define AUTOTEST_REPEAT3 "y=0: repeat 0: y+=1: rend: assert y==0: y=0: repeat 1: y+=1: rend: assert y==1:"
-    "y=0: repeat 5: y+=1: rend: assert y==5: y=1: repeat 5,x: assert y==x: y+=1: rend: y=2: repeat 5,x,2,2: assert x==y:"
-    "y+=2: rend: startingindex 5: y=5: repeat 2,x: assert x==y: y+=1: rend: startingindex 5,5: y=10: repeat 3,x,10: assert x==y: "
-    "y+=5: rend: startingindex: y=1: repeat 2,x: assert x==y: y+=1: rend: nop ";
+    "y=0: repeat 5: y+=1: rend: assert y==5: y=1: repeat 5,x: assert y=={x}: y+=1: rend: y=2: repeat 5,x,2,2: assert {x}==y:"
+    "y+=2: rend: startingindex 5: y=5: repeat 2,x: assert {x}==y: y+=1: rend: startingindex 5,5: y=10: repeat 3,x,10: assert {x}==y: "
+    "y+=5: rend: startingindex: y=1: repeat 2,x: assert {x}==y: y+=1: rend: nop ";
 
 
     #define AUTOTEST_SNASET "buildsna:bank 0:nop:"

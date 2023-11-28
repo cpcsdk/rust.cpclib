@@ -570,6 +570,10 @@ impl ListingElement for Token {
             _ => false
         }
     }
+
+    fn repeat_counter_step(&self) -> Option<&Self::Expr> {
+        todo!()
+    }
 }
 
 /// Standard listing is a specific implementation

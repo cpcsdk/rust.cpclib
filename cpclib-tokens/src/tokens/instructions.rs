@@ -651,6 +651,7 @@ pub enum Token {
         cpclib_sna::flags::FlagValue
     ),
     StableTicker(StableTickerAction<SmolStr>),
+    StartingIndex{start: Option<Expr>, step: Option<Expr>},
     Str(Vec<Expr>),
     Struct(SmolStr, Vec<(SmolStr, Token)>),
     Switch(Expr, Vec<(Expr, Listing, bool)>, Option<Listing>),
@@ -828,6 +829,7 @@ impl Clone for Token {
                     expr: expr.clone()
                 }
             },
+            Token::StartingIndex{..} => todo!(),
         }
     }
 }

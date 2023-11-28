@@ -55,7 +55,6 @@ use crate::{AssemblingOptions, PhysicalAddress};
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
-const REPEAT_START_VALUE: i32 = 1;
 const MMR_PAGES_SELECTION: [u8; 9] = [
     0xC0,
     0b11_000_0_01,
@@ -437,6 +436,10 @@ pub struct Env {
 
     map_counter: i32,
 
+    // repeat conf
+    repeat_start: ExprResult,
+    repeat_step: ExprResult,
+
     // temporary stuff
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
     extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>
@@ -498,7 +501,10 @@ impl Clone for Env {
                 .clone()
                 .into(),
 
-            map_counter: self.map_counter
+            map_counter: self.map_counter,
+
+            repeat_start: self.repeat_start.clone(),
+            repeat_step: self.repeat_step.clone(),
         }
     }
 }
@@ -569,7 +575,10 @@ impl Default for Env {
 
             extra_print_from_function: Vec::new().into(),
             extra_failed_assert_from_function: Vec::new().into(),
-            map_counter: 0
+            map_counter: 0,
+
+            repeat_start: 1.into(),
+            repeat_step: 1.into(),
         }
     }
 }
@@ -1540,6 +1549,7 @@ impl Env {
 
 /// Visit directives
 impl Env {
+
     fn visit_org<E: ExprElement + ExprEvaluationExt + Debug>(
         &mut self,
         address: &E,
@@ -2794,6 +2804,7 @@ macro_rules! visit_token_impl {
             $cls::SnaInit(ref fname) => $env.visit_snainit(fname),
             $cls::SnaSet(ref flag, ref value) => $env.visit_snaset(flag, value),
             $cls::StableTicker(ref ticker) => visit_stableticker(ticker, $env),
+            $cls::StartingIndex{ref start, ref step} => $env.visit_starting_index(start.as_ref(), step.as_ref()),
             $cls::Str(l) => visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), $env),
             $cls::Struct(ref name, ref content) => {
                 $env.visit_struct_definition(name, content.as_slice(), $span)
@@ -3261,13 +3272,30 @@ impl Env {
         Ok(())
     }
 
-    /// Handle the statndard repetition directive
+
+    pub fn visit_starting_index<E>(&mut self, start: Option<&E>, step: Option<&E>) -> Result<(), AssemblerError> 
+    where 
+    E: ExprEvaluationExt,
+    {
+
+        let start_value = start.map(|start| self.resolve_expr_must_never_fail(start))
+            .unwrap_or(Ok(ExprResult::from(1)))?;
+        let step_value = step.map(|step| self.resolve_expr_must_never_fail(step))
+            .unwrap_or(Ok(ExprResult::from(1)))?;
+
+        self.repeat_start = start_value;
+        self.repeat_step = step_value;
+        Ok(())
+    }
+
+    /// Handle the standard repetition directive
     pub fn visit_repeat<'token, T, E>(
         &mut self,
         count: &E,
         code: &mut [ProcessedToken<'token, T>],
-        counter: Option<&str>,
+        counter_name: Option<&str>,
         counter_start: Option<&E>,
+        counter_step: Option<&E>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
@@ -3282,7 +3310,7 @@ impl Env {
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
 
         // get the counter name of any
-        let counter_name = counter.as_ref().map(|counter| format!("{{{}}}", counter));
+        let counter_name = counter_name.as_ref().map(|counter| format!("{{{}}}", counter));
         let counter_name = counter_name.as_ref().map(|s| s.as_str());
         if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
@@ -3302,7 +3330,10 @@ impl Env {
         // get the first value
         let mut counter_value = counter_start
             .map(|start| self.resolve_expr_must_never_fail(start))
-            .unwrap_or(Ok(REPEAT_START_VALUE.into()))?;
+            .unwrap_or(Ok(self.repeat_start.clone()))?; // TODO use the one setup by STARTINGINDEX
+        let step_value = counter_step.map(|step| self.resolve_expr_must_never_fail(step))
+            .unwrap_or(Ok(self.repeat_step.clone()))?
+            ; // TODO use the one steup by STARTINGINDEX
 
         for i in 0..count {
             self.inner_visit_repeat(
@@ -3313,7 +3344,7 @@ impl Env {
                 span.clone()
             )?;
             // handle the counter update
-            counter_value += 1i32.into();
+            counter_value += step_value.clone();
         }
 
         if let Some(counter_name) = counter_name {

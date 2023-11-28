@@ -1101,6 +1101,7 @@ where
                             processed_tokens,
                             self.token.repeat_counter_name(),
                             self.token.repeat_counter_start(),
+                            self.token.repeat_counter_step(),
                             self.token.possible_span()
                         )
                     },

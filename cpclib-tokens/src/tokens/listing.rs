@@ -87,6 +87,7 @@ where Self: Debug + Sized + Sync
     fn repeat_count(&self) -> &Self::Expr;
     fn repeat_counter_name(&self) -> Option<&str>;
     fn repeat_counter_start(&self) -> Option<&Self::Expr>;
+    fn repeat_counter_step(&self) -> Option<&Self::Expr>;
 
     fn is_crunched_section(&self) -> bool;
     fn crunched_section_listing(&self) -> &[Self];

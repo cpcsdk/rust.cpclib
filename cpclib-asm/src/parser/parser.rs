@@ -265,6 +265,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"SNAINIT",
     b"SNAPINIT",
     b"SNASET",
+    b"STARTINGINDEX",
     b"STR",
     b"TEXT",
     b"TICKER",
@@ -1041,6 +1042,9 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             )
             .parse_next(input)?;
             let counter_start = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+            let counter_step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+
+
             let inner =
                 cut_err(inner_code.context("REPEAT: issue in the content")).parse_next(input)?;
 
@@ -1060,7 +1064,13 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             .parse_next(input)?;
 
             let token =
-                LocatedTokenInner::Repeat(count, inner, counter.map(|c| c.into()), counter_start)
+                LocatedTokenInner::Repeat(
+                    count,
+                    inner,
+                    counter.map(|c| c.into()),
+                    counter_start,
+                    counter_step
+                )
                     .into_located_token_between(repeat_start, input.clone());
             Ok(token)
         },
@@ -2295,6 +2305,9 @@ pub fn parse_directive_new(
                 parse_snainit.parse_next(input)?
             },
 
+            choice_nocase!(b"STARTINGINDEX") => {
+                parse_startingindex.parse_next(input)?
+            }
             choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input)?,
 
             choice_nocase!(b"UNDEF") => parse_undef.parse_next(input)?,
@@ -2550,6 +2563,15 @@ directive_with_expr!(parse_map, Map);
 directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
+
+
+pub fn parse_startingindex(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+    let start = opt(located_expr).parse_next(input)?;
+    let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+
+    Ok(LocatedTokenInner::StartingIndex { start, step})
+}
+
 
 /// Parse tickin directives
 pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -2825,7 +2847,8 @@ pub fn parse_res_set_bit(
         )
         .parse_next(input)?;
 
-        // Bit and Res can copy the result in a reg
+        // Res can copy the result in a reg
+        // not bit http://www.z80.info/z80undoc.htm
         let hidden_arg = if res_or_set == Mnemonic::Bit {
             None
         }

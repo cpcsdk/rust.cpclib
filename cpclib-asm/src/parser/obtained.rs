@@ -953,10 +953,11 @@ pub enum LocatedTokenInner {
 
     Range(Z80Span, LocatedExpr, LocatedExpr),
     Repeat(
-        LocatedExpr,
-        LocatedListing,
-        Option<Z80Span>,
-        Option<LocatedExpr>
+        LocatedExpr, // amount
+        LocatedListing, // code
+        Option<Z80Span>, // Name of the counter TODO check why it is optional
+        Option<LocatedExpr>, // Start value
+        Option<LocatedExpr>, //Step value
     ),
     RepeatUntil(LocatedExpr, LocatedListing),
     Return(LocatedExpr),
@@ -980,6 +981,7 @@ pub enum LocatedTokenInner {
     SnaInit(UnescapedString),
     SnaSet(SnapshotFlag, FlagValue),
     StableTicker(StableTickerAction<Z80Span>),
+    StartingIndex{start: Option<LocatedExpr>, step: Option<LocatedExpr>},
     Str(Vec<LocatedExpr>),
     Struct(Z80Span, Vec<(Z80Span, LocatedToken)>),
     Switch(
@@ -1343,7 +1345,14 @@ impl ListingElement for LocatedToken {
 
     fn repeat_counter_start(&self) -> Option<&Self::Expr> {
         match &self.inner {
-            either::Left(LocatedTokenInner::Repeat(_, _, _, start)) => start.as_ref(),
+            either::Left(LocatedTokenInner::Repeat(_, _, _, start, ..)) => start.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn repeat_counter_step(&self) -> Option<&Self::Expr> {
+        match &self.inner {
+            either::Left(LocatedTokenInner::Repeat(_, _, _, _, step)) => step.as_ref(),
             _ => unreachable!()
         }
     }
@@ -1698,7 +1707,8 @@ impl ListingElement for LocatedTokenInner {
                     e.as_ref().map(|l| l.as_listing())
                 ))
             },
-            Self::Repeat(e, l, s, start) => {
+            Self::Repeat(e, l, s, start, step) => {
+                unimplemented!("step");
                 Cow::Owned(Token::Repeat(
                     e.to_expr().into_owned(),
                     l.as_listing(),
@@ -2066,7 +2076,7 @@ impl ListingElement for LocatedTokenInner {
 
     fn repeat_counter_start(&self) -> Option<&Self::Expr> {
         match &self {
-            LocatedTokenInner::Repeat(_, _, _, start) => start.as_ref(),
+            LocatedTokenInner::Repeat(_, _, _, start, ..) => start.as_ref(),
             _ => unreachable!()
         }
     }
@@ -2328,6 +2338,10 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn is_org(&self) -> bool {
+        todo!()
+    }
+
+    fn repeat_counter_step(&self) -> Option<&Self::Expr> {
         todo!()
     }
 }
