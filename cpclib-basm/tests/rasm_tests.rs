@@ -320,8 +320,10 @@ import_rasm_success! {
 #define AUTOTEST_LOCAPROX	"repeat 1: @label  nop: .prox   nop: @label2 nop: djnz @label.prox: rend";
 #define AUTOTEST_FORMULA1	"a=5:b=2:assert int(a/b)==3:assert !a+!b==0:a=a*100:b=b*100:assert a*b==100000:ld hl,a*b-65536:a=123+-5*(-6/2)-50*2<<1";
 #define AUTOTEST_LIMIT06	"org #FFFF : nop";
+
+// void added
 #define AUTOTEST_EMBEDDED_LABELS " disarkCounter = 0:MACRO dkps:PLY_AKG_DisarkPointerRegionStart_{disarkCounter}:ENDM"
-        ":MACRO dkpe\nPLY_AKG_DisarkPointerRegionEnd_{disarkCounter}:\ndisarkCounter = disarkCounter + 1:ENDM:\ndkps\ndkpe\ndkps";
+        ":MACRO dkpe \nPLY_AKG_DisarkPointerRegionEnd_{disarkCounter}:\ndisarkCounter = disarkCounter + 1:ENDM:\ndkps (void)\ndkpe (void)\ndkps (void)";
 
 #define AUTOTEST_INTORAM1 " buildsna : bankset 0 :  org #3FF8 : defb 'roudoudou in da house' ";
 
