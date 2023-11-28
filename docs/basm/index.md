@@ -51,3 +51,17 @@ Prefer to compile yourself `basm`. But you can still download latest versions he
 !!! failure Wrong files
 
     Continuous delivery system for Linux is broken. The executables are outdated of few years...
+
+
+## Differences with RASM
+
+- slower on the parsing side
+- more buggy because not enough tested ;)
+- `MODULE` directive must be closed by `ENDMODULE`
+- `REPEAT` counter is not accessible by using the variable `counter` but `{counter}` as in a `MACRO`
+- It is possible to name a `MACRO` using the label before the `MACRO` directive
+- More data types (list, matrix, int, float, boolean)
+- As `basm` can use an unlimited number of pass (warning there is not infinite loop check ATM), it can assemble  code that would not be assembled with `rasm` because labels have to be known at this moment
+- Weak support of `DSK``, no support of `TAPE`` and `CPR``. `HFE` is usable on Linux with the appropriate compilation option. `AMSDOS` support is buggy `ATM`
+- `SNA` should be ok
+- Possibility to add some `BASIC` tokens to create loaders that do not clear the screen when launched
