@@ -2584,7 +2584,13 @@ pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
 pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
-    preceded((tag_no_case("start"), my_space1), parse_label(false))
+    preceded(
+        (
+            tag_no_case("start"), 
+            alt((my_space1, parse_comma)) 
+        ), 
+        cut_err(parse_label(false).context("Missing label"))
+    )
         .map(|name| {
             LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into()))
         })
@@ -2596,9 +2602,16 @@ pub fn parse_stable_ticker_start(
 pub fn parse_stable_ticker_stop(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
-    tag_no_case("stop")
-        .map(|_| LocatedTokenInner::StableTicker(StableTickerAction::Stop))
-        .parse_next(input)
+    tag_no_case("stop").parse_next(input)?;
+
+    let name = opt(preceded(
+        alt((my_space1, parse_comma)),
+        parse_label(false)
+                .map(|s| Z80Span::from(s))
+    )
+    ).parse_next(input)?;
+
+    Ok(LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Stop(name)))
 }
 
 #[inline]
@@ -5899,8 +5912,23 @@ assert!(res.is_ok());
         let res = parse_test(parse_multiline_comment, "/* fdf\n*\n*\nsdfgd */");
         assert!(res.is_ok(), "{:?}", &res);
     }
+
+        #[test]
+    fn test_parse_ticker() {
+     
+        let res = parse_test(parse_stable_ticker_start, "start mc");
+        assert!(res.is_ok(), "{:?}", &res);
+   
+        let res = parse_test(parse_stable_ticker_start, "start, mc");
+        assert!(res.is_ok(), "{:?}", &res);
+   
+    }
     #[test]
     fn test_parse_line_component() {
+
+        let res = parse_test(parse_line_component, "ticker start, mc");
+        assert!(res.is_ok(), "{:?}", &res);
+
         let res = parse_test(parse_line_component, "JP HL_div_2");
         assert!(res.is_ok(), "{:?}", &res);
 

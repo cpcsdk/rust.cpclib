@@ -30,6 +30,14 @@ impl StableTickerCounters {
         self.counters.pop()
     }
 
+    pub fn release_counter(&mut self, name: &str) -> Option<(String, usize)> {
+        if let Some(idx) = self.counters.iter().position(|c| c.0 == name) {
+            Some(self.counters.remove(idx))
+        } else {
+            return None;
+        }
+    }
+
     /// Update each opened counters by count
     pub fn update_counters(&mut self, count: usize) {
         self.counters.iter_mut().for_each(|(_, local_count)| {

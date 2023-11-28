@@ -329,6 +329,10 @@ import_rasm_success! {
 "ifdef label4:nbt+=1:endif: ifndef label5:nbt+=1:endif: module deuze: label1 nop: label3: label5: ifdef label1:nbt+=1:endif:"
 "ifdef label3:nbt+=1:endif: ifndef label4:nbt+=1:endif: ifdef label5:nbt+=1:endif: assert nbt==8:"
 "module grouik: plop: ifused plop : glop=1 : endif:assert glop==1";
+
+
+// this one works in basm but not rasm
+#define AUTOTEST_DELAYED_RUN "run _start:nop:_start nop";
 }
 
 // AUTOTEST_INSTRMUSTFAILED is not tested as expected by asm as we stop right after the first failure
@@ -358,7 +362,6 @@ import_rasm_failure! {
 #define AUTOTEST_LIMIT04	"limit #10001 : nop";
 #define AUTOTEST_LIMIT05	"org #FFFF : ldir";
 #define AUTOTEST_LIMIT07	"org #ffff : Start:  equ $ :    di :     ld hl,#c9fb :  ld (#38),hl";
-#define AUTOTEST_DELAYED_RUN "run _start:nop:_start nop";
 #define AUTOTEST_INHIBITION	"if 0:ifused truc:ifnused glop:ifdef bidule:ifndef machin:ifnot 1:nop:endif:nop:else:nop:endif:endif:endif:endif:endif";
 #define AUTOTEST_LZ4	"lz4:repeat 10:nop:rend:defb 'roudoudoudouoneatxkjhgfdskljhsdfglkhnopnopnopnop':lzclose";
 #define AUTOTEST_LIMITOK "org #100:limit #102:nop:limit #103:ld a,0:protect #105,#107:limit #108:xor a:org $+3:inc a" ;

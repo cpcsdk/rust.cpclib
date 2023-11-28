@@ -3992,20 +3992,23 @@ pub fn visit_stableticker<S: AsRef<str>>(
             env.stable_counters.add_counter(name)?;
             Ok(())
         },
-        StableTickerAction::Stop => {
-            match env.stable_counters.release_last_counter() {
-                None => Err(AssemblerError::NoActiveCounter),
-                Some((label, count)) => {
-                    if env.pass.is_listing_pass() {
+        StableTickerAction::Stop(ref stop) => {
+            if let Some((label, count)) = stop.as_ref()
+                .map(|stop| env.stable_counters.release_counter(stop.as_ref()))
+                .unwrap_or_else(|| env.stable_counters.release_last_counter()) {
+                    if !env.pass.is_listing_pass() {
+                        if env.symbols().contains_symbol(&label)? {
+                            env.add_warning(AssemblerWarning::AlreadyRenderedError(format!("Symbol {label} has been overwritten")));
+                        }
+                    }
+
                         // force the injection of the value
-                        env.symbols_mut().set_symbol_to_value(label, count)?;
-                        Ok(())
-                    }
-                    else {
-                        env.add_symbol_to_symbol_table(&label, count)
-                    }
+                    env.symbols_mut().set_symbol_to_value(label, count)?;
+                    return Ok(());
                 }
-            }
+                else {
+                    return Err(AssemblerError::NoActiveCounter);
+                }
         }
     }
 }

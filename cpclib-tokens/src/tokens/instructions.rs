@@ -352,7 +352,7 @@ is_mnemonic!(
 pub enum StableTickerAction<S: AsRef<str>> {
     /// Start of the ticker with its name that will contains its duration
     Start(S),
-    Stop
+    Stop(Option<S>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -1033,9 +1033,12 @@ impl fmt::Display for Token {
                 => {
                     match ticker {
                         StableTickerAction::Start(ref label) => {
-                            write!(f, "STABLETICKER START {}", label)
+                            write!(f, "STABLETICKER START, {}", label)
                         },
-                        StableTickerAction::Stop => {
+                        StableTickerAction::Stop(Some(ref label)) => {
+                            write!(f, "STABLETICKER STOP, {}", label)
+                        },
+                        StableTickerAction::Stop(None) => {
                             write!(f, "STABLETICKER STOP")
                         }
                     }

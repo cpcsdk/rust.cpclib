@@ -407,6 +407,7 @@ impl TokenExt for Token {
                         match arg1 {
                             Some(DataAccess::PortC) => 4, // XXX Not sure for out (c), 0
                             Some(DataAccess::Expression(_)) => 3,
+                            Some(DataAccess::PortN(_)) => 3,
                             _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
                         }
                     },
