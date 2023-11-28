@@ -1682,6 +1682,11 @@ impl Env {
     /// TODO set the limit for the current page
     fn visit_limit<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
+
+        if value <= 0 {
+            return Err(AssemblerError::AlreadyRenderedError(format!("It is a nonsense to define a limit of {value}")));
+        }
+
         self.active_page_info_mut().limit = value as _;
 
         if self.limit_address() <= self.maximum_address() {
