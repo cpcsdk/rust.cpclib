@@ -309,14 +309,16 @@ impl Display for UnaryFunction {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryOperation {
     Neg,
-    Not
+    Not,
+    BinaryNot,
 }
 
 impl Display for UnaryOperation {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
             UnaryOperation::Neg => "-",
-            UnaryOperation::Not => "~"
+            UnaryOperation::Not => "!",
+            UnaryOperation::BinaryNot => "~"
         };
         write!(format, "{}", repr)
     }
@@ -1016,6 +1018,21 @@ impl ExprResult {
         }
     }
 
+
+    pub fn as_type(&self, other: &Self) -> Result<Self , ExpressionTypeError> {
+        if other.is_char() {
+            self.char().map(|e| e.into())
+        }
+        else if other.is_float() {
+            self.float().map(|e| e.into())
+        }
+        else if other.is_int() {
+            self.int().map(|e| e.into())
+        } else {
+            unimplemented!();
+        }
+    }
+
     pub fn string(&self) -> Result<&str, ExpressionTypeError> {
         match self {
             ExprResult::String(s) => Ok(s.borrow()),
@@ -1085,6 +1102,21 @@ impl ExprResult {
                     self
                 )))
             },
+        }
+    }
+
+
+    pub fn not(&self) -> Result<Self, ExpressionTypeError> {
+        match self {
+            ExprResult::Bool(b) => Ok(Self::from(!*b)),
+            ExprResult::Value(i) => Ok(Self::from(if *i == 0 {1} else {0})),
+            ExprResult::Float(f) => Ok(Self::from(if *f == 0.0 {1.0} else {0.0})),
+            _ => {
+                Err(ExpressionTypeError(format!(
+                    "NOT is not an operation for {}",
+                    self
+                )))
+            },           
         }
     }
 }
@@ -1322,33 +1354,43 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
 
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
-        match (&self, rhs) {
+        match (self, rhs) {
+
+            (any, ExprResult::Bool(_)) => {
+                let b = rhs.as_type(&any)?;
+                any.sub(b)
+            }
+            (ExprResult::Bool(_), any) => {
+                let b = rhs.as_type(&any)?;
+                b.sub(any)
+            }
+
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() + f2.into_inner()).into())
             },
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
-            (ExprResult::Value(_) | ExprResult::Char(_), ExprResult::Float(f2)) => {
-                Ok((self.float()? + f2.into_inner()).into())
+            (any@ (ExprResult::Value(_) | ExprResult::Char(_)), ExprResult::Float(f2)) => {
+                Ok((any.float()? + f2.into_inner()).into())
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
             (ExprResult::Char(v1), ExprResult::Char(v2)) => Ok((v1 + v2).into()),
             (ExprResult::Value(v1), ExprResult::Char(v2)) => Ok((v1 + *v2 as i32).into()),
-            (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((*v1 as i32 + *v2).into()),
+            (ExprResult::Char(v1), ExprResult::Value(v2)) => Ok((v1 as i32 + *v2).into()),
 
             (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
             },
-            (ExprResult::Char(c), _) => ExprResult::Value(*c as _) + rhs.clone(),
+            (ExprResult::Char(c), _) => ExprResult::Value(c as _) + rhs.clone(),
 
-            (_, ExprResult::String(s)) if s.len() == 1 => {
-                self.clone() + ExprResult::Char(s.chars().next().unwrap() as u8)
+            (any, ExprResult::String(s)) if s.len() == 1 => {
+                any + ExprResult::Char(s.chars().next().unwrap() as u8)
             },
-            (_, ExprResult::Char(c)) => self.clone() + ExprResult::Value(*c as _),
+            (any, ExprResult::Char(c)) => any + ExprResult::Value(*c as _),
 
-            (..) => {
+            (any, _) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible addition between {} and {}",
-                    self, rhs
+                    any, rhs
                 )))
             },
         }
@@ -1360,32 +1402,41 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
 
     fn sub(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
-        match (&self, rhs) {
+        match (self, rhs) {
+            (any, ExprResult::Bool(_)) => {
+                let b = rhs.as_type(&any)?;
+                any.sub(b)
+            }
+            (ExprResult::Bool(_), any) => {
+                let b = rhs.as_type(&any)?;
+                b.sub(any)
+            }
+
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() - f2.into_inner()).into())
             },
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() - rhs.float()?).into())
             },
-            (ExprResult::Value(_), ExprResult::Float(f2)) => {
-                Ok((self.float()? - f2.into_inner()).into())
+            (any@ExprResult::Value(_), ExprResult::Float(f2)) => {
+                Ok((any.float()? - f2.into_inner()).into())
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 - v2).into()),
 
             (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) - rhs.clone()
             },
-            (ExprResult::Char(c), _) => ExprResult::Value(*c as _) - rhs.clone(),
+            (ExprResult::Char(c), any) => ExprResult::Value(c as _) - any,
 
-            (_, ExprResult::String(s)) if s.len() == 1 => {
-                self.clone() - ExprResult::Char(s.chars().next().unwrap() as u8)
+            (any, ExprResult::String(s)) if s.len() == 1 => {
+                any - ExprResult::Char(s.chars().next().unwrap() as u8)
             },
-            (_, ExprResult::Char(c)) => self.clone() - ExprResult::Value(*c as _),
+            (any, ExprResult::Char(c)) => any- ExprResult::Value(*c as _),
 
-            (..) => {
+            (any, rhs) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible substraction between {} and {}",
-                    self, rhs
+                    any, rhs
                 )))
             },
         }

@@ -359,9 +359,14 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
             let e = $self.arg1();
 
             match $self.unary_operation() {
-                cpclib_tokens::UnaryOperation::Not => {
+                cpclib_tokens::UnaryOperation::BinaryNot => {
                     e.resolve($env)?
                     .binary_not()
+                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
+                },
+                cpclib_tokens::UnaryOperation::Not => {
+                    e.resolve($env)?
+                    .not()
                     .map_err(|e| AssemblerError::ExpressionTypeError(e))
                 },
                 cpclib_tokens::UnaryOperation::Neg => {

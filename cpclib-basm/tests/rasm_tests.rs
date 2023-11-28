@@ -273,6 +273,7 @@ import_rasm_success! {
     "y+=5: rend: startingindex: y=1: repeat 2,x: assert {x}==y: y+=1: rend: nop ";
 
 
+    // XXX a decision has to be taken. BANK semantic seems to be different in both assemblers
     #define AUTOTEST_SNASET "buildsna:bank 0:nop:"
     ":snaset Z80_AF,0x1234 :snaset Z80_A,0x11 :snaset Z80_F,0x11 :snaset Z80_BC,0x11 :snaset Z80_B,0x11 :snaset Z80_C,0x11 :snaset Z80_DE,0x11 :snaset Z80_D,0x11"
     ":snaset Z80_E,0x11 :snaset Z80_HL,0x11 :snaset Z80_H,0x11 :snaset Z80_L,0x11 :snaset Z80_R,0x11 :snaset Z80_I,0x11 :snaset Z80_IFF0,0x11 :snaset Z80_IFF1,0x11"
@@ -284,7 +285,8 @@ import_rasm_success! {
     ":snaset CRTC_STATE,0x11 :snaset GA_VSC,0x11 :snaset GA_ISC,0x11 :snaset GA_PEN,0x11 :snaset GA_ROMCFG,0x11 :snaset GA_RAMCFG,0x11 :snaset ROM_UP,0x11"
     ":snaset CRTC_REG,0,0x11 :snaset CRTC_REG,1,0x11 :snaset CRTC_REG,16,0x11 :snaset PSG_REG,0,0x11 :snaset PSG_REG,5,0x11 :snaset PSG_REG,15,0x11: bank : nop";
     #define AUTOTEST_VIRGULE2 "print '5,,5':nop";
-    #define AUTOTEST_IFDEFMACRO	"macro test:nop:endm:ifndef test:error:else:test:endif:ifdef test:test:else:error:endif:nop";
+    // (void) added
+    #define AUTOTEST_IFDEFMACRO	"macro test:nop:endm:ifndef test:error:else:test (void):endif:ifdef test:test (void):else:error:endif:nop";
     #define AUTOTEST_NOT 	"myvar=10:myvar=10+myvar:if 5!=3:else:print glop:endif:ifnot 5:print glop:else:endif:"
                         "ifnot 0:else:print glop:endif:if !(5):print glop:endif:if !(0):else:print glop:endif:"
                         "ya=!0:if ya==1:else:print glop:endif:if !5:print glop:endif:ya = 0:ya =! 0:if ya == 1:"

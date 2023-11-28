@@ -285,6 +285,7 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"IFDEF",
     b"IFEXIST",
     b"IFNDEF",
+    b"IFNOT",
     b"IFUSED",
     b"ITER",
     b"ITERATE",
@@ -2394,7 +2395,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .parse_next(input)?;
 
         // get the conditionnal code
-        //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+        //dbg!("Listing to extract code", &input);
         let code = cut_err(inner_code.context("Condition: syntax error in conditionnal code"))
             .parse_next(input)?;
         //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
@@ -2422,7 +2423,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     }
 
     // Here we have read the latest block
-    // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+ //   dbg!("Everythng  has been read", &input);
 
     let _ = (
         opt(alt((
@@ -4899,14 +4900,14 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let neg = opt(delimited(
+    let not = opt(delimited(
         my_space0,
         alt((tag("!").recognize(), parse_word(b"NOT").recognize())),
         my_space0
     ))
     .parse_next(input)?;
 
-    let not = opt(delimited(my_space0, tag("~"), my_space0)).parse_next(input)?;
+    let binary_not = opt(delimited(my_space0, tag("~"), my_space0)).parse_next(input)?;
 
     let cloned = input.clone();
     let factor = delimited(
@@ -4944,10 +4945,12 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     )
     .parse_next(input)?;
 
-    let factor = match neg {
+    // XXX I have replaced Neg by Not, this seems the most coherent stuff
+    // XXX Need to check later
+    let factor = match not {
         Some(_) => {
             LocatedExpr::UnaryOperation(
-                UnaryOperation::Neg,
+                UnaryOperation::Not,
                 Box::new(factor),
                 build_span(input_offset, input_start, input.clone()).into()
             )
@@ -4955,10 +4958,10 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
         None => factor
     };
 
-    let factor = match not {
+    let factor = match binary_not {
         Some(_) => {
             LocatedExpr::UnaryOperation(
-                UnaryOperation::Not,
+                UnaryOperation::BinaryNot,
                 Box::new(factor),
                 build_span(input_offset, input_start, input.clone()).into()
             )
@@ -5464,6 +5467,16 @@ mod test {
                     "
         );
         assert!(res.is_ok());
+
+
+        let res = parse_test(
+            (parse_conditional, line_ending, my_space1),
+            "ifnot 5
+print glop
+else
+endif"
+);
+assert!(res.is_ok());
 
         let res = parse_test(
             parse_conditional,
