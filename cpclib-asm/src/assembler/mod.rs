@@ -504,7 +504,7 @@ impl Clone for Env {
             map_counter: self.map_counter,
 
             repeat_start: self.repeat_start.clone(),
-            repeat_step: self.repeat_step.clone(),
+            repeat_step: self.repeat_step.clone()
         }
     }
 }
@@ -578,7 +578,7 @@ impl Default for Env {
             map_counter: 0,
 
             repeat_start: 1.into(),
-            repeat_step: 1.into(),
+            repeat_step: 1.into()
         }
     }
 }
@@ -1551,7 +1551,6 @@ impl Env {
 
 /// Visit directives
 impl Env {
-
     fn visit_org<E: ExprElement + ExprEvaluationExt + Debug>(
         &mut self,
         address: &E,
@@ -1686,11 +1685,15 @@ impl Env {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
 
         if value <= 0 {
-            return Err(AssemblerError::AlreadyRenderedError(format!("It is a nonsense to define a limit of {value}")));
+            return Err(AssemblerError::AlreadyRenderedError(format!(
+                "It is a nonsense to define a limit of {value}"
+            )));
         }
 
         if value > 0x10000 {
-            return Err(AssemblerError::AlreadyRenderedError(format!("It is a nonsense to define a limit of {value} that exceeds hardware limitations.")));
+            return Err(AssemblerError::AlreadyRenderedError(format!(
+                "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
+            )));
         }
 
         self.active_page_info_mut().limit = value as _;
@@ -2276,8 +2279,10 @@ impl Env {
                 let address = self.resolve_expr_must_never_fail(address)?.int()?;
                 if address < 0 {
                     return Err(AssemblerError::AssemblingError {
-                        msg: format!("Cannot SAVE {filename} as the address ({address}) is invalid.")
-                    });                   
+                        msg: format!(
+                            "Cannot SAVE {filename} as the address ({address}) is invalid."
+                        )
+                    });
                 }
                 Some(address)
             },
@@ -2289,7 +2294,7 @@ impl Env {
                 if size < 0 {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!("Cannot SAVE {filename} as the size ({size}) is invalid.")
-                    });                   
+                    });
                 }
                 Some(size)
             },
@@ -2297,11 +2302,14 @@ impl Env {
         };
 
         if let Some(from) = &from {
-            if let Some(size) = & size {
-                if 0x10000 - *from <  *size {
+            if let Some(size) = &size {
+                if 0x10000 - *from < *size {
                     return Err(AssemblerError::AssemblingError {
-                        msg: format!("Cannot SAVE {filename} as the address+size ({}) is out of bounds.", *from+*size)
-                    }); 
+                        msg: format!(
+                            "Cannot SAVE {filename} as the address+size ({}) is out of bounds.",
+                            *from + *size
+                        )
+                    });
                 }
             }
         }
@@ -2840,7 +2848,10 @@ macro_rules! visit_token_impl {
             $cls::SnaInit(ref fname) => $env.visit_snainit(fname),
             $cls::SnaSet(ref flag, ref value) => $env.visit_snaset(flag, value),
             $cls::StableTicker(ref ticker) => visit_stableticker(ticker, $env),
-            $cls::StartingIndex{ref start, ref step} => $env.visit_starting_index(start.as_ref(), step.as_ref()),
+            $cls::StartingIndex {
+                ref start,
+                ref step
+            } => $env.visit_starting_index(start.as_ref(), step.as_ref()),
             $cls::Str(l) => visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), $env),
             $cls::Struct(ref name, ref content) => {
                 $env.visit_struct_definition(name, content.as_slice(), $span)
@@ -3308,15 +3319,19 @@ impl Env {
         Ok(())
     }
 
-
-    pub fn visit_starting_index<E>(&mut self, start: Option<&E>, step: Option<&E>) -> Result<(), AssemblerError> 
-    where 
-    E: ExprEvaluationExt,
+    pub fn visit_starting_index<E>(
+        &mut self,
+        start: Option<&E>,
+        step: Option<&E>
+    ) -> Result<(), AssemblerError>
+    where
+        E: ExprEvaluationExt
     {
-
-        let start_value = start.map(|start| self.resolve_expr_must_never_fail(start))
+        let start_value = start
+            .map(|start| self.resolve_expr_must_never_fail(start))
             .unwrap_or(Ok(ExprResult::from(1)))?;
-        let step_value = step.map(|step| self.resolve_expr_must_never_fail(step))
+        let step_value = step
+            .map(|step| self.resolve_expr_must_never_fail(step))
             .unwrap_or(Ok(ExprResult::from(1)))?;
 
         self.repeat_start = start_value;
@@ -3346,7 +3361,9 @@ impl Env {
         let count = self.resolve_expr_must_never_fail(count)?.int()?;
 
         // get the counter name of any
-        let counter_name = counter_name.as_ref().map(|counter| format!("{{{}}}", counter));
+        let counter_name = counter_name
+            .as_ref()
+            .map(|counter| format!("{{{}}}", counter));
         let counter_name = counter_name.as_ref().map(|s| s.as_str());
         if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
@@ -3367,9 +3384,9 @@ impl Env {
         let mut counter_value = counter_start
             .map(|start| self.resolve_expr_must_never_fail(start))
             .unwrap_or(Ok(self.repeat_start.clone()))?; // TODO use the one setup by STARTINGINDEX
-        let step_value = counter_step.map(|step| self.resolve_expr_must_never_fail(step))
-            .unwrap_or(Ok(self.repeat_step.clone()))?
-            ; // TODO use the one steup by STARTINGINDEX
+        let step_value = counter_step
+            .map(|step| self.resolve_expr_must_never_fail(step))
+            .unwrap_or(Ok(self.repeat_step.clone()))?; // TODO use the one steup by STARTINGINDEX
 
         for i in 0..count {
             self.inner_visit_repeat(
@@ -4029,22 +4046,26 @@ pub fn visit_stableticker<S: AsRef<str>>(
             Ok(())
         },
         StableTickerAction::Stop(ref stop) => {
-            if let Some((label, count)) = stop.as_ref()
+            if let Some((label, count)) = stop
+                .as_ref()
                 .map(|stop| env.stable_counters.release_counter(stop.as_ref()))
-                .unwrap_or_else(|| env.stable_counters.release_last_counter()) {
-                    if !env.pass.is_listing_pass() {
-                        if env.symbols().contains_symbol(&label)? {
-                            env.add_warning(AssemblerWarning::AlreadyRenderedError(format!("Symbol {label} has been overwritten")));
-                        }
+                .unwrap_or_else(|| env.stable_counters.release_last_counter())
+            {
+                if !env.pass.is_listing_pass() {
+                    if env.symbols().contains_symbol(&label)? {
+                        env.add_warning(AssemblerWarning::AlreadyRenderedError(format!(
+                            "Symbol {label} has been overwritten"
+                        )));
                     }
+                }
 
-                        // force the injection of the value
-                    env.symbols_mut().set_symbol_to_value(label, count)?;
-                    return Ok(());
-                }
-                else {
-                    return Err(AssemblerError::NoActiveCounter);
-                }
+                // force the injection of the value
+                env.symbols_mut().set_symbol_to_value(label, count)?;
+                return Ok(());
+            }
+            else {
+                return Err(AssemblerError::NoActiveCounter);
+            }
         }
     }
 }

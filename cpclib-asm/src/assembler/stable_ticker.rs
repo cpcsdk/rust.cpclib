@@ -33,7 +33,8 @@ impl StableTickerCounters {
     pub fn release_counter(&mut self, name: &str) -> Option<(String, usize)> {
         if let Some(idx) = self.counters.iter().position(|c| c.0 == name) {
             Some(self.counters.remove(idx))
-        } else {
+        }
+        else {
             return None;
         }
     }

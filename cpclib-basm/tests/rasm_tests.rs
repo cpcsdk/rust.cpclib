@@ -103,7 +103,7 @@ import_rasm_success! {
 
 #define AUTOTEST_SWITCH		"mavar=4:switch mavar:case 1:nop:case 4:defb 4:case 3:defb 3:break:case 2:nop:case 4:defb 4:endswitch";
 
-// I have removed instructions like bit 0,(ix+#12),d 
+// I have removed instructions like bit 0,(ix+#12),d
 // seems not http://www.z80.info/z80undoc.htm
 #define AUTOTEST_OPCODES "nop::ld bc,#1234::ld (bc),a::inc bc:inc b:dec b:ld b,#12:rlca:ex af,af':add hl,bc:ld a,(bc):dec bc:"
                          "inc c:dec c:ld c,#12:rrca::djnz $:ld de,#1234:ld (de),a:inc de:inc d:dec d:ld d,#12:rla:jr $:"

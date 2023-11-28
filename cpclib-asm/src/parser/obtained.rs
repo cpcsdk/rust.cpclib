@@ -953,11 +953,11 @@ pub enum LocatedTokenInner {
 
     Range(Z80Span, LocatedExpr, LocatedExpr),
     Repeat(
-        LocatedExpr, // amount
-        LocatedListing, // code
-        Option<Z80Span>, // Name of the counter TODO check why it is optional
+        LocatedExpr,         // amount
+        LocatedListing,      // code
+        Option<Z80Span>,     // Name of the counter TODO check why it is optional
         Option<LocatedExpr>, // Start value
-        Option<LocatedExpr>, //Step value
+        Option<LocatedExpr>  // Step value
     ),
     RepeatUntil(LocatedExpr, LocatedListing),
     Return(LocatedExpr),
@@ -981,7 +981,10 @@ pub enum LocatedTokenInner {
     SnaInit(UnescapedString),
     SnaSet(SnapshotFlag, FlagValue),
     StableTicker(StableTickerAction<Z80Span>),
-    StartingIndex{start: Option<LocatedExpr>, step: Option<LocatedExpr>},
+    StartingIndex {
+        start: Option<LocatedExpr>,
+        step: Option<LocatedExpr>
+    },
     Str(Vec<LocatedExpr>),
     Struct(Z80Span, Vec<(Z80Span, LocatedToken)>),
     Switch(

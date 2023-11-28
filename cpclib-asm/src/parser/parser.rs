@@ -1045,7 +1045,6 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             let counter_start = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
             let counter_step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
-
             let inner =
                 cut_err(inner_code.context("REPEAT: issue in the content")).parse_next(input)?;
 
@@ -1064,15 +1063,14 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             )
             .parse_next(input)?;
 
-            let token =
-                LocatedTokenInner::Repeat(
-                    count,
-                    inner,
-                    counter.map(|c| c.into()),
-                    counter_start,
-                    counter_step
-                )
-                    .into_located_token_between(repeat_start, input.clone());
+            let token = LocatedTokenInner::Repeat(
+                count,
+                inner,
+                counter.map(|c| c.into()),
+                counter_start,
+                counter_step
+            )
+            .into_located_token_between(repeat_start, input.clone());
             Ok(token)
         },
 
@@ -2306,9 +2304,7 @@ pub fn parse_directive_new(
                 parse_snainit.parse_next(input)?
             },
 
-            choice_nocase!(b"STARTINGINDEX") => {
-                parse_startingindex.parse_next(input)?
-            }
+            choice_nocase!(b"STARTINGINDEX") => parse_startingindex.parse_next(input)?,
             choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input)?,
 
             choice_nocase!(b"UNDEF") => parse_undef.parse_next(input)?,
@@ -2395,7 +2391,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .parse_next(input)?;
 
         // get the conditionnal code
-        //dbg!("Listing to extract code", &input);
+        // dbg!("Listing to extract code", &input);
         let code = cut_err(inner_code.context("Condition: syntax error in conditionnal code"))
             .parse_next(input)?;
         //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
@@ -2423,7 +2419,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     }
 
     // Here we have read the latest block
- //   dbg!("Everythng  has been read", &input);
+    //   dbg!("Everythng  has been read", &input);
 
     let _ = (
         opt(alt((
@@ -2565,14 +2561,12 @@ directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
 
-
 pub fn parse_startingindex(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let start = opt(located_expr).parse_next(input)?;
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
-    Ok(LocatedTokenInner::StartingIndex { start, step})
+    Ok(LocatedTokenInner::StartingIndex { start, step })
 }
-
 
 /// Parse tickin directives
 pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -2585,16 +2579,11 @@ pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
     preceded(
-        (
-            tag_no_case("start"), 
-            alt((my_space1, parse_comma)) 
-        ), 
+        (tag_no_case("start"), alt((my_space1, parse_comma))),
         cut_err(parse_label(false).context("Missing label"))
     )
-        .map(|name| {
-            LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into()))
-        })
-        .parse_next(input)
+    .map(|name| LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into())))
+    .parse_next(input)
 }
 
 /// Parse end of ticker
@@ -2606,12 +2595,13 @@ pub fn parse_stable_ticker_stop(
 
     let name = opt(preceded(
         alt((my_space1, parse_comma)),
-        parse_label(false)
-                .map(|s| Z80Span::from(s))
-    )
-    ).parse_next(input)?;
+        parse_label(false).map(|s| Z80Span::from(s))
+    ))
+    .parse_next(input)?;
 
-    Ok(LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Stop(name)))
+    Ok(LocatedTokenInner::StableTicker(
+        StableTickerAction::<Z80Span>::Stop(name)
+    ))
 }
 
 #[inline]
@@ -5481,15 +5471,14 @@ mod test {
         );
         assert!(res.is_ok());
 
-
         let res = parse_test(
             (parse_conditional, line_ending, my_space1),
             "ifnot 5
 print glop
 else
 endif"
-);
-assert!(res.is_ok());
+        );
+        assert!(res.is_ok());
 
         let res = parse_test(
             parse_conditional,
@@ -5913,19 +5902,16 @@ assert!(res.is_ok());
         assert!(res.is_ok(), "{:?}", &res);
     }
 
-        #[test]
+    #[test]
     fn test_parse_ticker() {
-     
         let res = parse_test(parse_stable_ticker_start, "start mc");
         assert!(res.is_ok(), "{:?}", &res);
-   
+
         let res = parse_test(parse_stable_ticker_start, "start, mc");
         assert!(res.is_ok(), "{:?}", &res);
-   
     }
     #[test]
     fn test_parse_line_component() {
-
         let res = parse_test(parse_line_component, "ticker start, mc");
         assert!(res.is_ok(), "{:?}", &res);
 

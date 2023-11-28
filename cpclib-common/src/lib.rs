@@ -159,7 +159,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use winnow::error::{ContextError};
+    use winnow::error::ContextError;
     use winnow::stream::AsBStr;
     use winnow::BStr;
 

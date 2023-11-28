@@ -310,7 +310,7 @@ impl Display for UnaryFunction {
 pub enum UnaryOperation {
     Neg,
     Not,
-    BinaryNot,
+    BinaryNot
 }
 
 impl Display for UnaryOperation {
@@ -1018,8 +1018,7 @@ impl ExprResult {
         }
     }
 
-
-    pub fn as_type(&self, other: &Self) -> Result<Self , ExpressionTypeError> {
+    pub fn as_type(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
         if other.is_char() {
             self.char().map(|e| e.into())
         }
@@ -1028,7 +1027,8 @@ impl ExprResult {
         }
         else if other.is_int() {
             self.int().map(|e| e.into())
-        } else {
+        }
+        else {
             unimplemented!();
         }
     }
@@ -1047,7 +1047,7 @@ impl ExprResult {
 
     pub fn int(&self) -> Result<i32, ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => Ok((f.into_inner() + 0.5) as  _), // ensure 2.9 is treated as 3
+            ExprResult::Float(f) => Ok((f.into_inner() + 0.5) as _), // ensure 2.9 is treated as 3
             ExprResult::Value(i) => Ok(*i),
             ExprResult::Char(i) => Ok(*i as i32),
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
@@ -1105,18 +1105,17 @@ impl ExprResult {
         }
     }
 
-
     pub fn not(&self) -> Result<Self, ExpressionTypeError> {
         match self {
             ExprResult::Bool(b) => Ok(Self::from(!*b)),
-            ExprResult::Value(i) => Ok(Self::from(if *i == 0 {1} else {0})),
-            ExprResult::Float(f) => Ok(Self::from(if *f == 0.0 {1.0} else {0.0})),
+            ExprResult::Value(i) => Ok(Self::from(if *i == 0 { 1 } else { 0 })),
+            ExprResult::Float(f) => Ok(Self::from(if *f == 0.0 { 1.0 } else { 0.0 })),
             _ => {
                 Err(ExpressionTypeError(format!(
                     "NOT is not an operation for {}",
                     self
                 )))
-            },           
+            },
         }
     }
 }
@@ -1355,21 +1354,20 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();
         match (self, rhs) {
-
             (any, ExprResult::Bool(_)) => {
                 let b = rhs.as_type(&any)?;
                 any.sub(b)
-            }
+            },
             (ExprResult::Bool(_), any) => {
                 let b = rhs.as_type(&any)?;
                 b.sub(any)
-            }
+            },
 
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() + f2.into_inner()).into())
             },
             (ExprResult::Float(f1), ExprResult::Value(_)) => Ok((f1 + rhs.float()?).into()),
-            (any@ (ExprResult::Value(_) | ExprResult::Char(_)), ExprResult::Float(f2)) => {
+            (any @ (ExprResult::Value(_) | ExprResult::Char(_)), ExprResult::Float(f2)) => {
                 Ok((any.float()? + f2.into_inner()).into())
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 + v2).into()),
@@ -1406,11 +1404,11 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (any, ExprResult::Bool(_)) => {
                 let b = rhs.as_type(&any)?;
                 any.sub(b)
-            }
+            },
             (ExprResult::Bool(_), any) => {
                 let b = rhs.as_type(&any)?;
                 b.sub(any)
-            }
+            },
 
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
                 Ok((f1.into_inner() - f2.into_inner()).into())
@@ -1418,7 +1416,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (ExprResult::Float(f1), ExprResult::Value(_)) => {
                 Ok((f1.into_inner() - rhs.float()?).into())
             },
-            (any@ExprResult::Value(_), ExprResult::Float(f2)) => {
+            (any @ ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((any.float()? - f2.into_inner()).into())
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 - v2).into()),
@@ -1431,7 +1429,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             (any, ExprResult::String(s)) if s.len() == 1 => {
                 any - ExprResult::Char(s.chars().next().unwrap() as u8)
             },
-            (any, ExprResult::Char(c)) => any- ExprResult::Value(*c as _),
+            (any, ExprResult::Char(c)) => any - ExprResult::Value(*c as _),
 
             (any, rhs) => {
                 Err(ExpressionTypeError(format!(

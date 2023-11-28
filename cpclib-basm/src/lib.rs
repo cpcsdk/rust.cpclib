@@ -1,13 +1,13 @@
 #![feature(box_patterns)]
 
 use std::fmt::Display;
-use std::fs::{File};
+use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
 
-use cpclib_asm::assembler::file::{get_filename};
+use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;

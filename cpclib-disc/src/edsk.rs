@@ -1,17 +1,14 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
 use std::fs::File;
-
 use std::io::prelude::*;
 use std::path::Path;
 use std::string::ToString;
-
 
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
-
 
 use crate::disc::Disc;
 
