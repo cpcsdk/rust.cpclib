@@ -2272,14 +2272,39 @@ impl Env {
         }
 
         let from = match address {
-            Some(address) => Some(self.resolve_expr_must_never_fail(address)?.int()?),
+            Some(address) => {
+                let address = self.resolve_expr_must_never_fail(address)?.int()?;
+                if address < 0 {
+                    return Err(AssemblerError::AssemblingError {
+                        msg: format!("Cannot SAVE {filename} as the address ({address}) is invalid.")
+                    });                   
+                }
+                Some(address)
+            },
             None => None
         };
         let size = match size {
-            Some(size) => Some(self.resolve_expr_must_never_fail(size)?.int()?),
+            Some(size) => {
+                let size = self.resolve_expr_must_never_fail(size)?.int()?;
+                if size < 0 {
+                    return Err(AssemblerError::AssemblingError {
+                        msg: format!("Cannot SAVE {filename} as the size ({size}) is invalid.")
+                    });                   
+                }
+                Some(size)
+            },
             None => None
         };
 
+        if let Some(from) = &from {
+            if let Some(size) = & size {
+                if from + size > (0x10000-from) {
+                    return Err(AssemblerError::AssemblingError {
+                        msg: format!("Cannot SAVE {filename} as the address+size ({}) is out of bounds.", *from+size)
+                    }); 
+                }
+            }
+        }
         // TODO process the filename to interpret possible variables
 
         // Check filename validity
