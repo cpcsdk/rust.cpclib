@@ -5472,7 +5472,7 @@ mod test {
         assert!(res.is_ok());
 
         let res = parse_test(
-            (parse_conditional, line_ending, my_space1),
+            (parse_conditional),
             "ifnot 5
 print glop
 else
