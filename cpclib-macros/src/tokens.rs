@@ -15,6 +15,22 @@ pub trait MyToTokens {
     fn to_tokens(&self, tokens: &mut TokenStream);
 }
 
+impl<T> MyToTokens for &Option<T>
+where T: MyToTokens
+{
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            None => tokens.append(Ident::new("None", Span::call_site())),
+            Some(t) => {
+                tokens.append(Ident::new("Some", Span::call_site()));
+                let mut inner = TokenStream::new();
+                t.to_tokens(&mut inner);
+                tokens.append(Group::new(Delimiter::Parenthesis, inner));
+            }
+        }
+    }
+}
+
 impl<T> MyToTokens for Option<T>
 where T: MyToTokens
 {
@@ -294,7 +310,7 @@ impl MyToTokens for Token {
     }
 }
 
-impl<S: AsRef<str>> MyToTokens for StableTickerAction<S> {
+impl<S: AsRef<str> + MyToTokens> MyToTokens for StableTickerAction<S> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         no_param("StableTickerAction", tokens);
         tokens.append(Punct::new(':', Spacing::Joint));
@@ -305,8 +321,8 @@ impl<S: AsRef<str>> MyToTokens for StableTickerAction<S> {
                 one_param("Start", label.as_ref(), tokens);
             },
 
-            StableTickerAction::Stop => {
-                no_param("Stop", tokens);
+            StableTickerAction::Stop(label) => {
+                one_param("Stop", &label, tokens);
             }
         }
     }
