@@ -113,6 +113,12 @@ fn inner_main() -> Result<(), BndBuilderError> {
         return Ok(());
     }
 
+    if matches.get_flag("init") {
+        cpclib_bndbuild::init_project(None)?;
+        println!("Empty project initialized");
+        return Ok(())
+    }
+
     // Get the file and read it
     let fname: &String = matches.get_one("file").unwrap();
     if !std::path::Path::new(fname).exists() {

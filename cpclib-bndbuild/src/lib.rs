@@ -32,13 +32,28 @@ pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
         return Err(BndBuilderError::AnyError(format!("{} is not a valid directory", path.display())))
     }
 
-    std::fs::write(path.join("bndbuild.yml"), include_bytes!("default_bndbuild.yml"))
+    let bndbuild_yml = path.join("bndbuild.yml");
+    if bndbuild_yml.exists() {
+        return Err(BndBuilderError::AnyError(format!("{} already exists", bndbuild_yml.display())));
+    }
+
+    let main_asm = path.join("main.asm");
+    if main_asm.exists() {
+        return Err(BndBuilderError::AnyError(format!("{} already exists", main_asm.display())));
+    }
+
+    let data_asm = path.join("data.asm");
+    if main_asm.exists() {
+        return Err(BndBuilderError::AnyError(format!("{} already exists", data_asm.display())));
+    }
+
+    std::fs::write(&bndbuild_yml, include_bytes!("default_bndbuild.yml"))
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
-    std::fs::write(path.join("main.asm"), include_bytes!("default_main.asm"))
+    std::fs::write(&main_asm, include_bytes!("default_main.asm"))
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
-    std::fs::write(path.join("data.asm"), include_bytes!("default_data.asm"))
+    std::fs::write(&data_asm, include_bytes!("default_data.asm"))
     .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
     
     Ok(())
