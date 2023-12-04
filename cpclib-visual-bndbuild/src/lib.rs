@@ -375,7 +375,7 @@ impl BndBuildApp {
                         .add(Button::new("Quit").shortcut_text(ctx.format_shortcut(&CTRL_Q)))
                         .clicked()
                     {
-                        frame.close();
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
             })
@@ -392,7 +392,7 @@ impl BndBuildApp {
             ui.separator();
 
             if ui.input_mut(|i| i.consume_shortcut(&CTRL_Q)) {
-                _frame.close();
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             if ui.input_mut(|i| i.consume_shortcut(&CTRL_R)) {
                 self.request_reload = true;

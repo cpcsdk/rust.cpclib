@@ -1,6 +1,7 @@
 use std::collections::HashSet;
+use std::env::current_dir;
 use std::io::{BufReader, Read};
-use std::path::Path;
+use std::path::{Path, self};
 
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
@@ -18,6 +19,29 @@ pub use builder::*;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+    
+
+pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
+    let path = path
+        .map(|p| p.to_owned())
+        .unwrap_or_else(|| current_dir().unwrap());
+
+    if ! path.is_dir() {
+        return Err(BndBuilderError::AnyError(format!("{} is not a valid directory", path.display())))
+    }
+
+    std::fs::write(path.join("bndbuild.yml"), include_bytes!("default_bndbuild.yml"))
+        .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+
+    std::fs::write(path.join("main.asm"), include_bytes!("default_main.asm"))
+        .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+
+    std::fs::write(path.join("data.asm"), include_bytes!("default_data.asm"))
+    .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+    
+    Ok(())
 }
 
 /// Expand glob patterns
@@ -98,5 +122,7 @@ pub enum BndBuilderError {
     #[error("The target {0} is disabled.")]
     DisabledTarget(String),
     #[error("Target {0} is not buildable.")]
-    UnknownTarget(String)
+    UnknownTarget(String),
+    #[error("{0}")]
+    AnyError(String)
 }

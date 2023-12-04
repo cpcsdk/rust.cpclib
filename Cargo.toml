@@ -161,11 +161,11 @@ velcro = "0.5.4"
 winnow = {version= "0.5.19", features=["simd"]}
 
 # gui based dependencies
-eframe = "0.23"
-egui = "0.23"
+eframe = "0.24"
+egui = "0.24"
 claui = {git="https://github.com/rgiot/claui.git"}
-egui_code_editor = "0.1.8" # cannot be updated to 0.1.8 yet
-egui_file = "0.11"
+egui_code_editor = "0.1.9"
+egui_file = "0.13"
 open = "5.0.0"
 
 

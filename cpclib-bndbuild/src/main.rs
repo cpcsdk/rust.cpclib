@@ -64,11 +64,17 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .help("List the available targets")
         )
         .arg(
+            Arg::new("init")
+                .long("init")
+                .action(ArgAction::SetTrue)
+                .help("Init a new project by creating it")
+        )
+        .arg(
             Arg::new("target")
                 .action(ArgAction::Append)
                 .value_name("TARGET")
                 .help("Provide the target(s) to run.")
-                .conflicts_with("list")
+                .conflicts_with_all(["list", "init"])
         );
 
     let matches = cmd.clone().get_matches();
