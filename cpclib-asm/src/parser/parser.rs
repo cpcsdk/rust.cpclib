@@ -4334,7 +4334,8 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
                         eof.value(()),
                         my_line_ending.value(()),
                         ",".value(()),
-                        ":".value(())
+                        ":".value(()),
+                        ";".value(())
                     ))
                 )
             )
