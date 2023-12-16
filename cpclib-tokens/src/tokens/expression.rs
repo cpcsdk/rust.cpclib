@@ -207,17 +207,17 @@ impl ExprFormat {
     pub fn string_representation(&self, val: i32) -> String {
         match self {
             Self::Hex(None) => format!("0x{:x}", val),
-            Self::Bin(None) => format!("0b{:x}", val),
+            Self::Bin(None) => format!("0b{:b}", val),
 
             Self::Int => format!("{}", val),
 
-            Self::Hex(Some(2)) => format!("0x{:2x}", val),
-            Self::Hex(Some(4)) => format!("0x{:4x}", val),
-            Self::Hex(Some(8)) => format!("0x{:8x}", val),
+            Self::Hex(Some(2)) => format!("0x{:0>2x}", val),
+            Self::Hex(Some(4)) => format!("0x{:0>4x}", val),
+            Self::Hex(Some(8)) => format!("0x{:0>8x}", val),
 
-            Self::Bin(Some(8)) => format!("0b{:8x}", val),
-            Self::Bin(Some(16)) => format!("0b{:16x}", val),
-            Self::Bin(Some(32)) => format!("0b{:32x}", val),
+            Self::Bin(Some(8)) => format!("0b{:0>8b}", val),
+            Self::Bin(Some(16)) => format!("0b{:0>16b}", val),
+            Self::Bin(Some(32)) => format!("0b{:0>32b}", val),
 
             _ => unreachable!()
         }
