@@ -492,13 +492,13 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     }
     else {
         // Standard case
-        if matches.contains_id("OVERSCAN") {
+        if matches.get_flag("OVERSCAN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
                 display_address: DisplayCRTCAddress::new_overscan_from_page(2)
             }
         }
-        else if matches.contains_id("FULLSCREEN") {
+        else if matches.get_flag("FULLSCREEN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
                 display_address: DisplayCRTCAddress::new_overscan_from_page(2)
@@ -1032,17 +1032,20 @@ pub fn build_args_parser() -> clap::Command {
                     .arg(
                         Arg::new("FULLSCREEN")
                             .long("fullscreen")
+                            .action(ArgAction::SetTrue)
                             .help("Specify a full screen displayed using 2 non consecutive banks.")
                             .conflicts_with("OVERSCAN")
                     )
                     .arg(
                         Arg::new("OVERSCAN")
                             .long("overscan")
+                            .action(ArgAction::SetTrue)
                             .help("Specify an overscan screen (crtc meaning).")
                     )
                     .arg(
                         Arg::new("STANDARD")
                             .long("standard")
+                            .action(ArgAction::SetTrue)
                             .help("Specify a standard screen manipulation.")
                             .conflicts_with("OVERSCAN")
                             .conflicts_with("FULLSCREEN")
