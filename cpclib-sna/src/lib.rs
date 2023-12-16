@@ -166,6 +166,10 @@ impl Snapshot {
     pub fn from_buffer(mut file_content: Vec<u8>) -> Result<Self, String> {
         let mut sna = Self::default();
 
+        if file_content.len() < 0x100 {
+            return Err("SNA file is invalid".to_owned());
+        }
+
         // Copy the header
         sna.header
             .copy_from_slice(file_content.drain(0..0x100).as_slice());
