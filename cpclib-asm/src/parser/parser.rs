@@ -4249,29 +4249,33 @@ pub fn parse_indexregister_with_index(
     let (open, _, reg) =
         ((alt((b'(', b'[')), my_space0, parse_indexregister16)).parse_next(input)?;
 
-    let op = preceded(
+    let op = opt(preceded(
         my_space0,
         alt((
             b'+'.value(BinaryOperation::Add),
             b'-'.value(BinaryOperation::Sub)
         ))
-    )
+    ))
     .parse_next(input)?;
 
-    let expr = if open == b'(' {
-        terminated(located_expr, (my_space0, b')')).parse_next(input)?
-    }
-    else {
-        assert_eq!(open, b'[');
-        terminated(located_expr, (my_space0, b']'))
-            .parse_next(input)
-            .unwrap()
+    let close = if open == b'(' { 
+        b')'
+    } else {
+        b']'
+    };
+
+    let expr = if op.is_some() {
+        terminated(located_expr, (my_space0, close)).parse_next(input)?
+    } else {
+        (my_space0, close)
+            .value( LocatedExpr::Value(0, input.clone().into()))
+            .parse_next(input)?
     };
 
     let span = build_span(start_eof_offset, start_checkpoint, input.clone());
     Ok(LocatedDataAccess::IndexRegister16WithIndex(
         reg.get_indexregister16().unwrap(),
-        op,
+        op.unwrap_or(BinaryOperation::Add),
         expr,
         span.into()
     ))

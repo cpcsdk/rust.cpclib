@@ -13,6 +13,19 @@ fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
     (ctx, span)
 }
 
+#[test]
+fn regression_ld_memory_ix() {
+    let (_ctx_, span) = ctx_and_span("ld a, (ix)");
+    assert_eq!(
+        parse_token(&mut span.into()).unwrap().to_token().into_owned(),
+        Token::OpCode(
+            Mnemonic::Ld, 
+            Some(DataAccess::Register8(Register8::A)), 
+            Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, BinaryOperation::Add, Expr::Value(0))), 
+            None
+        )
+    );
+}
 
 #[test]
 fn regression_ld_memory() {
