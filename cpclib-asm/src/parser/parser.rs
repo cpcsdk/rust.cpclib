@@ -4333,9 +4333,10 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
                     alt((
                         eof.value(()),
                         my_line_ending.value(()),
-                        ",".value(()),
-                        ":".value(()),
-                        ";".value(())
+                        ','.value(()),
+                        ':'.value(()),
+                        ';'.value(()),
+                        "//".value(())
                     ))
                 )
             )
@@ -4612,7 +4613,7 @@ fn parse_snaset(
 #[inline]
 pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = input.clone();
-    preceded(alt((b";", b"////")), take_till0(|ch| ch == b'\n'))
+    preceded(alt((b";", b"//")), take_till0(|ch| ch == b'\n'))
         .map(|string: &[u8]| {
             LocatedTokenInner::Comment(cloned.update_slice(string).into())
                 .into_located_token_direct()
