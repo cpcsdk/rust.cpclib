@@ -17,11 +17,18 @@ fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
 fn regression_ld_memory_ix() {
     let (_ctx_, span) = ctx_and_span("ld a, (ix)");
     assert_eq!(
-        parse_token(&mut span.into()).unwrap().to_token().into_owned(),
+        parse_token(&mut span.into())
+            .unwrap()
+            .to_token()
+            .into_owned(),
         Token::OpCode(
-            Mnemonic::Ld, 
-            Some(DataAccess::Register8(Register8::A)), 
-            Some(DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, BinaryOperation::Add, Expr::Value(0))), 
+            Mnemonic::Ld,
+            Some(DataAccess::Register8(Register8::A)),
+            Some(DataAccess::IndexRegister16WithIndex(
+                IndexRegister16::Ix,
+                BinaryOperation::Add,
+                Expr::Value(0)
+            )),
             None
         )
     );
@@ -31,33 +38,30 @@ fn regression_ld_memory_ix() {
 fn regression_ld_memory() {
     let (_ctx_, span) = ctx_and_span("ld a, (data.y)");
     assert_eq!(
-        parse_token(&mut span.into()).unwrap().to_token().into_owned(),
+        parse_token(&mut span.into())
+            .unwrap()
+            .to_token()
+            .into_owned(),
         Token::OpCode(
-            Mnemonic::Ld, 
-            Some(DataAccess::Register8(Register8::A)), 
-            Some(DataAccess::Memory(Expr::Label("data.y".into()))), 
+            Mnemonic::Ld,
+            Some(DataAccess::Register8(Register8::A)),
+            Some(DataAccess::Memory(Expr::Label("data.y".into()))),
             None
         )
     );
 
-
     let bytes = assemble("ld a, (0x1234)").unwrap();
     assert_eq!(3, bytes.len());
-    assert_eq!(&bytes, &[0x3a, 0x34, 0x12]);
-
+    assert_eq!(&bytes, &[0x3A, 0x34, 0x12]);
 
     let bytes = assemble("org 0x1234:data:.y:ld a, (data.y)").unwrap();
     assert_eq!(3, bytes.len());
-    assert_eq!(&bytes, &[0x3a, 0x34, 0x12]);
+    assert_eq!(&bytes, &[0x3A, 0x34, 0x12]);
 
     let bytes = assemble("org 0x1234:data:.y:ld a, (data.y)   ; comment").unwrap();
-    assert_eq!(&bytes, &[0x3a, 0x34, 0x12]);
+    assert_eq!(&bytes, &[0x3A, 0x34, 0x12]);
     assert_eq!(3, bytes.len());
-
-
 }
-
-
 
 #[test]
 fn test_regression1() {

@@ -2206,118 +2206,204 @@ pub fn parse_directive_new(
 
         //   dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
 
-        let token: LocatedTokenInner = match word {
-            choice_nocase!(b"ORG") => parse_org.parse_next(input)?,
+        let token: LocatedTokenInner = match word.len() {
+            2 => {
+                match word {
+                    choice_nocase!(b"DB") | choice_nocase!(b"DM") => {
+                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
+                    },
 
-            choice_nocase!(b"DB")
-            | choice_nocase!(b"DEFB")
-            | choice_nocase!(b"DM")
-            | choice_nocase!(b"DEFM")
-            | choice_nocase!(b"BYTE")
-            | choice_nocase!(b"TEXT") => {
-                parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
-            },
-            choice_nocase!(b"WORD") | choice_nocase!(b"DW") | choice_nocase!(b"DEFW") => {
-                parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
-            },
-            choice_nocase!(b"STR") => {
-                parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)?
-            },
+                    choice_nocase!(b"DS") => parse_defs.parse_next(input)?,
 
-            choice_nocase!(b"INCBIN") | choice_nocase!(b"BINCLUDE") => {
-                parse_incbin(BinaryTransformation::None).parse_next(input)?
-            },
-            choice_nocase!(b"INCEXO") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO)).parse_next(input)?
-            },
-            choice_nocase!(b"INCLZ4") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4)).parse_next(input)?
-            },
-            choice_nocase!(b"INCL48") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48)).parse_next(input)?
-            },
-            choice_nocase!(b"INCL49") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49)).parse_next(input)?
-            },
-            choice_nocase!(b"INCAPU") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU)).parse_next(input)?
-            },
-            choice_nocase!(b"INCZX0") => {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0)).parse_next(input)?
+                    choice_nocase!(b"DW") => {
+                        parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
+                    },
+
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
             },
 
-            choice_nocase!(b"INCLUDE") | choice_nocase!(b"READ") => {
-                parse_include.parse_next(input)?
+            3 => {
+                match word {
+                    choice_nocase!(b"STR") => {
+                        parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)?
+                    },
+                    choice_nocase!(b"END") => Ok(LocatedTokenInner::End)?,
+                    choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input)?,
+                    choice_nocase!(b"MAP") => parse_map.parse_next(input)?,
+                    choice_nocase!(b"NOP") => parse_nop.parse_next(input)?,
+                    choice_nocase!(b"ORG") => parse_org.parse_next(input)?,
+                    choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input)?,
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
             },
 
-            choice_nocase!(b"STRUCT") => parse_struct.parse_next(input)?,
-            choice_nocase!(b"SAVE") => parse_save(SaveKind::Save).parse_next(input)?,
-            choice_nocase!(b"WRITE") => {
-                alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))
-                    .parse_next(input)?
-            },
-            choice_nocase!(b"FILL")
-            | choice_nocase!(b"DS")
-            | choice_nocase!(b"DEFS")
-            | choice_nocase!(b"RMEM") => parse_defs.parse_next(input)?,
+            4 => {
+                match word {
+                    choice_nocase!(b"DEFB")
+                    | choice_nocase!(b"DEFM")
+                    | choice_nocase!(b"BYTE")
+                    | choice_nocase!(b"TEXT") => {
+                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
+                    },
 
-            choice_nocase!(b"ALIGN") => parse_align.parse_next(input)?,
-            choice_nocase!(b"ASSERT") => parse_assert.parse_next(input)?,
+                    choice_nocase!(b"FILL") | choice_nocase!(b"DEFS") | choice_nocase!(b"RMEM") => {
+                        parse_defs.parse_next(input)?
+                    },
 
-            choice_nocase!(b"BANK") => parse_bank.parse_next(input)?,
-            choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input)?,
-            choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input)?,
-            choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input)?,
+                    choice_nocase!(b"BANK") => parse_bank.parse_next(input)?,
+                    choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input)?,
+                    choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List)?,
+                    choice_nocase!(b"READ") => parse_include.parse_next(input)?,
 
-            choice_nocase!(b"CHARSET") => parse_charset.parse_next(input)?,
+                    choice_nocase!(b"SAVE") => parse_save(SaveKind::Save).parse_next(input)?,
 
-            choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input)?,
-
-            choice_nocase!(b"END") => Ok(LocatedTokenInner::End)?,
-            choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input)?,
-
-            choice_nocase!(b"EXPORT") => parse_export(ExportKind::Export).parse_next(input)?,
-
-            choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input)?,
-
-            choice_nocase!(b"LIMIT") => parse_limit.parse_next(input)?,
-            choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List)?,
-
-            choice_nocase!(b"MAP") => parse_map.parse_next(input)?,
-
-            choice_nocase!(b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input)?,
-            choice_nocase!(b"NOLIST") => LocatedTokenInner::NoList,
-            choice_nocase!(b"NOP") => parse_nop.parse_next(input)?,
-
-            choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause)?,
-            choice_nocase!(b"PRINT") => parse_print(true).parse_next(input)?,
-            choice_nocase!(b"PROTECT") => parse_protect.parse_next(input)?,
-
-            choice_nocase!(b"RANGE") => parse_range.parse_next(input)?,
-            choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
-            choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input)?,
-
-            choice_nocase!(b"SECTION") => parse_section.parse_next(input)?,
-            choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
-
-            choice_nocase!(b"SNAPINIT") | choice_nocase!(b"SNAINIT") => {
-                parse_snainit.parse_next(input)?
+                    choice_nocase!(b"WORD") | choice_nocase!(b"DEFW") => {
+                        parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
+                    },
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
             },
 
-            choice_nocase!(b"STARTINGINDEX") => parse_startingindex.parse_next(input)?,
-            choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input)?,
+            5 => {
+                match word {
+                    choice_nocase!(b"ALIGN") => parse_align.parse_next(input)?,
+                    choice_nocase!(b"LIMIT") => parse_limit.parse_next(input)?,
+                    choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause)?,
+                    choice_nocase!(b"PRINT") => parse_print(true).parse_next(input)?,
+                    choice_nocase!(b"RANGE") => parse_range.parse_next(input)?,
+                    choice_nocase!(b"UNDEF") => parse_undef.parse_next(input)?,
 
-            choice_nocase!(b"UNDEF") => parse_undef.parse_next(input)?,
+                    choice_nocase!(b"WRITE") => {
+                        alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))
+                            .parse_next(input)?
+                    },
 
-            choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input)?,
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
+            },
 
+            6 => {
+                match word {
+                    choice_nocase!(b"ASSERT") => parse_assert.parse_next(input)?,
+
+                    choice_nocase!(b"EXPORT") => {
+                        parse_export(ExportKind::Export).parse_next(input)?
+                    },
+                    choice_nocase!(b"INCBIN") => {
+                        parse_incbin(BinaryTransformation::None).parse_next(input)?
+                    },
+                    choice_nocase!(b"INCEXO") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO))
+                            .parse_next(input)?
+                    },
+                    choice_nocase!(b"INCLZ4") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4))
+                            .parse_next(input)?
+                    },
+
+                    choice_nocase!(b"INCL48") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48))
+                            .parse_next(input)?
+                    },
+
+                    choice_nocase!(b"INCL49") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49))
+                            .parse_next(input)?
+                    },
+
+                    choice_nocase!(b"INCAPU") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU))
+                            .parse_next(input)?
+                    },
+
+                    choice_nocase!(b"INCZX0") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0))
+                            .parse_next(input)?
+                    },
+
+                    choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
+                    choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
+
+                    choice_nocase!(b"STRUCT") => parse_struct.parse_next(input)?,
+                    choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input)?,
+
+                    choice_nocase!(b"NOLIST") => LocatedTokenInner::NoList,
+
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
+            },
             _ => {
-                input.reset(input_start);
-                return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                    input,
-                    ErrorKind::Alt
-                )));
-            }
+                match word {
+                    choice_nocase!(b"BINCLUDE") => {
+                        parse_incbin(BinaryTransformation::None).parse_next(input)?
+                    },
+
+                    choice_nocase!(b"INCLUDE") => parse_include.parse_next(input)?,
+
+                    choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input)?,
+                    choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input)?,
+                    choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input)?,
+
+                    choice_nocase!(b"CHARSET") => parse_charset.parse_next(input)?,
+
+                    choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input)?,
+
+                    choice_nocase!(b"NOEXPORT") => {
+                        parse_export(ExportKind::NoExport).parse_next(input)?
+                    },
+
+                    choice_nocase!(b"PROTECT") => parse_protect.parse_next(input)?,
+
+                    choice_nocase!(b"SECTION") => parse_section.parse_next(input)?,
+
+                    choice_nocase!(b"SNAPINIT") | choice_nocase!(b"SNAINIT") => {
+                        parse_snainit.parse_next(input)?
+                    },
+
+                    choice_nocase!(b"STARTINGINDEX") => parse_startingindex.parse_next(input)?,
+
+                    choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input)?,
+
+                    _ => {
+                        input.reset(input_start);
+                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                            input,
+                            ErrorKind::Alt
+                        )));
+                    }
+                }
+            },
         };
 
         let token = token.into_located_token_between(input_start, input.clone());
@@ -4258,17 +4344,14 @@ pub fn parse_indexregister_with_index(
     ))
     .parse_next(input)?;
 
-    let close = if open == b'(' { 
-        b')'
-    } else {
-        b']'
-    };
+    let close = if open == b'(' { b')' } else { b']' };
 
     let expr = if op.is_some() {
         terminated(located_expr, (my_space0, close)).parse_next(input)?
-    } else {
+    }
+    else {
         (my_space0, close)
-            .value( LocatedExpr::Value(0, input.clone().into()))
+            .value(LocatedExpr::Value(0, input.clone().into()))
             .parse_next(input)?
     };
 
@@ -4712,7 +4795,6 @@ pub fn parse_label(
         if label_len >= MIN_MAX_LABEL_SIZE.0 &&
         label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
             !ignore_ascii_case_allowed_label( true_label, input.state.options().dotted_directive)  {
-            
             input.reset(start);
             Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
