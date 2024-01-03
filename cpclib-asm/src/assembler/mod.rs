@@ -645,7 +645,15 @@ impl Env {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
+                // if we have no more remaining passes, we fail !
+                if let Some(commands) = self.assembling_control_current_output_commands.last() {
+                    if !commands.has_remaining_passes() {
+                        return Err(e);
+                    }
+                }
+
                 if self.pass.is_first_pass() {
+
                     *self.can_skip_next_passes.write().unwrap() = false;
                     Ok(r.into())
                 }
