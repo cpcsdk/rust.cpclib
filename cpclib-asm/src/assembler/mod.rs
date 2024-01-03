@@ -896,7 +896,7 @@ impl Env {
             );
             self.current_pass_discarded_errors.clear();
 
-            self.stable_counters = StableTickerCounters::default();
+            self.stable_counters.new_pass();
             self.run_options = None;
             self.written_bytes().fill(false);
             self.warnings.retain(|elem| !elem.is_override_memory());

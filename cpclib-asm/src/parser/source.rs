@@ -5,7 +5,6 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::{AsBStr, Offset};
 use cpclib_common::winnow::{BStr, Bytes, Located, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
-use line_col::LineColLookup;
 use line_span::LineSpanExt;
 
 use super::context::ParserContext;
@@ -113,11 +112,8 @@ impl Z80Span {
     /// Get the line and column relatively to the source start
     #[inline]
     pub fn relative_line_and_column(&self) -> (usize, usize) {
-        // TODO store this lookup somewhere instead of recomputing it each time
-        let lookup = LineColLookup::new(self.complete_source());
-
         let offset = self.offset_from_start();
-        lookup.get(offset)
+        self.context().relative_line_and_column(offset)
     }
 
     #[inline]

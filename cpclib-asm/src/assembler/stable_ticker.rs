@@ -9,6 +9,11 @@ pub struct StableTickerCounters {
 
 #[allow(missing_docs)]
 impl StableTickerCounters {
+    pub fn new_pass(&mut self) {
+        self.counters.clear();
+    }
+
+
     /// Check if a counter with the same name already exists
     pub fn has_counter<S: AsRef<str>>(&self, name: &S) -> bool {
         let name = name.as_ref();

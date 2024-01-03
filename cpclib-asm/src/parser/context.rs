@@ -2,10 +2,12 @@ use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use cpclib_common::lazy_static;
 use cpclib_common::winnow::BStr;
 use either::Either;
+use super::line_col::LineColLookup;
 use regex::Regex;
 
 use crate::error::AssemblerError;
@@ -177,14 +179,17 @@ impl ParserContextBuilder {
     }
 
     /// Build a ParserContext for the given source code
+    #[inline]
     pub fn build(self, code: &str) -> ParserContext {
+        let code: &'static str = unsafe{std::mem::transmute(code)};
         let str: &'static BStr = unsafe { std::mem::transmute(BStr::new(code)) };
         ParserContext {
             options: self.options,
             current_filename: self.current_filename,
             context_name: self.context_name,
             state: self.state,
-            source: str
+            source: str,
+            line_col_lut: Default::default()
         }
     }
 }
@@ -372,12 +377,14 @@ pub struct ParserContext {
     pub context_name: Option<String>,
     pub options: ParserOptions,
     /// Full source code of the parsing state
-    pub source: &'static BStr
+    pub source: &'static BStr,
+    pub line_col_lut: RwLock<Option<LineColLookup<'static>>>
 }
 
 impl Eq for ParserContext {}
 
 impl PartialEq for ParserContext {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.state == other.state
             && self.current_filename == other.current_filename
@@ -394,7 +401,8 @@ impl Clone for ParserContext {
             context_name: self.context_name.clone(),
             state: self.state.clone(),
             source: self.source,
-            options: self.options.clone()
+            options: self.options.clone(),
+            line_col_lut:RwLock::default() // no need to copy paste the datastructure if it is never used
         }
     }
 }
@@ -422,6 +430,7 @@ impl ParserContext {
             context_name: self.context_name.clone(),
             source: self.source,
             options: self.options.clone(),
+            line_col_lut: Default::default(), // no need to duplicate the structure
             state
         }
     }
@@ -429,43 +438,66 @@ impl ParserContext {
 
 #[allow(missing_docs)]
 impl ParserContext {
+    #[inline]
     pub fn context_name(&self) -> Option<&str> {
         self.context_name.as_ref().map(|b| b.as_str())
     }
 
+    #[inline]
     pub fn filename(&self) -> Option<&Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }
 
     //#[deprecated(note="Totally unsafe. Every test should be modified to not use it")]
+    #[inline]
     pub fn build_span<S: ?Sized + AsRef<[u8]>>(&self, src: &S) -> Z80Span {
         Z80Span::new_extra(src, self)
     }
 
     /// Specify the path that contains the code
+    #[inline]
     pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
         let file = file.into();
         self.current_filename = Some(file.canonicalize().unwrap_or(file))
     }
 
+    #[inline]
     pub fn remove_filename(&mut self) {
         self.current_filename = None;
     }
 
+    #[inline]
     pub fn set_context_name(&mut self, name: &str) {
         self.context_name = Some(name.to_owned());
     }
 
+    #[inline]
     pub fn complete_source(&self) -> &str {
         unsafe { std::mem::transmute(self.source.deref()) }
     }
 
+    #[inline]
     pub fn options(&self) -> &ParserOptions {
         &self.options
     }
 
+    #[inline]
     pub fn state(&self) -> &ParsingState {
         &self.state
+    }
+
+    #[inline]
+    pub fn relative_line_and_column(&self, offset: usize) -> (usize, usize) {
+        if self.line_col_lut.read().unwrap().is_none() {
+            let src: &'static str= unsafe { std::mem::transmute(self.source.deref()) };
+
+            self.line_col_lut.write().unwrap().replace(LineColLookup::new(src));
+        }
+
+        let res = self.line_col_lut.read().unwrap().as_ref().unwrap().get(offset);
+
+        res
+        
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {
