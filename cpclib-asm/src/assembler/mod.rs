@@ -1,3 +1,4 @@
+pub mod control;
 pub mod delayed_command;
 pub mod file;
 pub mod function;
@@ -11,7 +12,6 @@ pub mod save_command;
 pub mod section;
 pub mod stable_ticker;
 pub mod symbols_output;
-pub mod control;
 
 pub mod embedded;
 pub mod processed_token;
@@ -19,7 +19,7 @@ pub mod processed_token;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::io::{Write, stdout};
+use std::io::{stdout, Write};
 use std::ops::Neg;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -37,7 +37,7 @@ use cpclib_tokens::ToSimpleToken;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
-use self::control::{ControlOutputStore};
+use self::control::ControlOutputStore;
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
 use self::processed_token::ProcessedToken;
@@ -511,7 +511,9 @@ impl Clone for Env {
             repeat_start: self.repeat_start.clone(),
             repeat_step: self.repeat_step.clone(),
 
-            assembling_control_current_output_commands: self.assembling_control_current_output_commands.clone()
+            assembling_control_current_output_commands: self
+                .assembling_control_current_output_commands
+                .clone()
         }
     }
 }
@@ -1310,8 +1312,7 @@ impl Env {
         }
 
         // dbg!(self.output_address(), &v);
-        let physical_address: PhysicalAddress =
-            self.physical_output_address();
+        let physical_address: PhysicalAddress = self.physical_output_address();
 
         // Check if it is legal to output the value
         if self.logical_code_address() > self.limit_address()
@@ -1333,15 +1334,12 @@ impl Env {
             }
         }
 
-
-
         self.byte_written = true;
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
-            commands.store_byte( v);
+            commands.store_byte(v);
         }
 
         /// TODO move the next in a function to reuse when executing the command
-
         // update the maximm 64k position
         self.active_page_info_mut().maxadr =
             self.maximum_address().max(self.logical_output_address());
@@ -1597,7 +1595,6 @@ impl Env {
             code_adr.clone()
         };
 
-
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
             commands.store_org(code_adr as _, output_adr as _);
         }
@@ -1605,10 +1602,12 @@ impl Env {
         self.visit_org_set_arguments(code_adr as _, output_adr as _)
     }
 
-    pub fn visit_org_set_arguments(&mut self, code_adr: u16, output_adr: u16) -> Result<(), AssemblerError> {
-
+    pub fn visit_org_set_arguments(
+        &mut self,
+        code_adr: u16,
+        output_adr: u16
+    ) -> Result<(), AssemblerError> {
         // TODO move following code in a new method
-
 
         // TODO Check overlapping region
         {
@@ -1959,24 +1958,29 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if cmd.is_restricted_assembling_environment() {
-            return Err(AssemblerError::BugInAssembler { file:file!(), line: line!(), msg: format!("BUG in assembler. This has to be handled in processed_tokens") })
-            
+            return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!("BUG in assembler. This has to be handled in processed_tokens")
+            });
         }
         else if cmd.is_print_at_parse_state() {
             // nothing to do here because printing as alrady been done
         }
         else {
             assert!(cmd.is_print_at_assembling_state());
-            let print_or_error = match self.build_string_from_formatted_expression(cmd.get_formatted_expr()) {
-                Ok(msg) => either::Either::Left(msg),
-                Err(error) => either::Either::Right(error)
-            };
+            let print_or_error =
+                match self.build_string_from_formatted_expression(cmd.get_formatted_expr()) {
+                    Ok(msg) => either::Either::Left(msg),
+                    Err(error) => either::Either::Right(error)
+                };
 
             PrintCommand {
                 prefix: Some(format!("[PASS{}] ", self.pass)),
                 span: span.cloned(),
                 print_or_error
-            }.execute(&mut stdout());
+            }
+            .execute(&mut stdout());
         }
         Ok(())
     }
@@ -2738,7 +2742,7 @@ where
     let mut env = Env::new(options);
     let mut tokens = match processed_token::build_processed_tokens_list(tokens, &mut env) {
         Ok(tokens) => tokens,
-        Err(e) => return Err((None, env, e)),
+        Err(e) => return Err((None, env, e))
     };
     loop {
         env.start_new_pass();
@@ -3015,11 +3019,9 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
     env: &mut Env,
     span: Option<&Z80Span>
 ) -> Result<bool, AssemblerError> {
-
-    if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
-        commands.store_assert(exp.to_expr(), txt.cloned(), span.clone());
+    if let Some(commands) = env.assembling_control_current_output_commands.last_mut() {
+        commands.store_assert(exp.to_expr().into_owned(), txt.cloned(), span.cloned());
     }
-
 
     let res = match env.resolve_expr_must_never_fail(exp) {
         Err(e) => Err(e),

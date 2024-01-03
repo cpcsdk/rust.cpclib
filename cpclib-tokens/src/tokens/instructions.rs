@@ -498,15 +498,12 @@ impl ToSimpleToken for Token {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum StandardAssemblerControlCommand {
-    RestrictedAssemblingEnvironment{passes: Option<Expr>, lst: Listing},
+    RestrictedAssemblingEnvironment { passes: Option<Expr>, lst: Listing },
     PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
     PrintAtAssemblingState(Vec<FormattedExpr>)
-
 }
-
 
 pub trait AssemblerControlCommand {
     type Expr;
@@ -549,7 +546,6 @@ impl AssemblerControlCommand for StandardAssemblerControlCommand {
         todo!()
     }
 }
-
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
@@ -718,180 +714,178 @@ pub enum Token {
     WaitNops(Expr),
     While(Expr, Listing)
 }
-/*
-impl Clone for Token {
-    fn clone(&self) -> Self {
-        match self {
-            Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
-            Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
-            Token::Assign { label, expr, op } => {
-                Token::Assign {
-                    label: label.clone(),
-                    expr: expr.clone(),
-                    op: *op
-                }
-            },
-            Token::Bank(b) => Token::Bank(b.clone()),
-            Token::Bankset(b) => Token::Bankset(b.clone()),
-            Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),
-            Token::Break => Token::Break,
-            Token::Breakpoint(a) => Token::Breakpoint(a.clone()),
-            Token::BuildCpr => Token::BuildCpr,
-            Token::BuildSna(a) => Token::BuildSna(*a),
-            Token::Charset(a) => Token::Charset(a.clone()),
-            Token::Comment(c) => Token::Comment(c.clone()),
-            Token::CrunchedBinary(a, b) => Token::CrunchedBinary(*a, b.clone()),
-            Token::CrunchedSection(a, b) => Token::CrunchedSection(*a, b.clone()),
-            Token::Defb(l) => Token::Defb(l.clone()),
-            Token::Defs(l) => Token::Defs(l.clone()),
-            Token::Defw(l) => Token::Defw(l.clone()),
-            Token::Equ { label, expr } => {
-                Token::Equ {
-                    label: label.clone(),
-                    expr: expr.clone()
-                }
-            },
-            Token::End => Token::End,
-            Token::Export(a) => Token::Export(a.clone()),
-            Token::Fail(a) => Token::Fail(a.clone()),
-            Token::Function(a, b, c) => Token::Function(a.clone(), b.clone(), c.clone()),
-            Token::If(a, b) => Token::If(a.clone(), b.clone()),
-            Token::Incbin {
-                fname,
-                offset,
-                length,
-                extended_offset,
-                off,
-                transformation
-            } => {
-                Token::Incbin {
-                    fname: fname.clone(),
-                    offset: offset.clone(),
-                    length: length.clone(),
-                    extended_offset: extended_offset.clone(),
-                    off: *off,
-                    transformation: *transformation
-                }
-            },
-            Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), *c),
-            Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
-            Token::Label(a) => Token::Label(a.clone()),
-            Token::Let(a, b) => Token::Let(a.clone(), b.clone()),
-            Token::Limit(a) => Token::Limit(a.clone()),
-            Token::List => Token::List,
-            Token::Macro {
-                name: a,
-                params: b,
-                content: c
-            } => {
-                Token::Macro {
-                    name: a.clone(),
-                    params: b.clone(),
-                    content: c.clone()
-                }
-            },
-            Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
-            Token::Module(a, b) => Token::Module(a.clone(), b.clone()),
-            Token::MultiPop(a) => Token::MultiPop(a.clone()),
-            Token::MultiPush(b) => Token::MultiPush(b.clone()),
-            Token::Next {
-                label,
-                source,
-                expr
-            } => {
-                Token::Next {
-                    label: label.clone(),
-                    source: source.clone(),
-                    expr: expr.clone()
-                }
-            },
-            Token::NoExport(a) => Token::NoExport(a.clone()),
-            Token::NoList => Token::NoList,
-            Token::OpCode(mne, arg1, arg2, arg3) => {
-                Self::OpCode(*mne, arg1.clone(), arg2.clone(), *arg3)
-            },
-            Token::Org { val1, val2 } => {
-                Token::Org {
-                    val1: val1.clone(),
-                    val2: val2.clone()
-                }
-            },
-            Token::Pause => Token::Pause,
-            Token::Print(a) => Token::Print(a.clone()),
-            Token::Protect(a, b) => Token::Protect(a.clone(), b.clone()),
-            Token::Range(a, b, c) => Token::Range(a.clone(), b.clone(), c.clone()),
-            Token::Repeat(a, b, c, d) => Token::Repeat(a.clone(), b.clone(), c.clone(), d.clone()),
-            Token::RepeatUntil(a, b) => Token::RepeatUntil(a.clone(), b.clone()),
-            Token::Return(a) => Token::Return(a.clone()),
-            Token::Rorg(a, b) => Token::Rorg(a.clone(), b.clone()),
-            Token::Run(a, b) => Token::Run(a.clone(), b.clone()),
-            Token::Save {
-                filename,
-                address,
-                size,
-                save_type,
-                dsk_filename,
-                side
-            } => {
-                Token::Save {
-                    filename: filename.clone(),
-                    address: address.clone(),
-                    size: size.clone(),
-                    save_type: *save_type,
-                    dsk_filename: dsk_filename.clone(),
-                    side: side.clone()
-                }
-            },
-            Token::Section(a) => Token::Section(a.clone()),
-            Token::SetCPC(b) => Token::SetCPC(b.clone()),
-            Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
-            Token::SetN {
-                label,
-                source,
-                expr
-            } => {
-                Token::SetN {
-                    label: label.clone(),
-                    source: source.clone(),
-                    expr: expr.clone()
-                }
-            },
-            Token::SnaInit(a) => Token::SnaInit(a.clone()),
-            Token::SnaSet(a, b) => Token::SnaSet(*a, b.clone()),
-            Token::StableTicker(a) => Token::StableTicker(a.clone()),
-            Token::Str(a) => Token::Str(a.clone()),
-            Token::Struct(a, b) => Token::Struct(a.clone(), b.clone()),
-            Token::Switch(a, b, c) => Token::Switch(a.clone(), b.clone(), c.clone()),
-            Token::Undef(a) => Token::Undef(a.clone()),
-            Token::WaitNops(b) => Token::WaitNops(b.clone()),
-            Token::While(a, b) => Token::While(a.clone(), b.clone()),
-            Token::For {
-                label,
-                start,
-                stop,
-                step,
-                listing
-            } => {
-                Token::For {
-                    label: label.clone(),
-                    start: start.clone(),
-                    stop: stop.clone(),
-                    step: step.clone(),
-                    listing: listing.clone()
-                }
-            },
-            Token::Map(e) => Token::Map(e.clone()),
-            Token::Field { label, expr } => {
-                Token::Field {
-                    label: label.clone(),
-                    expr: expr.clone()
-                }
-            },
-            Token::StartingIndex { .. } => todo!()
-        }
-    }
-}
-*/
+// impl Clone for Token {
+// fn clone(&self) -> Self {
+// match self {
+// Token::Align(a, b) => Token::Align(a.clone(), b.clone()),
+// Token::Assert(a, b) => Token::Assert(a.clone(), b.clone()),
+// Token::Assign { label, expr, op } => {
+// Token::Assign {
+// label: label.clone(),
+// expr: expr.clone(),
+// op: *op
+// }
+// },
+// Token::Bank(b) => Token::Bank(b.clone()),
+// Token::Bankset(b) => Token::Bankset(b.clone()),
+// Token::Basic(a, b, c) => Token::Basic(a.clone(), b.clone(), c.clone()),
+// Token::Break => Token::Break,
+// Token::Breakpoint(a) => Token::Breakpoint(a.clone()),
+// Token::BuildCpr => Token::BuildCpr,
+// Token::BuildSna(a) => Token::BuildSna(*a),
+// Token::Charset(a) => Token::Charset(a.clone()),
+// Token::Comment(c) => Token::Comment(c.clone()),
+// Token::CrunchedBinary(a, b) => Token::CrunchedBinary(*a, b.clone()),
+// Token::CrunchedSection(a, b) => Token::CrunchedSection(*a, b.clone()),
+// Token::Defb(l) => Token::Defb(l.clone()),
+// Token::Defs(l) => Token::Defs(l.clone()),
+// Token::Defw(l) => Token::Defw(l.clone()),
+// Token::Equ { label, expr } => {
+// Token::Equ {
+// label: label.clone(),
+// expr: expr.clone()
+// }
+// },
+// Token::End => Token::End,
+// Token::Export(a) => Token::Export(a.clone()),
+// Token::Fail(a) => Token::Fail(a.clone()),
+// Token::Function(a, b, c) => Token::Function(a.clone(), b.clone(), c.clone()),
+// Token::If(a, b) => Token::If(a.clone(), b.clone()),
+// Token::Incbin {
+// fname,
+// offset,
+// length,
+// extended_offset,
+// off,
+// transformation
+// } => {
+// Token::Incbin {
+// fname: fname.clone(),
+// offset: offset.clone(),
+// length: length.clone(),
+// extended_offset: extended_offset.clone(),
+// off: *off,
+// transformation: *transformation
+// }
+// },
+// Token::Include(a, b, c) => Token::Include(a.clone(), b.clone(), *c),
+// Token::Iterate(a, b, c) => Token::Iterate(a.clone(), b.clone(), c.clone()),
+// Token::Label(a) => Token::Label(a.clone()),
+// Token::Let(a, b) => Token::Let(a.clone(), b.clone()),
+// Token::Limit(a) => Token::Limit(a.clone()),
+// Token::List => Token::List,
+// Token::Macro {
+// name: a,
+// params: b,
+// content: c
+// } => {
+// Token::Macro {
+// name: a.clone(),
+// params: b.clone(),
+// content: c.clone()
+// }
+// },
+// Token::MacroCall(n, p) => Token::MacroCall(n.clone(), p.clone()),
+// Token::Module(a, b) => Token::Module(a.clone(), b.clone()),
+// Token::MultiPop(a) => Token::MultiPop(a.clone()),
+// Token::MultiPush(b) => Token::MultiPush(b.clone()),
+// Token::Next {
+// label,
+// source,
+// expr
+// } => {
+// Token::Next {
+// label: label.clone(),
+// source: source.clone(),
+// expr: expr.clone()
+// }
+// },
+// Token::NoExport(a) => Token::NoExport(a.clone()),
+// Token::NoList => Token::NoList,
+// Token::OpCode(mne, arg1, arg2, arg3) => {
+// Self::OpCode(*mne, arg1.clone(), arg2.clone(), *arg3)
+// },
+// Token::Org { val1, val2 } => {
+// Token::Org {
+// val1: val1.clone(),
+// val2: val2.clone()
+// }
+// },
+// Token::Pause => Token::Pause,
+// Token::Print(a) => Token::Print(a.clone()),
+// Token::Protect(a, b) => Token::Protect(a.clone(), b.clone()),
+// Token::Range(a, b, c) => Token::Range(a.clone(), b.clone(), c.clone()),
+// Token::Repeat(a, b, c, d) => Token::Repeat(a.clone(), b.clone(), c.clone(), d.clone()),
+// Token::RepeatUntil(a, b) => Token::RepeatUntil(a.clone(), b.clone()),
+// Token::Return(a) => Token::Return(a.clone()),
+// Token::Rorg(a, b) => Token::Rorg(a.clone(), b.clone()),
+// Token::Run(a, b) => Token::Run(a.clone(), b.clone()),
+// Token::Save {
+// filename,
+// address,
+// size,
+// save_type,
+// dsk_filename,
+// side
+// } => {
+// Token::Save {
+// filename: filename.clone(),
+// address: address.clone(),
+// size: size.clone(),
+// save_type: *save_type,
+// dsk_filename: dsk_filename.clone(),
+// side: side.clone()
+// }
+// },
+// Token::Section(a) => Token::Section(a.clone()),
+// Token::SetCPC(b) => Token::SetCPC(b.clone()),
+// Token::SetCrtc(c) => Token::SetCrtc(c.clone()),
+// Token::SetN {
+// label,
+// source,
+// expr
+// } => {
+// Token::SetN {
+// label: label.clone(),
+// source: source.clone(),
+// expr: expr.clone()
+// }
+// },
+// Token::SnaInit(a) => Token::SnaInit(a.clone()),
+// Token::SnaSet(a, b) => Token::SnaSet(*a, b.clone()),
+// Token::StableTicker(a) => Token::StableTicker(a.clone()),
+// Token::Str(a) => Token::Str(a.clone()),
+// Token::Struct(a, b) => Token::Struct(a.clone(), b.clone()),
+// Token::Switch(a, b, c) => Token::Switch(a.clone(), b.clone(), c.clone()),
+// Token::Undef(a) => Token::Undef(a.clone()),
+// Token::WaitNops(b) => Token::WaitNops(b.clone()),
+// Token::While(a, b) => Token::While(a.clone(), b.clone()),
+// Token::For {
+// label,
+// start,
+// stop,
+// step,
+// listing
+// } => {
+// Token::For {
+// label: label.clone(),
+// start: start.clone(),
+// stop: stop.clone(),
+// step: step.clone(),
+// listing: listing.clone()
+// }
+// },
+// Token::Map(e) => Token::Map(e.clone()),
+// Token::Field { label, expr } => {
+// Token::Field {
+// label: label.clone(),
+// expr: expr.clone()
+// }
+// },
+// Token::StartingIndex { .. } => todo!()
+// }
+// }
+// }
 
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {

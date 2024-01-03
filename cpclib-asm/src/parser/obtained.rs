@@ -850,7 +850,10 @@ impl TestKindElement for LocatedTestKind {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum LocatedAssemblerControlCommand {
-    RestrictedAssemblingEnvironment{passes: Option<LocatedExpr>, lst: LocatedListing},
+    RestrictedAssemblingEnvironment {
+        passes: Option<LocatedExpr>,
+        lst: LocatedListing
+    },
     PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
     PrintAtAssemblingState(Vec<FormattedExpr>)
 }
@@ -862,7 +865,7 @@ impl AssemblerControlCommand for LocatedAssemblerControlCommand {
     fn is_restricted_assembling_environment(&self) -> bool {
         matches!(
             self,
-            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{..}
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment { .. }
         )
     }
 
@@ -879,21 +882,24 @@ impl AssemblerControlCommand for LocatedAssemblerControlCommand {
 
     fn get_max_nb_passes(&self) -> Option<&Self::Expr> {
         match self {
-            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{passes, ..} => passes.as_ref(),
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment { passes, .. } => {
+                passes.as_ref()
+            },
             _ => unreachable!()
         }
     }
 
     fn get_listing(&self) -> &[Self::T] {
         match self {
-            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{lst, ..} => lst,
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment { lst, .. } => lst,
             _ => unreachable!()
         }
     }
 
     fn get_formatted_expr(&self) -> &[FormattedExpr] {
         match self {
-            LocatedAssemblerControlCommand::PrintAtAssemblingState(e) |   LocatedAssemblerControlCommand::PrintAtParsingState(e) => e,
+            LocatedAssemblerControlCommand::PrintAtAssemblingState(e)
+            | LocatedAssemblerControlCommand::PrintAtParsingState(e) => e,
             _ => unreachable!()
         }
     }
@@ -1124,11 +1130,11 @@ pub struct LocatedToken {
 }
 
 impl ListingElement for LocatedToken {
+    type AssemblerControlCommand = LocatedAssemblerControlCommand;
     type DataAccess = LocatedDataAccess;
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
-    type AssemblerControlCommand = LocatedAssemblerControlCommand;
 
     fn to_token(&self) -> Cow<cpclib_tokens::Token> {
         match &self.inner {
@@ -1745,11 +1751,11 @@ impl ListingElement for LocatedToken {
 // Several methodsare not implemented because their return type is wrong
 // it soes not really matter because we never have to call them
 impl ListingElement for LocatedTokenInner {
+    type AssemblerControlCommand = LocatedAssemblerControlCommand;
     type DataAccess = LocatedDataAccess;
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
-    type AssemblerControlCommand = LocatedAssemblerControlCommand;
 
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved

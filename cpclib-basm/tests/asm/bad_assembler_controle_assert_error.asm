@@ -34,7 +34,7 @@ TEST_MACRO macro, nb
 	; There are some limitations and probably bugs too. For example to use org directive is probably not hnadled properly
 	ASMCONTROLENV SET_MAX_NB_OF_PASSES=1
 		org $+2
-		assert $ == 0x4000 + 3 + 1 + 2
+		assert $ == 0x4000 + 3 + 1 + 2 + 100 ; here it is wrong we expect a failure
 		TEST_MACRO 2 ; 1 byte
 		TEST_MACRO 3 ; 1 byte
 	ENDASMCONTROLENV

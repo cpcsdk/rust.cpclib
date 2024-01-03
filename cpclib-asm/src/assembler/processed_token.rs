@@ -9,14 +9,14 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
-use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, PhysicalAddress};
+use cpclib_tokens::symbols::{PhysicalAddress, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    BinaryTransformation, ExprElement, ListingElement, MacroParamElement, TestKindElement,
-    ToSimpleToken, Token
+    AssemblerControlCommand, BinaryTransformation, ExprElement, ListingElement, MacroParamElement,
+    TestKindElement, ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;
-use cpclib_tokens::AssemblerControlCommand;
+
 use super::control::ControlOutputStore;
 use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
@@ -93,7 +93,11 @@ impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListing
 impl<'token, T: Visited + ListingElement + Debug + Sync + MayHaveSpan> SimpleListingState<'token, T>
 where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    fn build(tokens: &'token [T], span: Option<Z80Span>, env: &Env) -> Result<Self, AssemblerError> {
+    fn build(
+        tokens: &'token [T],
+        span: Option<Z80Span>,
+        env: &Env
+    ) -> Result<Self, AssemblerError> {
         Ok(Self {
             processed_tokens: build_processed_tokens_list(tokens, env)?,
             span
@@ -419,10 +423,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 // build else listing if needed
                 if self.else_listing.is_none() && self.token.if_else().is_some() {
                     let listing = self.token.if_else();
-                    self.else_listing =
-                        listing.map(|listing| build_processed_tokens_list(listing, env))
-                        .transpose()?
-                        ;
+                    self.else_listing = listing
+                        .map(|listing| build_processed_tokens_list(listing, env))
+                        .transpose()?;
                 }
                 self.else_listing.as_mut()
             }
@@ -454,7 +457,8 @@ pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement 
     env: &Env
 ) -> Result<ProcessedToken<'token, T>, AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
     let state = if token.is_confined() {
         Some(ProcessedTokenState::Confined(SimpleListingState {
             processed_tokens: build_processed_tokens_list(token.confined_listing(), env)?,
@@ -552,22 +556,27 @@ where
             span: token.possible_span().cloned()
         }))
     }
-    else if token.is_assembler_control() && token.assembler_control_command().is_restricted_assembling_environment() {
-
-
-        assert!(token.assembler_control_get_max_passes().is_some(), "We currently only support a maximum number of passes, so it as to be provided ...");
+    else if token.is_assembler_control()
+        && token
+            .assembler_control_command()
+            .is_restricted_assembling_environment()
+    {
+        assert!(
+            token.assembler_control_get_max_passes().is_some(),
+            "We currently only support a maximum number of passes, so it as to be provided ..."
+        );
 
         let passes = match token.assembler_control_get_max_passes() {
             Some(passes) => Some(env.resolve_expr_must_never_fail(passes)?.int()? as u8),
-            None => None,
+            None => None
         };
 
         let tokens = token.assembler_control_get_listing();
-        Some(ProcessedTokenState::RestrictedAssemblingEnvironment { 
-            listing: SimpleListingState{
+        Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
+            listing: SimpleListingState {
                 processed_tokens: build_processed_tokens_list(tokens, env)?,
                 span: token.possible_span().cloned()
-            }, 
+            },
             commands: Some(ControlOutputStore::with_passes(passes.unwrap()))
         })
     }
@@ -854,23 +863,25 @@ where
                 let options = env.options();
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
-                    Some(ProcessedTokenState::RestrictedAssemblingEnvironment { listing, 
-                    commands
-                }) => {
-
+                    Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
+                        listing,
+                        commands
+                    }) => {
                         let mut new_commands = commands.take().unwrap();
 
-
                         if !new_commands.has_remaining_passes() {
-                            new_commands.execute(env)?;                            
+                            new_commands.execute(env)?;
                         }
                         else {
                             // TODO move that code directly inside ControlOutputStore
                             new_commands.new_pass();
-                            env.assembling_control_current_output_commands.push(new_commands);
+                            env.assembling_control_current_output_commands
+                                .push(new_commands);
                             visit_processed_tokens(&mut listing.processed_tokens, env)?;
-                            new_commands = env.assembling_control_current_output_commands.pop().unwrap();
-
+                            new_commands = env
+                                .assembling_control_current_output_commands
+                                .pop()
+                                .unwrap();
                         }
                         commands.replace(new_commands);
                         Ok(())

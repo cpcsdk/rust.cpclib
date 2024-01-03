@@ -9,12 +9,12 @@ use crate::tokens::listing::*;
 use crate::DataAccess;
 
 impl ListingElement for Token {
+    type AssemblerControlCommand = StandardAssemblerControlCommand;
     // type Element = Token;
     type DataAccess = DataAccess;
     type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
-    type AssemblerControlCommand = StandardAssemblerControlCommand;
 
     //    type Listing = BaseListing<Token>;
 

@@ -2682,10 +2682,7 @@ pub fn parse_assembler_control_max_passes_number(
 
     let _ = preceded(
         my_space0,
-        alt((
-            parse_directive_word(b"ASMCONTROLENV"),
-            my_space1
-        ))
+        alt((parse_directive_word(b"ASMCONTROLENV"), my_space1))
     )
     .parse_next(input)?;
 
@@ -2714,12 +2711,13 @@ pub fn parse_assembler_control_max_passes_number(
     )
     .parse_next(input)?;
 
-    Ok(
-        LocatedTokenInner::AssemblerControl(LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{
-            passes: Some(count), lst: inner
-        })
-        .into_located_token_between(asmctrl_start, input.clone())
+    Ok(LocatedTokenInner::AssemblerControl(
+        LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment {
+            passes: Some(count),
+            lst: inner
+        }
     )
+    .into_located_token_between(asmctrl_start, input.clone()))
 }
 
 #[inline]
