@@ -14,6 +14,7 @@ impl ListingElement for Token {
     type Expr = Expr;
     type MacroParam = MacroParam;
     type TestKind = TestKind;
+    type AssemblerControlCommand = StandardAssemblerControlCommand;
 
     //    type Listing = BaseListing<Token>;
 
@@ -572,6 +573,22 @@ impl ListingElement for Token {
     }
 
     fn repeat_counter_step(&self) -> Option<&Self::Expr> {
+        todo!()
+    }
+
+    fn is_assembler_control(&self) -> bool {
+        todo!()
+    }
+
+    fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
+        todo!()
+    }
+
+    fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr> {
+        todo!()
+    }
+
+    fn assembler_control_get_listing(&self) -> &[Self] {
         todo!()
     }
 }

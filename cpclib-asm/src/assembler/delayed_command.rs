@@ -15,6 +15,7 @@ trait DelayedCommand {}
 
 #[derive(Debug, Clone)]
 pub struct PrintCommand {
+    pub(crate) prefix: Option<String>,
     pub(crate) span: Option<Z80Span>,
     pub(crate) print_or_error: either::Either<String, AssemblerError>
 }
@@ -47,7 +48,8 @@ impl PrintCommand {
                 // TODO improve printting + integrate z80span information
                 write!(
                     writer,
-                    "{}",
+                    "{}{}",
+                    self.prefix.clone().unwrap_or_default(),
                     if let Some(span) = &self.span {
                         build_simple_error_message(msg, &span, Severity::Note)
                     }

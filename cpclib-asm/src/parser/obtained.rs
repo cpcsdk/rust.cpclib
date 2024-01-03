@@ -20,11 +20,11 @@ use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     data_access_impl_most_methods, data_access_is_any_indexregister16,
     data_access_is_any_indexregister8, data_access_is_any_register16, data_access_is_any_register8,
-    BaseListing, BinaryFunction, BinaryOperation, CharsetFormat, CrunchType, DataAccess,
-    DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr, IndexRegister16, IndexRegister8,
-    LabelPrefix, ListingElement, MacroParam, MacroParamElement, Mnemonic, Register16, Register8,
-    SaveType, StableTickerAction, TestKind, TestKindElement, ToSimpleToken, Token, UnaryFunction,
-    UnaryOperation, UnaryTokenOperation
+    AssemblerControlCommand, BaseListing, BinaryFunction, BinaryOperation, CharsetFormat,
+    CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
+    IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
+    Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind, TestKindElement,
+    ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
 
@@ -848,11 +848,63 @@ impl TestKindElement for LocatedTestKind {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum LocatedAssemblerControlCommand {
+    RestrictedAssemblingEnvironment{passes: Option<LocatedExpr>, lst: LocatedListing},
+    PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
+    PrintAtAssemblingState(Vec<FormattedExpr>)
+}
+
+impl AssemblerControlCommand for LocatedAssemblerControlCommand {
+    type Expr = LocatedExpr;
+    type T = LocatedToken;
+
+    fn is_restricted_assembling_environment(&self) -> bool {
+        matches!(
+            self,
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{..}
+        )
+    }
+
+    fn is_print_at_parse_state(&self) -> bool {
+        matches!(self, LocatedAssemblerControlCommand::PrintAtParsingState(_))
+    }
+
+    fn is_print_at_assembling_state(&self) -> bool {
+        matches!(
+            self,
+            LocatedAssemblerControlCommand::PrintAtAssemblingState(_)
+        )
+    }
+
+    fn get_max_nb_passes(&self) -> Option<&Self::Expr> {
+        match self {
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{passes, ..} => passes.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn get_listing(&self) -> &[Self::T] {
+        match self {
+            LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{lst, ..} => lst,
+            _ => unreachable!()
+        }
+    }
+
+    fn get_formatted_expr(&self) -> &[FormattedExpr] {
+        match self {
+            LocatedAssemblerControlCommand::PrintAtAssemblingState(e) |   LocatedAssemblerControlCommand::PrintAtParsingState(e) => e,
+            _ => unreachable!()
+        }
+    }
+}
+
 // Encode the LocatedToken BEFORE computing its span
 #[derive(Debug, PartialEq, Eq)]
 pub enum LocatedTokenInner {
     Align(LocatedExpr, Option<LocatedExpr>),
     Assert(LocatedExpr, Option<Vec<FormattedExpr>>),
+    AssemblerControl(LocatedAssemblerControlCommand),
     Assign {
         label: Z80Span,
         expr: LocatedExpr,
@@ -1076,6 +1128,7 @@ impl ListingElement for LocatedToken {
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
+    type AssemblerControlCommand = LocatedAssemblerControlCommand;
 
     fn to_token(&self) -> Cow<cpclib_tokens::Token> {
         match &self.inner {
@@ -1665,6 +1718,28 @@ impl ListingElement for LocatedToken {
     fn is_org(&self) -> bool {
         todo!()
     }
+
+    fn is_assembler_control(&self) -> bool {
+        match &self.inner {
+            either::Left(LocatedTokenInner::AssemblerControl(_)) => true,
+            _ => false
+        }
+    }
+
+    fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
+        match &self.inner {
+            either::Left(LocatedTokenInner::AssemblerControl(cmd)) => cmd,
+            _ => unreachable!()
+        }
+    }
+
+    fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr> {
+        self.assembler_control_command().get_max_nb_passes()
+    }
+
+    fn assembler_control_get_listing(&self) -> &[Self] {
+        self.assembler_control_command().get_listing()
+    }
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -1674,6 +1749,7 @@ impl ListingElement for LocatedTokenInner {
     type Expr = LocatedExpr;
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
+    type AssemblerControlCommand = LocatedAssemblerControlCommand;
 
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
@@ -2345,6 +2421,32 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn repeat_counter_step(&self) -> Option<&Self::Expr> {
+        todo!()
+    }
+
+    fn is_assembler_control(&self) -> bool {
+        todo!()
+    }
+
+    fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
+        todo!()
+    }
+
+    fn defer_listing_output(&self) -> bool {
+        false // self.is_equ() | self.is_set()
+    }
+
+    fn include_is_standard_include(&self) -> bool {
+        self.is_include() && 
+        !self.include_fname().contains('{') && // no expansion
+        !self.include_once()
+    }
+
+    fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr> {
+        self.assembler_control_command().get_max_nb_passes()
+    }
+
+    fn assembler_control_get_listing(&self) -> &[Self] {
         todo!()
     }
 }

@@ -7,7 +7,7 @@ use cpclib_common::smallvec::SmallVec;
 
 use crate::{
     BinaryTransformation, CrunchType, DataAccessElem, ExprElement, MacroParamElement, Mnemonic,
-    TestKindElement
+    TestKindElement, AssemblerControlCommand
 };
 
 //
@@ -22,10 +22,21 @@ where Self: Debug + Sized + Sync
     // type Element: ListingElement + Debug + Sync;
     type DataAccess: DataAccessElem<Expr = Self::Expr>;
     // type Listing: ListingTrait;
+    type AssemblerControlCommand: AssemblerControlCommand;
+
+
+
+
 
     fn defer_listing_output(&self) -> bool {
         false // self.is_equ() | self.is_set()
     }
+
+    fn is_assembler_control(&self) -> bool;
+    fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
+    fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr>;
+    fn assembler_control_get_listing(&self) -> &[Self];
+
 
     fn is_org(&self) -> bool;
     fn is_comment(&self) -> bool;

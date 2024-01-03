@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
+use std::fmt::Debug;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
@@ -497,12 +498,66 @@ impl ToSimpleToken for Token {
     }
 }
 
+
+#[derive(Debug, Clone)]
+pub enum StandardAssemblerControlCommand {
+    RestrictedAssemblingEnvironment{passes: Option<Expr>, lst: Listing},
+    PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
+    PrintAtAssemblingState(Vec<FormattedExpr>)
+
+}
+
+
+pub trait AssemblerControlCommand {
+    type Expr;
+    type T: ListingElement + Debug + Sync;
+
+    fn is_restricted_assembling_environment(&self) -> bool;
+    fn is_print_at_parse_state(&self) -> bool;
+    fn is_print_at_assembling_state(&self) -> bool;
+
+    fn get_max_nb_passes(&self) -> Option<&Self::Expr>;
+    fn get_listing(&self) -> &[Self::T];
+    fn get_formatted_expr(&self) -> &[FormattedExpr];
+}
+
+impl AssemblerControlCommand for StandardAssemblerControlCommand {
+    type Expr = Expr;
+    type T = Token;
+
+    fn is_restricted_assembling_environment(&self) -> bool {
+        todo!()
+    }
+
+    fn is_print_at_parse_state(&self) -> bool {
+        todo!()
+    }
+
+    fn is_print_at_assembling_state(&self) -> bool {
+        todo!()
+    }
+
+    fn get_max_nb_passes(&self) -> Option<&Self::Expr> {
+        todo!()
+    }
+
+    fn get_listing(&self) -> &[Self::T] {
+        todo!()
+    }
+
+    fn get_formatted_expr(&self) -> &[FormattedExpr] {
+        todo!()
+    }
+}
+
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(missing_docs)]
 pub enum Token {
     Align(Expr, Option<Expr>),
+    AssemblerControl(StandardAssemblerControlCommand),
     Assert(Expr, Option<Vec<FormattedExpr>>),
     Assign {
         label: SmolStr,
@@ -663,7 +718,7 @@ pub enum Token {
     WaitNops(Expr),
     While(Expr, Listing)
 }
-
+/*
 impl Clone for Token {
     fn clone(&self) -> Self {
         match self {
@@ -836,6 +891,7 @@ impl Clone for Token {
         }
     }
 }
+*/
 
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {

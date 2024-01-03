@@ -72,7 +72,7 @@ impl Constraint {
                 else {
                     false
                 }
-            }
+            },
             Constraint::Linux => {
                 if cfg!(target_os = "linux") {
                     true
@@ -80,7 +80,7 @@ impl Constraint {
                 else {
                     false
                 }
-            }
+            },
             Constraint::MacOsx => {
                 if cfg!(target_os = "macos") {
                     true
@@ -88,10 +88,9 @@ impl Constraint {
                 else {
                     false
                 }
-            }
-            Constraint::Not(c) => !c.corresponds()
-            // 		Constraint::And(a, b) => a.corresponds() && b.corresponds(),
-            // 		Constraint::Or(a, b) => a.corresponds() || b.corresponds(),
+            },
+            Constraint::Not(c) => !c.corresponds() /* 		Constraint::And(a, b) => a.corresponds() && b.corresponds(),
+                                                    * 		Constraint::Or(a, b) => a.corresponds() || b.corresponds(), */
         }
     }
 }

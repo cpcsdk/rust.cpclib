@@ -9,14 +9,15 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
-use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
+use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, PhysicalAddress};
 use cpclib_tokens::{
     BinaryTransformation, ExprElement, ListingElement, MacroParamElement, TestKindElement,
     ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;
-
+use cpclib_tokens::AssemblerControlCommand;
+use super::control::ControlOutputStore;
 use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
@@ -38,6 +39,10 @@ pub struct ProcessedToken<'token, T: Visited + Debug + ListingElement + Sync> {
 /// Specific state to maintain for the current token
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
+    RestrictedAssemblingEnvironment {
+        listing: SimpleListingState<'token, T>,
+        commands: Option<ControlOutputStore>
+    },
     Confined(SimpleListingState<'token, T>),
     CrunchedSection {
         /// The token to assemble
@@ -88,11 +93,11 @@ impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListing
 impl<'token, T: Visited + ListingElement + Debug + Sync + MayHaveSpan> SimpleListingState<'token, T>
 where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    fn build(tokens: &'token [T], span: Option<Z80Span>, env: &Env) -> Self {
-        Self {
-            processed_tokens: build_processed_tokens_list(tokens, env),
+    fn build(tokens: &'token [T], span: Option<Z80Span>, env: &Env) -> Result<Self, AssemblerError> {
+        Ok(Self {
+            processed_tokens: build_processed_tokens_list(tokens, env)?,
             span
-        }
+        })
     }
 
     fn tokens_mut(&mut self) -> &mut [ProcessedToken<'token, T>] {
@@ -147,13 +152,13 @@ impl IncludeState {
                 Progress::progress().remove_parse(progress::normalize(fname));
             }
 
-            let include_state = IncludeStateInnerBuilder {
+            let include_state = IncludeStateInnerTryBuilder {
                 listing,
                 processed_tokens_builder: |listing: &LocatedListing| {
                     build_processed_tokens_list(listing.as_slice(), env)
                 }
             }
-            .build();
+            .try_build()?;
 
             self.0.try_insert(fname.clone(), include_state).unwrap()
         }
@@ -405,7 +410,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 // build the listing if never done
                 if self.tests_listing.get(&selected_idx).is_none() {
                     let listing = self.token.if_test(selected_idx).1;
-                    let listing = build_processed_tokens_list(listing, env);
+                    let listing = build_processed_tokens_list(listing, env)?;
                     self.tests_listing.insert(selected_idx, listing);
                 }
                 self.tests_listing.get_mut(&selected_idx)
@@ -415,7 +420,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 if self.else_listing.is_none() && self.token.if_else().is_some() {
                     let listing = self.token.if_else();
                     self.else_listing =
-                        listing.map(|listing| build_processed_tokens_list(listing, env));
+                        listing.map(|listing| build_processed_tokens_list(listing, env))
+                        .transpose()?
+                        ;
                 }
                 self.else_listing.as_mut()
             }
@@ -445,13 +452,12 @@ pub type AssemblerInfo = AssemblerError;
 pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
     env: &Env
-) -> ProcessedToken<'token, T>
+) -> Result<ProcessedToken<'token, T>, AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
-{
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
     let state = if token.is_confined() {
         Some(ProcessedTokenState::Confined(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.confined_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.confined_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
@@ -479,13 +485,13 @@ where
                                     Progress::progress().remove_parse(progress::normalize(&fname));
                                 }
 
-                                let include_state = IncludeStateInnerBuilder {
+                                let include_state = IncludeStateInnerTryBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
                                         build_processed_tokens_list(listing, env)
                                     }
                                 }
-                                .build();
+                                .try_build()?;
 
                                 let mut map = BTreeMap::new();
                                 map.insert(fname, include_state);
@@ -510,7 +516,7 @@ where
                 processed_tokens: build_processed_tokens_list(
                     token.crunched_section_listing(),
                     env
-                ),
+                )?,
                 span: token.possible_span().cloned()
             },
             previous_bytes: None,
@@ -519,7 +525,7 @@ where
     }
     else if token.is_for() {
         Some(ProcessedTokenState::For(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.for_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.for_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
@@ -530,31 +536,50 @@ where
     }
     else if token.is_iterate() {
         Some(ProcessedTokenState::Iterate(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.iterate_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.iterate_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
     else if token.is_module() {
         Some(ProcessedTokenState::Module(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.module_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.module_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
     else if token.is_repeat() {
         Some(ProcessedTokenState::Repeat(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.repeat_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.repeat_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
+    else if token.is_assembler_control() && token.assembler_control_command().is_restricted_assembling_environment() {
+
+
+        assert!(token.assembler_control_get_max_passes().is_some(), "We currently only support a maximum number of passes, so it as to be provided ...");
+
+        let passes = match token.assembler_control_get_max_passes() {
+            Some(passes) => Some(env.resolve_expr_must_never_fail(passes)?.int()? as u8),
+            None => None,
+        };
+
+        let tokens = token.assembler_control_get_listing();
+        Some(ProcessedTokenState::RestrictedAssemblingEnvironment { 
+            listing: SimpleListingState{
+                processed_tokens: build_processed_tokens_list(tokens, env)?,
+                span: token.possible_span().cloned()
+            }, 
+            commands: Some(ControlOutputStore::with_passes(passes.unwrap()))
+        })
+    }
     else if token.is_repeat_until() {
         Some(ProcessedTokenState::RepeatUntil(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
     else if token.is_rorg() {
         Some(ProcessedTokenState::Rorg(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.rorg_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.rorg_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
@@ -566,21 +591,22 @@ where
                 .map(|(_v, l, _b)| {
                     SimpleListingState::build(l, token.possible_span().cloned(), env)
                 })
-                .collect_vec(),
+                .collect::<Result<Vec<_>, _>>()?,
 
             default: token
                 .switch_default()
                 .map(|l| SimpleListingState::build(l, token.possible_span().cloned(), env))
+                .transpose()?
         }))
     }
     else if token.is_warning() {
         Some(ProcessedTokenState::Warning(Box::new(
-            build_processed_token(token.warning_token(), env)
+            build_processed_token(token.warning_token(), env)?
         )))
     }
     else if token.is_while() {
         Some(ProcessedTokenState::While(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.while_listing(), env),
+            processed_tokens: build_processed_tokens_list(token.while_listing(), env)?,
             span: token.possible_span().cloned()
         }))
     }
@@ -592,7 +618,7 @@ where
         None
     };
 
-    ProcessedToken { token, state }
+    Ok(ProcessedToken { token, state })
 }
 
 pub fn build_processed_tokens_list<
@@ -601,7 +627,7 @@ pub fn build_processed_tokens_list<
 >(
     tokens: &'token [T],
     env: &Env
-) -> Vec<ProcessedToken<'token, T>>
+) -> Result<Vec<ProcessedToken<'token, T>>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
@@ -634,7 +660,7 @@ where
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let iter = tokens.iter();
     iter.map(|t| build_processed_token(t, env))
-        .collect::<Vec<_>>()
+        .collect::<Result<Vec<_>, _>>()
 }
 
 /// Visit all the tokens until an error occurs
@@ -774,13 +800,13 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             listing
         };
 
-        let expand_state = ExpandStateBuilder {
+        let expand_state = ExpandStateTryBuilder {
             listing,
             processed_tokens_builder: |listing: &LocatedListing| {
                 build_processed_tokens_list(listing, env)
             }
         }
-        .build();
+        .try_build()?;
 
         self.state = Some(ProcessedTokenState::MacroCallOrBuildStruct(expand_state));
 
@@ -828,6 +854,28 @@ where
                 let options = env.options();
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
+                    Some(ProcessedTokenState::RestrictedAssemblingEnvironment { listing, 
+                    commands
+                }) => {
+
+                        let mut new_commands = commands.take().unwrap();
+
+
+                        if !new_commands.has_remaining_passes() {
+                            new_commands.execute(env)?;                            
+                        }
+                        else {
+                            // TODO move that code directly inside ControlOutputStore
+                            new_commands.new_pass();
+                            env.assembling_control_current_output_commands.push(new_commands);
+                            visit_processed_tokens(&mut listing.processed_tokens, env)?;
+                            new_commands = env.assembling_control_current_output_commands.pop().unwrap();
+
+                        }
+                        commands.replace(new_commands);
+                        Ok(())
+                    },
+
                     Some(ProcessedTokenState::Confined(SimpleListingState {
                         ref mut processed_tokens,
                         span
@@ -878,7 +926,7 @@ where
                             let inner = self.token.function_definition_inner();
                             let params = self.token.function_definition_params();
 
-                            let inner = build_processed_tokens_list(inner, env);
+                            let inner = build_processed_tokens_list(inner, env)?;
                             let f =
                                 Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
                             option.replace(f.clone());

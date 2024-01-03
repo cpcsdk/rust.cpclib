@@ -11,6 +11,7 @@ pub mod save_command;
 pub mod section;
 pub mod stable_ticker;
 pub mod symbols_output;
+pub mod control;
 
 pub mod embedded;
 pub mod processed_token;
@@ -18,7 +19,7 @@ pub mod processed_token;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::ops::Neg;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -36,6 +37,7 @@ use cpclib_tokens::ToSimpleToken;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
+use self::control::{ControlOutputStore};
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
 use self::processed_token::ProcessedToken;
@@ -442,7 +444,10 @@ pub struct Env {
 
     // temporary stuff
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
-    extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>
+    extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>,
+
+    // list of output commands that are generted in a restricted assembling env
+    pub(crate) assembling_control_current_output_commands: Vec<ControlOutputStore>
 }
 
 impl Clone for Env {
@@ -504,7 +509,9 @@ impl Clone for Env {
             map_counter: self.map_counter,
 
             repeat_start: self.repeat_start.clone(),
-            repeat_step: self.repeat_step.clone()
+            repeat_step: self.repeat_step.clone(),
+
+            assembling_control_current_output_commands: self.assembling_control_current_output_commands.clone()
         }
     }
 }
@@ -578,7 +585,9 @@ impl Default for Env {
             map_counter: 0,
 
             repeat_start: 1.into(),
-            repeat_step: 1.into()
+            repeat_step: 1.into(),
+
+            assembling_control_current_output_commands: Vec::new()
         }
     }
 }
@@ -1211,6 +1220,10 @@ impl Env {
         self.active_page_info().logical_outputadr
     }
 
+    pub fn physical_output_address(&self) -> PhysicalAddress {
+        self.logical_to_physical_address(self.logical_output_address() as u16)
+    }
+
     /// Return the address of dollar
     pub fn logical_code_address(&self) -> u16 {
         self.active_page_info().logical_codeadr
@@ -1282,7 +1295,7 @@ impl Env {
 
     /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
     /// return true if it raised an override warning
-    pub fn output(&mut self, v: u8) -> Result<bool, AssemblerError> {
+    pub fn output_byte(&mut self, v: u8) -> Result<bool, AssemblerError> {
         //   dbg!(self.logical_output_address(), self.output_address);
         if self.logical_output_address() != self.output_address {
             return Err(AssemblerError::BugInAssembler {
@@ -1297,8 +1310,8 @@ impl Env {
         }
 
         // dbg!(self.output_address(), &v);
-        let physical_address =
-            self.logical_to_physical_address(self.logical_output_address() as u16);
+        let physical_address: PhysicalAddress =
+            self.physical_output_address();
 
         // Check if it is legal to output the value
         if self.logical_code_address() > self.limit_address()
@@ -1320,7 +1333,14 @@ impl Env {
             }
         }
 
+
+
         self.byte_written = true;
+        if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
+            commands.store_byte( v);
+        }
+
+        /// TODO move the next in a function to reuse when executing the command
 
         // update the maximm 64k position
         self.active_page_info_mut().maxadr =
@@ -1416,7 +1436,7 @@ impl Env {
 
         let mut previously_overrided = false;
         for b in bytes.iter() {
-            let currently_overrided = self.output(*b)?;
+            let currently_overrided = self.output_byte(*b)?;
 
             match (previously_overrided, currently_overrided) {
                 (true, true) => {
@@ -1576,6 +1596,19 @@ impl Env {
         else {
             code_adr.clone()
         };
+
+
+        if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
+            commands.store_org(code_adr as _, output_adr as _);
+        }
+
+        self.visit_org_set_arguments(code_adr as _, output_adr as _)
+    }
+
+    pub fn visit_org_set_arguments(&mut self, code_adr: u16, output_adr: u16) -> Result<(), AssemblerError> {
+
+        // TODO move following code in a new method
+
 
         // TODO Check overlapping region
         {
@@ -1920,6 +1953,34 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_assembler_control<C: AssemblerControlCommand>(
+        &mut self,
+        cmd: &C,
+        span: Option<&Z80Span>
+    ) -> Result<(), AssemblerError> {
+        if cmd.is_restricted_assembling_environment() {
+            return Err(AssemblerError::BugInAssembler { file:file!(), line: line!(), msg: format!("BUG in assembler. This has to be handled in processed_tokens") })
+            
+        }
+        else if cmd.is_print_at_parse_state() {
+            // nothing to do here because printing as alrady been done
+        }
+        else {
+            assert!(cmd.is_print_at_assembling_state());
+            let print_or_error = match self.build_string_from_formatted_expression(cmd.get_formatted_expr()) {
+                Ok(msg) => either::Either::Left(msg),
+                Err(error) => either::Either::Right(error)
+            };
+
+            PrintCommand {
+                prefix: Some(format!("[PASS{}] ", self.pass)),
+                span: span.cloned(),
+                print_or_error
+            }.execute(&mut stdout());
+        }
+        Ok(())
+    }
+
     pub fn visit_align<E: ExprEvaluationExt>(
         &mut self,
         boundary: &E,
@@ -1932,7 +1993,7 @@ impl Env {
         };
 
         while self.logical_output_address() as u16 % boundary != 0 {
-            self.output(fill)?;
+            self.output_byte(fill)?;
         }
 
         Ok(())
@@ -2240,6 +2301,7 @@ impl Env {
         };
 
         self.active_page_info_mut().add_print_command(PrintCommand {
+            prefix: None,
             span: span.cloned(),
             print_or_error
         })
@@ -2662,7 +2724,7 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     options: EnvOptions
 ) -> Result<
     (Vec<ProcessedToken<'token, T>>, Env),
-    (Vec<ProcessedToken<'token, T>>, Env, AssemblerError)
+    (Option<Vec<ProcessedToken<'token, T>>>, Env, AssemblerError)
 >
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
@@ -2674,7 +2736,10 @@ where
     assert!(!tokens.is_empty());
 
     let mut env = Env::new(options);
-    let mut tokens = processed_token::build_processed_tokens_list(tokens, &mut env);
+    let mut tokens = match processed_token::build_processed_tokens_list(tokens, &mut env) {
+        Ok(tokens) => tokens,
+        Err(e) => return Err((None, env, e)),
+    };
     loop {
         env.start_new_pass();
         // println!("[pass] {:?}", env.pass);
@@ -2685,7 +2750,7 @@ where
 
         let res = processed_token::visit_processed_tokens(&mut tokens, &mut env);
         if let Err(e) = res {
-            return Err((tokens, env, e));
+            return Err((Some(tokens), env, e));
         }
     }
 
@@ -2735,6 +2800,7 @@ macro_rules! visit_token_impl {
                 visit_assert(exp, txt.as_ref(), $env, $span)?;
                 Ok(())
             },
+            $cls::AssemblerControl(cmd) => $env.visit_assembler_control(cmd, $span),
             $cls::Assign { label, expr, op } => $env.visit_assign(label, expr, op.as_ref()),
 
             $cls::Basic(ref variables, ref hidden_lines, ref code) => {
@@ -2866,7 +2932,13 @@ macro_rules! visit_token_impl {
             | $cls::Repeat(..)
             | $cls::Macro { .. } => panic!("Should be handled by ProcessedToken"),
 
-            _ => unimplemented!("{:?}", $token)
+            _ => {
+                Err(AssemblerError::BugInAssembler {
+                    file: file!(),
+                    line: line!(),
+                    msg: format!("Directive not handled: {:?}", $token)
+                })
+            },
         }
     }};
 }
@@ -2943,6 +3015,12 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
     env: &mut Env,
     span: Option<&Z80Span>
 ) -> Result<bool, AssemblerError> {
+
+    if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
+        commands.store_assert(exp.to_expr(), txt.cloned(), span.clone());
+    }
+
+
     let res = match env.resolve_expr_must_never_fail(exp) {
         Err(e) => Err(e),
 
@@ -3202,7 +3280,7 @@ impl Env {
             != self.logical_code_address() & 0xFF00
         {
             while (self.logical_code_address() & 0x00FF) != 0x0000 {
-                self.output(0)?;
+                self.output_byte(0)?;
                 self.update_dollar();
             }
         }
@@ -3836,13 +3914,13 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement>(
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
         if mask == 0xFF {
-            env.output(val as u8)?;
+            env.output_byte(val as u8)?;
         }
         else {
             let high = ((val & 0xFF00) >> 8) as u8;
             let low = (val & 0xFF) as u8;
-            env.output(low)?;
-            env.output(high)?;
+            env.output_byte(low)?;
+            env.output_byte(high)?;
         }
         Ok(())
     };
@@ -4149,7 +4227,7 @@ where
     // TODO update $ in the symbol table
     let bytes = assemble_opcode(mnemonic, arg1, arg2, arg3, env)?;
     for b in bytes.iter() {
-        env.output(*b)?;
+        env.output_byte(*b)?;
     }
 
     Ok(())

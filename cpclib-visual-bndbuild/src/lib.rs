@@ -473,21 +473,27 @@ impl BndBuildApp {
                 let cache = bnl.borrow_dependent();
                 for layer in cache.layers.iter() {
                     ui.horizontal_wrapped(|ui| {
-                     //   ui.set_max_width(ui.available_width()/2.0);
+                        //   ui.set_max_width(ui.available_width()/2.0);
                         for tgt in layer.iter() {
                             let rule = bnl.borrow_owner().get_rule(tgt);
 
                             let txt = tgt.display().to_string();
-                            let txt = if let Some(watched) = self.watched.as_ref() && watched == tgt {
+                            let txt = if let Some(watched) = self.watched.as_ref()
+                                && watched == tgt
+                            {
                                 format!("{txt} [watched]")
-                            } else {
+                            }
+                            else {
                                 txt
                             };
                             let txt = RichText::new(txt).color(Color32::BLACK);
                             // set in bold the default target to see it
-                            let txt = if let Some(default) = &default && default == tgt {
+                            let txt = if let Some(default) = &default
+                                && default == tgt
+                            {
                                 txt.strong().strong()
-                            } else {
+                            }
+                            else {
                                 txt
                             };
                             // set underline the dependencies of the target
@@ -544,8 +550,10 @@ impl BndBuildApp {
                             if button.hovered() {
                                 self.hovered_target = Some(tgt.into());
                             }
-                            button.context_menu(|ui|{
-                                if tgt.exists() && ui.button(&format!("Open \"{}\"", tgt.display())).clicked() {
+                            button.context_menu(|ui| {
+                                if tgt.exists()
+                                    && ui.button(&format!("Open \"{}\"", tgt.display())).clicked()
+                                {
                                     match open::that(tgt) {
                                         Ok(_) => {},
                                         Err(e) => {
@@ -555,12 +563,15 @@ impl BndBuildApp {
                                     ui.close_menu();
                                 }
 
-                                if let Some(watched) = self.watched.as_ref() && watched == tgt {
+                                if let Some(watched) = self.watched.as_ref()
+                                    && watched == tgt
+                                {
                                     if ui.button("Unwatch").clicked() {
                                         self.watched.take();
                                         ui.close_menu();
                                     }
-                                } else {
+                                }
+                                else {
                                     if ui.button("Watch").clicked() {
                                         self.watched = Some(tgt.to_path_buf());
                                         ui.close_menu();

@@ -204,6 +204,7 @@ const INSTRUCTIONS: &[&[u8]] = &[
 const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"#",
     b"ALIGN",
+    b"ASMCONTROL",
     b"ASSERT",
     b"BANK",
     b"BANKSET",
@@ -278,6 +279,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
 ];
 
 const START_DIRECTIVE: &[&[u8]] = &[
+    b"ASMCONTROLENV",
     b"CONFINED",
     b"FUNCTION",
     b"FOR",
@@ -311,6 +313,8 @@ const START_DIRECTIVE: &[&[u8]] = &[
 
 // This table is supposed to contain the keywords that finish a section
 const END_DIRECTIVE: &[&[u8]] = &[
+    b"ENDASMCONTROLENV",
+    b"ENDA",
     b"BREAK",
     b"CASE",
     b"CEND",
@@ -1530,7 +1534,8 @@ pub fn parse_z80_directive_with_block(
         parse_iterate,
         parse_while,
         parse_rorg,
-        parse_conditional
+        parse_conditional,
+        parse_assembler_control_max_passes_number
     ))
     .parse_next(input)
 }
@@ -2365,6 +2370,8 @@ pub fn parse_directive_new(
             },
             _ => {
                 match word {
+                    choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input)?,
+
                     choice_nocase!(b"BINCLUDE") => {
                         parse_incbin(BinaryTransformation::None).parse_next(input)?
                     },
@@ -2652,6 +2659,116 @@ pub fn parse_startingindex(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     Ok(LocatedTokenInner::StartingIndex { start, step })
+}
+
+pub fn parse_assembler_control(
+    input: &mut InnerZ80Span
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    cut_err(
+        alt((
+            parse_assembler_control_print_parse,
+            parse_assembler_control_print_any_pass
+        ))
+        .context("Wrong argument in ASSEMBLING_CONTROL directive")
+    )
+    .parse_next(input)
+}
+
+#[inline]
+pub fn parse_assembler_control_max_passes_number(
+    input: &mut InnerZ80Span
+) -> PResult<LocatedToken, Z80ParserError> {
+    let asmctrl_start = input.checkpoint();
+
+    let _ = preceded(
+        my_space0,
+        alt((
+            parse_directive_word(b"ASMCONTROLENV"),
+            my_space1
+        ))
+    )
+    .parse_next(input)?;
+
+    let count = cut_err(preceded(
+        (
+            parse_word(b"SET_MAX_NB_OF_PASSES").context("Missing modified option"),
+            (my_space0, b'=', my_space0).context("Missing =")
+        ),
+        located_expr.context("Expression expected")
+    ))
+    .parse_next(input)?;
+
+    let inner =
+        cut_err(inner_code.context("ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"))
+            .parse_next(input)?;
+
+    let _ = cut_err(
+        preceded(
+            my_space0,
+            alt((
+                parse_directive_word(b"ENDASMCONTROLENV"),
+                parse_directive_word(b"ENDA")
+            ))
+        )
+        .context("REPEAT: not closed")
+    )
+    .parse_next(input)?;
+
+    Ok(
+        LocatedTokenInner::AssemblerControl(LocatedAssemblerControlCommand::RestrictedAssemblingEnvironment{
+            passes: Some(count), lst: inner
+        })
+        .into_located_token_between(asmctrl_start, input.clone())
+    )
+}
+
+#[inline]
+pub fn parse_assembler_control_print_any_pass(
+    input: &mut InnerZ80Span
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    preceded(
+        (parse_word(b"PRINT_ANY_PASS"), parse_comma),
+        parse_print_inner
+    )
+    .map(|p| {
+        LocatedTokenInner::AssemblerControl(LocatedAssemblerControlCommand::PrintAtAssemblingState(
+            p
+        ))
+    })
+    .parse_next(input)
+}
+
+#[inline]
+pub fn parse_assembler_control_print_parse(
+    input: &mut InnerZ80Span
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    let input2: InnerZ80Span = input.clone();
+
+    preceded((parse_word(b"PRINT_PARSE"), parse_comma), parse_print_inner)
+        .map(|p| {
+            let msg = p.iter().map(|e| e.to_string()).join("");
+            let ctx = input
+                .state
+                .current_filename
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| {
+                    input
+                        .state
+                        .context_name()
+                        .map(|c| c.to_owned())
+                        .unwrap_or_default()
+                });
+            let (line, column) = Z80Span::from(input2).relative_line_and_column();
+            println!("[PARSE] {ctx}:{line}:{column} {msg}");
+            p
+        })
+        .map(|p| {
+            LocatedTokenInner::AssemblerControl(
+                LocatedAssemblerControlCommand::PrintAtParsingState(p)
+            )
+        })
+        .parse_next(input)
 }
 
 /// Parse tickin directives
@@ -5524,6 +5641,12 @@ mod test {
         assert!(res.is_ok());
 
         let res = parse_test(parse_directive, "ORG 10");
+        assert!(res.is_ok());
+
+        let res = parse_test(
+            parse_directive,
+            "ASSEMBLER_CONTROL SET_MAX_NB_OF_PASSES, 10"
+        );
         assert!(res.is_ok());
     }
 

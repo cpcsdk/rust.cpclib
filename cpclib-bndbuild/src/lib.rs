@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::env::current_dir;
 use std::io::{BufReader, Read};
-use std::path::{Path, self};
+use std::path::{self, Path};
 
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
@@ -21,30 +21,40 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-    
-
 pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
     let path = path
         .map(|p| p.to_owned())
         .unwrap_or_else(|| current_dir().unwrap());
 
-    if ! path.is_dir() {
-        return Err(BndBuilderError::AnyError(format!("{} is not a valid directory", path.display())))
+    if !path.is_dir() {
+        return Err(BndBuilderError::AnyError(format!(
+            "{} is not a valid directory",
+            path.display()
+        )));
     }
 
     let bndbuild_yml = path.join("bndbuild.yml");
     if bndbuild_yml.exists() {
-        return Err(BndBuilderError::AnyError(format!("{} already exists", bndbuild_yml.display())));
+        return Err(BndBuilderError::AnyError(format!(
+            "{} already exists",
+            bndbuild_yml.display()
+        )));
     }
 
     let main_asm = path.join("main.asm");
     if main_asm.exists() {
-        return Err(BndBuilderError::AnyError(format!("{} already exists", main_asm.display())));
+        return Err(BndBuilderError::AnyError(format!(
+            "{} already exists",
+            main_asm.display()
+        )));
     }
 
     let data_asm = path.join("data.asm");
     if main_asm.exists() {
-        return Err(BndBuilderError::AnyError(format!("{} already exists", data_asm.display())));
+        return Err(BndBuilderError::AnyError(format!(
+            "{} already exists",
+            data_asm.display()
+        )));
     }
 
     std::fs::write(&bndbuild_yml, include_bytes!("default_bndbuild.yml"))
@@ -54,8 +64,8 @@ pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
     std::fs::write(&data_asm, include_bytes!("default_data.asm"))
-    .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
-    
+        .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+
     Ok(())
 }
 

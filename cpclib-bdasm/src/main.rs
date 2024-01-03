@@ -38,11 +38,14 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             current_instruction
         {
-            let address = if let Expr::Label(l) = e && l == "$" {
+            let address = if let Expr::Label(l) = e
+                && l == "$"
+            {
                 current_address.clone().unwrap() // address before instruction
-            } else {
+            }
+            else {
                 let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
-                (*current_address.as_ref().unwrap() as i32  + delta) as _
+                (*current_address.as_ref().unwrap() as i32 + delta) as _
             };
             labels.push(address);
         }
@@ -144,11 +147,14 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             current_instruction
         {
-            let address = if let Expr::Label(l) = e && l == "$" {
+            let address = if let Expr::Label(l) = e
+                && l == "$"
+            {
                 current_address.clone().unwrap() // address before instruction
-            } else {
+            }
+            else {
                 let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
-                (*current_address.as_ref().unwrap() as i32  + delta) as _
+                (*current_address.as_ref().unwrap() as i32 + delta) as _
             };
 
             update_expr_address(e, address);

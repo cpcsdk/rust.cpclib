@@ -116,7 +116,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
     if matches.get_flag("init") {
         cpclib_bndbuild::init_project(None)?;
         println!("Empty project initialized");
-        return Ok(())
+        return Ok(());
     }
 
     // Get the file and read it
