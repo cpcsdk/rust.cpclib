@@ -11,6 +11,7 @@ pub mod report;
 pub mod save_command;
 pub mod section;
 pub mod stable_ticker;
+pub mod string;
 pub mod symbols_output;
 
 pub mod embedded;
@@ -42,6 +43,7 @@ use self::function::{Function, FunctionBuilder, HardCodedFunction};
 use self::listing_output::*;
 use self::processed_token::ProcessedToken;
 use self::report::SavedFile;
+use self::string::PreprocessedFormattedString;
 use self::symbols_output::{SymbolOutputFormat, SymbolOutputGenerator};
 use crate::assembler::processed_token::visit_processed_tokens;
 use crate::delayed_command::*;
@@ -653,14 +655,13 @@ impl Env {
                 }
 
                 if self.pass.is_first_pass() {
-
                     *self.can_skip_next_passes.write().unwrap() = false;
                     Ok(r.into())
                 }
                 else {
                     Err(e)
                 }
-            },
+            }
         }
     }
 
@@ -1978,7 +1979,7 @@ impl Env {
         else {
             assert!(cmd.is_print_at_assembling_state());
             let print_or_error =
-                match self.build_string_from_formatted_expression(cmd.get_formatted_expr()) {
+                match self.prepropress_string_formatted_expression(cmd.get_formatted_expr()) {
                     Ok(msg) => either::Either::Left(msg),
                     Err(error) => either::Either::Right(error)
                 };
@@ -2274,40 +2275,17 @@ impl Env {
         Ok(())
     }
 
-    fn build_string_from_formatted_expression(
+    #[inline]
+    fn prepropress_string_formatted_expression(
         &self,
         info: &[FormattedExpr]
-    ) -> Result<String, AssemblerError> {
-        let mut repr = String::default();
-        for (_idx, current) in info.iter().enumerate() {
-            // if idx != 0 {
-            // repr += " ";
-            // }
-            // we do not want the space anymore
-            match current {
-                FormattedExpr::Raw(Expr::String(string)) => {
-                    repr += string;
-                },
-                FormattedExpr::Raw(Expr::Char(char)) => {
-                    repr += &char.to_string();
-                },
-                FormattedExpr::Raw(expr) => {
-                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?;
-                    repr += &value.to_string();
-                },
-                FormattedExpr::Formatted(format, expr) => {
-                    let value = self.resolve_expr_may_fail_in_first_pass(expr)?.int()? as i32;
-                    repr += &format.string_representation(value);
-                }
-            }
-        }
-
-        Ok(repr)
+    ) -> Result<PreprocessedFormattedString, AssemblerError> {
+        PreprocessedFormattedString::try_new(info, self)
     }
 
     /// Print the evaluation of the expression in the 2nd pass
     pub fn visit_print(&mut self, info: &[FormattedExpr], span: Option<&Z80Span>) {
-        let print_or_error = match self.build_string_from_formatted_expression(info) {
+        let print_or_error = match self.prepropress_string_formatted_expression(info) {
             Ok(msg) => either::Either::Left(msg),
             Err(error) => either::Either::Right(error)
         };
@@ -2326,9 +2304,11 @@ impl Env {
 
     pub fn visit_fail(&self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
         let repr = info
-            .map(|info| self.build_string_from_formatted_expression(info))
-            .unwrap_or_else(|| Ok("".to_owned()))?;
-        Err(AssemblerError::Fail { msg: repr })
+            .map(|info| self.prepropress_string_formatted_expression(info))
+            .unwrap_or_else(|| Ok(Default::default()))?;
+        Err(AssemblerError::Fail {
+            msg: repr.to_string()
+        })
     }
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
@@ -3039,7 +3019,7 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
                 Err(AssemblerError::AssertionFailed {
                     msg: /*prefix
                         +*/ (if txt.is_some() {
-                            env.build_string_from_formatted_expression(txt.unwrap())?
+                            env.prepropress_string_formatted_expression(txt.unwrap())?.to_string()
                         }
                         else {
                             "".to_owned()

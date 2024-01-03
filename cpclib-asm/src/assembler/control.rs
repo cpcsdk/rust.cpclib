@@ -1,9 +1,10 @@
-use cpclib_tokens::{symbols::PhysicalAddress, Expr, FormattedExpr};
+use cpclib_tokens::symbols::PhysicalAddress;
+use cpclib_tokens::{Expr, ExprElement, FormattedExpr};
 
-use super::{Env, visit_assert};
-use crate::{error::AssemblerError, preamble::Z80Span};
+use super::{visit_assert, Env};
+use crate::error::AssemblerError;
+use crate::preamble::Z80Span;
 use crate::ExprEvaluationExt;
-use cpclib_tokens::ExprElement;
 
 /// This structure store the necessary information to replay the assembled stuff of previous passes when we do not reassemble
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,27 +25,25 @@ struct ControlOrg {
     output: u16
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ControlAssert {
-	exp: Expr,
-	txt: Option<Vec<FormattedExpr>>,
-	span: Option<Z80Span>
+    exp: Expr,
+    txt: Option<Vec<FormattedExpr>>,
+    span: Option<Z80Span>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ControlOutputCommand {
-	Assert(ControlAssert),
+    Assert(ControlAssert),
     Byte(ControlOutputByte),
     Bytes(ControlOutputBytes),
     Org(ControlOrg)
 }
 
 impl From<ControlAssert> for ControlOutputCommand {
-	fn from(c: ControlAssert) -> Self {
-		Self::Assert(c)
-	}
+    fn from(c: ControlAssert) -> Self {
+        Self::Assert(c)
+    }
 }
 
 impl From<ControlOutputByte> for ControlOutputCommand {
@@ -71,13 +70,11 @@ pub struct ControlOutputStore {
     pub(crate) commands: Vec<ControlOutputCommand>
 }
 
-
-
 impl ControlAssert {
     fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
-		visit_assert(&self.exp, self.txt.as_ref(), env, self.span.as_ref())?;
-		Ok(())
-	}
+        visit_assert(&self.exp, self.txt.as_ref(), env, self.span.as_ref())?;
+        Ok(())
+    }
 }
 
 impl ControlOutputByte {
@@ -142,9 +139,14 @@ impl ControlOutputStore {
         self.commands.push(ControlOrg { code, output }.into())
     }
 
-	pub fn store_assert(&mut self, exp: Expr, txt: Option<Vec<FormattedExpr>>, span: Option<Z80Span> ) {
-		self.commands.push(ControlAssert{exp, txt, span}.into())
-	}
+    pub fn store_assert(
+        &mut self,
+        exp: Expr,
+        txt: Option<Vec<FormattedExpr>>,
+        span: Option<Z80Span>
+    ) {
+        self.commands.push(ControlAssert { exp, txt, span }.into())
+    }
 
     pub fn has_remaining_passes(&self) -> bool {
         self.remaining_passes > 0

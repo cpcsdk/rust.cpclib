@@ -138,6 +138,21 @@ impl Z80Span {
     pub fn get_line_beginning(&self) -> &str {
         self.complete_line()
     }
+
+    #[inline]
+    pub fn filename(&self) -> &str {
+        self.state
+            .filename()
+            .as_ref()
+            .map(|p| p.as_os_str().to_str().unwrap_or("[Invalid file name]"))
+            .unwrap_or_else(|| {
+                self.state
+                    .context_name
+                    .as_ref()
+                    .map(|s| s.as_ref())
+                    .unwrap_or_else(|| "no file specified")
+            })
+    }
 }
 
 impl std::fmt::Display for Z80Span {

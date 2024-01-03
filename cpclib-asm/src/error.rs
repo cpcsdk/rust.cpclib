@@ -867,6 +867,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
 
+#[inline]
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
     let source = span.state.complete_source();
@@ -908,21 +909,9 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
 
-fn build_filename(span: &Z80Span) -> Box<String> {
-    let fname = &span.state.filename();
-    let context = &span.state.context_name();
-
-    let name = fname
-        .as_ref()
-        .map(|p| p.as_os_str().to_str().unwrap_or("[Invalid file name]"))
-        .unwrap_or_else(|| {
-            context
-                .as_ref()
-                .map(|s| s.as_ref())
-                .unwrap_or_else(|| "no file specified")
-        });
-
-    Box::new(name.to_owned())
+#[inline]
+pub fn build_filename(span: &Z80Span) -> Box<String> {
+    Box::new(span.filename().to_owned())
 }
 
 fn build_simple_error_message_with_notes(
