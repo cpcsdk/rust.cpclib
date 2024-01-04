@@ -725,10 +725,10 @@ impl MacroParamElement for LocatedMacroParam {
         matches!(self, LocatedMacroParam::List(..))
     }
 
-    fn single_argument(&self) -> Cow<str> {
+    fn single_argument(&self) -> beef::lean::Cow<str> {
         match &self {
-            LocatedMacroParam::Empty => Cow::Borrowed(""),
-            LocatedMacroParam::Single(ref s) => Cow::Borrowed(s.as_str()),
+            LocatedMacroParam::Empty => beef::lean::Cow::borrowed(""),
+            LocatedMacroParam::Single(ref s) => beef::lean::Cow::borrowed(s.as_str()),
             LocatedMacroParam::List(_) => unreachable!()
         }
     }

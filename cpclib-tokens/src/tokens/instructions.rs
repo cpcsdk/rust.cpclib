@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -39,7 +38,7 @@ pub trait MacroParamElement: Clone + core::fmt::Debug {
     fn is_single(&self) -> bool;
     fn is_list(&self) -> bool;
 
-    fn single_argument(&self) -> Cow<str>;
+    fn single_argument(&self) -> beef::lean::Cow<str>;
     fn list_argument(&self) -> &[Box<Self>];
 }
 
@@ -56,9 +55,9 @@ impl MacroParamElement for MacroParam {
         matches!(self, MacroParam::List(_))
     }
 
-    fn single_argument(&self) -> Cow<str> {
+    fn single_argument(&self) -> beef::lean::Cow<str> {
         match self {
-            MacroParam::Single(s) => Cow::Borrowed(s),
+            MacroParam::Single(s) => beef::lean::Cow::borrowed(s),
             MacroParam::List(_) => unreachable!()
         }
     }
@@ -489,12 +488,12 @@ pub type Filename = String;
 
 pub trait ToSimpleToken {
     /// Convert the token in its simplest form
-    fn as_simple_token(&self) -> Cow<Token>;
+    fn as_simple_token(&self) -> std::borrow::Cow<Token>;
 }
 
 impl ToSimpleToken for Token {
-    fn as_simple_token(&self) -> Cow<Token> {
-        Cow::Borrowed(self)
+    fn as_simple_token(&self) -> std::borrow::Cow<Token> {
+        std::borrow::Cow::Borrowed(self)
     }
 }
 

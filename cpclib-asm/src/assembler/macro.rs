@@ -1,13 +1,19 @@
 use std::ops::Deref;
 
+use aho_corasick::{AhoCorasick, MatchKind};
+use compact_str::CompactString;
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, Source, Struct};
 use cpclib_tokens::{MacroParamElement, Token};
+use either::Either;
+use smartstring::SmartString;
 
 use crate::error::AssemblerError;
 use crate::preamble::{Z80ParserError, Z80Span};
 use crate::Env;
+use super::list;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -15,8 +21,10 @@ pub trait Expandable {
     fn expand(&self, env: &Env) -> Result<String, AssemblerError>;
 }
 
-fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, AssemblerError> {
-    if m.is_single() {
+
+#[inline]
+fn expand_param<'p, P: MacroParamElement>(m: &'p P, env: &Env) -> Result<beef::lean::Cow<'p,  str>, AssemblerError> {
+    let extended = if m.is_single() {
         let s = m.single_argument();
         let trimmed = s.trim();
         const EVAL: &str = "{eval}";
@@ -38,22 +46,24 @@ fn expand_param<P: MacroParamElement>(m: &P, env: &Env) -> Result<String, Assemb
             let value = env
                 .resolve_expr_must_never_fail(&expr_token)
                 .map_err(|e| AssemblerError::AssemblingError { msg: e.to_string() })?;
-            return Ok(value.to_string());
+            beef::lean::Cow::owned(value.to_string())
         }
         else {
-            Ok(s.into_owned())
+           s
         }
     }
     else {
         let l = m.list_argument();
-        Ok(format!(
+        beef::lean::Cow::owned(format!(
             "{}",
             l.iter()
                 .map(|p| expand_param(p.deref(), env))
                 .collect::<Result<Vec<_>, AssemblerError>>()?
                 .join(",")
         ))
-    }
+    };
+
+    Ok(extended)
 }
 
 /// Encodes both the arguments and the macro
@@ -65,6 +75,7 @@ pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
 
 impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     /// The construction fails if the number pf arguments is incorrect
+    #[inline]
     pub fn build(r#macro: &'m Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
@@ -83,6 +94,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
         }
     }
 
+    #[inline]
     pub fn source(&self) -> Option<&Source> {
         self.r#macro.source()
     }
@@ -90,9 +102,63 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
 
 impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
     /// Develop the macro with the given arguments
+    #[inline]
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
         //        assert_eq!(args.len(), self.nb_args());
-        let mut listing = self.r#macro.code().to_string();
+        let listing = self.r#macro.code();
+        let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
+        // build the needed datastructures for replacement
+        /*let (patterns, replacements) =*/ {
+            /*
+            let capacity = all_expanded.len();
+            let mut patterns = Vec::with_capacity(capacity);
+            let mut replacement = Vec::with_capacity(capacity);
+            */
+
+            let mut listing = beef::lean::Cow::borrowed(listing);
+
+            for (argname, expanded) in self.r#macro.params().iter().zip(/*&*/all_expanded) {
+                
+                let expanded = expanded?;
+                let (pattern, replacement) = if argname.starts_with("r#") & expanded.starts_with("\"") & expanded.ends_with("\"")
+                    {
+                        let mut search = CompactString::with_capacity(argname.len()-2+2);
+                        search += "{";
+                        search += &argname[2..];
+                        search += "}";
+                        // remove " " before doing the expansion
+                        (search, &expanded[1..(expanded.len() - 1)])
+                    }
+                    else {
+                        let mut search = CompactString::with_capacity(argname.len()+2);
+                        search += "{";
+                        search += &argname;
+                        search += "}";
+                        (search, &expanded[..])
+                    };
+
+
+                    listing = listing.replace(pattern.as_str(), replacement).into(); // sadly this dumb way is faster than the ahocarasick one ...
+            }
+            return Ok(listing.into_owned());
+
+            //(patterns, replacement)
+        };
+
+        /*
+        // make all replacements in one row :( sadly it is too slow :(
+        let ac = AhoCorasick::builder()
+            .match_kind(MatchKind::Standard)
+            .kind(None)
+            .build(&patterns)
+            .unwrap();
+        let result = ac.replace_all(listing, &replacements);
+
+        Ok(result)
+
+        */
+
+        /*
 
         // replace the arguments for the listing
         for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
@@ -104,14 +170,15 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
                     listing.replace(
                         &format!("{{{}}}", &argname[2..]),
                         &expanded[1..(expanded.len() - 1)]
-                    )
+                    ).into()
                 }
                 else {
-                    listing.replace(&format!("{{{}}}", argname), &expanded)
+                    listing.replace(&format!("{{{}}}", argname), &expanded).into()
                 }
         }
 
         Ok(listing)
+        */
     }
 }
 
@@ -187,11 +254,11 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                 "DW"
                             };
 
-                            let elem = match provided_param {
+                            let elem  = match provided_param {
                                 Some(provided_param) => {
                                     let elem = expand_param(provided_param, env)?;
                                     if elem.is_empty() {
-                                        c[0].to_string()
+                                        beef::lean::Cow::owned(c[0].to_simplified_string())
                                     }
                                     else {
                                         elem
@@ -203,7 +270,7 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                             msg: format!("A value is expected for {} (no default value is provided)", name)
                                         })
                                     } else {
-                                        c[0].to_string()
+                                        beef::lean::Cow::owned(c[0].to_string())
                                     }
                                 }
                             };
@@ -215,7 +282,7 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                         Token::MacroCall(r#macro, current_default_args) => {
                             let mut call = format!(" {}{} ", prefix, r#macro);
 
-                            let args = match provided_param {
+                            let args: Vec<beef::lean::Cow<str>> = match provided_param {
                                 Some(provided_param2) => {
                                     if provided_param2.is_single() {
                                         provided_param
@@ -244,11 +311,11 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                                         repr
                                                     }
                                                     else {
-                                                        format!("[{}]", repr)
+                                                        beef::lean::Cow::owned(format!("[{}]", repr))
                                                     }
                                                 })
                                             })
-                                            .collect::<Result<Vec<String>, AssemblerError>>()?
+                                            .collect::<Result<Vec<_>, AssemblerError>>()?
                                     }
                                     else {
                                         provided_param2
@@ -278,11 +345,11 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                                         repr
                                                     }
                                                     else {
-                                                        format!("[{}]", repr)
+                                                        beef::lean::Cow::owned(format!("[{}]", repr))
                                                     }
                                                 })
                                             })
-                                            .collect::<Result<Vec<String>, AssemblerError>>()?
+                                            .collect::<Result<Vec<_>, AssemblerError>>()?
                                     }
                                 }
 
@@ -290,10 +357,10 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                     current_default_args
                                         .iter()
                                         .map(|a| expand_param(a, env))
-                                        .collect::<Result<Vec<String>, AssemblerError>>()?
+                                        .collect::<Result<Vec<_>, AssemblerError>>()?
                                 }
                             };
-                            call.push_str(&args.join(","));
+                            call.push_str(&args.join(",")); // TODO push all strings instead of creating a new one and pushing it
                             Ok(call)
                         }
                         _ => unreachable!("{:?}", token)

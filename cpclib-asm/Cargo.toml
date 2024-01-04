@@ -51,6 +51,9 @@ velcro.workspace = true
 
 rayon-cond = {version="0.3.0", optional= true}
 chardetng = {workspace = true, optional = true}
+aho-corasick = "1.1.2"
+compact_str = "0.7.1"
+beef = "0.5.2"
 
 
 [build-dependencies]

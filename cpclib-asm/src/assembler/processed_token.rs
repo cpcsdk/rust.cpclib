@@ -733,6 +733,7 @@ impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> Processed
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     /// Generate the tokens needed for the macro or the struct
+    #[inline]
     pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
     where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
         let caller = self.token;
@@ -756,7 +757,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 None
             };
 
-            // Leave if it corresponds to nothing
+            // Leave now if it corresponds to no macro or struct
             if r#macro.is_none() && r#struct.is_none() {
                 let e = AssemblerError::UnknownMacro {
                     symbol: name.into(),
