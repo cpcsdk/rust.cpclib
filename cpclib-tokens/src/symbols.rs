@@ -671,6 +671,7 @@ impl SymbolsTable {
     }
 
     /// Setup the current label for local to global labels conversions
+    #[inline]
     pub fn set_current_global_label<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
@@ -689,12 +690,14 @@ impl SymbolsTable {
         Ok(())
     }
 
+    #[inline]
     pub fn get_current_label(&self) -> &Symbol {
         &self.current_global_label
     }
 
     /// Some symbols are local and need to be converted to their global value.
     /// Some have expressions that need to be expended
+    #[inline]
     pub fn extend_local_and_patterns_for_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
     where
         Symbol: From<S>,
@@ -775,6 +778,7 @@ impl SymbolsTable {
 /// Module handling code
 impl SymbolsTable {
     /// Retrieve the map for the currently selected module
+    #[inline]
     fn current_module_map(&self) -> &ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &self.map
@@ -785,6 +789,7 @@ impl SymbolsTable {
     }
 
     /// Retrieve the mutable map for the currently selected module
+    #[inline]
     fn current_module_map_mut(&mut self) -> &mut ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &mut self.map
@@ -796,6 +801,7 @@ impl SymbolsTable {
     }
 
     /// Retreive the map for the requested module
+    #[inline]
     fn module_map(&self, namespace: &[Symbol]) -> &ModuleSymbolTable {
         let mut current_map = &self.map;
         for current_namespace in namespace.iter() {
@@ -804,6 +810,7 @@ impl SymbolsTable {
         current_map
     }
 
+    #[inline]
     fn module_map_mut(&mut self, namespace: &[Symbol]) -> &mut ModuleSymbolTable {
         let mut current_map = &mut self.map;
         for current_namespace in namespace.iter() {
@@ -813,6 +820,7 @@ impl SymbolsTable {
     }
 
     /// Split the namespaces of the symbol
+    #[inline]
     fn split_namespaces(symbol: Symbol) -> Vec<Symbol> {
         symbol
             .value()
@@ -824,6 +832,7 @@ impl SymbolsTable {
 }
 
 impl SymbolsTableTrait for SymbolsTable {
+    #[inline]
     fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
         self.map
             .iter()
@@ -836,6 +845,7 @@ impl SymbolsTableTrait for SymbolsTable {
             .collect_vec()
     }
 
+    #[inline]
     fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
     where
         Symbol: From<S>,
@@ -851,6 +861,7 @@ impl SymbolsTableTrait for SymbolsTable {
         }))
     }
 
+    #[inline]
     fn assign_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -873,10 +884,12 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self.map.insert(symbol, value))
     }
 
+    #[inline]
     fn enter_namespace(&mut self, namespace: &str) {
         self.namespace_stack.push(namespace.into())
     }
 
+    #[inline]
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
         match self.namespace_stack.pop() {
             Some(s) => Ok(s),
@@ -885,6 +898,7 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     /// Returns the Value at the given key
+    #[inline]
     fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>
     where
         Symbol: From<S>,
@@ -894,6 +908,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self.map.get(&symbol))
     }
 
+    #[inline]
     fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
     where
         Symbol: From<S>,
@@ -913,6 +928,7 @@ impl SymbolsTableTrait for SymbolsTable {
             }))
     }
 
+    #[inline]
     fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>
     where
         Symbol: From<S>,
@@ -921,6 +937,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
     }
 
+    #[inline]
     fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>
     where
         Symbol: From<S>,
@@ -929,6 +946,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
     }
 
+    #[inline]
     fn address_value<S>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError>
     where
         Symbol: From<S>,
@@ -938,6 +956,7 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     /// Remove the given symbol name from the table. (used by undef)
+    #[inline]
     fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>
     where
         Symbol: From<S>,
@@ -947,6 +966,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self.map.remove(&symbol))
     }
 
+    #[inline]
     fn is_used<S>(&self, symbol: S) -> bool
     where
         Symbol: From<S>,
@@ -956,6 +976,7 @@ impl SymbolsTableTrait for SymbolsTable {
         self.used_symbols.contains(&symbol)
     }
 
+    #[inline]
     fn use_symbol<S>(&mut self, symbol: S)
     where
         Symbol: From<S>,
@@ -996,6 +1017,7 @@ impl SymbolsTable {
     /// Symbol is either :
     /// - a global symbol from the current module
     /// - or a fully qualified that represents a module from the start
+    #[inline]
     pub fn get_potential_candidates(&self, symbol: Symbol) -> SmallVec<[Symbol; 2]> {
         if symbol.value().starts_with("::") {
             smallvec![symbol.value()[2..].to_owned().into()]
@@ -1013,6 +1035,7 @@ impl SymbolsTable {
         }
     }
 
+    #[inline]
     fn inject_current_namespace<S>(&self, symbol: S) -> Symbol
     where
         Symbol: From<S>,
@@ -1023,6 +1046,7 @@ impl SymbolsTable {
         global.iter().join(".").into()
     }
 
+    #[inline]
     fn extend_readable_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
     where
         Symbol: From<S>,
@@ -1042,6 +1066,7 @@ impl SymbolsTable {
         }
     }
 
+    #[inline]
     fn extend_writable_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
     where
         Symbol: From<S>,
@@ -1054,6 +1079,7 @@ impl SymbolsTable {
     }
 
     /// Return the current addres if it is known or return an error
+    #[inline]
     pub fn current_address(&self) -> Result<u16, SymbolError> {
         match self.value("$")? {
             Some(address) => Ok(address.integer().unwrap() as u16),
@@ -1062,15 +1088,18 @@ impl SymbolsTable {
     }
 
     /// Update `$` value
+    #[inline]
     pub fn set_current_address(&mut self, address: PhysicalAddress) {
         self.map.insert("$".into(), Value::Address(address));
     }
 
+    #[inline]
     pub fn set_current_output_address(&mut self, address: PhysicalAddress) {
         self.map.insert("$$".into(), Value::Address(address));
     }
 
     /// Set the given symbol to $ value
+    #[inline]
     pub fn set_symbol_to_current_address<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
@@ -1087,6 +1116,7 @@ impl SymbolsTable {
 
     /// Set the given Value to the given value
     /// Return the previous value if any
+    #[inline]
     pub fn set_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -1105,6 +1135,7 @@ impl SymbolsTable {
         Ok(self.map.insert(symbol, value))
     }
 
+    #[inline]
     pub fn update_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -1132,6 +1163,7 @@ impl SymbolsTable {
 
     /// Instead of returning the value, return the bank information
     /// logic stolen to rasm
+    #[inline]
     pub fn prefixed_value<S>(
         &self,
         prefix: &LabelPrefix,
@@ -1173,6 +1205,7 @@ impl SymbolsTable {
     }
 
     /// Check if the symbol table contains the expected symbol, whatever is the pass
+    #[inline]
     pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError>
     where
         Symbol: From<S>,
@@ -1184,6 +1217,7 @@ impl SymbolsTable {
     }
 
     /// Check if the symbol table contains the expected symbol, added during the current pass
+    #[inline]
     pub fn symbol_exist_in_current_pass<S>(&self, symbol: S) -> Result<bool, SymbolError>
     where
         Symbol: From<S>,
@@ -1197,6 +1231,7 @@ impl SymbolsTable {
     }
 
     /// Returns the closest Value
+    #[inline]
     pub fn closest_symbol<S>(
         &self,
         symbol: S,
@@ -1246,6 +1281,7 @@ impl SymbolsTable {
             .map(|(_distance, symbol2)| symbol2))
     }
 
+    #[inline]
     pub fn kind<S>(&self, symbol: S) -> Result<&'static str, SymbolError>
     where
         Symbol: From<S>,
@@ -1317,6 +1353,7 @@ impl SymbolsTableCaseDependent {
         }
     }
 
+    #[inline]
     pub fn is_case_sensitive(&self) -> bool {
         self.case_sensitive
     }
@@ -1331,6 +1368,7 @@ impl SymbolsTableCaseDependent {
     }
 
     /// Modify the Value value depending on the case confurigration (do nothing, or set uppercase)
+    #[inline]
     pub fn normalize_symbol<S>(&self, symbol: S) -> Symbol
     where
         Symbol: From<S>,
@@ -1349,6 +1387,7 @@ impl SymbolsTableCaseDependent {
     }
 
     // Setup the current label for local to global labels conversions
+    #[inline]
     pub fn set_current_label<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
@@ -1358,10 +1397,12 @@ impl SymbolsTableCaseDependent {
             .set_current_global_label::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     pub fn get_current_label(&self) -> &Symbol {
         self.table.get_current_label()
     }
 
+    #[inline]
     pub fn set_symbol_to_current_address<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
@@ -1371,6 +1412,7 @@ impl SymbolsTableCaseDependent {
             .set_symbol_to_current_address::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     pub fn set_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -1384,6 +1426,7 @@ impl SymbolsTableCaseDependent {
             .set_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
     }
 
+    #[inline]
     pub fn update_symbol_to_value<S, E: Into<Value>>(
         &mut self,
         symbol: S,
@@ -1397,6 +1440,7 @@ impl SymbolsTableCaseDependent {
             .update_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value.into())
     }
 
+    #[inline]
     pub fn prefixed_value<S>(
         &self,
         prefix: &LabelPrefix,
@@ -1410,6 +1454,7 @@ impl SymbolsTableCaseDependent {
             .prefixed_value::<Symbol>(prefix, self.normalize_symbol(symbol))
     }
 
+    #[inline]
     pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError>
     where
         Symbol: From<S>,
@@ -1419,6 +1464,7 @@ impl SymbolsTableCaseDependent {
             .contains_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     pub fn symbol_exist_in_current_pass<S>(&self, symbol: S) -> Result<bool, SymbolError>
     where
         Symbol: From<S>,
@@ -1442,6 +1488,7 @@ impl SymbolsTableCaseDependent {
 }
 
 impl SymbolsTableTrait for SymbolsTableCaseDependent {
+    #[inline]
     fn is_used<S>(&self, symbol: S) -> bool
     where
         Symbol: From<S>,
@@ -1450,6 +1497,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         self.table.is_used::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn use_symbol<S>(&mut self, symbol: S)
     where
         Symbol: From<S>,
@@ -1459,10 +1507,12 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .use_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
         self.table.expression_symbol()
     }
 
+    #[inline]
     fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
     where
         Symbol: From<S>,
@@ -1472,6 +1522,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .int_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
     where
         Symbol: From<S>,
@@ -1481,6 +1532,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .counter_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>
     where
         Symbol: From<S>,
@@ -1490,6 +1542,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .macro_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>
     where
         Symbol: From<S>,
@@ -1499,6 +1552,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .struct_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>
     where
         Symbol: From<S>,
@@ -1507,6 +1561,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         self.table.value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>
     where
         Symbol: From<S>,
@@ -1516,6 +1571,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .remove_symbol::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn address_value<S>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError>
     where
         Symbol: From<S>,
@@ -1525,6 +1581,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .address_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
+    #[inline]
     fn assign_symbol_to_value<S, V: Into<Value>>(
         &mut self,
         symbol: S,
@@ -1538,11 +1595,13 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
             .assign_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
     }
 
+    #[inline]
     fn enter_namespace(&mut self, namespace: &str) {
         self.table
             .enter_namespace(self.normalize_symbol(namespace).value())
     }
 
+    #[inline]
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
         self.table.leave_namespace()
     }

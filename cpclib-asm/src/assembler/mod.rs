@@ -1889,6 +1889,7 @@ impl Env {
         self.output_bytes(&result)
     }
 
+    // TODO move that part n processed_tokens ?
     pub fn visit_macro_definition(
         &mut self,
         name: &str,
