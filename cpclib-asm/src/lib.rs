@@ -11,6 +11,7 @@
 #![feature(get_mut_unchecked)]
 #![feature(stmt_expr_attributes)]
 #![feature(slice_take)]
+#![feature(write_all_vectored)]
 
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;

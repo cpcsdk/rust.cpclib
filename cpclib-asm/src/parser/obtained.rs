@@ -2848,10 +2848,7 @@ impl LocatedListing {
     ) -> PResult<Arc<LocatedListing>, Z80ParserError> {
         let mut tokens = Vec::with_capacity(20);
 
-        // The context is similar to the initial one ...
-        let mut ctx = input_code.state.clone();
-        // ... but the state can be modified to forbid some keywords
-        ctx.state = new_state;
+        let ctx_moved_in_builder = input_code.state.clone_with_state(new_state);
 
         // we do not change ctx.source that must be the very same than the parent
         //       let input_fragment = input_code.fragment();
@@ -2863,8 +2860,8 @@ impl LocatedListing {
 
             // Context source has already been provided before. Its state as also been properly set
             ctx_builder: move |_src| {
-                // we have already build the context
-                ctx
+                // we ignore the provided code
+                ctx_moved_in_builder
             },
 
             parse_result_builder: |_src, lst_ctx| {

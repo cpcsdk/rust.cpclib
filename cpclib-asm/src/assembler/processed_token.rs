@@ -789,8 +789,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             let listing = match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let ctx_builder = ParserContextBuilder::from(span.state.clone())
-                        .remove_filename()
+                    let ctx_builder = ParserContextBuilder::default() // nothing is specified
+//                    from(span.state.clone())
+                        .set_state(span.state.state.clone())
+                        .set_options(span.state.options.clone())
                         .set_context_name(&format!(
                             "{}:{}:{} > {} {}:",
                             source.map(|s| s.fname()).unwrap_or_else(|| "???"),

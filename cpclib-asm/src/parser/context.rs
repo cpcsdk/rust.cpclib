@@ -178,6 +178,11 @@ impl ParserContextBuilder {
         self
     }
 
+    pub fn set_options(mut self, options: ParserOptions) -> Self {
+        self.options = options;
+        self
+    }
+
     /// Build a ParserContext for the given source code
     #[inline]
     pub fn build(self, code: &str) -> ParserContext {
@@ -396,6 +401,9 @@ impl PartialEq for ParserContext {
 
 impl Clone for ParserContext {
     fn clone(&self) -> Self {
+
+        panic!();
+
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),

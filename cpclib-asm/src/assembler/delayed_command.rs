@@ -5,13 +5,14 @@ use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
-
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
 use super::string::PreprocessedFormattedString;
 use super::Env;
 use crate::error::{build_filename, build_simple_error_message, AssemblerError};
 use crate::preamble::Z80Span;
+use either::Either;
+
 trait DelayedCommand {}
 
 #[derive(Debug, Clone)]
@@ -42,7 +43,57 @@ impl DelayedCommand for PrintCommand {}
 
 impl DelayedCommand for FailedAssertCommand {}
 
+
+
+
 impl PrintCommand {
+
+
+
+    #[inline]
+    pub fn string_or_error(&self) -> Result<String, AssemblerError> {
+        match &self.print_or_error {
+            either::Either::Left(msg) => {
+                // TODO improve printting + integrate z80span information
+                let file_location = if let Some(span) = &self.span {
+                    let fname = span.filename();
+                    let (line, col) = span.relative_line_and_column();
+
+                    Some((fname, line, col))
+                }
+                else {
+                    None
+                };
+
+                // duplicate code to speed it up
+                let repr = match (&self.prefix, file_location) {
+                    (Some(prefix), Some(loc)) => {
+                        format!(
+                            "{}{}:{}:{} PRINT: {}",
+                            prefix, loc.0, loc.1, loc.2, msg
+                        )
+                    },
+
+                    (Some(prefix), None) => {
+                        format!("{} PRINT: {}", prefix, msg)
+                    },
+
+                    (None, Some(loc)) => {
+                        format!("{}:{}:{} PRINT: {}", loc.0, loc.1, loc.2, msg)
+                    },
+
+                    (None, None) => {
+                        format!("PRINT: {}", msg)
+                    }
+                };
+
+                Ok(repr)
+            },
+            either::Either::Right(e) => Err(e.clone())
+        }
+    }
+    
+    // XXX The code is the same than string_or_error
     #[inline]
     pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
         match &self.print_or_error {
@@ -86,6 +137,12 @@ impl PrintCommand {
             either::Either::Right(e) => Err(e.clone())
         }
     }
+
+
+    #[inline]
+    pub fn is_print(&self) -> bool {
+        self.print_or_error.is_left()
+    }
 }
 #[derive(Debug, Clone)]
 
@@ -98,6 +155,8 @@ impl From<Option<Z80Span>> for PauseCommand {
 }
 
 impl PauseCommand {
+
+    #[inline]
     pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
         let msg = "PAUSE - press enter to continue.";
         write!(
@@ -299,20 +358,41 @@ impl DelayedCommands {
         }
     }
 
+    /// XXX Current version completly ignore pause. TODO find a way to reactivate
     pub fn execute_print_or_pause(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
-        // todo aggregate successive print to write them in one time
-        let res = self
-            .print_commands
-            .iter()
-            .map(|p| p.execute(writer))
-            .filter(|r| r.is_err())
-            .map(|e| e.err().unwrap())
+        // Generate in parallal all the strings (I doubt it is efficient as there is a lock...)
+
+        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+        let iter = self.print_commands.par_iter();
+
+        #[cfg(not(all(not(target_arch = "wasm32"), feature = "rayon")))]
+        let iter = self.print_commands.iter();
+
+
+        let errors = iter
+            .filter_map(|c| {
+                match c {
+                    PrintOrPauseCommand::Print(p) => {
+                        if p.is_print() {
+                            p.execute(writer);
+                            None
+                        } else {
+                            Some(p.print_or_error.as_ref().right().unwrap().clone())
+                        }
+                    },
+                    PrintOrPauseCommand::Pause(p) => {
+                        p.execute(writer);
+                        None
+                    }
+                }
+            })
             .collect_vec();
-        if res.is_empty() {
+
+        if errors.is_empty() {
             Ok(())
         }
         else {
-            Err(AssemblerError::MultipleErrors { errors: res })
+            Err(AssemblerError::MultipleErrors { errors})
         }
     }
 }

@@ -20,7 +20,7 @@ pub mod processed_token;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::io::{stdout, Write};
+use std::io::{stdout, Write, BufWriter};
 use std::ops::Neg;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -1058,6 +1058,7 @@ impl Env {
 
         let mut print_errors: Option<AssemblerError> = None;
         let mut writer = std::io::stdout();
+      //  let mut writer = BufWriter::new(writer); seem to be slower with the buffer :()
 
         // Print from the snapshot
         for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
