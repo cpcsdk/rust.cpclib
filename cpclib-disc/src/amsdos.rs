@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::path::Path;
+use std::path::{Path, Display};
 
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
@@ -34,7 +34,10 @@ pub enum AmsdosError {
     Various(String),
 
     #[error("File name error: {}", msg)]
-    WrongFileName { msg: String }
+    WrongFileName { msg: String },
+
+    #[error("File `{0}` already present in  disc")]
+    FileAlreadyExists(String)
 }
 
 impl From<std::io::Error> for AmsdosError {
@@ -1025,7 +1028,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
             0
         }; // XXX why ?
 
-        eprintln!("head:{:?} track: {} sector: {}", &self.head, track, sector_id);
+        //eprintln!("head:{:?} track: {} sector: {}", &self.head, track, sector_id);
         let mut sector = self
             .disc
             .sector_read_bytes(self.head, track, sector_id)
@@ -1061,7 +1064,9 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let filename = file.amsdos_filename()?;
         if let Some(file) = self.get_file(filename) {
             match behavior {
-                AmsdosAddBehavior::FailIfPresent => todo!(),
+                AmsdosAddBehavior::FailIfPresent => {
+                    return Err(AmsdosError::FileAlreadyExists(format!("{:?}", filename)));
+                },
                 AmsdosAddBehavior::ReplaceIfPresent => todo!(),
                 AmsdosAddBehavior::BackupIfPresent => todo!(),
                 AmsdosAddBehavior::ReplaceAndEraseIfPresent => todo!(),
@@ -1086,7 +1091,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                 None => return Err(AmsdosError::NoEntriesAvailable)
             };
 
-            eprintln!("Will use entry  {entry_idx}");
+            //eprintln!("Will use entry  {entry_idx}");
             //      println!("Select entry {}", entry_idx);
             let entry_num_page = nb_entries;
             nb_entries += 1;
@@ -1111,7 +1116,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     };
                     assert!(bloc_idx.is_valid());
                     *current_chosen_bloc = bloc_idx;
-                    eprintln!("Will use bloc {:?}", bloc_idx);
+                    //eprintln!("Will use bloc {:?}", bloc_idx);
                     //          println!("Select bloc{:?}", bloc_idx);
                     self.update_bloc(
                         bloc_idx,
@@ -1120,7 +1125,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                             2 * DATA_SECTOR_SIZE
                         )
                     )?;
-                    eprintln!("Has updated  bloc {:?}", bloc_idx);
+                    //eprintln!("Has updated  bloc {:?}", bloc_idx);
 
                     file_pos += 2 * DATA_SECTOR_SIZE;
                 }
@@ -1150,7 +1155,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         // More tests are needed to check if it can work without that
         assert_eq!(content.len(), DATA_SECTOR_SIZE * 2);
 
-        let access_info = dbg!(self.bloc_access_information(bloc_idx));
+        let access_info = self.bloc_access_information(bloc_idx);
 
         // Copy in first sector
         self.disc.sector_write_bytes(

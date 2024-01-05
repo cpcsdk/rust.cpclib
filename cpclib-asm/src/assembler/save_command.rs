@@ -100,7 +100,7 @@ impl SaveCommand {
                 };
 
                 assert_eq!(amsdos_file.header().file_length(), size as _);
-                dbg!(size);
+                //dbg!(size);
 
                 match r#type {
                     SaveType::AmsdosBin | SaveType::AmsdosBas => {
@@ -151,7 +151,7 @@ impl SaveCommand {
                     })?;
 
                     // check if everything is ok
-                    eprintln!("File  saved in disc");
+                    eprintln!("TODO: removethat: check that file is properly saved in disc");
                     let amsdos_file2 = disc.get_amsdos_file(head, amsdos_file.amsdos_filename()?).unwrap().unwrap();
                     assert_eq!(
                         amsdos_file,

@@ -867,7 +867,7 @@ impl Sector {
     }
 
     pub fn values_mut(&mut self) -> &mut [u8] {
-        let idx = dbg!(self.len() as usize);
+        let idx = self.len() as usize;
         &mut self.values[..idx]
     }
 
