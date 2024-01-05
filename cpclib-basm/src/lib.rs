@@ -197,6 +197,11 @@ pub fn assemble<'arg>(
 
     let mut assemble_options = AssemblingOptions::default();
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
+    if matches.get_flag("OVERRIDE") {
+        assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::ReplaceAndEraseIfPresent);
+    } else {
+        assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::FailIfPresent);
+    }
 
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
@@ -647,7 +652,14 @@ pub fn build_args_parser() -> clap::Command {
                             .short('D')
                             .action(ArgAction::Append)
                             .number_of_values(1)
-                    );
+                    )
+                    .arg(
+                        Arg::new("OVERRIDE")
+                        .help("Override file when already stored in a disc")
+                        .long("override")
+                        .action(ArgAction::SetTrue)
+                    )
+                    ;
 
     let cmd = if cfg!(feature = "xferlib") {
         cmd.arg(

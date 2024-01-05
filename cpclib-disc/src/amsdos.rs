@@ -36,8 +36,12 @@ pub enum AmsdosError {
     #[error("File name error: {}", msg)]
     WrongFileName { msg: String },
 
-    #[error("File `{0}` already present in  disc")]
-    FileAlreadyExists(String)
+    #[error("File `{0}` already present in disc")]
+    FileAlreadyExists(String),
+
+
+    #[error("File `{0}` not present in disc")]
+    FileDoesNotExist(String)
 }
 
 impl From<std::io::Error> for AmsdosError {
@@ -624,6 +628,23 @@ impl AmsdosEntry {
             self.file_name.extension()
         )
     }
+
+
+    fn track_and_sector<D: Disc>(&self, disc: &D, head: Head) -> (u8, u8) {
+        let min_sect = disc.global_min_sector(head);
+        let sector_id = (self.idx >> 4) + min_sect;
+        let track = if min_sect == 0x41 {
+            2
+        }
+        else if min_sect == 1 {
+            1
+        }
+        else {
+            0
+        }; 
+
+        (track, sector_id)
+    }
 }
 
 /// Encode the catalog of an existing disc
@@ -1011,22 +1032,29 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         &mut self.disc
     }
 
+
+    fn erase_entry(&mut self, entry: &AmsdosEntry) {
+        let (track, sector_id) = entry.track_and_sector(self.disc, self.head);
+
+        let mut sector = self
+            .disc
+            .sector_read_bytes(self.head, track, sector_id)
+            .unwrap();
+        let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
+        let bytes = &mut (sector[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
+        bytes.fill(0xe5);
+        self.disc
+            .sector_write_bytes(self.head, track, sector_id, &sector)
+            .unwrap();
+    }
+
     /// Write the entry information on disc AFTER the sectors has been set up.
     /// Panic if dsk is invalid
     /// Still stolen to iDSK
     pub fn update_entry(&mut self, entry: &AmsdosEntry) {
+        // TODO refactor
         // compute the track/sector
-        let min_sect = self.disc.global_min_sector(self.head);
-        let sector_id = (entry.idx >> 4) + min_sect;
-        let track = if min_sect == 0x41 {
-            2
-        }
-        else if min_sect == 1 {
-            1
-        }
-        else {
-            0
-        }; // XXX why ?
+        let (track, sector_id) = entry.track_and_sector(self.disc, self.head);
 
         //eprintln!("head:{:?} track: {} sector: {}", &self.head, track, sector_id);
         let mut sector = self
@@ -1067,9 +1095,15 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                 AmsdosAddBehavior::FailIfPresent => {
                     return Err(AmsdosError::FileAlreadyExists(format!("{:?}", filename)));
                 },
-                AmsdosAddBehavior::ReplaceIfPresent => todo!(),
-                AmsdosAddBehavior::BackupIfPresent => todo!(),
-                AmsdosAddBehavior::ReplaceAndEraseIfPresent => todo!(),
+                AmsdosAddBehavior::ReplaceIfPresent => {
+                    self.erase_file(filename, false)?;
+                },
+                AmsdosAddBehavior::BackupIfPresent => {
+                    todo!("Rename the current file and remove other files with new name");
+                },
+                AmsdosAddBehavior::ReplaceAndEraseIfPresent => {
+                    self.erase_file(filename, true)?;
+                },
             }
         }
 
@@ -1175,6 +1209,35 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         Ok(())
     }
 
+
+    fn erase_bloc(&mut self, bloc_idx: BlocIdx) -> Result<(), String>  {
+        assert!(bloc_idx.is_valid());
+
+        let content = vec![0xe5; DATA_SECTOR_SIZE*2];
+        self.update_bloc(bloc_idx, &content)
+    }
+
+    pub fn erase_file(&mut self, filename: AmsdosFileName, clear_sectors: bool) -> Result<(), AmsdosError> {
+        let entries = self.entries_for(filename)
+            .ok_or_else(|| AmsdosError::FileDoesNotExist(format!("{:?}", filename)))?;
+
+        if clear_sectors {
+            entries.iter()
+                .flat_map(|e| e.used_blocs())
+                .for_each(|b| {
+                    self.erase_bloc(*b).unwrap();
+                });
+        }
+
+        entries.iter()
+            .for_each(|e| {
+                self.erase_entry(e);
+            });
+
+        Ok(())
+    }
+
+
     pub fn catalog<'mngr: 'dsk>(&'dsk self) -> AmsdosEntries {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.catalog()
@@ -1194,6 +1257,15 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     ) -> Option<AmsdosFile> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.get_file(filename)
+    }
+
+
+    fn entries_for<'mngr: 'dsk, F: Into<AmsdosFileName>>(
+        &'mngr self,
+        filename: F
+    ) -> Option<Vec<AmsdosEntry>> {
+        let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
+        nonmut.entries_for(filename)
     }
 }
 
@@ -1328,7 +1400,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         let track = {
             let mut track = bloc_idx.track();
             if min_sector == 0x41 {
-                track += 2;
+                track += 2; // we skip file table ?
             }
             else if min_sector == 0x01 {
                 track += 1;
@@ -1389,6 +1461,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
         content
     }
+
 
     /// Read the content of the given entry
     pub fn read_entry(&self, entry: &AmsdosEntry) -> Vec<u8> {
