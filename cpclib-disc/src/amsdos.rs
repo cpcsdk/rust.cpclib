@@ -1099,7 +1099,17 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     self.erase_file(filename, false)?;
                 },
                 AmsdosAddBehavior::BackupIfPresent => {
-                    todo!("Rename the current file and remove other files with new name");
+                    let mut backup_fname = filename.clone();
+                    backup_fname.set_extension("BAK");
+
+                    if self.entries_for(backup_fname).is_some() {
+                        self.erase_file(backup_fname, true)?;
+                    }
+                    assert!(self.get_file(backup_fname).is_none());
+                    self.rename(filename, backup_fname)?;
+                    assert!(self.get_file(filename).is_none());
+                    assert!(self.get_file(backup_fname).is_some());
+
                 },
                 AmsdosAddBehavior::ReplaceAndEraseIfPresent => {
                     self.erase_file(filename, true)?;
@@ -1237,6 +1247,19 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         Ok(())
     }
 
+    pub fn rename(&mut self, source: AmsdosFileName, destination: AmsdosFileName) -> Result<(), AmsdosError> {
+        match self.entries_for(source) {
+            Some(entries) => {
+                entries.into_iter()
+                    .for_each(|mut e| {
+                        e.file_name = destination;
+                        self.update_entry(&e);
+                    });
+                    Ok(())
+            },
+            None => Err(AmsdosError::FileDoesNotExist(format!("{:?}", source))),
+        }
+    }
 
     pub fn catalog<'mngr: 'dsk>(&'dsk self) -> AmsdosEntries {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();

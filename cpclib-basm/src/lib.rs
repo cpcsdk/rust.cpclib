@@ -199,7 +199,10 @@ pub fn assemble<'arg>(
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
     if matches.get_flag("OVERRIDE") {
         assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::ReplaceAndEraseIfPresent);
-    } else {
+    } else if matches.get_flag("BACKUP") {
+        assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::BackupIfPresent);
+    }
+    else {
         assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::FailIfPresent);
     }
 
@@ -658,6 +661,13 @@ pub fn build_args_parser() -> clap::Command {
                         .help("Override file when already stored in a disc")
                         .long("override")
                         .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("BACKUP")
+                            .help("Backup an existing file when saved on disc")
+                            .long("backup")
+                            .conflicts_with("OVERRIDE")
+                            .action(ArgAction::SetTrue)
                     )
                     ;
 
