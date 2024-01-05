@@ -43,6 +43,7 @@ custom_error! {pub DskManagerError
 
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
+    let behavior = amsdos::AmsdosAddBehavior::ReplaceIfPresent;
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
@@ -183,7 +184,7 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     panic!("Unable to load {fname}: {e:?}");
                 }
             };
-            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only)
+            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
                 .unwrap();
         }
 

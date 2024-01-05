@@ -53,7 +53,8 @@ pub struct AssemblingOptions {
     symbols: cpclib_tokens::symbols::SymbolsTable,
     output_builder: Option<Arc<RwLock<ListingOutput>>>,
     /// The snapshot may be prefiled with a dedicated snapshot
-    snapshot_model: Option<Snapshot>
+    snapshot_model: Option<Snapshot>,
+    amsdos_behavior: AmsdosAddBehavior
 }
 
 impl Default for AssemblingOptions {
@@ -62,7 +63,8 @@ impl Default for AssemblingOptions {
             case_sensitive: true,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
             output_builder: None,
-            snapshot_model: None
+            snapshot_model: None,
+            amsdos_behavior: AmsdosAddBehavior::FailIfPresent
         }
     }
 }
@@ -92,6 +94,11 @@ impl AssemblingOptions {
         self
     }
 
+    pub fn set_save_behavior(&mut self, behavior: AmsdosAddBehavior) -> &mut Self {
+        self.amsdos_behavior = behavior;
+        self
+    }
+
     pub fn set_snapshot_model(&mut self, mut sna: Snapshot) -> &mut Self {
         sna.unwrap_memory_chunks();
         self.snapshot_model = Some(sna);
@@ -118,6 +125,10 @@ impl AssemblingOptions {
 
     pub fn snapshot_model(&self) -> Option<&Snapshot> {
         self.snapshot_model.as_ref()
+    }
+
+    pub fn save_behavior(&self) -> AmsdosAddBehavior {
+        self.amsdos_behavior
     }
 
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
@@ -187,7 +198,7 @@ pub fn assemble_to_amsdos_file(
         &amsdos_filename,
         env.loading_address().unwrap() as u16,
         env.execution_address().unwrap() as u16,
-        &env.produced_bytes()
+        env.produced_bytes()
     )?)
 }
 

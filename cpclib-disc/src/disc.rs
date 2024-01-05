@@ -2,7 +2,7 @@ use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
 
-use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut};
+use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut, AmsdosAddBehavior, AmsdosFileName, AmsdosManagerNonMut};
 use crate::edsk::Head;
 
 pub trait Disc {
@@ -59,7 +59,8 @@ pub trait Disc {
         file: &AmsdosFile,
         head: H,
         system: bool,
-        read_only: bool
+        read_only: bool,
+        behavior: AmsdosAddBehavior
     ) -> Result<(), AmsdosError>
     where
         Self: Sized
@@ -72,10 +73,29 @@ pub trait Disc {
 
         let mut manager = AmsdosManagerMut::new_from_disc(self, head);
 
-        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
-        manager.add_file(&file, system, read_only)?;
-        eprint!("{:?}", manager.catalog().all_entries().collect_vec());
+        manager.add_file(&file, system, read_only, behavior)?;
 
         Ok(())
+    }
+
+    fn get_amsdos_file<H: Into<Head>, F: Into<AmsdosFileName>>(
+        &mut self,
+        head: H,
+        filename: F) -> Result<Option<AmsdosFile>, AmsdosError>  
+        where
+            Self: Sized{
+
+            let filename: AmsdosFileName = filename.into();
+        
+        if !filename.is_valid() {
+            return Err(AmsdosError::WrongFileName {
+                msg: format!("{:?}", filename)
+            });
+        } else {
+            let manager = AmsdosManagerNonMut::new_from_disc(self, head);
+
+            Ok(manager.get_file(filename))
+        }
+       
     }
 }

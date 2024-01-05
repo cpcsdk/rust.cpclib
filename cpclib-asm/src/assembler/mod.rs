@@ -99,6 +99,8 @@ impl EnvOptions {
             pub fn case_sensitive(&self) -> bool;
             pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable;
             pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable;
+            pub fn save_behavior(&self) -> cpclib_disc::amsdos::AmsdosAddBehavior;
+
             pub fn write_listing_output<W: 'static + Write + Send + Sync>(
                 &mut self,
                 writer: W

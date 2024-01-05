@@ -111,7 +111,7 @@ mod tests {
         let file =
             AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, &content).unwrap();
 
-        let obtained_result = file.full_content().map(|&b| b).collect::<Vec<_>>();
+        let obtained_result = file.header_and_content().map(|&b| b).collect::<Vec<_>>();
         assert_eq!(obtained_result.len(), result.len());
         assert_eq!(obtained_result, result.to_vec());
     }

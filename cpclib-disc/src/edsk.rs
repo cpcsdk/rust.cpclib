@@ -800,7 +800,8 @@ impl SectorInformationList {
             let data_size = convert_fdc_sector_size_to_real_sector_size(
                 sector.sector_information_bloc.sector_size
             ) as usize;
-            sector.values.resize(data_size, filler_byte);
+            sector.values.resize(data_size,  filler_byte);
+            sector.values.fill(filler_byte);
             sector.sector_information_bloc.data_length = sector.values.len() as u16;
 
             self.add_sector(sector);
@@ -1116,7 +1117,7 @@ impl ExtendedDsk {
         }
         else {
             if let Head::B = head {
-                panic!("You cannot select Head B in a single Headd disc");
+                panic!("You cannot select Head B in a single Head disc");
             }
             track as usize
         }
@@ -1212,10 +1213,10 @@ impl Disc for ExtendedDsk {
         let head = head.into();
         let sector = self.sector_mut(head, track, sector_id).ok_or_else(|| {
             format!(
-                "Head {:?} track {} sector {} missing",
-                head, track, sector_id
+                "Head {:?} track {} sector 0x{:X} missing",
+                head, track, sector_id,
             )
-        })?;
+        }).unwrap()/*?*/;
         sector.set_values(bytes)?;
 
         Ok(())
