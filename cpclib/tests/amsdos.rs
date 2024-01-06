@@ -28,7 +28,7 @@ mod tests {
         assert!(file.header().is_checksum_valid());
 
         let file2 =
-            AmsdosFile::basic_file_from_buffer(&"test.bas".try_into().unwrap(), file.content())
+            AmsdosFile::basic_file_from_buffer(&"test.bas".try_into().unwrap(), file.content().to_vec())
                 .unwrap();
 
         assert_eq!(file.header(), file2.header());
@@ -37,7 +37,7 @@ mod tests {
 
         let mut empty_obtained = ExtendedDsk::from(DiscConfig::single_head_data_format());
         let mut manager2 = AmsdosManagerMut::new_from_disc(&mut empty_obtained, 0);
-        manager2.add_file(&file2, false, false).unwrap();
+        manager2.add_file(&file2, false, false, AmsdosAddBehavior::ReplaceAndEraseIfPresent).unwrap();
 
         assert_eq!(manager.catalog(), manager2.catalog(),);
 
@@ -109,7 +109,7 @@ mod tests {
 
         let filename = AmsdosFileName::new_incorrect_case(0, "test", "bin").unwrap();
         let file =
-            AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, &content).unwrap();
+            AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, content.to_vec()).unwrap();
 
         let obtained_result = file.header_and_content().map(|&b| b).collect::<Vec<_>>();
         assert_eq!(obtained_result.len(), result.len());
@@ -208,12 +208,12 @@ mod tests {
                     filename.as_ref().unwrap(),
                     0x3210,
                     0x1234,
-                    &[0x41, 0x42, 0x43, 0x0A]
+                    [0x41, 0x42, 0x43, 0x0A].to_vec()
                 )
                 .unwrap()
             );
             manager
-                .add_file(file.as_ref().unwrap(), false, false)
+                .add_file(file.as_ref().unwrap(), false, false, AmsdosAddBehavior::ReplaceAndEraseIfPresent)
                 .expect("Unable to add file");
 
             assert_eq!(

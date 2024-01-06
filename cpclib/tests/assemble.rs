@@ -7,7 +7,7 @@ mod tests {
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
         let mut processed = build_processed_token(token, env);
-        processed.visited(env)
+        processed?.visited(env)
     }
 
     fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
