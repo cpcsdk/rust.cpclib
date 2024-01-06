@@ -577,7 +577,10 @@ impl ListingElement for Token {
     }
 
     fn is_assembler_control(&self) -> bool {
-        todo!()
+        match self {
+            Self::AssemblerControl(..) => true,
+            _ => false
+        }
     }
 
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {

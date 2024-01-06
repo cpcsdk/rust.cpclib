@@ -5642,8 +5642,8 @@ mod test {
         assert!(res.is_ok());
 
         let res = parse_test(
-            parse_directive,
-            "ASSEMBLER_CONTROL SET_MAX_NB_OF_PASSES, 10"
+            parse_assembler_control_max_passes_number,
+            "ASMCONTROLENV SET_MAX_NB_OF_PASSES=10: nop : ENDA"
         );
         assert!(res.is_ok());
     }
