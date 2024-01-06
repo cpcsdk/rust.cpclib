@@ -964,7 +964,8 @@ impl Env {
     /// as they are stored inside a chunk of the snapshot:
     /// If one day another export is coded, we could export the others too.
     fn handle_breakpoints(&mut self) -> Result<(), AssemblerError> {
-        let mut winape_raw = Vec::new();
+        let mut winape_chunk = WinapeBreakPointChunk::empty();
+        let mut ace_chunk = AceBreakPointChunk::empty();
 
         let pages_mmr = MMR_PAGES_SELECTION;
         for (activepage, _page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
@@ -977,16 +978,17 @@ impl Env {
                 };
                 eprint!("{}", info);
 
-                winape_raw.extend(brk.winape_raw());
+                winape_chunk.add_breakpoint(brk.winape());
+                ace_chunk.add_breakpoint(brk.ace());
             }
         }
 
-        assert_eq!(winape_raw.len() % 5, 0);
-
-        let winape_chunk = WinapeBreakPointChunk::from([b'B', b'R', b'K', b'S'], winape_raw);
-
         if winape_chunk.nb_breakpoints() > 0 {
             self.sna.add_chunk(winape_chunk);
+        }
+
+        if ace_chunk.nb_breakpoints() > 0 {
+            self.sna.add_chunk(ace_chunk);
         }
 
         Ok(())

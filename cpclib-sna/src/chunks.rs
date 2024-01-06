@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{ops::Deref, ffi::{CStr, CString}};
 
 use cpclib_common::itertools::Itertools;
 use delegate::delegate;
@@ -279,6 +279,7 @@ impl AceSymbolChunk {
         }
     }
 
+
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code[0], b'S');
@@ -354,6 +355,137 @@ impl AceSymbolChunk {
     }
 }
 
+// https://www.cpcwiki.eu/index.php/Snapshot#BRKC
+
+#[derive(Clone, Debug)]
+pub struct AceBreakPointChunk {
+    data: SnapshotChunkData
+}
+
+impl AceBreakPointChunk {
+    delegate! {
+        to self.data {
+            pub fn code(&self) -> &Code;
+            pub fn size(&self) -> usize;
+            pub fn size_as_array(&self) -> [u8; 4];
+            pub fn data(&self) -> &[u8];
+            fn add_bytes(&mut self, data: &[u8]);
+
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::from("BRKC", Vec::new())
+    }
+
+
+    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+        let code = code.into();
+        assert_eq!(code[0], b'B');
+        assert_eq!(code[1], b'R');
+        assert_eq!(code[2], b'K');
+        assert_eq!(code[3], b'C');
+
+        Self {
+            data: SnapshotChunkData {
+                code,
+                data: content
+            }
+        }
+    }
+
+    pub fn add_breakpoint_raw(&mut self, raw: &[u8]) {
+        assert!(raw.len() == 216);
+        self.add_bytes(raw);
+    }
+
+    pub fn add_breakpoint(&mut self, brk: AceBreakPoint) {
+        self.add_breakpoint_raw(&brk.buffer)
+    }
+
+    pub fn nb_breakpoints(&self) -> usize {
+        self.size() / 216
+    }
+}
+
+pub struct AceBreakPoint {
+    buffer: [u8; 216]
+}
+
+#[repr(u8)]
+pub enum AceBrkRuntimeMode {
+    Break = 0,
+    Watch = 1
+}
+
+#[repr(u8)]
+pub enum AceBrkMapType {
+    Undefined = 0,
+    MainRam = 1,
+    ExtensionRam = 2,
+    ExtensionRom = 3,
+    FrimwareRom = 4,
+    CartridgeRom = 5,
+    AsicIOPage = 6,
+}
+
+
+impl Into<[u8;216]> for AceBreakPoint {
+    fn into(self) -> [u8;216] {
+        self.buffer
+    }
+}
+
+impl AceBreakPoint {
+    const BRK_TYPE_EXEC: u8 = 0;
+    const BRK_TYPE_MEM: u8 = 1;
+    const BRK_TYPE_PORT: u8 = 2;
+
+    pub fn new_execution(address: u16, runtime_mode: AceBrkRuntimeMode, map_type: AceBrkMapType) -> Self {
+        let mut brk =  Self { buffer: [0; 216]};
+        brk.buffer[0x00] = Self::BRK_TYPE_EXEC;
+        brk.buffer[0x02] = runtime_mode as u8;
+        brk.buffer[0x03] = map_type as u8;
+        brk.buffer[0x04] = (address/256) as u8; // I have followed instructions on https://www.cpcwiki.eu/index.php/Snapshot#BRKC but rasm seems to do the opposite
+        brk.buffer[0x05] = (address%256) as u8;
+        brk
+    }
+
+    pub fn with_condition(mut self, condition: &str) -> Self {
+        assert!(condition.len() < 127);
+        for (idx, b) in condition.as_bytes().into_iter().enumerate() {
+            self.buffer[0x10 + idx] = *b;
+        }
+        self.buffer[0x10 + condition.len()] = 0;
+        self
+    }
+
+    pub fn with_user_name(mut self, user_name: &str) -> Self {
+        assert!(user_name.len() < 63);
+        for (idx, b) in user_name.as_bytes().into_iter().enumerate() {
+            self.buffer[0x90 + idx] = *b;
+        }
+        self.buffer[0x90 + user_name.len()] = 0;
+        self
+    }
+}
+
+
+
+pub struct WinapeBreakPoint {
+    buffer: [u8; 5]
+}
+
+impl WinapeBreakPoint {
+    pub fn new(address: u16, page: u8) -> Self {
+        let mut buffer = [0;5];
+        buffer[0] = (address & 0xFF) as u8;
+        buffer[1] = (address >> 8) as u8;
+        buffer[2] = page;
+        Self{buffer}
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct WinapeBreakPointChunk {
     data: SnapshotChunkData
@@ -370,6 +502,11 @@ impl WinapeBreakPointChunk {
 
         }
     }
+
+    pub fn empty() -> Self {
+        Self::from("BRKS", Vec::new())
+    }
+
 
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
@@ -389,6 +526,10 @@ impl WinapeBreakPointChunk {
     pub fn add_breakpoint_raw(&mut self, raw: &[u8]) {
         assert!(raw.len() == 5);
         self.add_bytes(raw);
+    }
+
+    pub fn add_breakpoint(&mut self, brk: WinapeBreakPoint) {
+        self.add_breakpoint_raw(&brk.buffer)
     }
 
     pub fn nb_breakpoints(&self) -> usize {
@@ -442,6 +583,7 @@ pub enum SnapshotChunk {
     Memory(MemoryChunk),
     /// The chunk is a breakpoint chunk for winape emulator
     WinapeBreakPoint(WinapeBreakPointChunk),
+    AceBreakPoint(AceBreakPointChunk),
     /// The type of the chunk is unknown
     Unknown(UnknownChunk)
 }
@@ -493,7 +635,8 @@ impl SnapshotChunk {
             SnapshotChunk::AceSymbol(chunck) => chunck.code(),
             SnapshotChunk::Memory(chunk) => chunk.code(),
             SnapshotChunk::Unknown(chunk) => chunk.code(),
-            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code()
+            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.code(),
         }
     }
 
@@ -502,7 +645,8 @@ impl SnapshotChunk {
             SnapshotChunk::AceSymbol(chunk) => chunk.size(),
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
-            SnapshotChunk::Unknown(chunk) => chunk.size()
+            SnapshotChunk::Unknown(chunk) => chunk.size(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size(),
         }
     }
 
@@ -511,7 +655,8 @@ impl SnapshotChunk {
             SnapshotChunk::AceSymbol(chunk) => chunk.size_as_array(),
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
-            SnapshotChunk::Unknown(chunk) => chunk.size_as_array()
+            SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array(),
         }
     }
 
@@ -520,7 +665,8 @@ impl SnapshotChunk {
             SnapshotChunk::AceSymbol(chunk) => chunk.data(),
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
-            SnapshotChunk::Unknown(chunk) => chunk.data()
+            SnapshotChunk::Unknown(chunk) => chunk.data(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.data(),
         }
     }
 }
@@ -540,6 +686,13 @@ impl From<MemoryChunk> for SnapshotChunk {
 impl From<WinapeBreakPointChunk> for SnapshotChunk {
     fn from(chunk: WinapeBreakPointChunk) -> Self {
         SnapshotChunk::WinapeBreakPoint(chunk)
+    }
+}
+
+
+impl From<AceBreakPointChunk> for SnapshotChunk {
+    fn from(chunk: AceBreakPointChunk) -> Self {
+        SnapshotChunk::AceBreakPoint(chunk)
     }
 }
 
