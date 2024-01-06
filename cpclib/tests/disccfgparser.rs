@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
-use cpclib::disc::disc::Disc;
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

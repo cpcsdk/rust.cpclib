@@ -328,7 +328,7 @@ mod tests {
     pub fn test_turlogh() {
         use cpclib_common::itertools::Itertools;
 
-        let mut dsk = cpclib::disc::edsk::ExtendedDsk::open(
+        let dsk = cpclib::disc::edsk::ExtendedDsk::open(
             "tests/dsk/Turlogh Le Rodeur (F) (Face A) (1987) [Original] (GAPS).dsk"
         )
         .unwrap();

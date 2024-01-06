@@ -314,7 +314,7 @@ impl BndBuildApp {
 }
 
 impl BndBuildApp {
-    fn update_menu(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update_menu(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             if self.job.is_some() {
                 ui.set_enabled(false);

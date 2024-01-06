@@ -1,8 +1,11 @@
 use std::path::Path;
 
-use cpclib_common::itertools::Itertools;
 
-use crate::amsdos::{AmsdosError, AmsdosFile, AmsdosManagerMut, AmsdosAddBehavior, AmsdosFileName, AmsdosManagerNonMut};
+
+use crate::amsdos::{
+    AmsdosAddBehavior, AmsdosError, AmsdosFile, AmsdosFileName, AmsdosManagerMut,
+    AmsdosManagerNonMut
+};
 use crate::edsk::Head;
 
 pub trait Disc {
@@ -81,21 +84,22 @@ pub trait Disc {
     fn get_amsdos_file<H: Into<Head>, F: Into<AmsdosFileName>>(
         &mut self,
         head: H,
-        filename: F) -> Result<Option<AmsdosFile>, AmsdosError>  
-        where
-            Self: Sized{
+        filename: F
+    ) -> Result<Option<AmsdosFile>, AmsdosError>
+    where
+        Self: Sized
+    {
+        let filename: AmsdosFileName = filename.into();
 
-            let filename: AmsdosFileName = filename.into();
-        
         if !filename.is_valid() {
             return Err(AmsdosError::WrongFileName {
                 msg: format!("{:?}", filename)
             });
-        } else {
+        }
+        else {
             let manager = AmsdosManagerNonMut::new_from_disc(self, head);
 
             Ok(manager.get_file(filename))
         }
-       
     }
 }

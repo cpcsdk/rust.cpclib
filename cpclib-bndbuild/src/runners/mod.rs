@@ -1,12 +1,6 @@
-/// Manage the standard tasks
-use cpclib_basm;
-use cpclib_common::clap::{self, Arg, ArgAction, ArgMatches, Command};
-use cpclib_common::itertools::Itertools;
-use cpclib_disc::dsk_manager_build_arg_parser;
+use cpclib_common::clap::{ArgMatches, Command};
 use glob::glob;
 use shlex::split;
-
-use crate::{built_info, expand_glob};
 
 pub mod basm;
 pub mod dsk;

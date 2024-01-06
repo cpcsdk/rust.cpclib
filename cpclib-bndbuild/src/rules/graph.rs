@@ -2,15 +2,11 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use cpclib_common::itertools::Itertools;
-use serde::de::Visitor;
-use serde::{self, Deserialize, Deserializer};
 use topologic::AcyclicDependencyGraph;
 
 use super::{Rule, Rules};
-use crate::constraints::{deserialize_constraint, Constraint};
 use crate::executor::execute;
-use crate::task::Task;
-use crate::{expand_glob, BndBuilderError};
+use crate::BndBuilderError;
 
 #[derive(Clone)]
 pub struct Graph<'r> {

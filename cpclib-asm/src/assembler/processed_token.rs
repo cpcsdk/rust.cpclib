@@ -791,7 +791,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 Some(span) => {
                     use crate::ParserContextBuilder;
                     let ctx_builder = ParserContextBuilder::default() // nothing is specified
-//                    from(span.state.clone())
+                        //                    from(span.state.clone())
                         .set_state(span.state.state.clone())
                         .set_options(span.state.options.clone())
                         .set_context_name(&format!(
@@ -1322,7 +1322,7 @@ mod test_super {
 
         let processed = build_processed_token(token, &env);
         assert!(matches!(
-            processed.state,
+            processed.unwrap().state,
             Some(ProcessedTokenState::Include(..))
         ));
     }

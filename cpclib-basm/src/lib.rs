@@ -198,8 +198,10 @@ pub fn assemble<'arg>(
     let mut assemble_options = AssemblingOptions::default();
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
     if matches.get_flag("OVERRIDE") {
-        assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::ReplaceAndEraseIfPresent);
-    } else if matches.get_flag("BACKUP") {
+        assemble_options
+            .set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::ReplaceAndEraseIfPresent);
+    }
+    else if matches.get_flag("BACKUP") {
         assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::BackupIfPresent);
     }
     else {

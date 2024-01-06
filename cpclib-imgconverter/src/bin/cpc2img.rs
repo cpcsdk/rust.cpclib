@@ -1,7 +1,5 @@
 use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
-use cpclib::common::itertools::Itertools;
 use cpclib::image::image::{ColorMatrix, Mode};
-use cpclib::image::pixels;
 use cpclib_imgconverter::{self, get_requested_palette};
 
 fn main() {

@@ -10,10 +10,10 @@ use cpclib_tokens::{MacroParamElement, Token};
 use either::Either;
 use smartstring::SmartString;
 
+use super::list;
 use crate::error::AssemblerError;
 use crate::preamble::{Z80ParserError, Z80Span};
 use crate::Env;
-use super::list;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -21,9 +21,11 @@ pub trait Expandable {
     fn expand(&self, env: &Env) -> Result<String, AssemblerError>;
 }
 
-
 #[inline]
-fn expand_param<'p, P: MacroParamElement>(m: &'p P, env: &Env) -> Result<beef::lean::Cow<'p,  str>, AssemblerError> {
+fn expand_param<'p, P: MacroParamElement>(
+    m: &'p P,
+    env: &Env
+) -> Result<beef::lean::Cow<'p, str>, AssemblerError> {
     let extended = if m.is_single() {
         let s = m.single_argument();
         let trimmed = s.trim();
@@ -49,7 +51,7 @@ fn expand_param<'p, P: MacroParamElement>(m: &'p P, env: &Env) -> Result<beef::l
             beef::lean::Cow::owned(value.to_string())
         }
         else {
-           s
+            s
         }
     }
     else {
@@ -107,78 +109,73 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
         //        assert_eq!(args.len(), self.nb_args());
         let listing = self.r#macro.code();
         let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
-        // build the needed datastructures for replacement
-        /*let (patterns, replacements) =*/ {
-            /*
-            let capacity = all_expanded.len();
-            let mut patterns = Vec::with_capacity(capacity);
-            let mut replacement = Vec::with_capacity(capacity);
-            */
+                                                                                         // build the needed datastructures for replacement
+                                                                                         // let (patterns, replacements) =
+        {
+            // let capacity = all_expanded.len();
+            // let mut patterns = Vec::with_capacity(capacity);
+            // let mut replacement = Vec::with_capacity(capacity);
 
             let mut listing = beef::lean::Cow::borrowed(listing);
 
-            for (argname, expanded) in self.r#macro.params().iter().zip(/*&*/all_expanded) {
-                
+            for (argname, expanded) in self.r#macro.params().iter().zip(/* & */ all_expanded) {
                 let expanded = expanded?;
-                let (pattern, replacement) = if argname.starts_with("r#") & expanded.starts_with("\"") & expanded.ends_with("\"")
-                    {
-                        let mut search = CompactString::with_capacity(argname.len()-2+2);
-                        search += "{";
-                        search += &argname[2..];
-                        search += "}";
-                        // remove " " before doing the expansion
-                        (search, &expanded[1..(expanded.len() - 1)])
-                    }
-                    else {
-                        let mut search = CompactString::with_capacity(argname.len()+2);
-                        search += "{";
-                        search += &argname;
-                        search += "}";
-                        (search, &expanded[..])
-                    };
+                let (pattern, replacement) = if argname.starts_with("r#")
+                    & expanded.starts_with("\"")
+                    & expanded.ends_with("\"")
+                {
+                    let mut search = CompactString::with_capacity(argname.len() - 2 + 2);
+                    search += "{";
+                    search += &argname[2..];
+                    search += "}";
+                    // remove " " before doing the expansion
+                    (search, &expanded[1..(expanded.len() - 1)])
+                }
+                else {
+                    let mut search = CompactString::with_capacity(argname.len() + 2);
+                    search += "{";
+                    search += &argname;
+                    search += "}";
+                    (search, &expanded[..])
+                };
 
-
-                    listing = listing.replace(pattern.as_str(), replacement).into(); // sadly this dumb way is faster than the ahocarasick one ...
+                listing = listing.replace(pattern.as_str(), replacement).into();
+                // sadly this dumb way is faster than the ahocarasick one ...
             }
             return Ok(listing.into_owned());
 
             //(patterns, replacement)
         };
 
-        /*
         // make all replacements in one row :( sadly it is too slow :(
-        let ac = AhoCorasick::builder()
-            .match_kind(MatchKind::Standard)
-            .kind(None)
-            .build(&patterns)
-            .unwrap();
-        let result = ac.replace_all(listing, &replacements);
-
-        Ok(result)
-
-        */
-
-        /*
+        // let ac = AhoCorasick::builder()
+        // .match_kind(MatchKind::Standard)
+        // .kind(None)
+        // .build(&patterns)
+        // .unwrap();
+        // let result = ac.replace_all(listing, &replacements);
+        //
+        // Ok(result)
+        //
 
         // replace the arguments for the listing
-        for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-            let expanded = expand_param(argvalue, env)?;
-            listing =
-                if argname.starts_with("r#") & expanded.starts_with("\"") & expanded.ends_with("\"")
-                {
-                    // remove " " before doing the expansion
-                    listing.replace(
-                        &format!("{{{}}}", &argname[2..]),
-                        &expanded[1..(expanded.len() - 1)]
-                    ).into()
-                }
-                else {
-                    listing.replace(&format!("{{{}}}", argname), &expanded).into()
-                }
-        }
-
-        Ok(listing)
-        */
+        // for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
+        // let expanded = expand_param(argvalue, env)?;
+        // listing =
+        // if argname.starts_with("r#") & expanded.starts_with("\"") & expanded.ends_with("\"")
+        // {
+        // remove " " before doing the expansion
+        // listing.replace(
+        // &format!("{{{}}}", &argname[2..]),
+        // &expanded[1..(expanded.len() - 1)]
+        // ).into()
+        // }
+        // else {
+        // listing.replace(&format!("{{{}}}", argname), &expanded).into()
+        // }
+        // }
+        //
+        // Ok(listing)
     }
 }
 

@@ -1,11 +1,8 @@
-use std::collections::HashSet;
 use std::env::current_dir;
-use std::io::{BufReader, Read};
-use std::path::{self, Path};
+use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
-use rules::{Graph, Rule};
 use thiserror::Error;
 
 pub mod builder;

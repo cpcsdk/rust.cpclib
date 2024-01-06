@@ -13,7 +13,6 @@ impl StableTickerCounters {
         self.counters.clear();
     }
 
-
     /// Check if a counter with the same name already exists
     pub fn has_counter<S: AsRef<str>>(&self, name: &S) -> bool {
         let name = name.as_ref();

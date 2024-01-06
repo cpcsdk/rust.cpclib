@@ -7,9 +7,9 @@ use std::sync::RwLock;
 use cpclib_common::lazy_static;
 use cpclib_common::winnow::BStr;
 use either::Either;
-use super::line_col::LineColLookup;
 use regex::Regex;
 
+use super::line_col::LineColLookup;
 use crate::error::AssemblerError;
 use crate::preamble::*;
 use crate::LocatedToken;
@@ -186,7 +186,7 @@ impl ParserContextBuilder {
     /// Build a ParserContext for the given source code
     #[inline]
     pub fn build(self, code: &str) -> ParserContext {
-        let code: &'static str = unsafe{std::mem::transmute(code)};
+        let code: &'static str = unsafe { std::mem::transmute(code) };
         let str: &'static BStr = unsafe { std::mem::transmute(BStr::new(code)) };
         ParserContext {
             options: self.options,
@@ -401,7 +401,6 @@ impl PartialEq for ParserContext {
 
 impl Clone for ParserContext {
     fn clone(&self) -> Self {
-
         panic!();
 
         Self {
@@ -410,7 +409,7 @@ impl Clone for ParserContext {
             state: self.state.clone(),
             source: self.source,
             options: self.options.clone(),
-            line_col_lut:RwLock::default() // no need to copy paste the datastructure if it is never used
+            line_col_lut: RwLock::default() /* no need to copy paste the datastructure if it is never used */
         }
     }
 }
@@ -497,15 +496,23 @@ impl ParserContext {
     #[inline]
     pub fn relative_line_and_column(&self, offset: usize) -> (usize, usize) {
         if self.line_col_lut.read().unwrap().is_none() {
-            let src: &'static str= unsafe { std::mem::transmute(self.source.deref()) };
+            let src: &'static str = unsafe { std::mem::transmute(self.source.deref()) };
 
-            self.line_col_lut.write().unwrap().replace(LineColLookup::new(src));
+            self.line_col_lut
+                .write()
+                .unwrap()
+                .replace(LineColLookup::new(src));
         }
 
-        let res = self.line_col_lut.read().unwrap().as_ref().unwrap().get(offset);
+        let res = self
+            .line_col_lut
+            .read()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .get(offset);
 
         res
-        
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {

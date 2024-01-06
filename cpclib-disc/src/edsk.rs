@@ -800,7 +800,7 @@ impl SectorInformationList {
             let data_size = convert_fdc_sector_size_to_real_sector_size(
                 sector.sector_information_bloc.sector_size
             ) as usize;
-            sector.values.resize(data_size,  filler_byte);
+            sector.values.resize(data_size, filler_byte);
             sector.values.fill(filler_byte);
             sector.sector_information_bloc.data_length = sector.values.len() as u16;
 

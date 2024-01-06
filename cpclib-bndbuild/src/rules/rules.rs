@@ -1,16 +1,11 @@
-use std::collections::{BTreeMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::BTreeMap;
+use std::path::Path;
 
-use cpclib_common::itertools::Itertools;
-use serde::de::Visitor;
-use serde::{self, Deserialize, Deserializer};
+use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;
 
 use super::{Graph, Rule};
-use crate::constraints::{deserialize_constraint, Constraint};
-use crate::executor::execute;
-use crate::task::Task;
-use crate::{expand_glob, BndBuilderError};
+use crate::BndBuilderError;
 
 #[derive(Deserialize)]
 #[serde(transparent)]

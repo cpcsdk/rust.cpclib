@@ -760,10 +760,17 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 };
 
                 let head = Head::A;
-                let system = false;
-                let read_only = false;
+                let _system = false;
+                let _read_only = false;
 
-                dsk.add_amsdos_file(&file, head, false, false).unwrap();
+                dsk.add_amsdos_file(
+                    &file,
+                    head,
+                    false,
+                    false,
+                    AmsdosAddBehavior::ReplaceAndEraseIfPresent
+                )
+                .unwrap();
                 dsk.save(fname).unwrap();
             }
         }

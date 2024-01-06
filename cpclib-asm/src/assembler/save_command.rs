@@ -80,7 +80,9 @@ impl SaveCommand {
             Some(r#type) => {
                 let loading_address = from as u16;
                 let execution_address = match env.run_options {
-                    Some((exec_address, _)) if exec_address < loading_address + size as u16 => exec_address,
+                    Some((exec_address, _)) if exec_address < loading_address + size as u16 => {
+                        exec_address
+                    },
                     _ => loading_address
                 };
 
@@ -100,11 +102,16 @@ impl SaveCommand {
                 };
 
                 assert_eq!(amsdos_file.header().file_length(), size as _);
-                //dbg!(size);
+                // dbg!(size);
 
                 match r#type {
                     SaveType::AmsdosBin | SaveType::AmsdosBas => {
-                        either::Left(amsdos_file.header_and_content().copied().collect::<Vec<u8>>())
+                        either::Left(
+                            amsdos_file
+                                .header_and_content()
+                                .copied()
+                                .collect::<Vec<u8>>()
+                        )
                     },
                     SaveType::Disc(_) | SaveType::Tape => either::Right(amsdos_file)
                 }
@@ -143,7 +150,13 @@ impl SaveCommand {
                     let head = Head::A;
                     let system = false;
                     let read_only = false;
-                    disc.add_amsdos_file(&amsdos_file, head, read_only, system, env.options().assemble_options().save_behavior())?;
+                    disc.add_amsdos_file(
+                        &amsdos_file,
+                        head,
+                        read_only,
+                        system,
+                        env.options().assemble_options().save_behavior()
+                    )?;
                     disc.save(disc_filename).map_err(|e| {
                         AssemblerError::AssemblingError {
                             msg: format!("Error while saving {e}")
@@ -152,11 +165,11 @@ impl SaveCommand {
 
                     // check if everything is ok
                     eprintln!("TODO: removethat: check that file is properly saved in disc");
-                    let amsdos_file2 = disc.get_amsdos_file(head, amsdos_file.amsdos_filename()?).unwrap().unwrap();
-                    assert_eq!(
-                        amsdos_file,
-                        amsdos_file2
-                    );
+                    let amsdos_file2 = disc
+                        .get_amsdos_file(head, amsdos_file.amsdos_filename()?)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(amsdos_file, amsdos_file2);
                 }
                 else {
                     return Err(AssemblerError::InvalidArgument {

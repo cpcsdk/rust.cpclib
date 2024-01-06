@@ -1,7 +1,7 @@
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited};
 use cpclib_common::winnow::token::tag_no_case;
-use cpclib_common::winnow::{self, PResult, Parser};
+use cpclib_common::winnow::{PResult, Parser};
 use serde::{self, Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash, Clone)]

@@ -1,4 +1,3 @@
-use std::process::Command;
 // tests cannot be run in parallel as they change cwd
 use std::sync::Mutex;
 
@@ -9,7 +8,7 @@ lazy_static::lazy_static! { static ref MUT: Mutex<()> = Mutex::new(()); }
 
 #[test_generator::test_resources("cpclib-bndbuild/tests/valid/parse*.yml")]
 fn expect_successful_parse(real_fname: &str) {
-    let guard = MUT.lock();
+    let _guard = MUT.lock();
 
     println!("{}", real_fname);
     println!("{}", std::env::current_dir().unwrap().display());
@@ -33,7 +32,7 @@ fn expect_successful_parse(real_fname: &str) {
 
 #[test_generator::test_resources("cpclib-bndbuild/tests/invalid/parse*.yml")]
 fn expect_parse_error(real_fname: &str) {
-    let guard = MUT.lock();
+    let _guard = MUT.lock();
 
     println!("{}", real_fname);
     println!("{}", std::env::current_dir().unwrap().display());

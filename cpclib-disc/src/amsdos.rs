@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::path::{Path, Display};
+use std::path::{Path};
 
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
@@ -38,7 +38,6 @@ pub enum AmsdosError {
 
     #[error("File `{0}` already present in disc")]
     FileAlreadyExists(String),
-
 
     #[error("File `{0}` not present in disc")]
     FileDoesNotExist(String)
@@ -629,7 +628,6 @@ impl AmsdosEntry {
         )
     }
 
-
     fn track_and_sector<D: Disc>(&self, disc: &D, head: Head) -> (u8, u8) {
         let min_sect = disc.global_min_sector(head);
         let sector_id = (self.idx >> 4) + min_sect;
@@ -641,7 +639,7 @@ impl AmsdosEntry {
         }
         else {
             0
-        }; 
+        };
 
         (track, sector_id)
     }
@@ -1008,7 +1006,7 @@ pub struct AmsdosManagerMut<'dsk, D: Disc> {
     head: Head
 }
 
-#[derive(Clone,Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum AmsdosAddBehavior {
     // Raise an error
     FailIfPresent,
@@ -1032,7 +1030,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         &mut self.disc
     }
 
-
     fn erase_entry(&mut self, entry: &AmsdosEntry) {
         let (track, sector_id) = entry.track_and_sector(self.disc, self.head);
 
@@ -1042,7 +1039,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
             .unwrap();
         let idx_in_sector: usize = ((entry.idx & 15) << 5) as usize;
         let bytes = &mut (sector[idx_in_sector..(idx_in_sector + AmsdosEntry::len())]);
-        bytes.fill(0xe5);
+        bytes.fill(0xE5);
         self.disc
             .sector_write_bytes(self.head, track, sector_id, &sector)
             .unwrap();
@@ -1056,7 +1053,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         // compute the track/sector
         let (track, sector_id) = entry.track_and_sector(self.disc, self.head);
 
-        //eprintln!("head:{:?} track: {} sector: {}", &self.head, track, sector_id);
+        // eprintln!("head:{:?} track: {} sector: {}", &self.head, track, sector_id);
         let mut sector = self
             .disc
             .sector_read_bytes(self.head, track, sector_id)
@@ -1087,10 +1084,9 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         is_read_only: bool,
         behavior: AmsdosAddBehavior
     ) -> Result<(), AmsdosError> {
-
         // handle the case where a file is already present
         let filename = file.amsdos_filename()?;
-        if let Some(file) = self.get_file(filename) {
+        if let Some(_file) = self.get_file(filename) {
             match behavior {
                 AmsdosAddBehavior::FailIfPresent => {
                     return Err(AmsdosError::FileAlreadyExists(format!("{:?}", filename)));
@@ -1109,14 +1105,12 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     self.rename(filename, backup_fname)?;
                     assert!(self.get_file(filename).is_none());
                     assert!(self.get_file(backup_fname).is_some());
-
                 },
                 AmsdosAddBehavior::ReplaceAndEraseIfPresent => {
                     self.erase_file(filename, true)?;
-                },
+                }
             }
         }
-
 
         // we know there is no file of the same name and can safely add it
         let content: Vec<u8> = file.header_and_content().copied().collect();
@@ -1135,7 +1129,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                 None => return Err(AmsdosError::NoEntriesAvailable)
             };
 
-            //eprintln!("Will use entry  {entry_idx}");
+            // eprintln!("Will use entry  {entry_idx}");
             //      println!("Select entry {}", entry_idx);
             let entry_num_page = nb_entries;
             nb_entries += 1;
@@ -1160,7 +1154,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     };
                     assert!(bloc_idx.is_valid());
                     *current_chosen_bloc = bloc_idx;
-                    //eprintln!("Will use bloc {:?}", bloc_idx);
+                    // eprintln!("Will use bloc {:?}", bloc_idx);
                     //          println!("Select bloc{:?}", bloc_idx);
                     self.update_bloc(
                         bloc_idx,
@@ -1169,7 +1163,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                             2 * DATA_SECTOR_SIZE
                         )
                     )?;
-                    //eprintln!("Has updated  bloc {:?}", bloc_idx);
+                    // eprintln!("Has updated  bloc {:?}", bloc_idx);
 
                     file_pos += 2 * DATA_SECTOR_SIZE;
                 }
@@ -1219,45 +1213,49 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         Ok(())
     }
 
-
-    fn erase_bloc(&mut self, bloc_idx: BlocIdx) -> Result<(), String>  {
+    fn erase_bloc(&mut self, bloc_idx: BlocIdx) -> Result<(), String> {
         assert!(bloc_idx.is_valid());
 
-        let content = vec![0xe5; DATA_SECTOR_SIZE*2];
+        let content = vec![0xE5; DATA_SECTOR_SIZE * 2];
         self.update_bloc(bloc_idx, &content)
     }
 
-    pub fn erase_file(&mut self, filename: AmsdosFileName, clear_sectors: bool) -> Result<(), AmsdosError> {
-        let entries = self.entries_for(filename)
+    pub fn erase_file(
+        &mut self,
+        filename: AmsdosFileName,
+        clear_sectors: bool
+    ) -> Result<(), AmsdosError> {
+        let entries = self
+            .entries_for(filename)
             .ok_or_else(|| AmsdosError::FileDoesNotExist(format!("{:?}", filename)))?;
 
         if clear_sectors {
-            entries.iter()
-                .flat_map(|e| e.used_blocs())
-                .for_each(|b| {
-                    self.erase_bloc(*b).unwrap();
-                });
+            entries.iter().flat_map(|e| e.used_blocs()).for_each(|b| {
+                self.erase_bloc(*b).unwrap();
+            });
         }
 
-        entries.iter()
-            .for_each(|e| {
-                self.erase_entry(e);
-            });
+        entries.iter().for_each(|e| {
+            self.erase_entry(e);
+        });
 
         Ok(())
     }
 
-    pub fn rename(&mut self, source: AmsdosFileName, destination: AmsdosFileName) -> Result<(), AmsdosError> {
+    pub fn rename(
+        &mut self,
+        source: AmsdosFileName,
+        destination: AmsdosFileName
+    ) -> Result<(), AmsdosError> {
         match self.entries_for(source) {
             Some(entries) => {
-                entries.into_iter()
-                    .for_each(|mut e| {
-                        e.file_name = destination;
-                        self.update_entry(&e);
-                    });
-                    Ok(())
+                entries.into_iter().for_each(|mut e| {
+                    e.file_name = destination;
+                    self.update_entry(&e);
+                });
+                Ok(())
             },
-            None => Err(AmsdosError::FileDoesNotExist(format!("{:?}", source))),
+            None => Err(AmsdosError::FileDoesNotExist(format!("{:?}", source)))
         }
     }
 
@@ -1281,7 +1279,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         let nonmut: AmsdosManagerNonMut<'dsk, D> = self.into();
         nonmut.get_file(filename)
     }
-
 
     fn entries_for<'mngr: 'dsk, F: Into<AmsdosFileName>>(
         &'mngr self,
@@ -1358,9 +1355,8 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         }
     }
 
-
     /// Retrieve the AmsdosEntry dedidacted to the specific file
-    fn entries_for<F:Into<AmsdosFileName>>(&self, filename: F) -> Option<Vec<AmsdosEntry>> {
+    fn entries_for<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<Vec<AmsdosEntry>> {
         let filename = filename.into();
         let entries = self
             .catalog()
@@ -1369,16 +1365,17 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
             .collect::<Vec<_>>();
         if entries.is_empty() {
             None
-        } else {
+        }
+        else {
             Some(entries)
         }
     }
 
     fn read_entries(&self, entries: &[AmsdosEntry]) -> Vec<u8> {
         entries
-        .iter()
-        .flat_map(|entry| self.read_entry(entry))
-        .collect::<Vec<u8>>()
+            .iter()
+            .flat_map(|entry| self.read_entry(entry))
+            .collect::<Vec<u8>>()
     }
 
     /// Return the file if it exists
@@ -1446,8 +1443,8 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         // Compute the information to access the second sector
         // TODO set this knowledge in edsk
         let (sector2_id, track2) = {
-            if (sector_pos+1) > 8 {
-                (0+min_sector, track + 1)
+            if (sector_pos + 1) > 8 {
+                (0 + min_sector, track + 1)
             }
             else {
                 (sector_pos + 1 + min_sector, track)
@@ -1484,7 +1481,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 
         content
     }
-
 
     /// Read the content of the given entry
     pub fn read_entry(&self, entry: &AmsdosEntry) -> Vec<u8> {
@@ -1541,7 +1537,13 @@ impl AmsdosHeader {
 
     /// Generate a header for a basic file
     pub fn compute_basic_header(filename: &AmsdosFileName, data: &[u8]) -> AmsdosHeader {
-        AmsdosHeader::build_header(filename, AmsdosFileType::Basic, 0x0170, 0x0000, data.len() as _)
+        AmsdosHeader::build_header(
+            filename,
+            AmsdosFileType::Basic,
+            0x0170,
+            0x0000,
+            data.len() as _
+        )
     }
 
     /// XXX currently untested
@@ -1745,7 +1747,10 @@ impl AmsdosFile {
             data.len() as _
         );
 
-        Ok(Self { header, content: data })
+        Ok(Self {
+            header,
+            content: data
+        })
     }
 
     pub fn basic_file_from_buffer(
@@ -1758,10 +1763,18 @@ impl AmsdosFile {
             return Err(AmsdosError::FileLargerThan64Kb);
         }
 
-        let header =
-            AmsdosHeader::build_header(filename, AmsdosFileType::Basic, 0x0170, 0x0000, data.len() as _);
+        let header = AmsdosHeader::build_header(
+            filename,
+            AmsdosFileType::Basic,
+            0x0170,
+            0x0000,
+            data.len() as _
+        );
 
-        Ok(Self { header, content: data })
+        Ok(Self {
+            header,
+            content: data
+        })
     }
 
     /// Create a file from its header and content
@@ -1818,7 +1831,12 @@ impl AmsdosFile {
     /// This method removes the extra unecessary bytes.
     pub fn shrink_content_to_fit_header_size(&mut self) {
         let size = self.header.file_length() as usize;
-        assert!(size <= self.content.len(), "Header is invalid. File content has a size of {}, whereas header specify {}", self.content.len(), size);
+        assert!(
+            size <= self.content.len(),
+            "Header is invalid. File content has a size of {}, whereas header specify {}",
+            self.content.len(),
+            size
+        );
         self.content.resize(size, 0);
     }
 
