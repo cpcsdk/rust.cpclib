@@ -43,24 +43,52 @@ use preamble::processed_token::ProcessedToken;
 use preamble::*;
 
 use self::listing_output::ListingOutput;
+use enumflags2::{bitflags, make_bitflags, BitFlags};
+
+#[bitflags]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum AssemblingOptionFlags {
+    /// Set to consider that the assembler pay attention to the case of the labels
+    CaseSensitive,
+    // Set to include SYMB in sna chunks
+    SnaSymb,
+    // Set to include BRKS in sna chunks
+    SnaBrks,
+    // Set to include BRKC in sna chunks
+    SnaBrkc
+}
+
+
+impl AssemblingOptionFlags {
+    pub fn from_chunk(chunk: &str) -> Option<Self> {
+        match chunk {
+            "SYMB" => Some(Self::SnaSymb),
+            "BRKS" => Some(Self::SnaBrks),
+            "BRKC" => Some(Self::SnaBrkc),
+            _ => None
+        }
+    }
+}
 
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug, Clone)]
 pub struct AssemblingOptions {
-    /// Set to true to consider that the assembler pay attention to the case of the labels
-    case_sensitive: bool,
+
+    flags: BitFlags<AssemblingOptionFlags>,
+
     /// Contains some symbols that could be used during assembling
     symbols: cpclib_tokens::symbols::SymbolsTable,
     output_builder: Option<Arc<RwLock<ListingOutput>>>,
     /// The snapshot may be prefiled with a dedicated snapshot
     snapshot_model: Option<Snapshot>,
-    amsdos_behavior: AmsdosAddBehavior
+    amsdos_behavior: AmsdosAddBehavior,
 }
 
 impl Default for AssemblingOptions {
     fn default() -> Self {
         Self {
-            case_sensitive: true,
+            flags: AssemblingOptionFlags::CaseSensitive | AssemblingOptionFlags::SnaBrkc | AssemblingOptionFlags::SnaBrks | AssemblingOptionFlags::SnaSymb,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
             output_builder: None,
             snapshot_model: None,
@@ -77,7 +105,7 @@ impl AssemblingOptions {
 
     pub fn new_case_insensitive() -> Self {
         let mut options = Self::new_case_sensitive();
-        options.case_sensitive = false;
+        options.set_case_sensitive(false);
         options
     }
 
@@ -88,9 +116,18 @@ impl AssemblingOptions {
         options
     }
 
+    pub fn set_flag(&mut self, flag: AssemblingOptionFlags, val: bool) -> &mut Self {
+        self.flags.set(flag, val);
+        self
+    }
+
+    pub fn get_flag(&self, flag: AssemblingOptionFlags) -> bool {
+        self.flags.contains(flag)
+    }
+
     /// Specify if the assembler must be case sensitive or not
     pub fn set_case_sensitive(&mut self, val: bool) -> &mut Self {
-        self.case_sensitive = val;
+        self.set_flag(AssemblingOptionFlags::CaseSensitive, val);
         self
     }
 
@@ -120,7 +157,7 @@ impl AssemblingOptions {
     }
 
     pub fn case_sensitive(&self) -> bool {
-        self.case_sensitive
+        self.get_flag(AssemblingOptionFlags::CaseSensitive)
     }
 
     pub fn snapshot_model(&self) -> Option<&Snapshot> {

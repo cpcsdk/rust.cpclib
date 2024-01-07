@@ -10,7 +10,7 @@ use std::str::FromStr;
 use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
-use cpclib_asm::preamble::*;
+use cpclib_asm::{preamble::*, AssemblingOptionFlags};
 use cpclib_asm::progress::{normalize, Progress};
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
@@ -196,7 +196,9 @@ pub fn assemble<'arg>(
     let _show_progress = matches.get_flag("PROGRESS");
 
     let mut assemble_options = AssemblingOptions::default();
+    
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
+
     if matches.get_flag("OVERRIDE") {
         assemble_options
             .set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::ReplaceAndEraseIfPresent);
@@ -207,6 +209,14 @@ pub fn assemble<'arg>(
     else {
         assemble_options.set_save_behavior(cpclib_disc::amsdos::AmsdosAddBehavior::FailIfPresent);
     }
+
+    if let Some(chunks) = matches.get_many::<String>("NO_SNA_CHUNK") {
+        for chunk in chunks {
+            let flag = AssemblingOptionFlags::from_chunk(chunk).unwrap();
+            assemble_options.set_flag(flag, false);
+        }
+    }
+
 
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
@@ -626,6 +636,14 @@ pub fn build_args_parser() -> clap::Command {
                             .long("snapshot")
                             .alias("sna")
                             .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("NO_SNA_CHUNK")
+                            .help("Deactivate some snapshot chunks (comma separated)")
+                            .long("nochunk")
+                            .value_delimiter(',')
+                            .value_names(["CODE"])
+                            .value_parser(["BRKC", "BRKS", "SYMB"])
                     )
 					.arg(
 						Arg::new("CASE_INSENSITIVE")

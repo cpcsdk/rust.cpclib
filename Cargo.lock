@@ -1350,6 +1350,7 @@ dependencies = [
  "delegate",
  "either",
  "encoding_rs",
+ "enumflags2",
  "getset",
  "globset",
  "hashbag",
