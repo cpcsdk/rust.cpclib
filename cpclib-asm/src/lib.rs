@@ -38,12 +38,12 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
 use cpclib_sna::Snapshot;
+use enumflags2::{bitflags, make_bitflags, BitFlags};
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 use preamble::*;
 
 use self::listing_output::ListingOutput;
-use enumflags2::{bitflags, make_bitflags, BitFlags};
 
 #[bitflags]
 #[repr(u8)]
@@ -59,7 +59,6 @@ pub enum AssemblingOptionFlags {
     SnaBrkc
 }
 
-
 impl AssemblingOptionFlags {
     pub fn from_chunk(chunk: &str) -> Option<Self> {
         match chunk {
@@ -74,7 +73,6 @@ impl AssemblingOptionFlags {
 /// Configuration of the assembler. By default the assembler is case sensitive and has no symbol
 #[derive(Debug, Clone)]
 pub struct AssemblingOptions {
-
     flags: BitFlags<AssemblingOptionFlags>,
 
     /// Contains some symbols that could be used during assembling
@@ -82,13 +80,16 @@ pub struct AssemblingOptions {
     output_builder: Option<Arc<RwLock<ListingOutput>>>,
     /// The snapshot may be prefiled with a dedicated snapshot
     snapshot_model: Option<Snapshot>,
-    amsdos_behavior: AmsdosAddBehavior,
+    amsdos_behavior: AmsdosAddBehavior
 }
 
 impl Default for AssemblingOptions {
     fn default() -> Self {
         Self {
-            flags: AssemblingOptionFlags::CaseSensitive | AssemblingOptionFlags::SnaBrkc | AssemblingOptionFlags::SnaBrks | AssemblingOptionFlags::SnaSymb,
+            flags: AssemblingOptionFlags::CaseSensitive
+                | AssemblingOptionFlags::SnaBrkc
+                | AssemblingOptionFlags::SnaBrks
+                | AssemblingOptionFlags::SnaSymb,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
             output_builder: None,
             snapshot_model: None,

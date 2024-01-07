@@ -1,5 +1,6 @@
-use crate::{Code, SnapshotChunkData};
 use delegate::delegate;
+
+use crate::{Code, SnapshotChunkData};
 
 pub struct WinapeBreakPoint {
     buffer: [u8; 5]
@@ -7,11 +8,11 @@ pub struct WinapeBreakPoint {
 
 impl WinapeBreakPoint {
     pub fn new(address: u16, page: u8) -> Self {
-        let mut buffer = [0;5];
+        let mut buffer = [0; 5];
         buffer[0] = (address & 0xFF) as u8;
         buffer[1] = (address >> 8) as u8;
         buffer[2] = page;
-        Self{buffer}
+        Self { buffer }
     }
 }
 
@@ -21,7 +22,7 @@ pub struct WinapeBreakPointChunk {
 }
 
 impl WinapeBreakPointChunk {
-	const CODE: Code = Code([b'B', b'R', b'K', b'S']);
+    const CODE: Code = Code([b'B', b'R', b'K', b'S']);
 
     delegate! {
         to self.data {
@@ -37,7 +38,6 @@ impl WinapeBreakPointChunk {
     pub fn empty() -> Self {
         Self::from(Self::CODE, Vec::new())
     }
-
 
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();

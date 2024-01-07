@@ -1,7 +1,5 @@
 use std::path::Path;
 
-
-
 use crate::amsdos::{
     AmsdosAddBehavior, AmsdosError, AmsdosFile, AmsdosFileName, AmsdosManagerMut,
     AmsdosManagerNonMut

@@ -1,14 +1,13 @@
 mod ace;
 mod winape;
 
+
+use std::ops::Deref;
+
 pub use ace::*;
-pub use winape::*;
 
-
-use std::{ops::Deref, ffi::{CStr, CString}};
-
-use cpclib_common::itertools::Itertools;
 use delegate::delegate;
+pub use winape::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Code(pub(crate) [u8; 4]);
@@ -261,9 +260,6 @@ impl MemoryChunk {
     }
 }
 
-
-
-
 #[derive(Clone, Debug)]
 /// Unknwon kind of chunk
 pub struct UnknownChunk {
@@ -363,7 +359,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.code(),
             SnapshotChunk::Unknown(chunk) => chunk.code(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.code(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.code()
         }
     }
 
@@ -373,7 +369,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
             SnapshotChunk::Unknown(chunk) => chunk.size(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size()
         }
     }
 
@@ -383,7 +379,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
             SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array()
         }
     }
 
@@ -393,7 +389,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
             SnapshotChunk::Unknown(chunk) => chunk.data(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.data(),
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.data()
         }
     }
 }
@@ -415,7 +411,6 @@ impl From<WinapeBreakPointChunk> for SnapshotChunk {
         SnapshotChunk::WinapeBreakPoint(chunk)
     }
 }
-
 
 impl From<AceBreakPointChunk> for SnapshotChunk {
     fn from(chunk: AceBreakPointChunk) -> Self {

@@ -10,8 +10,9 @@ use std::str::FromStr;
 use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
-use cpclib_asm::{preamble::*, AssemblingOptionFlags};
+use cpclib_asm::preamble::*;
 use cpclib_asm::progress::{normalize, Progress};
+use cpclib_asm::AssemblingOptionFlags;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
@@ -196,7 +197,7 @@ pub fn assemble<'arg>(
     let _show_progress = matches.get_flag("PROGRESS");
 
     let mut assemble_options = AssemblingOptions::default();
-    
+
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
 
     if matches.get_flag("OVERRIDE") {
@@ -216,7 +217,6 @@ pub fn assemble<'arg>(
             assemble_options.set_flag(flag, false);
         }
     }
-
 
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {

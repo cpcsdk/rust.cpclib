@@ -2,7 +2,7 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::path::{Path};
+use std::path::Path;
 
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;

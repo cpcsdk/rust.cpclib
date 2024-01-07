@@ -225,17 +225,13 @@ impl BreakpointCommand {
     }
 
     pub fn winape(&self) -> WinapeBreakPoint {
-        WinapeBreakPoint::new(
-            self.address,
-            self.page
-        )
+        WinapeBreakPoint::new(self.address, self.page)
     }
-
 
     pub fn ace(&self) -> AceBreakPoint {
         let brk = AceBreakPoint::new_execution(
-            self.address, 
-            AceBrkRuntimeMode::Break, 
+            self.address,
+            AceBrkRuntimeMode::Break,
             cpclib_sna::AceMemMapType::Undefined
         );
         brk

@@ -954,10 +954,13 @@ impl Env {
 
     // Add the symbols in the snapshot
     fn handle_sna_symbols(&mut self) -> Result<(), AssemblerError> {
-        if ! self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaSymb) {
+        if !self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::SnaSymb)
+        {
             return Ok(());
         }
-
 
         let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
         self.sna.add_chunk(ace_chunk);
@@ -969,15 +972,26 @@ impl Env {
     /// as they are stored inside a chunk of the snapshot:
     /// If one day another export is coded, we could export the others too.
     fn handle_breakpoints(&mut self) -> Result<(), AssemblerError> {
-        let mut winape_chunk = if self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaBrks) {
+        let mut winape_chunk = if self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::SnaBrks)
+        {
             Some(WinapeBreakPointChunk::empty())
-        } else {
+        }
+        else {
             None
         };
-        let mut ace_chunk =  if self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaBrkc) {
+        let mut ace_chunk = if self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::SnaBrkc)
+        {
             Some(AceBreakPointChunk::empty())
         }
-        else {None};
+        else {
+            None
+        };
 
         let pages_mmr = MMR_PAGES_SELECTION;
         for (activepage, _page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
@@ -990,17 +1004,24 @@ impl Env {
                 };
                 eprint!("{}", info);
 
-                winape_chunk.as_mut().map(|chunk| chunk.add_breakpoint(brk.winape()));
-                ace_chunk.as_mut().map(|chunk| chunk.add_breakpoint(brk.ace()));
+                winape_chunk
+                    .as_mut()
+                    .map(|chunk| chunk.add_breakpoint(brk.winape()));
+                ace_chunk
+                    .as_mut()
+                    .map(|chunk| chunk.add_breakpoint(brk.ace()));
             }
         }
 
-        
-        if let Some(chunk) = winape_chunk && chunk.nb_breakpoints() > 0 {
+        if let Some(chunk) = winape_chunk
+            && chunk.nb_breakpoints() > 0
+        {
             self.sna.add_chunk(chunk);
         }
 
-        if let Some(chunk) = ace_chunk && chunk.nb_breakpoints() > 0 {
+        if let Some(chunk) = ace_chunk
+            && chunk.nb_breakpoints() > 0
+        {
             self.sna.add_chunk(chunk);
         }
 

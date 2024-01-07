@@ -1,19 +1,19 @@
 use std::borrow::Cow;
 
-use crate::{SnapshotChunkData, Code};
 use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 
+use crate::{Code, SnapshotChunkData};
 
 #[derive(Clone)]
 pub enum AceMemMapType {
     Undefined,
-    MainRam(u8), // XXX only 0 or 1 ?
+    MainRam(u8),          // XXX only 0 or 1 ?
     ExtensionRam(u8, u8), // XXX bank (0-3) page (0-31)
-    ExtensionRom(u8), // XXX rom slot (0-255)
+    ExtensionRom(u8),     // XXX rom slot (0-255)
     FirmwareRom,
     CartridgeRom(u8),
-    AsicIOPage,
+    AsicIOPage
 }
 
 impl Into<u8> for &AceMemMapType {
@@ -21,11 +21,11 @@ impl Into<u8> for &AceMemMapType {
         match self {
             AceMemMapType::Undefined => 0,
             AceMemMapType::MainRam(_) => 1,
-            AceMemMapType::ExtensionRam(_, _) => 2,
+            AceMemMapType::ExtensionRam(..) => 2,
             AceMemMapType::ExtensionRom(_) => 3,
             AceMemMapType::FirmwareRom => 4,
             AceMemMapType::CartridgeRom(_) => 5,
-            AceMemMapType::AsicIOPage => 6,
+            AceMemMapType::AsicIOPage => 6
         }
     }
 }
@@ -33,18 +33,17 @@ impl Into<u8> for &AceMemMapType {
 impl From<(u8, u8, u8)> for AceMemMapType {
     fn from(value: (u8, u8, u8)) -> Self {
         match value.0 {
-			0 => AceMemMapType::Undefined,
-			1 => AceMemMapType::MainRam(value.1),
-			2 => AceMemMapType::ExtensionRam(value.1, value.2),
-			3 => AceMemMapType::ExtensionRom(value.1),
-			4 => AceMemMapType::FirmwareRom,
-			5 => AceMemMapType::CartridgeRom(value.1),
-			6 => AceMemMapType::AsicIOPage,
-			_ => unreachable!()
-		}
+            0 => AceMemMapType::Undefined,
+            1 => AceMemMapType::MainRam(value.1),
+            2 => AceMemMapType::ExtensionRam(value.1, value.2),
+            3 => AceMemMapType::ExtensionRom(value.1),
+            4 => AceMemMapType::FirmwareRom,
+            5 => AceMemMapType::CartridgeRom(value.1),
+            6 => AceMemMapType::AsicIOPage,
+            _ => unreachable!()
+        }
     }
 }
-
 
 impl AceMemMapType {
     #[inline]
@@ -55,7 +54,10 @@ impl AceMemMapType {
     #[inline]
     pub fn bank(&self) -> u8 {
         match self {
-            Self::MainRam(bank) | Self::ExtensionRam(bank, _) | Self::ExtensionRom(bank) | Self::CartridgeRom(bank) => *bank,
+            Self::MainRam(bank)
+            | Self::ExtensionRam(bank, _)
+            | Self::ExtensionRom(bank)
+            | Self::CartridgeRom(bank) => *bank,
             _ => 0
         }
     }
@@ -71,24 +73,24 @@ impl AceMemMapType {
 
 #[repr(u8)]
 pub enum AceSymbolType {
-	Absolute,
-	Relative
+    Absolute,
+    Relative
 }
-
 
 #[derive(Clone, Debug)]
 pub struct AceSymbol<'a> {
     buffer: Cow<'a, [u8]>
 }
 
-
 impl<'a> From<Vec<u8>> for AceSymbol<'a> {
     fn from(value: Vec<u8>) -> Self {
         let name_len = value[0];
         let buffer_len = Self::buffer_len(name_len as _);
-		assert_eq!(buffer_len, value.len());
+        assert_eq!(buffer_len, value.len());
 
-		Self { buffer: Cow::Owned(value) }
+        Self {
+            buffer: Cow::Owned(value)
+        }
     }
 }
 
@@ -96,17 +98,18 @@ impl<'a> From<&'a [u8]> for AceSymbol<'a> {
     fn from(value: &'a [u8]) -> Self {
         let name_len = value[0];
         let buffer_len = Self::buffer_len(name_len as _);
-		assert_eq!(buffer_len, value.len());
+        assert_eq!(buffer_len, value.len());
 
-		Self { buffer: Cow::Borrowed(value) }
+        Self {
+            buffer: Cow::Borrowed(value)
+        }
     }
 }
 
-
 impl<'a> AceSymbol<'a> {
-	pub fn buffer_len(name_len: u8) -> usize {
-		1 + name_len as usize + 1 + 1 + 1 + 2 + 1 + 2
-	}
+    pub fn buffer_len(name_len: u8) -> usize {
+        1 + name_len as usize + 1 + 1 + 1 + 2 + 1 + 2
+    }
 
     pub fn new(name: &str, address: u16, map_type: AceMemMapType, sym_type: AceSymbolType) -> Self {
         let name_len = name.len().min(255);
@@ -120,35 +123,40 @@ impl<'a> AceSymbol<'a> {
             buffer[1 + idx] = *b;
         }
 
-        buffer[name_len+1] = map_type.code();
-		buffer[name_len+2] = map_type.bank();
-		buffer[name_len+3] = map_type.page();
+        buffer[name_len + 1] = map_type.code();
+        buffer[name_len + 2] = map_type.bank();
+        buffer[name_len + 3] = map_type.page();
 
-		buffer[name_len+6] = sym_type as u8;
+        buffer[name_len + 6] = sym_type as u8;
 
-		buffer[name_len+7] = (address / 256) as u8;
-		buffer[name_len+8] = (address % 256) as u8;
+        buffer[name_len + 7] = (address / 256) as u8;
+        buffer[name_len + 8] = (address % 256) as u8;
 
         buffer.into()
     }
 
-	pub fn name_len(&self) -> u8 {
-		self.buffer[0]
-	}
+    pub fn name_len(&self) -> u8 {
+        self.buffer[0]
+    }
 
-	pub fn name(&self) -> &str {
-		unsafe { std::str::from_utf8_unchecked(&self.buffer[1..(self.name_len() as usize +1)]) }
-	}
+    pub fn name(&self) -> &str {
+        unsafe { std::str::from_utf8_unchecked(&self.buffer[1..(self.name_len() as usize + 1)]) }
+    }
 
-	pub fn mem_type(&self) -> AceMemMapType {
-		let name_len = self.name_len() as usize;
-		(self.buffer[name_len+1], self.buffer[name_len+2], self.buffer[name_len+3]).into()
-	}
+    pub fn mem_type(&self) -> AceMemMapType {
+        let name_len = self.name_len() as usize;
+        (
+            self.buffer[name_len + 1],
+            self.buffer[name_len + 2],
+            self.buffer[name_len + 3]
+        )
+            .into()
+    }
 
-	pub fn address(&self) -> u16 {
-		let name_len = self.name_len() as usize;
-		(self.buffer[name_len+7] as u16) * 256 + (self.buffer[name_len+8] as u16)
-	}
+    pub fn address(&self) -> u16 {
+        let name_len = self.name_len() as usize;
+        (self.buffer[name_len + 7] as u16) * 256 + (self.buffer[name_len + 8] as u16)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -157,13 +165,7 @@ pub struct AceSymbolChunk {
 }
 
 impl AceSymbolChunk {
-	const CODE: Code = Code([b'S', b'Y', b'M', b'B']);
-
-
-    pub fn empty() -> Self {
-        Self::from(Self::CODE, Vec::new())
-    }
-
+    const CODE: Code = Code([b'S', b'Y', b'M', b'B']);
 
     delegate! {
         to self.data {
@@ -175,6 +177,10 @@ impl AceSymbolChunk {
         }
     }
 
+    pub fn empty() -> Self {
+        Self::from(Self::CODE, Vec::new())
+    }
+
     pub fn new() -> Self {
         Self {
             data: SnapshotChunkData {
@@ -183,7 +189,6 @@ impl AceSymbolChunk {
             }
         }
     }
-
 
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
@@ -202,21 +207,21 @@ impl AceSymbolChunk {
         self.add_bytes(&sym.buffer);
     }
 
-	pub fn add_symbols<'a, S:Iterator<Item=AceSymbol<'a>>>(&mut self, symbs: S) {
-		symbs.for_each(|s| self.add_symbol(s));
-	}
+    pub fn add_symbols<'a, S: Iterator<Item = AceSymbol<'a>>>(&mut self, symbs: S) {
+        symbs.for_each(|s| self.add_symbol(s));
+    }
 
     pub fn get_symbols(&self) -> Vec<AceSymbol> {
         let mut res = Vec::new();
 
-        let mut idx = 0; 
+        let mut idx = 0;
         while idx < self.size() {
-			let name_len = self.data()[idx];
-			let buffer_len = AceSymbol::buffer_len(name_len);
-			let symb = AceSymbol::from( self.data()[idx..(idx+buffer_len) ].to_vec());
+            let name_len = self.data()[idx];
+            let buffer_len = AceSymbol::buffer_len(name_len);
+            let symb = AceSymbol::from(self.data()[idx..(idx + buffer_len)].to_vec());
             res.push(symb);
 
-			idx += buffer_len;
+            idx += buffer_len;
         }
 
         res
@@ -244,56 +249,62 @@ pub enum AceBrkRuntimeMode {
     Watch = 1
 }
 
-
-impl<'a> From<[u8;216]> for AceBreakPoint<'a> {
-    fn from(value: [u8;216]) -> Self {
-        Self{buffer: Cow::Owned(value)}
+impl<'a> From<[u8; 216]> for AceBreakPoint<'a> {
+    fn from(value: [u8; 216]) -> Self {
+        Self {
+            buffer: Cow::Owned(value)
+        }
     }
 }
 
-impl<'a> From<&'a [u8;216]> for AceBreakPoint<'a> {
-    fn from(value: &'a [u8;216]) -> Self {
-        Self{buffer: Cow::Borrowed(value)}
+impl<'a> From<&'a [u8; 216]> for AceBreakPoint<'a> {
+    fn from(value: &'a [u8; 216]) -> Self {
+        Self {
+            buffer: Cow::Borrowed(value)
+        }
     }
 }
 
-
-impl<'a> Into<[u8;216]> for AceBreakPoint<'a> {
-    fn into(self) -> [u8;216] {
+impl<'a> Into<[u8; 216]> for AceBreakPoint<'a> {
+    fn into(self) -> [u8; 216] {
         self.buffer.into_owned()
     }
-}   
+}
 
 impl<'a> AceBreakPoint<'a> {
     const BRK_TYPE_EXEC: u8 = 0;
     const BRK_TYPE_MEM: u8 = 1;
     const BRK_TYPE_PORT: u8 = 2;
 
-    pub fn new_execution(address: u16, runtime_mode: AceBrkRuntimeMode, map_type: AceMemMapType) -> Self {
-        let mut buffer =  [0; 216];
+    pub fn new_execution(
+        address: u16,
+        runtime_mode: AceBrkRuntimeMode,
+        map_type: AceMemMapType
+    ) -> Self {
+        let mut buffer = [0; 216];
         buffer[0x00] = Self::BRK_TYPE_EXEC;
         buffer[0x02] = runtime_mode as u8;
         buffer[0x03] = map_type.code();
         buffer[0xD0] = map_type.bank();
         buffer[0xD1] = map_type.page();
-        buffer[0x04] = (address/256) as u8; // I have followed instructions on https://www.cpcwiki.eu/index.php/Snapshot#BRKC but rasm seems to do the opposite
-        buffer[0x05] = (address%256) as u8;
+        buffer[0x04] = (address / 256) as u8; // I have followed instructions on https://www.cpcwiki.eu/index.php/Snapshot#BRKC but rasm seems to do the opposite
+        buffer[0x05] = (address % 256) as u8;
         buffer.into()
     }
 
     pub fn with_condition(self, condition: &str) -> Self {
         assert!(condition.len() < 127);
-		let mut buffer = self.buffer.into_owned();
+        let mut buffer = self.buffer.into_owned();
         for (idx, b) in condition.as_bytes().into_iter().enumerate() {
             buffer[0x10 + idx] = *b;
         }
         buffer[0x10 + condition.len()] = 0;
-		buffer.into()
+        buffer.into()
     }
 
     pub fn with_user_name(self, user_name: &str) -> Self {
         assert!(user_name.len() < 63);
-		let mut buffer = self.buffer.into_owned();
+        let mut buffer = self.buffer.into_owned();
 
         for (idx, b) in user_name.as_bytes().into_iter().enumerate() {
             buffer[0x90 + idx] = *b;
@@ -309,8 +320,7 @@ pub struct AceBreakPointChunk {
 }
 
 impl AceBreakPointChunk {
-	const CODE: Code = Code([b'B', b'R', b'K', b'C']);
-
+    const CODE: Code = Code([b'B', b'R', b'K', b'C']);
 
     delegate! {
         to self.data {
@@ -327,7 +337,6 @@ impl AceBreakPointChunk {
         Self::from(Self::CODE, Vec::new())
     }
 
-
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
@@ -340,7 +349,7 @@ impl AceBreakPointChunk {
         }
     }
 
-    pub fn add_breakpoint_raw(&mut self, raw: &[u8;216]) {
+    pub fn add_breakpoint_raw(&mut self, raw: &[u8; 216]) {
         assert!(raw.len() == 216);
         self.add_bytes(raw);
     }
@@ -353,5 +362,3 @@ impl AceBreakPointChunk {
         self.size() / 216
     }
 }
-
-

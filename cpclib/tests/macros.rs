@@ -121,22 +121,19 @@ fn test_macro_parse_z80_several_instructions_b() {
 //
 // }
 
-
-/*
-#[test]
-fn test_macro_assemble_single_instruction() {
-    let bytes = assemble!(" push hl");
-
-    assert_eq!(bytes.len(), 1);
-    assert_eq!(&bytes[..], &[0xE5]);
-}
-
-#[test]
-fn test_macro_assemble_two_instructions() {
-    let bytes = assemble!(" push hl : push de");
-
-    assert_eq!(bytes.len(), 2);
-    assert_eq!(&bytes[..], &[0xE5, 0xD5]);
-}
-
-*/
+// #[test]
+// fn test_macro_assemble_single_instruction() {
+// let bytes = assemble!(" push hl");
+//
+// assert_eq!(bytes.len(), 1);
+// assert_eq!(&bytes[..], &[0xE5]);
+// }
+//
+// #[test]
+// fn test_macro_assemble_two_instructions() {
+// let bytes = assemble!(" push hl : push de");
+//
+// assert_eq!(bytes.len(), 2);
+// assert_eq!(&bytes[..], &[0xE5, 0xD5]);
+// }
+//

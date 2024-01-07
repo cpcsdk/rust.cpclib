@@ -2,7 +2,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceSymbolChunk, AceSymbol, AceSymbolType};
+use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType};
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
@@ -136,11 +136,15 @@ impl SymbolOutputGenerator {
             // TODO properly create the value by specifying a correct mem map type and symb type
             // store if we have a representation
             if let Some(v) = v {
-                let symb = AceSymbol::new(&k, v, cpclib_sna::AceMemMapType::Undefined, AceSymbolType::Absolute);
+                let symb = AceSymbol::new(
+                    &k,
+                    v,
+                    cpclib_sna::AceMemMapType::Undefined,
+                    AceSymbolType::Absolute
+                );
                 symbols.push(symb);
             }
         }
-
 
         let mut chunk = AceSymbolChunk::empty();
         chunk.add_symbols(symbols.into_iter());
