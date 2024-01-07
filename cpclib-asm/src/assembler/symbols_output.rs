@@ -2,7 +2,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::AceSymbolChunk;
+use cpclib_sna::{AceSymbolChunk, AceSymbol, AceSymbolType};
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
@@ -109,12 +109,13 @@ impl Default for SymbolOutputGenerator {
 
 impl SymbolOutputGenerator {
     pub fn build_ace_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait) -> AceSymbolChunk {
-        let mut chunk = AceSymbolChunk::new();
+        let mut symbols = Vec::new();
+
         for (k, v) in symbs
             .expression_symbol()
             .iter()
             .filter(|(s, _v)| self.keep_symbol(s))
-            .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
+        //    .sorted_by_key(|(s, _v)| s.to_string().to_ascii_lowercase())
         {
             // Get the symbol
             let k = k.value();
@@ -132,11 +133,17 @@ impl SymbolOutputGenerator {
                 _ => None
             };
 
+            // TODO properly create the value by specifying a correct mem map type and symb type
             // store if we have a representation
             if let Some(v) = v {
-                chunk.add_symbol(&k.to_string(), v)
+                let symb = AceSymbol::new(&k, v, cpclib_sna::AceMemMapType::Undefined, AceSymbolType::Absolute);
+                symbols.push(symb);
             }
         }
+
+
+        let mut chunk = AceSymbolChunk::empty();
+        chunk.add_symbols(symbols.into_iter());
         chunk
     }
 

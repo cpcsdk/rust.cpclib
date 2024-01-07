@@ -236,7 +236,7 @@ impl BreakpointCommand {
         let brk = AceBreakPoint::new_execution(
             self.address, 
             AceBrkRuntimeMode::Break, 
-            cpclib_sna::AceBrkMapType::Undefined
+            cpclib_sna::AceMemMapType::Undefined
         );
         brk
     }
