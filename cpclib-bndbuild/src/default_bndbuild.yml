@@ -1,0 +1,10 @@
+- tgt: sna
+  dep: hello.sna
+
+- tgt: m4
+  dep: sna
+  cmd: xfer 192.168.1.27 -y hello.sna
+
+- tgt: hello.sna
+  dep: main.asm
+  cmd: basm main.asm -o hello.sna
