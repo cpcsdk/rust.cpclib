@@ -643,7 +643,7 @@ pub fn build_args_parser() -> clap::Command {
                             .long("nochunk")
                             .value_delimiter(',')
                             .value_names(["CODE"])
-                            .value_parser(["BRKC", "BRKS", "SYMB"])
+                            .value_parser(["BRKC", "BRKS", "REMU", "SYMB"])
                     )
 					.arg(
 						Arg::new("CASE_INSENSITIVE")

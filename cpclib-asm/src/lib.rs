@@ -56,7 +56,9 @@ pub enum AssemblingOptionFlags {
     // Set to include BRKS in sna chunks
     SnaBrks,
     // Set to include BRKC in sna chunks
-    SnaBrkc
+    SnaBrkc,
+    // Set to include REMU in sna chunks
+    SnaRemu
 }
 
 impl AssemblingOptionFlags {
@@ -65,6 +67,7 @@ impl AssemblingOptionFlags {
             "SYMB" => Some(Self::SnaSymb),
             "BRKS" => Some(Self::SnaBrks),
             "BRKC" => Some(Self::SnaBrkc),
+            "REMU" => Some(Self::SnaRemu),
             _ => None
         }
     }
@@ -89,7 +92,8 @@ impl Default for AssemblingOptions {
             flags: AssemblingOptionFlags::CaseSensitive
                 | AssemblingOptionFlags::SnaBrkc
                 | AssemblingOptionFlags::SnaBrks
-                | AssemblingOptionFlags::SnaSymb,
+                | AssemblingOptionFlags::SnaSymb
+                | AssemblingOptionFlags::SnaRemu,
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
             output_builder: None,
             snapshot_model: None,

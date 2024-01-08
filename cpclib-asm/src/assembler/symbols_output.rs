@@ -2,7 +2,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType};
+use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType, RemuEntry, RemuChunk};
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
@@ -108,6 +108,22 @@ impl Default for SymbolOutputGenerator {
 }
 
 impl SymbolOutputGenerator {
+
+    fn symbol_to_u16(v: &Value) -> Option<u16> {
+        match v {
+            Value::Address(a) => Some(a.address()),
+            Value::Expr(ExprResult::Value(i)) => Some(*i as u16),
+            Value::Expr(ExprResult::Bool(b)) => Some(*b as u16),
+            Value::Expr(_e @ ExprResult::Float(_f)) => None,
+            Value::Expr(ExprResult::String(_s)) => None,
+            Value::Expr(_l @ ExprResult::List(_)) => None,
+            Value::Expr(_m @ ExprResult::Matrix { .. }) => None,
+
+            _ => None
+        }
+    }
+
+
     pub fn build_ace_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait) -> AceSymbolChunk {
         let mut symbols = Vec::new();
 
@@ -121,17 +137,7 @@ impl SymbolOutputGenerator {
             let k = k.value();
 
             // get a possible value when using u16
-            let v = match v {
-                Value::Address(a) => Some(a.address()),
-                Value::Expr(ExprResult::Value(i)) => Some(*i as u16),
-                Value::Expr(ExprResult::Bool(b)) => Some(*b as u16),
-                Value::Expr(_e @ ExprResult::Float(_f)) => None,
-                Value::Expr(ExprResult::String(_s)) => None,
-                Value::Expr(_l @ ExprResult::List(_)) => None,
-                Value::Expr(_m @ ExprResult::Matrix { .. }) => None,
-
-                _ => None
-            };
+            let v = Self::symbol_to_u16(v);
 
             // TODO properly create the value by specifying a correct mem map type and symb type
             // store if we have a representation
@@ -150,6 +156,31 @@ impl SymbolOutputGenerator {
         chunk.add_symbols(symbols.into_iter());
         chunk
     }
+
+
+    pub fn fill_remu_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait, remu: &mut RemuChunk) {
+
+        for (k, v) in symbs
+            .expression_symbol()
+            .iter()
+            .filter(|(s, _v)| self.keep_symbol(s))
+        {
+            // Get the symbol
+            let k = k.value();
+
+            // get a possible value when using u16
+            let v = Self::symbol_to_u16(v);
+
+            // TODO handle aliases
+            if let Some(v) = v {
+                let entry = RemuEntry::new_label(k.to_string(), v, 0);
+                remu.add_entry(&entry);
+                
+            }
+        }
+
+    }
+
 
     /// Generate the symbol table in w
     pub fn generate<W: Write>(

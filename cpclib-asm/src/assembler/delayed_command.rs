@@ -3,7 +3,7 @@ use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, WinapeBreakPoint};
+use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, WinapeBreakPoint, RemuEntry};
 use either::Either;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
@@ -229,12 +229,15 @@ impl BreakpointCommand {
     }
 
     pub fn ace(&self) -> AceBreakPoint {
-        let brk = AceBreakPoint::new_execution(
+        AceBreakPoint::new_execution(
             self.address,
             AceBrkRuntimeMode::Break,
             cpclib_sna::AceMemMapType::Undefined
-        );
-        brk
+        )
+    }
+
+    pub fn remu(&self) -> RemuEntry {
+        RemuEntry::BreakPoint(self.address, self.page)
     }
 }
 

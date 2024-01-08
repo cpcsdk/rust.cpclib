@@ -946,24 +946,40 @@ impl Env {
     pub fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
         self.handle_print()?;
         self.handle_assert()?;
-        self.handle_breakpoints()?;
-        self.handle_sna_symbols()?;
+
+        let mut remu = if (self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaRemu)) {
+            Some(RemuChunk::empty())
+        } else {
+            None
+        };
+
+        
+        self.handle_breakpoints(&mut remu.as_mut())?;
+        self.handle_sna_symbols(&mut remu.as_mut())?;
+
+        if let Some(remu) = remu {
+            self.sna.add_chunk(remu);
+        }
+
         self.saved_files = Some(self.handle_file_save()?);
         Ok(())
     }
 
     // Add the symbols in the snapshot
-    fn handle_sna_symbols(&mut self) -> Result<(), AssemblerError> {
-        if !self
-            .options()
-            .assemble_options()
-            .get_flag(crate::AssemblingOptionFlags::SnaSymb)
+    fn handle_sna_symbols(&mut self, remu: &mut Option<&mut RemuChunk>) -> Result<(), AssemblerError> {
+        let options = self.options().assemble_options().clone();
+        if options.get_flag(crate::AssemblingOptionFlags::SnaSymb)
         {
-            return Ok(());
+
+
+            let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
+            self.sna.add_chunk(ace_chunk);
         }
 
-        let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
-        self.sna.add_chunk(ace_chunk);
+        if options.get_flag(crate::AssemblingOptionFlags::SnaRemu)
+        {
+            self.symbols_output.fill_remu_snapshot_chunk(self.symbols(), remu.as_mut().unwrap());
+        }
 
         Ok(())
     }
@@ -971,7 +987,7 @@ impl Env {
     /// We handle breakpoint ONLY for the pages stored in the snapshot
     /// as they are stored inside a chunk of the snapshot:
     /// If one day another export is coded, we could export the others too.
-    fn handle_breakpoints(&mut self) -> Result<(), AssemblerError> {
+    fn handle_breakpoints(&mut self, remu: &mut Option<&mut RemuChunk>) -> Result<(), AssemblerError> {
         let mut winape_chunk = if self
             .options()
             .assemble_options()
@@ -1010,6 +1026,11 @@ impl Env {
                 ace_chunk
                     .as_mut()
                     .map(|chunk| chunk.add_breakpoint(brk.ace()));
+                
+                // TODO check it is not consummed at first loop
+                if let Some(chunk) = remu {
+                    chunk.add_entry(&brk.remu());
+                }
             }
         }
 

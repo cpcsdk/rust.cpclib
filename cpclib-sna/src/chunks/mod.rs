@@ -1,13 +1,15 @@
 mod ace;
 mod winape;
-
+mod remu;
 
 use std::ops::Deref;
 
 pub use ace::*;
+pub use remu::*;
+pub use winape::*;
+
 
 use delegate::delegate;
-pub use winape::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Code(pub(crate) [u8; 4]);
@@ -301,14 +303,16 @@ impl UnknownChunk {
 #[derive(Clone, Debug)]
 /// Represents any kind of chunks in order to manipulate them easily based on their semantic
 pub enum SnapshotChunk {
+    AceBreakPoint(AceBreakPointChunk),
+
     AceSymbol(AceSymbolChunk),
     /// The chunk is a memory chunk
     Memory(MemoryChunk),
+    Remu(RemuChunk),
+    /// The type of the chunk is unknown
+    Unknown(UnknownChunk),
     /// The chunk is a breakpoint chunk for winape emulator
     WinapeBreakPoint(WinapeBreakPointChunk),
-    AceBreakPoint(AceBreakPointChunk),
-    /// The type of the chunk is unknown
-    Unknown(UnknownChunk)
 }
 
 #[allow(missing_docs)]
@@ -359,7 +363,8 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.code(),
             SnapshotChunk::Unknown(chunk) => chunk.code(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.code()
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.code(),
+            SnapshotChunk::Remu(c) => c.code(),
         }
     }
 
@@ -369,7 +374,8 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
             SnapshotChunk::Unknown(chunk) => chunk.size(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size()
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size(),
+            SnapshotChunk::Remu(c) => c.size(),
         }
     }
 
@@ -379,7 +385,8 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
             SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array()
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array(),
+            SnapshotChunk::Remu(c) => c.size_as_array(),
         }
     }
 
@@ -389,7 +396,8 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(chunk) => chunk.data(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
             SnapshotChunk::Unknown(chunk) => chunk.data(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.data()
+            SnapshotChunk::AceBreakPoint(chunk) => chunk.data(),
+            SnapshotChunk::Remu(c) => c.data(),
         }
     }
 }
@@ -417,6 +425,13 @@ impl From<AceBreakPointChunk> for SnapshotChunk {
         SnapshotChunk::AceBreakPoint(chunk)
     }
 }
+
+impl From<RemuChunk> for SnapshotChunk {
+    fn from(chunk: RemuChunk) -> Self {
+        SnapshotChunk::Remu(chunk)
+    }
+}
+
 
 impl From<UnknownChunk> for SnapshotChunk {
     fn from(chunk: UnknownChunk) -> Self {

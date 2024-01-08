@@ -181,15 +181,6 @@ impl AceSymbolChunk {
         Self::from(Self::CODE, Vec::new())
     }
 
-    pub fn new() -> Self {
-        Self {
-            data: SnapshotChunkData {
-                code: Self::CODE,
-                data: vec![0u8; 4usize]
-            }
-        }
-    }
-
     pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
