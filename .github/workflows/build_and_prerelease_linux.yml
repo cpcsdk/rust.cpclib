@@ -25,11 +25,12 @@ jobs:
       with:
         command: build
         toolchain: nightly
-        args: --bins --release 
+        args: --bins --release --features hfe
     - uses: actions-rs/cargo@v1
       with:
         command: test
         toolchain: nightly
+        args: --features hfe
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
