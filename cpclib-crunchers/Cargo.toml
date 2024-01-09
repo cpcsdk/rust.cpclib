@@ -14,11 +14,13 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
+cxx = "1.0"
 libc.workspace = true
 
 [build-dependencies]
 built.workspace = true
 cc.workspace = true
+cxx-build = "1.0"
 
 #[lib]
 #crate-type = ["cdylib", "dylib"]

@@ -47,11 +47,24 @@ fn build() {
         .compile("lz4");
 }
 
+fn build_shrinkler() {
+    cxx_build::bridge("src/shrinkler.rs")
+    .file("extra/Shrinkler4.6NoParityContext//basm_bridge.cpp")
+    .flag_if_supported("-std=c++14")
+    .compile("cpclib-crunchers");
+
+
+    println!("cargo:rerun-if-changed=src/shrinkler.rs");
+    println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.cpp");
+    println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
+}
+
 fn main() {
     if !env::var("CARGO_CFG_TARGET_ARCH")
         .unwrap()
         .contains("wasm32")
     {
         build();
+        build_shrinkler();
     }
 }

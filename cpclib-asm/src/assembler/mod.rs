@@ -2449,6 +2449,12 @@ impl Env {
                             msg: format!("{fname} has not a HFE compatible extension")
                         });
                     }
+
+
+                    #[cfg(not(feature = "hfe"))]
+                    Err(AssemblerError::InvalidArgument {
+                        msg: format!("{fname} cannot be saved. No HFE support is included with this version of basm")
+                    })?
                 },
                 DiscType::Auto => {
                     if !(lower_fname.ends_with(".dsk")
@@ -2458,6 +2464,15 @@ impl Env {
                         return Err(AssemblerError::InvalidArgument {
                             msg: format!("{fname} has not a DSK or HFE compatible extension")
                         });
+                    }
+
+
+
+                    #[cfg(not(feature = "hfe"))]
+                    if lower_fname.ends_with(".hfe") {
+                        Err(AssemblerError::InvalidArgument {
+                            msg: format!("{fname} cannot be saved. No HFE support is included with this version of basm")
+                        })?
                     }
                 }
             }

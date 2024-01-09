@@ -18,8 +18,8 @@ pub mod disc;
 /// EDSK File format
 pub mod edsk;
 
-#[cfg(hfe)]
 /// HFE File format
+#[cfg(feature = "hfe")]
 pub mod hfe;
 
 use std::io::Read;

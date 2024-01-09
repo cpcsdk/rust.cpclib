@@ -51,7 +51,7 @@ xferlib = ["cpclib-xfer"]
 indicatif = ["cpclib-asm/indicatif"]
 colored_errors = ["cpclib-asm/colored_errors"]
 rayon = ["cpclib-asm/rayon", "cpclib-common/rayon"]
-
+hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 
 [profile.release]
 lto = "fat"

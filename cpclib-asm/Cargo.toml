@@ -72,3 +72,5 @@ colored_errors = []
 indicatif = ["dep:indicatif"]
 rayon = ["cpclib-common/rayon", "dep:rayon-cond"]
 chardet = ["dep:chardetng"]
+hfe = ["cpclib-disc/hfe"]
+

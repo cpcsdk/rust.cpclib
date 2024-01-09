@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
+use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosError};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
-use cpclib_tokens::SaveType;
+use cpclib_tokens::{SaveType, DiscType};
 
 use super::report::SavedFile;
 use super::Env;
@@ -76,7 +76,7 @@ impl SaveCommand {
         let data = env.memory(from as _, size as _);
 
         // Add the header if any
-        let object: either::Either<Vec<u8>, AmsdosFile> = match self.save_type {
+        let object: either::Either<Vec<u8>, AmsdosFile> = match dbg!(self.save_type) {
             Some(r#type) => {
                 let loading_address = from as u16;
                 let execution_address = match env.run_options {
@@ -135,7 +135,8 @@ impl SaveCommand {
                         Hfe::default()
                     };
                     #[cfg(not(feature = "hfe"))]
-                    let mut disc: ExtendedDsk =
+                    let mut disc : 
+                        ExtendedDsk =
                         if std::path::Path::new(disc_filename.as_str()).exists() {
                             ExtendedDsk::open(disc_filename).map_err(|e| {
                                 AssemblerError::AssemblingError {
@@ -145,7 +146,8 @@ impl SaveCommand {
                         }
                         else {
                             ExtendedDsk::default()
-                        };
+                        }
+                    ;
 
                     let head = Head::A;
                     let system = false;
