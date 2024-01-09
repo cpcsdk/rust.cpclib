@@ -300,6 +300,7 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"LZEXO",
     b"LZ4",
     b"LZX7",
+    b"LZSHRINKLER",
     b"LOCOMOTIVE",
     b"MACRO",
     b"MODULE",
@@ -851,6 +852,7 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
             parse_directive_word(b"LZ4").value(CrunchType::LZ4),
             parse_directive_word(b"LZ48").value(CrunchType::LZ48),
             parse_directive_word(b"LZ49").value(CrunchType::LZ49),
+            parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
             parse_directive_word(b"LZX7").value(CrunchType::LZX7),
             parse_directive_word(b"LZX0").value(CrunchType::LZX0),
             parse_directive_word(b"LZAPU").value(CrunchType::LZAPU)
@@ -2351,6 +2353,8 @@ pub fn parse_directive_new(
                             .parse_next(input)?
                     },
 
+
+
                     choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
                     choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
 
@@ -2401,6 +2405,11 @@ pub fn parse_directive_new(
                     choice_nocase!(b"STARTINGINDEX") => parse_startingindex.parse_next(input)?,
 
                     choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input)?,
+
+                    choice_nocase!(b"INCSHRINKLER") => {
+                        parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler))
+                            .parse_next(input)?
+                    },
 
                     _ => {
                         input.reset(input_start);

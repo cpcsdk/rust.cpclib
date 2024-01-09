@@ -1,3 +1,4 @@
+use cpclib_crunchers::CompressMethod;
 use cpclib_tokens::CrunchType;
 
 use crate::crunchers;
@@ -14,15 +15,29 @@ impl Cruncher for CrunchType {
         if raw.is_empty() {
             return Err(AssemblerError::NoDataToCrunch);
         }
-        match self {
-            CrunchType::LZ48 => Ok(crunchers::lz48::lz48_encode_legacy(raw)),
-            CrunchType::LZ49 => Ok(crunchers::lz49::lz49_encode_legacy(raw)),
+        
+        
+        
+        let method = match self {
+            CrunchType::LZ48 => Ok(CompressMethod::Lz48),
+            CrunchType::LZ49 => Ok(CompressMethod::Lz49),
 
             CrunchType::LZX7 => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZX7 compression not implemented".to_owned()
                 })
             },
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::LZ4 => Ok(CompressMethod::Lz4),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::LZX0 => Ok(CompressMethod::Zx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::LZEXO => Ok(CompressMethod::Exomizer),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::LZAPU => Ok(CompressMethod::Apultra),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
+
             #[cfg(target_arch = "wasm32")]
             CrunchType::LZ4 => {
                 Err(AssemblerError::AssemblingError {
@@ -47,15 +62,9 @@ impl Cruncher for CrunchType {
                     msg: "LZAPU compression not available".to_owned()
                 })
             },
+        }?;
 
-            #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::LZ4 => Ok(crunchers::lz4::compress(raw)),
-            #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::LZX0 => Ok(crunchers::zx0::compress(raw)),
-            #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::LZEXO => Ok(crunchers::exomizer::compress(raw)),
-            #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::LZAPU => Ok(crunchers::apultra::compress(raw))
-        }
+
+        Ok(method.compress(raw))
     }
 }

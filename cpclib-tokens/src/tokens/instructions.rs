@@ -364,7 +364,8 @@ pub enum CrunchType {
     LZX7,
     LZX0,
     LZEXO,
-    LZAPU
+    LZAPU,
+    Shrinkler
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -982,7 +983,8 @@ impl fmt::Display for Token {
                                 CrunchType::LZX7 =>"INCZX7",
                                 CrunchType::LZX0 => "INCZX0",
                                 CrunchType::LZEXO => "INCEXO",
-                                CrunchType::LZAPU => "INCAPU"
+                                CrunchType::LZAPU => "INCAPU",
+                                CrunchType::Shrinkler => "INCSHRINKLER",
                             }
                         }
                     };

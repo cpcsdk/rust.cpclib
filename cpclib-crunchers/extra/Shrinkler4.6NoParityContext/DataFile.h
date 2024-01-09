@@ -128,7 +128,7 @@ public:
 		vector<unsigned> pack_buffer = compress(params, edge_factory, show_progress);
 		int margin = verify(pack_buffer);
 
-		if show_progress {
+		if (show_progress) {
 			printf("Minimum safety margin for overlapped decrunching: %d\n\n", margin);
 		}
 
