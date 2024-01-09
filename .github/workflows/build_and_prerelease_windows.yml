@@ -16,8 +16,8 @@ jobs:
     - uses: houseabsolute/actions-rust-cross@v0
       with:
           command: build
-          toolchain: nightly-x86_64-pc-windows-gnu
-          target: x86_64-pc-windows-gnu
+          toolchain: nightly-x86_64-pc-windows-msvc
+          target: x86_64-pc-windows-msvc
           args: --release --bins
     - uses: ncipollo/release-action@v1
       with:
@@ -29,5 +29,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: "target/x86_64-pc-windows-gnu/release/*.exe"
+          artifacts: "target/x86_64-pc-windows-msvc/release/*.exe"
   

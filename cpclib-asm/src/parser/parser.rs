@@ -239,6 +239,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"INCL49",
     b"INCAPU",
     b"INCZX0",
+    b"INCSHRINKLER",
     b"LET",
     b"LIMIT",
     b"LIST",
