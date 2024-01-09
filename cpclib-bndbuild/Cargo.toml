@@ -53,6 +53,7 @@ path = "src/main.rs"
 default = []
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
+hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe"]
 
 [profile.release]
 debug = 1

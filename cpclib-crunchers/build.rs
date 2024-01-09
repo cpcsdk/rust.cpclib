@@ -40,11 +40,11 @@ fn build() {
 
     cc::Build::new()
         .warnings(false)
-        .file("extra/lz4.c")
+        .file("extra/lz4_embedded.c")
         .opt_level(0)
         .shared_flag(true)
         .cargo_metadata(true)
-        .compile("lz4");
+                .compile("lz4");
 }
 
 fn build_shrinkler() {

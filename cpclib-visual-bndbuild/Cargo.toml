@@ -35,3 +35,4 @@ static_vcruntime = "2.0"
 [features]
 default = []
 rayon = ["cpclib-bndbuild/rayon"]
+hfe = ["cpclib-bndbuild/hfe"]
