@@ -3340,8 +3340,8 @@ pub fn parse_macro_or_struct_call_inner(
         // }
 
         let _ = (my_space0, not(parse_comment)).parse_next(input)?;
-        let input2 = input.clone();
 
+        let has_parenthesis = opt(('(', my_space0)).parse_next(input)?.is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof::<_, Z80ParserError>.value(()),
             tag("\n").value(()),
@@ -3383,6 +3383,10 @@ pub fn parse_macro_or_struct_call_inner(
             )
             .parse_next(input)?
         };
+
+        if has_parenthesis {
+            (my_space0, ')', my_space0).parse_next(input)?;
+        }
 
         if args.len() == 1 && args.first().unwrap().0.is_empty() {
             panic!();
@@ -3459,139 +3463,6 @@ pub fn parse_macro_or_struct_call(
     }
 }
 
-/// Manage the call of a macro.
-/// When ambiguou may return a label
-#[inline]
-/// TODO remove by restore the way to parse the macro name
-pub fn parse_macro_or_struct_call_beckup_to_remove(
-    allowed_to_return_a_label: bool,
-    for_struct: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    move |input: &mut InnerZ80Span| {
-        panic!("Should not be called anymore");
-
-        // BUG: added because of parsing issues. Need to find why and remove ot
-        my_space0(input)?;
-        let input_start = input.checkpoint();
-        let name = terminated(
-            parse_macro_name,
-            not(alt((
-                (my_space0, alt((tag(":"), line_ending, eof))).recognize(),
-                ('.').recognize()
-            )))
-        )
-        .parse_next(input)?;
-
-        // Check if the macro name is allowed
-        if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive, input.state.options().assembler_flavor)
-        {
-            input.reset(input_start);
-            return Err(ErrMode::Backtrack(
-                Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
-                    input,
-                    if for_struct {
-                        "STRUCT: forbidden name"
-                    }
-                    else {
-                        "MACRO or STRUCT: forbidden name"
-                    }
-                )
-            ));
-        }
-
-        let nothing_after = peek((
-            my_space0,
-            alt((parse_comment.recognize(), tag(":"), tag("\n")))
-        ))
-        .parse_next(input)
-        .is_ok();
-
-        if allowed_to_return_a_label && nothing_after {
-            let token = LocatedTokenInner::Label(name.into());
-            let msg = format!("Ambiguous code. Use (void) for macro with no args, (default) for struct with default parameters; avoid labels that do not start at beginning of a line. {} is considered to be a label, not a macro.", String::from_utf8_lossy(name.as_bstr()));
-            let warning = LocatedTokenInner::WarningWrapper(Box::new(token), msg);
-            return Ok(warning.into_located_token_at(name.clone()));
-        }
-
-        let _ = (my_space0, not(parse_comment)).parse_next(input)?;
-        let input2 = input.clone();
-
-        let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
-            eof::<_, Z80ParserError>.value(()),
-            tag("\n").value(()),
-            tag(":").value(())
-        )))
-        .parse_next(input)
-        .is_ok()
-        {
-            vec![]
-        }
-        else {
-            cut_err(
-                alt((
-                    delimited(my_space0, tag_no_case("(void)"), my_space0)
-                        .value(Default::default()),
-                    alt((
-                        tag_no_case("(void)").value(Vec::new()),
-                        separated(
-                            1..,
-                            alt((
-                                parse_macro_arg.with_recognized(),
-                                my_space1
-                                    .map(|space: InnerZ80Span| {
-                                        LocatedMacroParam::Single(space.into())
-                                        // string of size 0;
-                                    })
-                                    .with_recognized()
-                            )),
-                            parse_comma
-                        )
-                    ))
-                ))
-                .context(if for_struct {
-                    "STRUCT: error in arguments list"
-                }
-                else {
-                    "MACRO or STRUCT: forbidden name"
-                })
-            )
-            .parse_next(input)?
-        };
-
-        if args.len() == 1 && args.first().unwrap().0.is_empty() {
-            panic!();
-        }
-
-        // avoid ambiguate code such as label nop
-        if args.len() == 1 {
-            let mut arg = input.clone().update_slice(args[0].1);
-            if alt((
-                parse_word(b"NOP").recognize(),
-                parse_opcode_no_arg.recognize()
-            ))
-            .parse_next(&mut arg)
-            .is_ok()
-            {
-                input.reset(input_start);
-                return Err(ErrMode::Cut(
-                    Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
-                        input,
-                        if for_struct {
-                            "First argument of STRUCT cannot be an opcode with no argument"
-                        }
-                        else {
-                            "First argument of MACRO or STRUCT cannot be an opcode with no argument"
-                        }
-                    )
-                ));
-            }
-        }
-
-        let args = args.into_iter().map(|(a, _b)| a).collect_vec();
-        let token = LocatedTokenInner::MacroCall(name.into(), args);
-        Ok(token.into_located_token_between(input_start, input.clone()))
-    }
-}
 
 #[inline]
 fn parse_directive_word(
@@ -4936,7 +4807,8 @@ pub fn parse_label(
                 one_of((
                     b'a'..=b'z',
                     b'A'..=b'Z',
-                    b'_', b'#'
+                    b'_', 
+                    b'#', b'\'' // orgams additions
                 )).value(()),
                 delimited('{', expr, '}').value(())
             )),
@@ -4945,7 +4817,9 @@ pub fn parse_label(
                     (b'a'..=b'z',
                     b'A'..=b'Z',
                     b'0'..=b'9',
-                    b'_', b'#')
+                    b'_', 
+                    b'#', b'\'' // orgams additions
+                )
                   ).value(()),
                 ".".value(()),
                 delimited('{', opt(expr), '}').value(())
