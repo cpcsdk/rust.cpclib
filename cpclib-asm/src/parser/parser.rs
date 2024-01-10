@@ -2414,6 +2414,8 @@ pub fn parse_directive_new(
 
                     choice_nocase!(b"NOLIST") => LocatedTokenInner::NoList,
 
+                    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input)?, // TODO filter to remove the orgams specificies 
+
                     _ => {
                         input.reset(input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
