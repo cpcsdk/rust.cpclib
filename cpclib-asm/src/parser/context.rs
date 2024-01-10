@@ -100,7 +100,8 @@ pub struct ParserOptions {
     pub read_referenced_files: bool,
     pub show_progress: bool,
     /// Set to true when directives must start by a dot
-    pub dotted_directive: bool
+    pub dotted_directive: bool,
+    pub assembler_flavor: AssemblerFlavor
 }
 
 impl Default for ParserOptions {
@@ -109,7 +110,8 @@ impl Default for ParserOptions {
             search_path: Default::default(),
             read_referenced_files: true,
             dotted_directive: false,
-            show_progress: false
+            show_progress: false,
+            assembler_flavor: AssemblerFlavor::Basm
         }
     }
 }
@@ -367,6 +369,15 @@ impl ParserOptions {
 
         // No file found
         return Err(Either::Right(does_not_exists));
+    }
+
+    pub fn set_flavor(&mut self, flavor: AssemblerFlavor) -> &mut Self {
+        self.assembler_flavor = flavor;
+        self
+    }
+
+    pub fn is_orgams(&self) -> bool {
+        self.assembler_flavor == AssemblerFlavor::Orgams
     }
 }
 /// Context information that can guide the parser

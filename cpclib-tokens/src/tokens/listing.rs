@@ -7,7 +7,7 @@ use cpclib_common::smallvec::SmallVec;
 
 use crate::{
     AssemblerControlCommand, BinaryTransformation, CrunchType, DataAccessElem, ExprElement,
-    MacroParamElement, Mnemonic, TestKindElement
+    MacroParamElement, Mnemonic, TestKindElement, AssemblerFlavor
 };
 
 //
@@ -103,6 +103,7 @@ where Self: Debug + Sized + Sync
     fn macro_definition_name(&self) -> &str;
     fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]>;
     fn macro_definition_code(&self) -> &str;
+    fn macro_flavor(&self) -> AssemblerFlavor;
 
     fn is_call_macro_or_build_struct(&self) -> bool;
     fn macro_call_name(&self) -> &str;

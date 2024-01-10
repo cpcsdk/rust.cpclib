@@ -24,7 +24,7 @@ use cpclib_tokens::{
     CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
     IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
     Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind, TestKindElement,
-    ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
+    ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation, AssemblerFlavor
 };
 use ouroboros::self_referencing;
 
@@ -978,7 +978,8 @@ pub enum LocatedTokenInner {
     Macro {
         name: Z80Span,
         params: Vec<Z80Span>,
-        content: Z80Span
+        content: Z80Span,
+        flavor: AssemblerFlavor
     },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>),
@@ -1036,6 +1037,7 @@ pub enum LocatedTokenInner {
         source: Z80Span,
         expr: Option<LocatedExpr>
     },
+    Skip(LocatedExpr),
     SnaInit(UnescapedString),
     SnaSet(SnapshotFlag, FlagValue),
     StableTicker(StableTickerAction<Z80Span>),
@@ -1746,10 +1748,17 @@ impl ListingElement for LocatedToken {
     fn assembler_control_get_listing(&self) -> &[Self] {
         self.assembler_control_command().get_listing()
     }
+
+    fn macro_flavor(&self) -> AssemblerFlavor {
+        match &self.inner {
+            either::Left(LocatedTokenInner::Macro{flavor, ..}) => *flavor,
+            _ => unreachable!()
+        }
+    }
 }
 
 // Several methodsare not implemented because their return type is wrong
-// it soes not really matter because we never have to call them
+// it does not really matter because we never have to call them
 impl ListingElement for LocatedTokenInner {
     type AssemblerControlCommand = LocatedAssemblerControlCommand;
     type DataAccess = LocatedDataAccess;
@@ -1878,12 +1887,14 @@ impl ListingElement for LocatedTokenInner {
             Self::Macro {
                 name,
                 params,
-                content
+                content,
+                flavor
             } => {
                 Cow::Owned(Token::Macro {
                     name: name.into(),
                     params: params.iter().map(|p| p.into()).collect_vec(),
-                    content: content.as_str().to_owned()
+                    content: content.as_str().to_owned(),
+                    flavor: *flavor
                 })
             },
             Self::Confined(..) => todo!(),
@@ -2453,6 +2464,10 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn assembler_control_get_listing(&self) -> &[Self] {
+        todo!()
+    }
+
+    fn macro_flavor(&self) -> AssemblerFlavor {
         todo!()
     }
 }

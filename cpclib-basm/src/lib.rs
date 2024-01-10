@@ -127,6 +127,10 @@ pub fn parse<'arg>(
     options.set_dotted_directives(matches.get_flag("DOTTED_DIRECTIVES"));
     options.show_progress = show_progress;
 
+    if matches.get_flag("ORGAMS") {
+        options.set_flavor(AssemblerFlavor::Orgams);
+    }
+
     match std::env::current_dir() {
         Ok(cwd) => {
             options.add_search_path(cwd)?;
@@ -688,6 +692,12 @@ pub fn build_args_parser() -> clap::Command {
                             .long("backup")
                             .conflicts_with("OVERRIDE")
                             .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("ORGAMS")
+                        .help("Main source is at ORGAMS format")
+                        .long("orgams")
+                        .action(ArgAction::SetTrue)
                     )
                     ;
 

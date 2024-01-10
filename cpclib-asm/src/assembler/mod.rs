@@ -1954,7 +1954,8 @@ impl Env {
         name: &str,
         arguments: &[&str],
         code: &str,
-        source: Option<&Z80Span>
+        source: Option<&Z80Span>,
+        flavor: AssemblerFlavor
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -1966,7 +1967,7 @@ impl Env {
 
         self.symbols_mut().set_symbol_to_value(
             name,
-            Macro::new(name.into(), arguments, code.to_owned(), source)
+            Macro::new(name.into(), arguments, code.to_owned(), source, flavor)
         )?;
         Ok(())
     }
@@ -2203,6 +2204,27 @@ impl Env {
     /// https://grimware.org/doku.php/documentations/devices/gatearray#mmr
     pub fn logical_to_physical_address(&self, address: u16) -> PhysicalAddress {
         PhysicalAddress::new(address, self.ga_mmr)
+    }
+
+    fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+        let amount = self.resolve_expr_must_never_fail(exp)?.int()?;
+
+/* 
+        if amount < 0 {
+            return Err(AssemblerError::AlreadyRenderedError(format!("SKIP accept only positive values. {amount} is invalid")));
+        }
+*/
+
+        let amount = amount as u16;
+
+        let codeaddr = self.active_page_info().logical_codeadr.wrapping_add(amount as _);
+        let outputadr = self.active_page_info().logical_outputadr.wrapping_add(amount as _);
+
+        self.active_page_info_mut().logical_codeadr = codeaddr;
+        self.active_page_info_mut().logical_outputadr = outputadr;
+
+        self.update_dollar();     
+        Ok(())
     }
 
     fn visit_bank<E: ExprEvaluationExt>(&mut self, exp: Option<&E>) -> Result<(), AssemblerError> {
@@ -2979,6 +3001,7 @@ macro_rules! visit_token_impl {
                 )
             },
             $cls::Section(ref name) => $env.visit_section(name),
+            $cls::Skip(ref amount) => $env.visit_skip(amount),
             $cls::SnaInit(ref fname) => $env.visit_snainit(fname),
             $cls::SnaSet(ref flag, ref value) => $env.visit_snaset(flag, value),
             $cls::StableTicker(ref ticker) => visit_stableticker(ticker, $env),

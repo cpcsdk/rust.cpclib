@@ -547,6 +547,15 @@ impl AssemblerControlCommand for StandardAssemblerControlCommand {
     }
 }
 
+
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum AssemblerFlavor {
+    Basm,
+    // mathematical expressions use []
+    Orgams,
+}
+
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
 #[derive(Debug, Clone)]
@@ -626,7 +635,8 @@ pub enum Token {
     Macro {
         name: SmolStr,
         params: Vec<SmolStr>,
-        content: String
+        content: String,
+        flavor: AssemblerFlavor
     }, // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */
@@ -695,6 +705,7 @@ pub enum Token {
         source: SmolStr,
         expr: Option<Expr>
     },
+    Skip(Expr),
     /// This directive setup a value for a given flag of the snapshot
     SnaInit(Filename),
     SnaSet(

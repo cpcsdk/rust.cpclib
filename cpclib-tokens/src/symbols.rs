@@ -13,7 +13,7 @@ use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext}
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, ListingElement, ToSimpleToken, Token};
+use crate::{ExprResult, ListingElement, ToSimpleToken, Token, AssemblerFlavor};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,35 +253,47 @@ pub struct Macro {
     // The content
     code: String,
     // Origin of the macro (for error messages)
-    source: Option<Source>
+    source: Option<Source>,
+    flavor: AssemblerFlavor
 }
 
 impl Macro {
-    pub fn new(name: SmolStr, params: &[&str], code: String, source: Option<Source>) -> Self {
+    pub fn new(name: SmolStr, params: &[&str], code: String, source: Option<Source>, flavor: AssemblerFlavor) -> Self {
         Macro {
             name,
             params: params.iter().map(|&s| SmolStr::from(s)).collect(),
             code,
-            source
+            source,
+            flavor
         }
     }
 
+    #[inline]
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
 
+    #[inline]
     pub fn source(&self) -> Option<&Source> {
         self.source.as_ref()
     }
 
+    #[inline]
     pub fn code(&self) -> &str {
         self.code.as_ref()
     }
 
+    #[inline]
+    pub fn flavor(&self) -> AssemblerFlavor {
+        self.flavor
+    }
+    
+    #[inline]
     pub fn params(&self) -> &[SmolStr] {
         &self.params
     }
 
+    #[inline]
     pub fn nb_args(&self) -> usize {
         self.params.len()
     }

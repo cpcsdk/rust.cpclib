@@ -594,6 +594,10 @@ impl ListingElement for Token {
     fn assembler_control_get_listing(&self) -> &[Self] {
         todo!()
     }
+
+    fn macro_flavor(&self) -> AssemblerFlavor {
+        todo!()
+    }
 }
 
 /// Standard listing is a specific implementation

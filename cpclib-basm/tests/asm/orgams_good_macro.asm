@@ -1,0 +1,9 @@
+
+	org #20
+
+  MACRO ALIGN n
+    SKIP -$ MOD n
+  ENDM
+
+
+  ALIGN 5

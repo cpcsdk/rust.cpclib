@@ -6,7 +6,7 @@ use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, Source, Struct};
-use cpclib_tokens::{MacroParamElement, Token};
+use cpclib_tokens::{MacroParamElement, Token, AssemblerFlavor};
 use either::Either;
 use smartstring::SmartString;
 
@@ -100,12 +100,14 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     pub fn source(&self) -> Option<&Source> {
         self.r#macro.source()
     }
-}
 
-impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
-    /// Develop the macro with the given arguments
     #[inline]
-    fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
+    pub fn flavor(&self) -> AssemblerFlavor {
+        self.r#macro.flavor()
+    }
+
+    #[inline]
+    fn expand_for_basm(&self, env: &Env) -> Result<String, AssemblerError> {
         //        assert_eq!(args.len(), self.nb_args());
         let listing = self.r#macro.code();
         let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
@@ -146,6 +148,57 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
 
             //(patterns, replacement)
         };
+    }
+
+
+
+    #[inline]
+    fn expand_for_orgams(&self, env: &Env) -> Result<String, AssemblerError> {
+        let listing = self.r#macro.code();
+        let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)).collect::<Result<Vec<_>, AssemblerError>>()?; 
+
+        let capacity: usize = self.args.len();
+        let mut patterns = Vec::with_capacity(capacity);
+        let mut replacements = Vec::with_capacity(capacity);
+
+        for (argname, expanded) in self.r#macro.params().iter().zip(&all_expanded) {
+            let (pattern, replacement) = if argname.starts_with("r#")
+                & expanded.starts_with("\"")
+                & expanded.ends_with("\"")
+            {
+                // remove " " before doing the expansion
+                (&argname[2..], &expanded[1..(expanded.len() - 1)])
+            }
+            else {
+                (&argname[..], &expanded[..])
+            };
+
+            patterns.push(pattern);
+            replacements.push(replacement);
+        }
+
+        let ac = AhoCorasick::builder()
+         .match_kind(MatchKind::LeftmostLongest)
+         .kind(None)
+         .build(&patterns)
+         .unwrap();
+         let result = ac.replace_all(listing, &replacements);
+        
+         Ok(result)
+
+    }
+}
+
+impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
+    /// Develop the macro with the given arguments
+    #[inline]
+    fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
+        if self.flavor() == AssemblerFlavor::Basm {
+            self.expand_for_basm(env)
+        } else {
+            assert_eq!(self.flavor(), AssemblerFlavor::Orgams );
+            self.expand_for_orgams(env)
+        }
 
         // make all replacements in one row :( sadly it is too slow :(
         // let ac = AhoCorasick::builder()

@@ -12,7 +12,7 @@ use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{PhysicalAddress, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
     AssemblerControlCommand, BinaryTransformation, ExprElement, ListingElement, MacroParamElement,
-    TestKindElement, ToSimpleToken, Token
+    TestKindElement, ToSimpleToken, Token, AssemblerFlavor
 };
 use either::Either;
 use ouroboros::*;
@@ -776,14 +776,14 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
             // get the generated code
             // TODO handle some errors there
-            let (source, code) = if let Some(ref r#macro) = r#macro {
-                (r#macro.source(), r#macro.expand(env)?)
+            let (source, code, flavor) = if let Some(ref r#macro) = r#macro {
+                (r#macro.source(), r#macro.expand(env)?, r#macro.flavor())
             }
             else {
                 let r#struct = r#struct.as_ref().unwrap();
                 let mut parameters = parameters.to_vec();
                 parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
-                (r#struct.source(), r#struct.expand(env)?)
+                (r#struct.source(), r#struct.expand(env)?, AssemblerFlavor::Basm)
             };
 
             // Tokenize with the same parsing  parameters and context when possible
@@ -859,7 +859,7 @@ where
                 let name = self.token.macro_definition_name();
                 let arguments = self.token.macro_definition_arguments();
                 let code = self.token.macro_definition_code();
-                env.visit_macro_definition(name, &arguments, code, self.possible_span())
+                env.visit_macro_definition(name, &arguments, code, self.possible_span(), self.token.macro_flavor())
             }
             // Behavior based on the state (for ease of writting)
             else {
