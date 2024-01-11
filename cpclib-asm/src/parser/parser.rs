@@ -1280,6 +1280,18 @@ pub fn parse_line_component(
 pub fn parse_line_component_standard(
     input: &mut InnerZ80Span
 ) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
+
+    if input.state.options().is_orgams() {
+        let repeat = opt(parse_orgams_repeat).parse_next(input)?;
+        if repeat.is_some() {
+            return Ok((None, repeat));
+        }
+    }
+
+
+
+
+
     let before_let = input.checkpoint();
     let r#let = terminated(opt(parse_directive_word(b"LET")), my_space0).parse_next(input)?;
 
@@ -1553,7 +1565,7 @@ pub fn parse_z80_directive_with_block(
             parse_macro,
             parse_repeat,
             parse_conditional,
-            parse_orgams_repeat
+            parse_orgams_fail // TODO call it elsewhere
         ))
         .parse_next(input)
     }
@@ -1904,7 +1916,7 @@ pub fn parse_write_direct_memory(
     ))
         .parse_next(input)?;
 
-    let bank = located_expr(input)?;
+    let bank = located_expr.parse_next(input)?;
 
     let token = LocatedTokenInner::Bank(Some(bank));
 
@@ -2101,7 +2113,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 
         choice_nocase!(b"SBC") => parse_sbc.parse_next(input),
         choice_nocase!(b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
-        choice_nocase!(b"SL1") => parse_shifts_and_rotations(Mnemonic::Sl1).parse_next(input),
+        choice_nocase!(b"SL1") => cut_err(parse_shifts_and_rotations(Mnemonic::Sl1)).parse_next(input),
         choice_nocase!(b"SLA") => parse_shifts_and_rotations(Mnemonic::Sla).parse_next(input),
         choice_nocase!(b"SLL") => parse_shifts_and_rotations(Mnemonic::Sl1).parse_next(input),
         choice_nocase!(b"SRA") => parse_shifts_and_rotations(Mnemonic::Sra).parse_next(input),
@@ -2642,7 +2654,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
 }
 
 pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let count = located_expr(input)?;
+    let count = located_expr.parse_next(input)?;
 
     Ok(LocatedTokenInner::Bankset(count))
 }
@@ -2697,7 +2709,7 @@ macro_rules! directive_with_expr {
     ($name:ident, $enum:tt) => {
         #[inline]
         pub fn $name(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-            let exp = located_expr(input)?;
+            let exp = located_expr.parse_next(input)?;
 
             Ok((LocatedTokenInner::$enum(exp)))
         }
@@ -3535,7 +3547,7 @@ pub fn parse_assert(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80P
 
 /// ...
 pub fn parse_align(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let boundary = located_expr(input)?;
+    let boundary = located_expr.parse_next(input)?;
     let fill = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     Ok(LocatedTokenInner::Align(boundary, fill))
@@ -3719,7 +3731,7 @@ fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError
 
 /// ...
 pub fn parse_protect(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let start = located_expr(input)?;
+    let start = located_expr.parse_next(input)?;
 
     let end = preceded(parse_comma, located_expr).parse_next(input)?;
 
@@ -4558,7 +4570,7 @@ pub fn parse_indexregister_address(
 /// Parse an expression and returns it inside a DataAccession::Expression
 #[inline]
 pub fn parse_expr(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
-    let expr = located_expr(input)?;
+    let expr = located_expr.parse_next(input)?;
     Ok(LocatedDataAccess::Expression(expr))
 }
 
@@ -4788,7 +4800,6 @@ pub fn parse_label(
     #[inline]
     move |input: &mut InnerZ80Span| {
         let start = input.checkpoint();
-
 
         // Finger crosses that no allocation is done there
         let obtained_label = ((
@@ -5236,6 +5247,13 @@ where
     move |input: &mut InnerZ80Span| {
         let _ = my_space0(input)?;
         let _ = tag_no_case(pattern).parse_next(input)?;
+
+        // for orgams we cannot accept * as being a mulitplication if it is followed by another * as it repreents a repetition
+        if input.state.options().is_orgams() && pattern == "*" {
+            not(pattern).parse_next(input)?;
+        }
+
+
         let _ = my_space0(input)?;
         let operation = inner(input)?;
 
@@ -5372,9 +5390,9 @@ pub fn parse_binary_function_call(
 
     let _ = ((my_space0, tag("("), my_space0)).parse_next(input)?;
 
-    let arg1 = located_expr(input)?;
+    let arg1 = located_expr.parse_next(input)?;
     let _ = ((my_space0, tag(","), my_space0)).parse_next(input)?;
-    let arg2 = located_expr(input)?;
+    let arg2 = located_expr.parse_next(input)?;
 
     let _ = ((my_space0, tag(")"))).parse_next(input)?;
 

@@ -1,5 +1,8 @@
+use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::token::take_until0;
 use cpclib_common::winnow::{PResult, Parser, combinator::terminated, stream::Stream};
 use cpclib_common::winnow::combinator::{opt, cut_err};
+use cpclib_tokens::Expr;
 
 use crate::preamble::{parse_expr, located_expr, my_space0, my_space1, parse_single_token, LocatedListing, one_instruction_inner_code};
 
@@ -30,6 +33,23 @@ pub static END_DIRECTIVE_ORGAMS: &[&[u8]] = &[
     b"ENDM",
     b"]"
 ];
+
+
+pub fn parse_orgams_fail( input: &mut InnerZ80Span)  -> PResult<LocatedToken, Z80ParserError> {
+    let input_start = input.checkpoint();
+
+    "!!".parse_next(input)?;
+
+    let content = take_until0("\n").parse_next(input)?;
+    let txt = String::from_utf8_lossy(content);
+    let exp = Expr::String(SmolStr::new(txt));
+    let fmtexp = cpclib_tokens::FormattedExpr::Raw(exp);
+    let token = LocatedTokenInner::Fail(Some(vec![fmtexp]));
+
+    let token = token.into_located_token_between(input_start, input.clone());
+
+	Ok(token)
+}
 
 
 pub fn parse_orgams_repeat( input: &mut InnerZ80Span)  -> PResult<LocatedToken, Z80ParserError> {
