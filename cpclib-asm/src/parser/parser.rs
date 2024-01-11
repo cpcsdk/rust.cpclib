@@ -2113,7 +2113,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 
         choice_nocase!(b"SBC") => parse_sbc.parse_next(input),
         choice_nocase!(b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
-        choice_nocase!(b"SL1") => cut_err(parse_shifts_and_rotations(Mnemonic::Sl1)).parse_next(input),
+        choice_nocase!(b"SL") /*1*/  => cut_err(preceded(('1', my_space1), parse_shifts_and_rotations(Mnemonic::Sl1))).parse_next(input),
         choice_nocase!(b"SLA") => parse_shifts_and_rotations(Mnemonic::Sla).parse_next(input),
         choice_nocase!(b"SLL") => parse_shifts_and_rotations(Mnemonic::Sl1).parse_next(input),
         choice_nocase!(b"SRA") => parse_shifts_and_rotations(Mnemonic::Sra).parse_next(input),
