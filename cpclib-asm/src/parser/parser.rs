@@ -37,6 +37,7 @@ use super::context::*;
 use super::obtained::*;
 use super::*;
 use crate::preamble::*;
+use super::orgams::*;
 
 const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
@@ -202,20 +203,6 @@ const INSTRUCTIONS: &[&[u8]] = &[
 ];
 
 
-const STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK",
-    b"BRK",
-    b"BYTE",
-    b"DEFS",
-    b"ELSE",
-  //  b"END",
-    b"ENT",
-    b"IMPORT",
-    b"ORG",
-    b"SKIP",
-    b"WORD",
-];
-
 const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"#",
     b"ALIGN",
@@ -329,15 +316,6 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"WHILE"
 ];
 
-
-
-const START_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"IF",
-    b"MACRO",
-];
-
-
-
 // This table is supposed to contain the keywords that finish a section
 const END_DIRECTIVE: &[&[u8]] = &[
     b"END", // for orgams
@@ -374,13 +352,6 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"UNTIL",
     b"WEND"
 ];
-
-
-const END_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"END", // for orgams
-    b"ENDM",
-];
-
 
 // tODO use hash-based structures
 lazy_static::lazy_static! {
@@ -681,20 +652,26 @@ where
 }
 
 #[inline]
-fn inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
-    inner_code_with_state(input.state.state.clone()).parse_next(input)
+pub fn inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+    inner_code_with_state(input.state.state.clone(), false).parse_next(input)
 }
+#[inline]
+pub fn one_instruction_inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+    inner_code_with_state(input.state.state.clone(), true).parse_next(input)
+}
+
 
 /// Workaround because many0 is not used in the main root function
 /// TODO add an argument to handle context change
 #[inline]
 pub fn inner_code_with_state(
-    new_state: ParsingState
+    new_state: ParsingState,
+    only_one_instruction: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
         // dbg!("Requested state", &new_state);
-        LocatedListing::parse_inner(input, new_state)
+        LocatedListing::parse_inner(input, new_state, only_one_instruction)
             .map(|l| (Arc::<LocatedListing>::try_unwrap(l).unwrap()))
     }
 }
@@ -726,7 +703,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 /// TODO - limit the listing possibilities
 pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     // dbg!("parse_function_listing requests FunctionLimited state");
-    inner_code_with_state(ParsingState::FunctionLimited).parse_next(input)
+    inner_code_with_state(ParsingState::FunctionLimited, false).parse_next(input)
 }
 
 pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
@@ -1545,7 +1522,7 @@ pub fn parse_line_or_with_comment(
 }
 
 #[inline]
-fn parse_single_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_single_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     // Get the token
     alt((parse_token, parse_directive)).parse_next(input)
 }
@@ -1570,23 +1547,36 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Pars
 pub fn parse_z80_directive_with_block(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
-    alt((
-        parse_basic.context("Basic code embedding"),
-        parse_macro,
-        parse_crunched_section,
-        parse_module,
-        parse_confined,
-        parse_repeat,
-        parse_for,
-        parse_function,
-        parse_switch,
-        parse_iterate,
-        parse_while,
-        parse_rorg,
-        parse_conditional,
-        parse_assembler_control_max_passes_number
-    ))
-    .parse_next(input)
+
+    if input.state.options().is_orgams() {
+        alt((
+            parse_macro,
+            parse_repeat,
+            parse_conditional,
+            parse_orgams_repeat
+        ))
+        .parse_next(input)
+    }
+    else {
+        alt((
+            parse_basic.context("Basic code embedding"),
+            parse_macro,
+            parse_crunched_section,
+            parse_module,
+            parse_confined,
+            parse_repeat,
+            parse_for,
+            parse_function,
+            parse_switch,
+            parse_iterate,
+            parse_while,
+            parse_rorg,
+            parse_conditional,
+            parse_assembler_control_max_passes_number
+        ))
+        .parse_next(input)
+    }
+
 }
 
 #[inline]
@@ -3685,7 +3675,7 @@ where
 
 /// Handle \ in end of line
 #[inline]
-fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = input.clone();
 
     let spaces = alt((
@@ -4905,6 +4895,13 @@ fn ignore_ascii_case_allowed_label(name: &[u8], dotted_directive: bool, flavor: 
 pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     if input.state.options().dotted_directive {
         b'.'.parse_next(input)?;
+    }
+
+    if input.state.options().is_orgams() {
+        let bracket = opt("]").parse_next(input)?;
+        if let Some(bracket) = bracket {
+            return Ok(input.clone().update_slice(bracket));
+        }
     }
 
     let keyword =

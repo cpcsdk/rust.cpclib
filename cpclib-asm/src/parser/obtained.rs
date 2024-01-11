@@ -30,7 +30,7 @@ use ouroboros::self_referencing;
 
 use super::{
     build_span, my_many0_nocollect, parse_lines, parse_z80_line_complete, InnerZ80Span,
-    ParserContext, SourceString, Z80ParserError, Z80Span
+    ParserContext, SourceString, Z80ParserError, Z80Span, parse_single_token
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -2859,7 +2859,8 @@ impl LocatedListing {
     #[inline]
     pub fn parse_inner(
         input_code: &mut InnerZ80Span,
-        new_state: ParsingState
+        new_state: ParsingState,
+        only_one_instruction: bool
     ) -> PResult<Arc<LocatedListing>, Z80ParserError> {
         let mut tokens = Vec::with_capacity(20);
 
@@ -2906,9 +2907,21 @@ impl LocatedListing {
                 // keep a track of the very beginning of the span
                 let inner_start = inner_code_ptr.checkpoint();
 
-                let res = cut_err(my_many0_nocollect(parse_z80_line_complete(&mut tokens))).parse_next(
-                    inner_code_ptr
-                );
+                let res = if only_one_instruction {
+                    match parse_single_token.parse_next(inner_code_ptr) {
+                        Ok(token) => {
+                            tokens.push(token);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            Err(e)
+                        }
+                    }
+                } else {
+                    cut_err(my_many0_nocollect(parse_z80_line_complete(&mut tokens))).parse_next(
+                        inner_code_ptr
+                    )
+                };
                 match res {
                     Ok(_) => {
                         let inner_length = inner_code_ptr.offset_from(&inner_start);
