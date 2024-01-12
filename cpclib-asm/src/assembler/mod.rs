@@ -1959,13 +1959,21 @@ impl Env {
     ) -> Result<(), AssemblerError> {
 
         // ignore if it is the very same macro. That can happen with orgams
-        if let Some(r#macro) = self.symbols().macro_value(name)? {
-            r#macro.code().trim() == code.trim()
-        } else {
-            false
+        if let Some(r#macro) = dbg!(self.symbols().macro_value(name)?) {
+            if r#macro.code().trim() == code.trim() {
+                return Ok(());
+            } else {
+                let diff = prettydiff::diff_lines(r#macro.code().trim(), code.trim())
+                    .names("Pevious macro", "Current macro")
+                    .set_show_lines(true)
+                    .set_diff_only(true)
+                    .format();
+                let msg = format!("Macro name `{name}` already exists. {}", diff);
+                return Err(AssemblerError::AlreadyRenderedError(msg));
+            }
         }
     
-
+        // raise an error if already exists
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned()

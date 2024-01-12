@@ -20,6 +20,7 @@ cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 parking_lot.workspace = true
 time.workspace = true
+diff = "0.1.13"
 
 [dev-dependencies]
 test-generator.workspace = true
