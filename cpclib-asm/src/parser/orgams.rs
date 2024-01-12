@@ -13,7 +13,7 @@ use crate::preamble::{
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
     b"BANK", b"BRK", b"BYTE", b"DEFS", b"ELSE", //  b"END",
-    b"ENT", b"IMPORT", b"ORG", b"SKIP", b"WORD"
+    b"ENT", b"IMPORT", b"ORG", b"PRINT",  b"SKIP", b"WORD"
 ];
 
 pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"IF", b"MACRO"];

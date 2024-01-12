@@ -2259,6 +2259,7 @@ impl Env {
         self.active_page_info_mut().logical_outputadr = outputadr;
 
         self.update_dollar();
+        self.output_address = outputadr;
         Ok(())
     }
 
@@ -2403,6 +2404,7 @@ impl Env {
 
     /// Print the evaluation of the expression in the 2nd pass
     pub fn visit_print(&mut self, info: &[FormattedExpr], span: Option<&Z80Span>) {
+        dbg!(info);
         let print_or_error = match self.prepropress_string_formatted_expression(info) {
             Ok(msg) => either::Either::Left(msg),
             Err(error) => either::Either::Right(error)

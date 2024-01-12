@@ -9,6 +9,31 @@ use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
 use crate::{SymbolFor, UnaryFunction};
 
+
+
+/// XXX Orgams only handles integer values and strings
+pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
+    let e = if env.options().parse_options().is_orgams() {
+        let res = match &e {
+            ExprResult::Float(_) |
+            ExprResult::Value(_) |
+            ExprResult::Char(_) |
+            ExprResult::Bool(_) => ExprResult::Value(e.int()?) ,
+            ExprResult::String(s) => e,
+            _ => return Err(AssemblerError::AlreadyRenderedError(format!(
+                "Incompatible type with orgams"
+            )))
+        } ;
+        res
+
+    } else {
+        e
+    };
+
+    Ok(e)
+
+}
+
 /// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
 
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
@@ -30,6 +55,7 @@ pub trait ExprEvaluationExt: Display {
 
 #[macro_export]
 macro_rules! resolve_impl {
+
     ($self: ident, $env: ident) => { {
         use std::ops::Neg;
         use cpclib_tokens::symbols::SymbolsTableTrait;
@@ -48,14 +74,11 @@ impl<'a, E:ExprEvaluationExt>  std::fmt::Display for  UnaryFunctionWrapper<'a,E>
     }
 }
 
-
 impl<'a, E:ExprEvaluationExt> UnaryFunctionWrapper<'a, E> {
     fn new(func:  UnaryFunction, arg: &'a E) -> UnaryFunctionWrapper<'a,E> {
         UnaryFunctionWrapper { func, arg }
     }
 }
-
-
 
 impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
 
@@ -68,7 +91,7 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let arg = self.arg.resolve(env)?;
 
-        match self.func {
+        let res = match self.func {
             UnaryFunction::High => {
                 ((arg >> 8.into())? & 0xFF.into())
                     .map_err(|e| AssemblerError::ExpressionTypeError(e))
@@ -116,9 +139,15 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
             }
             UnaryFunction::Exp => (arg.exp()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::Sqrt => (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e))
-        }
+        }?;
+
+
+        ensure_orgams_type(res, env)
+
+
     }
 }
+
 
 /// utility class for binary function evaluation
 struct BinaryFunctionWrapper<'a,  E:ExprEvaluationExt> {
@@ -155,7 +184,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
         let arg1 = self.arg1.resolve(env)?;
         let arg2 = self.arg2.resolve(env)?;
 
-        match self.func {
+        let res = match self.func {
             BinaryFunction::Min => Ok(arg1.min(arg2)),
             BinaryFunction::Max => Ok(arg1.max(arg2)),
             BinaryFunction::Pow => {
@@ -181,7 +210,10 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                     }
                 }
             }
-        }
+        }?;
+
+        ensure_orgams_type(res, env)
+
     }
 }
 

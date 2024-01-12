@@ -27,6 +27,7 @@ use cpclib_tokens::{
     TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
+use crate::ensure_orgams_type;
 
 use super::{
     build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete,
@@ -459,7 +460,11 @@ impl ExprElement for LocatedExpr {
 impl ExprEvaluationExt for LocatedExpr {
     /// Resolve by adding localisation in case of error
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
-        resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))
+        let res = resolve_impl!(self, env)
+            .map_err(|e| e.locate(self.span().clone()))?;
+        
+        let res = ensure_orgams_type(res, env);
+        res
     }
 
     /// Be sure it is always synchronized with Expr
