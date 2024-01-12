@@ -25,7 +25,10 @@ LAST_ADDRESS
 	save "good_save_whole_inner.bin" ; Save binary without header
 	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, AMSDOS ; Save a binary with  header
 	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, DSK, "hello.dsk" ; Save binary with  header INSIDE a dsk
-	save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, HFE, "hello.hfe" ; Save binary with  header INSIDE a hfe file
+
+	if BASM_FEATURE_HFE
+		save "hello.bin", FIRST_ADDRESS, LAST_ADDRESS-FIRST_ADDRESS, HFE, "hello.hfe" ; Save binary with  header INSIDE a hfe file
+	endif
 
 	save "good_save_txt.bin", txt.start, (txt.stop - txt.start) ; save text without header
 

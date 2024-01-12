@@ -33,6 +33,7 @@ use cpclib_common::lazy_static::__Deref;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::UpdateSlice;
+use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -860,6 +861,7 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
+
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
         let mut can_change_request = true;
@@ -938,6 +940,14 @@ impl Env {
                 #[cfg(not(target_arch = "wasm32"))]
                 Progress::progress().new_pass();
             }
+        }
+
+
+
+        if AssemblingPass::FirstPass == self.pass {
+            self.add_symbol_to_symbol_table("BASM_VERSION", built_info::PKG_VERSION.to_owned());
+            self.add_symbol_to_symbol_table("BASM", 1);
+            self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", cfg!(feature = "hfe"));
         }
     }
 
@@ -1959,7 +1969,7 @@ impl Env {
     ) -> Result<(), AssemblerError> {
 
         // ignore if it is the very same macro. That can happen with orgams
-        if let Some(r#macro) = dbg!(self.symbols().macro_value(name)?) {
+        if let Some(r#macro) = self.symbols().macro_value(name)? {
             if r#macro.code().trim() == code.trim() {
                 return Ok(());
             } else {
