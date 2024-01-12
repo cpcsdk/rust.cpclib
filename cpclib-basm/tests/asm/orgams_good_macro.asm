@@ -8,3 +8,10 @@
 
   ALIGN 5
   ALIGN(5)
+
+
+  MACRO NOARG
+  ENDM
+  
+  NOARG()
+  NOARG ()

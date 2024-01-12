@@ -3343,7 +3343,16 @@ pub fn parse_macro_or_struct_call_inner(
 
         let _ = (my_space0, not(parse_comment)).parse_next(input)?;
 
-        let has_parenthesis = opt(('(', my_space0)).parse_next(input)?.is_some();
+        let has_parenthesis = opt(
+            (
+                '(', 
+                my_space0, 
+                not(alt((
+                    ("void", my_space0).value(()), 
+                    ')'.value(())
+                )))
+            )
+        ).parse_next(input)?.is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof::<_, Z80ParserError>.value(()),
             tag("\n").value(()),
@@ -3357,10 +3366,10 @@ pub fn parse_macro_or_struct_call_inner(
         else {
             cut_err(
                 alt((
-                    delimited(my_space0, tag_no_case("(void)"), my_space0)
+                    delimited(my_space0, alt(("()", tag_no_case("(void)"))), my_space0)
                         .value(Default::default()),
                     alt((
-                        tag_no_case("(void)").value(Vec::new()),
+                        alt((tag_no_case("(void)"), "()")).value(Vec::new()),
                         separated(
                             1..,
                             alt((

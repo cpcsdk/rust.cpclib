@@ -77,3 +77,85 @@ pub fn parse_orgams_repeat( input: &mut InnerZ80Span)  -> PResult<LocatedToken, 
 
 	Ok(token)
 }
+
+
+
+#[cfg(test)]
+mod test {
+    use std::ops::Deref;
+
+    use cpclib_common::{winnow::{error::{ErrMode, ParseError}, Parser}};
+
+    use crate::{preamble::{parse_line_component, ParserContextBuilder, Z80Span, ParserContext, ParserOptions, InnerZ80Span, Z80ParserError}, error::AssemblerError};
+
+    #[derive(Debug)]
+    struct TestResult<O: std::fmt::Debug> {
+        ctx: Box<ParserContext>,
+        span: Z80Span,
+        res: Result<O, ParseError<InnerZ80Span, Z80ParserError>>
+    }
+
+    impl<O: std::fmt::Debug> Deref for TestResult<O> {
+        type Target = Result<O, ParseError<InnerZ80Span, Z80ParserError>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.res
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestResultRest<O: std::fmt::Debug> {
+        ctx: Box<ParserContext>,
+        span: Z80Span,
+        res: Result<O, ErrMode<Z80ParserError>>
+    }
+
+    impl<O: std::fmt::Debug> Deref for TestResultRest<O> {
+        type Target = Result<O, ErrMode<Z80ParserError>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.res
+        }
+    }
+
+
+
+    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+        let mut options = ParserOptions::default();
+        options.set_flavor(cpclib_tokens::AssemblerFlavor::Orgams);
+        let ctx = Box::new(
+            ParserContextBuilder::default()
+                .set_context_name("ORGAMS_TEST")
+                .set_options(options)
+                .build(code)
+        );
+        let span = Z80Span::new_extra(code, ctx.deref());
+        (ctx, span)
+    }
+
+    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+        mut parser: P,
+        code: &'static str
+    ) -> TestResult<O>
+    where
+        O: std::fmt::Debug
+    {
+        let (ctx, span) = ctx_and_span(code);
+        let res = parser.parse(span.0);
+        if let Err(e) = &res {
+            let e = e.inner();
+            let e = AssemblerError::SyntaxError { error: e.clone() };
+            eprintln!("Parse error: {}", e);
+        }
+
+        TestResult { ctx, span, res }
+    }
+
+    #[test]
+    fn orgams_test_parse_macro_call() {
+        assert!(dbg!(parse_test(parse_line_component, "empty (void)")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "empty(void)")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "empty()")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "empty ()")).is_ok());
+    }
+}
