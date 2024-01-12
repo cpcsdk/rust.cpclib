@@ -1957,6 +1957,15 @@ impl Env {
         source: Option<&Z80Span>,
         flavor: AssemblerFlavor
     ) -> Result<(), AssemblerError> {
+
+        // ignore if it is the very same macro. That can happen with orgams
+        if let Some(r#macro) = self.symbols().macro_value(name)? {
+            r#macro.code().trim() == code.trim()
+        } else {
+            false
+        }
+    
+
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned()
