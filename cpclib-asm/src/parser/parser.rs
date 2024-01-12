@@ -35,9 +35,9 @@ use obtained::LocatedTokenInner;
 
 use super::context::*;
 use super::obtained::*;
+use super::orgams::*;
 use super::*;
 use crate::preamble::*;
-use super::orgams::*;
 
 const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
@@ -202,7 +202,6 @@ const INSTRUCTIONS: &[&[u8]] = &[
     b"SL1", b"SLL", b"EXA", b"EXD"
 ];
 
-
 const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"#",
     b"ALIGN",
@@ -225,11 +224,11 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"DEFW",
     b"DEFSECTION",
     b"DM",
-    b"DS",    b"FOR",
-
+    b"DS",
+    b"FOR",
     b"DW",
     b"ELSE",
-  //  b"END",
+    //  b"END",
     b"ENT",
     b"EQU",
     b"EXPORT",
@@ -403,9 +402,6 @@ lazy_static::lazy_static! {
     static ref DOTTED_MIN_MAX_LABEL_SIZE:  (usize, usize) = DOTTED_IMPOSSIBLE_NAMES.iter().map(|l| l.len()).minmax().into_option().unwrap();
 
 }
-
-
-
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
@@ -656,10 +652,11 @@ pub fn inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80Parser
     inner_code_with_state(input.state.state.clone(), false).parse_next(input)
 }
 #[inline]
-pub fn one_instruction_inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+pub fn one_instruction_inner_code(
+    input: &mut InnerZ80Span
+) -> PResult<LocatedListing, Z80ParserError> {
     inner_code_with_state(input.state.state.clone(), true).parse_next(input)
 }
-
 
 /// Workaround because many0 is not used in the main root function
 /// TODO add an argument to handle context change
@@ -1280,17 +1277,12 @@ pub fn parse_line_component(
 pub fn parse_line_component_standard(
     input: &mut InnerZ80Span
 ) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
-
     if input.state.options().is_orgams() {
         let repeat = opt(parse_orgams_repeat).parse_next(input)?;
         if repeat.is_some() {
             return Ok((None, repeat));
         }
     }
-
-
-
-
 
     let before_let = input.checkpoint();
     let r#let = terminated(opt(parse_directive_word(b"LET")), my_space0).parse_next(input)?;
@@ -1559,7 +1551,6 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Pars
 pub fn parse_z80_directive_with_block(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
-
     if input.state.options().is_orgams() {
         alt((
             parse_macro,
@@ -1588,7 +1579,6 @@ pub fn parse_z80_directive_with_block(
         ))
         .parse_next(input)
     }
-
 }
 
 #[inline]
@@ -2292,7 +2282,7 @@ pub fn parse_directive_new(
                     choice_nocase!(b"STR") => {
                         parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)?
                     },
-                   choice_nocase!(b"END") if !is_orgams  => Ok(LocatedTokenInner::End)?,
+                    choice_nocase!(b"END") if !is_orgams => Ok(LocatedTokenInner::End)?,
                     choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input)?,
                     choice_nocase!(b"MAP") => parse_map.parse_next(input)?,
                     choice_nocase!(b"NOP") => parse_nop.parse_next(input)?,
@@ -2406,8 +2396,6 @@ pub fn parse_directive_new(
                             .parse_next(input)?
                     },
 
-
-
                     choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
                     choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
 
@@ -2416,7 +2404,7 @@ pub fn parse_directive_new(
 
                     choice_nocase!(b"NOLIST") => LocatedTokenInner::NoList,
 
-                    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input)?, // TODO filter to remove the orgams specificies 
+                    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input)?, /* TODO filter to remove the orgams specificies */
 
                     _ => {
                         input.reset(input_start);
@@ -2496,7 +2484,6 @@ enum KindOfConditional {
 /// TODO shorten the string code source
 #[inline]
 pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-
     let is_orgams = input.state.options().is_orgams();
 
     let if_start = input.checkpoint();
@@ -2586,7 +2573,11 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
             delimited(my_space0, tag(":"), my_space0),
             delimited(my_space0, parse_comment, line_ending).recognize()
         ))),
-        cut_err(preceded(my_space0, parse_directive_word(if is_orgams {b"END"} else {b"ENDIF"}))).recognize()
+        cut_err(preceded(
+            my_space0,
+            parse_directive_word(if is_orgams { b"END" } else { b"ENDIF" })
+        ))
+        .recognize()
     )
         .context("Condition: end condition not found")
         .parse_next(input)?;
@@ -2878,7 +2869,6 @@ pub fn parse_bank(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 
     Ok(LocatedTokenInner::Bank(count))
 }
-
 
 #[inline]
 pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3309,10 +3299,10 @@ pub fn parse_macro_or_struct_call_inner(
         not(':').parse_next(input)?;
 
         if !ignore_ascii_case_allowed_label(
-            name.as_bstr(), 
+            name.as_bstr(),
             input.state.options().dotted_directive,
-            input.state.options().assembler_flavor)
-        {
+            input.state.options().assembler_flavor
+        ) {
             return Err(ErrMode::Backtrack(
                 Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
                     input,
@@ -3343,16 +3333,13 @@ pub fn parse_macro_or_struct_call_inner(
 
         let _ = (my_space0, not(parse_comment)).parse_next(input)?;
 
-        let has_parenthesis = opt(
-            (
-                '(', 
-                my_space0, 
-                not(alt((
-                    ("void", my_space0).value(()), 
-                    ')'.value(())
-                )))
-            )
-        ).parse_next(input)?.is_some();
+        let has_parenthesis = opt((
+            '(',
+            my_space0,
+            not(alt((("void", my_space0).value(()), ')'.value(()))))
+        ))
+        .parse_next(input)?
+        .is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof::<_, Z80ParserError>.value(()),
             tag("\n").value(()),
@@ -3452,8 +3439,11 @@ pub fn parse_macro_or_struct_call(
         .parse_next(input)?;
 
         // Check if the macro name is allowed
-        if !ignore_ascii_case_allowed_label(name.as_bstr(), input.state.options().dotted_directive, input.state.options().assembler_flavor)
-        {
+        if !ignore_ascii_case_allowed_label(
+            name.as_bstr(),
+            input.state.options().dotted_directive,
+            input.state.options().assembler_flavor
+        ) {
             input.reset(input_start);
             return Err(ErrMode::Backtrack(
                 Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
@@ -3473,7 +3463,6 @@ pub fn parse_macro_or_struct_call(
         Ok(inner)
     }
 }
-
 
 #[inline]
 fn parse_directive_word(
@@ -4885,7 +4874,6 @@ pub fn parse_label(
 
 #[inline]
 fn impossible_names(dotted_directive: bool, flavor: AssemblerFlavor) -> &'static [&'static [u8]] {
-
     if flavor == AssemblerFlavor::Basm {
         if dotted_directive {
             &DOTTED_IMPOSSIBLE_NAMES
@@ -4893,14 +4881,19 @@ fn impossible_names(dotted_directive: bool, flavor: AssemblerFlavor) -> &'static
         else {
             &IMPOSSIBLE_NAMES
         }
-    } else {
+    }
+    else {
         assert_eq!(flavor, AssemblerFlavor::Orgams);
         &IMPOSSIBLE_NAMES_ORGAMS
     }
 }
 
 #[inline]
-fn ignore_ascii_case_allowed_label(name: &[u8], dotted_directive: bool, flavor: AssemblerFlavor) -> bool {
+fn ignore_ascii_case_allowed_label(
+    name: &[u8],
+    dotted_directive: bool,
+    flavor: AssemblerFlavor
+) -> bool {
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
     let iter = impossible_names(dotted_directive).par_iter();
 
@@ -4908,7 +4901,6 @@ fn ignore_ascii_case_allowed_label(name: &[u8], dotted_directive: bool, flavor: 
     let mut iter = impossible_names(dotted_directive, flavor).iter();
 
     !iter.any(|&content| content.eq_ignore_ascii_case(name))
-
 }
 
 #[inline]
@@ -5117,14 +5109,19 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             parse_counter,
             // manage $ and $$
             alt(("$$", "$")).map(|l| LocatedExpr::Label(cloned.update_slice(l).into())),
-            ("-", alt(("$$", "$")).map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into()))))
-                .with_recognized().map(|((m , dollar), content)| 
-                LocatedExpr::UnaryOperation(
-                    UnaryOperation::Neg, 
-                    dollar,
-                    cloned.update_slice(content).into()
-                )
-            ),
+            (
+                "-",
+                alt(("$$", "$"))
+                    .map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into())))
+            )
+                .with_recognized()
+                .map(|((m, dollar), content)| {
+                    LocatedExpr::UnaryOperation(
+                        UnaryOperation::Neg,
+                        dollar,
+                        cloned.update_slice(content).into()
+                    )
+                }),
             parse_bool_expr,
             // manage labels
             parse_label(false).map(|l| LocatedExpr::Label(l.into())),
@@ -5261,7 +5258,6 @@ where
         if input.state.options().is_orgams() && pattern == "*" {
             not(pattern).parse_next(input)?;
         }
-
 
         let _ = my_space0(input)?;
         let operation = inner(input)?;

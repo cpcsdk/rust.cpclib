@@ -6,7 +6,7 @@ use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, Source, Struct};
-use cpclib_tokens::{MacroParamElement, Token, AssemblerFlavor};
+use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 use either::Either;
 use smartstring::SmartString;
 
@@ -150,12 +150,14 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
         };
     }
 
-
-
     #[inline]
     fn expand_for_orgams(&self, env: &Env) -> Result<String, AssemblerError> {
         let listing = self.r#macro.code();
-        let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)).collect::<Result<Vec<_>, AssemblerError>>()?; 
+        let all_expanded = self
+            .args
+            .iter()
+            .map(|argvalue| expand_param(argvalue, env))
+            .collect::<Result<Vec<_>, AssemblerError>>()?;
 
         let capacity: usize = self.args.len();
         let mut patterns = Vec::with_capacity(capacity);
@@ -178,14 +180,13 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
         }
 
         let ac = AhoCorasick::builder()
-         .match_kind(MatchKind::LeftmostLongest)
-         .kind(None)
-         .build(&patterns)
-         .unwrap();
-         let result = ac.replace_all(listing, &replacements);
-        
-         Ok(result)
+            .match_kind(MatchKind::LeftmostLongest)
+            .kind(None)
+            .build(&patterns)
+            .unwrap();
+        let result = ac.replace_all(listing, &replacements);
 
+        Ok(result)
     }
 }
 
@@ -195,8 +196,9 @@ impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
         if self.flavor() == AssemblerFlavor::Basm {
             self.expand_for_basm(env)
-        } else {
-            assert_eq!(self.flavor(), AssemblerFlavor::Orgams );
+        }
+        else {
+            assert_eq!(self.flavor(), AssemblerFlavor::Orgams);
             self.expand_for_orgams(env)
         }
 

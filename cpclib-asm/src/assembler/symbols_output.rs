@@ -2,7 +2,7 @@ use std::io::Write;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType, RemuEntry, RemuChunk};
+use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType, RemuChunk, RemuEntry};
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
@@ -108,7 +108,6 @@ impl Default for SymbolOutputGenerator {
 }
 
 impl SymbolOutputGenerator {
-
     fn symbol_to_u16(v: &Value) -> Option<u16> {
         match v {
             Value::Address(a) => Some(a.address()),
@@ -122,7 +121,6 @@ impl SymbolOutputGenerator {
             _ => None
         }
     }
-
 
     pub fn build_ace_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait) -> AceSymbolChunk {
         let mut symbols = Vec::new();
@@ -157,9 +155,7 @@ impl SymbolOutputGenerator {
         chunk
     }
 
-
     pub fn fill_remu_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait, remu: &mut RemuChunk) {
-
         for (k, v) in symbs
             .expression_symbol()
             .iter()
@@ -175,12 +171,9 @@ impl SymbolOutputGenerator {
             if let Some(v) = v {
                 let entry = RemuEntry::new_label(k.to_string(), v, 0);
                 remu.add_entry(&entry);
-                
             }
         }
-
     }
-
 
     /// Generate the symbol table in w
     pub fn generate<W: Write>(

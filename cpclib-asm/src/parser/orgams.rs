@@ -1,41 +1,26 @@
 use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::combinator::{cut_err, opt, terminated};
+use cpclib_common::winnow::stream::Stream;
 use cpclib_common::winnow::token::take_until0;
-use cpclib_common::winnow::{PResult, Parser, combinator::terminated, stream::Stream};
-use cpclib_common::winnow::combinator::{opt, cut_err};
+use cpclib_common::winnow::{PResult, Parser};
 use cpclib_tokens::Expr;
 
-use crate::preamble::{parse_expr, located_expr, my_space0, my_space1, parse_single_token, LocatedListing, one_instruction_inner_code};
-
-use super::{InnerZ80Span, Z80ParserError, LocatedTokenInner, LocatedToken, inner_code};
-
+use super::{inner_code, InnerZ80Span, LocatedToken, LocatedTokenInner, Z80ParserError};
+use crate::preamble::{
+    located_expr, my_space0, my_space1, one_instruction_inner_code, parse_expr, parse_single_token,
+    LocatedListing
+};
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK",
-    b"BRK",
-    b"BYTE",
-    b"DEFS",
-    b"ELSE",
-  //  b"END",
-    b"ENT",
-    b"IMPORT",
-    b"ORG",
-    b"SKIP",
-    b"WORD",
+    b"BANK", b"BRK", b"BYTE", b"DEFS", b"ELSE", //  b"END",
+    b"ENT", b"IMPORT", b"ORG", b"SKIP", b"WORD"
 ];
 
-pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"IF",
-    b"MACRO",
-];
+pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"IF", b"MACRO"];
 
-pub static END_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"END", 
-    b"ENDM",
-    b"]"
-];
+pub static END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"END", b"ENDM", b"]"];
 
-
-pub fn parse_orgams_fail( input: &mut InnerZ80Span)  -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
     "!!".parse_next(input)?;
@@ -48,45 +33,44 @@ pub fn parse_orgams_fail( input: &mut InnerZ80Span)  -> PResult<LocatedToken, Z8
 
     let token = token.into_located_token_between(input_start, input.clone());
 
-	Ok(token)
+    Ok(token)
 }
 
-
-pub fn parse_orgams_repeat( input: &mut InnerZ80Span)  -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
-	let amount = terminated(
-		located_expr,
-		(my_space0, "**", my_space0)
-	).parse_next(input)?;
-
+    let amount = terminated(located_expr, (my_space0, "**", my_space0)).parse_next(input)?;
 
     let bracket = opt('[').parse_next(input)?;
     let listing = if bracket.is_some() {
         my_space0.parse_next(input)?;
-        let listing = cut_err(inner_code.context("ORGAMS REPEAT: unable to parse inner code")).parse_next(input)?;
+        let listing = cut_err(inner_code.context("ORGAMS REPEAT: unable to parse inner code"))
+            .parse_next(input)?;
         ']'.parse_next(input)?;
         listing
-    } else {
+    }
+    else {
         one_instruction_inner_code.parse_next(input)?
     };
 
-
-	let token = LocatedTokenInner::Repeat(amount, listing, None, None, None);
+    let token = LocatedTokenInner::Repeat(amount, listing, None, None, None);
     let token = token.into_located_token_between(input_start, input.clone());
 
-	Ok(token)
+    Ok(token)
 }
-
-
 
 #[cfg(test)]
 mod test {
     use std::ops::Deref;
 
-    use cpclib_common::{winnow::{error::{ErrMode, ParseError}, Parser}};
+    use cpclib_common::winnow::error::{ErrMode, ParseError};
+    use cpclib_common::winnow::Parser;
 
-    use crate::{preamble::{parse_line_component, ParserContextBuilder, Z80Span, ParserContext, ParserOptions, InnerZ80Span, Z80ParserError}, error::AssemblerError};
+    use crate::error::AssemblerError;
+    use crate::preamble::{
+        parse_line_component, InnerZ80Span, ParserContext, ParserContextBuilder, ParserOptions,
+        Z80ParserError, Z80Span
+    };
 
     #[derive(Debug)]
     struct TestResult<O: std::fmt::Debug> {
@@ -117,8 +101,6 @@ mod test {
             &self.res
         }
     }
-
-
 
     fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
         let mut options = ParserOptions::default();

@@ -26,7 +26,7 @@ static ref DESC_BEFORE: String = format!(
 
 fn main() {
     std::thread::Builder::new()
-        .stack_size(1024*1024*1024)
+        .stack_size(1024 * 1024 * 1024)
         .spawn(|| {
             let matches = build_args_parser()
                 .before_help(DESC_BEFORE.as_str())

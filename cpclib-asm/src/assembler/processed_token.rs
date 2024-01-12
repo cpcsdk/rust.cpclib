@@ -11,8 +11,8 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_tokens::symbols::{PhysicalAddress, SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    AssemblerControlCommand, BinaryTransformation, ExprElement, ListingElement, MacroParamElement,
-    TestKindElement, ToSimpleToken, Token, AssemblerFlavor
+    AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ExprElement, ListingElement,
+    MacroParamElement, TestKindElement, ToSimpleToken, Token
 };
 use either::Either;
 use ouroboros::*;
@@ -783,7 +783,11 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 let r#struct = r#struct.as_ref().unwrap();
                 let mut parameters = parameters.to_vec();
                 parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
-                (r#struct.source(), r#struct.expand(env)?, AssemblerFlavor::Basm)
+                (
+                    r#struct.source(),
+                    r#struct.expand(env)?,
+                    AssemblerFlavor::Basm
+                )
             };
 
             // Tokenize with the same parsing  parameters and context when possible
@@ -859,7 +863,13 @@ where
                 let name = self.token.macro_definition_name();
                 let arguments = self.token.macro_definition_arguments();
                 let code = self.token.macro_definition_code();
-                env.visit_macro_definition(name, &arguments, code, self.possible_span(), self.token.macro_flavor())
+                env.visit_macro_definition(
+                    name,
+                    &arguments,
+                    code,
+                    self.possible_span(),
+                    self.token.macro_flavor()
+                )
             }
             // Behavior based on the state (for ease of writting)
             else {

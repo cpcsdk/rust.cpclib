@@ -861,7 +861,6 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
         let mut can_change_request = true;
@@ -942,8 +941,6 @@ impl Env {
             }
         }
 
-
-
         if AssemblingPass::FirstPass == self.pass {
             self.add_symbol_to_symbol_table("BASM_VERSION", built_info::PKG_VERSION.to_owned());
             self.add_symbol_to_symbol_table("BASM", 1);
@@ -957,13 +954,17 @@ impl Env {
         self.handle_print()?;
         self.handle_assert()?;
 
-        let mut remu = if (self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaRemu)) {
+        let mut remu = if (self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::SnaRemu))
+        {
             Some(RemuChunk::empty())
-        } else {
+        }
+        else {
             None
         };
 
-        
         self.handle_breakpoints(&mut remu.as_mut())?;
         self.handle_sna_symbols(&mut remu.as_mut())?;
 
@@ -976,19 +977,19 @@ impl Env {
     }
 
     // Add the symbols in the snapshot
-    fn handle_sna_symbols(&mut self, remu: &mut Option<&mut RemuChunk>) -> Result<(), AssemblerError> {
+    fn handle_sna_symbols(
+        &mut self,
+        remu: &mut Option<&mut RemuChunk>
+    ) -> Result<(), AssemblerError> {
         let options = self.options().assemble_options().clone();
-        if options.get_flag(crate::AssemblingOptionFlags::SnaSymb)
-        {
-
-
+        if options.get_flag(crate::AssemblingOptionFlags::SnaSymb) {
             let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
             self.sna.add_chunk(ace_chunk);
         }
 
-        if options.get_flag(crate::AssemblingOptionFlags::SnaRemu)
-        {
-            self.symbols_output.fill_remu_snapshot_chunk(self.symbols(), remu.as_mut().unwrap());
+        if options.get_flag(crate::AssemblingOptionFlags::SnaRemu) {
+            self.symbols_output
+                .fill_remu_snapshot_chunk(self.symbols(), remu.as_mut().unwrap());
         }
 
         Ok(())
@@ -997,7 +998,10 @@ impl Env {
     /// We handle breakpoint ONLY for the pages stored in the snapshot
     /// as they are stored inside a chunk of the snapshot:
     /// If one day another export is coded, we could export the others too.
-    fn handle_breakpoints(&mut self, remu: &mut Option<&mut RemuChunk>) -> Result<(), AssemblerError> {
+    fn handle_breakpoints(
+        &mut self,
+        remu: &mut Option<&mut RemuChunk>
+    ) -> Result<(), AssemblerError> {
         let mut winape_chunk = if self
             .options()
             .assemble_options()
@@ -1036,7 +1040,7 @@ impl Env {
                 ace_chunk
                     .as_mut()
                     .map(|chunk| chunk.add_breakpoint(brk.ace()));
-                
+
                 // TODO check it is not consummed at first loop
                 if let Some(chunk) = remu {
                     chunk.add_entry(&brk.remu());
@@ -1967,12 +1971,12 @@ impl Env {
         source: Option<&Z80Span>,
         flavor: AssemblerFlavor
     ) -> Result<(), AssemblerError> {
-
         // ignore if it is the very same macro. That can happen with orgams
         if let Some(r#macro) = self.symbols().macro_value(name)? {
             if r#macro.code().trim() == code.trim() {
                 return Ok(());
-            } else {
+            }
+            else {
                 let diff = prettydiff::diff_lines(r#macro.code().trim(), code.trim())
                     .names("Pevious macro", "Current macro")
                     .set_show_lines(true)
@@ -1982,7 +1986,7 @@ impl Env {
                 return Err(AssemblerError::AlreadyRenderedError(msg));
             }
         }
-    
+
         // raise an error if already exists
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -2236,21 +2240,25 @@ impl Env {
     fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
         let amount = self.resolve_expr_must_never_fail(exp)?.int()?;
 
-/* 
-        if amount < 0 {
-            return Err(AssemblerError::AlreadyRenderedError(format!("SKIP accept only positive values. {amount} is invalid")));
-        }
-*/
+        // if amount < 0 {
+        // return Err(AssemblerError::AlreadyRenderedError(format!("SKIP accept only positive values. {amount} is invalid")));
+        // }
 
         let amount = amount as u16;
 
-        let codeaddr = self.active_page_info().logical_codeadr.wrapping_add(amount as _);
-        let outputadr = self.active_page_info().logical_outputadr.wrapping_add(amount as _);
+        let codeaddr = self
+            .active_page_info()
+            .logical_codeadr
+            .wrapping_add(amount as _);
+        let outputadr = self
+            .active_page_info()
+            .logical_outputadr
+            .wrapping_add(amount as _);
 
         self.active_page_info_mut().logical_codeadr = codeaddr;
         self.active_page_info_mut().logical_outputadr = outputadr;
 
-        self.update_dollar();     
+        self.update_dollar();
         Ok(())
     }
 
@@ -2499,7 +2507,6 @@ impl Env {
                         });
                     }
 
-
                     #[cfg(not(feature = "hfe"))]
                     Err(AssemblerError::InvalidArgument {
                         msg: format!("{fname} cannot be saved. No HFE support is included with this version of basm")
@@ -2514,8 +2521,6 @@ impl Env {
                             msg: format!("{fname} has not a DSK or HFE compatible extension")
                         });
                     }
-
-
 
                     #[cfg(not(feature = "hfe"))]
                     if lower_fname.ends_with(".hfe") {
@@ -3893,11 +3898,10 @@ impl Env {
         else {
             let label = self.handle_global_and_local_labels(label.as_str())?;
 
-        /* XXX Disabled behavior the 12/01/2024    
-            if !label.starts_with('.') {
-                self.symbols_mut().set_current_label(label)?;
-            }
-        */
+            // XXX Disabled behavior the 12/01/2024
+            // if !label.starts_with('.') {
+            // self.symbols_mut().set_current_label(label)?;
+            // }
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
             self.output_trigger
                 .as_mut()
@@ -3970,11 +3974,10 @@ impl Env {
             .map(|o| o.replace_code_address(&value));
 
         let label = self.handle_global_and_local_labels(label)?;
-        /* XXX Disabled behavior the 12/01/2024    
-        if !label.starts_with('.') {
-            self.symbols_mut().set_current_label(label)?;
-        }
-        */
+        // XXX Disabled behavior the 12/01/2024
+        // if !label.starts_with('.') {
+        // self.symbols_mut().set_current_label(label)?;
+        // }
         self.symbols_mut().assign_symbol_to_value(label, value)?;
 
         Ok(())

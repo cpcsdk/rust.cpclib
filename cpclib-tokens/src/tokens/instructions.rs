@@ -547,13 +547,11 @@ impl AssemblerControlCommand for StandardAssemblerControlCommand {
     }
 }
 
-
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum AssemblerFlavor {
     Basm,
     // mathematical expressions use []
-    Orgams,
+    Orgams
 }
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)

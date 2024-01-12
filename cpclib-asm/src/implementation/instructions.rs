@@ -15,9 +15,7 @@ impl Cruncher for CrunchType {
         if raw.is_empty() {
             return Err(AssemblerError::NoDataToCrunch);
         }
-        
-        
-        
+
         let method = match self {
             CrunchType::LZ48 => Ok(CompressMethod::Lz48),
             CrunchType::LZ49 => Ok(CompressMethod::Lz49),
@@ -63,7 +61,6 @@ impl Cruncher for CrunchType {
                 })
             },
         }?;
-
 
         Ok(method.compress(raw))
     }

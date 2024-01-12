@@ -44,15 +44,14 @@ fn build() {
         .opt_level(0)
         .shared_flag(true)
         .cargo_metadata(true)
-                .compile("lz4");
+        .compile("lz4");
 }
 
 fn build_shrinkler() {
     cxx_build::bridge("src/shrinkler.rs")
-    .file("extra/Shrinkler4.6NoParityContext//basm_bridge.cpp")
-    .flag_if_supported("-std=c++14")
-    .compile("cpclib-crunchers");
-
+        .file("extra/Shrinkler4.6NoParityContext//basm_bridge.cpp")
+        .flag_if_supported("-std=c++14")
+        .compile("cpclib-crunchers");
 
     println!("cargo:rerun-if-changed=src/shrinkler.rs");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.cpp");

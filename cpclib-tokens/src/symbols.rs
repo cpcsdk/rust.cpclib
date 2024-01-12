@@ -13,7 +13,7 @@ use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext}
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{ExprResult, ListingElement, ToSimpleToken, Token, AssemblerFlavor};
+use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -258,7 +258,13 @@ pub struct Macro {
 }
 
 impl Macro {
-    pub fn new(name: SmolStr, params: &[&str], code: String, source: Option<Source>, flavor: AssemblerFlavor) -> Self {
+    pub fn new(
+        name: SmolStr,
+        params: &[&str],
+        code: String,
+        source: Option<Source>,
+        flavor: AssemblerFlavor
+    ) -> Self {
         Macro {
             name,
             params: params.iter().map(|&s| SmolStr::from(s)).collect(),
@@ -287,7 +293,7 @@ impl Macro {
     pub fn flavor(&self) -> AssemblerFlavor {
         self.flavor
     }
-    
+
     #[inline]
     pub fn params(&self) -> &[SmolStr] {
         &self.params

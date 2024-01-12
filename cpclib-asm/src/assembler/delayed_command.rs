@@ -3,7 +3,7 @@ use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, WinapeBreakPoint, RemuEntry};
+use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, RemuEntry, WinapeBreakPoint};
 use either::Either;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};

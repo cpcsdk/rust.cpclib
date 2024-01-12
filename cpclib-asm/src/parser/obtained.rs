@@ -20,17 +20,17 @@ use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     data_access_impl_most_methods, data_access_is_any_indexregister16,
     data_access_is_any_indexregister8, data_access_is_any_register16, data_access_is_any_register8,
-    AssemblerControlCommand, BaseListing, BinaryFunction, BinaryOperation, CharsetFormat,
-    CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
-    IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
-    Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind, TestKindElement,
-    ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation, AssemblerFlavor
+    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryFunction, BinaryOperation,
+    CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest,
+    FormattedExpr, IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam,
+    MacroParamElement, Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind,
+    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
 
 use super::{
-    build_span, my_many0_nocollect, parse_lines, parse_z80_line_complete, InnerZ80Span,
-    ParserContext, SourceString, Z80ParserError, Z80Span, parse_single_token
+    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete,
+    InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -1751,7 +1751,7 @@ impl ListingElement for LocatedToken {
 
     fn macro_flavor(&self) -> AssemblerFlavor {
         match &self.inner {
-            either::Left(LocatedTokenInner::Macro{flavor, ..}) => *flavor,
+            either::Left(LocatedTokenInner::Macro { flavor, .. }) => *flavor,
             _ => unreachable!()
         }
     }

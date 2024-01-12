@@ -1,15 +1,13 @@
 mod ace;
-mod winape;
 mod remu;
+mod winape;
 
 use std::ops::Deref;
 
 pub use ace::*;
+use delegate::delegate;
 pub use remu::*;
 pub use winape::*;
-
-
-use delegate::delegate;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Code(pub(crate) [u8; 4]);
@@ -312,7 +310,7 @@ pub enum SnapshotChunk {
     /// The type of the chunk is unknown
     Unknown(UnknownChunk),
     /// The chunk is a breakpoint chunk for winape emulator
-    WinapeBreakPoint(WinapeBreakPointChunk),
+    WinapeBreakPoint(WinapeBreakPointChunk)
 }
 
 #[allow(missing_docs)]
@@ -364,7 +362,7 @@ impl SnapshotChunk {
             SnapshotChunk::Unknown(chunk) => chunk.code(),
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
             SnapshotChunk::AceBreakPoint(chunk) => chunk.code(),
-            SnapshotChunk::Remu(c) => c.code(),
+            SnapshotChunk::Remu(c) => c.code()
         }
     }
 
@@ -375,7 +373,7 @@ impl SnapshotChunk {
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
             SnapshotChunk::Unknown(chunk) => chunk.size(),
             SnapshotChunk::AceBreakPoint(chunk) => chunk.size(),
-            SnapshotChunk::Remu(c) => c.size(),
+            SnapshotChunk::Remu(c) => c.size()
         }
     }
 
@@ -386,7 +384,7 @@ impl SnapshotChunk {
             SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
             SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
             SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array(),
-            SnapshotChunk::Remu(c) => c.size_as_array(),
+            SnapshotChunk::Remu(c) => c.size_as_array()
         }
     }
 
@@ -397,7 +395,7 @@ impl SnapshotChunk {
             SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
             SnapshotChunk::Unknown(chunk) => chunk.data(),
             SnapshotChunk::AceBreakPoint(chunk) => chunk.data(),
-            SnapshotChunk::Remu(c) => c.data(),
+            SnapshotChunk::Remu(c) => c.data()
         }
     }
 }
@@ -431,7 +429,6 @@ impl From<RemuChunk> for SnapshotChunk {
         SnapshotChunk::Remu(chunk)
     }
 }
-
 
 impl From<UnknownChunk> for SnapshotChunk {
     fn from(chunk: UnknownChunk) -> Self {

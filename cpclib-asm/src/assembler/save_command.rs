@@ -1,11 +1,11 @@
 use std::convert::TryFrom;
 
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosError};
+use cpclib_disc::amsdos::{AmsdosError, AmsdosFile, AmsdosFileName};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
-use cpclib_tokens::{SaveType, DiscType};
+use cpclib_tokens::{DiscType, SaveType};
 
 use super::report::SavedFile;
 use super::Env;
@@ -135,8 +135,7 @@ impl SaveCommand {
                         Hfe::default()
                     };
                     #[cfg(not(feature = "hfe"))]
-                    let mut disc : 
-                        ExtendedDsk =
+                    let mut disc: ExtendedDsk =
                         if std::path::Path::new(disc_filename.as_str()).exists() {
                             ExtendedDsk::open(disc_filename).map_err(|e| {
                                 AssemblerError::AssemblingError {
@@ -146,8 +145,7 @@ impl SaveCommand {
                         }
                         else {
                             ExtendedDsk::default()
-                        }
-                    ;
+                        };
 
                     let head = Head::A;
                     let system = false;
