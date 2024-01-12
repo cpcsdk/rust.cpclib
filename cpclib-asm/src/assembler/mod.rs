@@ -3892,10 +3892,12 @@ impl Env {
         }
         else {
             let label = self.handle_global_and_local_labels(label.as_str())?;
+
+        /* XXX Disabled behavior the 12/01/2024    
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
-
+        */
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
             self.output_trigger
                 .as_mut()
@@ -3968,9 +3970,11 @@ impl Env {
             .map(|o| o.replace_code_address(&value));
 
         let label = self.handle_global_and_local_labels(label)?;
+        /* XXX Disabled behavior the 12/01/2024    
         if !label.starts_with('.') {
             self.symbols_mut().set_current_label(label)?;
         }
+        */
         self.symbols_mut().assign_symbol_to_value(label, value)?;
 
         Ok(())

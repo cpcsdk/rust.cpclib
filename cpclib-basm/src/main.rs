@@ -25,26 +25,33 @@ static ref DESC_BEFORE: String = format!(
 }
 
 fn main() {
-    let matches = build_args_parser()
-        .before_help(DESC_BEFORE.as_str())
-        .get_matches();
+    std::thread::Builder::new()
+        .stack_size(1024*1024*1024)
+        .spawn(|| {
+            let matches = build_args_parser()
+                .before_help(DESC_BEFORE.as_str())
+                .get_matches();
 
-    let start = std::time::Instant::now();
+            let start = std::time::Instant::now();
 
-    match process(&matches) {
-        Ok((env, warnings)) => {
-            for warning in warnings {
-                eprintln!("{warning}");
+            match process(&matches) {
+                Ok((env, warnings)) => {
+                    for warning in warnings {
+                        eprintln!("{warning}");
+                    }
+
+                    let report = env.report(&start);
+                    println!("{report}");
+
+                    std::process::exit(0);
+                },
+                Err(e) => {
+                    eprintln!("Error while assembling.\n{e}");
+                    std::process::exit(-1);
+                }
             }
-
-            let report = env.report(&start);
-            println!("{report}");
-
-            std::process::exit(0);
-        },
-        Err(e) => {
-            eprintln!("Error while assembling.\n{e}");
-            std::process::exit(-1);
-        }
-    }
+        })
+        .unwrap()
+        .join()
+        .unwrap()
 }

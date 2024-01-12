@@ -12,5 +12,7 @@
 
 	assert fibo(0) == 0
 	assert fibo(1) == 1
+
 	assert fibo(5) == 5
+
 	assert fibo(10) == 55
