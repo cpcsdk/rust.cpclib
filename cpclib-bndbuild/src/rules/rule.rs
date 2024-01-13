@@ -147,7 +147,7 @@ impl Rule {
 
         let task = match kind {
             "basm" => {
-                Task::new_basm(&format!("{} -o {}", targets[0].as_ref(), dependencies[0].as_ref()))
+                Task::new_basm(&format!("-o {} {}", targets[0].as_ref(), dependencies[0].as_ref()))
             },
             _ => unreachable!()
         };

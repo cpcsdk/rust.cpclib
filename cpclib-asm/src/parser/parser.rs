@@ -1544,7 +1544,7 @@ enum LabelModifier {
 }
 
 pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
-    parse_string(input)
+    alt((parse_string, parse_stringlike_without_quote)).parse_next(input)
 }
 
 #[inline]
@@ -1738,6 +1738,19 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
     Ok(UnescapedString(string, slice.into()))
 }
 
+pub fn parse_stringlike_without_quote(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
+    let (normal, escapable) = (none_of(('\\', ' ', '\r', '\n', ':', ';')), one_of(('\\', ' ', ':', ';')));
+    let (string, slice) = 
+        opt(my_escaped(normal, '\\', escapable))
+            .map(|s| s.unwrap_or_default())
+            .with_recognized()
+    .parse_next(input)?;
+
+    let slice = input.clone().update_slice(slice);
+
+    Ok(UnescapedString(string, slice.into()))
+}
+
 #[inline(always)]
 pub fn my_escaped<'a, I: 'a, Error, F, G, O1, O2>(
     mut normal: F,
@@ -1831,7 +1844,7 @@ pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, 
 pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let once_fname = (
         opt(delimited(my_space0, parse_word(b"ONCE"), my_space0)),
-        parse_fname
+        cut_err(parse_fname.context("INCLUDE: error in fname"))
     )
         .parse_next(input)?;
 
@@ -6379,5 +6392,19 @@ endif"
         assert!(dbg!(parse_test(expr_list, "1 ,2")).is_ok());
         assert!(dbg!(parse_test(expr_list, "1 , 2")).is_ok());
         assert!(dbg!(parse_test(expr_list, "1,2,")).is_ok());
+    }
+
+    #[test]
+    fn test_fname() {
+        assert!(parse_test(parse_fname, "\"test.asm\"").is_ok());
+        assert!(parse_test(parse_fname, "test.asm").is_ok());
+
+        assert!(parse_test(parse_directive, "include \"test.asm\"").is_ok());
+        assert!(parse_test(parse_directive, "include test.asm").is_ok());
+        assert!(parse_test(parse_directive, "include good_db.asm").is_ok());
+        assert!(parse_test(parse_include, "good_db.asm").is_ok());
+
+        assert!(dbg!(parse_test((parse_directive, "  "), "incbin \"test.asm\"  ")).is_ok());
+        assert!(parse_test((parse_directive, "  "), "incbin test.asm  ").is_ok());
     }
 }
