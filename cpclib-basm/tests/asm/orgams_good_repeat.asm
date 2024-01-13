@@ -23,3 +23,9 @@ bob_w = 5
 	bob_w - 2 ** [
           ld e,(hl):ld a,(de):ld (hl),a:inc l
           ]
+
+
+parallax#=10
+	parallax# ** [
+		byte 30 +#*2
+	]

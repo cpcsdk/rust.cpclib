@@ -147,7 +147,20 @@ pub fn parse_orgams_ordered_expression(input: &mut InnerZ80Span) -> PResult<Loca
 
 #[inline]
 pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    parse_factor(input)
+    
+    let before_bracket = input.checkpoint();
+    let bracket = opt(('[', my_space0)).parse_next(input)?;
+    let exp = if bracket.is_some() {
+        let exp = parse_orgams_expression.parse_next(input)?;
+        (my_space0, ']').parse_next(input)?;
+        
+        // TODO properly setup the string (we lack parenthesis)
+        let span = exp.span().clone();
+        LocatedExpr::Paren(Box::new(exp), span)
+    } else {
+        parse_factor(input)?
+    };
+    Ok(exp)
 }
 
 #[cfg(test)]
@@ -247,6 +260,10 @@ mod test {
 
 
         assert!(dbg!(parse_test(parse_orgams_expression, "1+3 -5 *2")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_expression, "30 + #*2")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_expression, "&100 + #*10")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_expression, "96 MOD [30 + #*2]")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_expression, "[r1 + r13*2]*2")).is_ok());
 
 
 
