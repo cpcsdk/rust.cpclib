@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
 use cpclib_common::itertools::Itertools;
@@ -28,6 +29,49 @@ where D: Deserializer<'de> {
         .collect_vec();
 
     Ok(r)
+}
+
+
+impl Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let targets = self.targets().iter()
+            .map(|p| p.display().to_string())
+            .join(" ");
+
+
+        writeln!(f, "\n- tgt: {targets}")?;
+
+        if !self.dependencies.is_empty() {
+            let dependencies = self.dependencies().iter()
+            .map(|p| p.display().to_string())
+            .join(" ");
+            writeln!(f, "  dep: {dependencies}")?;
+
+        }
+
+        if let Some(phony) = &self.phony {
+            writeln!(f, "  phony: {}", phony)?;
+        }
+
+        if let Some(help) = &self.help {
+            writeln!(f, "  help: {}", help)?;
+        }
+
+        if let Some(constraint) = &self.constraint {
+            writeln!(f, "  constraint: {}", constraint)?;
+        }
+
+        if self.commands.len() == 1 {
+            writeln!(f, "  cmd: {}", &self.commands[0])?;
+        } else if !self.commands.is_empty() {
+            writeln!(f, "  cmd:")?;
+            for cmd in self.commands() {
+                writeln!(f, "       - {cmd}")?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash)]
@@ -95,6 +139,22 @@ where D: Deserializer<'de> {
 }
 
 impl Rule {
+    pub fn new_default<S: AsRef<str>> (
+        targets: &[S],
+        dependencies: &[S],
+        kind: &str
+    ) -> Self {
+
+        let task = match kind {
+            "basm" => {
+                Task::new_basm(&format!("{} -o {}", targets[0].as_ref(), dependencies[0].as_ref()))
+            },
+            _ => unreachable!()
+        };
+
+        Self::new(targets, dependencies, &[task])
+    }
+
     pub fn new<S: AsRef<str>, T: Into<Task> + Clone>(
         targets: &[S],
         dependencies: &[S],

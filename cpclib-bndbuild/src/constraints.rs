@@ -1,3 +1,5 @@
+use std::fmt::{Display, write};
+
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited};
 use cpclib_common::winnow::token::tag_no_case;
@@ -12,6 +14,18 @@ pub enum Constraint {
     // And(Box<Constraint>, Box<Constraint>),
     // Or(Box<Constraint>, Box<Constraint>),
     Not(Box<Constraint>)
+}
+
+impl Display for Constraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = match self {
+            Constraint::Windows => "windows".to_owned(),
+            Constraint::Linux => "linux".to_owned(),
+            Constraint::MacOsx => "macos".to_owned(),
+            Constraint::Not(c) => format!("not({})", c),
+        };
+        write!(f, "{}", text)
+    }
 }
 
 // TODO Implement the other stuff

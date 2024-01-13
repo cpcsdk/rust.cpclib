@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap};
 use std::path::Path;
 
 use serde::{self, Deserialize};
@@ -6,11 +6,23 @@ use topologic::AcyclicDependencyGraph;
 
 use super::{Graph, Rule};
 use crate::BndBuilderError;
+use std::fmt::Display;
 
 #[derive(Deserialize)]
 #[serde(transparent)]
 pub struct Rules {
     rules: Vec<Rule>
+}
+
+
+impl Display for Rules {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for rule in self.rules() {
+            writeln!(f, "{rule}")?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Rules {
@@ -24,6 +36,10 @@ impl Rules {
 
     pub fn rule_at(&self, at: usize) -> &Rule {
         &self.rules[at]
+    }
+
+    pub fn add(&mut self, rule: Rule) {
+        self.rules.push(rule)
     }
 
     /// Get the rule for this target (of course None is returned for leaf files)

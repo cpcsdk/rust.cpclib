@@ -69,12 +69,30 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .action(ArgAction::SetTrue)
                 .help("Init a new project by creating it")
         )
+        .arg(Arg::new("add")
+            .long("add").short('a')
+            .help("Add a new basm target in an existing bndbuild.yml (or create it)")
+                .action(ArgAction::Set)
+        ).arg(
+                            Arg::new("dep").help("The source files")
+                            .long("dep").short('d')
+                            .requires("add")
+                        )
+                        .arg(
+                            Arg::new("kind").help("The kind of command")
+                            .long("kind").short('k')
+                            .value_parser(["basm", "img2cpc", "xfer"])
+                            .requires("add")
+                            .default_missing_value("basm")
+                        )
+
+        
         .arg(
             Arg::new("target")
                 .action(ArgAction::Append)
                 .value_name("TARGET")
                 .help("Provide the target(s) to run.")
-                .conflicts_with_all(["list", "init"])
+                .conflicts_with_all(["list", "init", "add"])
         );
 
     let matches = cmd.clone().get_matches();
@@ -119,22 +137,43 @@ fn inner_main() -> Result<(), BndBuilderError> {
         return Ok(());
     }
 
-    // Get the file and read it
+    // Get the file
     let fname: &String = matches.get_one("file").unwrap();
+
+    let add =  matches.get_one::<String>("add");
+
+    // Read it
     if !std::path::Path::new(fname).exists() {
-        eprintln!("{fname} does not exists.");
-        if let Some(Some(fname)) = matches
-            .get_many::<String>("target")
-            .map(|s| s.into_iter().next())
-        {
-            if fname.ends_with("bndbuild.yml") {
-                eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
-            }
+        if add.is_some() {
+            std::fs::File::create(fname).expect("create empty {fname}");
         }
-        std::process::exit(1);
+        else {
+            eprintln!("{fname} does not exists.");
+            if let Some(Some(fname)) = matches
+                .get_many::<String>("target")
+                .map(|s| s.into_iter().next())
+            {
+                if fname.ends_with("bndbuild.yml") {
+                    eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
+                }
+            }
+            std::process::exit(1);
+        }
     }
 
     let builder = BndBuilder::from_fname(fname)?;
+
+    if let Some(add) = matches.get_one::<String>("add") {
+        let targets = [add];
+        let dependencies = matches.get_many::<String>("dep")
+            .map(|l| l.collect_vec())
+            .unwrap_or_default();
+        let kind = matches.get_one::<String>("kind").unwrap();
+
+        let builder = builder.add_default_rule(&targets, &dependencies, kind);
+        builder.save(fname).expect("Error when saving the file");
+        return Ok(());
+    }
 
     // Print list if asked
     if matches.get_flag("list") {

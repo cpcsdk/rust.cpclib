@@ -22,6 +22,18 @@ pub struct BndBuilder {
 }
 
 impl BndBuilder {
+    pub fn add_default_rule<S: AsRef<str>>(mut self, targets: &[S],
+        dependencies: &[S], kind: &str) -> Self {
+
+        let rule = Rule::new_default(targets, dependencies, kind);
+        let mut rules = self.inner.into_owner();
+        rules.add(rule);
+
+        let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps()).unwrap();
+        BndBuilder { inner }
+    }
+
+
     pub fn from_fname<P: AsRef<Path>>(fname: P) -> Result<Self, BndBuilderError> {
         let fname = fname.as_ref();
         let file = std::fs::File::open(fname).map_err(|e| {
@@ -36,6 +48,11 @@ impl BndBuilder {
 
         let rdr = BufReader::new(file);
         Self::from_reader(rdr, working_directory)
+    }
+
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        let contents = self.inner.borrow_owner().to_string();
+        std::fs::write(path, contents)
     }
 
     pub fn from_reader<P: AsRef<Path>>(
