@@ -3,9 +3,9 @@
 TEST=1
 
 	if TEST
-		db 1
+		byte 1
 	else
-		db 2
+		byte 2
 	end
 
-	db 3
+	byte 3

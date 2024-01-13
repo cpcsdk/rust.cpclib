@@ -1,5 +1,5 @@
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::combinator::{cut_err, opt, terminated, alt, delimited};
+use cpclib_common::winnow::combinator::{cut_err, opt, terminated, alt, delimited,not};
 use cpclib_common::winnow::stream::{Stream, AsBStr, UpdateSlice};
 use cpclib_common::winnow::token::take_until0;
 use cpclib_common::winnow::{PResult, Parser};
@@ -99,10 +99,13 @@ pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
 #[inline]
 pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> PResult<BinaryOperation, Z80ParserError> {
     alt((
-        "+".value(BinaryOperation::Add), 
-        "-".value(BinaryOperation::Sub), 
-        "/".value(BinaryOperation::Div), 
-        "*".value(BinaryOperation::Mul)
+        '+'.value(BinaryOperation::Add), 
+        '-'.value(BinaryOperation::Sub), 
+        '/'.value(BinaryOperation::Div), 
+        ('*', not('*')).value(BinaryOperation::Mul),
+        "AND".value(BinaryOperation::BinaryAnd),
+        "OR".value(BinaryOperation::BinaryOr),
+        "MOD".value(BinaryOperation::Mod),
     )).parse_next(input)
 }
 
