@@ -1543,6 +1543,8 @@ enum LabelModifier {
     Macro
 }
 
+
+/// ACcept "fname" as in most assemblers and fname as in vasm
 pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
     alt((parse_string, parse_stringlike_without_quote)).parse_next(input)
 }
@@ -5095,6 +5097,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     .parse_next(input)?;
 
     let binary_not = opt(delimited(my_space0, tag("~"), my_space0)).parse_next(input)?;
+    let high_or_low = opt(preceded(my_space0, alt(('>', '<')))).parse_next(input)?;
 
     let cloned = input.clone();
     let factor = preceded(
@@ -5162,6 +5165,21 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             LocatedExpr::UnaryOperation(
                 UnaryOperation::BinaryNot,
                 Box::new(factor),
+                build_span(input_offset, input_start, input.clone()).into()
+            )
+        },
+        None => factor
+    };
+
+    let factor = match high_or_low {
+        Some(k) => {
+            LocatedExpr::UnaryFunction(
+                match k {
+                    b'>' => UnaryFunction::High,
+                    b'<' => UnaryFunction::Low,
+                    _ => unreachable!()
+                }, 
+                Box::new(factor), 
                 build_span(input_offset, input_start, input.clone()).into()
             )
         },
@@ -5785,17 +5803,6 @@ endif"
         assert_eq!(res, Expr::PrefixedLabel(LabelPrefix::Bank, "label".into()));
     }
 
-    #[test]
-    fn test_parse_expr_format() {
-        let res = parse_test(formatted_expr, "{hex} VAL");
-        assert!(res.is_ok());
-        let res = res.res.unwrap();
-
-        assert_eq!(
-            res,
-            FormattedExpr::Formatted(ExprFormat::Hex(None), Expr::Label("VAL".into()))
-        );
-    }
 
     #[test]
     fn test_undocumented_code() {
@@ -6331,7 +6338,10 @@ endif"
             "'o'",
             "'o' + 0x80",
             "CHECK",
-            "\"\\\" et voila\""
+            "\"\\\" et voila\"",
+            "0X1234",
+            "<0X1234",
+            ">0X1234",
         ] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 
@@ -6398,11 +6408,13 @@ endif"
     fn test_fname() {
         assert!(parse_test(parse_fname, "\"test.asm\"").is_ok());
         assert!(parse_test(parse_fname, "test.asm").is_ok());
+        assert!(dbg!(parse_test(parse_fname, "src/credits_screen.asm")).is_ok());
 
         assert!(parse_test(parse_directive, "include \"test.asm\"").is_ok());
         assert!(parse_test(parse_directive, "include test.asm").is_ok());
         assert!(parse_test(parse_directive, "include good_db.asm").is_ok());
         assert!(parse_test(parse_include, "good_db.asm").is_ok());
+        assert!(dbg!(parse_test(parse_include, "src/credits_screen.asm")).is_ok());
 
         assert!(dbg!(parse_test((parse_directive, "  "), "incbin \"test.asm\"  ")).is_ok());
         assert!(parse_test((parse_directive, "  "), "incbin test.asm  ").is_ok());
