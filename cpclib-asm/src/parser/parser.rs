@@ -5084,7 +5084,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     let binary_not = opt(delimited(my_space0, tag("~"), my_space0)).parse_next(input)?;
 
     let cloned = input.clone();
-    let factor = delimited(
+    let factor = preceded(
         my_space0,
         alt((
             prefixed_label_expr,
@@ -5126,8 +5126,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             // manage labels
             parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             parens
-        )),
-        my_space0
+        ))/* ,
+        my_space0 */
     )
     .parse_next(input)?;
 
@@ -5316,6 +5316,11 @@ fn expr(input: &mut InnerZ80Span) -> PResult<Expr, Z80ParserError> {
 /// TODO replace ALL expr parse by a located version
 #[inline]
 pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    if input.state.options().is_orgams() {
+        return parse_orgams_expression.parse_next(input);
+    }
+
+
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 

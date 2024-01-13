@@ -1,14 +1,14 @@
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::combinator::{cut_err, opt, terminated};
-use cpclib_common::winnow::stream::Stream;
+use cpclib_common::winnow::combinator::{cut_err, opt, terminated, alt, delimited};
+use cpclib_common::winnow::stream::{Stream, AsBStr, UpdateSlice};
 use cpclib_common::winnow::token::take_until0;
 use cpclib_common::winnow::{PResult, Parser};
-use cpclib_tokens::Expr;
+use cpclib_tokens::{Expr, BinaryOperation};
 
-use super::{inner_code, InnerZ80Span, LocatedToken, LocatedTokenInner, Z80ParserError};
+use super::{inner_code, InnerZ80Span, LocatedToken, LocatedTokenInner, Z80ParserError, LocatedExpr, parse_factor};
 use crate::preamble::{
     located_expr, my_space0, my_space1, one_instruction_inner_code, parse_expr, parse_single_token,
-    LocatedListing
+    LocatedListing, MayHaveSpan
 };
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
@@ -59,6 +59,94 @@ pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
     Ok(token)
 }
 
+
+#[inline]
+pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    let mut factors = Vec::new();
+    let mut operators = Vec::new();
+
+    loop {
+        factors.push(parse_orgams_ordered_expression.parse_next(input)?);
+
+        if let Some(operator) = opt(delimited(my_space0, parse_orgams_operator, my_space0)).parse_next(input)? {
+            operators.push(operator);
+        } else {
+            break;
+        }
+        
+    }
+
+    factors.reverse(); operators.reverse();
+    let mut expr = factors.pop().unwrap();
+    while let Some(next) = factors.pop() {
+        let operator = operators.pop().unwrap();
+        let left = expr;
+        let right = next;
+
+        // span goes from left to right with operator between
+        let left_bytes = left.span().as_bstr();
+        let right_bytes = right.span().as_bstr();
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).abs() as usize + right_bytes.len();
+        let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
+        let span = input.clone().update_slice(unsafe{std::mem::transmute(span)});
+
+        expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
+    }
+
+    Ok(expr)
+}
+
+#[inline]
+pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> PResult<BinaryOperation, Z80ParserError> {
+    alt((
+        "+".value(BinaryOperation::Add), 
+        "-".value(BinaryOperation::Sub), 
+        "/".value(BinaryOperation::Div), 
+        "*".value(BinaryOperation::Mul)
+    )).parse_next(input)
+}
+
+#[inline]
+pub fn parse_orgams_ordered_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    let mut factors = Vec::new();
+    let mut operators = Vec::new();
+
+    loop {
+        factors.push(parse_orgams_factor.parse_next(input)?);
+
+        if let Some(operator) = opt(parse_orgams_operator).parse_next(input)? {
+            operators.push(operator);
+        } else {
+            break;
+        }
+        
+    }
+
+    factors.reverse(); operators.reverse();
+    let mut expr = factors.pop().unwrap();
+    while let Some(next) = factors.pop() {
+        let operator = operators.pop().unwrap();
+        let left = expr;
+        let right = next;
+
+        // span goes from left to right with operator between
+        let left_bytes = left.span().as_bstr();
+        let right_bytes = right.span().as_bstr();
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).abs() as usize + right_bytes.len();
+        let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
+        let span = input.clone().update_slice(unsafe{std::mem::transmute(span)});
+
+        expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
+    }
+
+    Ok(expr)
+}
+
+#[inline]
+pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    parse_factor(input)
+}
+
 #[cfg(test)]
 mod test {
     use std::ops::Deref;
@@ -69,7 +157,7 @@ mod test {
     use crate::error::AssemblerError;
     use crate::preamble::{
         parse_line_component, InnerZ80Span, ParserContext, ParserContextBuilder, ParserOptions,
-        Z80ParserError, Z80Span
+        Z80ParserError, Z80Span, parse_orgams_factor, parse_orgams_ordered_expression, parse_orgams_expression
     };
 
     #[derive(Debug)]
@@ -139,5 +227,25 @@ mod test {
         assert!(dbg!(parse_test(parse_line_component, "empty(void)")).is_ok());
         assert!(dbg!(parse_test(parse_line_component, "empty()")).is_ok());
         assert!(dbg!(parse_test(parse_line_component, "empty ()")).is_ok());
+    }
+
+
+    #[test]
+    fn orgams_test_expr() {
+        assert!(dbg!(parse_test(parse_orgams_factor, "label")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_factor, "10")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_factor, "-$")).is_ok());
+
+        assert!(dbg!(parse_test(parse_orgams_ordered_expression, "label")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_ordered_expression, "10")).is_ok());
+
+        assert!(dbg!(parse_test(parse_orgams_ordered_expression, "label+10")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_ordered_expression, "label+10*5")).is_ok());
+
+
+        assert!(dbg!(parse_test(parse_orgams_expression, "1+3 -5 *2")).is_ok());
+
+
+
     }
 }
