@@ -560,7 +560,7 @@ pub const INKS: [Ink; NB_INKS as usize] = [
     Ink { value: 26 }
 ];
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize, PartialOrd, Ord)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
 pub struct Pen {
     /// pen value
@@ -937,14 +937,9 @@ impl Palette {
         self.values
             .iter()
             .filter(|(&p, _)| p.number() != 16)
-            .find_map(move |(p, &i)| {
-                if i == ink {
-                    Some(*p)
-                }
-                else {
-                    None
-                }
-            })
+            .filter(|(&p, &i)| i == ink)
+            .min()
+            .map(|(p, _i)| *p)
     }
 
     /// Returns true if the palette contains the inks in one of its pens (except border)

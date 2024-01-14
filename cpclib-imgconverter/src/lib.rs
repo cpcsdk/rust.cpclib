@@ -461,7 +461,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         }
     }
     else if let Some(tile_matches) = matches.subcommand_matches("tile") {
-        OutputFormat::TileEncoded {
+        dbg!(OutputFormat::TileEncoded {
             tile_width: TileWidthCapture::NbBytes(parse_int(
                 tile_matches
                     .get_one::<String>("WIDTH")
@@ -488,7 +488,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                 .map(|v| parse_int(v))
                 .map(|v| GridHeightCapture::TilesInColumn(v))
                 .unwrap_or(GridHeightCapture::FullHeight)
-        }
+        })
     }
     else {
         // Standard case
@@ -579,8 +579,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let output_format = get_output_format(&matches);
     let conversion = ImageConverter::convert(
         input_file,
-        palette,
-        output_mode.into(),
+        dbg!(palette),
+        dbg!(output_mode.into()),
         transformations,
         &output_format
     )?;

@@ -270,7 +270,9 @@ pub mod mode1 {
 
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
-        assert!(pens.len() % 4 == 0);
+        if pens.len() % 4 != 0 {
+            eprintln!("{} pens provided, but only {} handled", pens.len(), (pens.len()/4)*4);
+        };
 
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 4) {

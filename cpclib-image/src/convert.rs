@@ -1346,6 +1346,7 @@ impl<'a> ImageConverter<'a> {
         let mut tiles_list: Vec<Vec<u8>> = Vec::new();
         for row in 0..nb_rows {
             for column in 0..nb_columns {
+
                 // TODO add an additional parameter to read x before y
                 // Manage the sprite in this cell
                 let mut y_counter = vertical_movement.counter();
@@ -1355,16 +1356,16 @@ impl<'a> ImageConverter<'a> {
                     for x in 0..tile_width {
                         // Get the line of interest
                         let real_line =
-                            y_counter.get_line_index_in_screen() + row * tile_height as usize;
+                            row * tile_height as usize + y_counter.get_line_index_in_screen() ;
 
-                        // Get the 2 columns of interest (we want to  display word per word)
-                        let real_col1 = x_counter.get_column_index() + column * tile_width as usize;
+                        let real_col = column * tile_width as usize + x_counter.get_column_index();
                         if x != tile_width - 1 {
                             x_counter.next();
                         }
 
                         // Get the byte from the sprite ...
-                        let byte: u8 = sprite.get_byte(real_col1, real_line);
+                    //    dbg!(real_line, real_col);
+                        let byte: u8 = sprite.get_byte(real_col, real_line);
 
                         // ... and store it at the right place
                         current_tile.push(byte);
