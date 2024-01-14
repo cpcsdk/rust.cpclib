@@ -54,7 +54,7 @@ fn main() {
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
     let mode = Mode::from(mode);
 
-    let mode0ratio = matches.contains_id("MODE0RATIO");
+    let mode0ratio = matches.get_flag("MODE0RATIO");
     // read the data file
     let data = std::fs::read(input_fname).expect("Unable to read input file");
 
