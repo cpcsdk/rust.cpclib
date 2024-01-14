@@ -22,9 +22,12 @@ pub struct BndBuilder {
 }
 
 impl BndBuilder {
-    pub fn add_default_rule<S: AsRef<str>>(mut self, targets: &[S],
-        dependencies: &[S], kind: &str) -> Self {
-
+    pub fn add_default_rule<S: AsRef<str>>(
+        mut self,
+        targets: &[S],
+        dependencies: &[S],
+        kind: &str
+    ) -> Self {
         let rule = Rule::new_default(targets, dependencies, kind);
         let mut rules = self.inner.into_owner();
         rules.add(rule);
@@ -32,7 +35,6 @@ impl BndBuilder {
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps()).unwrap();
         BndBuilder { inner }
     }
-
 
     pub fn from_fname<P: AsRef<Path>>(fname: P) -> Result<Self, BndBuilderError> {
         let fname = fname.as_ref();

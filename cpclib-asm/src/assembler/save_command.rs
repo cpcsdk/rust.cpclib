@@ -5,6 +5,7 @@ use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
+use cpclib_disc::open_disc;
 use cpclib_tokens::{DiscType, SaveType};
 
 use super::report::SavedFile;
@@ -52,6 +53,7 @@ impl SaveCommand {
     }
 
     /// Really make the save - Prerequisit : the page is properly selected
+    /// Do not yet handle the ascii format
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
         assert_eq!(env.ga_mmr, self.ga_mmr);
         if env.options().show_progress() {
@@ -89,7 +91,7 @@ impl SaveCommand {
                 let amsdos_file = if r#type == SaveType::AmsdosBas {
                     AmsdosFile::basic_file_from_buffer(
                         &AmsdosFileName::try_from(self.filename.as_os_str().to_str().unwrap())?,
-                        data
+                        &data
                     )?
                 }
                 else {
@@ -97,11 +99,11 @@ impl SaveCommand {
                         &AmsdosFileName::try_from(self.filename.as_os_str().to_str().unwrap())?,
                         loading_address,
                         execution_address,
-                        data
+                        &data
                     )?
                 };
 
-                assert_eq!(amsdos_file.header().file_length(), size as _);
+                assert_eq!(amsdos_file.header().unwrap().file_length(), size as _);
                 // dbg!(size);
 
                 match r#type {
@@ -109,8 +111,7 @@ impl SaveCommand {
                         either::Left(
                             amsdos_file
                                 .header_and_content()
-                                .copied()
-                                .collect::<Vec<u8>>()
+                                .to_vec()
                         )
                     },
                     SaveType::Disc(_) | SaveType::Tape => either::Right(amsdos_file)
@@ -123,29 +124,9 @@ impl SaveCommand {
         match object {
             either::Right(amsdos_file) => {
                 if let Some(disc_filename) = &self.disc_filename {
-                    #[cfg(feature = "hfe")]
-                    let mut disc: Hfe = if std::path::Path::new(disc_filename.as_str()).exists() {
-                        Hfe::open(disc_filename).map_err(|e| {
-                            AssemblerError::AssemblingError {
-                                msg: format!("Error while loading {e}")
-                            }
-                        })?
-                    }
-                    else {
-                        Hfe::default()
-                    };
-                    #[cfg(not(feature = "hfe"))]
-                    let mut disc: ExtendedDsk =
-                        if std::path::Path::new(disc_filename.as_str()).exists() {
-                            ExtendedDsk::open(disc_filename).map_err(|e| {
-                                AssemblerError::AssemblingError {
-                                    msg: format!("Error while loading {e}")
-                                }
-                            })?
-                        }
-                        else {
-                            ExtendedDsk::default()
-                        };
+                    let mut disc = open_disc(disc_filename, false)
+                        .map_err(|msg| AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg)))
+                        ?;
 
                     let head = Head::A;
                     let system = false;
@@ -166,7 +147,7 @@ impl SaveCommand {
                     // check if everything is ok
                     eprintln!("TODO: removethat: check that file is properly saved in disc");
                     let amsdos_file2 = disc
-                        .get_amsdos_file(head, amsdos_file.amsdos_filename()?)
+                        .get_amsdos_file(head, amsdos_file.amsdos_filename().unwrap()?)
                         .unwrap()
                         .unwrap();
                     assert_eq!(amsdos_file, amsdos_file2);

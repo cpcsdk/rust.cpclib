@@ -228,6 +228,12 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"FOR",
     b"DW",
     b"ELSE",
+    b"ELSEIF",
+    b"ELSEIFDEF",
+    b"ELSEIFEXIST",
+    b"ELSEIFNDEF",
+    b"ELSEIFNOT",
+    b"ELSEIFUSED",
     //  b"END",
     b"ENT",
     b"EQU",
@@ -326,6 +332,12 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"DEFAULT",
     b"DEPHASE",
     b"ELSE",
+    b"ELSEIF",
+    b"ELSEIFDEF",
+    b"ELSEIFEXIST",
+    b"ELSEIFNDEF",
+    b"ELSEIFNOT",
+    b"ELSEIFUSED",
     b"ENDC",
     b"ENDCONFINED",
     b"ENDF",
@@ -1543,7 +1555,6 @@ enum LabelModifier {
     Macro
 }
 
-
 /// ACcept "fname" as in most assemblers and fname as in vasm
 pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
     alt((parse_string, parse_stringlike_without_quote)).parse_next(input)
@@ -1740,13 +1751,17 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
     Ok(UnescapedString(string, slice.into()))
 }
 
-pub fn parse_stringlike_without_quote(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
-    let (normal, escapable) = (none_of(('\\', ' ', '\r', '\n', ':', ';')), one_of(('\\', ' ', ':', ';')));
-    let (string, slice) = 
-        opt(my_escaped(normal, '\\', escapable))
-            .map(|s| s.unwrap_or_default())
-            .with_recognized()
-    .parse_next(input)?;
+pub fn parse_stringlike_without_quote(
+    input: &mut InnerZ80Span
+) -> PResult<UnescapedString, Z80ParserError> {
+    let (normal, escapable) = (
+        none_of(('\\', ' ', '\r', '\n', ':', ';')),
+        one_of(('\\', ' ', ':', ';'))
+    );
+    let (string, slice) = opt(my_escaped(normal, '\\', escapable))
+        .map(|s| s.unwrap_or_default())
+        .with_recognized()
+        .parse_next(input)?;
 
     let slice = input.clone().update_slice(slice);
 
@@ -1921,7 +1936,7 @@ pub fn parse_write_direct_memory(
     ))
         .parse_next(input)?;
 
-    let bank = located_expr.parse_next(input)?;
+    let bank = cut_err(located_expr.context("WRITE DIRECT -1, -1: BANK expected")).parse_next(input)?;
 
     let token = LocatedTokenInner::Bank(Some(bank));
 
@@ -1943,7 +1958,9 @@ pub fn parse_save(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if save_kind == SaveKind::WriteDirect {
-            parse_word(b"DIRECT").parse_next(input)?;
+            (parse_word(b"DIRECT"), not((my_space0, "-1"))).parse_next(input)?;
+        } else {
+            not((parse_word(b"DIRECT"), my_space0, "-1")).parse_next(input)?;
         }
 
         let filename = parse_fname.parse_next(input)?;
@@ -2567,7 +2584,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
                     line_ending.value(()),
                     tag(":").value(())
                 ))),
-                parse_directive_word(b"ELSE")
+                (winnow::ascii::Caseless(b"ELSE"), my_space0) // no word to allow ELSEIF in addition to ELSE IF
             ))
             .parse_next(input)?;
             if r#else.is_none() {
@@ -5142,8 +5159,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             // manage labels
             parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             parens
-        ))/* ,
-        my_space0 */
+        )) /* ,
+            * my_space0 */
     )
     .parse_next(input)?;
 
@@ -5178,8 +5195,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
                     b'>' => UnaryFunction::High,
                     b'<' => UnaryFunction::Low,
                     _ => unreachable!()
-                }, 
-                Box::new(factor), 
+                },
+                Box::new(factor),
                 build_span(input_offset, input_start, input.clone()).into()
             )
         },
@@ -5350,7 +5367,6 @@ pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     if input.state.options().is_orgams() {
         return parse_orgams_expression.parse_next(input);
     }
-
 
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5802,7 +5818,6 @@ endif"
         let res = res.res.unwrap();
         assert_eq!(res, Expr::PrefixedLabel(LabelPrefix::Bank, "label".into()));
     }
-
 
     #[test]
     fn test_undocumented_code() {
@@ -6341,7 +6356,7 @@ endif"
             "\"\\\" et voila\"",
             "0X1234",
             "<0X1234",
-            ">0X1234",
+            ">0X1234"
         ] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 

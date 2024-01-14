@@ -31,22 +31,23 @@ where D: Deserializer<'de> {
     Ok(r)
 }
 
-
 impl Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let targets = self.targets().iter()
+        let targets = self
+            .targets()
+            .iter()
             .map(|p| p.display().to_string())
             .join(" ");
-
 
         writeln!(f, "\n- tgt: {targets}")?;
 
         if !self.dependencies.is_empty() {
-            let dependencies = self.dependencies().iter()
-            .map(|p| p.display().to_string())
-            .join(" ");
+            let dependencies = self
+                .dependencies()
+                .iter()
+                .map(|p| p.display().to_string())
+                .join(" ");
             writeln!(f, "  dep: {dependencies}")?;
-
         }
 
         if let Some(phony) = &self.phony {
@@ -63,7 +64,8 @@ impl Display for Rule {
 
         if self.commands.len() == 1 {
             writeln!(f, "  cmd: {}", &self.commands[0])?;
-        } else if !self.commands.is_empty() {
+        }
+        else if !self.commands.is_empty() {
             writeln!(f, "  cmd:")?;
             for cmd in self.commands() {
                 writeln!(f, "       - {cmd}")?;
@@ -139,15 +141,14 @@ where D: Deserializer<'de> {
 }
 
 impl Rule {
-    pub fn new_default<S: AsRef<str>> (
-        targets: &[S],
-        dependencies: &[S],
-        kind: &str
-    ) -> Self {
-
+    pub fn new_default<S: AsRef<str>>(targets: &[S], dependencies: &[S], kind: &str) -> Self {
         let task = match kind {
             "basm" => {
-                Task::new_basm(&format!("-o {} {}", targets[0].as_ref(), dependencies[0].as_ref()))
+                Task::new_basm(&format!(
+                    "-o {} {}",
+                    targets[0].as_ref(),
+                    dependencies[0].as_ref()
+                ))
             },
             _ => unreachable!()
         };

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
+use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 use thiserror::Error;
 
@@ -307,6 +308,14 @@ impl AmsdosFileName {
     }
 }
 
+impl TryFrom<&String> for AmsdosFileName {
+    type Error = AmsdosError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        let value = value.as_str();
+        value.try_into()
+    }
+}
 // TODO use tryfrom asap
 impl TryFrom<&str> for AmsdosFileName {
     type Error = AmsdosError;
@@ -333,7 +342,7 @@ impl TryFrom<&str> for AmsdosFileName {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 /// Encodes the amsdos file type
 pub enum AmsdosFileType {
     /// Basic file type
@@ -1085,7 +1094,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         behavior: AmsdosAddBehavior
     ) -> Result<(), AmsdosError> {
         // handle the case where a file is already present
-        let filename = file.amsdos_filename()?;
+        let filename = file.amsdos_filename().unwrap()?;
         if let Some(_file) = self.get_file(filename) {
             match behavior {
                 AmsdosAddBehavior::FailIfPresent => {
@@ -1113,7 +1122,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         }
 
         // we know there is no file of the same name and can safely add it
-        let content: Vec<u8> = file.header_and_content().copied().collect();
+        let content = file.header_and_content();
 
         let mut file_pos = 0;
         let file_size = content.len();
@@ -1173,7 +1182,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
             // Update the entry on disc
             let new_entry = AmsdosEntry {
                 idx: entry_idx,
-                file_name: file.amsdos_filename()?,
+                file_name: filename,
                 read_only: is_read_only,
                 system: is_system,
                 num_page: entry_num_page,
@@ -1722,8 +1731,8 @@ impl AmsdosHeader {
 #[derive(Clone, PartialEq, Debug)]
 #[allow(missing_docs)]
 pub struct AmsdosFile {
-    header: AmsdosHeader,
-    content: Vec<u8>
+    all_data: Vec<u8>,
+    binary_filename: Option<AmsdosFileName>
 }
 
 #[allow(missing_docs)]
@@ -1733,11 +1742,8 @@ impl AmsdosFile {
         filename: &AmsdosFileName,
         loading_address: u16,
         execution_address: u16,
-        data: Vec<u8>
+        data: &[u8]
     ) -> Result<Self, AmsdosError> {
-        if data.len() > 0x10000 {
-            return Err(AmsdosError::FileLargerThan64Kb);
-        }
 
         let header = AmsdosHeader::build_header(
             filename,
@@ -1747,21 +1753,28 @@ impl AmsdosFile {
             data.len() as _
         );
 
+        Self::from_header_and_buffer(header, data)
+    }
+
+    pub fn from_header_and_buffer(header: AmsdosHeader, data: &[u8]) -> Result<Self, AmsdosError>  {
+        if data.len() > 0x10000 {
+            return Err(AmsdosError::FileLargerThan64Kb);
+        }
+
+        let mut all_data = Vec::new();
+        all_data.extend(header.as_bytes());
+        all_data.extend(data);
+
         Ok(Self {
-            header,
-            content: data
+            all_data,
+            binary_filename: None
         })
     }
 
     pub fn basic_file_from_buffer(
         filename: &AmsdosFileName,
-        data: Vec<u8>
+        data: &[u8]
     ) -> Result<Self, AmsdosError> {
-        if data.len() > 0x10000
-        // TODO shorten the limit
-        {
-            return Err(AmsdosError::FileLargerThan64Kb);
-        }
 
         let header = AmsdosHeader::build_header(
             filename,
@@ -1771,19 +1784,40 @@ impl AmsdosFile {
             data.len() as _
         );
 
-        Ok(Self {
-            header,
-            content: data
-        })
+        Self::from_header_and_buffer(header, data)
     }
 
-    /// Create a file from its header and content
+    /// Create a file from its potential header and content
     pub fn from_buffer(data: &[u8]) -> Self {
-        let (header_bytes, content_bytes) = data.split_at(128);
         Self {
-            header: AmsdosHeader::from_buffer(header_bytes),
-            content: content_bytes.to_vec()
+            all_data: data.to_vec(),
+            binary_filename: None
         }
+    }
+    pub fn from_buffer_with_name(data: &[u8], binary_filename: AmsdosFileName) -> Self {
+        Self {
+            all_data: data.to_vec(),
+            binary_filename: Some(binary_filename)
+        }
+    }
+
+    pub fn is_ascii(&self) -> bool {
+        self.header().is_none()
+    }
+
+    pub fn is_binary(&self) -> bool {
+        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Binary))
+            .unwrap_or(false)
+    }
+    
+    pub fn is_basic(&self) -> bool {
+        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Basic))
+        .unwrap_or(false)
+    }
+    
+    pub fn is_protected(&self) -> bool {
+        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Protected))
+        .unwrap_or(false)
     }
 
     /// Read a file from disc and success if there is no io error and if the header if correct
@@ -1792,63 +1826,77 @@ impl AmsdosFile {
         let mut content = Vec::new();
         f.read_to_end(&mut content)?;
 
-        if content.len() < 128 {
-            return Err(AmsdosError::InvalidHeader);
-        }
-
-        let ams_file = Self::from_buffer(&content);
-        if ams_file.header().is_checksum_valid() {
-            Ok(ams_file)
-        }
-        else {
-            Err(AmsdosError::InvalidHeader)
-        }
+    
+        Ok(Self::from_buffer(&content))
     }
 
-    pub fn amsdos_filename(&self) -> Result<AmsdosFileName, AmsdosError> {
-        self.header.amsdos_filename()
+    pub fn amsdos_filename(&self) -> Option<Result<AmsdosFileName, AmsdosError>> {
+        match self.header() {
+            Some(header) => Some(header.amsdos_filename()),
+            None => self.binary_filename.clone().map(|f| {
+                Ok(f)
+            }),
+        }
+            
     }
 
     /// Return an iterator on the full content of the file: header + content
-    pub fn header_and_content(&self) -> impl Iterator<Item = &u8> {
-        self.header.as_bytes().iter().chain(self.content.iter())
+    pub fn header_and_content(&self) -> &[u8] {
+        &self.all_data
     }
 
-    pub fn header(&self) -> &AmsdosHeader {
-        &self.header
+    /// Return an header if the checksum is valid
+    pub fn header(&self) -> Option<AmsdosHeader> {
+        if self.all_data.len()>128 {
+            let header = AmsdosHeader::from_buffer(&self.all_data[..128]);
+            if header.is_checksum_valid() {
+                return Some(header);
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
+    /// Return the content for no nascii files, everything for the others
     pub fn content(&self) -> &[u8] {
-        self.content.as_ref()
-    }
-
-    /// Returns the header + the content
-    pub fn as_bytes(&self) -> Vec<u8> {
-        self.header_and_content().copied().collect()
+        if self.is_ascii() {
+            self.header_and_content()
+        } else {
+            &self.all_data[128..]
+        }
     }
 
     /// Files are read from disc by chunks of the size of 2 sectors.
     /// This method removes the extra unecessary bytes.
+    /// it works only for not ascii files
     pub fn shrink_content_to_fit_header_size(&mut self) {
-        let size = self.header.file_length() as usize;
-        assert!(
-            size <= self.content.len(),
-            "Header is invalid. File content has a size of {}, whereas header specify {}",
-            self.content.len(),
-            size
-        );
-        self.content.resize(size, 0);
+
+        if let Some(header) = self.header() {
+            let size = header.file_length() as usize;
+            assert!(
+                size + 128 <= self.all_data.len(),
+                "Header is invalid. File content has a size of {}, whereas header specify {}",
+                self.all_data.len(),
+                size
+            );
+            self.all_data.resize(size + 128, 0);
+        } else {
+            // nothing to do
+        }
+
     }
 
-    /// Save the file at the given path
+    /// Save the file at the given path (header and data)
     pub fn save_in_folder<P: AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
         use std::io::Write;
 
         let folder = folder.as_ref();
-        let fname = self.amsdos_filename().unwrap().filename();
+        let fname = self.amsdos_filename().unwrap().unwrap().filename();
         println!("Will write in {}", fname);
         let mut file = File::create(folder.join(fname))?;
-        file.write_all(&self.as_bytes())?;
+        file.write_all(self.content())?;
         Ok(())
     }
 }

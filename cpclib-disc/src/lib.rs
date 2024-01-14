@@ -4,7 +4,9 @@
 use std::fs::File;
 use std::io::Write;
 
+use amsdos::{AmsdosFileName, AmsdosEntry, AmsdosError};
 use cpclib_common::clap::*;
+use cpclib_common::itertools::Itertools;
 use disc::Disc;
 use edsk::Head;
 
@@ -39,6 +41,58 @@ custom_error! {pub DskManagerError
     IOError{source: std::io::Error} = "IO error: {source}.",
     AnyError{msg: String} = "{msg}",
     DiscConfigError{source: crate::cfg::DiscConfigError} = "Disc configuration: {source}",
+}
+
+impl From<AmsdosError> for DskManagerError {
+    fn from(value: AmsdosError) -> Self {
+        DskManagerError::AnyError { msg: format!("Amsdos error: {}", value) }
+    }
+}
+
+#[cfg(feature = "hfe")]
+pub fn new_disc<P: AsRef<std::path::Path>>(path: Option<P>) -> Hfe {
+    let disc = Hfe::default();
+}
+
+#[cfg(not(feature = "hfe"))]
+pub fn new_disc<P: AsRef<std::path::Path>>(path: Option<P>) -> ExtendedDsk {
+    ExtendedDsk::default()
+}
+
+#[cfg(feature = "hfe")]
+pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> Result<Hfe, String> {
+    let path = path.as_ref();
+    if !path.exists() {
+        if fail_if_missing {
+            return Err(format!("{} does not exists", path.display()));
+        } else {
+            return Ok(new_disc(Some(path)));
+        }
+    }
+
+    Hfe::open(disc_filename).map_err(|e| {
+        AssemblerError::AssemblingError {
+            msg: format!("Error while loading {e}")
+        }
+    })
+}
+
+#[cfg(not(feature = "hfe"))]
+pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> Result<ExtendedDsk, String> {
+    let path = path.as_ref();
+    if !path.exists() {
+        if fail_if_missing {
+            return Err(format!("{} does not exists", path.display()));
+        } else {
+            return Ok(new_disc(Some(path)));
+        }
+    }
+
+    ExtendedDsk::open(path)
+        .map_err(|e| {
+        format!("Error while loading {e}")
+    })
+    .map(|dsk: ExtendedDsk| dsk)
 }
 
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
@@ -156,11 +210,33 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
             sector = next_position.2;
         }
     }
+    else if let Some(sub) = matches.subcommand_matches("get") {
+        let disc = open_disc(dsk_fname, true)
+            .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
+        let head = Head::A;
+
+        for filename in sub.get_many::<String>("OUTPUT_FILES").unwrap() {
+            let ams_filename = AmsdosFileName::try_from(filename)?;
+            let file = disc.get_amsdos_file(head, ams_filename)?;
+
+            if file.is_none() {
+                return Err(DskManagerError::AnyError { msg: format!("missing {filename}") });
+            } else {
+                let file = file.unwrap();
+                if sub.get_flag("noheader") {
+                    std::fs::write(filename, file.content())?;
+                } else {
+                    std::fs::write(filename, file.header_and_content())?;
+                }
+            }
+
+        }
+    }
     else if let Some(sub) = matches.subcommand_matches("add") {
         // Add files in an Amsdos compatible disc
 
         // Get the input dsk
-        let mut dsk = ExtendedDsk::open(dsk_fname)
+        let mut disc = open_disc(dsk_fname, true)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
 
         // Get the common parameters
@@ -173,7 +249,7 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(ams_file) => {
                     assert!(
-                        ams_file.amsdos_filename().unwrap().is_valid(),
+                        ams_file.amsdos_filename().unwrap()?.is_valid(),
                         "Invalid amsdos filename ! {:?}",
                         ams_file.amsdos_filename()
                     );
@@ -184,12 +260,12 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
                     panic!("Unable to load {fname}: {e:?}");
                 }
             };
-            dsk.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
+            disc.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
                 .unwrap();
         }
 
         // Save the dsk on disc
-        dsk.save(dsk_fname)
+        disc.save(dsk_fname)
             .map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else if let Some(sub) = matches.subcommand_matches("format") {
@@ -282,7 +358,7 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                            .arg(
                                Arg::new("CATART")
                                .help("[unimplemented] Display the catart version")
-                               .long("--catart")
+                               .long("catart")
                         .action(ArgAction::SetTrue)
 
                            )
@@ -295,6 +371,21 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                                 .required(true)
                            )
                        )
+                       .subcommand(
+                            Command::new("get")
+                                .about("Retrieve files for the disc in the Amsdos way")
+                                .arg(Arg::new("OUTPUT_FILES")
+                                    .help("The files to retrieve")
+                                    .action(ArgAction::Append)
+                                    .required(true)
+                                )
+                                .arg(
+                                    Arg::new("noheader")
+                                    .long("no-header")
+                                    .help("Do not store the header of the file")
+                                    .action(ArgAction::SetTrue)
+                                )
+                            )
                        .subcommand(
                            Command::new("add")
                            .about("Add files in the disc in an Amsdos way")

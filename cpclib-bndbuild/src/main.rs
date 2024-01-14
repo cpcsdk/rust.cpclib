@@ -69,24 +69,29 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .action(ArgAction::SetTrue)
                 .help("Init a new project by creating it")
         )
-        .arg(Arg::new("add")
-            .long("add").short('a')
-            .help("Add a new basm target in an existing bndbuild.yml (or create it)")
+        .arg(
+            Arg::new("add")
+                .long("add")
+                .short('a')
+                .help("Add a new basm target in an existing bndbuild.yml (or create it)")
                 .action(ArgAction::Set)
-        ).arg(
-                            Arg::new("dep").help("The source files")
-                            .long("dep").short('d')
-                            .requires("add")
-                        )
-                        .arg(
-                            Arg::new("kind").help("The kind of command")
-                            .long("kind").short('k')
-                            .value_parser(["basm", "img2cpc", "xfer"])
-                            .requires("add")
-                            .default_missing_value("basm")
-                        )
-
-        
+        )
+        .arg(
+            Arg::new("dep")
+                .help("The source files")
+                .long("dep")
+                .short('d')
+                .requires("add")
+        )
+        .arg(
+            Arg::new("kind")
+                .help("The kind of command")
+                .long("kind")
+                .short('k')
+                .value_parser(["basm", "img2cpc", "xfer"])
+                .requires("add")
+                .default_missing_value("basm")
+        )
         .arg(
             Arg::new("target")
                 .action(ArgAction::Append)
@@ -140,7 +145,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
     // Get the file
     let fname: &String = matches.get_one("file").unwrap();
 
-    let add =  matches.get_one::<String>("add");
+    let add = matches.get_one::<String>("add");
 
     // Read it
     if !std::path::Path::new(fname).exists() {
@@ -165,7 +170,8 @@ fn inner_main() -> Result<(), BndBuilderError> {
 
     if let Some(add) = matches.get_one::<String>("add") {
         let targets = [add];
-        let dependencies = matches.get_many::<String>("dep")
+        let dependencies = matches
+            .get_many::<String>("dep")
             .map(|l| l.collect_vec())
             .unwrap_or_default();
         let kind = matches.get_one::<String>("kind").unwrap();

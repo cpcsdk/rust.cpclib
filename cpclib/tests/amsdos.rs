@@ -25,11 +25,14 @@ mod tests {
         let file = manager
             .get_file(AmsdosFileName::try_from("test.bas").unwrap())
             .unwrap();
-        assert!(file.header().is_checksum_valid());
+        assert!(dbg!(file.header().unwrap()).is_checksum_valid());
+        assert!(file.is_basic());
+        assert!(!file.is_ascii());
+        assert_eq!(file.content().len() as u16, file.header().unwrap().file_length());
 
         let file2 = AmsdosFile::basic_file_from_buffer(
             &"test.bas".try_into().unwrap(),
-            file.content().to_vec()
+            file.content()
         )
         .unwrap();
 
@@ -117,10 +120,10 @@ mod tests {
         let _header = &result[0..128];
 
         let filename = AmsdosFileName::new_incorrect_case(0, "test", "bin").unwrap();
-        let file = AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, content.to_vec())
+        let file = AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, &content)
             .unwrap();
 
-        let obtained_result = file.header_and_content().map(|&b| b).collect::<Vec<_>>();
+        let obtained_result = file.header_and_content().to_vec();
         assert_eq!(obtained_result.len(), result.len());
         assert_eq!(obtained_result, result.to_vec());
     }
@@ -217,7 +220,7 @@ mod tests {
                     filename.as_ref().unwrap(),
                     0x3210,
                     0x1234,
-                    [0x41, 0x42, 0x43, 0x0A].to_vec()
+                    &[0x41, 0x42, 0x43, 0x0A]
                 )
                 .unwrap()
             );
@@ -234,17 +237,18 @@ mod tests {
                 file.as_ref()
                     .unwrap()
                     .header()
+                    .unwrap()
                     .amsdos_filename()
                     .unwrap()
                     .filename(),
                 "TEST.BIN"
             );
             assert_eq!(
-                &file.as_ref().unwrap().header().amsdos_filename().unwrap(),
+                &file.as_ref().unwrap().header().unwrap().amsdos_filename().unwrap(),
                 filename.as_ref().unwrap()
             );
-            assert_eq!(file.as_ref().unwrap().header().execution_address(), 0x1234);
-            assert_eq!(file.as_ref().unwrap().header().loading_address(), 0x3210);
+            assert_eq!(file.as_ref().unwrap().header().unwrap().execution_address(), 0x1234);
+            assert_eq!(file.as_ref().unwrap().header().unwrap().loading_address(), 0x3210);
         }
 
         let filename = filename.unwrap();
@@ -273,7 +277,7 @@ mod tests {
         let file2 = manager.get_file(filename);
         assert!(file2.is_some());
         let file2 = file2.unwrap();
-        assert!(file2.header().is_checksum_valid());
+        assert!(file2.header().unwrap().is_checksum_valid());
         assert_eq!(&file.header(), &file2.header());
 
         assert_eq!(&file.content().len(), &file2.content().len());

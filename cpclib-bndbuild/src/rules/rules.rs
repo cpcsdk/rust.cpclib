@@ -1,4 +1,5 @@
-use std::{collections::BTreeMap};
+use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::path::Path;
 
 use serde::{self, Deserialize};
@@ -6,14 +7,12 @@ use topologic::AcyclicDependencyGraph;
 
 use super::{Graph, Rule};
 use crate::BndBuilderError;
-use std::fmt::Display;
 
 #[derive(Deserialize)]
 #[serde(transparent)]
 pub struct Rules {
     rules: Vec<Rule>
 }
-
 
 impl Display for Rules {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

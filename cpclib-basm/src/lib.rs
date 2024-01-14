@@ -439,7 +439,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                     "[WARNING] You are saving a file with .sna extension without using --sna flag"
                 );
             }
-            let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_ref());
+            let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_str());
 
             // Raise an error if the filename is not compatible with the header
             if (matches.get_flag("BINARY_HEADER") || matches.get_flag("BASIC_HEADER"))

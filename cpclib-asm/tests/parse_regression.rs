@@ -432,14 +432,14 @@ fn regression_label_parsing() {
 
     let (_ctx_, input) = ctx_and_span("ds_m4_rom_byte_storage equ $");
 
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard, false).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "ds_m4_rom_byte_storage equ $
     "
     );
 
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard, false).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "ifndef ds_m4_rom_byte_storage
@@ -448,7 +448,7 @@ fn regression_label_parsing() {
         endif
         "
     );
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard, false).parse(input.into())).is_ok());
 
     let (_ctx_, input) = ctx_and_span(
         "    if USE_CPCWIFI
@@ -462,5 +462,5 @@ ds_m4_rom_byte_storage equ $
     endif
     "
     );
-    assert!(dbg!(inner_code_with_state(ParsingState::Standard).parse(input.into())).is_ok());
+    assert!(dbg!(inner_code_with_state(ParsingState::Standard, false).parse(input.into())).is_ok());
 }

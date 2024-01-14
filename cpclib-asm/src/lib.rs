@@ -240,7 +240,7 @@ pub fn assemble_to_amsdos_file(
         &amsdos_filename,
         env.loading_address().unwrap() as u16,
         env.execution_address().unwrap() as u16,
-        env.produced_bytes()
+        &env.produced_bytes()
     )?)
 }
 

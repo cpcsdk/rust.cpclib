@@ -66,9 +66,10 @@ pub trait Disc {
     where
         Self: Sized
     {
-        if !file.amsdos_filename().unwrap().is_valid() {
+        let fname = file.amsdos_filename().unwrap()?;
+        if !fname.is_valid() {
             return Err(AmsdosError::WrongFileName {
-                msg: file.amsdos_filename().unwrap().filename()
+                msg: fname.filename()
             });
         }
 
@@ -80,7 +81,7 @@ pub trait Disc {
     }
 
     fn get_amsdos_file<H: Into<Head>, F: Into<AmsdosFileName>>(
-        &mut self,
+        &self,
         head: H,
         filename: F
     ) -> Result<Option<AmsdosFile>, AmsdosError>

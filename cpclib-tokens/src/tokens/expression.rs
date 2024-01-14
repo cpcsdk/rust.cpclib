@@ -1351,7 +1351,6 @@ impl AsRef<ExprResult> for ExprResult {
 impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
-
     /// TODO Allow "string" + &80 to add a number to the very last string
     fn add(self, rhs: T) -> Self::Output {
         let rhs = rhs.as_ref();

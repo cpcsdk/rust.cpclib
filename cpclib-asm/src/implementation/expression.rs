@@ -9,29 +9,28 @@ use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
 use crate::{SymbolFor, UnaryFunction};
 
-
-
 /// XXX Orgams only handles integer values and strings
 pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
     let e = if env.options().parse_options().is_orgams() {
         let res = match &e {
-            ExprResult::Float(_) |
-            ExprResult::Value(_) |
-            ExprResult::Char(_) |
-            ExprResult::Bool(_) => ExprResult::Value(e.int()?) ,
+            ExprResult::Float(_)
+            | ExprResult::Value(_)
+            | ExprResult::Char(_)
+            | ExprResult::Bool(_) => ExprResult::Value(e.int()?),
             ExprResult::String(s) => e,
-            _ => return Err(AssemblerError::AlreadyRenderedError(format!(
-                "Incompatible type with orgams"
-            )))
-        } ;
+            _ => {
+                return Err(AssemblerError::AlreadyRenderedError(format!(
+                    "Incompatible type with orgams"
+                )))
+            },
+        };
         res
-
-    } else {
+    }
+    else {
         e
     };
 
     Ok(e)
-
 }
 
 /// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.

@@ -14,17 +14,58 @@ pub enum Task {
     Extern(StandardTask)
 }
 
-
 impl Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Task::Basm(s) => write!(f, "{}basm {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::Rm(s) => write!(f, "{}rm {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::Echo(s) => write!(f, "{}echo {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::ImgConverter(s) => write!(f, "{}img2cpc {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::Xfer(s) => write!(f, "{}xfer {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::Dsk(s) => write!(f, "{}disc {}", if s.ignore_error {"-"} else {""}, s.args),
-            Task::Extern(s) => write!(f, "{}extern {}", if s.ignore_error {"-"} else {""}, s.args),
+            Task::Basm(s) => {
+                write!(
+                    f,
+                    "{}basm {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
+            Task::Rm(s) => write!(f, "{}rm {}", if s.ignore_error { "-" } else { "" }, s.args),
+            Task::Echo(s) => {
+                write!(
+                    f,
+                    "{}echo {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
+            Task::ImgConverter(s) => {
+                write!(
+                    f,
+                    "{}img2cpc {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
+            Task::Xfer(s) => {
+                write!(
+                    f,
+                    "{}xfer {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
+            Task::Dsk(s) => {
+                write!(
+                    f,
+                    "{}disc {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
+            Task::Extern(s) => {
+                write!(
+                    f,
+                    "{}extern {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
         }
     }
 }

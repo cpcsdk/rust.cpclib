@@ -1,4 +1,4 @@
-use std::fmt::{Display, write};
+use std::fmt::{write, Display};
 
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited};
@@ -22,7 +22,7 @@ impl Display for Constraint {
             Constraint::Windows => "windows".to_owned(),
             Constraint::Linux => "linux".to_owned(),
             Constraint::MacOsx => "macos".to_owned(),
-            Constraint::Not(c) => format!("not({})", c),
+            Constraint::Not(c) => format!("not({})", c)
         };
         write!(f, "{}", text)
     }
