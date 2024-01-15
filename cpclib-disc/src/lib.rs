@@ -24,6 +24,9 @@ pub mod edsk;
 #[cfg(feature = "hfe")]
 pub mod hfe;
 
+#[cfg(feature = "hfe")]
+use crate::hfe::Hfe;
+
 use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
@@ -51,7 +54,7 @@ impl From<AmsdosError> for DskManagerError {
 
 #[cfg(feature = "hfe")]
 pub fn new_disc<P: AsRef<std::path::Path>>(path: Option<P>) -> Hfe {
-    let disc = Hfe::default();
+    Hfe::default()
 }
 
 #[cfg(not(feature = "hfe"))]
@@ -70,10 +73,8 @@ pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> R
         }
     }
 
-    Hfe::open(disc_filename).map_err(|e| {
-        AssemblerError::AssemblingError {
-            msg: format!("Error while loading {e}")
-        }
+    Hfe::open(path).map_err(|e| {
+         format!("Error while loading {e}")
     })
 }
 
