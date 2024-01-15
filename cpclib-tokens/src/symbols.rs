@@ -661,7 +661,9 @@ pub struct SymbolsTable {
     seed_stack: Vec<usize>, // stack of seeds for nested repeat to properly interpret the @ symbol
 
     /// Contains all the symbols that have been used in expressions
-    used_symbols: HashSet<Symbol>
+    used_symbols: HashSet<Symbol>,
+
+    counters: Vec<ExprResult>
 }
 
 impl Default for SymbolsTable {
@@ -676,7 +678,8 @@ impl Default for SymbolsTable {
             assignable: Default::default(),
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
-            used_symbols: HashSet::new()
+            used_symbols: HashSet::new(),
+            counters: Default::default()
         }
     }
 }
@@ -1005,21 +1008,53 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 }
 
+
+impl SymbolsTable {
+    /**
+     * We are leaving the inner loop and remove its value
+     */
+    pub fn pop_counter_value(&mut self) -> ExprResult {
+        self.clear_counters_lut();
+        let res = self.counters.pop().unwrap();
+        self.rebuild_counters_lut();
+        res
+    }
+
+    /**
+     * We are entering a new loop and add its value
+     */
+    pub fn push_counter_value(&mut self, e: ExprResult) {
+        self.clear_counters_lut();
+        self.counters.push(e);
+        self.rebuild_counters_lut();
+    }
+
+    fn clear_counters_lut(&mut self) {
+        let mut key= "".to_owned();
+        for _ in 0..self.counters.len() {
+            key.push('#');
+            self.remove_symbol(key.clone()).expect("[BUG] symbol {key} MUST be present");
+        }
+    }
+    fn rebuild_counters_lut(&mut self) {
+        let mut key= "".to_owned();
+        for value in self.counters.clone() {
+            key.push('#');
+            self.assign_symbol_to_value(key.clone(), value.clone()).expect("[BUG] symbol {key} MUST be set to {value");
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> Self {
         let mut map = ModuleSymbolTable::default();
         map.insert(Symbol::from("$"), Value::Expr(0.into()));
-        Self {
-            map: map.clone(),
-            current_pass_map: map.clone(),
-            dummy: true,
-            current_global_label: "".into(),
-            assignable: HashSet::new(),
-            seed_stack: Vec::new(),
-            namespace_stack: Vec::new(),
-            used_symbols: HashSet::new()
-        }
+        let mut table = SymbolsTable::default();
+        table.dummy = true;
+        table.current_global_label = "".into();
+        table
+
     }
 
     /// Add a new seed for the @ symbol name resolution (we enter in a repeat)
@@ -1353,6 +1388,8 @@ impl SymbolsTableCaseDependent {
             S: AsRef<str>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
+            pub fn pop_counter_value(&mut self);
+            pub fn push_counter_value(&mut self, e: ExprResult);
 
     pub fn extend_local_and_patterns_for_symbol<S>(
         &self,

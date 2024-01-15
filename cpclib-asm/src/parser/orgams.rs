@@ -191,7 +191,7 @@ mod test {
     use crate::preamble::{
         parse_line_component, parse_orgams_expression, parse_orgams_factor,
         parse_orgams_ordered_expression, InnerZ80Span, ParserContext, ParserContextBuilder,
-        ParserOptions, Z80ParserError, Z80Span
+        ParserOptions, Z80ParserError, Z80Span, parse_orgams_repeat
     };
 
     #[derive(Debug)]
@@ -280,5 +280,11 @@ mod test {
         assert!(dbg!(parse_test(parse_orgams_expression, "&100 + #*10")).is_ok());
         assert!(dbg!(parse_test(parse_orgams_expression, "96 MOD [30 + #*2]")).is_ok());
         assert!(dbg!(parse_test(parse_orgams_expression, "[r1 + r13*2]*2")).is_ok());
+    }
+
+    #[test]
+    fn orgams_test_repeat() {
+        assert!(dbg!(parse_test(parse_orgams_repeat, "5 ** inc l")).is_ok());
+
     }
 }

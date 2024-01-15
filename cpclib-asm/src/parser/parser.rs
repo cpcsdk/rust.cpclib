@@ -5060,10 +5060,17 @@ pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
+    let (open, close) = if input.state.options().is_orgams() {
+        ('[', ']')
+    }else {
+        ('(', ')')
+    };
+
+
     let exp = delimited(
-        delimited(my_space0, tag("("), my_space0),
+        delimited(my_space0, open, my_space0),
         located_expr,
-        delimited(my_space0, tag(")"), my_space0)
+        delimited(my_space0, close, my_space0)
     )
     .parse_next(input)?;
 
@@ -5103,6 +5110,8 @@ pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 /// Get a factor
 #[inline]
 pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    let is_orgams = input.state.options().is_orgams();
+
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -5121,7 +5130,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
         my_space0,
         alt((
             prefixed_label_expr,
-            parse_expr_bracketed_list,
+            parse_expr_bracketed_list.verify(|_| !is_orgams),
             // Manage functions
             parse_word(b"RND()").map(|w| LocatedExpr::Rnd(w.into())),
             parse_unary_function_call,

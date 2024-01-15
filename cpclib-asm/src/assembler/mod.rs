@@ -3647,6 +3647,11 @@ impl Env {
             }
         }
 
+
+        if let Some(counter_value) = &counter_value {
+            self.symbols_mut().push_counter_value(counter_value.clone());
+        }
+
         // generate the bytes
         visit_processed_tokens(code, self).map_err(|e| {
             let e = if let AssemblerError::RelocatedError {
@@ -3685,6 +3690,9 @@ impl Env {
 
         // handle the end of visibility of unique labels
         self.symbols_mut().pop_seed();
+        if let Some(counter_value) = &counter_value {
+            self.symbols_mut().pop_counter_value();
+        }
 
         Ok(())
     }
