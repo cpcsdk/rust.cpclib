@@ -1,5 +1,6 @@
 	org #300
-
+	ent $
+	
 	5 ** inc l
 	10 ** [
 		ld hl, 0
