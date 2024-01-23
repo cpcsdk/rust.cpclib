@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter, Result};
 use std::ops::Add;
+use std::fmt::Display;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::num::Integer;
+use cpclib_common::num::{Integer, Zero};
 use image as im;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -100,6 +101,19 @@ pub enum InkComponentQuantity {
     Full
 }
 
+
+impl Display for InkComponentQuantity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let code = match self {
+            InkComponentQuantity::Zero => 0,
+            InkComponentQuantity::Half => 127,
+            InkComponentQuantity::Full => 255,
+        };
+
+        write!(f, "{:3}", code)
+    }
+}
+
 impl InkComponentQuantity {
     /// Build a lower quantity
     pub fn decrease(&self) -> InkComponentQuantity {
@@ -107,6 +121,26 @@ impl InkComponentQuantity {
             Self::Zero => Self::Zero,
             Self::Half => Self::Zero,
             Self::Full => Self::Half
+        }
+    }
+
+
+    pub fn increase(&self) -> InkComponentQuantity {
+        match self {
+            Self::Zero => Self::Half,
+            Self::Half => Self::Full,
+            Self::Full => Self::Full
+        }
+    }
+}
+
+
+impl From<(InkComponent, InkComponentQuantity)> for Ink {
+    fn from(value: (InkComponent, InkComponentQuantity)) -> Self {
+        match value.0 {
+            InkComponent::Red => (value.1, InkComponentQuantity::Zero, InkComponentQuantity::Zero).into(),
+            InkComponent::Green => (InkComponentQuantity::Zero, value.1, InkComponentQuantity::Zero).into(),
+            InkComponent::Blue => (InkComponentQuantity::Zero, InkComponentQuantity::Zero, value.1).into(),
         }
     }
 }
@@ -287,6 +321,19 @@ pub enum InkComponent {
     Blue
 }
 
+
+impl Display for InkComponent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let code = match self {
+            InkComponent::Red => "red",
+            InkComponent::Green => "green",
+            InkComponent::Blue => "blue",
+        };
+
+        write!(f, "{}", code)
+    }
+}
+
 #[allow(missing_docs)]
 impl Ink {
     /// Get the RGB color value of the ink
@@ -337,7 +384,7 @@ impl Ink {
     }
 
     /// Decrease the component of interest
-    pub fn decrease_component(&mut self, comp: InkComponent) {
+    pub fn decrease_component(&mut self, comp: InkComponent) -> &mut Self {
         let (mut r, mut g, mut b) = (
             self.red_quantity(),
             self.green_quantity(),
@@ -350,8 +397,28 @@ impl Ink {
         };
         let new_ink: Ink = (r, g, b).into();
 
-        self.value = new_ink.value
+        self.value = new_ink.value;
+        self
     }
+
+
+        /// Increase the component of interest
+        pub fn increase_component(&mut self, comp: InkComponent) -> &mut Self {
+            let (mut r, mut g, mut b) = (
+                self.red_quantity(),
+                self.green_quantity(),
+                self.blue_quantity()
+            );
+            match comp {
+                InkComponent::Red => r = r.increase(),
+                InkComponent::Green => g = g.increase(),
+                InkComponent::Blue => b = b.increase()
+            };
+            let new_ink: Ink = (r, g, b).into();
+    
+            self.value = new_ink.value;
+            self
+        }
 
     /// Get the ink number (firmware wise)
     pub fn number(self) -> u8 {
@@ -361,6 +428,11 @@ impl Ink {
     /// Get the value required by the gate array the select the ink
     pub fn gate_array(self) -> u8 {
         INKS_GA_VALUE[self.value as usize]
+    }
+
+    pub fn from_gate_array_color_number(col: u8) -> Ink {
+        let idx = INKS_GA_VALUE.iter().position(|i| *i==col).unwrap();
+        INKS[idx].clone()
     }
 
     pub fn from_hardware_color_number(col: u8) -> Ink {
@@ -488,6 +560,13 @@ impl From<String> for Ink {
 
 impl Debug for Ink {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{} ({})", self, self.value)
+    }
+}
+
+
+impl Display for Ink {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let repr = match self.value {
             0 => "BLACK",
             1 => "BLUE",
@@ -519,7 +598,7 @@ impl Debug for Ink {
             _ => panic!()
         };
 
-        write!(f, "{} ({})", repr, self.value)
+        write!(f, "{}", repr)
     }
 }
 
@@ -674,6 +753,7 @@ impl Default for Palette {
     }
 }
 
+/*/
 impl<T> From<Vec<T>> for Palette
 where
     Ink: From<T>,
@@ -689,7 +769,28 @@ where
         p
     }
 }
+*/
 
+
+impl<S,T> From<S> for Palette
+where
+S: IntoIterator<Item = T>,
+Ink: From<T>
+{
+    fn from(items: S) -> Self {
+        let mut p = Self::empty();
+        let items = items.into_iter();
+
+        for (idx, ink) in items.enumerate().take(16+1) {
+            p.set(Pen::from(idx as u8), Ink::from(ink));
+        }
+
+        p
+    }
+}
+
+
+/*
 impl<T> From<[T; 16]> for Palette
 where
     Ink: From<T>,
@@ -699,6 +800,7 @@ where
         items.to_vec().into()
     }
 }
+*/
 
 /// Create a palette with the right inks
 /// Usage
@@ -745,7 +847,7 @@ impl Serialize for Palette {
 impl<'de> Deserialize<'de> for Palette {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let inks: Vec<Ink> = Vec::<Ink>::deserialize(deserializer)?;
-        let palette: Self = inks.into();
+        let palette: Self = inks.into_iter().into();
         Ok(palette)
     }
 }
@@ -909,6 +1011,10 @@ impl Palette {
         }
     }
 
+    pub fn safe_get(&self, pen: &Pen) -> Option<&Ink> {
+        self.values.get(pen)
+    }
+
     pub fn get_with_default<'a>(&'a self, pen: &'a Pen, default: &'a Ink) -> &'a Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
@@ -977,7 +1083,7 @@ impl Palette {
     pub fn decrease_component(&mut self, c: InkComponent) {
         self.values
             .iter_mut()
-            .for_each(|(_p, i)| i.decrease_component(c));
+            .for_each(|(_p, i)| {i.decrease_component(c);});
     }
 
     /// Generate the list of palette needed to obtain an RGB fadout.
@@ -1025,6 +1131,11 @@ impl Palette {
 
         palettes
     }
+
+
+    pub fn nb_pens_used(&self) -> usize {
+        self.values.len()
+    }
 }
 
 impl Into<Vec<u8>> for &Palette {
@@ -1058,7 +1169,9 @@ impl Palette {
 
 #[cfg(test)]
 mod tests {
-    use crate::ga;
+    use cpclib_common::itertools::Itertools;
+
+    use crate::ga::{self, InkComponentQuantity, Palette, Ink};
 
     #[test]
     fn test_ink() {
@@ -1079,5 +1192,20 @@ mod tests {
         assert_eq!(*p.get(2.into()), ga::INKS[9]);
         assert_eq!(*p.get(3.into()), ga::INKS[10]);
         assert_eq!(*p.get(4.into()), ga::INKS[0]);
+    }
+
+
+    #[test]
+    fn test_rgb() {
+        const RGB_RATIOS: &[InkComponentQuantity] = &[
+            InkComponentQuantity::Zero, 
+            InkComponentQuantity::Full
+        ];
+        let rgb_palette = RGB_RATIOS.into_iter()
+            .cartesian_product(RGB_RATIOS.into_iter())
+            .cartesian_product(RGB_RATIOS.into_iter())
+            .map(|t| (*t.0.0, *t.0.1, *t.1))
+            .map(|qty| Ink::from(qty));
+        let rgb_palette = Palette::from(rgb_palette);
     }
 }

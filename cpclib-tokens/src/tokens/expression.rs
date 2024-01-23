@@ -1515,7 +1515,10 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
             (ExprResult::Value(_), ExprResult::Float(f2)) => {
                 Ok((self.float()? % f2.into_inner()).into())
             },
-            (ExprResult::Value(v1), ExprResult::Value(v2)) => Ok((v1 % v2).into()),
+            (ExprResult::Value(v1), ExprResult::Value(v2)) => {
+                // XXX is it the expected behavior ? (I used this formula only for ORGAMS compatibilyt. It is maybe an error)
+                Ok(((*v1 as u32 % *v2 as u32) as i32).into()) 
+            },
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible reminder between {} and {}",
