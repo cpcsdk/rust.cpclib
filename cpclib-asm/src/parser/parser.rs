@@ -2311,6 +2311,8 @@ pub fn parse_directive_new(
 
             3 => {
                 match word {
+                    choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input)?,
+
                     choice_nocase!(b"STR") => {
                         parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)?
                     },
