@@ -162,6 +162,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
                     eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
                 }
             }
+
+            if matches
+                .get_many::<String>("target")
+                .map(|s| s.into_iter().any(|s| s== "init")).unwrap_or(false)
+            {
+                    eprintln!("Maybe you wanted to do --init.");
+            }
             std::process::exit(1);
         }
     }
