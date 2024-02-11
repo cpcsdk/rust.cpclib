@@ -697,6 +697,11 @@ impl Snapshot {
                 // TODO treat the case where extra memory is used as `memroy` may need to be extended
             }
         }
+
+        while memory.len() < max_memory {
+            memory = memory.increased_size();
+        }
+
         memory.memory()[..max_memory].to_vec()
     }
 

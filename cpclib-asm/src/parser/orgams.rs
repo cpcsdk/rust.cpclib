@@ -15,7 +15,7 @@ use crate::preamble::{
 };
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK", b"BRK", b"BY",  b"BYTE", 
+    b"BANK", b"BRK", b"BUILDSNA", b"BY",  b"BYTE", 
     b"DB", b"DEFB", b"DEFS", 
     b"ELSE", //  b"END",
     b"ENT", b"IMPORT", b"ORG", b"PRINT", b"SKIP", b"WORD"
