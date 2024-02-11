@@ -17,6 +17,7 @@ use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 use cpclib::{sna, ExtendedDsk};
+#[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 pub mod built_info {
@@ -1091,21 +1092,24 @@ pub fn build_args_parser() -> clap::Command {
                 );
 
     let args = if cfg!(feature = "xferlib") {
-        args.subcommand(
-                        Command::new("m4")
-                        .about("Directly send the code on the M4 through a snapshot")
-                        .arg(
-                            Arg::new("CPCM4")
-                            .help("Address of the M4")
-                            .required(true)
-                        )
-                        .arg(
-                            Arg::new("WATCH")
-                            .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
-                            .long("watch")
+        let subcommand = Command::new("m4")
+        .about("Directly send the code on the M4 through a snapshot")
+        .arg(
+            Arg::new("CPCM4")
+            .help("Address of the M4")
+            .required(true)
+        );
 
-                        )
-                    )
+        let subcommand = if cfg!(feature = "watch") {
+            subcommand.arg(
+                Arg::new("WATCH")
+                .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
+                .long("watch")
+            )
+        } else {
+            subcommand
+        };
+        args.subcommand(subcommand)
     }
     else {
         args
@@ -1135,7 +1139,9 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
     convert(&matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
-        if cfg!(feature = "xferlib") && sub_m4.contains_id("WATCH") {
+        eprintln!("hmmm seems to not be coded yet");
+        #[cfg(feature = "watch")]
+        if sub_m4.contains_id("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
             let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
                 move |res| tx.send(res).unwrap(),

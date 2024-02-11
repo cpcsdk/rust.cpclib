@@ -22,7 +22,6 @@ egui_file.workspace = true
 env_logger.workspace = true
 gag.workspace = true
 itertools.workspace = true
-notify.workspace = true
 open.workspace = true
 self_cell.workspace = true
 serde.workspace = true

@@ -42,9 +42,10 @@ rustyline = {  workspace = true, optional = true }
 rustyline-derive = {  workspace = true, optional = true }
 
 subprocess = {  workspace = true, optional = false }
-notify = { workspace = true, optional = false }
-crossbeam-channel = {  workspace = true, optional = false }
-hotwatch = {  workspace = true, optional = false }
+
+notify = { workspace = true, optional = true }
+crossbeam-channel = {  workspace = true, optional = true }
+hotwatch = {  workspace = true, optional = true }
 
 
 term_grid = {  workspace = true, optional = false }
@@ -52,8 +53,9 @@ termize = { workspace = true, optional = false }
 
 
 [features]
-default = ["interactive"]
+default = ["interactive", "watch"]
 interactive = ["rustyline", "rustyline-derive"]
+watch = ["notify", "crossbeam-channel", "hotwatch"]
 
 [build-dependencies]
 built.workspace = true

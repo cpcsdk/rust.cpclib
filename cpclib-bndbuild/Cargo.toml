@@ -23,7 +23,7 @@ lazy-regex = "3.1.0"
 cpclib-common = {workspace=true, features=["cmdline"]}
 cpclib-basm = { workspace=true, default-features=false, features=["xferlib"] }
 cpclib-asm.workspace = true
-cpclib-disc.workspace = true
+cpclib-disc  = {workspace = true, features = ["cmdline"]}
 cpclib-imgconverter = { workspace=true, features=["xferlib"]}
 cpclib-xfertool.workspace = true
 

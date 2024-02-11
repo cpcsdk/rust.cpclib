@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::TypedValueParser;
 use cpclib_xfer::{send_and_run_file, CpcXfer};
+#[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::clap::builder::PathBufValueParser;
@@ -17,6 +18,40 @@ pub mod built_info {
 }
 
 pub fn build_args_parser() -> clap::Command {
+
+    let y_command =         Command::new("-y")
+    .about("Upload a file on the M4 in the /tmp folder and launch it. V3 snapshots are automatically downgraded to V2 version");
+
+    let y_command = if cfg!(feature = "watch"){
+        y_command.arg(
+            clap::Arg::new("WATCH")
+                .help("Watch the file and resend it on the M4 if modified (so xfer does not end when started with this option).")
+                .short('w')
+                .long("watch")
+                .action(ArgAction::SetTrue)
+        )
+    }else {
+        y_command
+    };
+
+    let y_command = y_command.arg(
+        clap::Arg::new("fname")
+        .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
+        .value_parser(
+            PathBufValueParser::new()
+                .try_map(|p: PathBuf| {
+                    if p.exists() {
+                        Ok(p)
+                    } else {
+                        Err(format!("{} does not exists", p.display().to_string()))
+                    }
+                })
+        )
+        .required(true)
+    );
+
+
+
     let cmd = clap::Command::new("CPC xfer to M4")
     .author("Krusty/Benediction")
     .version(built_info::PKG_VERSION)
@@ -59,30 +94,7 @@ pub fn build_args_parser() -> clap::Command {
         )*/
     )
     .subcommand(
-        Command::new("-y")
-        .about("Upload a file on the M4 in the /tmp folder and launch it. V3 snapshots are automatically downgraded to V2 version")
-        .arg(
-            clap::Arg::new("WATCH")
-                .help("Watch the file and resend it on the M4 if modified (so xfer does not end when started with this option).")
-                .short('w')
-                .long("watch")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            clap::Arg::new("fname")
-            .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
-            .value_parser(
-                PathBufValueParser::new()
-                    .try_map(|p: PathBuf| {
-                        if p.exists() {
-                            Ok(p)
-                        } else {
-                            Err(format!("{} does not exists", p.display().to_string()))
-                        }
-                    })
-            )
-            .required(true)
-        )
+        y_command
     )
     .subcommand(
         Command::new("-x")
@@ -150,6 +162,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
         // Simple file sending
         send_and_run_file(&xfer, &fname, true);
 
+        #[cfg(feature = "watch")]
         if y_opt.get_flag("WATCH") {
             println!(
                 "I will not stop and redo the operation when detecting a modification of the file"

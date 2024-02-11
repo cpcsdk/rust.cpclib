@@ -19,15 +19,17 @@ cpclib = { workspace=true, features = ["cmdline"] }
 
 
 anyhow.workspace = true
-notify.workspace = true
 crossbeam-channel.workspace = true
 exitcode.workspace = true
 tempfile.workspace = true
+
+notify = {workspace = true, optional = true}
 
 
 [build-dependencies]
 built.workspace = true
 
 [features]
-default = ["xferlib"]
+default = ["xferlib", "watch"]
 xferlib = ["cpclib/xferlib"]
+watch = ["notify", "xferlib"]
