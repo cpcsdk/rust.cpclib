@@ -23,19 +23,19 @@ use crate::egui::{Button, Key, KeyboardShortcut, Modifiers};
 
 static CTRL_O: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
-    key: Key::O
+    logical_key: Key::O
 };
 static CTRL_S: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
-    key: Key::S
+    logical_key: Key::S
 };
 static CTRL_Q: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
-    key: Key::Q
+    logical_key: Key::Q
 };
 static CTRL_R: KeyboardShortcut = KeyboardShortcut {
     modifiers: Modifiers::COMMAND,
-    key: Key::R
+    logical_key: Key::R
 };
 
 #[derive(serde::Deserialize, serde::Serialize)]

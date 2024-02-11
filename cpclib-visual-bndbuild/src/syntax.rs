@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+
+use std::collections::BTreeSet;
 
 use egui_code_editor::Syntax;
 
@@ -8,7 +9,7 @@ pub fn syntax() -> Syntax {
         case_sensitive: true,
         comment: "#",
         comment_multiline: [r"/*", r"*/"],
-        keywords: HashSet::from([
+        keywords: BTreeSet::from([
             "tgt",
             "target",
             "targets",
@@ -24,7 +25,7 @@ pub fn syntax() -> Syntax {
             "help",
             "constraint"
         ]),
-        types: HashSet::from([
+        types: BTreeSet::from([
             "basm",
             "assemble",
             "echo",
@@ -42,6 +43,6 @@ pub fn syntax() -> Syntax {
             "Windows",
             "MacOsx"
         ]),
-        special: HashSet::from([":", "-"])
+        special: BTreeSet::from([":", "-"])
     }
 }

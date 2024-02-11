@@ -1,25 +1,26 @@
 [workspace]
 members = [
-    "cpclib-asm",
-    "cpclib-basic",
-    "cpclib-bndbuild",
-    "cpclib-common",
-    "cpclib-crunchers",
-    "cpclib-disc",
-    "cpclib-image",
-    "cpclib-macros",
-    "cpclib-sna",
-    "cpclib-tokens",
-    "cpclib-xfer",
-    "cpclib-xfertool",
+  "cpclib-asm",
+  "cpclib-basic",
+  "cpclib-bndbuild",
+  "cpclib-common",
+  "cpclib-crunchers",
+  "cpclib-disc",
+  "cpclib-image",
+  "cpclib-macros",
+  "cpclib-sna",
+  "cpclib-tokens",
+  "cpclib-xfer",
+  "cpclib-xfertool",
   #  "cpclib-xferfs",
-    "cpclib-z80emu",
-    "cpclib",
-    "cpclib-basm", "cpclib-bdasm",
-    "cpclib-imgconverter",
-    "cpclib-visual-basm",
-    "cpclib-visual-bndbuild",
-    "cpclib-wasm"
+  "cpclib-z80emu",
+  "cpclib",
+  "cpclib-basm",
+  "cpclib-bdasm",
+  "cpclib-imgconverter",
+  "cpclib-visual-basm",
+  "cpclib-visual-bndbuild",
+  "cpclib-wasm",
 ]
 
 resolver = "2"
@@ -33,24 +34,24 @@ homepage = "https://github.com/cpcsdk/rust.cpclib"
 
 [workspace.dependencies]
 
-cpclib = {version="0.7.1",path="cpclib", default-features=false}
-cpclib-asm = {version= "0.7.2",path="cpclib-asm", default-features=false}
-cpclib-basic = {version="0.7.1",path="cpclib-basic", default-features=false}
-cpclib-basm = {version="0.7.1",path="cpclib-basm", default-features=false}
-cpclib-bdasm = {version="0.7.1",path="cpclib-bdasm", default-features=false}
-cpclib-bndbuild = {version="=0.2.2",path="cpclib-bndbuild", default-features=false}
-cpclib-common = {version="0.7.1",path="cpclib-common", default-features=false}
-cpclib-crunchers = {version="0.7.1",path="cpclib-crunchers", default-features=false}
-cpclib-disc = {version="0.7.1",path="cpclib-disc", default-features=false}
-cpclib-image = {version="0.7.1",path="cpclib-image", default-features=false}
-cpclib-imgconverter = {version="0.7.1",path="cpclib-imgconverter", default-features=false}
-cpclib-macros = {version="0.7.1",path="cpclib-macros", default-features=false}
-cpclib-sna = {version="=0.7.2",path="cpclib-sna", default-features=false}
-cpclib-tokens = {version="0.7.1",path="cpclib-tokens", default-features=false}
-cpclib-visual-bndbuild = {version="0.2.1",path="cpclib-visual-bndbuild", default-features=false}
-cpclib-xfer = {version="0.7.1",path="cpclib-xfer", default-features=false}
-cpclib-xfertool = {version="0.7.1",path="cpclib-xfertool", default-features=false}
-cpclib-z80emu = {version="0.7.1",path="cpclib-z80emu", default-features=false}
+cpclib = { version = "0.7.1", path = "cpclib", default-features = false }
+cpclib-asm = { version = "0.7.2", path = "cpclib-asm", default-features = false }
+cpclib-basic = { version = "0.7.1", path = "cpclib-basic", default-features = false }
+cpclib-basm = { version = "0.7.1", path = "cpclib-basm", default-features = false }
+cpclib-bdasm = { version = "0.7.1", path = "cpclib-bdasm", default-features = false }
+cpclib-bndbuild = { version = "=0.2.2", path = "cpclib-bndbuild", default-features = false }
+cpclib-common = { version = "0.7.1", path = "cpclib-common", default-features = false }
+cpclib-crunchers = { version = "0.7.1", path = "cpclib-crunchers", default-features = false }
+cpclib-disc = { version = "0.7.1", path = "cpclib-disc", default-features = false }
+cpclib-image = { version = "0.7.1", path = "cpclib-image", default-features = false }
+cpclib-imgconverter = { version = "0.7.1", path = "cpclib-imgconverter", default-features = false }
+cpclib-macros = { version = "0.7.1", path = "cpclib-macros", default-features = false }
+cpclib-sna = { version = "=0.7.2", path = "cpclib-sna", default-features = false }
+cpclib-tokens = { version = "0.7.1", path = "cpclib-tokens", default-features = false }
+cpclib-visual-bndbuild = { version = "0.2.1", path = "cpclib-visual-bndbuild", default-features = false }
+cpclib-xfer = { version = "0.7.1", path = "cpclib-xfer", default-features = false }
+cpclib-xfertool = { version = "0.7.1", path = "cpclib-xfertool", default-features = false }
+cpclib-z80emu = { version = "0.7.1", path = "cpclib-z80emu", default-features = false }
 
 # cpclib = {version="0.7.0", default-features=false}
 # cpclib-asm = {version="0.7.0", default-features=false}
@@ -73,7 +74,7 @@ cpclib-z80emu = {version="0.7.1",path="cpclib-z80emu", default-features=false}
 # standard dependencies
 ambassador = "0.3.6"
 anyhow = "1.0.79"
-arrayref= "0.3.7"
+arrayref = "0.3.7"
 as-slice = "0.2.1"
 assert_matches = "1.5.0"
 bitfield = "0.14.0"
@@ -84,7 +85,7 @@ built = { version = "0.6.1", features = ["chrono"] }
 camino = "1.1.6"
 cc = "1.0.83"
 cfg-if = "1.0.0"
-chardetng = {version = "0.1.17", features = ["multithreading"]}
+chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
 clap = "4.5.0"
 codespan-reporting = "0.11.1"
@@ -92,12 +93,14 @@ contracts = "0.6.3"
 crc = "3.0.1"
 criterion = "0.5.1"
 crossbeam-channel = "0.5.11"
-curl =  "0.4.45"
+curl = "0.4.45"
 custom_error = "1.9.2"
 dbg = "1.0.4"
-delegate  = "0.10.0"
+delegate = "0.10.0"
 either = "1.10.0"
-encoding_rs = { version = "0.8.33", default-features = false , features=["alloc"]}
+encoding_rs = { version = "0.8.33", default-features = false, features = [
+  "alloc",
+] }
 enumn = "0.1.13"
 env_logger = "0.10"
 evalexpr = "11.3.0"
@@ -108,16 +111,16 @@ gif = "0.12.0"
 gif-dispose = "4.0.1"
 globset = "0.4.14"
 hashbag = "0.1.11"
-hotwatch = { version = "0.5.0"}
+hotwatch = { version = "0.5.0" }
 hxcfe = "0.1.5"
 image = "0.24.8"
 indicatif = "0.17.8"
-itertools= "0.11.0"
+itertools = "0.11.0"
 lazy_static = "1.4.0"
 libc = "0.2.153"
-log =  "0.4.20"
+log = "0.4.20"
 matches = "0.1.10"
-minus = {version="5.5.3", features=["static_output"]}
+minus = { version = "5.5.3", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.1"
 num_enum = "0.6.1"
@@ -136,34 +139,34 @@ remain = "0.2.12"
 ureq = "2.9.5"
 resolve-path = "0.1.0"
 rust-embed = { version = "6.8.1", features = ["compression"] }
-rustyline = { version = "12.0.0"}
+rustyline = { version = "12.0.0" }
 rustyline-derive = { version = "0.9.0" }
 self_cell = "1.0.3"
 semver = "1.0.21"
 serde = { version = "1.0.196", features = ["derive"] }
 serial_test = "2.0.0"
 similar-asserts = "1.5.0"
-simplelog = { version = "0.12.1" , default-features = false, features = ["local-offset"]}
+simple_logger = { version = "4.3.3" }
 smallvec = "1.13.1"
 smartstring = "1.0.1"
 smol_str = "0.2.1"
 strsim = "0.10.0"
-subprocess = { version = "0.2.9"}
+subprocess = { version = "0.2.9" }
 substring = "1.4.5"
 syn = "2.0.48"
 tempfile = "3.10.0"
-term_grid = { version = "0.2.0"}
-termize = { version = "0.1.1"}
+term_grid = { version = "0.2.0" }
+termize = { version = "0.1.1" }
 test-generator = "0.3.1"
 thiserror = "1.0"
 time = "0.3.34"
 velcro = "0.5.4"
-winnow = {version= "0.5.39", features=["simd"]}
+winnow = { version = "0.5.39", features = ["simd"] }
 
 # gui based dependencies
 eframe = "0.26"
 egui = "0.26"
-claui = {git="https://github.com/rgiot/claui.git"}
+claui = { git = "https://github.com/rgiot/claui.git" }
 egui_code_editor = "0.2.4"
 egui_file = "0.15"
 open = "5.0.1"
@@ -177,26 +180,25 @@ open = "5.0.1"
 #hxcadaptor-sys = {path = "../hxc_rust/hxcadaptor-sys/"}
 
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
-cpclib = {path = "./cpclib/"}
-cpclib-asm = {path = "./cpclib-asm/"}
-cpclib-basic = {path = "./cpclib-basic/"}
-cpclib-basm = {path = "./cpclib-basm/"}
-cpclib-bdasm = {path = "./cpclib-bdasm/"}
-cpclib-bndbuild = {path = "./cpclib-bndbuild/"}
-cpclib-common = {path = "./cpclib-common/"}
-cpclib-crunchers = {path = "./cpclib-crunchers/"}
-cpclib-disc = {path = "./cpclib-disc/"}
-cpclib-image = {path = "./cpclib-image/"}
-cpclib-imgconverter = {path = "./cpclib-imgconverter/"}
-cpclib-macros = {path = "./cpclib-macros/"}
-cpclib-sna = {path = "./cpclib-sna/"}#
-cpclib-tokens = {path = "./cpclib-tokens/"}
-cpclib-visual-bndbuild = {path = "./cpclib-visual-bndbuild/"}
-cpclib-wasm = {path="./cpclib-wasm"}
-cpclib-xfer = {path = "./cpclib-xfer/"}
-cpclib-xfertool = {path = "./cpclib-xfertool/"}
-cpclib-z80emu = {path = "./cpclib-z80emu/"}
-
+cpclib = { path = "./cpclib/" }
+cpclib-asm = { path = "./cpclib-asm/" }
+cpclib-basic = { path = "./cpclib-basic/" }
+cpclib-basm = { path = "./cpclib-basm/" }
+cpclib-bdasm = { path = "./cpclib-bdasm/" }
+cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
+cpclib-common = { path = "./cpclib-common/" }
+cpclib-crunchers = { path = "./cpclib-crunchers/" }
+cpclib-disc = { path = "./cpclib-disc/" }
+cpclib-image = { path = "./cpclib-image/" }
+cpclib-imgconverter = { path = "./cpclib-imgconverter/" }
+cpclib-macros = { path = "./cpclib-macros/" }
+cpclib-sna = { path = "./cpclib-sna/" }                         #
+cpclib-tokens = { path = "./cpclib-tokens/" }
+cpclib-visual-bndbuild = { path = "./cpclib-visual-bndbuild/" }
+cpclib-wasm = { path = "./cpclib-wasm" }
+cpclib-xfer = { path = "./cpclib-xfer/" }
+cpclib-xfertool = { path = "./cpclib-xfertool/" }
+cpclib-z80emu = { path = "./cpclib-z80emu/" }
 
 
 [profile.dev]

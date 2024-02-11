@@ -33,7 +33,7 @@ thiserror.workspace = true
 tempfile.workspace = true
 
 log = {workspace = true, optional = true }
-simplelog = { workspace = true, optional = true}
+simple_logger = { workspace = true, optional = true}
 
 # Only allow it on linux, because it fails on other platforms right now
 hxcfe = {workspace = true, optional = true}
@@ -45,7 +45,7 @@ built.workspace = true
 [features]
 default = ["dskmanager", "catalog", "hideur"]
 dskmanager = ["cmdline"]
-catalog = ["cmdline", "log", "simplelog"]
+catalog = ["cmdline", "log", "simple_logger"]
 hideur = ["cmdline"]
 hfe = ["hxcfe"]
 cmdline = ["cpclib-common/cmdline"]

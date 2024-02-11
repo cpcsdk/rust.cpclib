@@ -23,7 +23,7 @@ use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simplelog::{Config, LevelFilter};
+use simple_logger::{SimpleLogger, set_up_color_terminal};
 #[must_use]
 pub fn to_number<T>(repr: &str) -> T
 where
@@ -60,6 +60,10 @@ fn main() -> std::io::Result<()> {/*
     )
     .expect("Unable to build logger");
 */
+    set_up_color_terminal();
+    let logger = SimpleLogger::new();
+    log::set_max_level(log::LevelFilter::Debug);
+    log::set_boxed_logger(Box::new(logger)).unwrap();
 
 
     let matches = Command::new("catalog")
