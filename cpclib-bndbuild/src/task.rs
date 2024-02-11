@@ -65,7 +65,7 @@ impl Display for Task {
                     if s.ignore_error { "-" } else { "" },
                     s.args
                 )
-            },
+            }
         }
     }
 }

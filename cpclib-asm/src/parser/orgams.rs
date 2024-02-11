@@ -15,7 +15,9 @@ use crate::preamble::{
 };
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK", b"BRK", b"BYTE", b"DEFS", b"ELSE", //  b"END",
+    b"BANK", b"BRK", b"BY",  b"BYTE", 
+    b"DB", b"DEFB", b"DEFS", 
+    b"ELSE", //  b"END",
     b"ENT", b"IMPORT", b"ORG", b"PRINT", b"SKIP", b"WORD"
 ];
 
@@ -190,8 +192,8 @@ mod test {
     use crate::error::AssemblerError;
     use crate::preamble::{
         parse_line_component, parse_orgams_expression, parse_orgams_factor,
-        parse_orgams_ordered_expression, InnerZ80Span, ParserContext, ParserContextBuilder,
-        ParserOptions, Z80ParserError, Z80Span, parse_orgams_repeat
+        parse_orgams_ordered_expression, parse_orgams_repeat, InnerZ80Span, ParserContext,
+        ParserContextBuilder, ParserOptions, Z80ParserError, Z80Span
     };
 
     #[derive(Debug)]
@@ -263,6 +265,16 @@ mod test {
         assert!(dbg!(parse_test(parse_line_component, "empty ()")).is_ok());
     }
 
+
+    //TODO check that the appropriate opcode is assembled
+    #[test]
+    fn orgams_test_parse_byte() {
+        assert!(dbg!(parse_test(parse_line_component, "byte 1")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "db 2")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "defb 3")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "by 3")).is_ok());
+    }
+
     #[test]
     fn orgams_test_expr() {
         assert!(dbg!(parse_test(parse_orgams_factor, "label")).is_ok());
@@ -280,11 +292,19 @@ mod test {
         assert!(dbg!(parse_test(parse_orgams_expression, "&100 + #*10")).is_ok());
         assert!(dbg!(parse_test(parse_orgams_expression, "96 MOD [30 + #*2]")).is_ok());
         assert!(dbg!(parse_test(parse_orgams_expression, "[r1 + r13*2]*2")).is_ok());
+
+        assert!(dbg!(parse_test(parse_orgams_expression, "SIN(10)")).is_ok());
+        assert!(dbg!(parse_test(parse_orgams_expression, "ABS(SIN(10))")).is_ok());
     }
 
     #[test]
     fn orgams_test_repeat() {
         assert!(dbg!(parse_test(parse_orgams_repeat, "5 ** inc l")).is_ok());
 
+        assert!(dbg!(parse_test(
+            parse_orgams_repeat,
+            "256 ** BYTE ABS(SIN(#)/256)"
+        ))
+        .is_ok());
     }
 }

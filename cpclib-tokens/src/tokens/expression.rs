@@ -1517,7 +1517,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
             },
             (ExprResult::Value(v1), ExprResult::Value(v2)) => {
                 // XXX is it the expected behavior ? (I used this formula only for ORGAMS compatibilyt. It is maybe an error)
-                Ok(((*v1 as u32 % *v2 as u32) as i32).into()) 
+                Ok(((*v1 as u32 % *v2 as u32) as i32).into())
             },
             (..) => {
                 Err(ExpressionTypeError(format!(

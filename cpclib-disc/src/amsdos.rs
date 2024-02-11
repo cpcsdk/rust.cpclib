@@ -1744,7 +1744,6 @@ impl AmsdosFile {
         execution_address: u16,
         data: &[u8]
     ) -> Result<Self, AmsdosError> {
-
         let header = AmsdosHeader::build_header(
             filename,
             AmsdosFileType::Binary,
@@ -1756,7 +1755,7 @@ impl AmsdosFile {
         Self::from_header_and_buffer(header, data)
     }
 
-    pub fn from_header_and_buffer(header: AmsdosHeader, data: &[u8]) -> Result<Self, AmsdosError>  {
+    pub fn from_header_and_buffer(header: AmsdosHeader, data: &[u8]) -> Result<Self, AmsdosError> {
         if data.len() > 0x10000 {
             return Err(AmsdosError::FileLargerThan64Kb);
         }
@@ -1775,7 +1774,6 @@ impl AmsdosFile {
         filename: &AmsdosFileName,
         data: &[u8]
     ) -> Result<Self, AmsdosError> {
-
         let header = AmsdosHeader::build_header(
             filename,
             AmsdosFileType::Basic,
@@ -1794,6 +1792,7 @@ impl AmsdosFile {
             binary_filename: None
         }
     }
+
     pub fn from_buffer_with_name(data: &[u8], binary_filename: AmsdosFileName) -> Self {
         Self {
             all_data: data.to_vec(),
@@ -1806,18 +1805,21 @@ impl AmsdosFile {
     }
 
     pub fn is_binary(&self) -> bool {
-        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Binary))
+        self.header()
+            .map(|h| h.file_type() == Ok(AmsdosFileType::Binary))
             .unwrap_or(false)
     }
-    
+
     pub fn is_basic(&self) -> bool {
-        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Basic))
-        .unwrap_or(false)
+        self.header()
+            .map(|h| h.file_type() == Ok(AmsdosFileType::Basic))
+            .unwrap_or(false)
     }
-    
+
     pub fn is_protected(&self) -> bool {
-        self.header().map(|h| h.file_type() == Ok(AmsdosFileType::Protected))
-        .unwrap_or(false)
+        self.header()
+            .map(|h| h.file_type() == Ok(AmsdosFileType::Protected))
+            .unwrap_or(false)
     }
 
     /// Read a file from disc and success if there is no io error and if the header if correct
@@ -1826,18 +1828,14 @@ impl AmsdosFile {
         let mut content = Vec::new();
         f.read_to_end(&mut content)?;
 
-    
         Ok(Self::from_buffer(&content))
     }
 
     pub fn amsdos_filename(&self) -> Option<Result<AmsdosFileName, AmsdosError>> {
         match self.header() {
             Some(header) => Some(header.amsdos_filename()),
-            None => self.binary_filename.clone().map(|f| {
-                Ok(f)
-            }),
+            None => self.binary_filename.clone().map(|f| Ok(f))
         }
-            
     }
 
     /// Return an iterator on the full content of the file: header + content
@@ -1847,14 +1845,16 @@ impl AmsdosFile {
 
     /// Return an header if the checksum is valid
     pub fn header(&self) -> Option<AmsdosHeader> {
-        if self.all_data.len()>128 {
+        if self.all_data.len() > 128 {
             let header = AmsdosHeader::from_buffer(&self.all_data[..128]);
             if header.is_checksum_valid() {
                 return Some(header);
-            } else {
+            }
+            else {
                 None
             }
-        } else {
+        }
+        else {
             None
         }
     }
@@ -1863,7 +1863,8 @@ impl AmsdosFile {
     pub fn content(&self) -> &[u8] {
         if self.is_ascii() {
             self.header_and_content()
-        } else {
+        }
+        else {
             &self.all_data[128..]
         }
     }
@@ -1872,7 +1873,6 @@ impl AmsdosFile {
     /// This method removes the extra unecessary bytes.
     /// it works only for not ascii files
     pub fn shrink_content_to_fit_header_size(&mut self) {
-
         if let Some(header) = self.header() {
             let size = header.file_length() as usize;
             assert!(
@@ -1882,10 +1882,10 @@ impl AmsdosFile {
                 size
             );
             self.all_data.resize(size + 128, 0);
-        } else {
+        }
+        else {
             // nothing to do
         }
-
     }
 
     /// Save the file at the given path (header and data)

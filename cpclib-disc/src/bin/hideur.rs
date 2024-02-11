@@ -139,15 +139,13 @@ fn main() -> std::io::Result<()> {
     if matches.contains_id("INFO") {
         // In this branch we display information about the header
         let amsfile = AmsdosFile::from_buffer(&content);
-        match  amsfile.header() {
+        match amsfile.header() {
             Some(header) => {
                 println!("{header:?}");
-
             },
-             None => {
-            eprintln!("This is an ASCII file");
-
-             }
+            None => {
+                eprintln!("This is an ASCII file");
+            }
         }
     }
     else {

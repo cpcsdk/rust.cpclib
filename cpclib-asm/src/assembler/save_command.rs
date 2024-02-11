@@ -108,11 +108,7 @@ impl SaveCommand {
 
                 match r#type {
                     SaveType::AmsdosBin | SaveType::AmsdosBas => {
-                        either::Left(
-                            amsdos_file
-                                .header_and_content()
-                                .to_vec()
-                        )
+                        either::Left(amsdos_file.header_and_content().to_vec())
                     },
                     SaveType::Disc(_) | SaveType::Tape => either::Right(amsdos_file)
                 }
@@ -124,9 +120,9 @@ impl SaveCommand {
         match object {
             either::Right(amsdos_file) => {
                 if let Some(disc_filename) = &self.disc_filename {
-                    let mut disc = open_disc(disc_filename, false)
-                        .map_err(|msg| AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg)))
-                        ?;
+                    let mut disc = open_disc(disc_filename, false).map_err(|msg| {
+                        AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg))
+                    })?;
 
                     let head = Head::A;
                     let system = false;

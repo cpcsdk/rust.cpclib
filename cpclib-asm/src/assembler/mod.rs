@@ -3647,7 +3647,6 @@ impl Env {
             }
         }
 
-
         if let Some(counter_value) = &counter_value {
             self.symbols_mut().push_counter_value(counter_value.clone());
         }

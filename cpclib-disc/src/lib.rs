@@ -4,7 +4,7 @@
 use std::fs::File;
 use std::io::Write;
 
-use amsdos::{AmsdosFileName, AmsdosEntry, AmsdosError};
+use amsdos::{AmsdosEntry, AmsdosError, AmsdosFileName};
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use disc::Disc;
@@ -24,9 +24,6 @@ pub mod edsk;
 #[cfg(feature = "hfe")]
 pub mod hfe;
 
-#[cfg(feature = "hfe")]
-use crate::hfe::Hfe;
-
 use std::io::Read;
 use std::path::Path;
 use std::str::FromStr;
@@ -35,6 +32,8 @@ use custom_error::custom_error;
 
 use crate::amsdos::{AmsdosFile, AmsdosManagerNonMut};
 use crate::edsk::ExtendedDsk;
+#[cfg(feature = "hfe")]
+use crate::hfe::Hfe;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -48,7 +47,9 @@ custom_error! {pub DskManagerError
 
 impl From<AmsdosError> for DskManagerError {
     fn from(value: AmsdosError) -> Self {
-        DskManagerError::AnyError { msg: format!("Amsdos error: {}", value) }
+        DskManagerError::AnyError {
+            msg: format!("Amsdos error: {}", value)
+        }
     }
 }
 
@@ -68,32 +69,33 @@ pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> R
     if !path.exists() {
         if fail_if_missing {
             return Err(format!("{} does not exists", path.display()));
-        } else {
+        }
+        else {
             return Ok(new_disc(Some(path)));
         }
     }
 
-    Hfe::open(path).map_err(|e| {
-         format!("Error while loading {e}")
-    })
+    Hfe::open(path).map_err(|e| format!("Error while loading {e}"))
 }
 
 #[cfg(not(feature = "hfe"))]
-pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> Result<ExtendedDsk, String> {
+pub fn open_disc<P: AsRef<std::path::Path>>(
+    path: P,
+    fail_if_missing: bool
+) -> Result<ExtendedDsk, String> {
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
             return Err(format!("{} does not exists", path.display()));
-        } else {
+        }
+        else {
             return Ok(new_disc(Some(path)));
         }
     }
 
     ExtendedDsk::open(path)
-        .map_err(|e| {
-        format!("Error while loading {e}")
-    })
-    .map(|dsk: ExtendedDsk| dsk)
+        .map_err(|e| format!("Error while loading {e}"))
+        .map(|dsk: ExtendedDsk| dsk)
 }
 
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
@@ -221,16 +223,19 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
             let file = disc.get_amsdos_file(head, ams_filename)?;
 
             if file.is_none() {
-                return Err(DskManagerError::AnyError { msg: format!("missing {filename}") });
-            } else {
+                return Err(DskManagerError::AnyError {
+                    msg: format!("missing {filename}")
+                });
+            }
+            else {
                 let file = file.unwrap();
                 if sub.get_flag("noheader") {
                     std::fs::write(filename, file.content())?;
-                } else {
+                }
+                else {
                     std::fs::write(filename, file.header_and_content())?;
                 }
             }
-
         }
     }
     else if let Some(sub) = matches.subcommand_matches("add") {

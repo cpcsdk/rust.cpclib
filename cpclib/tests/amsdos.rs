@@ -28,13 +28,14 @@ mod tests {
         assert!(dbg!(file.header().unwrap()).is_checksum_valid());
         assert!(file.is_basic());
         assert!(!file.is_ascii());
-        assert_eq!(file.content().len() as u16, file.header().unwrap().file_length());
+        assert_eq!(
+            file.content().len() as u16,
+            file.header().unwrap().file_length()
+        );
 
-        let file2 = AmsdosFile::basic_file_from_buffer(
-            &"test.bas".try_into().unwrap(),
-            file.content()
-        )
-        .unwrap();
+        let file2 =
+            AmsdosFile::basic_file_from_buffer(&"test.bas".try_into().unwrap(), file.content())
+                .unwrap();
 
         assert_eq!(file.header(), file2.header());
 
@@ -120,8 +121,8 @@ mod tests {
         let _header = &result[0..128];
 
         let filename = AmsdosFileName::new_incorrect_case(0, "test", "bin").unwrap();
-        let file = AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, &content)
-            .unwrap();
+        let file =
+            AmsdosFile::binary_file_from_buffer(&filename, 0x3210, 0x1234, &content).unwrap();
 
         let obtained_result = file.header_and_content().to_vec();
         assert_eq!(obtained_result.len(), result.len());
@@ -244,11 +245,23 @@ mod tests {
                 "TEST.BIN"
             );
             assert_eq!(
-                &file.as_ref().unwrap().header().unwrap().amsdos_filename().unwrap(),
+                &file
+                    .as_ref()
+                    .unwrap()
+                    .header()
+                    .unwrap()
+                    .amsdos_filename()
+                    .unwrap(),
                 filename.as_ref().unwrap()
             );
-            assert_eq!(file.as_ref().unwrap().header().unwrap().execution_address(), 0x1234);
-            assert_eq!(file.as_ref().unwrap().header().unwrap().loading_address(), 0x3210);
+            assert_eq!(
+                file.as_ref().unwrap().header().unwrap().execution_address(),
+                0x1234
+            );
+            assert_eq!(
+                file.as_ref().unwrap().header().unwrap().loading_address(),
+                0x3210
+            );
         }
 
         let filename = filename.unwrap();

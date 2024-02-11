@@ -1346,7 +1346,6 @@ impl<'a> ImageConverter<'a> {
         let mut tiles_list: Vec<Vec<u8>> = Vec::new();
         for row in 0..nb_rows {
             for column in 0..nb_columns {
-
                 // TODO add an additional parameter to read x before y
                 // Manage the sprite in this cell
                 let mut y_counter = vertical_movement.counter();
@@ -1356,7 +1355,7 @@ impl<'a> ImageConverter<'a> {
                     for x in 0..tile_width {
                         // Get the line of interest
                         let real_line =
-                            row * tile_height as usize + y_counter.get_line_index_in_screen() ;
+                            row * tile_height as usize + y_counter.get_line_index_in_screen();
 
                         let real_col = column * tile_width as usize + x_counter.get_column_index();
                         if x != tile_width - 1 {
@@ -1364,7 +1363,7 @@ impl<'a> ImageConverter<'a> {
                         }
 
                         // Get the byte from the sprite ...
-                    //    dbg!(real_line, real_col);
+                        //    dbg!(real_line, real_col);
                         let byte: u8 = sprite.get_byte(real_col, real_line);
 
                         // ... and store it at the right place

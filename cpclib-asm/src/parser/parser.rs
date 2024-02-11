@@ -1936,7 +1936,8 @@ pub fn parse_write_direct_memory(
     ))
         .parse_next(input)?;
 
-    let bank = cut_err(located_expr.context("WRITE DIRECT -1, -1: BANK expected")).parse_next(input)?;
+    let bank =
+        cut_err(located_expr.context("WRITE DIRECT -1, -1: BANK expected")).parse_next(input)?;
 
     let token = LocatedTokenInner::Bank(Some(bank));
 
@@ -1959,7 +1960,8 @@ pub fn parse_save(
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if save_kind == SaveKind::WriteDirect {
             (parse_word(b"DIRECT"), not((my_space0, "-1"))).parse_next(input)?;
-        } else {
+        }
+        else {
             not((parse_word(b"DIRECT"), my_space0, "-1")).parse_next(input)?;
         }
 
@@ -2289,6 +2291,10 @@ pub fn parse_directive_new(
         let token: LocatedTokenInner = match word.len() {
             2 => {
                 match word {
+                    choice_nocase!(b"BY") if is_orgams => {
+                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
+                    },
+
                     choice_nocase!(b"DB") | choice_nocase!(b"DM") => {
                         parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
                     },
@@ -5064,10 +5070,10 @@ pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
 
     let (open, close) = if input.state.options().is_orgams() {
         ('[', ']')
-    }else {
+    }
+    else {
         ('(', ')')
     };
-
 
     let exp = delimited(
         delimited(my_space0, open, my_space0),
@@ -5425,8 +5431,8 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
         choice_nocase!(b"LN") => Some(UnaryFunction::Ln),
         choice_nocase!(b"LOG10") => Some(UnaryFunction::Log10),
         choice_nocase!(b"EXP") => Some(UnaryFunction::Exp),
-        choice_nocase!(b"SQRT") => Some(UnaryFunction::Char),
-        choice_nocase!(b"ABS") => Some(UnaryFunction::Sqrt),
+        choice_nocase!(b"SQRT") => Some(UnaryFunction::Sqrt),
+        choice_nocase!(b"ABS") => Some(UnaryFunction::Abs),
         _ => None
     };
 

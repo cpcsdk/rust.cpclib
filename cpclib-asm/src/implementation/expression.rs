@@ -20,7 +20,8 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
             ExprResult::String(s) => e,
             _ => {
                 return Err(AssemblerError::AlreadyRenderedError(format!(
-                    "Incompatible type with orgams {:?}", e
+                    "Incompatible type with orgams {:?}",
+                    e
                 )))
             },
         };
@@ -127,7 +128,13 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
                     .map(|i| i.into())
                     .map_err(|e| AssemblerError::ExpressionTypeError(e))
             }
-            UnaryFunction::Sin => (arg.sin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
+            UnaryFunction::Sin => {
+                if env.options().parse_options().is_orgams() {
+                    Ok((256.0*(arg.float()? * 3.1415926545 / (256.0/2.0)).sin()).into())
+                } else {
+                    arg.sin()
+                }.map_err(|e| AssemblerError::ExpressionTypeError(e))
+            },
             UnaryFunction::Cos => (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::ASin => (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
             UnaryFunction::ACos => (arg.acos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),

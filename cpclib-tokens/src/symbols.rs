@@ -1008,11 +1008,8 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 }
 
-
 impl SymbolsTable {
-    /**
-     * We are leaving the inner loop and remove its value
-     */
+    /// We are leaving the inner loop and remove its value
     pub fn pop_counter_value(&mut self) -> ExprResult {
         self.clear_counters_lut();
         let res = self.counters.pop().unwrap();
@@ -1020,9 +1017,7 @@ impl SymbolsTable {
         res
     }
 
-    /**
-     * We are entering a new loop and add its value
-     */
+    /// We are entering a new loop and add its value
     pub fn push_counter_value(&mut self, e: ExprResult) {
         self.clear_counters_lut();
         self.counters.push(e);
@@ -1030,17 +1025,20 @@ impl SymbolsTable {
     }
 
     fn clear_counters_lut(&mut self) {
-        let mut key= "".to_owned();
+        let mut key = "".to_owned();
         for _ in 0..self.counters.len() {
             key.push('#');
-            self.remove_symbol(key.clone()).expect("[BUG] symbol {key} MUST be present");
+            self.remove_symbol(key.clone())
+                .expect("[BUG] symbol {key} MUST be present");
         }
     }
+
     fn rebuild_counters_lut(&mut self) {
-        let mut key= "".to_owned();
+        let mut key = "".to_owned();
         for value in self.counters.clone() {
             key.push('#');
-            self.assign_symbol_to_value(key.clone(), value.clone()).expect("[BUG] symbol {key} MUST be set to {value");
+            self.assign_symbol_to_value(key.clone(), value.clone())
+                .expect("[BUG] symbol {key} MUST be set to {value");
         }
     }
 }
@@ -1054,7 +1052,6 @@ impl SymbolsTable {
         table.dummy = true;
         table.current_global_label = "".into();
         table
-
     }
 
     /// Add a new seed for the @ symbol name resolution (we enter in a repeat)
