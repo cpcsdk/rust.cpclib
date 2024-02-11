@@ -1192,14 +1192,21 @@ mod tests {
     }
 
     #[test]
-    fn test_from() {
+    fn test_from1() {
         let p: ga::Palette = vec![7, 8, 9, 10].into();
 
         assert_eq!(*p.get(0.into()), ga::INKS[7]);
         assert_eq!(*p.get(1.into()), ga::INKS[8]);
         assert_eq!(*p.get(2.into()), ga::INKS[9]);
         assert_eq!(*p.get(3.into()), ga::INKS[10]);
-        assert_eq!(*p.get(4.into()), ga::INKS[0]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_from2() {
+        let p: ga::Palette = vec![7, 8, 9, 10].into();
+
+        p.get(4.into());
     }
 
     #[test]
