@@ -127,7 +127,7 @@ impl Command {
                     //.flatten()
                     .map(|v| {
                         v.into_iter()
-                            .for_each(|(sym, addr)| println!("{sym} {addr:X}"))
+                            .for_each(|s| println!("{} {:X}", s.name(), s.address()))
                     });
             },
 
