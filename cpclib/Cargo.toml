@@ -23,7 +23,7 @@ cpclib-sna.workspace = true
 cpclib-crunchers.workspace = true
 cpclib-asm.workspace = true
 cpclib-z80emu.workspace = true
-cpclib-xfer.workspace = true
+cpclib-xfer = {workspace = true, optional= true}
 cpclib-disc.workspace = true
 cpclib-macros.workspace = true
 cpclib-common.workspace = true
@@ -32,7 +32,6 @@ cpclib-image.workspace = true
 anyhow.workspace = true
 arrayref.workspace = true
 cfg-if.workspace = true
-curl = { workspace = true, optional = true }
 custom_error.workspace = true
 dbg.workspace = true
 delegate.workspace = true
@@ -42,7 +41,6 @@ log = { workspace = true, optional = true }
 matches.workspace = true
 paste.workspace = true
 path-absolutize = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 tempfile.workspace = true
 time = { workspace = true, optional = true }
@@ -59,7 +57,7 @@ built = { workspace = true, features = ["chrono"] }
 
 [features]
 default = ["xferlib"]
-xferlib = [	"curl", "reqwest", "path-absolutize"]
+xferlib = ["cpclib-xfer"]
 cmdline = ["cpclib-common/cmdline"]
 
 

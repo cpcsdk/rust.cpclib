@@ -71,13 +71,13 @@ cpclib-z80emu = {version="0.7.1",path="cpclib-z80emu", default-features=false}
 # cpclib-z80emu = {version="0.7.0", default-features=false}
 
 # standard dependencies
-ambassador = "0.3.5"
-anyhow = "1.0.75"
+ambassador = "0.3.6"
+anyhow = "1.0.79"
 arrayref= "0.3.7"
 as-slice = "0.2.1"
 assert_matches = "1.5.0"
 bitfield = "0.14.0"
-bitflags = "2.4.0"
+bitflags = "2.4.2"
 bitsets = "0.1.1"
 bitvec = "1.0.1"
 built = { version = "0.6.1", features = ["chrono"] }
@@ -86,87 +86,87 @@ cc = "1.0.83"
 cfg-if = "1.0.0"
 chardetng = {version = "0.1.17", features = ["multithreading"]}
 choice_nocase = "0.2.0"
-clap = "4.4.6"
+clap = "4.5.0"
 codespan-reporting = "0.11.1"
 contracts = "0.6.3"
 crc = "3.0.1"
 criterion = "0.5.1"
-crossbeam-channel = "0.5.8"
-curl =  "0.4.44"
+crossbeam-channel = "0.5.11"
+curl =  "0.4.45"
 custom_error = "1.9.2"
 dbg = "1.0.4"
 delegate  = "0.10.0"
-either = "1.9.0"
+either = "1.10.0"
 encoding_rs = { version = "0.8.33", default-features = false , features=["alloc"]}
-enumn = "0.1.12"
+enumn = "0.1.13"
 env_logger = "0.10"
-evalexpr = "11.1.0"
+evalexpr = "11.3.0"
 exitcode = "1.1.2"
 gag = "1.0.0"
 getset = "0.1.2"
 gif = "0.12.0"
 gif-dispose = "4.0.1"
-globset = "0.4.13"
+globset = "0.4.14"
 hashbag = "0.1.11"
 hotwatch = { version = "0.5.0"}
 hxcfe = "0.1.5"
-image = "0.24.7"
-indicatif = "0.17.7"
+image = "0.24.8"
+indicatif = "0.17.8"
 itertools= "0.11.0"
 lazy_static = "1.4.0"
-libc = "0.2.149"
+libc = "0.2.153"
 log =  "0.4.20"
 matches = "0.1.10"
-minus = {version="5.4.1", features=["static_output"]}
+minus = {version="5.5.3", features=["static_output"]}
 notify = "6.1.1"
 num = "0.4.1"
 num_enum = "0.6.1"
 num-bigint = "0.4.4"
-ordered-float = "3.9.1"
+ordered-float = "3.9.2"
 ouroboros = "0.17.2"
 parking_lot = "0.12.1"
 paste = "1.0.14"
 path-absolutize = "3.1.1"
 pretty_assertions = "1.4.0"
-proc-macro2 = "1.0.68"
-quote = "1.0.33"
-rayon = "1.8.0"
-regex = "1.9.6"
-remain = "0.2.11"
-reqwest = "0.11.22"
+proc-macro2 = "1.0.78"
+quote = "1.0.35"
+rayon = "1.8.1"
+regex = "1.10.3"
+remain = "0.2.12"
+ureq = "2.9.5"
 resolve-path = "0.1.0"
 rust-embed = { version = "6.8.1", features = ["compression"] }
 rustyline = { version = "12.0.0"}
 rustyline-derive = { version = "0.9.0" }
-self_cell = "1.0.1"
-semver = "1.0.19"
-serde = { version = "1.0.188", features = ["derive"] }
+self_cell = "1.0.3"
+semver = "1.0.21"
+serde = { version = "1.0.196", features = ["derive"] }
 serial_test = "2.0.0"
 similar-asserts = "1.5.0"
-simplelog = { version = "0.12.1" }
-smallvec = "1.11.1"
+simplelog = { version = "0.12.1" , default-features = false, features = ["local-offset"]}
+smallvec = "1.13.1"
 smartstring = "1.0.1"
-smol_str = "0.2.0"
+smol_str = "0.2.1"
 strsim = "0.10.0"
 subprocess = { version = "0.2.9"}
 substring = "1.4.5"
-syn = "2.0.38"
-tempfile = "3.8.0"
+syn = "2.0.48"
+tempfile = "3.10.0"
 term_grid = { version = "0.2.0"}
 termize = { version = "0.1.1"}
 test-generator = "0.3.1"
 thiserror = "1.0"
-time = "0.3.29"
+time = "0.3.34"
 velcro = "0.5.4"
-winnow = {version= "0.5.34", features=["simd"]}
+winnow = {version= "0.5.39", features=["simd"]}
 
 # gui based dependencies
-eframe = "0.24"
-egui = "0.24"
+eframe = "0.26"
+egui = "0.26"
 claui = {git="https://github.com/rgiot/claui.git"}
-egui_code_editor = "0.1.9"
-egui_file = "0.13"
-open = "5.0.0"
+egui_code_editor = "0.2.4"
+egui_file = "0.15"
+open = "5.0.1"
 
 
 [patch.crates-io]

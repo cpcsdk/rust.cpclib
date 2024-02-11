@@ -23,7 +23,7 @@ use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+use simplelog::{Config, LevelFilter};
 #[must_use]
 pub fn to_number<T>(repr: &str) -> T
 where
@@ -48,7 +48,10 @@ where
     .expect("Unable to parse number")
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> std::io::Result<()> {/*
+
+    // XXX this has been disabled for compatbility reasons with gpu
+    // XXX as this software has been used since ages, I have no idea if this is an issue or not
     TermLogger::init(
         LevelFilter::Debug,
         Config::default(),
@@ -56,6 +59,8 @@ fn main() -> std::io::Result<()> {
         ColorChoice::Auto
     )
     .expect("Unable to build logger");
+*/
+
 
     let matches = Command::new("catalog")
 					.about("Amsdos catalog manipulation tool.")

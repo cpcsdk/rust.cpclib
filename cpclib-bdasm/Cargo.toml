@@ -20,7 +20,7 @@ cpclib-asm.workspace = true
 cpclib-disc.workspace = true
 clap.workspace = true
 lazy_static.workspace = true
-time = "0.3.29"
+time = "0.3.34"
 
 [features]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]

@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Write;
 
 use amsdos::{AmsdosEntry, AmsdosError, AmsdosFileName};
+#[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use disc::Disc;
@@ -98,6 +99,7 @@ pub fn open_disc<P: AsRef<std::path::Path>>(
         .map(|dsk: ExtendedDsk| dsk)
 }
 
+#[cfg(feature = "cmdline")]
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
     let behavior = amsdos::AmsdosAddBehavior::ReplaceIfPresent;
@@ -305,6 +307,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
     Ok(())
 }
 
+
+#[cfg(feature = "cmdline")]
 pub fn dsk_manager_build_arg_parser() -> Command {
     Command::new("dsk_manager")
                        .about("Manipulate DSK files")
