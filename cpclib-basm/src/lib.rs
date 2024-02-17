@@ -355,7 +355,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         && !matches.contains_id("OUTPUT")
     {
         return Err(BasmError::InvalidArgument(
-            "You have not provided an output file name".to_owned()
+            "You have not provided an output file namefor the snapshot".to_owned()
         ));
     }
 
