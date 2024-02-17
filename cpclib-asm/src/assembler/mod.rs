@@ -4293,6 +4293,11 @@ pub fn assemble_defs_item<E: ExprEvaluationExt>(
             0.into()
         }
     };
+
+    if count < 0 {
+        return Err(AssemblerError::AssemblingError{msg: format!("{count} is an invalid value")});
+    }
+
     let value = if fill.is_none() {
         0
     }
