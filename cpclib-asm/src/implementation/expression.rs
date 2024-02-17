@@ -130,7 +130,7 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
             }
             UnaryFunction::Sin => {
                 if env.options().parse_options().is_orgams() {
-                    Ok((256.0*(arg.float()? * 3.1415926545 / (256.0/2.0)).sin()).into())
+                    dbg!(Ok((512.0*(arg.float()? * 3.1415926545 / (256.0/2.0)).sin()).into()))
                 } else {
                     arg.sin()
                 }.map_err(|e| AssemblerError::ExpressionTypeError(e))

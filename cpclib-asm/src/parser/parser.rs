@@ -691,16 +691,16 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
     let rorg_start = input.checkpoint();
     let _ = alt((tag_no_case("PHASE"), tag_no_case("RORG"))).parse_next(input)?;
 
-    let exp = delimited(my_space1, located_expr, my_space0).parse_next(input)?;
+    let exp = cut_err(delimited(my_space1, located_expr, my_space0).context("RORG: error in the expression")).parse_next(input)?;
 
     let _ = my_line_ending.parse_next(input)?;
 
     let inner = inner_code.parse_next(input)?;
 
-    let _ = preceded(
+    let _ = cut_err(preceded(
         my_space0,
         alt((tag_no_case("DEPHASE"), tag_no_case("REND")))
-    )
+    ).context("RORG: missing REND"))
     .parse_next(input)?;
 
     let _rorg_stop = input.checkpoint();
