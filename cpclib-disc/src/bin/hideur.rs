@@ -18,7 +18,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use clap::value_parser;
-use cpclib_common::clap;
+use cpclib_common::clap::{self, ArgAction};
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosHeader};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
@@ -41,7 +41,7 @@ fn main() -> std::io::Result<()> {
                 .required(true)
                 .help("Input file to manipulate")
         )
-        .arg(clap::Arg::new("INFO").long("info"))
+        .arg(clap::Arg::new("INFO").long("info").action(ArgAction::SetTrue))
         .arg(
             clap::Arg::new("OUTPUT")
                 .short('o')
@@ -136,7 +136,7 @@ fn main() -> std::io::Result<()> {
             .expect("Invalid file definition")
     };
 
-    if matches.contains_id("INFO") {
+    if matches.get_flag("INFO") {
         // In this branch we display information about the header
         let amsfile = AmsdosFile::from_buffer(&content);
         match amsfile.header() {

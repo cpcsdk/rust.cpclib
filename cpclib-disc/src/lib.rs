@@ -248,8 +248,8 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
 
         // Get the common parameters
-        let is_system = sub.contains_id("SYSTEM");
-        let is_read_only = sub.contains_id("READ_ONLY");
+        let is_system = sub.get_flag("SYSTEM");
+        let is_read_only = sub.get_flag("READ_ONLY");
         let head = Head::A;
 
         // loop over all the files to add them
@@ -401,7 +401,7 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                            .about("Add files in the disc in an Amsdos way")
                            .arg(
                                Arg::new("INPUT_FILES")
-                                .help("The files to add. They MUST have a header")
+                                .help("The files to add. They MUST have a header if they are BINARY or BASIC files. Otherwise, they are considered to be ASCII files.")
                                 .action(ArgAction::Append)
                                 .required(true)
                             )
