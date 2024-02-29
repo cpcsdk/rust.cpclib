@@ -1093,12 +1093,8 @@ pub fn build_args_parser() -> clap::Command {
 
     let args = if cfg!(feature = "xferlib") {
         let subcommand = Command::new("m4")
-        .about("Directly send the code on the M4 through a snapshot")
-        .arg(
-            Arg::new("CPCM4")
-            .help("Address of the M4")
-            .required(true)
-        );
+            .about("Directly send the code on the M4 through a snapshot")
+            .arg(Arg::new("CPCM4").help("Address of the M4").required(true));
 
         let subcommand = if cfg!(feature = "watch") {
             subcommand.arg(
@@ -1106,7 +1102,8 @@ pub fn build_args_parser() -> clap::Command {
                 .help("Monitor the source file modification and restart the conversion and transfer automatically. Picture must ALWAYS be valid.")
                 .long("watch")
             )
-        } else {
+        }
+        else {
             subcommand
         };
         args.subcommand(subcommand)

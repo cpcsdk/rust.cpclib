@@ -41,7 +41,11 @@ fn main() -> std::io::Result<()> {
                 .required(true)
                 .help("Input file to manipulate")
         )
-        .arg(clap::Arg::new("INFO").long("info").action(ArgAction::SetTrue))
+        .arg(
+            clap::Arg::new("INFO")
+                .long("info")
+                .action(ArgAction::SetTrue)
+        )
         .arg(
             clap::Arg::new("OUTPUT")
                 .short('o')

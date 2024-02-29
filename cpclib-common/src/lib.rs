@@ -21,7 +21,7 @@ pub use {
 ///  (prefix) space number suffix
 pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<u32, Error>
 where
-    I: Stream + StreamIsPartial + for<'a> Compare<&'a str> ,
+    I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,

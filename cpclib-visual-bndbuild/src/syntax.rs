@@ -1,4 +1,3 @@
-
 use std::collections::BTreeSet;
 
 use egui_code_editor::Syntax;

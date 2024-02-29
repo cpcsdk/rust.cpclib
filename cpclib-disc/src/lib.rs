@@ -307,7 +307,6 @@ pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
     Ok(())
 }
 
-
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_build_arg_parser() -> Command {
     Command::new("dsk_manager")

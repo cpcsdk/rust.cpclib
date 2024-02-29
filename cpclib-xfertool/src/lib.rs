@@ -18,11 +18,10 @@ pub mod built_info {
 }
 
 pub fn build_args_parser() -> clap::Command {
-
     let y_command =         Command::new("-y")
     .about("Upload a file on the M4 in the /tmp folder and launch it. V3 snapshots are automatically downgraded to V2 version");
 
-    let y_command = if cfg!(feature = "watch"){
+    let y_command = if cfg!(feature = "watch") {
         y_command.arg(
             clap::Arg::new("WATCH")
                 .help("Watch the file and resend it on the M4 if modified (so xfer does not end when started with this option).")
@@ -30,7 +29,8 @@ pub fn build_args_parser() -> clap::Command {
                 .long("watch")
                 .action(ArgAction::SetTrue)
         )
-    }else {
+    }
+    else {
         y_command
     };
 
@@ -49,8 +49,6 @@ pub fn build_args_parser() -> clap::Command {
         )
         .required(true)
     );
-
-
 
     let cmd = clap::Command::new("CPC xfer to M4")
     .author("Krusty/Benediction")

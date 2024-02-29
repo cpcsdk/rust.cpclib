@@ -15,10 +15,21 @@ use crate::preamble::{
 };
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK", b"BRK", b"BUILDSNA", b"BY",  b"BYTE", 
-    b"DB", b"DEFB", b"DEFS", 
+    b"BANK",
+    b"BRK",
+    b"BUILDSNA",
+    b"BY",
+    b"BYTE",
+    b"DB",
+    b"DEFB",
+    b"DEFS",
     b"ELSE", //  b"END",
-    b"ENT", b"IMPORT", b"ORG", b"PRINT", b"SKIP", b"WORD"
+    b"ENT",
+    b"IMPORT",
+    b"ORG",
+    b"PRINT",
+    b"SKIP",
+    b"WORD"
 ];
 
 pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"IF", b"MACRO"];
@@ -265,8 +276,7 @@ mod test {
         assert!(dbg!(parse_test(parse_line_component, "empty ()")).is_ok());
     }
 
-
-    //TODO check that the appropriate opcode is assembled
+    // TODO check that the appropriate opcode is assembled
     #[test]
     fn orgams_test_parse_byte() {
         assert!(dbg!(parse_test(parse_line_component, "byte 1")).is_ok());
