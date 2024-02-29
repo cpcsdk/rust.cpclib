@@ -38,7 +38,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
 use cpclib_sna::Snapshot;
-use enumflags2::{bitflags, make_bitflags, BitFlags};
+use enumflags2::{bitflags, BitFlags};
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 use preamble::*;

@@ -9,7 +9,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosHeader;
-use cpclib_tokens::symbols::{PhysicalAddress, SymbolFor, SymbolsTableTrait};
+use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ExprElement, ListingElement,
     MacroParamElement, TestKindElement, ToSimpleToken, Token

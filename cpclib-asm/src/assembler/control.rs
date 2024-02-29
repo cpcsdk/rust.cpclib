@@ -1,10 +1,10 @@
-use cpclib_tokens::symbols::PhysicalAddress;
+
 use cpclib_tokens::{Expr, ExprElement, FormattedExpr};
 
 use super::{visit_assert, Env};
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
-use crate::ExprEvaluationExt;
+
 
 /// This structure store the necessary information to replay the assembled stuff of previous passes when we do not reassemble
 #[derive(Debug, Clone, PartialEq, Eq)]

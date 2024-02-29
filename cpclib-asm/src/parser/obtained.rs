@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, BorrowMut, Cow};
+use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -8,12 +8,12 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::combinator::{cut_err, eof, repeat_till0};
+
+use cpclib_common::winnow::combinator::{cut_err};
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
-use cpclib_common::winnow::trace::trace;
+
 use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;

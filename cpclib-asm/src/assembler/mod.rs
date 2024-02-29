@@ -20,7 +20,7 @@ pub mod processed_token;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::io::{stdout, BufWriter, Write};
+use std::io::{stdout, Write};
 use std::ops::Neg;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -954,10 +954,10 @@ impl Env {
         self.handle_print()?;
         self.handle_assert()?;
 
-        let mut remu = if (self
+        let mut remu = if self
             .options()
             .assemble_options()
-            .get_flag(crate::AssemblingOptionFlags::SnaRemu))
+            .get_flag(crate::AssemblingOptionFlags::SnaRemu)
         {
             Some(RemuChunk::empty())
         }

@@ -10,21 +10,21 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, escaped, line_ending, space0, space1};
+use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, repeat_till0, separated,
-    separated0, separated1, separated_foldl1, terminated
+    separated0, separated1, terminated
 };
 use cpclib_common::winnow::error::{
     AddContext, ErrMode, ErrorKind, ParserError, StrContext, VerboseError, VerboseErrorKind
 };
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Range, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{
     none_of, one_of, tag, tag_no_case, take, take_till0, take_till1, take_until0, take_while
 };
-use cpclib_common::winnow::{trace, BStr, PResult, Parser};
+use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_common::{lazy_static, winnow};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{FlagValue, SnapshotVersion};

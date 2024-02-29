@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::{AsBStr, Offset};
-use cpclib_common::winnow::{BStr, Bytes, Located, Stateful};
+use cpclib_common::winnow::{BStr, Located, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_span::LineSpanExt;
 

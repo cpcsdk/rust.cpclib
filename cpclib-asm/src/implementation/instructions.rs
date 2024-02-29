@@ -1,7 +1,7 @@
 use cpclib_crunchers::CompressMethod;
 use cpclib_tokens::CrunchType;
 
-use crate::crunchers;
+
 use crate::error::AssemblerError;
 
 pub trait Cruncher {

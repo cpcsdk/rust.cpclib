@@ -4,7 +4,7 @@ use std::io::Write;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, RemuEntry, WinapeBreakPoint};
-use either::Either;
+
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -12,7 +12,7 @@ use super::report::SavedFile;
 use super::save_command::SaveCommand;
 use super::string::PreprocessedFormattedString;
 use super::Env;
-use crate::error::{build_filename, build_simple_error_message, AssemblerError};
+use crate::error::{build_simple_error_message, AssemblerError};
 use crate::preamble::Z80Span;
 
 trait DelayedCommand {}

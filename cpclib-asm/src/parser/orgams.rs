@@ -10,8 +10,7 @@ use super::{
     Z80ParserError
 };
 use crate::preamble::{
-    located_expr, my_space0, my_space1, one_instruction_inner_code, parse_expr, parse_single_token,
-    LocatedListing, MayHaveSpan
+    located_expr, my_space0, one_instruction_inner_code, MayHaveSpan
 };
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[

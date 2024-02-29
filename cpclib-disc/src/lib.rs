@@ -1,15 +1,15 @@
 //#![feature(register_attr)]
 //#![register_attr(get)]
 
-use std::fs::File;
+
 use std::io::Write;
 
-use amsdos::{AmsdosEntry, AmsdosError, AmsdosFileName};
+use amsdos::{AmsdosError};
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
-use cpclib_common::itertools::Itertools;
+
 use disc::Disc;
-use edsk::Head;
+
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -25,13 +25,13 @@ pub mod edsk;
 #[cfg(feature = "hfe")]
 pub mod hfe;
 
-use std::io::Read;
-use std::path::Path;
-use std::str::FromStr;
+
+
+
 
 use custom_error::custom_error;
 
-use crate::amsdos::{AmsdosFile, AmsdosManagerNonMut};
+
 use crate::edsk::ExtendedDsk;
 #[cfg(feature = "hfe")]
 use crate::hfe::Hfe;
