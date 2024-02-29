@@ -23,7 +23,7 @@ pub struct BndBuilder {
 
 impl BndBuilder {
     pub fn add_default_rule<S: AsRef<str>>(
-        mut self,
+        self,
         targets: &[S],
         dependencies: &[S],
         kind: &str
