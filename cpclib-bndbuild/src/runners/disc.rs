@@ -4,11 +4,11 @@ use cpclib_disc::dsk_manager_build_arg_parser;
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
 
-pub struct DskManagerRunner {
+pub struct DiscManagerRunner {
     command: clap::Command
 }
 
-impl Default for DskManagerRunner {
+impl Default for DiscManagerRunner {
     fn default() -> Self {
         let command = dsk_manager_build_arg_parser();
         let command = command.no_binary_name(true).after_help(format!(
@@ -22,19 +22,19 @@ impl Default for DskManagerRunner {
     }
 }
 
-impl RunnerWithClap for DskManagerRunner {
+impl RunnerWithClap for DiscManagerRunner {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl Runner for DskManagerRunner {
+impl Runner for DiscManagerRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
         let matches = self.get_matches(itr)?;
         cpclib_disc::dsk_manager_handle(matches).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {
-        "dsk"
+        "disc"
     }
 }

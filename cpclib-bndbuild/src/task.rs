@@ -10,7 +10,7 @@ pub enum Task {
     Echo(StandardTask),
     ImgConverter(StandardTask),
     Xfer(StandardTask),
-    Dsk(StandardTask),
+    Disc(StandardTask),
     Extern(StandardTask)
 }
 
@@ -50,7 +50,7 @@ impl Display for Task {
                     s.args
                 )
             },
-            Task::Dsk(s) => {
+            Task::Disc(s) => {
                 write!(
                     f,
                     "{}disc {}",
@@ -98,7 +98,7 @@ impl<'de> Deserialize<'de> for Task {
                     "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
                     "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
                     "extern" => Ok(Task::Extern(std)),
-                    "dsk" | "disc" => Ok(Task::Dsk(std)),
+                    "dsk" | "disc" => Ok(Task::Disc(std)),
                     _ => Err(Error::custom(format!("{code} is invalid")))
                 }
             }
@@ -114,7 +114,7 @@ impl<'de> Deserialize<'de> for Task {
 
 impl Task {
     pub fn new_dsk(args: &str) -> Self {
-        Self::Dsk(StandardTask::new(args))
+        Self::Disc(StandardTask::new(args))
     }
 
     pub fn new_basm(args: &str) -> Self {
@@ -141,7 +141,7 @@ impl Task {
             | Task::ImgConverter(t)
             | Task::Xfer(t)
             | Task::Extern(t)
-            | Task::Dsk(t) => &t.args
+            | Task::Disc(t) => &t.args
         }
     }
 
@@ -153,7 +153,7 @@ impl Task {
             | Task::ImgConverter(t)
             | Task::Xfer(t)
             | Task::Extern(t)
-            | Task::Dsk(t) => t.ignore_error
+            | Task::Disc(t) => t.ignore_error
         }
     }
 
@@ -165,7 +165,7 @@ impl Task {
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
             | Task::Extern(ref mut t)
-            | Task::Dsk(ref mut t) => t.ignore_error = ignore
+            | Task::Disc(ref mut t) => t.ignore_error = ignore
         }
 
         self
@@ -180,7 +180,7 @@ impl Task {
             Task::Xfer(_) => true, // wrong when downloading files
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
-            Task::Dsk(_) => false // wrong for winape
+            Task::Disc(_) => false // wrong for winape
         }
     }
 }

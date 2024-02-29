@@ -3,7 +3,7 @@ use glob::glob;
 use shlex::split;
 
 pub mod basm;
-pub mod dsk;
+pub mod disc;
 pub mod echo;
 pub mod r#extern;
 pub mod imgconverter;
