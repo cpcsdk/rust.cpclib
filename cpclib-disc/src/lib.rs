@@ -112,7 +112,7 @@ pub fn open_disc<P: AsRef<std::path::Path>>(
 }
 
 #[cfg(feature = "cmdline")]
-pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
+pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
 
 

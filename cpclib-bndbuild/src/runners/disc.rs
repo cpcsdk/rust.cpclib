@@ -31,7 +31,7 @@ impl RunnerWithClap for DiscManagerRunner {
 impl Runner for DiscManagerRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
         let matches = self.get_matches(itr)?;
-        cpclib_disc::dsk_manager_handle(matches).map_err(|e| e.to_string())
+        cpclib_disc::dsk_manager_handle(&matches).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {

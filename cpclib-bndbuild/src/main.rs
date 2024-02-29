@@ -16,17 +16,21 @@ fn main() {
 }
 
 fn inner_main() -> Result<(), BndBuilderError> {
-    let basm_command = cpclib_basm::build_args_parser().name("basm");
+    let basm_cmd = cpclib_basm::build_args_parser().name("basm");
+    let img2cpc_cmd = cpclib_imgconverter::build_args_parser().name("img2cpc");
+    let xfer_cmd = cpclib_xfertool::build_args_parser().name("xfer");
+    let disc_cmd = cpclib_disc::dsk_manager_build_arg_parser().name("disc");
 
     let cmd = Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
+        .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any benedicition crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
         .author("Krusty/Benediction")
         .version(built_info::PKG_VERSION)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .subcommand_negates_reqs(true)
         .subcommand_precedence_over_arg(true)
-        .subcommand(basm_command)
+        .subcommands(&[basm_cmd, img2cpc_cmd.clone(), xfer_cmd, disc_cmd])
         .arg(
             Arg::new("help")
                 .long("help")
@@ -91,7 +95,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
         )
         .arg(
             Arg::new("kind")
-                .help("The kind of command")
+                .help("The kind of command to be added in the yaml file")
                 .long("kind")
                 .short('k')
                 .value_parser(["basm", "img2cpc", "xfer"])
@@ -128,6 +132,24 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 std::process::exit(-1);
             }
         }
+    }
+    else if let Some(img2cpc) = matches.subcommand_matches("img2cpc") {
+        eprintln!("Switch to img2cpc behavior, not bndbuild one.");
+        cpclib_imgconverter::process(img2cpc, img2cpc_cmd)
+            .map_err(|e| e.to_string())
+            .expect("Error when launching img2cpc tool");
+    }
+    else if let Some(xfer) = matches.subcommand_matches("xfer") {
+        eprintln!("Switch to xfer behavior, not bndbuild one.");
+        cpclib_xfertool::process(xfer)
+            .map_err(|e| e.to_string())
+            .expect("Error when launching xfer tool");
+    }
+    else if let Some(disc) = matches.subcommand_matches("disc") {
+        eprintln!("Switch to disc behavior, not bndbuild one.");
+        cpclib_disc::dsk_manager_handle(disc)
+            .map_err(|e| e.to_string())
+            .expect("Error when launching disc tool");
     }
     else {
         // handle the real behavior of bndbuild
