@@ -2,13 +2,25 @@
 //#![register_attr(get)]
 
 
-use std::io::Write;
 
 use amsdos::{AmsdosError};
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
 
 use disc::Disc;
+
+#[cfg(feature="cmdline")]
+use std::str::FromStr;
+#[cfg(feature="cmdline")]
+use crate::edsk::*;
+#[cfg(feature="cmdline")]
+use crate::amsdos::*;
+#[cfg(feature="cmdline")]
+use std::fs::File;
+#[cfg(feature="cmdline")]
+use std::path::Path;
+#[cfg(feature="cmdline")]
+use std::io::{Write, Read};
 
 
 /// Concerns all stuff related to Amsdos disc format
@@ -101,6 +113,10 @@ pub fn open_disc<P: AsRef<std::path::Path>>(
 
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_handle(matches: ArgMatches) -> Result<(), DskManagerError> {
+
+
+
+
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
     let behavior = amsdos::AmsdosAddBehavior::ReplaceIfPresent;
 
