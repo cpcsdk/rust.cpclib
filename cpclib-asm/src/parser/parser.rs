@@ -10,19 +10,19 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0};
+use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, repeat_till0, separated,
-    separated0, separated1, terminated
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated,
+    terminated
 };
 use cpclib_common::winnow::error::{
-    AddContext, ErrMode, ErrorKind, ParserError, StrContext, VerboseError, VerboseErrorKind
+    AddContext, ErrMode, ErrorKind, ParserError, StrContext
 };
 use cpclib_common::winnow::stream::{
     Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{
-    none_of, one_of, tag, tag_no_case, take, take_till0, take_till1, take_until0, take_while
+    none_of, one_of, take, take_till, take_while, take_until
 };
 use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_common::{lazy_static, winnow};
@@ -32,6 +32,7 @@ use cpclib_tokens::ListingElement;
 use crc::*;
 use either::Either;
 use obtained::LocatedTokenInner;
+use crate::parser::parser::winnow::combinator::repeat_till;
 
 use super::context::*;
 use super::obtained::*;
@@ -87,26 +88,6 @@ impl From<char> for Z80ParserErrorKind {
     }
 }
 
-impl From<VerboseErrorKind> for Z80ParserErrorKind {
-    fn from(other: VerboseErrorKind) -> Self {
-        match other {
-            VerboseErrorKind::Context(ctx) => Self::Context(StrContext::Label(ctx)),
-            VerboseErrorKind::Winnow(n) => n.into()
-        }
-    }
-}
-
-impl From<VerboseError<InnerZ80Span>> for Z80ParserError {
-    fn from(other: VerboseError<InnerZ80Span>) -> Self {
-        Self(
-            other
-                .errors
-                .into_iter()
-                .map(|(i, k)| (i, k.into()))
-                .collect_vec()
-        )
-    }
-}
 
 impl Z80ParserError {
     pub fn from_inner_error(
@@ -126,7 +107,7 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
         Self(vec![(input.clone(), kind.into())])
     }
 
-    fn append(mut self, input: &InnerZ80Span, kind: ErrorKind) -> Self {
+    fn append(mut self, input: &InnerZ80Span, token_start: &<InnerZ80Span as Stream>::Checkpoint, kind: ErrorKind) -> Self {
         self.0.push((input.clone(), kind.into()));
         self
     }
@@ -144,7 +125,7 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
 }
 
 impl AddContext<InnerZ80Span> for Z80ParserError {
-    fn add_context(mut self, input: &InnerZ80Span, ctx: &'static str) -> Self {
+    fn add_context(mut self, input: &InnerZ80Span, start: &<InnerZ80Span as Stream>::Checkpoint, ctx: &'static str) -> Self {
         self.0.push((
             input.clone(),
             Z80ParserErrorKind::Context(StrContext::Label(ctx))
@@ -153,21 +134,18 @@ impl AddContext<InnerZ80Span> for Z80ParserError {
     }
 }
 
-impl AddContext<InnerZ80Span, &StrContext> for Z80ParserError {
-    fn add_context(mut self, input: &InnerZ80Span, ctx: &StrContext) -> Self {
-        self.0
-            .push((input.clone(), Z80ParserErrorKind::Context(ctx.clone())));
+
+impl AddContext<InnerZ80Span, StrContext> for Z80ParserError {
+    fn add_context(mut self, input: &InnerZ80Span, start: &<InnerZ80Span as Stream>::Checkpoint, ctx: StrContext) -> Self {
+        self.0.push((
+            input.clone(),
+            Z80ParserErrorKind::Context(ctx)
+        ));
         self
     }
 }
 
-impl AddContext<InnerZ80Span, StrContext> for Z80ParserError {
-    fn add_context(mut self, input: &InnerZ80Span, ctx: StrContext) -> Self {
-        self.0
-            .push((input.clone(), Z80ParserErrorKind::Context(ctx)));
-        self
-    }
-}
+
 
 /// ...
 pub mod error_code {
@@ -430,11 +408,11 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
 #[inline]
 pub(crate) fn build_span(
     start_eof_offset: usize,
-    start: <InnerZ80Span as Stream>::Checkpoint,
+    start: &<InnerZ80Span as Stream>::Checkpoint,
     mut input: InnerZ80Span
 ) -> InnerZ80Span {
     let span_len: usize = start_eof_offset - input.eof_offset();
-    input.reset(start);
+    input.reset(&start);
     let bytes: &'static [u8] = unsafe { std::mem::transmute(&input.as_bstr()[..span_len]) }; // The bytes live longer than input
     input.update_slice(bytes)
 }
@@ -473,10 +451,10 @@ where
 
         match f.parse_next(i) {
             Err(ErrMode::Backtrack(_)) => {
-                i.reset(start);
+                i.reset(&start);
                 return Ok(acc);
             },
-            Err(e) => return Err(e.append(i, ErrorKind::Many)),
+            Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
             Ok(o) => {
                 if len == i.eof_offset() {
                     return Ok(acc); // diff is here
@@ -492,7 +470,7 @@ where
 
             match f.parse_next(i) {
                 Err(ErrMode::Backtrack(_)) => {
-                    i.reset(start);
+                    i.reset(&start);
                     return Ok(acc);
                 },
                 Err(e) => return Err(e),
@@ -531,10 +509,10 @@ where
 
         match f.parse_next(i) {
             Err(ErrMode::Backtrack(_)) => {
-                i.reset(start);
+                i.reset(&start);
                 return Ok(());
             },
-            Err(e) => return Err(e.append(i, ErrorKind::Many)),
+            Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
             Ok(o) => {
                 match o {
                     Either::Left(o) => {
@@ -555,10 +533,10 @@ where
 
             match sep.parse_next(i) {
                 Err(ErrMode::Backtrack(_)) => {
-                    i.reset(start);
+                    i.reset(&start);
                     return Ok(()); // no pb everything is already in the vec result
                 },
-                Err(e) => return Err(e.append(i, ErrorKind::Many)),
+                Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
                 Ok(_) => {
                     // infinite loop check: the parser must always consume
                     if i.eof_offset() == len {
@@ -569,7 +547,7 @@ where
                     let _len = i.eof_offset();
                     match f.parse_next(i) {
                         Err(ErrMode::Backtrack(_)) => {
-                            i.reset(start); // really usefull ? I doubt
+                            i.reset(&start); // really usefull ? I doubt
                             return Ok(());
                         },
                         Err(e) => return Err(e),
@@ -604,7 +582,7 @@ where
 
             match f.parse_next(i) {
                 Err(ErrMode::Backtrack(_)) => {
-                    i.reset(start);
+                    i.reset(&start);
                     return Ok(());
                 },
                 Err(e) => return Err(e),
@@ -638,8 +616,8 @@ where
                 Err(ErrMode::Backtrack(e)) => {
                     match f.parse_next(i) {
                         Err(ErrMode::Backtrack(_err)) => {
-                            i.reset(start_i);
-                            return Err(ErrMode::Backtrack(e.append(i, ErrorKind::Many)));
+                            i.reset(&start_i);
+                            return Err(ErrMode::Backtrack(e.append(i, &start_i,ErrorKind::Many)));
                         },
                         Err(e) => return Err(e),
                         Ok(_o) => {
@@ -689,7 +667,7 @@ pub fn inner_code_with_state(
 pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let _ = my_space0.parse_next(input)?;
     let rorg_start = input.checkpoint();
-    let _ = alt((tag_no_case("PHASE"), tag_no_case("RORG"))).parse_next(input)?;
+    let _ = alt((Caseless("PHASE"), Caseless("RORG"))).parse_next(input)?;
 
     let exp = cut_err(
         delimited(my_space1, located_expr, my_space0).context("RORG: error in the expression")
@@ -703,7 +681,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
     let _ = cut_err(
         preceded(
             my_space0,
-            alt((tag_no_case("DEPHASE"), tag_no_case("REND")))
+            alt((Caseless("DEPHASE"), Caseless("REND")))
         )
         .context("RORG: missing REND")
     )
@@ -711,7 +689,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 
     let _rorg_stop = input.checkpoint();
     let token =
-        LocatedTokenInner::Rorg(exp, inner).into_located_token_between(rorg_start, input.clone());
+        LocatedTokenInner::Rorg(exp, inner).into_located_token_between(&rorg_start, input.clone());
     Ok(token)
 }
 
@@ -735,7 +713,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
                 // parse_label(false)
                 delimited(
                     my_space0,
-                    take_till1(|c| c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ')
+                    take_till(1..,|c| c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ')
                         .map(|s: &[u8]| cloned.update_slice(s)),
                     my_space0
                 ),
@@ -761,7 +739,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     .parse_next(input)?;
 
     Ok(LocatedTokenInner::Function(name.into(), arguments, listing)
-        .into_located_token_between(function_start, input.clone()))
+        .into_located_token_between(&function_start, input.clone()))
 }
 
 /// TODO
@@ -775,10 +753,10 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     parse_macro_inner(dir_start, name).parse_next(input)
 }
 
-fn parse_macro_inner(
-    dir_start: Checkpoint<Checkpoint<Checkpoint<&BStr>>>,
+fn parse_macro_inner (
+    dir_start: <InnerZ80Span as Stream>::Checkpoint,
     name: InnerZ80Span
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> + '_ {
+) -> impl FnMut(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError>  {
     move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
         // macro arguments
         let arguments = preceded(
@@ -788,7 +766,7 @@ fn parse_macro_inner(
                 // parse_label(false)
                 delimited(
                     my_space0,
-                    take_till1(|c| c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' '),
+                    take_till(1.., |c| c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' '),
                     my_space0
                 ),
                 parse_comma
@@ -806,7 +784,8 @@ fn parse_macro_inner(
         // TODO factorize with the code of parse_basic
         let before_content = input.checkpoint();
         let (_, end) = cut_err(
-            repeat_till0::<_, _, (), _, _, _, _>(
+            repeat_till::<_, _, (), _, _, _, _>(
+                0..,
                 take(1usize),
                 alt((
                     parse_directive_word(b"ENDM"),
@@ -820,7 +799,7 @@ fn parse_macro_inner(
 
         let content_length = end.offset_from(&before_content);
         let mut content = input.clone();
-        content.reset(before_content);
+        content.reset(&before_content);
         let content: &BStr = unsafe { std::mem::transmute(&content.as_bstr()[..content_length]) };
         let content = input.clone().update_slice(content); // TODO find a way to improve that part. I'd like to not make the conversion
 
@@ -830,7 +809,7 @@ fn parse_macro_inner(
             content: content.into(),
             flavor: input.state.options().assembler_flavor
         }
-        .into_located_token_between(dir_start, input.clone()))
+        .into_located_token_between(&dir_start, input.clone()))
     }
 }
 
@@ -844,8 +823,8 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 
     // we must have either a new line or :
     let _ = alt((
-        delimited(my_space0, tag(":"), my_space0),
-        preceded(my_space0, line_ending)
+        delimited(my_space0, ':', my_space0).value(()),
+        preceded(my_space0, line_ending).value(())
     ))
     .parse_next(input)?;
 
@@ -860,7 +839,7 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     .parse_next(input)?;
 
     let token = LocatedTokenInner::While(cond, inner)
-        .into_located_token_between(while_start, input.clone());
+        .into_located_token_between(&while_start, input.clone());
     Ok(token)
 }
 
@@ -877,7 +856,7 @@ pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     .parse_next(input)?;
 
     let token = LocatedTokenInner::Module(name.into(), inner)
-        .into_located_token_between(module_start, input.clone());
+        .into_located_token_between(&module_start, input.clone());
     Ok(token)
 }
 
@@ -909,7 +888,7 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
     .parse_next(input)?;
 
     let token = LocatedTokenInner::CrunchedSection(kind, inner)
-        .into_located_token_between(crunched_start, input.clone());
+        .into_located_token_between(&crunched_start, input.clone());
     Ok(token)
 }
 
@@ -931,7 +910,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             my_many0_nocollect(alt((
                 my_space1.value(()),
                 line_ending.value(()),
-                tag(":").value(()),
+                ':'.value(()),
                 parse_comment.value(())
             )))
             .context("SWITCH: whitespace error")
@@ -966,14 +945,14 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
         };
         if endswitch {
             let token = LocatedTokenInner::Switch(value, cases_listing, default_listing)
-                .into_located_token_between(switch_start.checkpoint(), input.clone());
+                .into_located_token_between(&switch_start.checkpoint(), input.clone());
             return Ok(token);
         }
 
         let value = preceded(my_space0, opt(parse_directive_word(b"CASE"))).parse_next(input)?;
         if value.is_some() {
             let value = cut_err(
-                delimited(my_space0, located_expr, opt(tag(":")))
+                delimited(my_space0, located_expr, opt(':'))
                     .context("SWITCH: case value error.")
             )
             .parse_next(input)?;
@@ -991,7 +970,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                 delimited(
                     my_space0,
                     parse_directive_word(b"DEFAULT"),
-                    opt((my_space0, tag(":")))
+                    opt((my_space0, ':'))
                 )
                 .context("Only CASE, DEFAULT or ENDSWITCH are expected.")
             )
@@ -1037,7 +1016,7 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
         step,
         listing: inner
     }
-    .into_located_token_between(for_start, input.clone());
+    .into_located_token_between(&for_start, input.clone());
     Ok(token)
 }
 
@@ -1063,7 +1042,7 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     .parse_next(input)?;
 
     let token = LocatedTokenInner::Confined(inner)
-        .into_located_token_between(confined_start, input.clone());
+        .into_located_token_between(&confined_start, input.clone());
     Ok(token)
 }
 
@@ -1115,7 +1094,7 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                 counter_start,
                 counter_step
             )
-            .into_located_token_between(repeat_start, input.clone());
+            .into_located_token_between(&repeat_start, input.clone());
             Ok(token)
         },
 
@@ -1131,7 +1110,7 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             let cond =
                 cut_err(located_expr.context("REPEAT UNTIL: condition error")).parse_next(input)?;
             let token = LocatedTokenInner::RepeatUntil(cond, inner)
-                .into_located_token_between(repeat_start, input.clone());
+                .into_located_token_between(&repeat_start, input.clone());
             Ok(token)
         }
     }
@@ -1196,14 +1175,14 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
     .parse_next(input)?;
 
     let token = LocatedTokenInner::Iterate(counter.into(), values, inner)
-        .into_located_token_between(iterate_start, input.clone());
+        .into_located_token_between(&iterate_start, input.clone());
     Ok(token)
 }
 
 /// TODO
 pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let basic_start = input.checkpoint();
-    let _ = ((my_space0, tag_no_case("LOCOMOTIVE"), my_space0)).parse_next(input)?;
+    let _ = ((my_space0, Caseless("LOCOMOTIVE"), my_space0)).parse_next(input)?;
 
     // collect the labels that are spread to the basic environnement
     let args: Option<Vec<InnerZ80Span>> = opt(separated(
@@ -1229,21 +1208,21 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     // TODO factorize with the the code of parse_macro
     let before_content = input.checkpoint();
     let (_, end) = cut_err(
-        repeat_till0::<_, _, (), _, _, _, _>(take(1usize), parse_directive_word(b"ENDLOCOMOTIVE"))
+        repeat_till::<_, _, (), _, _, _, _>(0..,take(1usize), parse_directive_word(b"ENDLOCOMOTIVE"))
             .context("BASIC: impossible to collect BASIC content")
     )
     .parse_next(input)?;
 
     let content_length = end.offset_from(&before_content);
     let mut content = input.clone();
-    content.reset(before_content);
+    content.reset(&before_content);
     let content: &BStr = unsafe { std::mem::transmute(&content.as_bstr()[..content_length]) };
     let basic = input.clone().update_slice(content); // TODO find a way to improve that part. I'd like to not make the conversion
 
     let _ = my_space0.parse_next(input)?;
 
     let token = LocatedTokenInner::Basic(args, hidden_lines, basic.into())
-        .into_located_token_between(basic_start, input.clone());
+        .into_located_token_between(&basic_start, input.clone());
     Ok(token)
 }
 
@@ -1251,11 +1230,12 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 pub fn parse_basic_hide_lines(
     input: &mut InnerZ80Span
 ) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
-    let _ = ((tag_no_case("HIDE_LINES"), my_space1)).parse_next(input)?;
+    let _ = ((Caseless("HIDE_LINES"), my_space1)).parse_next(input)?;
     expr_list.parse_next(input)
 }
 
 pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z80ParserError> {
+    let start = input.checkpoint();
     cpclib_sna::parse::parse_flag_value::<InnerZ80Span, Z80ParserError>
         .parse_next(input)
         .map_err(|e| {
@@ -1264,7 +1244,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
                 ErrMode::Backtrack(e) => {
                     let mut error = Z80ParserError::from_error_kind(input, ErrorKind::Fail);
                     for ctx in e.context() {
-                        error = error.add_context(input, ctx);
+                        error = error.add_context(input, &start, ctx.clone());
                     }
 
                     ErrMode::Backtrack(error)
@@ -1272,7 +1252,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
                 ErrMode::Cut(e) => {
                     let mut error = Z80ParserError::from_error_kind(input, ErrorKind::Fail);
                     for ctx in e.context() {
-                        error = error.add_context(input, ctx);
+                        error = error.add_context(input, &start,ctx.clone());
                     }
 
                     ErrMode::Cut(error)
@@ -1479,17 +1459,17 @@ pub fn parse_line_component_standard(
             },
             LabelModifier::Macro => unreachable!("This case must have been handled before")
         }
-        .into_located_token_between(before_label, input.clone());
+        .into_located_token_between(&before_label, input.clone());
 
         Ok((None, Some(token)))
     }
     else {
         // ensure we have not eaten some label modifier bytes in case of error
-        input.reset(before_label_modifier);
+        input.reset(&before_label_modifier);
 
         // if a label was present as well as :, we prefer to stop here
         if label.is_some() && followed_by_double_column.is_some() {
-            input.reset(before_double_column);
+            input.reset(&before_double_column);
             return Ok((build_possible_label(), None));
         }
 
@@ -1505,7 +1485,7 @@ pub fn parse_line_component_standard(
                 .parse_next(input)
             {
                 // this is a macro call
-                let call = call.map(|t| t.into_located_token_between(before_label, input.clone()));
+                let call = call.map(|t| t.into_located_token_between(&before_label, input.clone()));
                 my_space0.parse_next(input)?;
 
                 return Ok((None, call));
@@ -1646,7 +1626,7 @@ pub fn parse_line(
         let before_end = input.checkpoint();
         let stop = opt(parse_end_directive).parse_next(input)?;
         let comment = if stop.is_some() {
-            input.reset(before_end);
+            input.reset(&before_end);
             None
         }
         else {
@@ -1689,6 +1669,7 @@ pub fn parse_z80_line_complete(
 pub fn parse_assign_operator(
     input: &mut InnerZ80Span
 ) -> PResult<Option<BinaryOperation>, Z80ParserError> {
+    let start = input.checkpoint();
     let word = take_while(1..=3, |c| {
         c == b'='
             || c == b'<'
@@ -1725,7 +1706,7 @@ pub fn parse_assign_operator(
         _ => {
             return Err(ErrMode::Cut(
                 Z80ParserError::from_error_kind(input, ErrorKind::Alt)
-                    .add_context(input, "Wrong symbol")
+                    .add_context(input, &start, "Wrong symbol")
             ))
         },
     };
@@ -1784,6 +1765,7 @@ where
     I: crate::parser::parser::winnow::stream::StreamIsPartial,
     I: Stream,
     <I as Stream>::Token: AsChar + Clone,
+    I:  cpclib_common::winnow::stream::Compare<char>,
     F: Parser<I, O1, Error>,
     G: Parser<I, O2, Error>,
     Error: ParserError<I> + Debug,
@@ -1817,7 +1799,7 @@ where
             }
         }
 
-        input.reset(start);
+        input.reset(&start);
         input.finish();
         return Ok(res);
     }
@@ -1877,16 +1859,16 @@ pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
         delimited(
             my_space0,
             alt((
-                tag_no_case("namespace"),
-                tag_no_case("module"),
-                tag_no_case("as")
+                Caseless("namespace"),
+                Caseless("module"),
+                Caseless("as")
             )),
             my_space0
         ),
         delimited(
-            tag("\""),
+            '"',
             parse_label(false),
-            tag("\"") // TODO modify to accept only labels without dot
+            '"' // TODO modify to accept only labels without dot
         )
     ))
     .parse_next(input)?;
@@ -1913,7 +1895,7 @@ pub fn parse_incbin(
         let _extended_offset =
             opt(preceded((my_space0, (','), my_space0), expr)).parse_next(input)?;
         let off =
-            opt(preceded((my_space0, (','), my_space0), tag_no_case("OFF"))).parse_next(input)?;
+            opt(preceded((my_space0, (','), my_space0), Caseless("OFF"))).parse_next(input)?;
 
         Ok(LocatedTokenInner::Incbin {
             fname,
@@ -1933,11 +1915,11 @@ pub fn parse_write_direct_memory(
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
     // filter all the stuff before
     let _ = ((
-        tag_no_case("DIRECT"),
+        Caseless("DIRECT"),
         my_space1,
-        tag_no_case("-1"),
+        Caseless("-1"),
         parse_comma,
-        tag_no_case("-1"),
+        Caseless("-1"),
         parse_comma
     ))
         .parse_next(input)?;
@@ -2160,7 +2142,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
         },
     }?;
 
-    let token = token.into_located_token_between(input_start, input.clone());
+    let token = token.into_located_token_between(&input_start, input.clone());
     Ok(token)
 }
 
@@ -2182,7 +2164,7 @@ pub fn parse_ex_af(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     alt((
         ((
-            //          tag_no_case("EX"),
+            //          Caseless("EX"),
             //          space1,
             parse_register_hl,
             parse_comma,
@@ -2190,7 +2172,7 @@ pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
         ))
             .value(()),
         ((
-            //            tag_no_case("EX"),
+            //            Caseless("EX"),
             //        space1,
             parse_register_de,
             parse_comma,
@@ -2206,7 +2188,7 @@ pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 #[inline]
 pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let destination = ((
-        //     tag_no_case("EX"),
+        //     Caseless("EX"),
         //      space1,
         ('('),
         my_space0,
@@ -2247,11 +2229,9 @@ fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToke
 
     // Only one argument is allowed
     if (directive.is_db() || directive.is_dw()) && directive.data_exprs().len() > 1 {
-        input.reset(input_start);
-
         return Err(ErrMode::Cut(
             Z80ParserError::from_error_kind(input, ErrorKind::Many)
-                .add_context(input, "0 or 1 arguments are expected")
+                .add_context(input, &input_start, "0 or 1 arguments are expected")
                 .into()
         ));
     }
@@ -2312,7 +2292,7 @@ pub fn parse_directive_new(
                     },
 
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2335,7 +2315,7 @@ pub fn parse_directive_new(
                     choice_nocase!(b"ORG") => parse_org.parse_next(input)?,
                     choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input)?,
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2370,7 +2350,7 @@ pub fn parse_directive_new(
                         parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
                     },
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2394,7 +2374,7 @@ pub fn parse_directive_new(
                     },
 
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2453,7 +2433,7 @@ pub fn parse_directive_new(
                     choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input)?, /* TODO filter to remove the orgams specificies */
 
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2501,7 +2481,7 @@ pub fn parse_directive_new(
                     },
 
                     _ => {
-                        input.reset(input_start);
+                        input.reset(&input_start);
                         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                             input,
                             ErrorKind::Alt
@@ -2511,7 +2491,7 @@ pub fn parse_directive_new(
             },
         };
 
-        let token = token.into_located_token_between(input_start, input.clone());
+        let token = token.into_located_token_between(&input_start, input.clone());
         Ok(token)
     }
 }
@@ -2554,7 +2534,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
 
         // leave if the first loop does not have a test
         if first_loop && if_token_or_error.is_err() {
-            input.reset(if_start);
+            input.reset(&if_start);
             return Err(if_token_or_error.err().unwrap());
         }
 
@@ -2576,8 +2556,8 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         let _ = cut_err(
             alt((
                 delimited(my_space0, parse_comment, line_ending).recognize(),
-                line_ending,
-                tag(":")
+                line_ending.recognize(),
+                ':'.recognize()
             ))
             .context("Condition: condition must end by a new line or ':'")
         )
@@ -2596,7 +2576,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
                 my_many0_nocollect(alt((
                     my_space1.value(()),
                     line_ending.value(()),
-                    tag(":").value(())
+                    ':'.value(())
                 ))),
                 (winnow::ascii::Caseless(b"ELSE"), my_space0) // no word to allow ELSEIF in addition to ELSE IF
             ))
@@ -2616,8 +2596,8 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
 
     let _ = (
         opt(alt((
-            delimited(my_space0, tag(":"), my_space0),
-            delimited(my_space0, parse_comment, line_ending).recognize()
+            delimited(my_space0, ':', my_space0).value(()),
+            delimited(my_space0, parse_comment, line_ending).value(())
         ))),
         cut_err(preceded(
             my_space0,
@@ -2631,7 +2611,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
 
     let token = LocatedTokenInner::If(conditions, else_clause)
-        .into_located_token_between(if_start, input.clone());
+        .into_located_token_between(&if_start, input.clone());
     Ok(token)
 }
 
@@ -2706,8 +2686,8 @@ pub fn parse_buildsna(
 
         terminated(
             cut_err(opt(alt((
-                tag_no_case("V2").value(SnapshotVersion::V2),
-                tag_no_case("V3").value(SnapshotVersion::V3)
+                Caseless("V2").value(SnapshotVersion::V2),
+                Caseless("V3").value(SnapshotVersion::V3)
             ))))
             .map(|v: Option<SnapshotVersion>| LocatedTokenInner::BuildSna(v)),
             not(alphanumeric1)
@@ -2821,7 +2801,7 @@ pub fn parse_assembler_control_max_passes_number(
             lst: inner
         }
     )
-    .into_located_token_between(asmctrl_start, input.clone()))
+    .into_located_token_between(&asmctrl_start, input.clone()))
 }
 
 #[inline]
@@ -2884,7 +2864,7 @@ pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
     preceded(
-        (tag_no_case("start"), alt((my_space1, parse_comma))),
+        (Caseless("start"), alt((my_space1, parse_comma))),
         cut_err(parse_label(false).context("Missing label"))
     )
     .map(|name| LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into())))
@@ -2896,7 +2876,7 @@ pub fn parse_stable_ticker_start(
 pub fn parse_stable_ticker_stop(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
-    tag_no_case("stop").parse_next(input)?;
+    Caseless("stop").parse_next(input)?;
 
     let name = opt(preceded(
         alt((my_space1, parse_comma)),
@@ -2951,7 +2931,7 @@ pub fn parse_ld_fake(
         let dst = alt((
             terminated(
                 alt((parse_register16, parse_indexregister16)),
-                not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+                not(alt((Caseless(".low"), Caseless(".high"))))
             ),
             parse_hl_address,
             parse_indexregister_with_index
@@ -2965,7 +2945,7 @@ pub fn parse_ld_fake(
             alt((
                 terminated(
                     alt((parse_register16, parse_indexregister16)),
-                    not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+                    not(alt((Caseless(".low"), Caseless(".high"))))
                 ),
                 parse_hl_address,
                 parse_indexregister_with_index
@@ -2977,7 +2957,7 @@ pub fn parse_ld_fake(
         {
             terminated(
                 parse_register16,
-                not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+                not(alt((Caseless(".low"), Caseless(".high"))))
             )
             .parse_next(input)?
         };
@@ -3011,7 +2991,7 @@ pub fn parse_ld_normal(
                 parse_register_sp,
                 terminated(
                     parse_register16,
-                    not(alt((tag_no_case(".low"), tag_no_case(".high"))))
+                    not(alt((Caseless(".low"), Caseless(".high"))))
                 ),
                 parse_register8,
                 parse_indexregister16,
@@ -3135,7 +3115,7 @@ fn parse_ld_normal_src(
             parse_register_a(input)
         }
         else {
-            input.reset(input_start);
+            input.reset(&input_start);
             Err(ErrMode::Backtrack(
                 Z80ParserError::from_error_kind(input, ErrorKind::Alt).into()
             ))
@@ -3213,7 +3193,7 @@ pub fn parse_export(
     #[inline]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let labels: Vec<InnerZ80Span> =
-            cut_err(separated0(parse_label(false), parse_comma).context("Wrong parameters"))
+            cut_err(separated(0.., parse_label(false), parse_comma).context("Wrong parameters"))
                 .parse_next(input)?;
         let labels = labels.into_iter().map(|l| Z80Span::from(l)).collect_vec();
 
@@ -3284,7 +3264,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
         .find(|&&a| a == name.to_ascii_uppercase())
         .is_some()
     {
-        input.reset(start);
+        input.reset(&start);
         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
             &name,
             ErrorKind::Verify
@@ -3352,6 +3332,7 @@ pub fn parse_macro_or_struct_call_inner(
             return Err(ErrMode::Backtrack(
                 Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
                     input,
+                    &input_start,
                     if for_struct {
                         "STRUCT: forbidden name"
                     }
@@ -3365,7 +3346,7 @@ pub fn parse_macro_or_struct_call_inner(
         // if uncommented we do not detect (void) !
         // let nothing_after = peek((
         // space0,
-        // alt((parse_comment.recognize(), tag(":"), tag("\n")))
+        // alt((parse_comment.recognize(), ':', '\n'))
         // ))
         // .parse_next(input)
         // .is_ok();
@@ -3388,8 +3369,8 @@ pub fn parse_macro_or_struct_call_inner(
         .is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof::<_, Z80ParserError>.value(()),
-            tag("\n").value(()),
-            tag(":").value(())
+            '\n'.value(()),
+            ':'.value(())
         )))
         .parse_next(input)
         .is_ok()
@@ -3399,10 +3380,10 @@ pub fn parse_macro_or_struct_call_inner(
         else {
             cut_err(
                 alt((
-                    delimited(my_space0, alt(("()", tag_no_case("(void)"))), my_space0)
+                    delimited(my_space0, alt(("()", Caseless("(void)"))), my_space0)
                         .value(Default::default()),
                     alt((
-                        alt((tag_no_case("(void)"), "()")).value(Vec::new()),
+                        alt((Caseless("(void)"), "()")).value(Vec::new()),
                         separated(
                             1..,
                             alt((
@@ -3446,10 +3427,10 @@ pub fn parse_macro_or_struct_call_inner(
             .parse_next(&mut arg)
             .is_ok()
             {
-                input.reset(input_start);
                 return Err(ErrMode::Cut(
                     Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
                         input,
+                        &input_start,
                         if for_struct {
                             "First argument of STRUCT cannot be an opcode with no argument"
                         }
@@ -3478,7 +3459,7 @@ pub fn parse_macro_or_struct_call(
         let name = terminated(
             parse_macro_name,
             not(alt((
-                (my_space0, alt((tag(":"), line_ending, eof))).recognize(),
+                (my_space0, alt((':'.value(()), line_ending.value(()), eof.value(())))).recognize(),
                 ('.').recognize()
             )))
         )
@@ -3490,10 +3471,10 @@ pub fn parse_macro_or_struct_call(
             input.state.options().dotted_directive,
             input.state.options().assembler_flavor
         ) {
-            input.reset(input_start);
             return Err(ErrMode::Backtrack(
                 Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
                     input,
+                    &input_start,
                     if for_struct {
                         "STRUCT: forbidden name"
                     }
@@ -3505,7 +3486,7 @@ pub fn parse_macro_or_struct_call(
         }
 
         let inner = parse_macro_or_struct_call_inner(for_struct, name).parse_next(input)?;
-        let inner = inner.into_located_token_between(input_start, input.clone());
+        let inner = inner.into_located_token_between(&input_start, input.clone());
         Ok(inner)
     }
 }
@@ -3516,7 +3497,7 @@ fn parse_directive_word(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> + 'static {
     move |input: &mut InnerZ80Span| {
         if input.state.options().dotted_directive {
-            preceded(tag("."), parse_word(name)).parse_next(input)
+            preceded(b'.',parse_word(name)).parse_next(input)
         }
         else {
             parse_word(name).parse_next(input)
@@ -3532,7 +3513,7 @@ fn parse_word(
     #[inline]
     move |input: &mut InnerZ80Span| -> PResult<InnerZ80Span, Z80ParserError> {
         let word = terminated(
-            tag_no_case(name),
+            Caseless(name),
             alt((
                 eof.value(()),
                 (
@@ -3652,15 +3633,15 @@ pub fn parse_fail(
 fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserError> {
     let _ = ('{').parse_next(input)?;
     let format = alt((
-        tag_no_case("INT").value(ExprFormat::Int),
-        tag_no_case("HEX4").value(ExprFormat::Hex(Some(4))),
-        tag_no_case("HEX8").value(ExprFormat::Hex(Some(8))),
-        tag_no_case("HEX2").value(ExprFormat::Hex(Some(2))),
-        tag_no_case("HEX").value(ExprFormat::Hex(None)),
-        tag_no_case("BIN8").value(ExprFormat::Bin(Some(8))),
-        tag_no_case("BIN16").value(ExprFormat::Bin(Some(16))),
-        tag_no_case("BIN32").value(ExprFormat::Bin(Some(32))),
-        tag_no_case("BIN").value(ExprFormat::Bin(None))
+        Caseless("INT").value(ExprFormat::Int),
+        Caseless("HEX4").value(ExprFormat::Hex(Some(4))),
+        Caseless("HEX8").value(ExprFormat::Hex(Some(8))),
+        Caseless("HEX2").value(ExprFormat::Hex(Some(2))),
+        Caseless("HEX").value(ExprFormat::Hex(None)),
+        Caseless("BIN8").value(ExprFormat::Bin(Some(8))),
+        Caseless("BIN16").value(ExprFormat::Bin(Some(16))),
+        Caseless("BIN32").value(ExprFormat::Bin(Some(32))),
+        Caseless("BIN").value(ExprFormat::Bin(None))
     ))
     .parse_next(input)?;
     let _ = ('}').parse_next(input)?;
@@ -3700,8 +3681,9 @@ where
     F: Parser<I, O, E>,
     E: ParserError<I>
 {
+    let start = i.checkpoint();
     match f.parse_next(i) {
-        Err(e) => Err(e.append(i, ErrorKind::Many)),
+        Err(e) => Err(e.append(i, &start,ErrorKind::Many)),
         Ok(o) => {
             let mut acc = C::initial(None);
             acc.accumulate(o);
@@ -3711,7 +3693,7 @@ where
                 let len = i.eof_offset();
                 match f.parse_next(i) {
                     Err(ErrMode::Backtrack(_)) => {
-                        i.reset(start);
+                        i.reset(&start);
                         return Ok(acc);
                     },
                     Err(e) => return Err(e),
@@ -3760,7 +3742,7 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
 #[inline]
 fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = input.clone();
-    alt((line_ending, tag(":")))
+    alt((line_ending.recognize(), ':'.recognize()))
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -3768,7 +3750,7 @@ fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserEr
 #[inline]
 fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = input.clone();
-    delimited(my_space0, tag(","), my_space0)
+    delimited(my_space0, ','.recognize(), my_space0)
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -3805,7 +3787,7 @@ pub fn parse_logical_operator(
 /// Substraction with A register
 #[inline]
 pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    //  let _ =tag_no_case("SUB").parse_next(input)?;
+    //  let _ =Caseless("SUB").parse_next(input)?;
     //  let _ =space1(input)?;
 
     let _first = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
@@ -3829,7 +3811,7 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 /// Par se the SBC instruction
 #[inline]
 pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    //  let _ =tag_no_case("SBC").parse_next(input)?;
+    //  let _ =Caseless("SBC").parse_next(input)?;
     //   let _ =space1(input)?;
 
     let opera = opt(terminated(
@@ -3917,7 +3899,7 @@ pub fn parse_push_n_pop(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let mut registers: Vec<_> =
-            separated1(alt((parse_register16, parse_indexregister16)), parse_comma)
+            separated(1..,alt((parse_register16, parse_indexregister16)), parse_comma)
                 .parse_next(input)?;
 
         if registers.len() > 1 {
@@ -3995,7 +3977,7 @@ pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
             parse_comma,
             alt((
                 parse_register8,
-                alt((parse_word(b"f").recognize(), tag("0"))).map(|w| {
+                alt((parse_word(b"f").recognize(), "0")).map(|w| {
                     LocatedDataAccess::Expression(LocatedExpr::Value(
                         0,
                         cloned.update_slice(w).into()
@@ -4034,7 +4016,7 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
     let (destination, span) = opt(terminated(
         alt((
             parse_register8,
-            alt((tag_no_case("f").recognize(), tag("0"))).map(|span| {
+            alt((Caseless("f").recognize(), "0")).map(|span| {
                 LocatedDataAccess::Expression(LocatedExpr::Value(
                     0,
                     cloned.update_slice(span).into()
@@ -4241,10 +4223,10 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z
         ((
             parse_register16,
             preceded(
-                tag("."),
+                b'.',
                 alt((
-                    tag_no_case("low").map(|_| Reg16Modifier::Low),
-                    tag_no_case("high").map(|_| Reg16Modifier::High)
+                    Caseless("low").map(|_| Reg16Modifier::Low),
+                    Caseless("high").map(|_| Reg16Modifier::High)
                 ))
             ),
             my_space0
@@ -4269,7 +4251,7 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z
 /// Parse register i
 #[inline]
 pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
-    let da = ((tag_no_case("I"), not(alphanumeric1)))
+    let da = ((Caseless("I"), not(alphanumeric1)))
         .recognize()
         .parse_next(input)?;
     let da = LocatedDataAccess::SpecialRegisterI(input.clone().update_slice(da).into());
@@ -4279,7 +4261,7 @@ pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 /// Parse register r
 #[inline]
 pub fn parse_register_r(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
-    let da = ((tag_no_case("R"), not(alphanumeric1)))
+    let da = ((Caseless("R"), not(alphanumeric1)))
         .recognize()
         .parse_next(input)?;
     let da = LocatedDataAccess::SpecialRegisterR(input.clone().update_slice(da).into());
@@ -4315,7 +4297,7 @@ fn register16_parser(
     #[inline]
     move |input: &mut InnerZ80Span| {
         let span = ((
-            tag_no_case(representation),
+            Caseless(representation),
             not(one_of(('a'..='z', 'A'..='Z', '0'..='9', '_')))
         ))
             .recognize()
@@ -4463,7 +4445,7 @@ pub fn parse_indexregister_with_index(
             .parse_next(input)?
     };
 
-    let span = build_span(start_eof_offset, start_checkpoint, input.clone());
+    let span = build_span(start_eof_offset, &start_checkpoint, input.clone());
     Ok(LocatedDataAccess::IndexRegister16WithIndex(
         reg.get_indexregister16().unwrap(),
         op.unwrap_or(BinaryOperation::Add),
@@ -4476,8 +4458,8 @@ pub fn parse_indexregister_with_index(
 #[inline]
 pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
-        ((tag("("), my_space0, parse_register_c, my_space0, tag(")"))),
-        ((tag("["), my_space0, parse_register_c, my_space0, tag("]")))
+        ((b'(', my_space0, parse_register_c, my_space0, b')')),
+        ((b'[', my_space0, parse_register_c, my_space0, b']'))
     ))
     .recognize()
     .parse_next(input)?;
@@ -4490,8 +4472,8 @@ pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80Pa
 #[inline]
 pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let (address, span) = alt((
-        delimited(tag("("), located_expr, preceded(my_space0, tag(")"))),
-        delimited(tag("["), located_expr, preceded(my_space0, tag("]")))
+        delimited("(", located_expr, preceded(my_space0, ")")),
+        delimited("[", located_expr, preceded(my_space0, "]"))
     ))
     .with_recognized()
     .parse_next(input)?;
@@ -4515,7 +4497,7 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
     // || c == b'&'
     // || c == b'|'
     // };
-    let first_char = alt(('(', '[')).parse_next(input)?;
+    let first_char = alt((b'(', b'[')).parse_next(input)?;
     let address = terminated(
         located_expr,
         (
@@ -4547,14 +4529,14 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
 pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let (reg, span) = alt((
         delimited(
-            terminated(tag("("), my_space0),
+            terminated("(", my_space0),
             parse_register16,
-            preceded(my_space0, tag(")"))
+            preceded(my_space0, ")")
         ),
         delimited(
-            terminated(tag("["), my_space0),
+            terminated("[", my_space0),
             parse_register16,
-            preceded(my_space0, tag("]"))
+            preceded(my_space0, "]")
         )
     ))
     .with_recognized()
@@ -4572,14 +4554,14 @@ pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
 pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         delimited(
-            terminated(tag("("), my_space0),
+            terminated("(", my_space0),
             parse_register_hl,
-            preceded(my_space0, tag(")"))
+            preceded(my_space0, ")")
         ),
         delimited(
-            terminated(tag("["), my_space0),
+            terminated("[", my_space0),
             parse_register_hl,
-            preceded(my_space0, tag("]"))
+            preceded(my_space0, "]")
         )
     ))
     .recognize()
@@ -4597,9 +4579,9 @@ pub fn parse_indexregister_address(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
     let (reg, res) = delimited(
-        terminated(tag("("), my_space0),
+        terminated("(", my_space0),
         parse_indexregister16,
-        preceded(my_space0, tag(")"))
+        preceded(my_space0, ")")
     )
     .with_recognized()
     .parse_next(input)?;
@@ -4628,7 +4610,8 @@ pub fn parse_org(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 
 /// Parse defs instruction. TODO add optional parameters
 pub fn parse_defs(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let val = separated1(
+    let val = separated(
+        1..,
         cut_err(
             ((located_expr, opt(preceded(parse_comma, located_expr)))).context("Wrong argument")
         ),
@@ -4725,7 +4708,7 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                     my_space1.value(()),
                     parse_comment.value(()),
                     line_ending.value(()),
-                    tag(":").value(())
+                    ':'.value(())
                 ))),
                 (
                     terminated(
@@ -4744,7 +4727,7 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                     my_space1.value(()),
                     parse_comment.value(()),
                     line_ending.value(()),
-                    tag(":").value(())
+                    ':'.value(())
                 )))
             )
         )
@@ -4797,7 +4780,7 @@ fn parse_snaset(
         };
 
         let flag = parse_flag::<_, ()>(&mut flagname.as_bytes()).map_err(|_e| {
-            input.reset(input_start);
+            input.reset(&input_start);
             ErrMode::Backtrack(Z80ParserError::from_error_kind(input, ErrorKind::Verify))
         })?;
         Ok(LocatedTokenInner::SnaSet(flag, value))
@@ -4808,7 +4791,7 @@ fn parse_snaset(
 #[inline]
 pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = input.clone();
-    preceded(alt((b";", b"//")), take_till0(|ch| ch == b'\n'))
+    preceded(alt((b";", b"//")), take_till(0.., |ch| ch == b'\n'))
         .map(|string: &[u8]| {
             LocatedTokenInner::Comment(cloned.update_slice(string).into())
                 .into_located_token_direct()
@@ -4819,7 +4802,7 @@ pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
 #[inline]
 pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = input.clone();
-    delimited(b"/*", take_until0("*/"), b"*/")
+    delimited(b"/*", take_until(0.., "*/"), b"*/")
         .map(|string: &[u8]| {
             LocatedTokenInner::Comment(cloned.update_slice(string).into())
                 .into_located_token_direct()
@@ -4874,7 +4857,7 @@ pub fn parse_label(
 
 /*
         // fail to parse a label when it is 100% sure it corresponds to  a macro call
-        let (macro_arg) = opt(preceded(space1, tag_no_case("(void)".into()))).parse_next(input)?;
+        let (macro_arg) = opt(preceded(space1, Caseless("(void)".into()))).parse_next(input)?;
         if macro_arg.is_some() {
             return Err(cpclib_common::nom::ErrMode::Backtrack(error_position!(
                 input,
@@ -4892,7 +4875,7 @@ pub fn parse_label(
 
         //needed because of AT2
         let input = if doubledots {
-            let _ =opt(tag_no_case(":")).parse_next(input)?;
+            let _ =opt(Caseless(":")).parse_next(input)?;
             input
         }
         else {
@@ -4905,11 +4888,11 @@ pub fn parse_label(
         if label_len >= MIN_MAX_LABEL_SIZE.0 &&
         label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
             !ignore_ascii_case_allowed_label( true_label, input.state.options().dotted_directive, input.state.options().assembler_flavor)  {
-            input.reset(start);
+            input.reset(&start);
             Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Verify
-            ).add_context(input, "You cannot use a directive or an instruction as a label")
+            ).add_context(input, &start, "You cannot use a directive or an instruction as a label")
             ))
         }
         else {
@@ -5010,19 +4993,19 @@ pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80
     let input_offset = input.eof_offset();
 
     let prefix = alt((
-        tag_no_case("{bank}").value(LabelPrefix::Bank),
-        tag_no_case("{page}").value(LabelPrefix::Page),
-        tag_no_case("{pageset}").value(LabelPrefix::Pageset)
+        Caseless("{bank}").value(LabelPrefix::Bank),
+        Caseless("{page}").value(LabelPrefix::Page),
+        Caseless("{pageset}").value(LabelPrefix::Pageset)
     ))
     .parse_next(input)?;
 
     let label = preceded(
         my_space0,
-        alt((parse_label(false).recognize(), tag("$$"), tag("$")))
+        alt((parse_label(false).recognize(), "$$", "$"))
     )
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::PrefixedLabel(
         prefix,
         input.clone().update_slice(label).into(),
@@ -5088,7 +5071,7 @@ pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     )
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::Paren(Box::new(exp), span.into()))
 }
 
@@ -5098,13 +5081,13 @@ pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> PResult<LocatedExp
     let input_offset = input.eof_offset();
 
     let list = delimited(
-        (tag("["), my_space0),
-        separated0(located_expr, parse_comma),
-        (my_space0, tag("]"))
+        ("[", my_space0),
+        separated(0.., located_expr, parse_comma),
+        (my_space0, "]")
     )
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::List(list, span.into()))
 }
 
@@ -5117,7 +5100,7 @@ pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
         parse_word(b"false").value(false)
     ))
     .parse_next(input)?;
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::Bool(bool, span.into()))
 }
 
@@ -5131,13 +5114,13 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
 
     let not = opt(delimited(
         my_space0,
-        alt((tag("!").recognize(), parse_word(b"NOT").recognize())),
+        alt(('!'.recognize(), parse_word(b"NOT").recognize())),
         my_space0
     ))
     .parse_next(input)?;
 
-    let binary_not = opt(delimited(my_space0, tag("~"), my_space0)).parse_next(input)?;
-    let high_or_low = opt(preceded(my_space0, alt(('>', '<')))).parse_next(input)?;
+    let binary_not = opt(delimited(my_space0, '~', my_space0)).parse_next(input)?;
+    let high_or_low = opt(preceded(my_space0, alt((b'>', b'<')))).parse_next(input)?;
 
     let cloned = input.clone();
     let factor = preceded(
@@ -5194,7 +5177,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             LocatedExpr::UnaryOperation(
                 UnaryOperation::Not,
                 Box::new(factor),
-                build_span(input_offset, input_start, input.clone()).into()
+                build_span(input_offset, &input_start, input.clone()).into()
             )
         },
         None => factor
@@ -5205,7 +5188,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
             LocatedExpr::UnaryOperation(
                 UnaryOperation::BinaryNot,
                 Box::new(factor),
-                build_span(input_offset, input_start, input.clone()).into()
+                build_span(input_offset, &input_start, input.clone()).into()
             )
         },
         None => factor
@@ -5220,7 +5203,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
                     _ => unreachable!()
                 },
                 Box::new(factor),
-                build_span(input_offset, input_start, input.clone()).into()
+                build_span(input_offset, &input_start, input.clone()).into()
             )
         },
         None => factor
@@ -5234,7 +5217,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let v = preceded(tag("-"), positive_number)
+    let v = preceded(b'-', positive_number)
         .map(|exp| {
             match exp {
                 LocatedExpr::Value(v, _) => -v,
@@ -5243,7 +5226,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
         })
         .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::Value(v, span.into()))
 }
 
@@ -5269,9 +5252,9 @@ pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 #[inline]
 pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix, Z80ParserError> {
     alt((
-        tag_no_case("{pageset}").value(LabelPrefix::Pageset),
-        tag_no_case("{bank}").value(LabelPrefix::Bank),
-        tag_no_case("{page}").value(LabelPrefix::Page)
+        Caseless("{pageset}").value(LabelPrefix::Pageset),
+        Caseless("{bank}").value(LabelPrefix::Bank),
+        Caseless("{page}").value(LabelPrefix::Page)
     ))
     .parse_next(input)
 }
@@ -5303,7 +5286,7 @@ pub fn term(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     )))
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(fold_exprs(initial, remainder, span.into()))
 }
 
@@ -5323,7 +5306,7 @@ where
     #[inline]
     move |input: &mut InnerZ80Span| {
         let _ = my_space0(input)?;
-        let _ = tag_no_case(pattern).parse_next(input)?;
+        let _ = Caseless(pattern).parse_next(input)?;
 
         // for orgams we cannot accept * as being a mulitplication if it is followed by another * as it repreents a repetition
         if input.state.options().is_orgams() && pattern == "*" {
@@ -5348,7 +5331,7 @@ where
     #[inline]
     move |input: &mut InnerZ80Span| {
         let _ = my_space0(input)?;
-        let _ = tag_no_case(pattern).parse_next(input)?;
+        let _ = Caseless(pattern).parse_next(input)?;
         let _ = my_space0(input)?;
         let operation = inner(input)?;
 
@@ -5374,7 +5357,7 @@ pub fn expr2(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     )))
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(fold_exprs(initial, remainder, span.into()))
 }
 
@@ -5400,7 +5383,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
         parse_oper(expr2, "||", BinaryOperation::BooleanOr)
     )))
     .parse_next(input)?;
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(fold_exprs(initial, remainder, span.into()))
 }
 
@@ -5413,9 +5396,9 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
     let (word, exp) = (
         delimited(my_space0, alpha1, my_space0),
         delimited(
-            (my_space0, tag("("), my_space0),
+            (my_space0, "(", my_space0),
             located_expr,
-            (my_space0, tag(")"))
+            (my_space0, ")")
         )
         .context("UNARY function: error in parameters")
     )
@@ -5442,7 +5425,7 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
         _ => None
     };
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     let word = input.clone().update_slice(word);
 
     let token = match func {
@@ -5462,21 +5445,21 @@ pub fn parse_binary_function_call(
     let input_offset = input.eof_offset();
 
     let func = alt((
-        tag_no_case("MIN").value(BinaryFunction::Min),
-        tag_no_case("MAX").value(BinaryFunction::Max),
-        tag_no_case("POW").value(BinaryFunction::Pow)
+        Caseless("MIN").value(BinaryFunction::Min),
+        Caseless("MAX").value(BinaryFunction::Max),
+        Caseless("POW").value(BinaryFunction::Pow)
     ))
     .parse_next(input)?;
 
-    let _ = ((my_space0, tag("("), my_space0)).parse_next(input)?;
+    let _ = ((my_space0, "(", my_space0)).parse_next(input)?;
 
     let arg1 = located_expr.parse_next(input)?;
-    let _ = ((my_space0, tag(","), my_space0)).parse_next(input)?;
+    let _ = ((my_space0, ',', my_space0)).parse_next(input)?;
     let arg2 = located_expr.parse_next(input)?;
 
-    let _ = ((my_space0, tag(")"))).parse_next(input)?;
+    let _ = ((my_space0, ")")).parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
 
     Ok(LocatedExpr::BinaryFunction(
         func,
@@ -5493,13 +5476,13 @@ pub fn parse_any_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
 
     let function_name = parse_label(false).parse_next(input)?;
     let arguments = delimited(
-        (/* space0, */ tag("("), my_space0),
+        (/* space0, */ "(", my_space0),
         separated(0.., located_expr, parse_comma),
-        (my_space0, tag(")"))
+        (my_space0, ")")
     )
     .parse_next(input)?;
 
-    let span = build_span(input_offset, input_start, input.clone());
+    let span = build_span(input_offset, &input_start, input.clone());
     Ok(LocatedExpr::AnyFunction(
         function_name.into(),
         arguments,
@@ -5514,11 +5497,11 @@ pub fn token_function<'a>(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     #[inline]
     move |input: &mut InnerZ80Span| {
-        let _ = ((tag_no_case(function_name), my_space0, ('('), my_space0)).parse_next(input)?;
+        let _ = ((Caseless(function_name), my_space0, ('('), my_space0)).parse_next(input)?;
 
         let token = parse_token(input)?;
 
-        let _ = ((my_space0, tag(")"))).parse_next(input)?;
+        let _ = ((my_space0, ")")).parse_next(input)?;
 
         Ok(token)
     }
@@ -5567,7 +5550,7 @@ pub fn shift(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     Ok(fold_exprs(
         initial,
         remainder,
-        build_span(start_eof_offset, start, input.clone())
+        build_span(start_eof_offset, &start, input.clone())
     ))
 }
 
@@ -5592,7 +5575,7 @@ pub fn comp(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     Ok(fold_exprs(
         initial,
         remainder,
-        build_span(start_eof_offset, start, input.clone())
+        build_span(start_eof_offset, &start, input.clone())
     ))
 }
 

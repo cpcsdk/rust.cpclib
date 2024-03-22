@@ -1,8 +1,8 @@
 use std::str;
 
-use cpclib_common::winnow::ascii::{space0, space1};
+use cpclib_common::winnow::ascii::{space0, space1, Caseless};
 use cpclib_common::winnow::combinator::{alt, preceded, rest};
-use cpclib_common::winnow::token::{tag_no_case, take_till1};
+use cpclib_common::winnow::token::take_till;
 use cpclib_common::winnow::{PResult, Parser};
 
 #[derive(Debug, Clone)]
@@ -30,13 +30,13 @@ pub(crate) enum XferCommand {
 // TODO find a way to reduce code duplicaiton
 
 fn ls_path(input: &mut &str) -> PResult<XferCommand> {
-    preceded((tag_no_case("ls"), space1), rest)
+    preceded((Caseless("ls"), space1), rest)
         .map(|path: &str| XferCommand::Ls(Some(path.to_string())))
         .parse_next(input)
 }
 
 fn ls_no_path(input: &mut &str) -> PResult<XferCommand> {
-    tag_no_case("ls")
+    Caseless("ls")
         .value(XferCommand::Ls(None))
         .parse_next(input)
 }
@@ -46,13 +46,13 @@ fn ls(input: &mut &str) -> PResult<XferCommand> {
 }
 
 fn cd_path(input: &mut &str) -> PResult<XferCommand> {
-    preceded((tag_no_case("cd"), space1), rest)
+    preceded((Caseless("cd"), space1), rest)
         .map(|path: &str| XferCommand::Cd(Some(path.to_string())))
         .parse_next(input)
 }
 
 fn cd_no_path(input: &mut &str) -> PResult<XferCommand> {
-    tag_no_case("cd")
+    Caseless("cd")
         .value(XferCommand::Cd(None))
         .parse_next(input)
 }
@@ -62,13 +62,13 @@ fn cd(input: &mut &str) -> PResult<XferCommand> {
 }
 
 fn launch(input: &mut &str) -> PResult<XferCommand> {
-    preceded((tag_no_case("launch"), space1), rest)
+    preceded((Caseless("launch"), space1), rest)
         .map(|path: &str| XferCommand::LaunchHost(path.to_string()))
         .parse_next(input)
 }
 
 fn local(input: &mut &str) -> PResult<XferCommand> {
-    preceded((tag_no_case("!"), space0), rest)
+    preceded((Caseless("!"), space0), rest)
         .map(|path: &str| XferCommand::LocalCommand(path.to_string()))
         .parse_next(input)
 }
@@ -76,8 +76,8 @@ fn local(input: &mut &str) -> PResult<XferCommand> {
 /// PUT a file on the M4 with defining a directory
 fn put(input: &mut &str) -> PResult<XferCommand> {
     preceded(
-        (tag_no_case("put"), space1),
-        take_till1(char::is_whitespace)
+        (Caseless("put"), space1),
+        take_till(1..,char::is_whitespace)
     )
     .map(|path: &str| XferCommand::Put(path.to_string()))
     .parse_next(input)
@@ -88,14 +88,14 @@ fn rm(input: &mut &str) -> PResult<XferCommand> {
     preceded(
         (
             alt((
-                tag_no_case("rm"),
-                tag_no_case("delete"),
-                tag_no_case("del"),
-                tag_no_case("era")
+                Caseless("rm"),
+                Caseless("delete"),
+                Caseless("del"),
+                Caseless("era")
             )),
             space1
         ),
-        take_till1(char::is_whitespace)
+        take_till(1.., char::is_whitespace)
     )
     .map(|path: &str| XferCommand::Era(path.to_string()))
     .parse_next(input)
@@ -103,11 +103,11 @@ fn rm(input: &mut &str) -> PResult<XferCommand> {
 
 fn no_arg(input: &mut &str) -> PResult<XferCommand> {
     alt((
-        tag_no_case("pwd").value(XferCommand::Pwd),
-        tag_no_case("help").value(XferCommand::Help),
-        tag_no_case("reboot").value(XferCommand::Reboot),
-        tag_no_case("reset").value(XferCommand::Reset),
-        alt((tag_no_case("exit"), tag_no_case("quit"))).value(XferCommand::Exit),
+        Caseless("pwd").value(XferCommand::Pwd),
+        Caseless("help").value(XferCommand::Help),
+        Caseless("reboot").value(XferCommand::Reboot),
+        Caseless("reset").value(XferCommand::Reset),
+        alt((Caseless("exit"), Caseless("quit"))).value(XferCommand::Exit),
         rest.map(|fname: &str| XferCommand::LaunchM4(fname.to_string()))
     ))
     .parse_next(input)

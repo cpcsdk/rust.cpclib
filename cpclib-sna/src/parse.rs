@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use cpclib_common::parse_value;
 use cpclib_common::winnow::ascii::space0;
-use cpclib_common::winnow::combinator::{alt, delimited, preceded, separated1};
+use cpclib_common::winnow::combinator::{alt, delimited, preceded, separated};
 use cpclib_common::winnow::error::{ErrMode, ErrorKind, ParserError};
 use cpclib_common::winnow::stream::{
     AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice
@@ -40,7 +40,8 @@ where
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
     I: StreamIsPartial,
-    I: Stream
+    I: Stream,
+    I: Compare<u8>
 {
     alt((
         parse_value.map(|val| {
@@ -52,12 +53,13 @@ where
             }
         }),
         delimited(
-            '[',
-            separated1(
+            b'[',
+            separated(
+                1..,
                 preceded(space0, parse_flag_value::<I, Error>),
-                preceded(space0, ',')
+                preceded(space0, b',')
             ),
-            ']'
+            b']'
         )
         .map(|val: Vec<FlagValue>| FlagValue::Array(val.to_vec()))
     ))

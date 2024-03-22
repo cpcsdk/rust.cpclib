@@ -27,14 +27,14 @@ cpclib-disc  = {workspace = true, features = ["cmdline"]}
 cpclib-imgconverter = { workspace=true, features=["xferlib"]}
 cpclib-xfertool.workspace = true
 
-globmatch = "0.2"
+globmatch = "0.3"
 glob = "0.3.1"
-serde_yaml = "0.9.31"
+serde_yaml = "0.9.32"
 serde.workspace = true
-assert_cmd = "2.0.13"
+assert_cmd = "2.0.14"
 thiserror = "1.0"
 self_cell = "1.0.3"
-anyhow = "1.0.79"
+anyhow = "1.0.80"
 
 [build-dependencies]
 built.workspace = true
@@ -43,7 +43,7 @@ build-deps = "0.1.4"
 
 [dev-dependencies]
 test-generator = "0.3.1"
-serial_test = "2.0.0"
+serial_test = "3.0.0"
 
 [[bin]]
 name = "bndbuild"

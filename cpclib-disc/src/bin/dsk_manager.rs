@@ -19,5 +19,5 @@ use cpclib_disc::{dsk_manager_build_arg_parser, dsk_manager_handle, DskManagerEr
 fn main() -> Result<(), DskManagerError> {
     let app = dsk_manager_build_arg_parser();
     let matches = app.get_matches();
-    dsk_manager_handle(matches)
+    dsk_manager_handle(&matches)
 }

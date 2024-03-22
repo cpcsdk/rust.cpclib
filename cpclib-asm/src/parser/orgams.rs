@@ -1,7 +1,7 @@
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
-use cpclib_common::winnow::token::take_until0;
+use cpclib_common::winnow::token::take_until;
 use cpclib_common::winnow::{PResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
@@ -40,13 +40,13 @@ pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
 
     "!!".parse_next(input)?;
 
-    let content = take_until0("\n").parse_next(input)?;
+    let content = take_until(0.., "\n").parse_next(input)?;
     let txt = String::from_utf8_lossy(content);
     let exp = Expr::String(SmolStr::new(txt));
     let fmtexp = cpclib_tokens::FormattedExpr::Raw(exp);
     let token = LocatedTokenInner::Fail(Some(vec![fmtexp]));
 
-    let token = token.into_located_token_between(input_start, input.clone());
+    let token = token.into_located_token_between(&input_start, input.clone());
 
     Ok(token)
 }
@@ -69,7 +69,7 @@ pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
     };
 
     let token = LocatedTokenInner::Repeat(amount, listing, None, None, None);
-    let token = token.into_located_token_between(input_start, input.clone());
+    let token = token.into_located_token_between(&input_start, input.clone());
 
     Ok(token)
 }

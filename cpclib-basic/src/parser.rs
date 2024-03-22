@@ -1,11 +1,11 @@
 use cpclib_common::itertools::Itertools;
-use cpclib_common::winnow::ascii::line_ending;
+use cpclib_common::winnow::ascii::{line_ending, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, eof, fold_repeat, not, opt, preceded, repeat, terminated
+    alt, cut_err, eof, not, opt, preceded, repeat, terminated
 };
 use cpclib_common::winnow::error::{ContextError, ParserError, StrContext};
 use cpclib_common::winnow::stream::AsChar;
-use cpclib_common::winnow::token::{one_of, tag, tag_no_case, take_while};
+use cpclib_common::winnow::token::{one_of, take_while};
 /// ! Locomotive basic parser routines.
 use cpclib_common::winnow::{Parser, *};
 use paste::paste;
@@ -38,9 +38,10 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
         .parse_next(input)?;
 
     // get the tokens
-    let tokens = fold_repeat(
+    let tokens = repeat(
         0..,
-        (parse_instruction, alt((eof, line_ending, ":"))),
+        (parse_instruction, alt((eof, line_ending, ":")))
+    ).fold(
         Vec::new,
         |mut acc: Vec<_>, (mut item, next)| {
             acc.append(&mut item);
@@ -126,7 +127,7 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 /// Parse a comment"],
 pub fn parse_rem<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     let sym = alt((
-        tag_no_case("REM").value(BasicTokenNoPrefix::Rem),
+        Caseless("REM").value(BasicTokenNoPrefix::Rem),
         '\''.value(BasicTokenNoPrefix::SymbolQuote)
     ))
     .parse_next(input)?;
@@ -187,9 +188,10 @@ pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 pub fn parse_quoted_string<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let start = parse_quote.parse_next(input)?;
-    let mut content = fold_repeat(
+    let mut content = repeat(
         0..,
-        alt((parse_char, parse_space)),
+        alt((parse_char, parse_space))
+    ).fold(
         Vec::new,
         |mut acc, new| {
             acc.push(new);
@@ -225,7 +227,7 @@ pub fn parse_comma<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// Parse the Args SPC or TAB of a print expression
 pub fn parse_print_arg_spc_or_tab<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (kind, open, param, close, mut space) = (
-        alt((tag_no_case("SPC"), tag_no_case("TAB"))),
+        alt((Caseless("SPC"), Caseless("TAB"))),
         '(',
         parse_decimal_value_16bits,
         ')',
@@ -248,7 +250,7 @@ pub fn parse_print_arg_spc_or_tab<'src>(input: &mut &'src str) -> BasicSeveralTo
 /// Parse using argument of a print expression
 pub fn parse_print_arg_using<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (using, mut space_a, mut format, mut space_b, sep, mut space_c) = (
-        tag_no_case("USING"),
+        Caseless("USING"),
         parse_space0,
         cut_err(
             alt((
@@ -382,7 +384,7 @@ pub fn parse_print_stream_expression<'src>(
 /// Parse a complete and valid print expression
 pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     // print keyword
-    let _ = tag_no_case("PRINT").parse_next(input)?;
+    let _ = Caseless("PRINT").parse_next(input)?;
 
     // space after keyword
     let mut tokens = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Print)];
@@ -410,7 +412,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 pub fn parse_call<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (_, mut space_a, mut address) = (
-        tag_no_case("CALL"),
+        Caseless("CALL"),
         parse_space1,
         cut_err(
             parse_numeric_expression(NumericExpressionConstraint::Integer)
@@ -439,7 +441,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         _,
         Vec<_>
     ) = (
-        tag_no_case("INPUT"),
+        Caseless("INPUT"),
         parse_space1,
         opt(parse_canal),
         parse_space0,
@@ -613,7 +615,7 @@ fn parse_any_string_function<'code>(
 ) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
     move |input: &mut &'code str| -> BasicSeveralTokensResult<'code> {
         let (code, mut space_a, open, mut expr, close) = (
-            tag_no_case(name).map(|_| code.clone()),
+            Caseless(name).map(|_| code.clone()),
             parse_space0,
             '(',
             cut_err(parse_string_expression.context(StrContext::Label("Wrong parameter"))),
@@ -714,7 +716,7 @@ fn parse_any_numeric_function<'code>(
 ) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
     move |input: &mut &'code str| -> BasicSeveralTokensResult<'code> {
         let (code, mut space_a, open, mut expr, close) = (
-            tag_no_case(name).map(|_| code.clone()),
+            Caseless(name).map(|_| code.clone()),
             parse_space0,
             '(',
             cut_err(
@@ -947,7 +949,7 @@ pub fn parse_integer_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 pub fn parse_hexadecimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     (
         opt('-'),
-        preceded(alt((tag("&"), tag_no_case("&h"))), hex_u16_inner)
+        preceded(alt((Caseless("&h"), "&" )), hex_u16_inner)
     )
         .map(|(neg, val)| {
             let val = val as i16;

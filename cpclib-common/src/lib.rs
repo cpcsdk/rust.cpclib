@@ -6,11 +6,11 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::ascii::{alphanumeric1, space0};
+use winnow::ascii::{alphanumeric1, space0, Caseless};
 use winnow::combinator::{alt, not, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
-use winnow::token::{tag_no_case, take_while};
+use winnow::token::{take_while};
 use winnow::{PResult, Parser};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, num, resolve_path, smallvec,
@@ -27,6 +27,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
+    I:  winnow::stream::Compare<u8>,
     Error: AddContext<I, winnow::error::StrContext>
 {
     #[derive(Clone, PartialEq, Debug)]
@@ -71,7 +72,7 @@ where
         EncodingKind::AmbiguousBinHex => {
             // we parse for hexdecimal then guess the encoding
             let digits = opt(hex_digits_and_sep()).parse_next(input)?;
-            let suffix = opt(alt(('h', 'H')))
+            let suffix = opt(alt((b'h', b'H')))
                 .verify(|s| {
                     if digits.is_none() {
                         s.is_some()
@@ -85,10 +86,10 @@ where
             if suffix.is_some() {
                 // this is an hexadecimal number and part of the encoding place was
                 // TODO find a more efficient way to not redo that
-                input.reset(before_encoding);
-                '0'.parse_next(input)?; // eat 0
+                input.reset(&before_encoding);
+                b'0'.parse_next(input)?; // eat 0
                 let digits = hex_digits_and_sep().parse_next(input)?;
-                let _suffix = alt(('h', 'H')).parse_next(input)?;
+                let _suffix = alt((b'h', b'H')).parse_next(input)?;
 
                 (EncodingKind::Hex, digits)
             }
@@ -101,7 +102,7 @@ where
             // we parse for hexdecimal then guess the encoding
             let backup = input.checkpoint();
             let digits = hex_digits_and_sep().parse_next(input)?;
-            let suffix = opt(tag_no_case("h")).parse_next(input)?;
+            let suffix = opt(alt((b'h', b'H'))).parse_next(input)?;
 
             if suffix.is_some() {
                 // we know if is hex
@@ -109,13 +110,13 @@ where
             }
             else {
                 // we need to choose between bin and dec so we reparse a second time :()
-                input.reset(backup);
+                input.reset(&backup);
                 let digits: &[u8] = digits.as_bytes();
                 let last_digit = digits[digits.len() - 1];
                 if last_digit == b'b' || last_digit == b'B' {
                     // we need to check this is really a binary
                     let digits = bin_digits_and_sep.parse_next(input)?;
-                    alt(('b', 'B')).parse_next(input)?;
+                    alt((b'b', b'B')).parse_next(input)?;
                     (EncodingKind::Bin, digits)
                 }
                 else {

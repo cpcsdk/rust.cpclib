@@ -1110,16 +1110,14 @@ impl LocatedTokenInner {
     #[inline]
     pub fn into_located_token_between(
         self,
-        start: Checkpoint<Checkpoint<Checkpoint<&BStr>>>,
+        start_checkpoint: &<InnerZ80Span as Stream>::Checkpoint,
         mut i: InnerZ80Span
     ) -> LocatedToken {
         let input = i.clone();
 
-        i.reset(unsafe { std::mem::transmute(start) });
+        i.reset(start_checkpoint);
         let start_eof_offset: usize = i.eof_offset();
 
-        let start_checkpoint: Checkpoint<Checkpoint<Checkpoint<&BStr>>> =
-            unsafe { std::mem::transmute(start) };
 
         let span = build_span(start_eof_offset, start_checkpoint, input);
 
@@ -2945,32 +2943,37 @@ impl LocatedListing {
             }
         }
         .build();
+
         let inner_listing = Arc::new(inner_listing);
 
-        match inner_listing.borrow_parse_result() {
-            ParseResult::SuccessInner { .. } => Ok(inner_listing),
-            ParseResult::FailureInner(e) => {
-                match e {
-                    ErrMode::Backtrack(e) => {
-                        Err(ErrMode::Backtrack(Z80ParserError::from_inner_error(
-                            input_code,
-                            inner_listing.clone(),
-                            Box::new(e.clone())
-                        )))
-                    },
-                    ErrMode::Cut(e) => {
-                        Err(ErrMode::Cut(Z80ParserError::from_inner_error(
-                            input_code,
-                            inner_listing.clone(),
-                            Box::new(e.clone())
-                        )))
-                    },
-                    ErrMode::Incomplete(e) => Err(ErrMode::Incomplete(*e))
-                }
-            },
-
-            _ => unreachable!()
+        if let ParseResult::SuccessInner {..} = inner_listing.borrow_parse_result() {
+            return Ok(inner_listing);
         }
+
+        if let ParseResult::FailureInner(e) = inner_listing.borrow_parse_result() {
+            match e {
+                ErrMode::Incomplete(e) => {
+                    return Err(ErrMode::Incomplete(e.clone()));
+                },
+                ErrMode::Backtrack(e) => {
+                    return Err(ErrMode::Backtrack(Z80ParserError::from_inner_error(
+                        input_code,
+                        inner_listing.clone(),
+                        Box::new(e.clone())
+                    )));
+                }
+                ErrMode::Cut(e) => {
+                    return Err(ErrMode::Cut(Z80ParserError::from_inner_error(
+                        input_code,
+                        inner_listing.clone(),
+                        Box::new(e.clone())
+                    )));
+                },
+            }
+        }
+
+        unreachable!();
+
     }
 }
 

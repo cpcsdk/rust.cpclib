@@ -6,11 +6,10 @@ use std::path::Path;
 use std::str::FromStr;
 
 use cpclib_common::itertools;
-use cpclib_common::winnow::ascii::{line_ending, space0};
+use cpclib_common::winnow::ascii::{line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, delimited, fold_repeat, opt, preceded, separated0, terminated
+    alt, delimited, opt, preceded, separated, terminated, repeat
 };
-use cpclib_common::winnow::token::{tag, tag_no_case};
 use cpclib_common::winnow::{PResult, Parser};
 /// Parser of the disc configuraiton used by the Arkos Loader
 use custom_error::custom_error;
@@ -363,13 +362,13 @@ fn number(input: &mut &[u8]) -> PResult<u16> {
 }
 
 fn list_of_values(input: &mut &[u8]) -> PResult<Vec<u16>> {
-    separated0(number, tag(",")).parse_next(input)
+    separated(0.., number, b',').parse_next(input)
 }
 
 fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<u16> {
     move |input: &mut &[u8]| {
         delimited(
-            (space0, tag_no_case(key), space0, tag("="), space0),
+            (space0, Caseless(key), space0, b'=', space0),
             number,
             (space0, opt(line_ending))
         )
@@ -380,7 +379,7 @@ fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<u16> {
 fn list_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<Vec<u16>> {
     move |input: &mut &[u8]| {
         delimited(
-            (space0, tag_no_case(key), space0, tag("="), space0),
+            (space0, Caseless(key), space0, b'=', space0),
             list_of_values,
             (space0, opt(line_ending))
         )
@@ -395,22 +394,22 @@ fn empty_line(input: &mut &[u8]) -> PResult<()> {
 fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
     let head = alt((
         delimited(
-            tag_no_case("[Track-"),
+            Caseless("[Track-"),
             alt((
-                tag_no_case("A").value(Head::A),
-                tag_no_case("B").value(Head::B)
+                Caseless("A").value(Head::A),
+                Caseless("B").value(Head::B)
             )),
-            tag_no_case(":")
+            Caseless(":")
         ),
-        tag_no_case("[Track:").value(Head::Unspecified)
+        Caseless("[Track:").value(Head::Unspecified)
     ))
     .parse_next(input)?;
 
     let tracks: Vec<u16> = terminated(
         list_of_values,
         (
-            tag_no_case("]"),
-            fold_repeat(0.., empty_line, || (), |_, _| ())
+            Caseless("]"),
+            repeat::<_, _, (), _, _>(0.., empty_line)
         )
     )
     .parse_next(input)?;
@@ -419,13 +418,13 @@ fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
 
     let sector_size = terminated(
         value_of_key(b"SectorSize"),
-        fold_repeat(0.., empty_line, || (), |_, _| ())
+        repeat::<_, _, (), _, _>(0.., empty_line)
     )
     .parse_next(input)?;
 
     let gap3 = terminated(
         value_of_key(b"Gap3"),
-        fold_repeat(0.., empty_line, || (), |_, _| ())
+        repeat::<_, _, (), _, _>(0.., empty_line)
     )
     .parse_next(input)?;
 
@@ -446,23 +445,25 @@ fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
 /// TODO allow to write the information in a different order
 pub fn parse_config(input: &mut &[u8]) -> PResult<DiscConfig> {
     let nb_tracks = preceded(
-        fold_repeat(0.., empty_line, || (), |_, _| ()),
+        repeat::<_, _, (), _, _>(0.., empty_line),
         value_of_key(b"NbTrack")
     )
     .parse_next(input)?;
 
     let nb_heads = preceded(
-        fold_repeat(0.., empty_line, || (), |_, _| ()),
+        repeat::<_, _, (), _, _>(0.., empty_line),
         alt((value_of_key(b"NbHead"), value_of_key(b"NbSide")))
     )
     .parse_next(input)?;
 
-    let track_groups = fold_repeat(
+    let track_groups = repeat(
         1..,
         preceded(
-            fold_repeat(0.., empty_line, || (), |_, _| ()),
+            repeat::<_, _, (), _, _>(0.., empty_line),
             track_group_head
-        ),
+        )
+    )
+    .fold(
         Vec::new,
         |mut acc: Vec<_>, item| {
             acc.push(item);

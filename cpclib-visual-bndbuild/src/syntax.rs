@@ -8,6 +8,7 @@ pub fn syntax() -> Syntax {
         case_sensitive: true,
         comment: "#",
         comment_multiline: [r"/*", r"*/"],
+        hyperlinks: BTreeSet::from(["http"]),
         keywords: BTreeSet::from([
             "tgt",
             "target",

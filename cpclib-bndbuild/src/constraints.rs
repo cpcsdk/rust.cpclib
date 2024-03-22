@@ -1,8 +1,7 @@
 use std::fmt::{Display};
 
-use cpclib_common::winnow::ascii::space0;
+use cpclib_common::winnow::ascii::{space0, Caseless};
 use cpclib_common::winnow::combinator::{alt, delimited};
-use cpclib_common::winnow::token::tag_no_case;
 use cpclib_common::winnow::{PResult, Parser};
 use serde::{self, Deserialize, Deserializer};
 
@@ -47,7 +46,7 @@ fn parse_constraint(input: &mut &str) -> PResult<Constraint> {
 
 fn parse_negated_constraint(input: &mut &str) -> PResult<Constraint> {
     delimited(
-        (tag_no_case("not("), space0),
+        (Caseless("not("), space0),
         parse_positive_constraint,
         (space0, ')', space0)
     )
@@ -59,13 +58,13 @@ fn parse_positive_constraint(input: &mut &str) -> PResult<Constraint> {
 }
 
 fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
-    tag_no_case("os").parse_next(input)?;
+    Caseless("os").parse_next(input)?;
     delimited(
         ('(', space0),
         alt((
-            tag_no_case("windows").value(Constraint::Windows),
-            tag_no_case("linux").value(Constraint::Linux),
-            tag_no_case("macos").value(Constraint::MacOsx)
+            Caseless("windows").value(Constraint::Windows),
+            Caseless("linux").value(Constraint::Linux),
+            Caseless("macos").value(Constraint::MacOsx)
         )),
         (space0, ')', space0)
     )
