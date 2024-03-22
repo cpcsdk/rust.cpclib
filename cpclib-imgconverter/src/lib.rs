@@ -907,16 +907,18 @@ pub fn build_args_parser() -> clap::Command {
                         export_palette!(Command::new("scr")
                         .about("Generate an OCP SCR file")
                         .arg(
-                            Arg::new("SCR")
-                                .help("SCR file to generate")
-                                .required(true)
-                        )
-                        .arg(
                             Arg::new("COMPRESSED")
                                 .help("Request a compressed screen")
                                 .long("compress")
                                 .short('c')
                                 .required(false)
+                        )
+                        .arg(
+                            Arg::new("SCR")
+                            .long("output")
+                            .short('o')
+                            .help("Filename to generate")
+                            .required(true)
                         )
                     ))
 
