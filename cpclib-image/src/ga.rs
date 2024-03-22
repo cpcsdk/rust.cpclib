@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use std::ops::Add;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::num::{Integer};
+use cpclib_common::num::Integer;
 use image as im;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

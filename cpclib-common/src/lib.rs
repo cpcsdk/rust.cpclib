@@ -10,7 +10,7 @@ use winnow::ascii::{alphanumeric1, space0, Caseless};
 use winnow::combinator::{alt, not, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
-use winnow::token::{take_while};
+use winnow::token::take_while;
 use winnow::{PResult, Parser};
 pub use {
     bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, num, resolve_path, smallvec,
@@ -27,7 +27,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    I:  winnow::stream::Compare<u8>,
+    I: winnow::stream::Compare<u8>,
     Error: AddContext<I, winnow::error::StrContext>
 {
     #[derive(Clone, PartialEq, Debug)]

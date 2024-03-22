@@ -1,27 +1,24 @@
 //#![feature(register_attr)]
 //#![register_attr(get)]
 
+#[cfg(feature = "cmdline")]
+use std::fs::File;
+#[cfg(feature = "cmdline")]
+use std::io::{Read, Write};
+#[cfg(feature = "cmdline")]
+use std::path::Path;
+#[cfg(feature = "cmdline")]
+use std::str::FromStr;
 
-
-use amsdos::{AmsdosError};
+use amsdos::AmsdosError;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
-
 use disc::Disc;
 
-#[cfg(feature="cmdline")]
-use std::str::FromStr;
-#[cfg(feature="cmdline")]
-use crate::edsk::*;
-#[cfg(feature="cmdline")]
+#[cfg(feature = "cmdline")]
 use crate::amsdos::*;
-#[cfg(feature="cmdline")]
-use std::fs::File;
-#[cfg(feature="cmdline")]
-use std::path::Path;
-#[cfg(feature="cmdline")]
-use std::io::{Write, Read};
-
+#[cfg(feature = "cmdline")]
+use crate::edsk::*;
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -37,12 +34,7 @@ pub mod edsk;
 #[cfg(feature = "hfe")]
 pub mod hfe;
 
-
-
-
-
 use custom_error::custom_error;
-
 
 use crate::edsk::ExtendedDsk;
 #[cfg(feature = "hfe")]
@@ -113,10 +105,6 @@ pub fn open_disc<P: AsRef<std::path::Path>>(
 
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
-
-
-
-
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
     let behavior = amsdos::AmsdosAddBehavior::ReplaceIfPresent;
 

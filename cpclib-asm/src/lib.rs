@@ -246,7 +246,6 @@ pub fn assemble_to_amsdos_file(
 
 #[cfg(test)]
 mod test_super {
-    
 
     use super::*;
 

@@ -8,12 +8,10 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
-
-use cpclib_common::winnow::combinator::{cut_err};
+use cpclib_common::winnow::combinator::cut_err;
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
-
 use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
@@ -1117,7 +1115,6 @@ impl LocatedTokenInner {
 
         i.reset(start_checkpoint);
         let start_eof_offset: usize = i.eof_offset();
-
 
         let span = build_span(start_eof_offset, start_checkpoint, input);
 
@@ -2946,7 +2943,7 @@ impl LocatedListing {
 
         let inner_listing = Arc::new(inner_listing);
 
-        if let ParseResult::SuccessInner {..} = inner_listing.borrow_parse_result() {
+        if let ParseResult::SuccessInner { .. } = inner_listing.borrow_parse_result() {
             return Ok(inner_listing);
         }
 
@@ -2961,19 +2958,18 @@ impl LocatedListing {
                         inner_listing.clone(),
                         Box::new(e.clone())
                     )));
-                }
+                },
                 ErrMode::Cut(e) => {
                     return Err(ErrMode::Cut(Z80ParserError::from_inner_error(
                         input_code,
                         inner_listing.clone(),
                         Box::new(e.clone())
                     )));
-                },
+                }
             }
         }
 
         unreachable!();
-
     }
 }
 

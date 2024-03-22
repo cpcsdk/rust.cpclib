@@ -8,7 +8,7 @@ use std::str::FromStr;
 use cpclib_common::itertools;
 use cpclib_common::winnow::ascii::{line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, delimited, opt, preceded, separated, terminated, repeat
+    alt, delimited, opt, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::{PResult, Parser};
 /// Parser of the disc configuraiton used by the Arkos Loader
@@ -395,10 +395,7 @@ fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
     let head = alt((
         delimited(
             Caseless("[Track-"),
-            alt((
-                Caseless("A").value(Head::A),
-                Caseless("B").value(Head::B)
-            )),
+            alt((Caseless("A").value(Head::A), Caseless("B").value(Head::B))),
             Caseless(":")
         ),
         Caseless("[Track:").value(Head::Unspecified)
@@ -407,10 +404,7 @@ fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
 
     let tracks: Vec<u16> = terminated(
         list_of_values,
-        (
-            Caseless("]"),
-            repeat::<_, _, (), _, _>(0.., empty_line)
-        )
+        (Caseless("]"), repeat::<_, _, (), _, _>(0.., empty_line))
     )
     .parse_next(input)?;
 
@@ -458,18 +452,12 @@ pub fn parse_config(input: &mut &[u8]) -> PResult<DiscConfig> {
 
     let track_groups = repeat(
         1..,
-        preceded(
-            repeat::<_, _, (), _, _>(0.., empty_line),
-            track_group_head
-        )
+        preceded(repeat::<_, _, (), _, _>(0.., empty_line), track_group_head)
     )
-    .fold(
-        Vec::new,
-        |mut acc: Vec<_>, item| {
-            acc.push(item);
-            acc
-        }
-    )
+    .fold(Vec::new, |mut acc: Vec<_>, item| {
+        acc.push(item);
+        acc
+    })
     .parse_next(input)?;
 
     Ok(DiscConfig {

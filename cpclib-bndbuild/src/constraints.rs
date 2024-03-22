@@ -1,4 +1,4 @@
-use std::fmt::{Display};
+use std::fmt::Display;
 
 use cpclib_common::winnow::ascii::{space0, Caseless};
 use cpclib_common::winnow::combinator::{alt, delimited};

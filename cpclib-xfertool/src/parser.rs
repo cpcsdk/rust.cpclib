@@ -77,7 +77,7 @@ fn local(input: &mut &str) -> PResult<XferCommand> {
 fn put(input: &mut &str) -> PResult<XferCommand> {
     preceded(
         (Caseless("put"), space1),
-        take_till(1..,char::is_whitespace)
+        take_till(1.., char::is_whitespace)
     )
     .map(|path: &str| XferCommand::Put(path.to_string()))
     .parse_next(input)

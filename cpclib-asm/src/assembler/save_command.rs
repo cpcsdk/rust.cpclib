@@ -2,11 +2,11 @@ use std::convert::TryFrom;
 
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::disc::Disc;
-use cpclib_disc::edsk::{Head};
+use cpclib_disc::edsk::Head;
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
 use cpclib_disc::open_disc;
-use cpclib_tokens::{SaveType};
+use cpclib_tokens::SaveType;
 
 use super::report::SavedFile;
 use super::Env;

@@ -16,7 +16,9 @@ fn main() {
 
 fn inner_main() -> Result<(), BndBuilderError> {
     let basm_cmd = cpclib_basm::build_args_parser().name("basm");
-    let img2cpc_cmd = cpclib_imgconverter::build_args_parser().name("img2cpc").disable_help_flag(false);
+    let img2cpc_cmd = cpclib_imgconverter::build_args_parser()
+        .name("img2cpc")
+        .disable_help_flag(false);
     let xfer_cmd = cpclib_xfertool::build_args_parser().name("xfer");
     let disc_cmd = cpclib_disc::dsk_manager_build_arg_parser().name("disc");
 

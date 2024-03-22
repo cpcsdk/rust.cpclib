@@ -9,9 +9,7 @@ use super::{
     inner_code, parse_factor, InnerZ80Span, LocatedExpr, LocatedToken, LocatedTokenInner,
     Z80ParserError
 };
-use crate::preamble::{
-    located_expr, my_space0, one_instruction_inner_code, MayHaveSpan
-};
+use crate::preamble::{located_expr, my_space0, one_instruction_inner_code, MayHaveSpan};
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
     b"BANK",

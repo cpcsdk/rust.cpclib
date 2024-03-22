@@ -8,7 +8,6 @@ mod tests {
     use cpclib::disc::amsdos::*;
     use cpclib::disc::cfg::*;
     use cpclib::disc::edsk::ExtendedDsk;
-    
     use cpclib_disc::disc::Disc;
 
     #[test]
@@ -196,7 +195,6 @@ mod tests {
 
     #[test]
     fn add_file() {
-        
         use cpclib::disc::cfg::DiscConfig;
 
         let mut filename = None;

@@ -38,12 +38,8 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
         .parse_next(input)?;
 
     // get the tokens
-    let tokens = repeat(
-        0..,
-        (parse_instruction, alt((eof, line_ending, ":")))
-    ).fold(
-        Vec::new,
-        |mut acc: Vec<_>, (mut item, next)| {
+    let tokens = repeat(0.., (parse_instruction, alt((eof, line_ending, ":"))))
+        .fold(Vec::new, |mut acc: Vec<_>, (mut item, next)| {
             acc.append(&mut item);
             if !next.is_empty() {
                 let char = next.chars().next().unwrap();
@@ -54,9 +50,8 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 }
             }
             acc
-        }
-    )
-    .parse_next(input)?;
+        })
+        .parse_next(input)?;
 
     Ok(BasicLine::new(line_number, &tokens))
 }
@@ -188,17 +183,12 @@ pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 pub fn parse_quoted_string<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let start = parse_quote.parse_next(input)?;
-    let mut content = repeat(
-        0..,
-        alt((parse_char, parse_space))
-    ).fold(
-        Vec::new,
-        |mut acc, new| {
+    let mut content = repeat(0.., alt((parse_char, parse_space)))
+        .fold(Vec::new, |mut acc, new| {
             acc.push(new);
             acc
-        }
-    )
-    .parse_next(input)?;
+        })
+        .parse_next(input)?;
     let stop =
         cut_err(parse_quote.context(StrContext::Label("Unclosed string"))).parse_next(input)?;
 
@@ -949,7 +939,7 @@ pub fn parse_integer_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 pub fn parse_hexadecimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     (
         opt('-'),
-        preceded(alt((Caseless("&h"), "&" )), hex_u16_inner)
+        preceded(alt((Caseless("&h"), "&")), hex_u16_inner)
     )
         .map(|(neg, val)| {
             let val = val as i16;

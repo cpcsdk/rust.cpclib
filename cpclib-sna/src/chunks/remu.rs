@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-
 use delegate::delegate;
 
 use crate::{Code, SnapshotChunkData};
