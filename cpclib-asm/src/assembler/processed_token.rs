@@ -985,7 +985,8 @@ where
 
                             if data.len() >= 128 {
                                 let header = AmsdosHeader::from_buffer(&data);
-                                let _info = Some(if header.is_checksum_valid() {
+                                let _info = Some(if header.is_checksum_valid() && data[..128].iter().map(|&b| b as usize).sum::<usize>() != 0  {
+                                    dbg!("TODO add a message explainng that header has been removed");
                                     data = &data[128..];
 
                                     AssemblerError::AssemblingError{
