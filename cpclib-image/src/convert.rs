@@ -377,6 +377,8 @@ impl DisplayAddress {
         address.set_page(page);
         address.set_overscan(is_overscan);
         address.set_offset(offset);
+
+        dbg!(address.r12(), address.r13());
         address
     }
 

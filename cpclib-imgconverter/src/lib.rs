@@ -492,7 +492,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         })
     }
     else {
-        // Standard case
+        dbg!(// Standard case
         if matches.get_flag("OVERSCAN") {
             OutputFormat::CPCMemory {
                 output_dimension: CPCScreenDimension::overscan(),
@@ -511,7 +511,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                 output_dimension: CPCScreenDimension::standard(),
                 display_address: DisplayCRTCAddress::new_standard_from_page(3)
             }
-        }
+        })
     }
 }
 
