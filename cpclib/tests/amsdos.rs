@@ -8,7 +8,7 @@ mod tests {
     use cpclib::disc::amsdos::*;
     use cpclib::disc::cfg::*;
     use cpclib::disc::edsk::ExtendedDsk;
-    use cpclib_asm::preamble::file;
+    
     use cpclib_disc::disc::Disc;
 
     #[test]
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn add_file() {
-        use cpclib::disc::amsdos::AmsdosManagerNonMut;
+        
         use cpclib::disc::cfg::DiscConfig;
 
         let mut filename = None;
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(entry_data[0], entry.amsdos_filename().user());
         assert_eq!(entry.amsdos_filename().user(), 0);
 
-        let mut manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
+        let manager = AmsdosManagerMut::new_from_disc(&mut dsk, 0);
         let catalog = manager.catalog();
 
         println!("{:?}", catalog);

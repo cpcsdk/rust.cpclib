@@ -6,7 +6,7 @@ mod tests {
     use cpclib_asm::preamble::*;
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-        let mut processed = build_processed_token(token, env);
+        let processed = build_processed_token(token, env);
         processed?.visited(env)
     }
 

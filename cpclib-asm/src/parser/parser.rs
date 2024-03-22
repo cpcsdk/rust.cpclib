@@ -19,7 +19,7 @@ use cpclib_common::winnow::error::{
     AddContext, ErrMode, ErrorKind, ParserError, StrContext
 };
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{
     none_of, one_of, take, take_till, take_while, take_until
@@ -5726,7 +5726,7 @@ mod test {
         assert!(res.is_ok());
 
         let res = parse_test(
-            (parse_conditional),
+            parse_conditional,
             "ifnot 5
 print glop
 else

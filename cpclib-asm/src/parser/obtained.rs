@@ -11,7 +11,7 @@ use cpclib_common::smallvec::SmallVec;
 
 use cpclib_common::winnow::combinator::{cut_err};
 use cpclib_common::winnow::error::ErrMode;
-use cpclib_common::winnow::stream::{AsBStr, AsBytes, Checkpoint, Offset, Stream, UpdateSlice};
+use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
 
 use cpclib_common::winnow::{BStr, PResult, Parser};
