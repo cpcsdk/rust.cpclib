@@ -1,6 +1,5 @@
 // TryFrom is used in the assembler stuff
 #![feature(type_ascription)]
-#![feature(associated_type_bounds)]
 #![feature(proc_macro_hygiene)]
 // Notes for later when clippy will work:
 // https://rust-lang.github.io/rust-clippy/master/index.html#identity_op must be deactivated
