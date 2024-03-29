@@ -229,6 +229,7 @@ impl AmsdosFileName {
             || char == b'\''
             || char == b'{'
             || char == b'}'
+            || char == b'-'
             || char == b' ' // by definition ' ' is already used to fill space
     }
 

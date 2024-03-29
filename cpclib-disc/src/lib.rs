@@ -263,7 +263,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                     assert!(
                         ams_file.amsdos_filename().unwrap()?.is_valid(),
                         "Invalid amsdos filename ! {:?}",
-                        ams_file.amsdos_filename()
+                        ams_file.amsdos_filename().unwrap()
                     );
                     println!("{:?} added", ams_file.amsdos_filename());
                     ams_file
