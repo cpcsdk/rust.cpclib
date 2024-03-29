@@ -301,11 +301,19 @@ impl AmsdosFileName {
         };
 
         // TODO see if upercase is needed
-        Ok(Self {
+        let fname = Self {
             user,
             name,
             extension
-        })
+        };
+
+        if fname.is_valid() {
+            Ok(fname)
+        } else {
+            Err(AmsdosError::WrongFileName {
+                msg: format!("The filename contains non ascii characters {:?}", fname)
+            })
+        }
     }
 }
 
@@ -1722,6 +1730,13 @@ impl AmsdosHeader {
     pub fn is_checksum_valid(&self) -> bool {
         self.checksum() == self.compute_checksum()
     }
+
+    /// Checks if the data correcpons to a file 
+    pub fn represent_a_valid_file(&self) -> bool {
+        self.is_checksum_valid() &&
+        self.amsdos_filename().is_ok()
+    }
+
 
     pub fn as_bytes(&self) -> &[u8; 128] {
         &self.content
