@@ -2856,8 +2856,6 @@ where
         ExprEvaluationExt + ExprElement,
     ProcessedToken<'token, T>: FunctionBuilder
 {
-    assert!(!tokens.is_empty());
-
     let mut env = Env::new(options);
     let mut tokens = match processed_token::build_processed_tokens_list(tokens, &mut env) {
         Ok(tokens) => tokens,
