@@ -4050,7 +4050,7 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 
     let port = cut_err(alt((
         parse_portc,
-        parse_portnn.verify(|_| destination.get_register8().unwrap().is_a())
+        parse_portnn.verify(|_| destination.get_register8().map(|r| r.is_a()).unwrap_or(false))
     )))
     .parse_next(input)?;
 
