@@ -4653,25 +4653,17 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         .int()?;
 
     let p = match val {
-        0x00 => 0b000,
-        0x08 => 0b001,
-        0x10 => 0b010,
-        0x18 => 0b011,
-        0x20 => 0b100,
-        0x28 => 0b101,
-        0x30 => 0b110,
-        0x38 => 0b111,
-
-        // just for convenience
-        10 => 0b010,
-        18 => 0b011,
-        20 => 0b100,
-        28 => 0b101,
-        30 => 0b110,
-        38 => 0b111,
+        0x00          => 0b000,
+        0x08 | 1      => 0b001,
+        0x10 | 2 | 10 => 0b010,
+        0x18 | 3 | 18 => 0b011,
+        0x20 | 4 | 20 => 0b100,
+        0x28 | 5 | 28 => 0b101,
+        0x30 | 6 | 30 => 0b110,
+        0x38 | 7 | 38 => 0b111,
         _ => {
             return Err(AssemblerError::InvalidArgument {
-                msg: format!("RST cannot take {} as argument.", val)
+                msg: format!("RST cannot take {} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38.", val)
             })
         },
     };
