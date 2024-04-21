@@ -40,7 +40,7 @@ pub struct BasicLine {
     line_number: u16,
     /// Tokens of the basic line
     tokens: Vec<BasicToken>,
-    /// Length of the line when we do not have to use the real lenght (ie, we play to hide lines)
+    /// Length of the line when we do not have to use the real length (ie, we play to hide lines)
     forced_length: Option<u16>
 }
 

@@ -371,19 +371,30 @@ impl From<char> for BasicTokenNoPrefix {
 
 impl fmt::Display for BasicTokenNoPrefix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let tag = match self {
-            Self::Call => "CALL",
-            Self::Print => "PRINT",
-            Self::Rem => "REM",
+        match self {
+            Self::Call => write!(f, "CALL"),
+            Self::For => write!(f, "FOR"),
+            Self::Load => write!(f, "LOAD"),
+            Self::Memory => write!(f, "MEMORY"),
+            Self::Print => write!(f, "PRINT"),
+            Self::Rem => write!(f, "REM"),
 
-            Self::SymbolQuote => "'",
-            Self::StatementSeparator => ":",
+            Self::SymbolQuote => write!(f, "'"),
+            Self::StatementSeparator => write!(f, ":"),
 
-            Self::CharSpace => " ",
 
-            _ => unimplemented!("{:?}", self)
-        };
-        write!(f, "{}", tag)
+            Self::EndOfTokenisedLine => {Ok(())},
+
+            _ => {
+                let c = (*self as u8) as char;
+                match  c {
+
+                    ' '..='z' => write!(f, "{}", c),
+
+                    _=>   unimplemented!("{:?}", self)
+                }
+            }
+        }
     }
 }
 
@@ -483,9 +494,9 @@ impl BasicTokenPrefixed {
 #[derive(Debug, Clone, PartialEq)]
 /// Encode a Basic value
 pub enum BasicValue {
-    /// 16bits integer value
+    /// 16bits integer value in saved order
     Integer(u8, u8),
-    /// 5bytes float value
+    /// 5bytes float value in saved order
     Float(u8, u8, u8, u8, u8),
     /// String
     String(String)
