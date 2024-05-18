@@ -59,7 +59,9 @@ fn main() {
     let data = std::fs::read(input_fname).expect("Unable to read input file");
 
     // remove header if any
-    let data = if cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid() && data[..128].iter().map(|&b| b as usize).sum::<usize>() != 0 {
+    let data = if cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid()
+        && data[..128].iter().map(|&b| b as usize).sum::<usize>() != 0
+    {
         &data[128..]
     }
     else {

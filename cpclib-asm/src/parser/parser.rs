@@ -1560,9 +1560,9 @@ pub fn parse_z80_directive_with_block(
 ) -> PResult<LocatedToken, Z80ParserError> {
     if input.state.options().is_orgams() {
         alt((
-            parse_macro,
-            parse_repeat,
-            parse_conditional,
+            parse_macro.context("Error in macro"),
+            parse_repeat.context("Error in repetition"),
+            parse_conditional.context("Error in condition"),
             parse_orgams_fail // TODO call it elsewhere
         ))
         .parse_next(input)
@@ -1570,19 +1570,19 @@ pub fn parse_z80_directive_with_block(
     else {
         alt((
             parse_basic.context("Basic code embedding"),
-            parse_macro,
-            parse_crunched_section,
-            parse_module,
-            parse_confined,
-            parse_repeat,
-            parse_for,
-            parse_function,
-            parse_switch,
-            parse_iterate,
-            parse_while,
-            parse_rorg,
-            parse_conditional,
-            parse_assembler_control_max_passes_number
+            parse_macro.context("Error in macro"),
+            parse_crunched_section.context("Error in crunched section"),
+            parse_module.context("Error in module"),
+            parse_confined.context("Error in confined"),
+            parse_repeat.context("Error in repetition"),
+            parse_for.context("Error in for"),
+            parse_function.context("Error in function definition"),
+            parse_switch.context("Error in switch"),
+            parse_iterate.context("Error in iterate"),
+            parse_while.context("Error in while"),
+            parse_rorg.context("Error in rorg"),
+            parse_conditional.context("Error in condition"),
+            parse_assembler_control_max_passes_number.context("Error in assembler control")
         ))
         .parse_next(input)
     }
@@ -2519,6 +2519,7 @@ enum KindOfConditional {
 pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
+    let if_clone = input.clone();
     let if_start = input.checkpoint();
 
     let mut conditions = Vec::new();
@@ -2568,7 +2569,9 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
             ))
             .context("Condition: condition must end by a new line or ':'")
         )
-        .parse_next(input)?;
+        .parse_next(input)
+        .map_err(|e| e.add_context(input, &if_start, "Error in condition"))
+        ?;
 
         // get the conditionnal code
         // dbg!("Listing to extract code", &input);
@@ -2601,7 +2604,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // Here we have read the latest block
     //   dbg!("Everythng  has been read", &input);
 
-    let _ = (
+    let _ = dbg!(  (
         opt(alt((
             delimited(my_space0, ':', my_space0).value(()),
             delimited(my_space0, parse_comment, line_ending).value(())
@@ -2612,8 +2615,9 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         ))
         .recognize()
     )
-        .context("Condition: end condition not found")
-        .parse_next(input)?;
+        .parse_next(input)
+        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found"))
+)?;
 
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
 
@@ -5228,7 +5232,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let v = preceded(b'-', positive_number)
+    let v = preceded(b'-', number)
         .map(|exp| {
             match exp {
                 LocatedExpr::Value(v, _) => -v,
@@ -5242,7 +5246,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 }
 
 #[inline]
-pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let _input_start = input.checkpoint();
     let _input_offset = input.eof_offset();
 
@@ -5257,6 +5261,13 @@ pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
             b'_'
         )))
     )
+    .parse_next(input)
+}
+
+
+#[inline]
+pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    preceded(opt('+'), number)
     .parse_next(input)
 }
 

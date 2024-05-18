@@ -1,5 +1,6 @@
 /// Paring related functions for basic.
-pub mod parser;
+pub mod string_parser;
+pub mod  binary_parser;
 /// Basic token encoding.
 pub mod tokens;
 
@@ -8,7 +9,7 @@ use std::fmt::{self};
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::Parser;
 use cpclib_sna::Snapshot;
-use parser::parse_basic_program;
+use string_parser::parse_basic_program;
 use thiserror::Error;
 use tokens::BasicToken;
 

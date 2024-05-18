@@ -1,8 +1,8 @@
-use cpclib_basic::parser::parse_print;
+use cpclib_basic::string_parser::parse_print;
 use cpclib_basic::BasicLine;
 
 pub fn test_parse(code: &str) -> BasicLine {
-    cpclib_basic::parser::test_parse(parse_print, code)
+    cpclib_basic::string_parser::test_parse(parse_print, code)
 }
 
 #[test]

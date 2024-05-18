@@ -498,6 +498,10 @@ impl BasicValue {
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 
+    pub fn new_integer_by_bytes(low: u8, high: u8) -> Self {
+        BasicValue::Integer(low, high)
+    }
+
     pub fn new_string(_value: &str) -> Self {
         unimplemented!()
     }

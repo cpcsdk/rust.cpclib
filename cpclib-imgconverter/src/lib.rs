@@ -492,26 +492,28 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         })
     }
     else {
-        dbg!(// Standard case
-        if matches.get_flag("OVERSCAN") {
-            OutputFormat::CPCMemory {
-                output_dimension: CPCScreenDimension::overscan(),
-                display_address: DisplayCRTCAddress::new_overscan_from_page(2)
+        dbg!(
+            // Standard case
+            if matches.get_flag("OVERSCAN") {
+                OutputFormat::CPCMemory {
+                    output_dimension: CPCScreenDimension::overscan(),
+                    display_address: DisplayCRTCAddress::new_overscan_from_page(2)
+                }
             }
-        }
-        else if matches.get_flag("FULLSCREEN") {
-            OutputFormat::CPCMemory {
-                output_dimension: CPCScreenDimension::overscan(),
-                display_address: DisplayCRTCAddress::new_overscan_from_page(2)
+            else if matches.get_flag("FULLSCREEN") {
+                OutputFormat::CPCMemory {
+                    output_dimension: CPCScreenDimension::overscan(),
+                    display_address: DisplayCRTCAddress::new_overscan_from_page(2)
+                }
             }
-        }
-        else {
-            // assume it is a standard screen
-            OutputFormat::CPCMemory {
-                output_dimension: CPCScreenDimension::standard(),
-                display_address: DisplayCRTCAddress::new_standard_from_page(3)
+            else {
+                // assume it is a standard screen
+                OutputFormat::CPCMemory {
+                    output_dimension: CPCScreenDimension::standard(),
+                    display_address: DisplayCRTCAddress::new_standard_from_page(3)
+                }
             }
-        })
+        )
     }
 }
 
