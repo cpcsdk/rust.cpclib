@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::{iter::IntoParallelRefIterator, prelude,iter::ParallelIterator};
+use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator, prelude};
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::{lazy_static, strsim};

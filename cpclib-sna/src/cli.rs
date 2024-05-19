@@ -149,9 +149,10 @@ where
         + for<'s> FindSlice<&'s str>
         + AsBytes
         + cpclib_common::winnow::stream::Compare<u8>
-        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>
-        + cpclib_common::winnow::stream::FindSlice<u8>
-        ,
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >
+        + cpclib_common::winnow::stream::FindSlice<u8>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -179,7 +180,9 @@ where
         + for<'s> FindSlice<&'s str>
         + AsBytes
         + cpclib_common::winnow::stream::Compare<u8>
-        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -205,7 +208,9 @@ where
         + for<'s> FindSlice<&'s str>
         + AsBytes
         + cpclib_common::winnow::stream::Compare<u8>
-        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -234,9 +239,11 @@ where
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
         + AsBytes
-       // + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 7]>>
-       // +for<'a>  cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 4]>>
-        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
+        // + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 7]>>
+        // +for<'a>  cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 4]>>
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -244,9 +251,13 @@ where
     I: for<'a> Compare<&'a [u8; 1]>,
     Error: AddContext<I, winnow::error::StrContext>
 {
-    (alt((Caseless(&b"SYMBOLS"[..]), Caseless(&b"SYMB"[..]), Caseless(&b"S"[..]))))
-        .map(|v| Command::Symbols(None))
-        .parse_next(input)
+    (alt((
+        Caseless(&b"SYMBOLS"[..]),
+        Caseless(&b"SYMB"[..]),
+        Caseless(&b"S"[..])
+    )))
+    .map(|v| Command::Symbols(None))
+    .parse_next(input)
 }
 
 fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
@@ -257,7 +268,9 @@ where
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
         + AsBytes
-        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -265,7 +278,9 @@ where
     I: for<'a> Compare<&'a [u8; 1]>,
     Error: AddContext<I, winnow::error::StrContext>
 {
-    Caseless(&b"HELP"[..]).map(|_| Command::Help).parse_next(input)
+    Caseless(&b"HELP"[..])
+        .map(|_| Command::Help)
+        .parse_next(input)
 }
 
 fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
@@ -276,7 +291,9 @@ where
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
         + AsBytes
-        +  for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>
+        + for<'a> cpclib_common::winnow::stream::Compare<
+            cpclib_common::winnow::ascii::Caseless<&'a [u8]>
+        >
         + cpclib_common::winnow::stream::Compare<u8>
         + cpclib_common::winnow::stream::FindSlice<u8>,
     <I as Stream>::Slice: AsBytes,
