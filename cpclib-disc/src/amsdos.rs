@@ -307,14 +307,9 @@ impl AmsdosFileName {
             extension
         };
 
-        if fname.is_valid() {
-            Ok(fname)
-        }
-        else {
-            Err(AmsdosError::WrongFileName {
-                msg: format!("The filename contains non ascii characters {:?}", fname)
-            })
-        }
+
+        // we do not call fname.is_valid because it will reject it due to low<er case fname
+        Ok(fname)
     }
 }
 
