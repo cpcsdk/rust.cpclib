@@ -1,6 +1,6 @@
+pub mod binary_parser;
 /// Paring related functions for basic.
 pub mod string_parser;
-pub mod  binary_parser;
 /// Basic token encoding.
 pub mod tokens;
 

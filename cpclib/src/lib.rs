@@ -43,7 +43,7 @@
 
 pub use cpclib_image::ga::{Ink, Palette, Pen};
 /// CPC Wifi extension related stuff. Useable
-#[cfg(any(feature = "xferlib", feature = "xfer"))]
+#[cfg(any(feature = "xferlib", feature = "cpclib-xfer"))]
 pub use cpclib_xfer as xfer;
 pub use {
     cpclib_asm as asm, cpclib_basic as basic, cpclib_common as common,

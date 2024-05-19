@@ -6,7 +6,7 @@ pub use rayon;
 pub use semver;
 #[cfg(feature = "cmdline")]
 pub use time;
-use winnow::ascii::{alphanumeric1, space0, Caseless};
+use winnow::ascii::{alphanumeric1, space0};
 use winnow::combinator::{alt, not, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};

@@ -1422,7 +1422,7 @@ impl Env {
             commands.store_byte(v);
         }
 
-        /// TODO move the next in a function to reuse when executing the command
+        // TODO move the next in a function to reuse when executing the command
         // update the maximm 64k position
         self.active_page_info_mut().maxadr =
             self.maximum_address().max(self.logical_output_address());

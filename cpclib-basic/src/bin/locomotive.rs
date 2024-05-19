@@ -20,7 +20,7 @@ use cpclib_basic::{binary_parser, BasicProgram};
 use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap::*;
-use cpclib_disc::amsdos::{AmsdosFileName, AmsdosManager};
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 
 fn main() -> std::io::Result<()> {
     let matches = Command::new("locomotive")
@@ -83,7 +83,7 @@ fn main() -> std::io::Result<()> {
 
             // Add header if needed
             if matches.contains_id("HEADER") {
-                let header = AmsdosManager::compute_basic_header(
+                let header = AmsdosHeader::compute_basic_header(
                     &AmsdosFileName::from_slice(output.display().to_string().as_bytes()),
                     &basic_bytes
                 );
@@ -96,13 +96,8 @@ fn main() -> std::io::Result<()> {
     }
     else if let Some(fname) = matches.get_one::<PathBuf>("BASIC_BINARY") {
         // Read the basic source file
-        let mut ascii_content: String = {
-            let mut f = File::open(fname)?;
-            let mut content = String::new();
-            f.read_to_string(&mut content)?;
-            content
-        };
-
+        let ascii_content: Vec<u8> = std::fs::read(fname)?;
+        let mut ascii_content = &ascii_content[..];
         let tokens = binary_parser::program(&mut ascii_content).expect("Error in the basic file");
 
         dbg!(&tokens);

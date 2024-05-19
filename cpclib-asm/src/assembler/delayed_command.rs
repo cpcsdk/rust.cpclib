@@ -356,12 +356,6 @@ impl DelayedCommands {
 
     /// XXX Current version completly ignore pause. TODO find a way to reactivate
     pub fn execute_print_or_pause(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
-        // Generate in parallal all the strings (I doubt it is efficient as there is a lock...)
-
-        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-        let iter = self.print_commands.par_iter();
-
-        #[cfg(not(all(not(target_arch = "wasm32"), feature = "rayon")))]
         let iter = self.print_commands.iter();
 
         let errors = iter
@@ -382,7 +376,7 @@ impl DelayedCommands {
                     }
                 }
             })
-            .collect_vec();
+            .collect::<Vec<_>>();
 
         if errors.is_empty() {
             Ok(())

@@ -2570,8 +2570,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
             .context("Condition: condition must end by a new line or ':'")
         )
         .parse_next(input)
-        .map_err(|e| e.add_context(input, &if_start, "Error in condition"))
-        ?;
+        .map_err(|e| e.add_context(input, &if_start, "Error in condition"))?;
 
         // get the conditionnal code
         // dbg!("Listing to extract code", &input);
@@ -2604,7 +2603,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // Here we have read the latest block
     //   dbg!("Everythng  has been read", &input);
 
-    let _ = dbg!(  (
+    let _ = dbg!((
         opt(alt((
             delimited(my_space0, ':', my_space0).value(()),
             delimited(my_space0, parse_comment, line_ending).value(())
@@ -2616,8 +2615,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .recognize()
     )
         .parse_next(input)
-        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found"))
-)?;
+        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found")))?;
 
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
 
@@ -4054,7 +4052,12 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 
     let port = cut_err(alt((
         parse_portc,
-        parse_portnn.verify(|_| destination.get_register8().map(|r| r.is_a()).unwrap_or(false))
+        parse_portnn.verify(|_| {
+            destination
+                .get_register8()
+                .map(|r| r.is_a())
+                .unwrap_or(false)
+        })
     )))
     .parse_next(input)?;
 
@@ -4942,7 +4945,7 @@ fn ignore_ascii_case_allowed_label(
     flavor: AssemblerFlavor
 ) -> bool {
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-    let iter = impossible_names(dotted_directive).par_iter();
+    let iter = impossible_names(dotted_directive, flavor).par_iter();
 
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let mut iter = impossible_names(dotted_directive, flavor).iter();
@@ -5264,11 +5267,9 @@ pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     .parse_next(input)
 }
 
-
 #[inline]
 pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    preceded(opt('+'), number)
-    .parse_next(input)
+    preceded(opt('+'), number).parse_next(input)
 }
 
 #[inline]

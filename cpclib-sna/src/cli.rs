@@ -10,13 +10,13 @@ use minus::{ExitStrategy, Pager};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-use crate::cli::winnow::ascii::space1;
+use crate::cli::winnow::ascii::{space1, Caseless};
 use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
 use crate::cli::winnow::error::{
     AddContext, ContextError, ErrMode, ParserError, StrContext, TreeError
 };
 use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
-use crate::cli::winnow::token::{tag_no_case, take_until1};
+use crate::cli::winnow::token::take_until;
 use crate::cli::winnow::{Located, PResult};
 use crate::*;
 
@@ -147,7 +147,11 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+        + cpclib_common::winnow::stream::Compare<u8>
+        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>
+        + cpclib_common::winnow::stream::FindSlice<u8>
+        ,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -173,7 +177,9 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+        + cpclib_common::winnow::stream::Compare<u8>
+        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -182,7 +188,7 @@ where
     Error: AddContext<I, winnow::error::StrContext>
 {
     (
-        alt((tag_no_case("MEMORY"), tag_no_case("MEM"))),
+        alt((Caseless(&b"MEMORY"[..]), Caseless(&b"MEM"[..]))),
         opt(preceded(space1, parse_value)),
         opt(preceded(space1, parse_value))
     )
@@ -197,7 +203,9 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+        + cpclib_common::winnow::stream::Compare<u8>
+        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -207,9 +215,9 @@ where
 {
     (
         alt((
-            tag_no_case("DISASSEMBLE"),
-            tag_no_case("DISASS"),
-            tag_no_case("DIS")
+            Caseless(&b"DISASSEMBLE"[..]),
+            Caseless(&b"DISASS"[..]),
+            Caseless(&b"DIS"[..])
         )),
         opt(preceded(space1, parse_value)),
         opt(preceded(space1, parse_value))
@@ -225,7 +233,10 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+       // + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 7]>>
+       // +for<'a>  cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8; 4]>>
+        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -233,13 +244,9 @@ where
     I: for<'a> Compare<&'a [u8; 1]>,
     Error: AddContext<I, winnow::error::StrContext>
 {
-    (alt((
-        tag_no_case("SYMBOLS"),
-        tag_no_case("SYMB"),
-        tag_no_case("S")
-    )))
-    .map(|v| Command::Symbols(None))
-    .parse_next(input)
+    (alt((Caseless(&b"SYMBOLS"[..]), Caseless(&b"SYMB"[..]), Caseless(&b"S"[..]))))
+        .map(|v| Command::Symbols(None))
+        .parse_next(input)
 }
 
 fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
@@ -249,7 +256,8 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+        + for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -257,7 +265,7 @@ where
     I: for<'a> Compare<&'a [u8; 1]>,
     Error: AddContext<I, winnow::error::StrContext>
 {
-    tag_no_case("HELP").map(|_| Command::Help).parse_next(input)
+    Caseless(&b"HELP"[..]).map(|_| Command::Help).parse_next(input)
 }
 
 fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
@@ -267,7 +275,10 @@ where
         + StreamIsPartial
         + for<'a> Compare<&'a str>
         + for<'s> FindSlice<&'s str>
-        + AsBytes,
+        + AsBytes
+        +  for<'a> cpclib_common::winnow::stream::Compare<cpclib_common::winnow::ascii::Caseless<&'a [u8]>>
+        + cpclib_common::winnow::stream::Compare<u8>
+        + cpclib_common::winnow::stream::FindSlice<u8>,
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -275,15 +286,24 @@ where
     I: for<'a> Compare<&'a [u8; 1]>,
     Error: AddContext<I, winnow::error::StrContext>
 {
-    preceded(
-        (
-            tag_no_case("LOAD2"),
-            cut_err(space1).context(StrContext::Label("LOAD2 expects a filename"))
-        ),
-        cut_err(
-            delimited('"', take_until1("\""), '"')
-                .context(StrContext::Label("Filename needs to be in a string"))
-        )
+    // preceded(
+    // (
+    // Caseless(b"LOAD2").value(()),
+    // cut_err(space1.value(())).context(StrContext::Label("LOAD2 expects a filename"))
+    // ).value(()),
+    // cut_err(
+    // delimited(b'"', take_until(1.., b'\"'), b'"')
+    // .context(StrContext::Label("Filename needs to be in a string"))
+    // )
+    // )
+    // .map(|fname: &[u8]| Command::Load2(String::from_utf8_lossy(fname).into_owned()))
+    // .parse_next(input)
+
+    Caseless(&b"LOAD2"[..]).parse_next(input)?;
+    cut_err(space1.context(StrContext::Label("LOAD2 expects a filename"))).parse_next(input)?;
+    cut_err(
+        delimited(b'"', take_until(1.., b'\"'), b'"')
+            .context(StrContext::Label("Filename needs to be in a string"))
     )
     .map(|fname: &[u8]| Command::Load2(String::from_utf8_lossy(fname).into_owned()))
     .parse_next(input)
