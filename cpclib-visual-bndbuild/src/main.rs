@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use cpclib_common::clap::*;
+
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
@@ -10,10 +12,16 @@ fn main() {
     // native_options.hardware_acceleration = eframe::HardwareAcceleration::Off;
     // native_options.renderer = eframe::Renderer::Wgpu;
 
+    let matches = Command::new("Visual BndBuild")
+        .arg(Arg::new("INPUT").help("Path to bndbuild.yml input file"))
+        .get_matches();
+
+
     eframe::run_native(
         "Visual BndBuild",
         native_options,
-        Box::new(|cc| Box::new(cpclib_visual_bndbuild::BndBuildApp::new(cc)))
+        Box::new(move |cc| Box::new(
+            cpclib_visual_bndbuild::BndBuildApp::new(cc, matches.get_one::<String>("INPUT"))))
     )
     .unwrap();
 }

@@ -41,7 +41,7 @@ use cpclib_sna::Snapshot;
 use enumflags2::{bitflags, BitFlags};
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
-use preamble::*;
+pub use preamble::*;
 
 use self::listing_output::ListingOutput;
 

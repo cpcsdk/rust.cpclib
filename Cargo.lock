@@ -1660,6 +1660,7 @@ version = "0.2.1"
 dependencies = [
  "built",
  "cpclib-bndbuild",
+ "cpclib-common",
  "eframe",
  "egui_code_editor",
  "egui_file",

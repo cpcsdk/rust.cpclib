@@ -269,8 +269,8 @@ impl BuilderAndCache {
 }
 
 impl BndBuildApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        if let Some(storage) = cc.storage {
+    pub fn new<P: AsRef<Path>>(cc: &eframe::CreationContext<'_>, path: Option<P>) -> Self {
+        let mut app = if let Some(storage) = cc.storage {
             let mut app: BndBuildApp =
                 eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
             app.build_error = None;
@@ -286,7 +286,11 @@ impl BndBuildApp {
         }
         else {
             Default::default()
-        }
+        };
+        if let Some(path) = path {
+            app.load(path)
+        };
+        app
     }
 
     pub fn load<P: AsRef<Path>>(&mut self, path: P) {

@@ -17,6 +17,8 @@ independent = true
 
 [dependencies]
 cpclib-bndbuild.workspace = true
+cpclib-common = {workspace=true, features=["cmdline"]}
+
 eframe = {workspace=true, features=["persistence"]}
 egui_file.workspace = true
 env_logger.workspace = true
