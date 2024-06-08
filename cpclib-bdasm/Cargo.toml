@@ -20,13 +20,13 @@ cpclib-asm.workspace = true
 cpclib-disc.workspace = true
 clap.workspace = true
 lazy_static.workspace = true
-time = "0.3.34"
+time = "0.3.36"
 
 [features]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 
 [build-dependencies]
-built = { version = "0.7.1", features = ["chrono"] }
+built = { version = "0.7.3", features = ["chrono"] }
 
 [[bin]]
 name = "bdasm"

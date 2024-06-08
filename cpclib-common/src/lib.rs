@@ -1,3 +1,8 @@
+#![feature(slice_take)]
+
+pub mod riff;
+
+
 #[cfg(feature = "cmdline")]
 pub use clap;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]

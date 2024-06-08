@@ -1,9 +1,8 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, ops::Deref};
 
-use cpclib_common::itertools::Itertools;
+use cpclib_common::{itertools::Itertools, riff::{RiffBlock, RiffCode, RiffLen}};
 use delegate::delegate;
 
-use crate::{Code, SnapshotChunkData};
 
 #[derive(Clone)]
 pub enum AceMemMapType {
@@ -161,17 +160,26 @@ impl<'a> AceSymbol<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AceSymbolChunk {
-    data: SnapshotChunkData
+    riff: RiffBlock
 }
 
+
+impl Deref for AceSymbolChunk {
+    type Target = RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
+}
+
+
 impl AceSymbolChunk {
-    const CODE: Code = Code([b'S', b'Y', b'M', b'B']);
+    const CODE: RiffCode = RiffCode::new([b'S', b'Y', b'M', b'B']);
 
     delegate! {
-        to self.data {
-            pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+            pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
             fn add_bytes(&mut self, data: &[u8]);
         }
@@ -181,15 +189,15 @@ impl AceSymbolChunk {
         Self::from(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            data: SnapshotChunkData {
+            riff: RiffBlock::new(
                 code,
-                data: content
-            }
+                content
+            )
         }
     }
 
@@ -206,7 +214,7 @@ impl AceSymbolChunk {
         let mut res = Vec::new();
 
         let mut idx = 0;
-        while idx < self.size() {
+        while idx < self.len().value() as usize {
             let name_len = self.data()[idx];
             let buffer_len = AceSymbol::buffer_len(name_len);
             let symb = AceSymbol::from(self.data()[idx..(idx + buffer_len)].to_vec());
@@ -307,17 +315,26 @@ impl<'a> AceBreakPoint<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AceBreakPointChunk {
-    data: SnapshotChunkData
+    riff: RiffBlock
 }
 
+
+impl Deref for AceBreakPointChunk {
+    type Target = RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
+}
+
+
 impl AceBreakPointChunk {
-    const CODE: Code = Code([b'B', b'R', b'K', b'C']);
+    const CODE: RiffCode = RiffCode::new([b'B', b'R', b'K', b'C']);
 
     delegate! {
-        to self.data {
-            pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+            pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
             fn add_bytes(&mut self, data: &[u8]);
 
@@ -328,15 +345,15 @@ impl AceBreakPointChunk {
         Self::from(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            data: SnapshotChunkData {
+            riff: RiffBlock::new(
                 code,
-                data: content
-            }
+                content
+            )
         }
     }
 
@@ -350,6 +367,6 @@ impl AceBreakPointChunk {
     }
 
     pub fn nb_breakpoints(&self) -> usize {
-        self.size() / 216
+        self.len().value() as usize / 216
     }
 }

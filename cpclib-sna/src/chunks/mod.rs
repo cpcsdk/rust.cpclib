@@ -5,88 +5,35 @@ mod winape;
 use std::ops::Deref;
 
 pub use ace::*;
+use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
 use delegate::delegate;
 pub use remu::*;
 pub use winape::*;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Code(pub(crate) [u8; 4]);
 
-impl Deref for Code {
-    type Target = [u8; 4];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<[u8; 4]> for Code {
-    fn from(value: [u8; 4]) -> Self {
-        Code(value)
-    }
-}
-
-impl From<&str> for Code {
-    fn from(value: &str) -> Self {
-        let code = value.as_bytes().take(..4).unwrap();
-        Code([code[0], code[1], code[2], code[3]])
-    }
-}
-
-#[derive(Clone, Debug)]
-/// Raw chunk data.
-pub struct SnapshotChunkData {
-    /// Identifier of the chunk
-    code: Code,
-    /// Content of the chunk
-    data: Vec<u8>
-}
-
-#[allow(missing_docs)]
-impl SnapshotChunkData {
-    pub fn code(&self) -> &Code {
-        &(self.code)
-    }
-
-    pub fn size(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn size_as_array(&self) -> [u8; 4] {
-        let mut size = self.size();
-        let mut array = [0, 0, 0, 0];
-
-        for item in &mut array {
-            *item = (size % 256) as u8;
-            size /= 256;
-        }
-
-        array
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn add_bytes(&mut self, data: &[u8]) {
-        self.data.extend_from_slice(data);
-    }
-}
 
 #[derive(Clone, Debug)]
 /// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
     /// Raw content of the memory chunk (i.e. compressed version)
-    pub(crate) data: SnapshotChunkData
+    riff: RiffBlock
+}
+
+
+impl Deref for MemoryChunk {
+    type Target = RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
 }
 
 #[allow(missing_docs)]
 impl MemoryChunk {
     delegate! {
-        to self.data {
-        pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+        pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
         }
     }
@@ -102,7 +49,7 @@ impl MemoryChunk {
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
-    pub fn from<C: Into<Code>>(code: C, data: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
         let code = code.into();
         assert!(code[0] == b'M');
         assert!(code[1] == b'E');
@@ -119,7 +66,7 @@ impl MemoryChunk {
                 || code[3] == b'8'
         );
         Self {
-            data: SnapshotChunkData { code, data }
+            riff: RiffBlock::new(code, data)
         }
     }
 
@@ -206,15 +153,15 @@ impl MemoryChunk {
     /// Uncrunch the 64kbio of RLE crunched data if crunched. Otherwise, return the whole memory
     pub fn uncrunched_memory(&self) -> Vec<u8> {
         if !self.is_crunched() {
-            return self.data.data.clone();
+            return self.riff.data().to_vec();
         }
 
         let mut content = Vec::new();
 
         let mut idx = 0;
-        let data = &self.data.data;
+        let data = self.riff.data();
         let mut read_byte = move || {
-            if idx == self.data.data.len() {
+            if idx == self.riff.data().len() {
                 None
             }
             else {
@@ -250,13 +197,13 @@ impl MemoryChunk {
 
     /// Returns the address in the memory array
     pub fn abstract_address(&self) -> usize {
-        let nb = (self.data.code[3] - b'0') as usize;
+        let nb = (self.riff.code()[3] - b'0') as usize;
         nb * 0x10000
     }
 
     /// A uncrunched memory taaks 64*1024 bytes
     pub fn is_crunched(&self) -> bool {
-        self.data.data.len() != 64 * 1024
+        self.riff.data().len() != 64 * 1024
     }
 }
 
@@ -264,24 +211,31 @@ impl MemoryChunk {
 /// Unknwon kind of chunk
 pub struct UnknownChunk {
     /// Raw data of the chunk
-    data: SnapshotChunkData
+    riff: RiffBlock
+}
+
+impl Deref for UnknownChunk {
+    type Target=RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
 }
 
 impl UnknownChunk {
     delegate! {
-        to self.data {
-        pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+        pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
         }
     }
 
     /// Generate the chunk from raw data
-    pub fn from<C: Into<Code>>(code: C, data: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
         let code = code.into();
         Self {
-            data: SnapshotChunkData { code, data }
+            riff: RiffBlock::new(code, data)
         }
     }
 }
@@ -354,49 +308,29 @@ impl SnapshotChunk {
         }
     }
 
+
+    fn riff(&self) -> &RiffBlock {
+        match self {
+            SnapshotChunk::AceBreakPoint(a) => a.deref(),
+            SnapshotChunk::AceSymbol(a) => a.deref(),
+            SnapshotChunk::Memory(m) => m.deref(),
+            SnapshotChunk::Remu(r) => r.deref(),
+            SnapshotChunk::Unknown(u) => u.deref(),
+            SnapshotChunk::WinapeBreakPoint(w) => w.deref(),
+        }
+    }
+
     /// Provides the code of the chunk
-    pub fn code(&self) -> &Code {
-        match self {
-            SnapshotChunk::AceSymbol(chunck) => chunck.code(),
-            SnapshotChunk::Memory(chunk) => chunk.code(),
-            SnapshotChunk::Unknown(chunk) => chunk.code(),
-            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.code(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.code(),
-            SnapshotChunk::Remu(c) => c.code()
-        }
+    pub fn code(&self) -> &RiffCode {
+        self.riff().code()
     }
 
-    pub fn size(&self) -> usize {
-        match self {
-            SnapshotChunk::AceSymbol(chunk) => chunk.size(),
-            SnapshotChunk::Memory(chunk) => chunk.size(),
-            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.size(),
-            SnapshotChunk::Unknown(chunk) => chunk.size(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size(),
-            SnapshotChunk::Remu(c) => c.size()
-        }
-    }
-
-    pub fn size_as_array(&self) -> [u8; 4] {
-        match self {
-            SnapshotChunk::AceSymbol(chunk) => chunk.size_as_array(),
-            SnapshotChunk::Memory(chunk) => chunk.size_as_array(),
-            SnapshotChunk::WinapeBreakPoint(ref chunk) => chunk.size_as_array(),
-            SnapshotChunk::Unknown(chunk) => chunk.size_as_array(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.size_as_array(),
-            SnapshotChunk::Remu(c) => c.size_as_array()
-        }
+    pub fn len(&self) -> &RiffLen {
+        self.riff().len()
     }
 
     pub fn data(&self) -> &[u8] {
-        match self {
-            SnapshotChunk::AceSymbol(chunk) => chunk.data(),
-            SnapshotChunk::Memory(chunk) => chunk.data(),
-            SnapshotChunk::WinapeBreakPoint(chunk) => chunk.data(),
-            SnapshotChunk::Unknown(chunk) => chunk.data(),
-            SnapshotChunk::AceBreakPoint(chunk) => chunk.data(),
-            SnapshotChunk::Remu(c) => c.data()
-        }
+        self.riff().data()
     }
 }
 

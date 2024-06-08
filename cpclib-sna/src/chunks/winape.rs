@@ -1,6 +1,8 @@
+use std::ops::Deref;
+
+use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
 use delegate::delegate;
 
-use crate::{Code, SnapshotChunkData};
 
 pub struct WinapeBreakPoint {
     buffer: [u8; 5]
@@ -18,17 +20,25 @@ impl WinapeBreakPoint {
 
 #[derive(Clone, Debug)]
 pub struct WinapeBreakPointChunk {
-    data: SnapshotChunkData
+    riff: RiffBlock
+}
+
+
+impl Deref for WinapeBreakPointChunk {
+    type Target= RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
 }
 
 impl WinapeBreakPointChunk {
-    const CODE: Code = Code([b'B', b'R', b'K', b'S']);
+    const CODE: RiffCode = RiffCode::new([b'B', b'R', b'K', b'S']);
 
     delegate! {
-        to self.data {
-            pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+            pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
             fn add_bytes(&mut self, data: &[u8]);
 
@@ -39,15 +49,15 @@ impl WinapeBreakPointChunk {
         Self::from(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            data: SnapshotChunkData {
+            riff: RiffBlock::new(
                 code,
-                data: content
-            }
+                content
+            )
         }
     }
 
@@ -61,6 +71,6 @@ impl WinapeBreakPointChunk {
     }
 
     pub fn nb_breakpoints(&self) -> usize {
-        self.size() / 5
+        (self.len().value() / 5)  as usize 
     }
 }

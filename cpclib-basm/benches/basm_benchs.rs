@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use cpclib_asm::basm_utils::{build_args_parser, process};
+use cpclib_basm::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
 use criterion::{criterion_group, criterion_main, Criterion};
 use globset::Glob;

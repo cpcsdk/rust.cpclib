@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::bitsets;
+use cpclib_common::riff::{RiffCode, RiffLen};
 use num_enum::TryFromPrimitive;
 
 mod chunks;
@@ -561,12 +562,8 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-            println!(
-                "Add chunk: {}",
-                chunk.code().iter().map(|c| *c as char).collect::<String>()
-            );
             buffer.write_all(chunk.code().deref())?;
-            buffer.write_all(&chunk.size_as_array())?;
+            buffer.write_all(chunk.len().deref())?;
             buffer.write_all(chunk.data())?;
         }
 
@@ -770,38 +767,24 @@ impl Snapshot {
             return None;
         }
 
-        let code = file_content.drain(0..4).as_slice().to_vec();
-        let data_length = file_content.drain(0..4).as_slice().to_vec();
-
-        // eprintln!("{:?} / {:?}", std::str::from_utf8(&code), data_length);
-
-        // compute the data length based on the 4 bytes that represent it
-        let data_length = {
-            let mut count = 0;
-            for i in 0..4 {
-                count = 256 * count + data_length[3 - i] as usize;
-            }
-            count
-        };
+        let code: RiffCode = file_content.drain(0..4).as_slice().into();
+        let data_length: RiffLen = file_content.drain(0..4).as_slice().into();
 
         // read the appropriate number of bytes
-        let content = file_content.drain(0..data_length).as_slice().to_vec();
+        let content = file_content.drain(0..data_length.value() as _).as_slice().to_vec();
 
-        // Generate the 4 size array
-        let code = {
-            let mut new_code = [0; 4];
-            assert_eq!(code.len(), 4);
-            new_code.copy_from_slice(&code);
-            new_code
-        };
-        let chunk = match code {
+
+        let chunk: SnapshotChunk = match code.deref() {
             [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
             [b'B', b'R', b'K', b'S'] => WinapeBreakPointChunk::from(code, content).into(),
+            [b'B', b'R', b'K', b'C'] => AceBreakPointChunk::from(code, content).into(),
             [b'S', b'Y', b'M', b'B'] => AceSymbolChunk::from(code, content).into(),
             // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
             // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
             _ => UnknownChunk::from(code, content).into()
         };
+
+        assert_eq!(&data_length, chunk.len());
 
         Some(chunk)
     }
@@ -818,7 +801,7 @@ impl Snapshot {
         self.chunks.push(c.into());
     }
 
-    pub fn get_chunk<C: Into<Code>>(&self, code: C) -> Option<&SnapshotChunk> {
+    pub fn get_chunk<C: Into<RiffCode>>(&self, code: C) -> Option<&SnapshotChunk> {
         let code = code.into();
         self.chunks().iter().find(|chunk| chunk.code() == &code)
     }

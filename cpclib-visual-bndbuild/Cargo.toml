@@ -30,7 +30,7 @@ serde.workspace = true
 egui_code_editor.workspace = true
 
 [build-dependencies]
-built = { version = "0.7.1", features = ["chrono"] }
+built = { version = "0.7.3", features = ["chrono"] }
 static_vcruntime = "2.0"
 
 [features]

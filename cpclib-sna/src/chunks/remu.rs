@@ -1,8 +1,8 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
+use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
 use delegate::delegate;
 
-use crate::{Code, SnapshotChunkData};
 
 pub enum RemuEntry {
     // (address, bank)
@@ -46,17 +46,24 @@ impl RemuEntry {
 
 #[derive(Clone, Debug)]
 pub struct RemuChunk {
-    data: SnapshotChunkData
+    riff: RiffBlock
+}
+
+impl Deref for RemuChunk {
+    type Target=RiffBlock;
+
+    fn deref(&self) -> &Self::Target {
+        &self.riff
+    }
 }
 
 impl RemuChunk {
-    const CODE: Code = Code([b'R', b'E', b'M', b'U']);
+    const CODE: RiffCode = RiffCode::new([b'R', b'E', b'M', b'U']);
 
     delegate! {
-        to self.data {
-            pub fn code(&self) -> &Code;
-            pub fn size(&self) -> usize;
-            pub fn size_as_array(&self) -> [u8; 4];
+        to self.riff {
+            pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
             pub fn data(&self) -> &[u8];
             fn add_bytes(&mut self, data: &[u8]);
         }
@@ -66,15 +73,15 @@ impl RemuChunk {
         Self::from(Self::CODE, Default::default())
     }
 
-    pub fn from<C: Into<Code>>(code: C, content: Vec<u8>) -> Self {
+    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         let c = Self {
-            data: SnapshotChunkData {
+            riff: RiffBlock::new(
                 code,
-                data: content
-            }
+                content
+            )
         };
 
         c
