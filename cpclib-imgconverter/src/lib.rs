@@ -833,7 +833,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                         .tempfile()
                         .expect("Unable to create the temporary file");
 
-                    sna.write(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
+                    sna.write_all(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
                         .expect("Unable to write the sna in the temporary file");
 
                     let xfer = CpcXfer::new(sub_m4.get_one::<String>("CPCM4").unwrap());

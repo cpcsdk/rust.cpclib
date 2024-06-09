@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
+use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 
 
@@ -20,12 +20,18 @@ impl WinapeBreakPoint {
 
 #[derive(Clone, Debug)]
 pub struct WinapeBreakPointChunk {
-    riff: RiffBlock
+    riff: RiffChunk
 }
 
 
+impl From<RiffChunk> for WinapeBreakPointChunk {
+    fn from(value: RiffChunk) -> Self {
+        Self{riff: value}
+    }
+}
+
 impl Deref for WinapeBreakPointChunk {
-    type Target= RiffBlock;
+    type Target= RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -46,15 +52,15 @@ impl WinapeBreakPointChunk {
     }
 
     pub fn empty() -> Self {
-        Self::from(Self::CODE, Vec::new())
+        Self::new(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
+    pub fn new<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffBlock::new(
+            riff: RiffChunk::new(
                 code,
                 content
             )

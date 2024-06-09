@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::Deref};
 
-use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
+use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 
 
@@ -46,11 +46,11 @@ impl RemuEntry {
 
 #[derive(Clone, Debug)]
 pub struct RemuChunk {
-    riff: RiffBlock
+    riff: RiffChunk
 }
 
 impl Deref for RemuChunk {
-    type Target=RiffBlock;
+    type Target=RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -78,7 +78,7 @@ impl RemuChunk {
         assert_eq!(code, Self::CODE);
 
         let c = Self {
-            riff: RiffBlock::new(
+            riff: RiffChunk::new(
                 code,
                 content
             )

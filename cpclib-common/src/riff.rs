@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::{fmt::{write, Display}, io::Write, ops::Deref};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RiffCode(pub(crate) [u8; 4]);
@@ -33,6 +33,12 @@ impl From<&str> for RiffCode {
 }
 
 
+
+impl Display for RiffCode {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}{}{}{}", self.0[0] as char , self.0[1] as char, self.0[2] as char, self.0[3] as char)
+	}
+}
 impl RiffCode {
 	pub const fn new(value: [u8;4]) -> Self {
 		Self(value)
@@ -121,9 +127,17 @@ impl RiffLen {
 	}
 }
 
+
+pub struct RiffContainer {
+	/// RIFF or LIST only
+    ckid: RiffCode,
+
+}
+
 #[derive(Clone, Debug)]
 /// Raw chunk data.
-pub struct RiffBlock {
+#[derive(PartialEq)]
+pub struct RiffChunk {
     /// Identifier of the chunk
     ckid: RiffCode,
 	/// Length of the chunk (always data.len())
@@ -133,7 +147,42 @@ pub struct RiffBlock {
 }
 
 #[allow(missing_docs)]
-impl RiffBlock {
+impl RiffChunk {
+
+
+	pub fn write_all<B: Write>(
+        &self,
+        buffer: &mut B) -> Result<(), std::io::Error> 
+		{
+		buffer.write_all(self.code().deref())?;
+		buffer.write_all(self.len().deref())?;
+		buffer.write_all(self.data())?;
+
+		Ok(())
+	}
+
+	pub fn from_buffer(file_content: &mut Vec<u8>) -> Self {
+		// get the code and length
+        let ckid: RiffCode = file_content.drain(0..4).as_slice().into();
+        let cksz: RiffLen = file_content.drain(0..4).as_slice().into();
+
+
+		dbg!(ckid.to_string(), cksz.value());
+        // read the appropriate number of bytes
+        let data = if cksz.value() > 0 {
+			file_content.drain(0..cksz.value() as _).as_slice().to_vec()
+		} else {
+			Vec::with_capacity(0)
+		};
+
+		assert_eq!(data.len(), cksz.value() as usize);
+
+		Self {
+			ckid,
+			cksz,
+			data,
+		}
+	}
 
 	pub fn new<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
 		Self {

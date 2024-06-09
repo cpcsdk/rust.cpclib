@@ -5,7 +5,7 @@ mod winape;
 use std::ops::Deref;
 
 pub use ace::*;
-use cpclib_common::riff::{RiffBlock, RiffCode, RiffLen};
+use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 pub use remu::*;
 pub use winape::*;
@@ -16,12 +16,18 @@ pub use winape::*;
 /// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
     /// Raw content of the memory chunk (i.e. compressed version)
-    riff: RiffBlock
+    riff: RiffChunk
 }
 
 
+impl From<RiffChunk> for MemoryChunk {
+    fn from(value: RiffChunk) -> Self {
+        Self{riff: value}
+    }
+}
+
 impl Deref for MemoryChunk {
-    type Target = RiffBlock;
+    type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -49,7 +55,7 @@ impl MemoryChunk {
     /// Create a memory chunk.
     /// `code` identify with memory block is concerned
     /// `data` contains the crunched version of the code
-    pub fn from<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
+    pub fn new<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
         let code = code.into();
         assert!(code[0] == b'M');
         assert!(code[1] == b'E');
@@ -66,7 +72,7 @@ impl MemoryChunk {
                 || code[3] == b'8'
         );
         Self {
-            riff: RiffBlock::new(code, data)
+            riff: RiffChunk::new(code, data)
         }
     }
 
@@ -80,7 +86,7 @@ impl MemoryChunk {
             res.extend(data);
             assert_eq!(res.len(), data.len());
             res.resize(0x100000, 0);
-            Self::from(code, res)
+            Self::new(code, res)
         }
         else {
             let mut previous = None;
@@ -135,10 +141,10 @@ impl MemoryChunk {
 
             // We may be unable to crunch the memory
             if res.len() >= 65536 {
-                return Self::from(code, data.to_vec());
+                return Self::new(code, data.to_vec());
             }
 
-            let chunk = Self::from(code, res.clone());
+            let chunk = Self::new(code, res.clone());
 
             // #[cfg(debug_assertions)]
             {
@@ -211,11 +217,17 @@ impl MemoryChunk {
 /// Unknwon kind of chunk
 pub struct UnknownChunk {
     /// Raw data of the chunk
-    riff: RiffBlock
+    riff: RiffChunk
+}
+
+impl From<RiffChunk> for UnknownChunk {
+    fn from(value: RiffChunk) -> Self {
+        Self{riff: value}
+    }
 }
 
 impl Deref for UnknownChunk {
-    type Target=RiffBlock;
+    type Target=RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -232,10 +244,10 @@ impl UnknownChunk {
     }
 
     /// Generate the chunk from raw data
-    pub fn from<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
+    pub fn new<C: Into<RiffCode>>(code: C, data: Vec<u8>) -> Self {
         let code = code.into();
         Self {
-            riff: RiffBlock::new(code, data)
+            riff: RiffChunk::new(code, data)
         }
     }
 }
@@ -309,7 +321,7 @@ impl SnapshotChunk {
     }
 
 
-    fn riff(&self) -> &RiffBlock {
+    pub fn riff(&self) -> &RiffChunk {
         match self {
             SnapshotChunk::AceBreakPoint(a) => a.deref(),
             SnapshotChunk::AceSymbol(a) => a.deref(),

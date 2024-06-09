@@ -4,6 +4,7 @@ members = [
   "cpclib-basic",
   "cpclib-bndbuild",
   "cpclib-common",
+  "cpclib-cpr",
   "cpclib-crunchers",
   "cpclib-disc",
   "cpclib-image",
@@ -20,7 +21,7 @@ members = [
   "cpclib-imgconverter",
   "cpclib-visual-basm",
   "cpclib-visual-bndbuild",
-  "cpclib-wasm",
+  "cpclib-wasm", 
 ]
 
 resolver = "2"
@@ -187,6 +188,7 @@ cpclib-basm = { path = "./cpclib-basm/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
 cpclib-common = { path = "./cpclib-common/" }
+cpclib-cpr = { path = "./cpclib-cpr/" }
 cpclib-crunchers = { path = "./cpclib-crunchers/" }
 cpclib-disc = { path = "./cpclib-disc/" }
 cpclib-image = { path = "./cpclib-image/" }

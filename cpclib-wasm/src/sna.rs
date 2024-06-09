@@ -36,7 +36,7 @@ impl JsSnapshot {
     #[wasm_bindgen(getter)]
     pub fn bytes(&self) -> Uint8Array {
         let mut content = Vec::new();
-        self.0.write(&mut content, SnapshotVersion::V2).unwrap();
+        self.0.write_all(&mut content, SnapshotVersion::V2).unwrap();
 
         Uint8Array::from(content.as_slice()).to_owned()
     }

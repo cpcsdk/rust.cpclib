@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::bitsets;
-use cpclib_common::riff::{RiffCode, RiffLen};
+use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use num_enum::TryFromPrimitive;
 
 mod chunks;
@@ -536,10 +536,10 @@ impl Snapshot {
         version: SnapshotVersion
     ) -> Result<(), std::io::Error> {
         let mut buffer = File::create(fname.as_ref())?;
-        self.write(&mut buffer, version)
+        self.write_all(&mut buffer, version)
     }
 
-    pub fn write<B: Write>(
+    pub fn write_all<B: Write>(
         &self,
         buffer: &mut B,
         version: SnapshotVersion
@@ -562,9 +562,7 @@ impl Snapshot {
 
         // Write chunks if any
         for chunk in &sna.chunks {
-            buffer.write_all(chunk.code().deref())?;
-            buffer.write_all(chunk.len().deref())?;
-            buffer.write_all(chunk.data())?;
+            chunk.riff().write_all(buffer)?;
         }
 
         Ok(())
@@ -767,24 +765,19 @@ impl Snapshot {
             return None;
         }
 
-        let code: RiffCode = file_content.drain(0..4).as_slice().into();
-        let data_length: RiffLen = file_content.drain(0..4).as_slice().into();
-
-        // read the appropriate number of bytes
-        let content = file_content.drain(0..data_length.value() as _).as_slice().to_vec();
+        let chunk = RiffChunk::from_buffer(file_content);
 
 
-        let chunk: SnapshotChunk = match code.deref() {
-            [b'M', b'E', b'M', _] => MemoryChunk::from(code, content).into(), //
-            [b'B', b'R', b'K', b'S'] => WinapeBreakPointChunk::from(code, content).into(),
-            [b'B', b'R', b'K', b'C'] => AceBreakPointChunk::from(code, content).into(),
-            [b'S', b'Y', b'M', b'B'] => AceSymbolChunk::from(code, content).into(),
+
+        let chunk: SnapshotChunk = match chunk.code().deref() {
+            [b'M', b'E', b'M', _] => MemoryChunk::from(chunk).into(), //
+            [b'B', b'R', b'K', b'S'] => WinapeBreakPointChunk::from(chunk).into(),
+            [b'B', b'R', b'K', b'C'] => AceBreakPointChunk::from(chunk).into(),
+            [b'S', b'Y', b'M', b'B'] => AceSymbolChunk::from(chunk).into(),
             // ['D', 'S', 'C', _] => InsertedDiscChunk::from(code, content)
             // ['C', 'P', 'C', '+'] => CPCPlusChunk::from(content)
-            _ => UnknownChunk::from(code, content).into()
+            _ => UnknownChunk::from(chunk).into()
         };
-
-        assert_eq!(&data_length, chunk.len());
 
         Some(chunk)
     }

@@ -1,6 +1,6 @@
 use std::{borrow::Cow, ops::Deref};
 
-use cpclib_common::{itertools::Itertools, riff::{RiffBlock, RiffCode, RiffLen}};
+use cpclib_common::{itertools::Itertools, riff::{RiffChunk, RiffCode, RiffLen}};
 use delegate::delegate;
 
 
@@ -160,12 +160,18 @@ impl<'a> AceSymbol<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AceSymbolChunk {
-    riff: RiffBlock
+    riff: RiffChunk
 }
 
 
+impl From<RiffChunk> for AceSymbolChunk {
+    fn from(value: RiffChunk) -> Self {
+        Self{riff: value}
+    }
+}
+
 impl Deref for AceSymbolChunk {
-    type Target = RiffBlock;
+    type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -186,15 +192,15 @@ impl AceSymbolChunk {
     }
 
     pub fn empty() -> Self {
-        Self::from(Self::CODE, Vec::new())
+        Self::new(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
+    pub fn new<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffBlock::new(
+            riff: RiffChunk::new(
                 code,
                 content
             )
@@ -315,12 +321,18 @@ impl<'a> AceBreakPoint<'a> {
 
 #[derive(Clone, Debug)]
 pub struct AceBreakPointChunk {
-    riff: RiffBlock
+    riff: RiffChunk
 }
 
 
+impl From<RiffChunk> for AceBreakPointChunk {
+    fn from(value: RiffChunk) -> Self {
+        Self{riff: value}
+    }
+}
+
 impl Deref for AceBreakPointChunk {
-    type Target = RiffBlock;
+    type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -342,15 +354,15 @@ impl AceBreakPointChunk {
     }
 
     pub fn empty() -> Self {
-        Self::from(Self::CODE, Vec::new())
+        Self::new(Self::CODE, Vec::new())
     }
 
-    pub fn from<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
+    pub fn new<C: Into<RiffCode>>(code: C, content: Vec<u8>) -> Self {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffBlock::new(
+            riff: RiffChunk::new(
                 code,
                 content
             )
