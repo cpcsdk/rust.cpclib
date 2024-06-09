@@ -3179,16 +3179,22 @@ pub fn parse_res_set_bit(
 pub fn parse_cp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //   preceded(
     //    parse_word(b"CP"),
-    alt((
-        parse_register8,
-        parse_indexregister8,
-        parse_hl_address,
-        parse_indexregister_with_index,
-        parse_expr
-    ))
-    .map(
+    
+    preceded(
+        opt((parse_register_a, parse_comma)),
+            cut_err(alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr
+        ))
+        .context("CP: wrong argument")
+        )
+        .map(
         //   )
         |operand| LocatedTokenInner::new_opcode(Mnemonic::Cp, Some(operand), None)
+        )
     )
     .parse_next(input)
 }
