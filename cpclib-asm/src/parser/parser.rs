@@ -5266,7 +5266,7 @@ pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     terminated(
         parse_value,
         not(one_of((
-            b'a'..=b'z',
+            b'A'..=b'Z',
             b'a'..=b'z',
             b'0'..=b'9',
             b'#',
@@ -6331,20 +6331,16 @@ endif"
     #[test]
     fn test_parse_label() {
         assert!(dbg!(parse_test(parse_label(false), "HL_div_2")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "CHECK")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "label")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "label.label")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "label{after}")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "{before}label")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "la{inner}bel")).is_ok());
-
         assert!(dbg!(parse_test(parse_label(false), "label{i+5}")).is_ok());
+
+        assert!(dbg!(parse_test(parse_label(false), "_JP")).is_ok());
+
     }
 
     #[test]
@@ -6391,13 +6387,59 @@ endif"
             "\"\\\" et voila\"",
             "0X1234",
             "<0X1234",
-            ">0X1234"
+            ">0X1234",
+            "TOTO",
+            "_TOTO",
         ] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 
             assert!(dbg!(parse_test(expr_list, code)).is_ok());
         }
     }
+
+    #[test]
+    fn debug_label_expression() {
+        for code in &[
+            "TOTO",
+            "_TOTO",
+            "_JP",
+        ] {
+            assert!(dbg!(parse_test(parse_label(false), code)).is_ok());
+            assert!(dbg!(parse_test(parse_factor, code)).is_ok());
+            assert!(dbg!(parse_test(term, code)).is_ok());
+            assert!(dbg!(parse_test(comp, code)).is_ok());
+            assert!(dbg!(parse_test(shift, code)).is_ok());
+            assert!(dbg!(parse_test(expr2, code)).is_ok());
+            assert!(dbg!(parse_test(located_expr, code)).is_ok());
+            assert!(dbg!(parse_test(expr, code)).is_ok());
+        }
+    }
+
+
+    #[test]
+    fn regression_parse_hl() {
+        for  code in &mut [
+            "ld hl, TOTO",
+            "ld HL, _TOTO",
+            "ld hl, _JP",
+            "ld a, TOTO",
+            "ld a, _TOTO",
+            "ld a, _JP",
+            "ld a,_JP",
+        ] {
+            dbg!("Handle", &code);
+            dbg!("parse_ld");
+            assert!(dbg!(parse_test(parse_ld(false), code)).is_ok());
+            dbg!("parse_instruction");
+            assert!(dbg!(parse_test(parse_token, code)).is_ok());
+            dbg!("parse_line");
+            let mut tokens = Vec::new();
+            assert!(dbg!(parse_test(parse_line(&mut tokens), code)).is_ok());
+
+
+        }
+    }
+
 
     // TODO find why this test fails wheras cpclib_common::tests::parse_string succeed. I do not get the differences
     #[test]
