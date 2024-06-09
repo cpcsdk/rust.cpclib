@@ -1,4 +1,4 @@
-use cpclib_cpr::{CartridgeBloc, Cpr};
+use cpclib_cpr::{CartridgeBank, Cpr};
 
 #[test]
 pub fn test_write_empty() {
@@ -15,7 +15,7 @@ pub fn test_write_one_rom() {
 	let mut buffer = Vec::new();
 
 	let mut cpr = Cpr::empty();
-	cpr.add_bloc(CartridgeBloc::new(0));
+	cpr.add_bank(CartridgeBank::new(0));
 	cpr.write(&mut buffer).expect("Error while writting CPR");
 
 }

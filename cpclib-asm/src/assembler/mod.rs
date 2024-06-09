@@ -13,8 +13,7 @@ pub mod section;
 pub mod stable_ticker;
 pub mod string;
 pub mod symbols_output;
-pub mod cpr;
-pub mod sna;
+pub mod support;
 
 
 pub mod embedded;
@@ -39,8 +38,9 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
-use cpr::CprAssembler;
-use sna::SnaAssembler;
+use support::sna::SnaAssembler;
+use support::banks::Pages;
+use support::cpr::CprAssembler;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -62,6 +62,15 @@ use crate::save_command::*;
 use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, PhysicalAddress};
+
+
+
+#[derive(Clone, Copy, PartialEq)]
+enum OutputKind {
+    Snapshot,
+    Cpr,
+    FreeBank
+}
 
 /// Use smallvec to put stuff on the stack not the heap and (hope so) speed up assembling
 const MAX_SIZE: usize = 4;
@@ -167,28 +176,8 @@ fn add_index_register_code(m: &mut Bytes, r: IndexRegister16) {
 const DD: u8 = 0xDD;
 const FD: u8 = 0xFD;
 
-trait MyDefault {
+pub trait MyDefault {
     fn default() -> Self;
-}
-
-/// ! Lots of things will probably be inspired from RASM
-type Bank = [u8; 0x1_0000];
-impl MyDefault for Bank {
-    fn default() -> Bank {
-        [0; 0x1_0000]
-    }
-}
-
-/// Number of banks allowed in a snapshot
-const NB_BANKS: usize = 9;
-
-/// The Banks of interest
-/// only one is added at first. Others are created on demand
-type Banks = Vec<Bank>;
-impl MyDefault for Banks {
-    fn default() -> Self {
-        vec![Bank::default()]
-    }
 }
 
 /// Several passes are needed to properly assemble a source file.
@@ -397,9 +386,7 @@ pub struct Env {
     cpr: Option<CprAssembler>,
 
     /// List of banks (temporary memory)
-    banks: Vec<(Bank, PageInformation, BitVec)>,
-    /// Some functionalities may be disabled once assembler is in a bank (TODO determine which ones)
-    selected_bank: Option<usize>,
+    banks: Pages,
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
@@ -408,7 +395,6 @@ pub struct Env {
 
     /// Track where bytes has been written to forbid overriding them when generating data
     /// BUG: should be stored individually in each bank ?
-    written_bytes: BitVec,
     byte_written: bool,
 
     symbols: SymbolsTableCaseDependent,
@@ -477,10 +463,8 @@ impl Clone for Env {
             sna: self.sna.clone(),
             sna_version: self.sna_version.clone(),
             banks: self.banks.clone(),
-            selected_bank: self.selected_bank.clone(),
             macro_seed: self.macro_seed.clone(),
             charset_encoding: self.charset_encoding.clone(),
-            written_bytes: self.written_bytes.clone(),
             byte_written: self.byte_written.clone(),
             symbols: self.symbols.clone(),
             run_options: self.run_options.clone(),
@@ -558,7 +542,6 @@ impl Default for Env {
 
             symbols: SymbolsTableCaseDependent::default(),
             run_options: None,
-            written_bytes: BitVec::repeat(false, 0x4000 * 2 * 4),
             byte_written: false,
             output_trigger: None,
             symbols_output: Default::default(),
@@ -572,8 +555,7 @@ impl Default for Env {
             sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
             current_section: None,
             output_address: 0,
-            banks: Vec::new(),
-            selected_bank: None,
+            banks: Pages::default(),
 
             real_nb_passes: 0,
             saved_files: None,
@@ -822,6 +804,21 @@ impl Env {
     }
 }
 
+impl Env {
+    /// Return the current state of writting of the assembler
+    fn output_kind(&self) -> OutputKind {
+        if self.cpr.is_some() {
+            OutputKind::Cpr
+        } else {
+            if self.banks.selected_index.is_some() {
+                OutputKind::FreeBank
+            } else {
+                OutputKind::Snapshot
+            }
+        }
+    }
+}
+
 #[allow(missing_docs)]
 impl Env {
     /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
@@ -906,7 +903,7 @@ impl Env {
 
             self.stable_counters.new_pass();
             self.run_options = None;
-            self.written_bytes().fill(false);
+            self.written_bytes_mut().fill(false);
             self.warnings.retain(|elem| !elem.is_override_memory());
             self.sna.pages_info.iter_mut().for_each(|p| p.new_pass());
 
@@ -915,11 +912,11 @@ impl Env {
                 .for_each(|s| s.1.write().unwrap().new_pass());
             self.current_section = None;
 
-            self.banks.iter_mut().for_each(|bank| {
+            self.banks.pages.iter_mut().for_each(|bank| {
                 bank.1.new_pass();
                 bank.2.fill(false);
             });
-            self.selected_bank = None;
+            self.banks.selected_index = None;
 
             // environnement is not reset when assembling is finished
             self.output_address = 0;
@@ -1076,7 +1073,6 @@ impl Env {
 
         let mut assert_failures: Option<AssemblerError> = None;
 
-        // Print from the snapshot
         for (activepage, page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             self.ga_mmr = *page;
             let mut l_errors = self.sna.pages_info[activepage].collect_assert_failure();
@@ -1097,8 +1093,8 @@ impl Env {
             }
         }
 
-        for bank in self.banks.iter() {
-            let mut l_errors = bank.1.collect_assert_failure();
+        for page in self.banks.pages.iter() {
+            let mut l_errors = page.1.collect_assert_failure();
             match (&mut assert_failures, &mut l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1159,8 +1155,8 @@ impl Env {
             }
         }
 
-        for bank in self.banks.iter() {
-            let mut l_errors = bank.1.execute_print_or_pause(&mut writer);
+        for page in self.banks.pages.iter() {
+            let mut l_errors = page.1.execute_print_or_pause(&mut writer);
             match (&mut print_errors, &mut l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1211,6 +1207,7 @@ impl Env {
                 .sum::<u64>() as u64;
             nb_files_to_save += self
                 .banks
+                .pages
                 .iter()
                 .map(|b| b.1.nb_files_to_save() as u64)
                 .sum::<u64>() as u64;
@@ -1244,7 +1241,7 @@ impl Env {
             CondIterator::new(&self.banks, can_save_in_parallel)
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
-        let iter = self.banks.iter();
+        let iter = self.banks.pages.iter();
         let mut saved = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
@@ -1266,42 +1263,59 @@ impl Env {
 impl Env {
     /// TODO
     fn active_page_info(&self) -> &PageInformation {
-        match &self.selected_bank {
-            Some(idx) => &self.banks[*idx].1,
-            None => {
+        match self.output_kind() {
+            OutputKind::Snapshot => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
                 &self.sna.pages_info[active_page]
-            }
+            },
+            OutputKind::Cpr => {
+                self.cpr.as_ref().unwrap().selected_active_page_info().unwrap()
+            },
+            OutputKind::FreeBank => {
+                self.banks.selected_active_page_info().unwrap()
+            },
         }
     }
 
-    /// TODO remove this method and its calls
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
-        match &self.selected_bank {
-            Some(idx) => &mut self.banks[*idx].1,
-            None => {
+        match self.output_kind() {
+            OutputKind::Snapshot => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
                 &mut self.sna.pages_info[active_page]
-            }
+            },
+            OutputKind::Cpr => {
+                self.cpr.as_mut().unwrap().selected_active_page_info_mut().unwrap()
+            },
+            OutputKind::FreeBank => {
+                self.banks.selected_active_page_info_mut().unwrap()
+            },
         }
     }
+
 
     fn page_info_for_logical_address_mut(&mut self, address: u16) -> &mut PageInformation {
-        match &self.selected_bank {
-            Some(idx) => &mut self.banks[*idx].1, // TODO check if this code is valid
-            None => {
+        match self.output_kind() {
+            OutputKind::Snapshot => {
                 let active_page = self.logical_to_physical_address(address).page() as usize;
                 &mut self.sna.pages_info[active_page]
-            }
+            },
+            OutputKind::Cpr => {
+                self.cpr.as_mut().unwrap().selected_active_page_info_mut().unwrap()
+            },
+            OutputKind::FreeBank => {
+                self.banks.selected_active_page_info_mut().unwrap()
+            },
         }
+
     }
 
-    fn written_bytes(&mut self) -> &mut BitVec {
-        match &self.selected_bank {
-            Some(idx) => &mut self.banks[*idx].2,
-            None => &mut self.written_bytes
+    fn written_bytes_mut(&mut self) -> &mut BitVec {
+        match self.output_kind() {
+            OutputKind::Snapshot => &mut self.sna.written_bytes,
+            OutputKind::Cpr => self.cpr.as_mut().unwrap().selected_written_bytes_mut().expect("No bank selected"),
+            OutputKind::FreeBank => self.banks.selected_written_bytes_mut().expect("No bank selected"),
         }
     }
 
@@ -1431,12 +1445,12 @@ impl Env {
         // update the maximm 64k position
         self.active_page_info_mut().maxadr =
             self.maximum_address().max(self.logical_output_address());
-        if self.active_page_info().startadr.is_none() {
+        if self.active_page_info_mut().startadr.is_none() {
             self.active_page_info_mut().startadr = Some(self.logical_output_address());
         }
 
         let abstract_address = physical_address.offset_in_cpc();
-        let already_used = *self.written_bytes().get(abstract_address as usize).unwrap();
+        let already_used = *self.written_bytes_mut().get(abstract_address as usize).unwrap();
 
         let r#override = if already_used {
             let r#override = AssemblerWarning::OverrideMemory(physical_address.clone(), 1);
@@ -1452,7 +1466,7 @@ impl Env {
             false
         };
 
-        if self.selected_bank.is_none() {
+        if self.banks.selected_index.is_none() {
             if let Some(section) = &self.current_section {
                 let section = section.read().unwrap();
                 if !section.contains(physical_address.address()) {
@@ -1468,15 +1482,24 @@ impl Env {
             }
         }
 
-        match &self.selected_bank {
-            Some(idx) => {
-                self.banks[*idx].0[self.output_address as usize] = v;
-            },
-            None => {
+
+        match self.output_kind() {
+            OutputKind::Snapshot => {
                 self.sna.set_byte(abstract_address, v);
-            }
+                self.written_bytes_mut().set(abstract_address as _, true);
+            },
+            OutputKind::Cpr => {
+                let output_address = self.output_address;
+                self.cpr.as_mut().map(|cpr| cpr.set_byte(self.output_address, v));
+                self.written_bytes_mut().set(output_address as _, true);
+            },
+            OutputKind::FreeBank => {
+                let output_address = self.output_address;
+                self.banks.set_byte(self.output_address, v);
+                self.written_bytes_mut().set(output_address as _, true);
+            },
         }
-        self.written_bytes().set(abstract_address as _, true);
+
 
         // Add the byte to the listing space
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
@@ -1579,22 +1602,37 @@ impl Env {
 
     pub fn peek(&self, address: &PhysicalAddress) -> u8 {
         let address = address.offset_in_cpc();
-        match &self.selected_bank {
-            Some(idx) => self.banks[*idx].0[address as usize],
-            None => self.sna.get_byte(address)
+
+        match self.output_kind() {
+            OutputKind::Snapshot => {
+                self.sna.get_byte(address)
+            },
+            OutputKind::Cpr => {
+                self.cpr.as_ref().unwrap().get_byte(address as _).unwrap()
+            },
+            OutputKind::FreeBank => {
+                self.banks.get_byte(address as _).unwrap()
+            },
         }
+
     }
 
     pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) {
         let address = address.offset_in_cpc();
-        match &self.selected_bank {
-            Some(idx) => {
-                self.banks[*idx].0[address as usize] = byte;
+
+        // TODO do we need to pretect memory when doing that ?
+        match self.output_kind() {
+            OutputKind::Snapshot => {
+                self.sna.set_byte(address, byte)
             },
-            None => {
-                self.sna.set_byte(address, byte);
-            }
+            OutputKind::Cpr => {
+                self.cpr.as_mut().unwrap().set_byte(address as _, byte)
+            },
+            OutputKind::FreeBank => {
+                self.banks.set_byte(address as _, byte)
+            },
         }
+
     }
 
     /// Get the size of the generated binary.
@@ -2052,8 +2090,21 @@ impl Env {
     }
 
     pub fn visit_buildcpr(&mut self) -> Result<(), AssemblerError>  {
-        assert!(self.cpr.is_none()); // TODO handle pass 2
-        self.cpr =  Some(CprAssembler::default());
+
+        if self.pass.is_first_pass() {
+            self.cpr =  Some(CprAssembler::default());
+        } else {
+            self.cpr.as_mut().unwrap().select(0);
+        }
+
+        self.banks.selected_index = None;
+        
+        let page_info = self.active_page_info_mut();
+        page_info.logical_outputadr = 0;
+        page_info.logical_codeadr = 0;
+        self.ga_mmr = 0xC0;
+        self.output_address = 0;
+
         Ok(())
     }
 
@@ -2062,6 +2113,7 @@ impl Env {
         version: Option<&SnapshotVersion>
     ) -> Result<(), AssemblerError> {
         self.sna_version = version.cloned().unwrap_or(SnapshotVersion::V3);
+        self.banks.selected_index = None;
         Ok(())
     }
 
@@ -2274,42 +2326,61 @@ impl Env {
         Ok(())
     }
 
-    fn visit_bank<E: ExprEvaluationExt>(&mut self, exp: Option<&E>) -> Result<(), AssemblerError> {
+    /// The keyword is named BANK, but in fact, it is a PAGE ...
+    fn visit_page_or_bank<E: ExprEvaluationExt>(&mut self, exp: Option<&E>) -> Result<(), AssemblerError> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
 
+        let output_kind = self.output_kind();
+
         match exp {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
-                let mmr = self.resolve_expr_must_never_fail(exp)?.int()?;
+                let exp = self.resolve_expr_must_never_fail(exp)?.int()?;
+                self.banks.selected_index = None;
 
-                if mmr < 0xC0 || mmr > 0xC7 {
-                    return Err(AssemblerError::MMRError { value: mmr });
-                }
+                if output_kind == OutputKind::Cpr {
+                    if exp <0 || exp>31 {
+                        return Err(AssemblerError::AssemblingError { msg: format!("Value {exp} is not compatible. [0-31]") });
+                    }
 
-                let mmr = mmr as u8;
-                self.ga_mmr = mmr;
+                    if let Some(cpr) = &mut self.cpr {
+                        cpr.select(exp as u8);
 
-                // we do not change the output address (there is no reason to do that)
-            },
-            None => {
-                // nothing provided, we write in a temporary area
-                if self.pass.is_first_pass() {
-                    self.selected_bank = Some(self.banks.len());
-                    self.banks.push((
-                        Bank::default(),
-                        PageInformation::default(),
-                        BitVec::repeat(false, 0x4000 * 4)
-                    ));
+                        let page_info = self.active_page_info_mut();
+                        page_info.logical_outputadr = 0;
+                        page_info.logical_codeadr = 0;
+                        self.ga_mmr = 0xC0;
+                        self.output_address = 0
+                    }
                 }
                 else {
-                    self.selected_bank = self.selected_bank.map(|v| v + 1).or(Some(0));
-                    if *self.selected_bank.as_ref().unwrap() >= self.banks.len() {
-                        return Err(AssemblerError::AssemblingError {
-                            msg: "There were less banks in previous pass".to_owned()
-                        });
+                    // Snapshot output
+
+                    let mmr = exp;
+                    if mmr < 0xC0 || mmr > 0xC7 {
+                        return Err(AssemblerError::MMRError { value: mmr });
                     }
+
+                    let mmr = mmr as u8;
+                    self.ga_mmr = mmr;
+
+
+                    // we do not change the output address (there is no reason to do that)
+                }
+            },
+            None => {
+                if output_kind == OutputKind::Cpr {
+                    todo!("Need to implement this behavior")
+                }
+
+                // nothing provided, we write in a temporary area
+                if self.pass.is_first_pass() {
+                    self.banks.add_new_and_select();
+                }
+                else {
+                    self.banks.select_next()?;
                 }
 
                 self.ga_mmr = 0xC0;
@@ -2324,7 +2395,7 @@ impl Env {
     }
 
     // total switch of page
-    fn visit_bankset<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+    fn visit_pageset<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
@@ -2365,7 +2436,7 @@ impl Env {
         let expected_nb = nb_pages.max(page + 1);
         if expected_nb > nb_pages {
             self.sna.pages_info.resize(expected_nb, Default::default());
-            self.written_bytes().resize(expected_nb * 0x1_0000, false);
+            self.written_bytes_mut().resize(expected_nb * 0x1_0000, false);
         }
 
         self.output_address = self.logical_output_address();
@@ -2944,8 +3015,8 @@ macro_rules! visit_token_impl {
                     code
                 )
             }, // TODO move in the processed tokens stuff
-            $cls::Bank(ref exp) => $env.visit_bank(exp.as_ref()),
-            $cls::Bankset(ref v) => $env.visit_bankset(v),
+            $cls::Bank(ref exp) => $env.visit_page_or_bank(exp.as_ref()),
+            $cls::Bankset(ref v) => $env.visit_pageset(v),
             $cls::Breakpoint(expr) => $env.visit_breakpoint(expr.as_ref(), $span),
             $cls::BuildCpr => $env.visit_buildcpr(),
             $cls::BuildSna(ref v) => $env.visit_buildsna(v.as_ref()),
@@ -3342,7 +3413,7 @@ impl Env {
         }
 
         self.update_dollar();
-        let value = self.active_page_info().logical_codeadr;
+        let value = self.active_page_info_mut().logical_codeadr;
 
         self.output_trigger
             .as_mut()

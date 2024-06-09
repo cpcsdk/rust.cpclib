@@ -210,6 +210,11 @@ impl RiffChunk {
 		self.update_cksz();
     }
 
+	pub fn set_byte(&mut self, address: u16, byte: u8) {
+		self.data[address as usize] = byte;
+	}
+
+
 
 	fn update_cksz(&mut self) {
 		self.cksz = self.data.len().into();

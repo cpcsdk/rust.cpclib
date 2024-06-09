@@ -4,10 +4,10 @@ use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct CartridgeBloc(RiffChunk);
+pub struct CartridgeBank(RiffChunk);
 
 
-impl Deref for CartridgeBloc {
+impl Deref for CartridgeBank {
     type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
@@ -16,7 +16,7 @@ impl Deref for CartridgeBloc {
 }
 
 
-impl TryFrom<RiffChunk> for CartridgeBloc {
+impl TryFrom<RiffChunk> for CartridgeBank {
     type Error = String;
 
     fn try_from(value: RiffChunk) -> Result<Self, Self::Error> {
@@ -39,8 +39,8 @@ impl TryFrom<RiffChunk> for CartridgeBloc {
 }
 
 
-impl CartridgeBloc {
-    pub fn new(nb: u8) -> CartridgeBloc {
+impl CartridgeBank {
+    pub fn new(nb: u8) -> CartridgeBank {
         assert!(nb<32);
 
         let data = vec![0; 0x4000];
@@ -54,13 +54,15 @@ impl CartridgeBloc {
         format!("cb{:02}", nb)
     }
 
-
+	pub fn set_byte(&mut self, address: u16, byte: u8) {
+        self.0.set_byte(address, byte)
+    }
 
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Cpr {
-    banks: Vec<CartridgeBloc>
+    banks: Vec<CartridgeBank>
 }
 
 impl Default for Cpr {
@@ -75,8 +77,16 @@ impl Cpr {
         Cpr{banks: Vec::default()}
     }
 
-    pub fn banks(&self) -> &[CartridgeBloc] {
+    pub fn banks(&self) -> &[CartridgeBank] {
         &self.banks
+    }
+
+    pub fn bank_mut(&mut self, idx: usize) -> Option<&mut CartridgeBank> {
+        self.banks.get_mut(idx)
+    }
+
+    pub fn bank(&self, idx: usize) -> Option<&CartridgeBank> {
+        self.banks.get(idx)
     }
 
     pub fn len(&self) -> RiffLen {
@@ -89,7 +99,7 @@ impl Cpr {
         size.into()
     }
 
-    pub fn add_bloc(&mut self, bloc: CartridgeBloc) {
+    pub fn add_bank(&mut self, bloc: CartridgeBank) {
         // TODO check if it is already present
         self.banks.push(bloc);
     }
@@ -153,7 +163,7 @@ impl Cpr {
         while !file_content.is_empty() {
             let chunk = RiffChunk::from_buffer(&mut file_content);
             if chunk.code().to_string().as_bytes() != b"fmt " {
-                let cb: CartridgeBloc = chunk.try_into()?;
+                let cb: CartridgeBank = chunk.try_into()?;
                 banks.push(cb);
             }
         }
@@ -176,11 +186,11 @@ impl Cpr {
 
 #[cfg(test)]
 mod test {
-    use crate::CartridgeBloc;
+    use crate::CartridgeBank;
 
     #[test]
     fn test_cartrdige_code() {
-        assert_eq!("cb00", CartridgeBloc::code_for(0).as_str());
-        assert_eq!("cb31", CartridgeBloc::code_for(31).as_str());
+        assert_eq!("cb00", CartridgeBank::code_for(0).as_str());
+        assert_eq!("cb31", CartridgeBank::code_for(31).as_str());
     }
 }
