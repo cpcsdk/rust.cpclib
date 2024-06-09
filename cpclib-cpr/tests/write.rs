@@ -5,7 +5,7 @@ pub fn test_write_empty() {
 	let mut buffer = Vec::new();
 
 	let cpr = Cpr::empty();
-	cpr.write(&mut buffer).expect("Error while writting CPR");
+	cpr.write_all(&mut buffer).expect("Error while writting CPR");
 
 }
 
@@ -16,7 +16,7 @@ pub fn test_write_one_rom() {
 
 	let mut cpr = Cpr::empty();
 	cpr.add_bank(CartridgeBank::new(0));
-	cpr.write(&mut buffer).expect("Error while writting CPR");
+	cpr.write_all(&mut buffer).expect("Error while writting CPR");
 
 }
 
@@ -34,7 +34,7 @@ pub fn test_write_copter() {
 
 	dbg!("Write file");
 	let mut buffer = Vec::new();
-	cpr.write(&mut buffer).expect("Error while writting CPR");
+	cpr.write_all(&mut buffer).expect("Error while writting CPR");
 
 
 	dbg!("Read result");

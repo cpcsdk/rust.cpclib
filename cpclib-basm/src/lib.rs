@@ -359,7 +359,17 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         ));
     }
 
-    if matches.get_flag("SNAPSHOT") && matches.contains_id("OUTPUT") {
+    if matches.get_flag("CPR") && matches.contains_id("OUTPUT") {
+        let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
+        env.save_cpr(pc_filename.clone()).map_err(|e| {
+            BasmError::Io {
+                io: e,
+                ctx: format!("saving \"{}\"", pc_filename)
+            }
+        })?;
+    }
+
+    else if matches.get_flag("SNAPSHOT") && matches.contains_id("OUTPUT") {
         // Get the appropriate filename
         let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
 
@@ -635,11 +645,20 @@ pub fn build_args_parser() -> clap::Command {
                             .action(ArgAction::SetTrue)
                     )
                     .arg(
+                        Arg::new("CPR")
+                         .help("Generate a CPR")
+                         .long("cartridge")
+                         .alias("cpr")
+                         .action(ArgAction::SetTrue)
+                         .requires("OUTPUT")
+                    )
+                    .arg(
                         Arg::new("SNAPSHOT")
                             .help("Generate a snapshot")
                             .long("snapshot")
                             .alias("sna")
                             .action(ArgAction::SetTrue)
+                            .conflicts_with("CPR")
                     )
                     .arg(
                         Arg::new("NO_SNA_CHUNK")
@@ -750,7 +769,7 @@ pub fn build_args_parser() -> clap::Command {
     )
     .group(
         // only one type of output can be provided
-        ArgGroup::new("ARTEFACT_TYPE").args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT"])
+        ArgGroup::new("ARTEFACT_TYPE").args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT", "CPR"])
     )
     .group(
         ArgGroup::new("ANY_INPUT")

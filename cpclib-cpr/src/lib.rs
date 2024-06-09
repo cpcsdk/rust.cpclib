@@ -103,8 +103,19 @@ impl Cpr {
         // TODO check if it is already present
         self.banks.push(bloc);
     }
+}
 
-    pub fn write<B: Write>(
+
+impl Cpr {
+    pub fn save<P: AsRef<Path>>(
+        &self,
+        fname: P,
+    ) -> Result<(), std::io::Error> {
+        let mut buffer = File::create(fname.as_ref())?;
+        self.write_all(&mut buffer)
+    }
+
+    pub fn write_all<B: Write>(
         &self,
         buffer: &mut B,
     ) -> Result<(), std::io::Error> {

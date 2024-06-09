@@ -1112,6 +1112,28 @@ impl Env {
             }
         }
 
+
+        if let Some(cpr) = self.cpr.as_ref() {
+            for page in cpr.pages_info.iter() {
+                let mut l_errors = page.collect_assert_failure();
+                match (&mut assert_failures, &mut l_errors) {
+                    (_, Ok(_)) => {
+                        // nothing to do
+                    },
+                    (
+                        Some(AssemblerError::MultipleErrors { errors: e1 }),
+                        Err(AssemblerError::MultipleErrors { errors: e2 })
+                    ) => {
+                        e1.append(e2);
+                    },
+                    (None, Err(l_errors)) => {
+                        assert_failures = Some(l_errors.clone());
+                    },
+                    _ => unreachable!()
+                }
+            }            
+        }
+
         self.ga_mmr = backup;
 
         // All possible messages have been printed.
@@ -1171,6 +1193,29 @@ impl Env {
                     print_errors = Some(l_errors.clone());
                 },
                 _ => unreachable!()
+            }
+        }
+
+
+
+        if let Some(cpr) = self.cpr.as_ref() {
+            for page in cpr.pages_info.iter() {
+                let mut l_errors = page.execute_print_or_pause(&mut writer);
+                match (&mut print_errors, &mut l_errors) {
+                    (_, Ok(_)) => {
+                        // nothing to do
+                    },
+                    (
+                        Some(AssemblerError::MultipleErrors { errors: e1 }),
+                        Err(AssemblerError::MultipleErrors { errors: e2 })
+                    ) => {
+                        e1.append(e2);
+                    },
+                    (None, Err(l_errors)) => {
+                        print_errors = Some(l_errors.clone());
+                    },
+                    _ => unreachable!()
+                }
             }
         }
 
@@ -1662,6 +1707,12 @@ impl Env {
     pub fn save_sna<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.sna().save(fname, self.sna_version())
     }
+
+    pub fn save_cpr<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), std::io::Error> {
+        self.cpr.as_ref().unwrap().deref().save(fname)
+    }
+
+    
 
     /// Compute the relative address. Is authorized to fail at first pass
     fn absolute_to_relative_may_fail_in_first_pass(
