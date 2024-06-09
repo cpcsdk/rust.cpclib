@@ -1356,6 +1356,14 @@ impl Env {
 
     }
 
+    fn written_bytes(& self) -> & BitVec {
+        match self.output_kind() {
+            OutputKind::Snapshot => & self.sna.written_bytes,
+            OutputKind::Cpr => self.cpr.as_ref().unwrap().selected_written_bytes().expect("No bank selected"),
+            OutputKind::FreeBank => self.banks.selected_written_bytes().expect("No bank selected"),
+        }
+    }
+
     fn written_bytes_mut(&mut self) -> &mut BitVec {
         match self.output_kind() {
             OutputKind::Snapshot => &mut self.sna.written_bytes,
@@ -1495,7 +1503,14 @@ impl Env {
         }
 
         let abstract_address = physical_address.offset_in_cpc();
-        let already_used = *self.written_bytes_mut().get(abstract_address as usize).unwrap();
+        let already_used = if let Some(access) = self.written_bytes()
+            .get(abstract_address as usize)
+        {
+            *access
+        }
+        else {
+            return Err(AssemblerError::BugInAssembler { file:file!(), line: line!(), msg:  format!("Wrong size of memory access {} > {}", abstract_address, self.written_bytes().len())})
+        };
 
         let r#override = if already_used {
             let r#override = AssemblerWarning::OverrideMemory(physical_address.clone(), 1);
@@ -1751,6 +1766,7 @@ impl Env {
         address: &E,
         address2: Option<&E>
     ) -> Result<(), AssemblerError> {
+
         // org $ set org to the output address (cf. rasm)
         let code_adr = if address2.is_none() && address.is_label_value("$") {
             if self.start_address().is_none() {
@@ -1764,7 +1780,7 @@ impl Env {
             self.resolve_expr_must_never_fail(address)?.int()?
         };
 
-        let output_adr = if address2.is_some() {
+        let mut output_adr = if address2.is_some() {
             self.resolve_expr_must_never_fail(address2.unwrap())?
                 .int()?
         }
@@ -1772,11 +1788,43 @@ impl Env {
             code_adr.clone()
         };
 
+        // In the CPR case, because of rasm, the semantic of ORG is a bit different
+        // No idea if I'll keep this behavior
+        if self.output_kind() == OutputKind::Cpr {
+            if self.active_page_info().startadr.is_none() {
+                // this is the first call in the bank of the cartrige
+                // so we set up the address
+                // TODO check that nothing has been written yet
+
+                assert!(address2.is_none(), "Need to raise an error");
+                assert_eq!(self.cpr.as_ref().unwrap().base_address().unwrap(), 0);
+                output_adr = 0;
+
+                self.cpr.as_mut()
+                    .unwrap()
+                    .set_base_address(code_adr as _)
+
+            } else {
+                let base = self.cpr.as_ref().unwrap().base_address().unwrap();
+                assert!(code_adr >= base as _, "Impossible to do ORG lower than the base address of the bank");
+                let delta = code_adr  - base as i32;
+                assert!(delta<0x4000, "A bank in a CPR is of size maximum 0x4000");
+                output_adr = delta as _;
+            }
+        }
+
+
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
             commands.store_org(code_adr as _, output_adr as _);
         }
 
+
+
         self.visit_org_set_arguments(code_adr as _, output_adr as _)
+
+
+
+
     }
 
     pub fn visit_org_set_arguments(
