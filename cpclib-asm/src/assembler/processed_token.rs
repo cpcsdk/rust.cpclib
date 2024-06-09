@@ -1109,7 +1109,7 @@ where
                         // save the number of prints to patch the ones added by the macro
                         // to properly locate them
                         let nb_prints = env
-                            .pages_info_sna
+                            .sna.pages_info
                             .iter()
                             .map(|ti| ti.print_commands().len())
                             .collect_vec();
@@ -1139,7 +1139,7 @@ where
 
                         let caller_span = self.possible_span();
                         if let Some(span) = caller_span {
-                            env.pages_info_sna
+                            env.sna.pages_info
                                 .iter_mut()
                                 .zip(nb_prints.into_iter())
                                 .for_each(|(ti, count)| {

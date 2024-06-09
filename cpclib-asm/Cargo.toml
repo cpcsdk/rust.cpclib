@@ -19,6 +19,7 @@ cpclib-sna.workspace = true
 cpclib-tokens.workspace = true
 cpclib-disc.workspace = true
 cpclib-common.workspace = true
+cpclib-cpr.workspace = true
 cpclib-image.workspace = true
 
 arrayref.workspace = true

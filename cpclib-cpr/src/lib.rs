@@ -3,7 +3,7 @@ use std::{fs::File, io::{Read, Write}, ops::Deref, path::Path};
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct CartridgeBloc(RiffChunk);
 
 
@@ -58,9 +58,15 @@ impl CartridgeBloc {
 
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Cpr {
     banks: Vec<CartridgeBloc>
+}
+
+impl Default for Cpr {
+    fn default() -> Self {
+        Cpr::empty()
+    }
 }
 
 impl Cpr {

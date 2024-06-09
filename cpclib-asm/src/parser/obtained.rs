@@ -924,6 +924,7 @@ pub enum LocatedTokenInner {
     Basic(Option<Vec<Z80Span>>, Option<Vec<LocatedExpr>>, Z80Span),
     Break,
     Breakpoint(Option<LocatedExpr>),
+    BuildCpr,
     BuildSna(Option<SnapshotVersion>),
 
     Charset(CharsetFormat),

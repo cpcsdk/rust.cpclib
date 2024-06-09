@@ -1419,6 +1419,7 @@ dependencies = [
  "compact_str",
  "cpclib-basic",
  "cpclib-common",
+ "cpclib-cpr",
  "cpclib-crunchers",
  "cpclib-disc",
  "cpclib-image",

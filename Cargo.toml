@@ -42,6 +42,7 @@ cpclib-basm = { version = "0.7.1", path = "cpclib-basm", default-features = fals
 cpclib-bdasm = { version = "0.7.1", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "=0.2.2", path = "cpclib-bndbuild", default-features = false }
 cpclib-common = { version = "0.7.1", path = "cpclib-common", default-features = false }
+cpclib-cpr = { version = "0.1.0", path = "cpclib-cpr", default-features = false }
 cpclib-crunchers = { version = "0.7.1", path = "cpclib-crunchers", default-features = false }
 cpclib-disc = { version = "0.7.1", path = "cpclib-disc", default-features = false }
 cpclib-image = { version = "0.7.1", path = "cpclib-image", default-features = false }

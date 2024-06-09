@@ -194,6 +194,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"BINCLUDE",
     b"BREAK",
     b"BREAKPOINT",
+    b"BUILDCPR",
     b"BUILDSNA",
     b"BYTE",
     b"CASE",
@@ -2461,6 +2462,7 @@ pub fn parse_directive_new(
                     choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input)?,
                     choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input)?,
                     choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input)?,
+                    choice_nocase!(b"BUILDCPR") => LocatedTokenInner::BuildCpr,
 
                     choice_nocase!(b"CHARSET") => parse_charset.parse_next(input)?,
 
@@ -2684,6 +2686,8 @@ pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 
     Ok(LocatedTokenInner::Bankset(count))
 }
+
+
 
 pub fn parse_buildsna(
     directive_name_parsed: bool

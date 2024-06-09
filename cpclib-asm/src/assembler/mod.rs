@@ -13,6 +13,9 @@ pub mod section;
 pub mod stable_ticker;
 pub mod string;
 pub mod symbols_output;
+pub mod cpr;
+pub mod sna;
+
 
 pub mod embedded;
 pub mod processed_token;
@@ -36,6 +39,8 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use cpr::CprAssembler;
+use sna::SnaAssembler;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -381,13 +386,15 @@ pub struct Env {
     output_address: u16,
 
     /// Ensemble of pages (2 for a stock CPC) for the snapshot
-    pages_info_sna: Vec<PageInformation>,
 
     /// Memory configuration is controlled by the underlying snapshot.
-    /// It will ease the generation of snapshots but may complexify the generation of files
-    sna: cpclib_sna::Snapshot,
+    /// It will ease the generation of snapshots but may complexity the generation of files
+    sna: SnaAssembler,
     // TODO remove it as it is store within the sna
     sna_version: cpclib_sna::SnapshotVersion,
+
+    /// If buildcpr is used, we work within a Cpr
+    cpr: Option<CprAssembler>,
 
     /// List of banks (temporary memory)
     banks: Vec<(Bank, PageInformation, BitVec)>,
@@ -451,7 +458,7 @@ pub struct Env {
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
     extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>,
 
-    // list of output commands that are generted in a restricted assembling env
+    // list of output commands that are generated in a restricted assembling env
     pub(crate) assembling_control_current_output_commands: Vec<ControlOutputStore>
 }
 
@@ -467,7 +474,6 @@ impl Clone for Env {
             stable_counters: self.stable_counters.clone(),
             ga_mmr: self.ga_mmr.clone(),
             output_address: self.output_address.clone(),
-            pages_info_sna: self.pages_info_sna.clone(),
             sna: self.sna.clone(),
             sna_version: self.sna_version.clone(),
             banks: self.banks.clone(),
@@ -513,6 +519,8 @@ impl Clone for Env {
 
             map_counter: self.map_counter,
 
+            cpr: self.cpr.clone(),
+
             repeat_start: self.repeat_start.clone(),
             repeat_step: self.repeat_step.clone(),
 
@@ -539,17 +547,14 @@ impl Default for Env {
             pass: AssemblingPass::Uninitialized,
             options: EnvOptions::default(),
             stable_counters: StableTickerCounters::default(),
-            pages_info_sna: vec![Default::default(); 2],
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
             charset_encoding: CharsetEncoding::new(),
-            sna: {
-                let mut sna = Snapshot::default(); // Snapshot::new_6128().unwrap();
-                sna.unwrap_memory_chunks();
-                sna
-            },
+            sna: SnaAssembler::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
+
+            cpr: None,
 
             symbols: SymbolsTableCaseDependent::default(),
             run_options: None,
@@ -903,7 +908,7 @@ impl Env {
             self.run_options = None;
             self.written_bytes().fill(false);
             self.warnings.retain(|elem| !elem.is_override_memory());
-            self.pages_info_sna.iter_mut().for_each(|p| p.new_pass());
+            self.sna.pages_info.iter_mut().for_each(|p| p.new_pass());
 
             self.sections
                 .iter_mut()
@@ -1024,8 +1029,8 @@ impl Env {
         };
 
         let pages_mmr = MMR_PAGES_SELECTION;
-        for (activepage, _page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
-            for brk in self.pages_info_sna[activepage].collect_breakpoints() {
+        for (activepage, _page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
+            for brk in self.sna.pages_info[activepage].collect_breakpoints() {
                 let info = AssemblerError::RelocatedInfo {
                     info: Box::new(AssemblerError::AssemblingError {
                         msg: format!("Add a breakpoint in 0x{:04x}", brk.address)
@@ -1072,9 +1077,9 @@ impl Env {
         let mut assert_failures: Option<AssemblerError> = None;
 
         // Print from the snapshot
-        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+        for (activepage, page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             self.ga_mmr = *page;
-            let mut l_errors = self.pages_info_sna[activepage].collect_assert_failure();
+            let mut l_errors = self.sna.pages_info[activepage].collect_assert_failure();
             match (&mut assert_failures, &mut l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1134,9 +1139,9 @@ impl Env {
         //  let mut writer = BufWriter::new(writer); seem to be slower with the buffer :()
 
         // Print from the snapshot
-        for (activepage, page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+        for (activepage, page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             self.ga_mmr = *page;
-            let mut l_errors = self.pages_info_sna[activepage].execute_print_or_pause(&mut writer);
+            let mut l_errors = self.sna.pages_info[activepage].execute_print_or_pause(&mut writer);
             match (&mut print_errors, &mut l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1196,12 +1201,12 @@ impl Env {
         // count the number of files to save to build the process bar
         let nb_files_to_save = {
             let mut nb_files_to_save: u64 = 0;
-            nb_files_to_save += pages_mmr[0..self.pages_info_sna.len()]
+            nb_files_to_save += pages_mmr[0..self.sna.pages_info.len()]
                 .iter()
                 .enumerate()
                 .map(|(activepage, page)| {
                     self.ga_mmr = *page;
-                    self.pages_info_sna[activepage].nb_files_to_save() as u64
+                    self.sna.pages_info[activepage].nb_files_to_save() as u64
                 })
                 .sum::<u64>() as u64;
             nb_files_to_save += self
@@ -1219,13 +1224,13 @@ impl Env {
         }
 
         // save from snapshot. cannot be done in parallel
-        for (activepage, _page) in pages_mmr[0..self.pages_info_sna.len()].iter().enumerate() {
+        for (activepage, _page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             //  eprintln!("ACTIVEPAGE. {:x}", &activepage);
             //  eprintln!("PAGE. {:x}", &page);
 
-            for mma in self.pages_info_sna[activepage].get_save_mmrs() {
+            for mma in self.sna.pages_info[activepage].get_save_mmrs() {
                 self.ga_mmr = mma;
-                let mut saved = self.pages_info_sna[activepage].execute_save(self, mma)?;
+                let mut saved = self.sna.pages_info[activepage].execute_save(self, mma)?;
                 saved_files.append(&mut saved);
             }
         }
@@ -1266,7 +1271,7 @@ impl Env {
             None => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
-                &self.pages_info_sna[active_page]
+                &self.sna.pages_info[active_page]
             }
         }
     }
@@ -1278,7 +1283,7 @@ impl Env {
             None => {
                 let active_page =
                     self.logical_to_physical_address(self.output_address).page() as usize;
-                &mut self.pages_info_sna[active_page]
+                &mut self.sna.pages_info[active_page]
             }
         }
     }
@@ -1288,7 +1293,7 @@ impl Env {
             Some(idx) => &mut self.banks[*idx].1, // TODO check if this code is valid
             None => {
                 let active_page = self.logical_to_physical_address(address).page() as usize;
-                &mut self.pages_info_sna[active_page]
+                &mut self.sna.pages_info[active_page]
             }
         }
     }
@@ -2046,6 +2051,12 @@ impl Env {
         Ok(())
     }
 
+    pub fn visit_buildcpr(&mut self) -> Result<(), AssemblerError>  {
+        assert!(self.cpr.is_none()); // TODO handle pass 2
+        self.cpr =  Some(CprAssembler::default());
+        Ok(())
+    }
+
     pub fn visit_buildsna(
         &mut self,
         version: Option<&SnapshotVersion>
@@ -2350,10 +2361,10 @@ impl Env {
         }
 
         let page = page as usize;
-        let nb_pages = self.pages_info_sna.len();
+        let nb_pages = self.sna.pages_info.len();
         let expected_nb = nb_pages.max(page + 1);
         if expected_nb > nb_pages {
-            self.pages_info_sna.resize(expected_nb, Default::default());
+            self.sna.pages_info.resize(expected_nb, Default::default());
             self.written_bytes().resize(expected_nb * 0x1_0000, false);
         }
 
@@ -2571,7 +2582,7 @@ impl Env {
                 )
             });
         }
-        self.sna = Snapshot::load(fname).map_err(|e| {
+        self.sna.sna = Snapshot::load(fname).map_err(|e| {
             AssemblerError::AssemblingError {
                 msg: format!("Error while loading snapshot. {}", e)
             }
@@ -2787,7 +2798,7 @@ impl Env {
 
         // prefill the snapshot representation with something else than the default
         if let Some(sna) = env.options.assemble_options().snapshot_model() {
-            env.sna = sna.clone();
+            env.sna.sna = sna.clone();
             env.sna_version = env.sna.version();
         }
 
@@ -2936,6 +2947,7 @@ macro_rules! visit_token_impl {
             $cls::Bank(ref exp) => $env.visit_bank(exp.as_ref()),
             $cls::Bankset(ref v) => $env.visit_bankset(v),
             $cls::Breakpoint(expr) => $env.visit_breakpoint(expr.as_ref(), $span),
+            $cls::BuildCpr => $env.visit_buildcpr(),
             $cls::BuildSna(ref v) => $env.visit_buildsna(v.as_ref()),
 
             $cls::Charset(format) => $env.visit_charset(format),
