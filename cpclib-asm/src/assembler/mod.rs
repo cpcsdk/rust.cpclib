@@ -24,7 +24,7 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, Write};
 use std::ops::Neg;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -351,6 +351,10 @@ impl CharsetEncoding {
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
+    /// Lookup directory when searching for a file. Must be pushed at each import directive and pop after
+    lookup_directory_stack: Vec<PathBuf>,
+
+
     /// Current pass
     pass: AssemblingPass,
     options: EnvOptions,
@@ -451,6 +455,7 @@ pub struct Env {
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
+            lookup_directory_stack: self.lookup_directory_stack.clone(),
             options: self.options.clone(),
             can_skip_next_passes: (*self.can_skip_next_passes.read().unwrap().deref()).into(),
             request_additional_pass: (*self.request_additional_pass.read().unwrap().deref()).into(),
@@ -528,6 +533,7 @@ impl fmt::Debug for Env {
 impl Default for Env {
     fn default() -> Self {
         Self {
+            lookup_directory_stack: Vec::with_capacity(3),
             pass: AssemblingPass::Uninitialized,
             options: EnvOptions::default(),
             stable_counters: StableTickerCounters::default(),
@@ -767,6 +773,33 @@ impl Env {
 
     fn mark_included(&mut self, path: PathBuf) {
         self.included_paths.insert(path);
+    }
+}
+
+
+/// Handle the file search relatively to the current file
+impl Env {
+    fn set_current_working_directory<P: Into<PathBuf>>(&mut self, p: P) {
+        self.lookup_directory_stack.push(p.into())
+    }
+
+    pub fn enter_current_working_file<P: AsRef<Path>>(&mut self, f: P) {
+        let f = f.as_ref();
+        debug_assert!(f.is_file() || f.starts_with("inner://"));
+        self.set_current_working_directory(f.parent().unwrap());
+    }
+
+    pub fn leave_current_working_file(&mut self) -> Option<PathBuf> {
+        self.lookup_directory_stack.pop()
+    }
+
+    pub fn get_current_working_directory(&self) -> Option<&Path> {
+        self.lookup_directory_stack.last()
+            .map(|p| p.as_path())
+    }
+
+    pub fn has_current_working_directory(&self) -> bool {
+        !self.lookup_directory_stack.is_empty()
     }
 }
 
@@ -4085,6 +4118,11 @@ impl Env {
         }
         else {
             let label = self.handle_global_and_local_labels(label.as_str())?;
+
+            if label.starts_with(".") {
+                let warning = AssemblerError::AssemblingError { msg: format!("{} is not a local label. A better name without the dot would be better", &label) };
+                self.warnings.push(warning);
+            }
 
             // XXX Disabled behavior the 12/01/2024
             // if !label.starts_with('.') {

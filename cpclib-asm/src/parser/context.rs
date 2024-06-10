@@ -327,16 +327,26 @@ impl ParserOptions {
 
         let fname = std::path::Path::new(fname);
 
-        // We expect the file to exists if no search_path is provided
-        if self.search_path.is_empty() {
-            if fname.is_file() {
-                return Ok(fname.into());
-            }
-            else {
-                does_not_exists.push(fname.to_str().unwrap().to_owned());
+        // check if file exists
+        if fname.is_file() {
+            return Ok(fname.into());
+        }
+        does_not_exists.push(fname.to_str().unwrap().to_owned());
+
+        // otherwhise, try with the current directory of the environment
+        if let Some(env) = env.as_ref() {
+            if let Some(search) = env.get_current_working_directory() {
+                let current_path = search.join(fname);
+                if current_path.is_file() {
+                    return Ok(current_path);
+                } else {
+                    does_not_exists.push(current_path.to_str().unwrap().to_owned());
+                }
             }
         }
-        else {
+
+        // otherwhise try with the folder set up at the beginning
+        {
             // loop over all possibilities
             for search in &self.search_path {
                 assert!(std::path::Path::new(&search).is_dir());

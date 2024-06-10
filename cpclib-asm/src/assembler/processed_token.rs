@@ -122,6 +122,8 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
 struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
 
 impl IncludeState {
+    /// By constructon fname exists and is correct
+    /// 
     fn retreive_listing(
         &mut self,
         env: &mut Env,
@@ -170,6 +172,8 @@ impl IncludeState {
             self.0.get_mut(fname).unwrap()
         };
 
+
+
         // handle the listing
         env.mark_included(fname.clone());
 
@@ -198,10 +202,13 @@ impl IncludeState {
             }
 
             // Visit the included listing
-            state.with_processed_tokens_mut(|tokens| {
+            env.enter_current_working_file(fname);
+            let res = state.with_processed_tokens_mut(|tokens| {
                 let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
-            })?;
+            });
+            env.leave_current_working_file();
+            res?;
 
             // Remove module if necessary
             if namespace.is_some() {

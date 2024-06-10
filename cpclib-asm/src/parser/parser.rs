@@ -2605,7 +2605,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     // Here we have read the latest block
     //   dbg!("Everythng  has been read", &input);
 
-    let _ = dbg!((
+    let _ = (
         opt(alt((
             delimited(my_space0, ':', my_space0).value(()),
             delimited(my_space0, parse_comment, line_ending).value(())
@@ -2617,7 +2617,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         .recognize()
     )
         .parse_next(input)
-        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found")))?;
+        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found"))?;
 
     // dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())}); // endif must have been eaten
 
