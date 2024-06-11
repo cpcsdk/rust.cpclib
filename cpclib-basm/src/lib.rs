@@ -131,6 +131,7 @@ pub fn parse<'arg>(
         options.set_flavor(AssemblerFlavor::Orgams);
     }
 
+
     match std::env::current_dir() {
         Ok(cwd) => {
             options.add_search_path(cwd)?;
@@ -203,6 +204,10 @@ pub fn assemble<'arg>(
     let mut assemble_options = AssemblingOptions::default();
 
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
+    if matches.get_flag("DISABLE_WARNINGS") {
+        assemble_options.disable_warnings();
+    }
+
 
     if matches.get_flag("OVERRIDE") {
         assemble_options
@@ -355,11 +360,12 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         && !matches.contains_id("OUTPUT")
     {
         return Err(BasmError::InvalidArgument(
-            "You have not provided an output file namefor the snapshot".to_owned()
+            "You have not provided an output file name for the snapshot".to_owned()
         ));
     }
 
-    if matches.get_flag("CPR") && matches.contains_id("OUTPUT") {
+
+    if matches.get_flag("CPR") {
         let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
         env.save_cpr(pc_filename.clone()).map_err(|e| {
             BasmError::Io {
@@ -675,6 +681,13 @@ pub fn build_args_parser() -> clap::Command {
 							.short('i')
                             .action(ArgAction::SetTrue)
 					)
+                    .arg(
+                        Arg::new("DISABLE_WARNINGS")
+                            .help("Do not generate warnings")
+                            .long("disable-warnings")
+                            .alias("no-warnings")
+                            .action(ArgAction::SetTrue)
+                    )
                     .arg(
                         Arg::new("DOTTED_DIRECTIVES")
                             .help("Expect directives to by prefixed with a dot")

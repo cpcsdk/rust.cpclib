@@ -83,7 +83,8 @@ pub struct AssemblingOptions {
     output_builder: Option<Arc<RwLock<ListingOutput>>>,
     /// The snapshot may be prefiled with a dedicated snapshot
     snapshot_model: Option<Snapshot>,
-    amsdos_behavior: AmsdosAddBehavior
+    amsdos_behavior: AmsdosAddBehavior,
+    enable_warnings: bool
 }
 
 impl Default for AssemblingOptions {
@@ -97,7 +98,8 @@ impl Default for AssemblingOptions {
             symbols: cpclib_tokens::symbols::SymbolsTable::default(),
             output_builder: None,
             snapshot_model: None,
-            amsdos_behavior: AmsdosAddBehavior::FailIfPresent
+            amsdos_behavior: AmsdosAddBehavior::FailIfPresent,
+            enable_warnings: true
         }
     }
 }
@@ -129,6 +131,12 @@ impl AssemblingOptions {
     pub fn get_flag(&self, flag: AssemblingOptionFlags) -> bool {
         self.flags.contains(flag)
     }
+
+    pub fn disable_warnings(&mut self) -> &mut Self {
+        self.enable_warnings = false;
+        self
+    }
+
 
     /// Specify if the assembler must be case sensitive or not
     pub fn set_case_sensitive(&mut self, val: bool) -> &mut Self {

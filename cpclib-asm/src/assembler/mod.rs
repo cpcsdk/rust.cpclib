@@ -38,6 +38,7 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use processed_token::build_processed_token;
 use support::sna::SnaAssembler;
 use support::banks::Pages;
 use support::cpr::CprAssembler;
@@ -1548,7 +1549,7 @@ impl Env {
         let r#override = if already_used {
             let r#override = AssemblerWarning::OverrideMemory(physical_address.clone(), 1);
             if self.allow_memory_override() {
-                self.warnings.push(r#override);
+                self.add_warning(r#override);
                 true
             }
             else {
@@ -1640,52 +1641,54 @@ impl Env {
         for b in bytes.iter() {
             let currently_overrided = self.output_byte(*b)?;
 
-            match (previously_overrided, currently_overrided) {
-                (true, true) => {
-                    // remove the latestwarning as it is a duplicate
-                    let extra_override_idx = self
-                        .warnings
-                        .iter_mut()
-                        .rev()
-                        .position(|w| {
-                            if let AssemblerError::OverrideMemory(..) = w {
-                                true
-                            }
-                            else {
-                                false
-                            }
-                        })
-                        .unwrap(); // cannot fail by construction
-                    self.warnings
-                        .remove(self.warnings.len() - 1 - extra_override_idx); // rev impose to change index order
+            if self.options().assemble_options().enable_warnings {
+                match (previously_overrided, currently_overrided) {
+                    (true, true) => {
+                        // remove the latestwarning as it is a duplicate
+                        let extra_override_idx = self
+                            .warnings
+                            .iter_mut()
+                            .rev()
+                            .position(|w| {
+                                if let AssemblerError::OverrideMemory(..) = w {
+                                    true
+                                }
+                                else {
+                                    false
+                                }
+                            })
+                            .unwrap(); // cannot fail by construction
+                        self.warnings
+                            .remove(self.warnings.len() - 1 - extra_override_idx); // rev impose to change index order
 
-                    // get the last override warning and update it
-                    let r#override = self
-                        .warnings
-                        .iter_mut()
-                        .rev()
-                        .find(|w| {
-                            if let AssemblerError::OverrideMemory(..) = w {
-                                true
-                            }
-                            else {
-                                false
-                            }
-                        })
-                        .unwrap(); // cannot fail by construction
+                        // get the last override warning and update it
+                        let r#override = self
+                            .warnings
+                            .iter_mut()
+                            .rev()
+                            .find(|w| {
+                                if let AssemblerError::OverrideMemory(..) = w {
+                                    true
+                                }
+                                else {
+                                    false
+                                }
+                            })
+                            .unwrap(); // cannot fail by construction
 
-                    // increase its size
-                    match r#override {
-                        AssemblerError::OverrideMemory(_, ref mut size) => {
-                            *size += 1;
-                        },
-                        _ => unreachable!()
-                    };
-                },
-                _ => {
-                    // nothing to do
+                        // increase its size
+                        match r#override {
+                            AssemblerError::OverrideMemory(_, ref mut size) => {
+                                *size += 1;
+                            },
+                            _ => unreachable!()
+                        };
+                    },
+                    _ => {
+                        // nothing to do
+                    }
                 }
-            }
+        }
 
             previously_overrided = currently_overrided;
         }
@@ -1788,7 +1791,9 @@ impl Env {
 
 impl Env {
     pub fn add_warning(&mut self, warning: AssemblerWarning) {
-        self.warnings.push(warning);
+        if self.options().assemble_options().enable_warnings {
+            self.warnings.push(warning);
+        }
     }
 }
 
@@ -2068,15 +2073,18 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                return Err(AssemblerError::AssemblingError {
+                
+                self.add_warning(AssemblerError::AssemblingError {
                     msg:
-                        "Use (void) for macros with no parameters to disambiguate them with labels"
+                        "Use (void) for macros or structs with no parameters to disambiguate them with labels"
                             .to_owned()
                 });
-            // self.visit_call_macro_or_build_struct(&Token::MacroCall(
-            // label.into(),
-            // Default::default()
-            // ))
+
+
+                // I'm really unsure of memory safety in case of bugs
+                let macro_token = Token::MacroCall(label.into(), Default::default());
+                let mut processed_token = build_processed_token(&macro_token, self)?;
+                processed_token.visited(self)
             }
             else {
                 res
@@ -2153,7 +2161,7 @@ impl Env {
             }
             else {
                 let diff = prettydiff::diff_lines(r#macro.code().trim(), code.trim())
-                    .names("Pevious macro", "Current macro")
+                    .names("Previous macro", "Current macro")
                     .set_show_lines(true)
                     .set_diff_only(true)
                     .format();
@@ -2321,17 +2329,20 @@ impl Env {
             }
         };
 
-        let (output_adr, code_adr, mmr) = {
+        let (output_adr, code_adr, mmr, warning) = {
             let section = section.read().unwrap();
 
-            if section.mmr != self.ga_mmr {
-                self.warnings.push(AssemblerError::AssemblingError{
+            let warning = if section.mmr != self.ga_mmr {
+               Some(AssemblerError::AssemblingError{
                     msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
-                });
-            }
+                })
+            } else {
+                None
+            };
 
-            (section.output_adr, section.code_adr, section.mmr)
+            (section.output_adr, section.code_adr, section.mmr, warning)
         };
+
 
         self.current_section = Some(Arc::clone(section));
 
@@ -2345,6 +2356,11 @@ impl Env {
         self.output_trigger
             .as_mut()
             .map(|o| o.replace_code_address(&code_adr.into()));
+
+        if let Some(warning) = warning{
+            self.add_warning(warning);
+        }
+    
         Ok(())
     }
 
@@ -2939,7 +2955,7 @@ impl Env {
         // - no LIMIT/PROTECT has been used in the crunched area
         // - a possible forbidden write has been done (maybe too complex to implement)
         if could_display_warning_message {
-            self.warnings.push(
+            self.add_warning(
                 AssemblerWarning::AssemblingError{
                     msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".to_owned()
                 }
@@ -3991,6 +4007,13 @@ impl Env {
 /// Warnings related code
 impl Env {
     pub fn cleanup_warnings(&mut self) {
+        if !self.options().assemble_options().enable_warnings {
+            assert!(self.warnings.is_empty());
+            return;
+        }
+
+
+
         // Filter the warnings to merge overriding
         let mut current_warning_idx = 1; // index to the last warning to treat
         let mut previous_warning_idx = 0; // index to the previous warning treated (diff with current_warning_idx can be higher than 1 when there are several consecutive warnings for OverrideMemory)
@@ -4097,8 +4120,13 @@ impl Env {
 
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
-            *w = AssemblerWarning::AssemblingError {
-                msg: (*w).to_string()
+            dbg!(&w);
+            if let AssemblerError::AssemblingError { msg } = w {
+                // nothing to do 
+            } else {
+                *w = AssemblerWarning::AssemblingError {
+                    msg: (*w).to_string()
+                }
             }
         });
     }
@@ -4121,7 +4149,8 @@ impl Env {
 
             if label.starts_with(".") {
                 let warning = AssemblerError::AssemblingError { msg: format!("{} is not a local label. A better name without the dot would be better", &label) };
-                self.warnings.push(warning);
+                let warning =  AssemblerWarning::AssemblingError {msg: warning.to_string()};
+                self.add_warning(warning);
             }
 
             // XXX Disabled behavior the 12/01/2024
