@@ -82,4 +82,18 @@ impl PageInformation {
         self.fail_next_write_if_zero = false;
         self.delayed_commands.clear();
     }
+
+
+    pub fn set_limit(&mut self, l: u16) -> Result<(), AssemblerError> {
+        if l>self.limit {
+            return Err(AssemblerError::AssemblingError { msg: format!("Cannot set a limit of &{:X} as a former limit of &{:X} is already set up",  l, self.limit) });
+        }
+
+        if l<self.maxadr {
+            return Err(AssemblerError::AssemblingError { msg: format!("Cannot set a limit of &{:X} as some bytes has been written at &{:X}p",  l, self.maxadr) });
+        }
+
+        self.limit = l;
+        Ok(())
+    }
 }

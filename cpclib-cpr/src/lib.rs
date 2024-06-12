@@ -71,6 +71,13 @@ impl Default for Cpr {
     }
 }
 
+
+impl From<Vec<CartridgeBank>> for Cpr {
+    fn from(banks: Vec<CartridgeBank>) -> Self {
+        Self{banks}
+    }
+}
+
 impl Cpr {
 
     pub fn empty() -> Self {

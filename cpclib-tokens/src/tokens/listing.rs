@@ -28,6 +28,7 @@ where Self: Debug + Sized + Sync
         false // self.is_equ() | self.is_set()
     }
 
+    fn is_buildcpr(&self) -> bool;
     fn is_assembler_control(&self) -> bool;
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
     fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr>;

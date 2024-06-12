@@ -9,7 +9,7 @@ use crate::page_info::PageInformation;
 pub(crate) struct SnaAssembler {
 	pub(crate) sna: Snapshot,
     pub(crate) pages_info: Vec<PageInformation>,
-    pub(crate) written_bytes: BitVec,
+    pub written_bytes: BitVec,
 	
 }
 
@@ -38,4 +38,24 @@ impl DerefMut for SnaAssembler {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.sna
 	}
+}
+
+impl SnaAssembler {
+	pub fn resize(&mut self, expected_nb: usize) {
+		self.pages_info.resize(expected_nb, Default::default());
+		self.written_bytes.resize(expected_nb * 0x1_0000, false);
+	}
+}
+
+impl SnaAssembler {
+		/// Write the byte in the snapshot  and save this information in written bytes
+		pub fn set_byte(&mut self, address: u32, byte: u8) {
+			self.deref_mut().set_byte(address, byte);
+			self.written_bytes.set(address as _, true);
+		}
+
+		pub fn reset_written_bytes(&mut self) {
+			self.written_bytes.fill(false);
+		}
+
 }

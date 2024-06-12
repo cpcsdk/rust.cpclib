@@ -1147,6 +1147,13 @@ impl ListingElement for LocatedToken {
         }
     }
 
+    fn is_buildcpr(&self) -> bool {
+        match &self.inner {
+            either::Left(LocatedTokenInner::BuildCpr) => true,
+            _ => false
+        }
+    }
+
     fn is_equ(&self) -> bool {
         match &self.inner {
             either::Left(LocatedTokenInner::Equ { .. }) => true,
@@ -1920,6 +1927,12 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
+    fn is_buildcpr(&self) -> bool {
+        match & self {
+            LocatedTokenInner::BuildCpr => true,
+            _ => false
+        }
+    }
     fn is_equ(&self) -> bool {
         match &self {
             LocatedTokenInner::Equ { .. } => true,

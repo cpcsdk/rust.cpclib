@@ -1264,7 +1264,10 @@ where
                 }
             }?;
 
-            env.update_dollar();
+            if ! self.token.is_buildcpr() { // we lack of some datastructures
+                env.update_dollar();
+            }
+
             if deferred {
                 let outer_token = unsafe {
                     (self.token as *const T as *const LocatedToken)

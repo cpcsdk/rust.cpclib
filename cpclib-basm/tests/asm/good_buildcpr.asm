@@ -7,6 +7,7 @@
 
 
 	bank 1
+	org 0x8000
 	print {hex}$
 	print {hex}$$
 	db 'B'

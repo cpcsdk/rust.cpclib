@@ -634,7 +634,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
     env.start_new_pass();
     env.visit_page_or_bank::<Expr>(None)?; // assemble in a new bank
     env.visit_listing(&tokens)?;
-    let bank_info = env.banks.pages.pop().unwrap();
+    let bank_info = env.free_banks.pages.pop().unwrap();
     match &bank_info.1.startadr {
         Some(startadr) => {
             let bytes = bank_info.0[*startadr as _..=bank_info.1.maxadr as _]

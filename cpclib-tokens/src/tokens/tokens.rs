@@ -598,6 +598,10 @@ impl ListingElement for Token {
     fn macro_flavor(&self) -> AssemblerFlavor {
         todo!()
     }
+    
+    fn is_buildcpr(&self) -> bool {
+        todo!()
+    }
 }
 
 /// Standard listing is a specific implementation
