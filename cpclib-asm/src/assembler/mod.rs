@@ -2006,11 +2006,16 @@ impl Env {
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
                 
-                self.add_warning(AssemblerError::AssemblingError {
+                let message = AssemblerError::AssemblingError {
                     msg:
                         "Use (void) for macros or structs with no parameters to disambiguate them with labels"
                             .to_owned()
-                });
+                };
+                if self.options().assemble_options().force_void() {
+                    return Err(message);
+                } else {
+                    self.add_warning(message);
+                }
 
 
                 // I'm really unsure of memory safety in case of bugs

@@ -208,6 +208,8 @@ pub fn assemble<'arg>(
         assemble_options.disable_warnings();
     }
 
+    assemble_options.set_force_void(!matches.get_flag("NO_FORCED_VOID"));
+
 
     if matches.get_flag("OVERRIDE") {
         assemble_options
@@ -711,6 +713,12 @@ pub fn build_args_parser() -> clap::Command {
                             .short('D')
                             .action(ArgAction::Append)
                             .number_of_values(1)
+                    )
+                    .arg(
+                        Arg::new("NO_FORCED_VOID")
+                        .help("By default (void) is mandatory on macro without parameters. This option disable this behavior")
+                        .long("no-forced-void")
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(
                         Arg::new("OVERRIDE")

@@ -84,7 +84,8 @@ pub struct AssemblingOptions {
     /// The snapshot may be prefiled with a dedicated snapshot
     snapshot_model: Option<Snapshot>,
     amsdos_behavior: AmsdosAddBehavior,
-    enable_warnings: bool
+    enable_warnings: bool,
+    force_void: bool
 }
 
 impl Default for AssemblingOptions {
@@ -99,7 +100,8 @@ impl Default for AssemblingOptions {
             output_builder: None,
             snapshot_model: None,
             amsdos_behavior: AmsdosAddBehavior::FailIfPresent,
-            enable_warnings: true
+            enable_warnings: true,
+            force_void: true
         }
     }
 }
@@ -184,6 +186,17 @@ impl AssemblingOptions {
     pub fn save_behavior(&self) -> AmsdosAddBehavior {
         self.amsdos_behavior
     }
+
+
+    pub fn force_void(&self)  -> bool {
+        self.force_void
+    }
+
+    pub fn set_force_void(&mut self, force_void: bool)  -> &mut Self {
+        self.force_void = force_void;
+        self
+    }
+
 
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
         &mut self,
