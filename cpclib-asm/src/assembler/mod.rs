@@ -19,6 +19,7 @@ pub mod support;
 pub mod embedded;
 pub mod processed_token;
 
+use std::borrow::BorrowMut;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
@@ -62,7 +63,7 @@ use crate::report::Report;
 use crate::save_command::*;
 use crate::section::Section;
 use crate::stable_ticker::*;
-use crate::{AssemblingOptions, PhysicalAddress};
+use crate::{AssemblingOptions, MemoryPhysicalAddress};
 
 
 
@@ -900,6 +901,7 @@ impl Env {
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
             self.handle_print();
+            self.generate_symbols_output(std::io::stderr().borrow_mut(), SymbolOutputFormat::Winape);
         }
 
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
@@ -1310,7 +1312,7 @@ impl Env {
         match self.output_kind() {
             OutputKind::Snapshot => {
                 let active_page =
-                    self.logical_to_physical_address(self.output_address).page() as usize;
+                    self.logical_to_physical_address(self.output_address).to_memory().page() as usize;
                 &self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
@@ -1326,7 +1328,7 @@ impl Env {
         match self.output_kind() {
             OutputKind::Snapshot => {
                 let active_page =
-                    self.logical_to_physical_address(self.output_address).page() as usize;
+                    self.logical_to_physical_address(self.output_address).to_memory().page() as usize;
                 &mut self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
@@ -1343,7 +1345,7 @@ impl Env {
     fn page_info_for_logical_address_mut(&mut self, address: u16) -> &mut PageInformation {
         match self.output_kind() {
             OutputKind::Snapshot => {
-                let active_page = self.logical_to_physical_address(address).page() as usize;
+                let active_page = self.logical_to_physical_address(address).to_memory().page() as usize;
                 &mut self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
@@ -1409,7 +1411,7 @@ impl Env {
     /// Produce the memory for the required limits
     /// TODO check that the implementation is still correct with snapshot inclusion
     /// BUG  does not take into account extra bank configuration
-    pub fn memory(&self, start: u16, size: u16) -> Vec<u8> {
+    pub fn get_memory(&self, start: u16, size: u16) -> Vec<u8> {
         //     dbg!(self.ga_mmr);
         let mut mem = Vec::new();
         let start = start as u32;
@@ -1435,7 +1437,7 @@ impl Env {
             None => (0, 0)
         };
 
-        self.memory(start, length as _)
+        self.get_memory(start, length as _)
     }
 
     /// Returns the address of the 1st written byte
@@ -1657,16 +1659,19 @@ impl Env {
     }
 
     pub fn peek(&self, address: &PhysicalAddress) -> u8 {
-        let address = address.offset_in_cpc();
 
+        // we assume that the physical address in argument matches the current configuration
         match self.output_kind() {
             OutputKind::Snapshot => {
+                let address = address.to_memory().offset_in_cpc();
                 self.sna.get_byte(address)
             },
             OutputKind::Cpr => {
+                let address = address.to_cpr().address();
                 self.cpr.as_ref().unwrap().get_byte(address as _).unwrap()
             },
             OutputKind::FreeBank => {
+                let address = address.to_bank().address();
                 self.free_banks.get_byte(address as _).unwrap()
             },
         }
@@ -1674,17 +1679,19 @@ impl Env {
     }
 
     pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) -> Result<(), AssemblerError> {
-        let address = address.offset_in_cpc();
 
-        // TODO do we need to pretect memory when doing that ?
+        // need modification to work when the physical address is different
         match self.output_kind() {
             OutputKind::Snapshot => {
+                let address = address.to_memory().offset_in_cpc();
                 self.sna.set_byte(address, byte)
             },
             OutputKind::Cpr => {
+                let address = address.to_cpr().address();
                 self.cpr.as_mut().unwrap().set_byte(address as _, byte)?
             },
             OutputKind::FreeBank => {
+                let address = address.to_bank().address();
                 self.free_banks.set_byte(address as _, byte)
             },
         }
@@ -1721,8 +1728,11 @@ impl Env {
         self.sna().save(fname, self.sna_version())
     }
 
-    pub fn save_cpr<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), std::io::Error> {
-        self.cpr.as_ref().unwrap().build_cpr().save(fname)
+    pub fn save_cpr<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), AssemblerError> {
+        let cpr_asm = self.cpr.as_ref().unwrap();
+        let cpr = cpr_asm.build_cpr()?;
+        cpr.save(fname)
+            .map_err(|e| AssemblerError::IOError {msg: e.to_string() })
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -1861,7 +1871,9 @@ impl Env {
         }
 
         let current_address = self.logical_code_address();
-        let page = match self.logical_to_physical_address(current_address).page() {
+        // ATM the breakpoints only work in SNA
+        // To allow them in CPR there is a bit of work to do
+        let page = match self.logical_to_physical_address(current_address).to_memory().page() {
             0 => 0,
             1 => 1,
             _ => {
@@ -1870,7 +1882,7 @@ impl Env {
                     line: line!(),
                     msg: format!(
                         "Page selection not handled 0x{:x}",
-                        self.logical_to_physical_address(current_address).page()
+                        self.logical_to_physical_address(current_address).to_memory().page()
                     )
                 })
             },
@@ -2377,7 +2389,13 @@ impl Env {
     /// return the page and bank configuration for the given address at the current mmr configuration
     /// https://grimware.org/doku.php/documentations/devices/gatearray#mmr
     pub fn logical_to_physical_address(&self, address: u16) -> PhysicalAddress {
-        PhysicalAddress::new(address, self.ga_mmr)
+        match self.output_kind() {
+            OutputKind::Snapshot => MemoryPhysicalAddress::new(address, self.ga_mmr).into(),
+            OutputKind::Cpr => CprPhysicalAddress::new(address, self.cpr.as_ref().unwrap().selected_bloc().unwrap()).into(),
+            OutputKind::FreeBank => BankPhysicalAddress::new(address, self.free_banks.selected_index().unwrap()).into(),
+        }
+
+        
     }
 
     fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
@@ -2963,7 +2981,7 @@ impl Env {
                 bytes: Vec::new(),
                 builder: builder.clone(),
                 start: 0,
-                physical_address: PhysicalAddress::new(0, 0)
+                physical_address: MemoryPhysicalAddress::new(0, 0).into()
             }
             .into();
         }

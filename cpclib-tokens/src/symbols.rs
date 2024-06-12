@@ -15,9 +15,158 @@ use regex::Regex;
 use crate::tokens::expression::LabelPrefix;
 use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhysicalAddress {
+    Memory(MemoryPhysicalAddress),
+    Bank(BankPhysicalAddress),
+    Cpr(CprPhysicalAddress)
+}
+
+impl Display for PhysicalAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PhysicalAddress::Memory(address) => write!(
+                f,
+                "0x{:X} (0x{:X} in page {})",
+                address.address(),
+                address.offset_in_page(),
+                address.page(),
+            ),
+            PhysicalAddress::Cpr(address) => write!(
+                f,
+                "0x{:X} in Cartridge bloc {}",
+                address.address(),
+                address.bloc()
+            ),
+            PhysicalAddress::Bank(address) => write!(
+                f,
+                "0x{:X} in bank {}",
+                address.address(),
+                address.bank()
+            )
+        }
+    }
+}
+
+impl PhysicalAddress {
+    #[inline(always)]
+    pub fn address(&self) -> u16 {
+        match self {
+            PhysicalAddress::Memory(adr) => adr.address(),
+            PhysicalAddress::Bank(adr) => adr.address(),
+            PhysicalAddress::Cpr(adr) => adr.address(),
+        }
+    }
+
+    /// not really coherent to use that with cpr and bank
+    #[inline(always)]
+    pub fn offset_in_cpc(&self) -> u32 {
+        match self {
+            PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
+            PhysicalAddress::Bank(adr) => adr.address() as _,
+            PhysicalAddress::Cpr(adr) => adr.address() as _,
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn to_memory(self) -> MemoryPhysicalAddress {
+        match self {
+            PhysicalAddress::Memory(adr) => adr,
+            _ => panic!()
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_bank(self) -> BankPhysicalAddress {
+        match self {
+            PhysicalAddress::Bank(adr) => adr,
+            _ => panic!()
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_cpr(self) -> CprPhysicalAddress {
+        match self {
+            PhysicalAddress::Cpr(adr) => adr,
+            _ => panic!()
+        }
+    }
+}
+
+impl From<MemoryPhysicalAddress> for PhysicalAddress {
+    #[inline(always)]
+    fn from(value: MemoryPhysicalAddress) -> Self {
+        Self::Memory(value)
+    }
+}
+
+impl From<BankPhysicalAddress> for PhysicalAddress {
+    #[inline(always)]
+    fn from(value: BankPhysicalAddress) -> Self {
+        Self::Bank(value)
+    }
+}
+
+impl From<CprPhysicalAddress> for PhysicalAddress {
+    #[inline(always)]
+    fn from(value: CprPhysicalAddress) -> Self {
+        Self::Cpr(value)
+    }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CprPhysicalAddress {
+    bloc: u8,
+    address: u16
+}
+
+impl CprPhysicalAddress {
+    #[inline]
+    pub fn new(address: u16, bloc: u8) -> Self {
+        Self { bloc, address}
+    }
+
+    #[inline]
+    pub fn address(&self) -> u16 {
+        self.address
+    }
+
+    #[inline]
+    pub fn bloc(&self) -> u8 {
+        self.bloc
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BankPhysicalAddress {
+    bank: usize,
+    address: u16
+}
+
+impl BankPhysicalAddress {
+    #[inline]
+    pub fn new(address: u16, bank: usize) -> Self {
+        Self { bank, address}
+    }
+
+    #[inline]
+    pub fn address(&self) -> u16 {
+        self.address
+    }
+
+    #[inline]
+    pub fn bank(&self) -> usize {
+        self.bank
+    }
+}
+
+
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PhysicalAddress {
+pub struct MemoryPhysicalAddress {
     /// Page number (0 for base, 1 for first page, 2 ...)
     page: u8,
     /// Bank number in the page: 0 to 3
@@ -26,16 +175,16 @@ pub struct PhysicalAddress {
     address: u16
 }
 
-impl From<u16> for PhysicalAddress {
+impl From<u16> for MemoryPhysicalAddress {
     fn from(nb: u16) -> Self {
-        PhysicalAddress::new(nb, 0xC0)
+        MemoryPhysicalAddress::new(nb, 0xC0)
     }
 }
 
-impl PhysicalAddress {
+impl MemoryPhysicalAddress {
     pub fn new(address: u16, mmr: u8) -> Self {
         if mmr == 0xC1 {
-            return PhysicalAddress {
+            return MemoryPhysicalAddress {
                 page: 1,
                 bank: (address / 0x4000) as u8,
                 address: address % 0x4000
@@ -369,7 +518,7 @@ impl Value {
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Expr(ExprResult::Value(i)) => Some(*i),
-            Value::Address(addr) => Some(addr.address as _),
+            Value::Address(addr) => Some(addr.address() as _),
             _ => None
         }
     }
@@ -1227,9 +1376,21 @@ impl SymbolsTable {
         let addr = self.address_value::<Symbol>(key)?;
         Ok(addr.map(|v| {
             match prefix {
-                LabelPrefix::Bank => v.bank() as u16,
-                LabelPrefix::Page => v.ga_bank() & 0x00ff,
-                LabelPrefix::Pageset => v.ga_page() & 0x00ff, // delete 0x7f00
+                LabelPrefix::Bank => match v {
+                    PhysicalAddress::Memory(v) => v.bank() as u16,
+                    PhysicalAddress::Bank(v) => v.bank() as _,
+                    PhysicalAddress::Cpr(v) => v.bloc() as _,
+                }
+                LabelPrefix::Page => match v {
+                    PhysicalAddress::Memory(v) => v.ga_bank() & 0x00ff,
+                    PhysicalAddress::Bank(v) => todo!(),
+                    PhysicalAddress::Cpr(_) => todo!(),
+                }
+                LabelPrefix::Pageset => match v {
+                    PhysicalAddress::Memory(v) => v.ga_page() & 0x00ff, // delete 0x7f00
+                    PhysicalAddress::Bank(_) => todo!(),
+                    PhysicalAddress::Cpr(_) => todo!(),
+                }
             }
         } as _))
 
@@ -1380,21 +1541,10 @@ impl SymbolsTableCaseDependent {
             pub fn current_address(&self) -> Result<u16, SymbolError>;
             pub fn set_current_address(&mut self, addr: PhysicalAddress);
             pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
-            pub fn closest_symbol<S>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>
-            where Symbol: From<S>,
-            S: AsRef<str>;
             pub fn push_seed(&mut self, seed: usize);
             pub fn pop_seed(&mut self);
             pub fn pop_counter_value(&mut self);
             pub fn push_counter_value(&mut self, e: ExprResult);
-
-    pub fn extend_local_and_patterns_for_symbol<S>(
-        &self,
-        symbol: S
-    ) -> Result<Symbol, SymbolError>
-    where Symbol: From<S>,
-    S: AsRef<str>;
-
         }
     }
 
@@ -1419,7 +1569,7 @@ impl SymbolsTableCaseDependent {
         Self::new(SymbolsTable::laxist(), false)
     }
 
-    /// Modify the Value value depending on the case confurigration (do nothing, or set uppercase)
+    /// Modify the Value value depending on the case configuration (do nothing, or set uppercase)
     #[inline]
     pub fn normalize_symbol<S>(&self, symbol: S) -> Symbol
     where
@@ -1536,6 +1686,24 @@ impl SymbolsTableCaseDependent {
         S: AsRef<str>
     {
         self.table.kind(symbol)
+    }
+
+
+    pub fn closest_symbol<S>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        let symbol = self.normalize_symbol(symbol);
+        self.table.closest_symbol::<Symbol>(symbol, r#for)
+    }
+
+    pub fn extend_local_and_patterns_for_symbol<S>(
+        &self,
+        symbol: S
+    ) -> Result<Symbol, SymbolError>
+    where Symbol: From<S>,
+    S: AsRef<str> {
+        let symbol = self.normalize_symbol(symbol);
+        self.table.extend_local_and_patterns_for_symbol::<Symbol>(symbol)
     }
 }
 

@@ -131,7 +131,6 @@ pub fn parse<'arg>(
         options.set_flavor(AssemblerFlavor::Orgams);
     }
 
-
     match std::env::current_dir() {
         Ok(cwd) => {
             options.add_search_path(cwd)?;
@@ -209,7 +208,7 @@ pub fn assemble<'arg>(
     }
 
     assemble_options.set_force_void(!matches.get_flag("NO_FORCED_VOID"));
-
+    assemble_options.set_debug(matches.get_flag("DEBUG"));
 
     if matches.get_flag("OVERRIDE") {
         assemble_options
@@ -366,17 +365,10 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         ));
     }
 
-
     if matches.get_flag("CPR") {
         let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
-        env.save_cpr(pc_filename.clone()).map_err(|e| {
-            BasmError::Io {
-                io: e,
-                ctx: format!("saving \"{}\"", pc_filename)
-            }
-        })?;
+        env.save_cpr(pc_filename.clone())?;
     }
-
     else if matches.get_flag("SNAPSHOT") && matches.contains_id("OUTPUT") {
         // Get the appropriate filename
         let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
@@ -718,6 +710,12 @@ pub fn build_args_parser() -> clap::Command {
                         Arg::new("NO_FORCED_VOID")
                         .help("By default (void) is mandatory on macro without parameters. This option disable this behavior")
                         .long("no-forced-void")
+                        .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("DEBUG")
+                        .help("Trace more information to help debug")
+                        .long("debug")
                         .action(ArgAction::SetTrue)
                     )
                     .arg(

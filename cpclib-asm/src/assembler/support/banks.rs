@@ -91,23 +91,39 @@ impl TryInto<Bank> for &DecoratedPage {
 
 	/// Copy the Page to the beginning of the bank, unless it is too huge
 	fn try_into(self) -> Result<Bank, Self::Error> {
-		let start = self.page_information().startadr.unwrap_or(0) as usize;
-		let stop = self.page_information().maxadr as usize;
+		let binary_bloc = self.binary_bloc();
 
-		assert!(stop > start);
-		if stop - start > 0x4000 {
-			return Err(AssemblerError::AssemblingError { msg: format!("{} > 0x4000", stop-start)});
+		if binary_bloc.len() > 0x4000 {
+			return Err(AssemblerError::AssemblingError { msg: format!("0x{:X} > 0x4000", binary_bloc.len() )});
 		 }
 
 		// get the appropriate bytes and copy them to the beginning
 		let mut bank: Bank = [0; 0x4000];
-		bank.copy_from_slice(&self.page()[start..=stop]);
+		bank[..binary_bloc.len()].copy_from_slice(binary_bloc);
 		Ok(bank)
+	}
+}
+
+impl DecoratedPage {
+	/// REturns the memory bloc of written byte
+	pub fn binary_bloc(&self) -> &[u8] {
+
+		if let Some(start) = &self.page_information().startadr {
+			let stop = self.page_information().maxadr as usize;
+			&self.page()[(*start as usize)..=stop]
+
+		} else {
+			&self.page()[..0]
+		}
+
 	}
 }
 
 impl DecoratedPages {
 
+	pub fn selected_index(&self) -> Option<usize> {
+		self.selected_index.clone()
+	}
 
 	pub fn selected_written_bytes(& self) -> Option<& BitVec> {
 		self.selected_index.as_ref()

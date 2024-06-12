@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_tokens::symbols::PhysicalAddress;
+use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
 use cpclib_tokens::ExprResult;
 
 use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
@@ -92,7 +92,7 @@ impl ListingOutput {
             current_first_address: 0,
             current_address_kind: AddressKind::None,
             crunched_section_counter: 0,
-            current_physical_address: PhysicalAddress::new(0, 0),
+            current_physical_address: MemoryPhysicalAddress::new(0, 0).into(),
             current_token_kind: TokenKind::Hidden,
             deferred_for_line: Default::default(),
             counter_update: Vec::new()
@@ -169,7 +169,12 @@ impl ListingOutput {
                 Some(format!(
                     "{:04X} {:05X} {l}",
                     self.current_first_address,
-                    self.current_physical_address.offset_in_cpc()
+                    match self.current_physical_address {
+                        PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
+                        PhysicalAddress::Bank(adr) => adr.address() as _,
+                        PhysicalAddress::Cpr(adr) => adr.address() as _,
+                    }
+                   
                 ))
             },
             TokenKind::Set(label) => {
@@ -311,7 +316,11 @@ impl ListingOutput {
             };
 
             // Physical address is only printed if it differs from the code address
-            let offset = self.current_physical_address.offset_in_cpc();
+            let offset = match self.current_physical_address {
+                PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
+                PhysicalAddress::Bank(adr) => adr.address() as _,
+                PhysicalAddress::Cpr(adr) => adr.address() as _,
+            };
             let phys_addr_representation =
                 if current_inner_line.is_none() || offset == self.current_first_address {
                     "      ".to_owned()

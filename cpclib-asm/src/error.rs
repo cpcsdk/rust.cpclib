@@ -12,13 +12,13 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
-use cpclib_tokens::symbols::{Symbol, SymbolError};
+use cpclib_tokens::symbols::{PhysicalAddress, Symbol, SymbolError};
 use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::preamble::{LocatedListing, SourceString, Z80ParserError, Z80ParserErrorKind};
-use crate::{PhysicalAddress, Z80Span};
+use crate::{Z80Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
@@ -479,11 +479,9 @@ impl AssemblerError {
             AssemblerError::OverrideMemory(address, count) => {
                 write!(
                     f,
-                    "Override {} bytes at 0x{:X} (0x{:X} in page {})",
+                    "Override {} bytes at {}",
                     *count,
-                    address.address(),
-                    address.offset_in_page(),
-                    address.page()
+                    address
                 )
             },
             AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {}", msg),
@@ -522,12 +520,11 @@ impl AssemblerError {
             AssemblerError::OutputExceedsLimits(address, limit) => {
                 write!(
                     f,
-                    "Code  at 0x{:X} (0x{:X} in page {}) exceeds limits of 0x{:X}",
-                    address.address(),
-                    address.offset_in_page(),
-                    address.page(),
+                    "Code  at {} exceeds limits of 0x{:X}",
+                    address,
                     limit
                 )
+                
             },
             AssemblerError::OutputAlreadyExceedsLimits(limit) => {
                 write!(f, "Code  already exceeds limits of 0x{:X}", limit)

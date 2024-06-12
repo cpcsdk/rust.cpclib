@@ -12,7 +12,7 @@ use super::banks::DecoratedPages;
 #[derive(Clone, Debug)]
 pub struct CprAssembler{
 	pages: DecoratedPages,
-	codes: Vec<String>
+	codes: Vec<(u8, String)>
 }
 
 
@@ -35,8 +35,14 @@ impl TryInto<Cpr> for &CprAssembler {
 
 		for (code, page) in  self.codes.iter().zip(self.pages.pages.iter()) {
 
-			let bank: Bank = page.try_into()?;
-			let riff_code = RiffCode::from(code.as_str());
+			let bank: Bank = page.try_into()
+				.map_err(|e: AssemblerError| {
+					dbg!(&page.1);
+					AssemblerError::AssemblingError { msg: format!("Error when building CPR bloc {}. {}",
+				code.1, e.to_string()
+			) }
+			})?;
+			let riff_code = RiffCode::from(code.1.as_str());
 			let riff = RiffChunk::new(riff_code, bank.into());
 			let chunk: CartridgeBank = riff.try_into().unwrap();
 			chunks.push(chunk);	
@@ -50,8 +56,8 @@ impl TryInto<Cpr> for &CprAssembler {
 impl CprAssembler {
 
 
-	pub fn build_cpr(&self) -> Cpr {
-		todo!()
+	pub fn build_cpr(&self) -> Result<Cpr, AssemblerError> {
+		self.try_into()
 	}
 
 
@@ -98,7 +104,7 @@ impl CprAssembler {
 
 		assert!(self.code_to_index(bank_number).is_none()); // TODO raise an error
 		self.pages.add_new_and_select();
-		self.codes.push(code);
+		self.codes.push((bank_number, code));
 	}
 
 	fn number_to_code(bank_number: u8) -> String {
@@ -110,7 +116,12 @@ impl CprAssembler {
 	fn code_to_index(&self, bank_number: u8) -> Option<usize> {
 		let code = Self::number_to_code(bank_number);
 		self.codes.iter()
-			.position(|c| c == &code)
+			.position(|c| &c.1 == &code)
+	}
+
+	pub fn selected_bloc(&self) -> Option<u8> {
+		self.pages.selected_index()
+			.map(|idx| self.codes[idx].0)
 	}
 
 	pub fn get_byte(&self, address: u16) -> Option<u8> {
@@ -122,8 +133,14 @@ impl CprAssembler {
 		// update the page limit to unsure that 16kb is used at max
 
 		if let Some(first) = self.pages.selected_active_page_info().unwrap().startadr.clone() {
-			let max = (first as u32 + 0x4000 - 1).max(0xffff) as u16;
-			self.pages.selected_active_page_info_mut().unwrap().set_limit(max)?;
+			let max = (first as u32 + 0x4000).min(0xffff) as u16;
+			if max > self.pages.selected_active_page_info().unwrap().limit {
+				dbg!(max, self.pages.selected_active_page_info());
+				todo!()
+			}
+			else {
+				self.pages.selected_active_page_info_mut().unwrap().set_limit(max)?;
+			}
 		}
 		
 		self.pages.set_byte(address, byte);

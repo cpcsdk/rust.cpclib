@@ -75,7 +75,7 @@ impl SaveCommand {
 
         //      eprintln!("Save from 0x{:X} for a size 0x{:X}", &from, &size);
 
-        let data = env.memory(from as _, size as _);
+        let data = env.get_memory(from as _, size as _);
 
         // Add the header if any
         let object: either::Either<Vec<u8>, AmsdosFile> = match dbg!(self.save_type) {

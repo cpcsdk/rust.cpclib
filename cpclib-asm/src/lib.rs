@@ -85,7 +85,8 @@ pub struct AssemblingOptions {
     snapshot_model: Option<Snapshot>,
     amsdos_behavior: AmsdosAddBehavior,
     enable_warnings: bool,
-    force_void: bool
+    force_void: bool,
+    debug: bool
 }
 
 impl Default for AssemblingOptions {
@@ -101,7 +102,8 @@ impl Default for AssemblingOptions {
             snapshot_model: None,
             amsdos_behavior: AmsdosAddBehavior::FailIfPresent,
             enable_warnings: true,
-            force_void: true
+            force_void: true,
+            debug: false
         }
     }
 }
@@ -176,8 +178,13 @@ impl AssemblingOptions {
     }
 
     pub fn debug(&self) -> bool {
-        true
+        self.debug
     }
+
+    pub fn set_debug(&mut self, debug: bool)  {
+        self.debug = debug;
+    }
+
 
     pub fn snapshot_model(&self) -> Option<&Snapshot> {
         self.snapshot_model.as_ref()
