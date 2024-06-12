@@ -173,6 +173,10 @@ impl AssemblingOptions {
         self.get_flag(AssemblingOptionFlags::CaseSensitive)
     }
 
+    pub fn debug(&self) -> bool {
+        true
+    }
+
     pub fn snapshot_model(&self) -> Option<&Snapshot> {
         self.snapshot_model.as_ref()
     }

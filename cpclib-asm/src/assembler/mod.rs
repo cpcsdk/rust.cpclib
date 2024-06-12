@@ -150,15 +150,14 @@ impl EnvOptions {
 
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
-    if idx < -127 || idx > 128 {
-        // Err(format!("Index error {}", idx).into())
+  //  if idx < -127 || idx > 128 {
+    if idx < -128 || idx > 127 {
+        // TODO raise a warning to get the line/file
         eprintln!("Index error {}", idx);
     }
-    // else {
     let val = (idx & 0xFF) as u8;
     add_byte(m, val);
     Ok(())
-    // }
 }
 
 fn add_byte(m: &mut Bytes, b: u8) {
@@ -897,6 +896,12 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
+
+        if self.options().assemble_options().debug() {
+            eprintln!("Start a new pass {}", self.pass());
+            self.handle_print();
+        }
+
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
         let mut can_change_request = true;
