@@ -600,7 +600,10 @@ impl ListingElement for Token {
     }
     
     fn is_buildcpr(&self) -> bool {
-        todo!()
+        match self {
+            Self::BuildCpr => true,
+            _ => false
+        }
     }
 }
 
