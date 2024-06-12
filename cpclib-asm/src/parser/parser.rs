@@ -4859,32 +4859,60 @@ pub fn parse_label(
     move |input: &mut InnerZ80Span| {
         let start = input.checkpoint();
 
-        // Finger crosses that no allocation is done there
-        let obtained_label = ((
-            opt(alt(("::", "@", "."))).value(()),
-            alt((
-                one_of((
-                    b'a'..=b'z',
-                    b'A'..=b'Z',
-                    b'_', 
-                    b'#', b'\'' // orgams additions
-                )).value(()),
-                delimited('{', expr, '}').value(())
-            )),
-            my_many0_nocollect(alt((
-                take_while(1..,
-                    (b'a'..=b'z',
-                    b'A'..=b'Z',
-                    b'0'..=b'9',
-                    b'_', 
-                    b'#', b'\'' // orgams additions
-                )
-                  ).value(()),
-                ".".value(()),
-                delimited('{', opt(expr), '}').value(())
-            )))
-        )).recognize()
-        .parse_next(input)?;
+        let is_orgams = input.state.options().is_orgams();
+        let obtained_label = if is_orgams {
+            ((
+                opt(alt(("::", "@", "."))).value(()),
+                alt((
+                    one_of((
+                        b'a'..=b'z',
+                        b'A'..=b'Z',
+                        b'_', 
+                        b'#', b'\'' // orgams additions
+                    )).value(()),
+                    delimited('{', expr, '}').value(())
+                )),
+                my_many0_nocollect(alt((
+                    take_while(1..,
+                        (b'a'..=b'z',
+                        b'A'..=b'Z',
+                        b'0'..=b'9',
+                        b'_', 
+                        b'#', b'\'' // orgams additions
+                    )
+                      ).value(()),
+                    ".".value(()),
+                    delimited('{', opt(expr), '}').value(())
+                )))
+            )).recognize()
+            .parse_next(input)?
+        } else {
+            ((
+                opt(alt(("::", "@", "."))).value(()),
+                alt((
+                    one_of((
+                        b'a'..=b'z',
+                        b'A'..=b'Z',
+                        b'_', 
+                    )).value(()),
+                    delimited('{', expr, '}').value(())
+                )),
+                my_many0_nocollect(alt((
+                    take_while(1..,
+                        (b'a'..=b'z',
+                        b'A'..=b'Z',
+                        b'0'..=b'9',
+                        b'_', 
+                    )
+                      ).value(()),
+                    ".".value(()),
+                    delimited('{', opt(expr), '}').value(())
+                )))
+            )).recognize()
+            .parse_next(input)?
+        };
+
+
 
 /*
         // fail to parse a label when it is 100% sure it corresponds to  a macro call

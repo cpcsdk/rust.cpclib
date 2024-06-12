@@ -386,6 +386,7 @@ impl ParserOptions {
         self
     }
 
+    #[inline(always)]
     pub fn is_orgams(&self) -> bool {
         self.assembler_flavor == AssemblerFlavor::Orgams
     }
@@ -504,7 +505,7 @@ impl ParserContext {
         unsafe { std::mem::transmute(self.source.deref()) }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn options(&self) -> &ParserOptions {
         &self.options
     }
