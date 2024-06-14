@@ -1,7 +1,9 @@
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use cpclib_disc::amsdos::AmsdosHeader;
 use either::Either;
 
 use super::embedded::EmbeddedFiles;
@@ -29,10 +31,40 @@ pub fn get_filename(
     })
 }
 
-/// Load a file
+
+
+
+/// Load a file and remove header if any
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename
-pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
+pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
+    // Get the file content
+    let data = load_binary_raw(fname, options)?;
+    let mut data = VecDeque::from(data);
+
+    // get a slice on the data to ease its cut
+    let header = if data.len() >= 128 {
+        // by construction there is only one slice
+        let header = AmsdosHeader::from_buffer(data.as_slices().0);
+        
+        if header.represent_a_valid_file() {
+            data.drain(..128);
+            Some(header)
+        }
+        else {
+            None
+        }
+    } else {
+        None
+    };
+
+
+    Ok((data, header))
+}
+
+/// Load a file and keep the header if any
+pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
+
     // Retreive fname
     let fname = match &fname {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,
@@ -49,6 +81,7 @@ pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, Ass
         None
     };
 
+    // Get the content from the inner files or the disc
     let content = if fname_repr.starts_with("inner://") {
         // handle inner file
         EmbeddedFiles::get(fname_repr)
@@ -72,6 +105,7 @@ pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, Ass
                 msg: format!("Unable to read {:?}. {}", fname, e.to_string())
             }
         })?;
+
         content
     };
 
@@ -89,7 +123,10 @@ pub fn read_source<P: AsRef<Path>>(
 ) -> Result<String, AssemblerError> {
     let fname = fname.as_ref();
 
-    let content = load_binary(Either::Left(fname), options)?;
+    let (mut content, header_removed) = load_binary(Either::Left(fname), options)?;
+    assert!(header_removed.is_none());
+
+    let content = content.make_contiguous();
     // handle_source_encoding(fname.to_str().unwrap(), &content)
 
     Ok(String::from_utf8_lossy(&content).into_owned())

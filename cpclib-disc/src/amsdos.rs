@@ -1521,6 +1521,7 @@ impl std::fmt::Debug for AmsdosHeader {
         writeln!(f, "Loading address 0x{:x}", self.loading_address())?;
         writeln!(f, "Execution address 0x{:x}", self.execution_address())?;
         writeln!(f, "Checksum 0x{:x}", self.checksum())?;
+        writeln!(f, "Is valid {}", self.represent_a_valid_file())?;
         Ok(())
     }
 }
@@ -1729,7 +1730,10 @@ impl AmsdosHeader {
 
     /// Checks if the data correcpons to a file
     pub fn represent_a_valid_file(&self) -> bool {
-        self.is_checksum_valid() && self.amsdos_filename().is_ok()
+
+        self.is_checksum_valid() && 
+        self.checksum() != 0  && 
+        self.amsdos_filename().is_ok()
     }
 
     pub fn as_bytes(&self) -> &[u8; 128] {

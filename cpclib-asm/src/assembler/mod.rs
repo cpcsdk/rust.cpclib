@@ -1401,11 +1401,11 @@ impl Env {
             }
         }
 
-        let addr = self.logical_to_physical_address(self.logical_code_address());
-        self.symbols.set_current_address(addr);
+        let code_addr = self.logical_to_physical_address(self.logical_code_address());
+        let output_addr = self.logical_to_physical_address(self.logical_output_address());
 
-        let addr = self.logical_to_physical_address(self.logical_output_address());
-        self.symbols.set_current_output_address(addr);
+        self.symbols.set_current_address(code_addr);
+        self.symbols.set_current_output_address(output_addr);
     }
 
     /// Produce the memory for the required limits
@@ -1468,16 +1468,16 @@ impl Env {
         }
 
         // dbg!(self.output_address(), &v);
-        let physical_address: PhysicalAddress = self.physical_output_address();
+        let physical_output_address: PhysicalAddress = self.physical_output_address();
 
         // Check if it is legal to output the value
-        if self.logical_code_address() > self.limit_address()
-            || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+        //if self.logical_code_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+        if self.physical_output_address().address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
         {
             // dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
 
             return Err(AssemblerError::OutputExceedsLimits(
-                physical_address,
+                physical_output_address,
                 self.limit_address() as _
             ));
         }
@@ -1503,7 +1503,7 @@ impl Env {
             self.active_page_info_mut().startadr = Some(self.logical_output_address());
         };
 
-        let abstract_address = physical_address.offset_in_cpc();
+        let abstract_address = physical_output_address.offset_in_cpc();
         let already_used = if let Some(access) = self.written_bytes()
             .get(abstract_address as usize)
         {
@@ -1514,7 +1514,7 @@ impl Env {
         };
 
         let r#override = if already_used {
-            let r#override = AssemblerWarning::OverrideMemory(physical_address.clone(), 1);
+            let r#override = AssemblerWarning::OverrideMemory(physical_output_address.clone(), 1);
             if self.allow_memory_override() {
                 self.add_warning(r#override);
                 true
@@ -1530,11 +1530,11 @@ impl Env {
         if self.free_banks.selected_index.is_none() {
             if let Some(section) = &self.current_section {
                 let section = section.read().unwrap();
-                if !section.contains(physical_address.address()) {
+                if !section.contains(physical_output_address.address()) {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!(
                             "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
-                            physical_address.address(),
+                            physical_output_address.address(),
                             section.start,
                             section.stop
                         )
@@ -1788,23 +1788,23 @@ impl Env {
             self.resolve_expr_must_never_fail(address)?.int()?
         };
 
-        let mut output_adr = if address2.is_some() {
-            self.resolve_expr_must_never_fail(address2.unwrap())?
+        let output_adr = if let Some(address2) = address2 {
+            if address2.is_label_value("$") {
+                self.logical_output_address() as i32 // XXX here is must be code not output. I do not understand ...
+            } else {
+                self.resolve_expr_must_never_fail(address2)?
                 .int()?
+            }
         }
         else {
             code_adr.clone()
         };
 
-
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
             commands.store_org(code_adr as _, output_adr as _);
         }
 
-
         self.visit_org_set_arguments(code_adr as _, output_adr as _)
-
-
     }
 
     pub fn visit_org_set_arguments(
@@ -1854,6 +1854,7 @@ impl Env {
                 )
             });
         }
+
         Ok(())
     }
 
@@ -2026,7 +2027,7 @@ impl Env {
                 if self.options().assemble_options().force_void() {
                     return Err(message);
                 } else {
-                    self.add_warning(message);
+                    //self.add_warning(message);
                 }
 
 
@@ -3251,6 +3252,7 @@ pub fn visit_located_token(
     outer_token: &LocatedToken,
     env: &mut Env
 ) -> Result<(), AssemblerError> {
+
     let nb_warnings = env.warnings.len();
 
     // cheat on the lifetime of tokens
@@ -4069,7 +4071,6 @@ impl Env {
 
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
-            dbg!(&w);
             if let AssemblerError::AssemblingError { msg } = w {
                 // nothing to do 
             } else {
@@ -4183,7 +4184,6 @@ impl Env {
         // self.symbols_mut().set_current_label(label)?;
         // }
         self.symbols_mut().assign_symbol_to_value(label, value)?;
-
         Ok(())
     }
 }

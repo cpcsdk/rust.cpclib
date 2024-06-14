@@ -1,6 +1,6 @@
 use std::{fmt::{write, Display}, io::Write, ops::Deref};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Eq)]
 pub struct RiffCode(pub(crate) [u8; 4]);
 
 

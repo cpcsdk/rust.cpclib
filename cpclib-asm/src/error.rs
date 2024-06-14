@@ -520,7 +520,7 @@ impl AssemblerError {
             AssemblerError::OutputExceedsLimits(address, limit) => {
                 write!(
                     f,
-                    "Code  at {} exceeds limits of 0x{:X}",
+                    "Code at {} exceeds limits of 0x{:X}",
                     address,
                     limit
                 )

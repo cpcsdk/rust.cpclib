@@ -37,7 +37,6 @@ impl TryInto<Cpr> for &CprAssembler {
 
 			let bank: Bank = page.try_into()
 				.map_err(|e: AssemblerError| {
-					dbg!(&page.1);
 					AssemblerError::AssemblingError { msg: format!("Error when building CPR bloc {}. {}",
 				code.1, e.to_string()
 			) }
@@ -47,6 +46,8 @@ impl TryInto<Cpr> for &CprAssembler {
 			let chunk: CartridgeBank = riff.try_into().unwrap();
 			chunks.push(chunk);	
 		}
+
+		chunks.sort_by_key(|bloc| bloc.code().clone());
 
 		Ok(chunks.into())
 	}

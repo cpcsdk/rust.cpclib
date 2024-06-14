@@ -8,7 +8,7 @@ use std::sync::Arc;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
-use cpclib_disc::amsdos::AmsdosHeader;
+use cpclib_disc::amsdos::{AmsdosFileType, AmsdosHeader};
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ExprElement, ListingElement,
@@ -846,7 +846,8 @@ where
     /// Due to the state management, the signature requires mutability
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let possible_span = self.possible_span().cloned();
-        let mut really_does_the_job = move || {
+
+        let mut really_does_the_job = move |possible_span: Option<&Z80Span>| {
             let deferred = self.token.defer_listing_output();
             if !deferred {
                 // dbg!(&self.token, deferred);
@@ -985,29 +986,31 @@ where
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file
 
-                            let data =
+                            let (data, header) =
                                 load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
-                            // get a slice on the data to ease its cut
-                            let mut data = &data[..];
 
-                            if data.len() >= 128 {
-                                let header = AmsdosHeader::from_buffer(&data);
-                                let _info = Some(if header.represent_a_valid_file() {
-                                    dbg!("TODO add a message explainng that header has been removed for", &fname);
-                                    data = &data[128..];
+                            if let Some(header) = header {
+                                let ams_fname = header.amsdos_filename()
+                                    .map(|ams_fname| ams_fname.filename_with_user())
+                                    .unwrap_or_else(|_| "<WRONG FILENAME>".to_owned());
+                                let txt = match header.file_type() {
+                                    Ok(AmsdosFileType::Binary) => format!{"{ams_fname} BINARY  L:{} X:{}", header.loading_address(), header.execution_address()},
+                                    Ok(AmsdosFileType::Protected) => format!{"{ams_fname} PROTECTED L:{} X:{}", header.loading_address(), header.execution_address()},
+                                    Ok(AmsdosFileType::Basic) => format!("{ams_fname} BASIC"),
+                                    Err(_) => format!("{ams_fname} <WRONG FILETYPE>"),
+                                };
 
-                                    AssemblerError::AssemblingError{
-                                    msg: format!("{:?} is a valid Amsdos file. It is included without its header.", fname)
-                                }
-                                }
-                                else {
-                                    AssemblerError::AssemblingError{
-                                            msg: format!("{:?} does not contain a valid Amsdos file. It is fully included.", fname)
-                                        }
-                                });
+                                let warning =  AssemblerError::AssemblingError { msg: format!("Header has been removed for {txt}")}; 
+                                let warning = if let  Some(span) = possible_span {
+                                    warning.locate(span.clone())
+                                } else {
+                                    warning
+                                };
+    
+                                env.add_warning(warning)
                             }
 
-                            contents.try_insert(fname.clone(), data.to_vec()).unwrap()
+                            contents.try_insert(fname.clone(), data.into()).unwrap()
                         }
                         else {
                             contents.get(&fname).unwrap()
@@ -1280,7 +1283,7 @@ where
             Ok(res)
         };
 
-        really_does_the_job().map_err(|e| {
+        really_does_the_job(possible_span.as_ref()).map_err(|e| {
             let e = match possible_span {
                 Some(span) => e.locate(span.clone()),
                 None => e
