@@ -1,7 +1,44 @@
 use std::{fmt::Display, fs::File, hash::{DefaultHasher, Hash, Hasher}, io::{Read, Write}, ops::Deref, path::Path};
 
-use cpclib_common::{itertools::Itertools, riff::{RiffChunk, RiffCode, RiffLen}};
+use cpclib_common::{itertools::Itertools, riff::{RiffChunk, RiffCode, RiffLen}, winnow::Parser};
 
+const CODE_BANKS: [&'static str; 32] = [
+    "cb00",
+    "cb01",
+    "cb02",
+    "cb03",
+    "cb04",
+    "cb05",
+    "cb06",
+    "cb07",
+    "cb08",
+    "cb09",
+
+    "cb10",
+    "cb11",
+    "cb12",
+    "cb13",
+    "cb14",
+    "cb15",
+    "cb16",
+    "cb17",
+    "cb18",
+    "cb19",
+
+    "cb20",
+    "cb21",
+    "cb22",
+    "cb23",
+    "cb24",
+    "cb25",
+    "cb26",
+    "cb27",
+    "cb28",
+    "cb29",
+
+    "cb30",
+    "cb31",
+];
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct CartridgeBank(RiffChunk);
@@ -45,19 +82,26 @@ impl CartridgeBank {
 
         let data = vec![0; 0x4000];
         let code = Self::code_for(nb);
-        let chunk = RiffChunk::new(code.as_str(), data);
+        let chunk = RiffChunk::new(code, data);
         chunk.try_into().unwrap()
     }
 
+    pub fn number(&self) -> u8 {
+        Self::nb_for_code(self.code().as_str())
+    }
 
-    pub fn code_for(nb: u8) -> String {
-        format!("cb{:02}", nb)
+    pub fn code_for(nb: u8) -> &'static str {
+        CODE_BANKS[nb as usize]
+    }
+    
+    pub fn nb_for_code(code: &str) -> u8 {
+        let idx = CODE_BANKS.iter().position(|&c| c == code).unwrap();
+        idx as u8
     }
 
 	pub fn set_byte(&mut self, address: u16, byte: u8) {
         self.0.set_byte(address, byte)
     }
-
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -92,9 +136,21 @@ impl Cpr {
         self.banks.get_mut(idx)
     }
 
-    pub fn bank(&self, idx: usize) -> Option<&CartridgeBank> {
+    pub fn bank_at_index(&self, idx: usize) -> Option<&CartridgeBank> {
         self.banks.get(idx)
     }
+
+    pub fn bank_by_num(&self, nb: u8) -> Option<&CartridgeBank> {
+        self.bank_index(nb)
+            .map(|idx| &self.banks[idx])
+    }
+
+    pub fn bank_by_code(&self, code: &RiffCode) -> Option<&CartridgeBank> {
+        self.bank_index(CartridgeBank::nb_for_code(code.as_str()))
+            .map(|idx| &self.banks[idx])
+    }
+
+    
 
     /// The len of a CPR is the len of each bloc + BAMS size
     pub fn len(&self) -> RiffLen {
@@ -111,6 +167,22 @@ impl Cpr {
         // TODO check if it is already present
         self.banks.push(bloc);
     }
+
+    pub fn remove_bank(&mut self, nb: u8) -> Option<CartridgeBank> {
+        if let Some(idx) = self.bank_index(nb) {
+            Some(self.banks.remove(idx))
+        } else {
+            None
+        }
+    }
+
+    fn bank_index(&self, nb: u8) -> Option<usize> {
+        self.banks()
+            .iter()
+            .position(|bank| bank.code().as_str() == CODE_BANKS[nb as usize])
+    }
+
+    
 }
 
 

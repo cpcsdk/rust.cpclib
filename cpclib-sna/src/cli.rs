@@ -81,7 +81,7 @@ fn diff_lines(first: &str, second: &str) -> String {
                 "...".to_string()
             }
         })
-        .unique()
+        .dedup()
         .join("\n")
 }
 
