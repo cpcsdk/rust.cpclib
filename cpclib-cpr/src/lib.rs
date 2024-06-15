@@ -1,6 +1,6 @@
-use std::{fs::File, io::{Read, Write}, ops::Deref, path::Path};
+use std::{fmt::Display, fs::File, hash::{DefaultHasher, Hash, Hasher}, io::{Read, Write}, ops::Deref, path::Path};
 
-use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
+use cpclib_common::{itertools::Itertools, riff::{RiffChunk, RiffCode, RiffLen}};
 
 
 #[derive(PartialEq, Debug, Clone)]
@@ -96,13 +96,14 @@ impl Cpr {
         self.banks.get(idx)
     }
 
+    /// The len of a CPR is the len of each bloc + BAMS size
     pub fn len(&self) -> RiffLen {
         let size: u32 = self.banks.iter()
             .map(|b| 
                 b.code().len() as u32 +
                 b.len().len() as u32 + 
                 b.len().value() )
-            .sum();
+            .sum::<u32>() + 4;
         size.into()
     }
 
@@ -128,7 +129,7 @@ impl Cpr {
     ) -> Result<(), std::io::Error> {
         
         let riff_code: RiffCode = "RIFF".into();
-        let len : RiffLen = (self.len().value() + 4).into();
+        let len : RiffLen = (self.len().value()).into();
         let ams_code: RiffCode = "AMS!".into();
 
         buffer.write_all(riff_code.deref())?;
@@ -201,7 +202,80 @@ impl Cpr {
 }
 
 
+pub struct CartridgeBankInfo<'c> {
+    riff_size: u32,
+    checksum: u64,
+    bank: &'c CartridgeBank,
+}
 
+impl<'c> Display for CartridgeBankInfo<'c> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f, 
+            "Code: {}\nRiff size: {}\nChecksum: {:X}", 
+            self.code().as_str(),
+            self.riff_size,
+            self.checksum
+        )
+    }
+}
+
+impl<'c> From<&'c CartridgeBank> for CartridgeBankInfo<'c> {
+    fn from(bank: &'c CartridgeBank) -> Self {
+        let checksum = {
+            let mut hasher = DefaultHasher::new();
+            bank.deref().data().hash(&mut hasher);
+            hasher.finish()
+        };
+
+        Self {
+            riff_size: bank.len().value(),
+            checksum,
+            bank
+        }
+    }
+}
+
+impl<'c> Deref for CartridgeBankInfo<'c> {
+    type Target = CartridgeBank;
+
+    fn deref(&self) -> &Self::Target {
+        &self.bank
+    }
+}
+
+
+pub struct CprInfo<'c> {
+    banks: Vec<CartridgeBankInfo<'c>>,
+    cpr: &'c Cpr
+}
+
+
+impl<'c> Display for CprInfo<'c> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Cartridge with {} banks", self.cpr.banks().len())?;
+        for (idx, bank) in self.banks.iter().enumerate() {
+            writeln!(f, "# Bank {idx}\n{}", bank)?;
+        }
+        Ok(())
+    }
+}
+
+impl<'c> From<&'c Cpr> for CprInfo<'c> {
+    fn from(cpr: &'c Cpr) -> Self {
+        let banks: Vec<CartridgeBankInfo<'c>> = cpr.banks().iter()
+            .map(|b| b.into())
+            .collect_vec();
+        Self {banks, cpr}
+    }
+}
+
+impl<'c> Deref for CprInfo<'c> {
+    type Target = Cpr;
+    fn deref(&self) -> &Self::Target {
+        &self.cpr
+    }
+}
 #[cfg(test)]
 mod test {
     use crate::CartridgeBank;
