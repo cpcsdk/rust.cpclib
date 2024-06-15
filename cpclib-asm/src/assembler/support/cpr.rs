@@ -105,10 +105,10 @@ impl CprAssembler {
 
 		assert!(self.code_to_index(bank_number).is_none()); // TODO raise an error
 		self.pages.add_new_and_select();
-		self.codes.push((bank_number, code));
+		self.codes.push((bank_number, code.into()));
 	}
 
-	fn number_to_code(bank_number: u8) -> String {
+	fn number_to_code(bank_number: u8) -> &'static str {
 		CartridgeBank::code_for(bank_number)
 	}
 

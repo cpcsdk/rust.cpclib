@@ -1,5 +1,21 @@
 use cpclib_asm::assemble;
 
+
+#[test]
+pub fn assemble_ld_ix_bc() {
+    let code = "
+		ld ix, bc
+	";
+
+    let binary = assemble(code).unwrap();
+
+    assert_eq!(
+        &binary,
+        &[0x06, 0xF5, 0xED, 0x78, 0x1F, 0x30, 0xFB, 0x18, 0xFE]
+    );
+}
+
+
 #[test]
 pub fn assemble_vsync_test() {
     let code = "
