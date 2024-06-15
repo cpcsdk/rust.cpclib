@@ -1565,6 +1565,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-cprcli"
+version = "0.1.0"
+dependencies = [
+ "colored",
+ "cpclib-common",
+ "cpclib-cpr",
+]
+
+[[package]]
 name = "cpclib-crunchers"
 version = "0.7.1"
 dependencies = [

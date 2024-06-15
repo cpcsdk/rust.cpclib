@@ -44,6 +44,10 @@ impl RiffCode {
 		Self(value)
 	}
 
+	pub fn as_str(&self) -> &str {
+		unsafe { std::str::from_utf8_unchecked(&self.0) }
+	}
+
 }
 
 
@@ -166,8 +170,6 @@ impl RiffChunk {
         let ckid: RiffCode = file_content.drain(0..4).as_slice().into();
         let cksz: RiffLen = file_content.drain(0..4).as_slice().into();
 
-
-		dbg!(ckid.to_string(), cksz.value());
         // read the appropriate number of bytes
         let data = if cksz.value() > 0 {
 			file_content.drain(0..cksz.value() as _).as_slice().to_vec()

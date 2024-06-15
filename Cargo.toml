@@ -21,7 +21,7 @@ members = [
   "cpclib-imgconverter",
   "cpclib-visual-basm",
   "cpclib-visual-bndbuild",
-  "cpclib-wasm", 
+  "cpclib-wasm", "cpclib-cprcli", 
 ]
 
 resolver = "2"

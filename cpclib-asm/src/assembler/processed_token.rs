@@ -21,6 +21,7 @@ use super::control::ControlOutputStore;
 use super::file::{get_filename, load_binary, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
+use super::AssemblerWarning;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
@@ -1000,7 +1001,7 @@ where
                                     Err(_) => format!("{ams_fname} <WRONG FILETYPE>"),
                                 };
 
-                                let warning =  AssemblerError::AssemblingError { msg: format!("Header has been removed for {txt}")}; 
+                                let warning =  AssemblerWarning::AssemblingError { msg: format!("Header has been removed for {txt}")}; 
                                 let warning = if let  Some(span) = possible_span {
                                     warning.locate(span.clone())
                                 } else {

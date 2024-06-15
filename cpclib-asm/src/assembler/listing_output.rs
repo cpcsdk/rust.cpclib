@@ -380,7 +380,7 @@ impl ListingOutput {
         let ctx = &token.span().state;
         let fname = ctx
             .filename()
-            .map(|p| p.as_os_str().to_str().unwrap().to_string())
+            .map(|p| p.as_os_str().to_str().unwrap_or("<NO FNAME>").to_string())
             .or_else(|| ctx.context_name().map(|s| s.to_owned()));
 
         match fname {
