@@ -354,7 +354,7 @@ mod test {
 
     #[test]
     fn test_cartrdige_code() {
-        assert_eq!("cb00", CartridgeBank::code_for(0).as_str());
-        assert_eq!("cb31", CartridgeBank::code_for(31).as_str());
+        assert_eq!("cb00", CartridgeBank::code_for(0));
+        assert_eq!("cb31", CartridgeBank::code_for(31));
     }
 }
