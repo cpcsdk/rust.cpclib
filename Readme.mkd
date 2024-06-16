@@ -1,4 +1,19 @@
 # cpclib
+
+
+ ## Success stories
+
+ Several demos have been released using this toolchain. However they may not build with the very last version due to its evolution.
+
+ -  J'AI PÉ-TÉLÉCRAN (2024) <https://www.pouet.net/prod.php?which=96575>, <https://github.com/rgiot/demo.revision2024.etchy>
+ -  Come Join Us (2024) <https://www.pouet.net/prod.php?which=96537>
+ -  Can Robots Take Control? (2021) <https://www.pouet.net/prod.php?which=88554>
+
+It is also able to build the (potentially closed, with minimal modifications) sources of
+
+ - CRTC3 (2017) <https://www.pouet.net/prod.php?which=72279>
+ - Goldorak <https://github.com/tbressel/goldorak-gx4000-beta/tree/master>
+ 
 ## Aim
 
 `cpclib` is a library that aims at helping to develop Amstrad CPC demos.
@@ -28,12 +43,3 @@ There are more are less able to do:
  Documentation is available at <https://cpcsdk.github.io/rust.cpclib/>
 
  **WARNING** the windows toolchain has to be `nightly-x86_64-pc-windows-gnu`
-
- ## Success stories
-
- Several demos have been released using this toolchain. However they may not build with the very last version due to its evolution.
-
- -  J'AI PÉ-TÉLÉCRAN (2024) <https://www.pouet.net/prod.php?which=96575>, <https://github.com/rgiot/demo.revision2024.etchy>
- -  Come Join Us (2024) <https://www.pouet.net/prod.php?which=96537>
- -  Can Robots Take Control? (2021) <https://www.pouet.net/prod.php?which=88554>
-
