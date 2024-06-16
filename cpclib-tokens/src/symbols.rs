@@ -23,6 +23,12 @@ pub enum PhysicalAddress {
     Cpr(CprPhysicalAddress)
 }
 
+
+impl From<u16> for PhysicalAddress {
+    fn from(value: u16) -> Self {
+        Self::Memory(MemoryPhysicalAddress::new(value, 0xc0))
+    }
+}
 impl Display for PhysicalAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

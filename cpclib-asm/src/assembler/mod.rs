@@ -2246,7 +2246,9 @@ impl Env {
             None => 0
         };
 
-        while self.logical_output_address() as u16 % boundary != 0 {
+        const OUTPUT_ALIGN: bool = false; // TODO programmaticall change it
+
+        while if OUTPUT_ALIGN {self.logical_output_address()} else {self.logical_code_address()}  as u16 % boundary != 0 {
             self.output_byte(fill)?;
         }
 

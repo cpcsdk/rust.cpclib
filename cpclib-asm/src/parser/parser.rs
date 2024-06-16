@@ -5623,7 +5623,7 @@ pub fn comp(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
         parse_oper(term, "-", BinaryOperation::Sub),
         parse_oper(term, "&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
         parse_oper(term, "AND", BinaryOperation::BinaryAnd),
-        parse_oper(term, "|", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with || */
+        parse_oper(term, "|", BinaryOperation::BinaryOr), /* TODO check if it works and not compete with || */
         parse_oper(term, "OR", BinaryOperation::BinaryOr),
         parse_oper(term, "^", BinaryOperation::BinaryXor), /* TODO check if it works and not compete with ^^ */
         parse_oper(term, "XOR", BinaryOperation::BinaryXor)
@@ -6522,6 +6522,16 @@ endif"
         assert!(dbg!(parse_test(expr_list, "1 ,2")).is_ok());
         assert!(dbg!(parse_test(expr_list, "1 , 2")).is_ok());
         assert!(dbg!(parse_test(expr_list, "1,2,")).is_ok());
+    }
+
+    #[test]
+    fn test_bitwise_or(){
+        let res = dbg!(parse_test(expr, "1|2"));
+        let res = res.as_ref().unwrap();
+        match res {
+            Expr::BinaryOperation(BinaryOperation::BinaryOr, ..) => {},
+            _ => panic!("Wrong operation")
+        }
     }
 
     #[test]

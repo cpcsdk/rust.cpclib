@@ -11,7 +11,23 @@ pub fn assemble_ld_ix_bc() {
 
     assert_eq!(
         &binary,
-        &[0x06, 0xF5, 0xED, 0x78, 0x1F, 0x30, 0xFB, 0x18, 0xFE]
+        &[0xdd, 0x69, 0xdd, 0x60]
+    );
+}
+
+
+
+#[test]
+pub fn test_binary_or_operation() {
+    let code = "
+		db 0b00010000 | 0b10000000 
+	";
+
+    let binary = assemble(code).unwrap();
+
+    assert_eq!(
+        &binary,
+        &[0x70]
     );
 }
 
