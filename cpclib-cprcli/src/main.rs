@@ -4,8 +4,7 @@ use std::path::PathBuf;
 
 use commands::Command;
 use cpclib_common::clap::builder::ValueParser;
-use cpclib_common::clap::{self, value_parser, Arg, ArgAction};
-use cpclib_common::itertools::Itertools;
+use cpclib_common::clap::{self, Arg, ArgAction};
 use cpclib_cpr::Cpr;
 
 mod commands;

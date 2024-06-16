@@ -1,4 +1,3 @@
-use std::ops::Deref;
 
 use cpclib_common::bitvec::vec::BitVec;
 use cpclib_common::riff::{RiffChunk, RiffCode};

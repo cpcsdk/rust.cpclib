@@ -6,7 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::bitsets;
-use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
+use cpclib_common::riff::{RiffChunk, RiffCode};
 use num_enum::TryFromPrimitive;
 
 mod chunks;
