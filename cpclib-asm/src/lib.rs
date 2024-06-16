@@ -141,7 +141,6 @@ impl AssemblingOptions {
         self
     }
 
-
     /// Specify if the assembler must be case sensitive or not
     pub fn set_case_sensitive(&mut self, val: bool) -> &mut Self {
         self.set_flag(AssemblingOptionFlags::CaseSensitive, val);
@@ -181,10 +180,9 @@ impl AssemblingOptions {
         self.debug
     }
 
-    pub fn set_debug(&mut self, debug: bool)  {
+    pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
     }
-
 
     pub fn snapshot_model(&self) -> Option<&Snapshot> {
         self.snapshot_model.as_ref()
@@ -194,16 +192,14 @@ impl AssemblingOptions {
         self.amsdos_behavior
     }
 
-
-    pub fn force_void(&self)  -> bool {
+    pub fn force_void(&self) -> bool {
         self.force_void
     }
 
-    pub fn set_force_void(&mut self, force_void: bool)  -> &mut Self {
+    pub fn set_force_void(&mut self, force_void: bool) -> &mut Self {
         self.force_void = force_void;
         self
     }
-
 
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
         &mut self,

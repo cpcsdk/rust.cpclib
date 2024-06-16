@@ -12,9 +12,8 @@ pub mod save_command;
 pub mod section;
 pub mod stable_ticker;
 pub mod string;
-pub mod symbols_output;
 pub mod support;
-
+pub mod symbols_output;
 
 pub mod embedded;
 pub mod processed_token;
@@ -40,9 +39,9 @@ use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 use processed_token::build_processed_token;
-use support::sna::SnaAssembler;
 use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
+use support::sna::SnaAssembler;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -64,8 +63,6 @@ use crate::save_command::*;
 use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, MemoryPhysicalAddress};
-
-
 
 #[derive(Clone, Copy, PartialEq)]
 enum OutputKind {
@@ -151,7 +148,7 @@ impl EnvOptions {
 
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
-  //  if idx < -127 || idx > 128 {
+    //  if idx < -127 || idx > 128 {
     if idx < -128 || idx > 127 {
         // TODO raise a warning to get the line/file
         eprintln!("Index error {}", idx);
@@ -354,7 +351,6 @@ impl CharsetEncoding {
 pub struct Env {
     /// Lookup directory when searching for a file. Must be pushed at each import directive and pop after
     lookup_directory_stack: Vec<PathBuf>,
-
 
     /// Current pass
     pass: AssemblingPass,
@@ -777,7 +773,6 @@ impl Env {
     }
 }
 
-
 /// Handle the file search relatively to the current file
 impl Env {
     fn set_current_working_directory<P: Into<PathBuf>>(&mut self, p: P) {
@@ -795,8 +790,7 @@ impl Env {
     }
 
     pub fn get_current_working_directory(&self) -> Option<&Path> {
-        self.lookup_directory_stack.last()
-            .map(|p| p.as_path())
+        self.lookup_directory_stack.last().map(|p| p.as_path())
     }
 
     pub fn has_current_working_directory(&self) -> bool {
@@ -843,10 +837,12 @@ impl Env {
     fn output_kind(&self) -> OutputKind {
         if self.cpr.is_some() {
             OutputKind::Cpr
-        } else {
+        }
+        else {
             if self.free_banks.selected_index.is_some() {
                 OutputKind::FreeBank
-            } else {
+            }
+            else {
                 OutputKind::Snapshot
             }
         }
@@ -897,11 +893,13 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
-
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
             self.handle_print();
-            self.generate_symbols_output(std::io::stderr().borrow_mut(), SymbolOutputFormat::Winape);
+            self.generate_symbols_output(
+                std::io::stderr().borrow_mut(),
+                SymbolOutputFormat::Winape
+            );
         }
 
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
@@ -1118,7 +1116,6 @@ impl Env {
 
         let mut assert_failures: Option<AssemblerError> = None;
 
-
         let mut handle_page = |page: &PageInformation| {
             let mut l_errors = page.collect_assert_failure();
             match (&mut assert_failures, &mut l_errors) {
@@ -1148,7 +1145,6 @@ impl Env {
             handle_page(page);
         }
 
-
         if let Some(cpr) = self.cpr.as_ref() {
             for page in cpr.page_infos() {
                 handle_page(page)
@@ -1177,8 +1173,6 @@ impl Env {
         let mut writer = std::io::stdout();
         //  let mut writer = BufWriter::new(writer); seem to be slower with the buffer :()
 
-
-
         let mut handle_page_info = |page: &PageInformation| {
             let mut l_errors = page.execute_print_or_pause(&mut writer);
             match (&mut print_errors, &mut l_errors) {
@@ -1198,7 +1192,6 @@ impl Env {
             }
         };
 
-
         // Print from the snapshot
         for (activepage, page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             self.ga_mmr = *page;
@@ -1207,7 +1200,6 @@ impl Env {
             handle_page_info(page_info);
         }
         self.ga_mmr = backup;
-
 
         // Print free banks
         for page in self.free_banks.page_infos() {
@@ -1220,7 +1212,6 @@ impl Env {
                 handle_page_info(page);
             }
         }
-
 
         // All possible messages have been printed.
         // Errors are generated for the others
@@ -1311,58 +1302,73 @@ impl Env {
     fn active_page_info(&self) -> &PageInformation {
         match self.output_kind() {
             OutputKind::Snapshot => {
-                let active_page =
-                    self.logical_to_physical_address(self.output_address).to_memory().page() as usize;
+                let active_page = self
+                    .logical_to_physical_address(self.output_address)
+                    .to_memory()
+                    .page() as usize;
                 &self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
-                self.cpr.as_ref().unwrap().selected_active_page_info().unwrap()
+                self.cpr
+                    .as_ref()
+                    .unwrap()
+                    .selected_active_page_info()
+                    .unwrap()
             },
-            OutputKind::FreeBank => {
-                self.free_banks.selected_active_page_info().unwrap()
-            },
+            OutputKind::FreeBank => self.free_banks.selected_active_page_info().unwrap()
         }
     }
 
     fn active_page_info_mut(&mut self) -> &mut PageInformation {
         match self.output_kind() {
             OutputKind::Snapshot => {
-                let active_page =
-                    self.logical_to_physical_address(self.output_address).to_memory().page() as usize;
+                let active_page = self
+                    .logical_to_physical_address(self.output_address)
+                    .to_memory()
+                    .page() as usize;
                 &mut self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
                 let cpr = self.cpr.as_mut().unwrap();
                 cpr.selected_active_page_info_mut().unwrap()
             },
-            OutputKind::FreeBank => {
-                self.free_banks.selected_active_page_info_mut().unwrap()
-            },
+            OutputKind::FreeBank => self.free_banks.selected_active_page_info_mut().unwrap()
         }
     }
-
 
     fn page_info_for_logical_address_mut(&mut self, address: u16) -> &mut PageInformation {
         match self.output_kind() {
             OutputKind::Snapshot => {
-                let active_page = self.logical_to_physical_address(address).to_memory().page() as usize;
+                let active_page =
+                    self.logical_to_physical_address(address).to_memory().page() as usize;
                 &mut self.sna.pages_info[active_page]
             },
             OutputKind::Cpr => {
-                self.cpr.as_mut().unwrap().selected_active_page_info_mut().unwrap()
+                self.cpr
+                    .as_mut()
+                    .unwrap()
+                    .selected_active_page_info_mut()
+                    .unwrap()
             },
-            OutputKind::FreeBank => {
-                self.free_banks.selected_active_page_info_mut().unwrap()
-            },
+            OutputKind::FreeBank => self.free_banks.selected_active_page_info_mut().unwrap()
         }
-
     }
 
-    fn written_bytes(& self) -> & BitVec {
+    fn written_bytes(&self) -> &BitVec {
         match self.output_kind() {
-            OutputKind::Snapshot => & self.sna.written_bytes,
-            OutputKind::Cpr => self.cpr.as_ref().unwrap().selected_written_bytes().expect("No bank selected"),
-            OutputKind::FreeBank => self.free_banks.selected_written_bytes().expect("No bank selected"),
+            OutputKind::Snapshot => &self.sna.written_bytes,
+            OutputKind::Cpr => {
+                self.cpr
+                    .as_ref()
+                    .unwrap()
+                    .selected_written_bytes()
+                    .expect("No bank selected")
+            },
+            OutputKind::FreeBank => {
+                self.free_banks
+                    .selected_written_bytes()
+                    .expect("No bank selected")
+            },
         }
     }
 
@@ -1394,7 +1400,6 @@ impl Env {
 
     /// . Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
-
         if let Some(cpr) = &self.cpr {
             if cpr.is_empty() {
                 return;
@@ -1471,8 +1476,9 @@ impl Env {
         let physical_output_address: PhysicalAddress = self.physical_output_address();
 
         // Check if it is legal to output the value
-        //if self.logical_code_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
-        if self.physical_output_address().address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+        // if self.logical_code_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+        if self.physical_output_address().address() > self.limit_address()
+            || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
         {
             // dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
 
@@ -1504,13 +1510,20 @@ impl Env {
         };
 
         let abstract_address = physical_output_address.offset_in_cpc();
-        let already_used = if let Some(access) = self.written_bytes()
-            .get(abstract_address as usize)
+        let already_used = if let Some(access) = self.written_bytes().get(abstract_address as usize)
         {
             *access
         }
         else {
-            return Err(AssemblerError::BugInAssembler { file:file!(), line: line!(), msg:  format!("Wrong size of memory access {} > {}", abstract_address, self.written_bytes().len())})
+            return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!(
+                    "Wrong size of memory access {} > {}",
+                    abstract_address,
+                    self.written_bytes().len()
+                )
+            });
         };
 
         let r#override = if already_used {
@@ -1543,19 +1556,20 @@ impl Env {
             }
         }
 
-
         match self.output_kind() {
             OutputKind::Snapshot => {
                 self.sna.set_byte(abstract_address, v);
             },
             OutputKind::Cpr => {
-                self.cpr.as_mut().unwrap().set_byte(self.output_address, v)?;
+                self.cpr
+                    .as_mut()
+                    .unwrap()
+                    .set_byte(self.output_address, v)?;
             },
             OutputKind::FreeBank => {
                 self.free_banks.set_byte(self.output_address, v);
-            },
+            }
         }
-
 
         // Add the byte to the listing space
         if self.pass.is_listing_pass() && self.output_trigger.is_some() {
@@ -1650,7 +1664,7 @@ impl Env {
                         // nothing to do
                     }
                 }
-        }
+            }
 
             previously_overrided = currently_overrided;
         }
@@ -1659,7 +1673,6 @@ impl Env {
     }
 
     pub fn peek(&self, address: &PhysicalAddress) -> u8 {
-
         // we assume that the physical address in argument matches the current configuration
         match self.output_kind() {
             OutputKind::Snapshot => {
@@ -1673,13 +1686,11 @@ impl Env {
             OutputKind::FreeBank => {
                 let address = address.to_bank().address();
                 self.free_banks.get_byte(address as _).unwrap()
-            },
+            }
         }
-
     }
 
     pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) -> Result<(), AssemblerError> {
-
         // need modification to work when the physical address is different
         match self.output_kind() {
             OutputKind::Snapshot => {
@@ -1693,11 +1704,10 @@ impl Env {
             OutputKind::FreeBank => {
                 let address = address.to_bank().address();
                 self.free_banks.set_byte(address as _, byte)
-            },
+            }
         }
 
         Ok(())
-
     }
 
     /// Get the size of the generated binary.
@@ -1732,7 +1742,7 @@ impl Env {
         let cpr_asm = self.cpr.as_ref().unwrap();
         let cpr = cpr_asm.build_cpr()?;
         cpr.save(fname)
-            .map_err(|e| AssemblerError::IOError {msg: e.to_string() })
+            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -1774,7 +1784,6 @@ impl Env {
         address: &E,
         address2: Option<&E>
     ) -> Result<(), AssemblerError> {
-
         // org $ set org to the output address (cf. rasm)
         let code_adr = if address2.is_none() && address.is_label_value("$") {
             if self.start_address().is_none() {
@@ -1791,9 +1800,9 @@ impl Env {
         let output_adr = if let Some(address2) = address2 {
             if address2.is_label_value("$") {
                 self.logical_output_address() as i32 // XXX here is must be code not output. I do not understand ...
-            } else {
-                self.resolve_expr_must_never_fail(address2)?
-                .int()?
+            }
+            else {
+                self.resolve_expr_must_never_fail(address2)?.int()?
             }
         }
         else {
@@ -1874,7 +1883,11 @@ impl Env {
         let current_address = self.logical_code_address();
         // ATM the breakpoints only work in SNA
         // To allow them in CPR there is a bit of work to do
-        let page = match self.logical_to_physical_address(current_address).to_memory().page() {
+        let page = match self
+            .logical_to_physical_address(current_address)
+            .to_memory()
+            .page()
+        {
             0 => 0,
             1 => 1,
             _ => {
@@ -1883,7 +1896,9 @@ impl Env {
                     line: line!(),
                     msg: format!(
                         "Page selection not handled 0x{:x}",
-                        self.logical_to_physical_address(current_address).to_memory().page()
+                        self.logical_to_physical_address(current_address)
+                            .to_memory()
+                            .page()
                     )
                 })
             },
@@ -2018,7 +2033,6 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
             if kind == "macro" || kind == "struct" {
-                
                 let message = AssemblerError::AssemblingError {
                     msg:
                         "Use (void) for macros or structs with no parameters to disambiguate them with labels"
@@ -2026,10 +2040,10 @@ impl Env {
                 };
                 if self.options().assemble_options().force_void() {
                     return Err(message);
-                } else {
-                    //self.add_warning(message);
                 }
-
+                else {
+                    // self.add_warning(message);
+                }
 
                 // I'm really unsure of memory safety in case of bugs
                 let macro_token = Token::MacroCall(label.into(), Default::default());
@@ -2179,11 +2193,11 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_buildcpr(&mut self) -> Result<(), AssemblerError>  {
-
+    pub fn visit_buildcpr(&mut self) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() {
-            self.cpr =  Some(CprAssembler::default());
-        } else {
+            self.cpr = Some(CprAssembler::default());
+        }
+        else {
             self.cpr.as_mut().unwrap().select(0);
         }
 
@@ -2248,7 +2262,15 @@ impl Env {
 
         const OUTPUT_ALIGN: bool = false; // TODO programmaticall change it
 
-        while if OUTPUT_ALIGN {self.logical_output_address()} else {self.logical_code_address()}  as u16 % boundary != 0 {
+        while if OUTPUT_ALIGN {
+            self.logical_output_address()
+        }
+        else {
+            self.logical_code_address()
+        } as u16
+            % boundary
+            != 0
+        {
             self.output_byte(fill)?;
         }
 
@@ -2280,16 +2302,16 @@ impl Env {
             let section = section.read().unwrap();
 
             let warning = if section.mmr != self.ga_mmr {
-               Some(AssemblerError::AssemblingError{
+                Some(AssemblerError::AssemblingError{
                     msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
                 })
-            } else {
+            }
+            else {
                 None
             };
 
             (section.output_adr, section.code_adr, section.mmr, warning)
         };
-
 
         self.current_section = Some(Arc::clone(section));
 
@@ -2304,10 +2326,10 @@ impl Env {
             .as_mut()
             .map(|o| o.replace_code_address(&code_adr.into()));
 
-        if let Some(warning) = warning{
+        if let Some(warning) = warning {
             self.add_warning(warning);
         }
-    
+
         Ok(())
     }
 
@@ -2394,11 +2416,17 @@ impl Env {
     pub fn logical_to_physical_address(&self, address: u16) -> PhysicalAddress {
         match self.output_kind() {
             OutputKind::Snapshot => MemoryPhysicalAddress::new(address, self.ga_mmr).into(),
-            OutputKind::Cpr => CprPhysicalAddress::new(address, self.cpr.as_ref().unwrap().selected_bloc().unwrap()).into(),
-            OutputKind::FreeBank => BankPhysicalAddress::new(address, self.free_banks.selected_index().unwrap()).into(),
+            OutputKind::Cpr => {
+                CprPhysicalAddress::new(
+                    address,
+                    self.cpr.as_ref().unwrap().selected_bloc().unwrap()
+                )
+                .into()
+            },
+            OutputKind::FreeBank => {
+                BankPhysicalAddress::new(address, self.free_banks.selected_index().unwrap()).into()
+            },
         }
-
-        
     }
 
     fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
@@ -2428,7 +2456,10 @@ impl Env {
     }
 
     /// The keyword is named BANK, but in fact, it is a PAGE ...
-    fn visit_page_or_bank<E: ExprEvaluationExt>(&mut self, exp: Option<&E>) -> Result<(), AssemblerError> {
+    fn visit_page_or_bank<E: ExprEvaluationExt>(
+        &mut self,
+        exp: Option<&E>
+    ) -> Result<(), AssemblerError> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
@@ -2442,8 +2473,10 @@ impl Env {
                 self.free_banks.selected_index = None;
 
                 if output_kind == OutputKind::Cpr {
-                    if exp <0 || exp>31 {
-                        return Err(AssemblerError::AssemblingError { msg: format!("Value {exp} is not compatible. [0-31]") });
+                    if exp < 0 || exp > 31 {
+                        return Err(AssemblerError::AssemblingError {
+                            msg: format!("Value {exp} is not compatible. [0-31]")
+                        });
                     }
 
                     if let Some(cpr) = &mut self.cpr {
@@ -2466,7 +2499,6 @@ impl Env {
 
                     let mmr = mmr as u8;
                     self.ga_mmr = mmr;
-
 
                     // we do not change the output address (there is no reason to do that)
                 }
@@ -3254,7 +3286,6 @@ pub fn visit_located_token(
     outer_token: &LocatedToken,
     env: &mut Env
 ) -> Result<(), AssemblerError> {
-
     let nb_warnings = env.warnings.len();
 
     // cheat on the lifetime of tokens
@@ -3965,8 +3996,6 @@ impl Env {
             return;
         }
 
-
-
         // Filter the warnings to merge overriding
         let mut current_warning_idx = 1; // index to the last warning to treat
         let mut previous_warning_idx = 0; // index to the previous warning treated (diff with current_warning_idx can be higher than 1 when there are several consecutive warnings for OverrideMemory)
@@ -4074,8 +4103,9 @@ impl Env {
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
             if let AssemblerError::AssemblingError { msg } = w {
-                // nothing to do 
-            } else {
+                // nothing to do
+            }
+            else {
                 *w = AssemblerWarning::AssemblingError {
                     msg: (*w).to_string()
                 }
@@ -4100,8 +4130,15 @@ impl Env {
             let label = self.handle_global_and_local_labels(label.as_str())?;
 
             if label.starts_with(".") {
-                let warning = AssemblerError::AssemblingError { msg: format!("{} is not a local label. A better name without the dot would be better", &label) };
-                let warning =  AssemblerWarning::AssemblingError {msg: warning.to_string()};
+                let warning = AssemblerError::AssemblingError {
+                    msg: format!(
+                        "{} is not a local label. A better name without the dot would be better",
+                        &label
+                    )
+                };
+                let warning = AssemblerWarning::AssemblingError {
+                    msg: warning.to_string()
+                };
                 self.add_warning(warning);
             }
 

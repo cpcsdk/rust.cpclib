@@ -16,12 +16,15 @@ fn main() {
         .arg(Arg::new("INPUT").help("Path to bndbuild.yml input file"))
         .get_matches();
 
-
     eframe::run_native(
         "Visual BndBuild",
         native_options,
-        Box::new(move |cc| Box::new(
-            cpclib_visual_bndbuild::BndBuildApp::new(cc, matches.get_one::<String>("INPUT"))))
+        Box::new(move |cc| {
+            Box::new(cpclib_visual_bndbuild::BndBuildApp::new(
+                cc,
+                matches.get_one::<String>("INPUT")
+            ))
+        })
     )
     .unwrap();
 }

@@ -598,7 +598,7 @@ impl ListingElement for Token {
     fn macro_flavor(&self) -> AssemblerFlavor {
         todo!()
     }
-    
+
     fn is_buildcpr(&self) -> bool {
         match self {
             Self::BuildCpr => true,

@@ -1,8 +1,9 @@
-use std::{borrow::Cow, ops::Deref};
+use std::borrow::Cow;
+use std::ops::Deref;
 
-use cpclib_common::{itertools::Itertools, riff::{RiffChunk, RiffCode, RiffLen}};
+use cpclib_common::itertools::Itertools;
+use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
-
 
 #[derive(Clone)]
 pub enum AceMemMapType {
@@ -163,10 +164,9 @@ pub struct AceSymbolChunk {
     riff: RiffChunk
 }
 
-
 impl From<RiffChunk> for AceSymbolChunk {
     fn from(value: RiffChunk) -> Self {
-        Self{riff: value}
+        Self { riff: value }
     }
 }
 
@@ -177,7 +177,6 @@ impl Deref for AceSymbolChunk {
         &self.riff
     }
 }
-
 
 impl AceSymbolChunk {
     const CODE: RiffCode = RiffCode::new([b'S', b'Y', b'M', b'B']);
@@ -200,10 +199,7 @@ impl AceSymbolChunk {
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffChunk::new(
-                code,
-                content
-            )
+            riff: RiffChunk::new(code, content)
         }
     }
 
@@ -324,10 +320,9 @@ pub struct AceBreakPointChunk {
     riff: RiffChunk
 }
 
-
 impl From<RiffChunk> for AceBreakPointChunk {
     fn from(value: RiffChunk) -> Self {
-        Self{riff: value}
+        Self { riff: value }
     }
 }
 
@@ -338,7 +333,6 @@ impl Deref for AceBreakPointChunk {
         &self.riff
     }
 }
-
 
 impl AceBreakPointChunk {
     const CODE: RiffCode = RiffCode::new([b'B', b'R', b'K', b'C']);
@@ -362,10 +356,7 @@ impl AceBreakPointChunk {
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffChunk::new(
-                code,
-                content
-            )
+            riff: RiffChunk::new(code, content)
         }
     }
 

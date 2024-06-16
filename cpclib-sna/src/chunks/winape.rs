@@ -3,7 +3,6 @@ use std::ops::Deref;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 
-
 pub struct WinapeBreakPoint {
     buffer: [u8; 5]
 }
@@ -23,15 +22,14 @@ pub struct WinapeBreakPointChunk {
     riff: RiffChunk
 }
 
-
 impl From<RiffChunk> for WinapeBreakPointChunk {
     fn from(value: RiffChunk) -> Self {
-        Self{riff: value}
+        Self { riff: value }
     }
 }
 
 impl Deref for WinapeBreakPointChunk {
-    type Target= RiffChunk;
+    type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -60,10 +58,7 @@ impl WinapeBreakPointChunk {
         assert_eq!(code, Self::CODE);
 
         Self {
-            riff: RiffChunk::new(
-                code,
-                content
-            )
+            riff: RiffChunk::new(code, content)
         }
     }
 
@@ -77,6 +72,6 @@ impl WinapeBreakPointChunk {
     }
 
     pub fn nb_breakpoints(&self) -> usize {
-        (self.len().value() / 5)  as usize 
+        (self.len().value() / 5) as usize
     }
 }

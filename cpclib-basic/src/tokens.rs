@@ -382,16 +382,14 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::SymbolQuote => write!(f, "'"),
             Self::StatementSeparator => write!(f, ":"),
 
-
-            Self::EndOfTokenisedLine => {Ok(())},
+            Self::EndOfTokenisedLine => Ok(()),
 
             _ => {
                 let c = (*self as u8) as char;
-                match  c {
-
+                match c {
                     ' '..='z' => write!(f, "{}", c),
 
-                    _=>   unimplemented!("{:?}", self)
+                    _ => unimplemented!("{:?}", self)
                 }
             }
         }

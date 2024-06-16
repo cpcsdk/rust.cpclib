@@ -767,8 +767,6 @@ impl Snapshot {
 
         let chunk = RiffChunk::from_buffer(file_content);
 
-
-
         let chunk: SnapshotChunk = match chunk.code().deref() {
             [b'M', b'E', b'M', _] => MemoryChunk::from(chunk).into(), //
             [b'B', b'R', b'K', b'S'] => WinapeBreakPointChunk::from(chunk).into(),

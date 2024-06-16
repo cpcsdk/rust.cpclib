@@ -339,7 +339,8 @@ impl ParserOptions {
                 let current_path = search.join(fname);
                 if current_path.is_file() {
                     return Ok(current_path);
-                } else {
+                }
+                else {
                     does_not_exists.push(current_path.to_str().unwrap().to_owned());
                 }
             }

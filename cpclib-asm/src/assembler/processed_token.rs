@@ -124,7 +124,6 @@ struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
 
 impl IncludeState {
     /// By constructon fname exists and is correct
-    /// 
     fn retreive_listing(
         &mut self,
         env: &mut Env,
@@ -172,8 +171,6 @@ impl IncludeState {
         else {
             self.0.get_mut(fname).unwrap()
         };
-
-
 
         // handle the listing
         env.mark_included(fname.clone());
@@ -991,23 +988,31 @@ where
                                 load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
 
                             if let Some(header) = header {
-                                let ams_fname = header.amsdos_filename()
+                                let ams_fname = header
+                                    .amsdos_filename()
                                     .map(|ams_fname| ams_fname.filename_with_user())
                                     .unwrap_or_else(|_| "<WRONG FILENAME>".to_owned());
                                 let txt = match header.file_type() {
-                                    Ok(AmsdosFileType::Binary) => format!{"{ams_fname} BINARY  L:{} X:{}", header.loading_address(), header.execution_address()},
-                                    Ok(AmsdosFileType::Protected) => format!{"{ams_fname} PROTECTED L:{} X:{}", header.loading_address(), header.execution_address()},
+                                    Ok(AmsdosFileType::Binary) => {
+                                        format! {"{ams_fname} BINARY  L:{} X:{}", header.loading_address(), header.execution_address()}
+                                    },
+                                    Ok(AmsdosFileType::Protected) => {
+                                        format! {"{ams_fname} PROTECTED L:{} X:{}", header.loading_address(), header.execution_address()}
+                                    },
                                     Ok(AmsdosFileType::Basic) => format!("{ams_fname} BASIC"),
-                                    Err(_) => format!("{ams_fname} <WRONG FILETYPE>"),
+                                    Err(_) => format!("{ams_fname} <WRONG FILETYPE>")
                                 };
 
-                                let warning =  AssemblerWarning::AssemblingError { msg: format!("Header has been removed for {txt}")}; 
-                                let warning = if let  Some(span) = possible_span {
+                                let warning = AssemblerWarning::AssemblingError {
+                                    msg: format!("Header has been removed for {txt}")
+                                };
+                                let warning = if let Some(span) = possible_span {
                                     warning.locate(span.clone())
-                                } else {
+                                }
+                                else {
                                     warning
                                 };
-    
+
                                 env.add_warning(warning)
                             }
 
@@ -1120,7 +1125,8 @@ where
                         // save the number of prints to patch the ones added by the macro
                         // to properly locate them
                         let nb_prints = env
-                            .sna.pages_info
+                            .sna
+                            .pages_info
                             .iter()
                             .map(|ti| ti.print_commands().len())
                             .collect_vec();
@@ -1150,7 +1156,8 @@ where
 
                         let caller_span = self.possible_span();
                         if let Some(span) = caller_span {
-                            env.sna.pages_info
+                            env.sna
+                                .pages_info
                                 .iter_mut()
                                 .zip(nb_prints.into_iter())
                                 .for_each(|(ti, count)| {
@@ -1268,7 +1275,8 @@ where
                 }
             }?;
 
-            if ! self.token.is_buildcpr() { // we lack of some datastructures
+            if !self.token.is_buildcpr() {
+                // we lack of some datastructures
                 env.update_dollar();
             }
 

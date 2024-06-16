@@ -307,7 +307,6 @@ impl AmsdosFileName {
             extension
         };
 
-
         // we do not call fname.is_valid because it will reject it due to low<er case fname
         Ok(fname)
     }
@@ -1730,10 +1729,7 @@ impl AmsdosHeader {
 
     /// Checks if the data correcpons to a file
     pub fn represent_a_valid_file(&self) -> bool {
-
-        self.is_checksum_valid() && 
-        self.checksum() != 0  && 
-        self.amsdos_filename().is_ok()
+        self.is_checksum_valid() && self.checksum() != 0 && self.amsdos_filename().is_ok()
     }
 
     pub fn as_bytes(&self) -> &[u8; 128] {

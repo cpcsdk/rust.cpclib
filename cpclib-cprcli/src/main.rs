@@ -1,10 +1,12 @@
-use std::{collections::HashSet, ops::Sub, path::PathBuf};
+use std::collections::HashSet;
+use std::ops::Sub;
+use std::path::PathBuf;
 
 use commands::Command;
-use cpclib_common::{clap::{self, builder::ValueParser, value_parser, Arg, ArgAction}, itertools::Itertools};
+use cpclib_common::clap::builder::ValueParser;
+use cpclib_common::clap::{self, value_parser, Arg, ArgAction};
+use cpclib_common::itertools::Itertools;
 use cpclib_cpr::Cpr;
-
-
 
 mod commands;
 
@@ -46,8 +48,7 @@ fn main() {
                 .required(false)
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::path_buf())
-        )
-        ;
+        );
     let args = cmd.get_matches();
 
     let mut cpr = {
@@ -57,15 +58,17 @@ fn main() {
 
     let mut cpr2 = if let Some(cpr_fname2) = args.get_one::<PathBuf>("INPUT2") {
         Some(Cpr::load(cpr_fname2).unwrap())
-    } else {
+    }
+    else {
         None
     };
 
     if let Some(banks) = args.get_many::<i64>("SELECTED_BANKS") {
         let cprs = [&cpr].into_iter().chain(cpr2.as_ref());
-        let available = cprs.map(|cpr| cpr.banks().iter().map(|b| b.number()))
-                                                                        .flatten()
-                                                                        .collect::<HashSet<u8>>();
+        let available = cprs
+            .map(|cpr| cpr.banks().iter().map(|b| b.number()))
+            .flatten()
+            .collect::<HashSet<u8>>();
         let to_keep = banks.map(|b| *b as u8).collect::<HashSet<u8>>();
 
         let missing = to_keep.sub(&available);
@@ -75,16 +78,16 @@ fn main() {
 
         let to_remove = available.sub(&to_keep);
 
-
         for bank in to_remove.into_iter() {
             cpr.remove_bank(bank as _).expect("Bank {bank} not present");
-            cpr2.as_mut().map(|cpr| cpr.remove_bank(bank as _).expect("Bank {bank} not present"));
+            cpr2.as_mut()
+                .map(|cpr| cpr.remove_bank(bank as _).expect("Bank {bank} not present"));
         }
     }
 
     let cmd = if args.get_flag("INFO") {
         Command::Info
-    } 
+    }
     else if args.get_flag("DUMP") {
         Command::Dump
     }
@@ -93,5 +96,4 @@ fn main() {
     };
 
     cmd.handle(&mut cpr, cpr2.as_mut());
-    
 }

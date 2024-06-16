@@ -1,6 +1,5 @@
 use cpclib_asm::assemble;
 
-
 #[test]
 pub fn assemble_ld_ix_bc() {
     let code = "
@@ -9,13 +8,8 @@ pub fn assemble_ld_ix_bc() {
 
     let binary = assemble(code).unwrap();
 
-    assert_eq!(
-        &binary,
-        &[0xdd, 0x69, 0xdd, 0x60]
-    );
+    assert_eq!(&binary, &[0xDD, 0x69, 0xDD, 0x60]);
 }
-
-
 
 #[test]
 pub fn test_binary_or_operation() {
@@ -25,12 +19,8 @@ pub fn test_binary_or_operation() {
 
     let binary = assemble(code).unwrap();
 
-    assert_eq!(
-        &binary,
-        &[0x70]
-    );
+    assert_eq!(&binary, &[0x70]);
 }
-
 
 #[test]
 pub fn assemble_vsync_test() {

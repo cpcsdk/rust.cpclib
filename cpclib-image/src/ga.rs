@@ -528,9 +528,6 @@ impl From<im::Rgb<u8>> for Ink {
     }
 }
 
-
-
-
 macro_rules! impl_from_ink_integer {
     ( $($t: ty),* ) => {
       $(  impl From<$t> for Ink {
@@ -542,9 +539,7 @@ macro_rules! impl_from_ink_integer {
     }
 }
 
-
-impl_from_ink_integer!{u8, u16, u32, u64, i8, i16, i32, i64}
-
+impl_from_ink_integer! {u8, u16, u32, u64, i8, i16, i32, i64}
 
 impl From<String> for Ink {
     fn from(item: String) -> Self {
@@ -1204,9 +1199,9 @@ mod tests {
 
     #[test]
     fn test_into_ink() {
-        assert_eq!(Ink::from(5u8), Ink{value:5});
-        assert_eq!(Ink::from(5u64), Ink{value:5});
-        assert_eq!(Ink::from(5i64), Ink{value:5});
+        assert_eq!(Ink::from(5u8), Ink { value: 5 });
+        assert_eq!(Ink::from(5u64), Ink { value: 5 });
+        assert_eq!(Ink::from(5i64), Ink { value: 5 });
     }
 
     #[test]

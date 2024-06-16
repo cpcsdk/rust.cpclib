@@ -1,17 +1,16 @@
+use colored::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_cpr::{CartridgeBank, Cpr, CprInfo};
-use colored::*;
 const DATA_WIDTH: usize = 16;
 
 pub enum Command {
-	Info,
-	Dump
+    Info,
+    Dump
 }
 
 fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize>) -> String {
     let from = from.unwrap_or(0);
     let amount = amount.unwrap_or_else(|| bank.data().len() - from);
-
 
     (from..(from + amount))
         .map(move |addr| bank.data()[addr])
@@ -45,7 +44,6 @@ fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize
         .join("\n")
 }
 
-
 fn diff_lines(first: &str, second: &str) -> String {
     first
         .lines()
@@ -77,47 +75,47 @@ fn compare_lines(first: &str, second: &str) -> String {
         .join("\n")
 }
 
-
 impl Command {
-	pub fn handle(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
-		match self {
-			Command::Info => self.handle_info(cpr, cpr2),
-			Command::Dump => self.handle_dump(cpr, cpr2)
-		}
-	}
+    pub fn handle(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+        match self {
+            Command::Info => self.handle_info(cpr, cpr2),
+            Command::Dump => self.handle_dump(cpr, cpr2)
+        }
+    }
 
-	fn handle_info(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
-		let info = CprInfo::from(cpr as &Cpr);
+    fn handle_info(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+        let info = CprInfo::from(cpr as &Cpr);
 
-		if let Some(cpr2) = cpr2 {
-			let info2 = CprInfo::from(cpr2 as &Cpr);
+        if let Some(cpr2) = cpr2 {
+            let info2 = CprInfo::from(cpr2 as &Cpr);
 
-			let info1 = info.to_string();
-			let info2 = info2.to_string();
-			let summary = compare_lines(&info1, &info2);
-			println!("{}", summary);
+            let info1 = info.to_string();
+            let info2 = info2.to_string();
+            let summary = compare_lines(&info1, &info2);
+            println!("{}", summary);
+        }
+        else {
+            println!("{}", info);
+        }
+    }
 
-		} else {
-			println!("{}", info);
-		}
-	}
+    fn handle_dump(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
+        for bank in cpr.banks() {
+            println!("Bank {}", bank.code().as_str());
 
-	fn handle_dump(&self, cpr: &mut Cpr, cpr2: Option<&mut Cpr>) {
-		for bank in cpr.banks() {
-			println!("Bank {}", bank.code().as_str());
+            let mem = mem_to_string(bank, None, None);
+            if let Some(cpr2) = cpr2.as_ref() {
+                let bank2 = cpr2
+                    .bank_by_code(bank.code())
+                    .expect(&format!("Bank {} unavailable in cpr2", bank.code()));
+                let mem2 = mem_to_string(bank2, None, None);
 
-			let mem = mem_to_string(bank, None, None);
-			if let Some(cpr2) = cpr2.as_ref() {
-				let bank2 = cpr2.bank_by_code(bank.code()).expect(&format!("Bank {} unavailable in cpr2", bank.code()));
-				let mem2 = mem_to_string(bank2, None, None);
-
-				let summary = diff_lines(&mem, &mem2);
-				println!("{}", summary);
-
-			} else {
-				println!("{}", mem);
-			}
-		}
-
-	}
+                let summary = diff_lines(&mem, &mem2);
+                println!("{}", summary);
+            }
+            else {
+                println!("{}", mem);
+            }
+        }
+    }
 }

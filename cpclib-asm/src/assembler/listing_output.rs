@@ -172,9 +172,8 @@ impl ListingOutput {
                     match self.current_physical_address {
                         PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
                         PhysicalAddress::Bank(adr) => adr.address() as _,
-                        PhysicalAddress::Cpr(adr) => adr.address() as _,
+                        PhysicalAddress::Cpr(adr) => adr.address() as _
                     }
-                   
                 ))
             },
             TokenKind::Set(label) => {
@@ -319,7 +318,7 @@ impl ListingOutput {
             let offset = match self.current_physical_address {
                 PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
                 PhysicalAddress::Bank(adr) => adr.address() as _,
-                PhysicalAddress::Cpr(adr) => adr.address() as _,
+                PhysicalAddress::Cpr(adr) => adr.address() as _
             };
             let phys_addr_representation =
                 if current_inner_line.is_none() || offset == self.current_first_address {

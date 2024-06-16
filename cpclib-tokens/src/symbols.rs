@@ -15,7 +15,6 @@ use regex::Regex;
 use crate::tokens::expression::LabelPrefix;
 use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhysicalAddress {
     Memory(MemoryPhysicalAddress),
@@ -23,34 +22,34 @@ pub enum PhysicalAddress {
     Cpr(CprPhysicalAddress)
 }
 
-
 impl From<u16> for PhysicalAddress {
     fn from(value: u16) -> Self {
-        Self::Memory(MemoryPhysicalAddress::new(value, 0xc0))
+        Self::Memory(MemoryPhysicalAddress::new(value, 0xC0))
     }
 }
 impl Display for PhysicalAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PhysicalAddress::Memory(address) => write!(
-                f,
-                "0x{:X} (0x{:X} in page {})",
-                address.address(),
-                address.offset_in_page(),
-                address.page(),
-            ),
-            PhysicalAddress::Cpr(address) => write!(
-                f,
-                "0x{:X} in Cartridge bloc {}",
-                address.address(),
-                address.bloc()
-            ),
-            PhysicalAddress::Bank(address) => write!(
-                f,
-                "0x{:X} in bank {}",
-                address.address(),
-                address.bank()
-            )
+            PhysicalAddress::Memory(address) => {
+                write!(
+                    f,
+                    "0x{:X} (0x{:X} in page {})",
+                    address.address(),
+                    address.offset_in_page(),
+                    address.page(),
+                )
+            },
+            PhysicalAddress::Cpr(address) => {
+                write!(
+                    f,
+                    "0x{:X} in Cartridge bloc {}",
+                    address.address(),
+                    address.bloc()
+                )
+            },
+            PhysicalAddress::Bank(address) => {
+                write!(f, "0x{:X} in bank {}", address.address(), address.bank())
+            },
         }
     }
 }
@@ -61,7 +60,7 @@ impl PhysicalAddress {
         match self {
             PhysicalAddress::Memory(adr) => adr.address(),
             PhysicalAddress::Bank(adr) => adr.address(),
-            PhysicalAddress::Cpr(adr) => adr.address(),
+            PhysicalAddress::Cpr(adr) => adr.address()
         }
     }
 
@@ -71,10 +70,9 @@ impl PhysicalAddress {
         match self {
             PhysicalAddress::Memory(adr) => adr.offset_in_cpc(),
             PhysicalAddress::Bank(adr) => adr.address() as _,
-            PhysicalAddress::Cpr(adr) => adr.address() as _,
+            PhysicalAddress::Cpr(adr) => adr.address() as _
         }
     }
-
 
     #[inline(always)]
     pub fn to_memory(self) -> MemoryPhysicalAddress {
@@ -122,7 +120,6 @@ impl From<CprPhysicalAddress> for PhysicalAddress {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CprPhysicalAddress {
     bloc: u8,
@@ -132,7 +129,7 @@ pub struct CprPhysicalAddress {
 impl CprPhysicalAddress {
     #[inline]
     pub fn new(address: u16, bloc: u8) -> Self {
-        Self { bloc, address}
+        Self { bloc, address }
     }
 
     #[inline]
@@ -155,7 +152,7 @@ pub struct BankPhysicalAddress {
 impl BankPhysicalAddress {
     #[inline]
     pub fn new(address: u16, bank: usize) -> Self {
-        Self { bank, address}
+        Self { bank, address }
     }
 
     #[inline]
@@ -168,7 +165,6 @@ impl BankPhysicalAddress {
         self.bank
     }
 }
-
 
 /// Structure that ease the addresses manipulation to read/write at the right place
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1694,22 +1690,27 @@ impl SymbolsTableCaseDependent {
         self.table.kind(symbol)
     }
 
-
-    pub fn closest_symbol<S>(&self, symbol: S, r#for: SymbolFor) -> Result<Option<SmolStr>, SymbolError>
-    where Symbol: From<S>,
-    S: AsRef<str> {
+    pub fn closest_symbol<S>(
+        &self,
+        symbol: S,
+        r#for: SymbolFor
+    ) -> Result<Option<SmolStr>, SymbolError>
+    where
+        Symbol: From<S>,
+        S: AsRef<str>
+    {
         let symbol = self.normalize_symbol(symbol);
         self.table.closest_symbol::<Symbol>(symbol, r#for)
     }
 
-    pub fn extend_local_and_patterns_for_symbol<S>(
-        &self,
-        symbol: S
-    ) -> Result<Symbol, SymbolError>
-    where Symbol: From<S>,
-    S: AsRef<str> {
+    pub fn extend_local_and_patterns_for_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
+    where
+        Symbol: From<S>,
+        S: AsRef<str>
+    {
         let symbol = self.normalize_symbol(symbol);
-        self.table.extend_local_and_patterns_for_symbol::<Symbol>(symbol)
+        self.table
+            .extend_local_and_patterns_for_symbol::<Symbol>(symbol)
     }
 }
 

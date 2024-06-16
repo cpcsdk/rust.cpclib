@@ -10,8 +10,6 @@ use delegate::delegate;
 pub use remu::*;
 pub use winape::*;
 
-
-
 #[derive(Clone, Debug)]
 /// Memory chunk that superseeds the snapshot memory if any.
 pub struct MemoryChunk {
@@ -19,10 +17,9 @@ pub struct MemoryChunk {
     riff: RiffChunk
 }
 
-
 impl From<RiffChunk> for MemoryChunk {
     fn from(value: RiffChunk) -> Self {
-        Self{riff: value}
+        Self { riff: value }
     }
 }
 
@@ -222,12 +219,12 @@ pub struct UnknownChunk {
 
 impl From<RiffChunk> for UnknownChunk {
     fn from(value: RiffChunk) -> Self {
-        Self{riff: value}
+        Self { riff: value }
     }
 }
 
 impl Deref for UnknownChunk {
-    type Target=RiffChunk;
+    type Target = RiffChunk;
 
     fn deref(&self) -> &Self::Target {
         &self.riff
@@ -320,7 +317,6 @@ impl SnapshotChunk {
         }
     }
 
-
     pub fn riff(&self) -> &RiffChunk {
         match self {
             SnapshotChunk::AceBreakPoint(a) => a.deref(),
@@ -328,7 +324,7 @@ impl SnapshotChunk {
             SnapshotChunk::Memory(m) => m.deref(),
             SnapshotChunk::Remu(r) => r.deref(),
             SnapshotChunk::Unknown(u) => u.deref(),
-            SnapshotChunk::WinapeBreakPoint(w) => w.deref(),
+            SnapshotChunk::WinapeBreakPoint(w) => w.deref()
         }
     }
 

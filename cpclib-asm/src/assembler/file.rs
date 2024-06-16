@@ -31,13 +31,13 @@ pub fn get_filename(
     })
 }
 
-
-
-
 /// Load a file and remove header if any
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename
-pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
+pub fn load_binary(
+    fname: Fname,
+    options: &ParserOptions
+) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
     // Get the file content
     let data = load_binary_raw(fname, options)?;
     let mut data = VecDeque::from(data);
@@ -46,7 +46,7 @@ pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<(VecDeque<u8
     let header = if data.len() >= 128 {
         // by construction there is only one slice
         let header = AmsdosHeader::from_buffer(data.as_slices().0);
-        
+
         if header.represent_a_valid_file() {
             data.drain(..128);
             Some(header)
@@ -54,17 +54,16 @@ pub fn load_binary(fname: Fname, options: &ParserOptions) -> Result<(VecDeque<u8
         else {
             None
         }
-    } else {
+    }
+    else {
         None
     };
-
 
     Ok((data, header))
 }
 
 /// Load a file and keep the header if any
 pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
-
     // Retreive fname
     let fname = match &fname {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,

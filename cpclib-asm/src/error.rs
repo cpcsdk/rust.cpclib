@@ -18,7 +18,7 @@ use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::preamble::{LocatedListing, SourceString, Z80ParserError, Z80ParserErrorKind};
-use crate::{Z80Span};
+use crate::Z80Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
@@ -477,12 +477,7 @@ impl AssemblerError {
             },
 
             AssemblerError::OverrideMemory(address, count) => {
-                write!(
-                    f,
-                    "Override {} bytes at {}",
-                    *count,
-                    address
-                )
+                write!(f, "Override {} bytes at {}", *count, address)
             },
             AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {}", msg),
 
@@ -518,13 +513,7 @@ impl AssemblerError {
             AssemblerError::IncoherentCode { msg } => write!(f, "Incoherent code: {}", msg),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
             AssemblerError::OutputExceedsLimits(address, limit) => {
-                write!(
-                    f,
-                    "Code at {} exceeds limits of 0x{:X}",
-                    address,
-                    limit
-                )
-                
+                write!(f, "Code at {} exceeds limits of 0x{:X}", address, limit)
             },
             AssemblerError::OutputAlreadyExceedsLimits(limit) => {
                 write!(f, "Code  already exceeds limits of 0x{:X}", limit)

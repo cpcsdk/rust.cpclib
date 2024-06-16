@@ -2687,8 +2687,6 @@ pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
     Ok(LocatedTokenInner::Bankset(count))
 }
 
-
-
 pub fn parse_buildsna(
     directive_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3179,21 +3177,22 @@ pub fn parse_res_set_bit(
 pub fn parse_cp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //   preceded(
     //    parse_word(b"CP"),
-    
+
     preceded(
         opt((parse_register_a, parse_comma)),
-            cut_err(alt((
-            parse_register8,
-            parse_indexregister8,
-            parse_hl_address,
-            parse_indexregister_with_index,
-            parse_expr
-        ))
-        .context("CP: wrong argument")
+        cut_err(
+            alt((
+                parse_register8,
+                parse_indexregister8,
+                parse_hl_address,
+                parse_indexregister_with_index,
+                parse_expr
+            ))
+            .context("CP: wrong argument")
         )
         .map(
-        //   )
-        |operand| LocatedTokenInner::new_opcode(Mnemonic::Cp, Some(operand), None)
+            //   )
+            |operand| LocatedTokenInner::new_opcode(Mnemonic::Cp, Some(operand), None)
         )
     )
     .parse_next(input)
@@ -6368,7 +6367,6 @@ endif"
         assert!(dbg!(parse_test(parse_label(false), "label{i+5}")).is_ok());
 
         assert!(dbg!(parse_test(parse_label(false), "_JP")).is_ok());
-
     }
 
     #[test]
@@ -6417,7 +6415,7 @@ endif"
             "<0X1234",
             ">0X1234",
             "TOTO",
-            "_TOTO",
+            "_TOTO"
         ] {
             assert!(dbg!(parse_test(parse_expr, code)).is_ok());
 
@@ -6427,11 +6425,7 @@ endif"
 
     #[test]
     fn debug_label_expression() {
-        for code in &[
-            "TOTO",
-            "_TOTO",
-            "_JP",
-        ] {
+        for code in &["TOTO", "_TOTO", "_JP"] {
             assert!(dbg!(parse_test(parse_label(false), code)).is_ok());
             assert!(dbg!(parse_test(parse_factor, code)).is_ok());
             assert!(dbg!(parse_test(term, code)).is_ok());
@@ -6443,17 +6437,16 @@ endif"
         }
     }
 
-
     #[test]
     fn regression_parse_hl() {
-        for  code in &mut [
+        for code in &mut [
             "ld hl, TOTO",
             "ld HL, _TOTO",
             "ld hl, _JP",
             "ld a, TOTO",
             "ld a, _TOTO",
             "ld a, _JP",
-            "ld a,_JP",
+            "ld a,_JP"
         ] {
             dbg!("Handle", &code);
             dbg!("parse_ld");
@@ -6463,11 +6456,8 @@ endif"
             dbg!("parse_line");
             let mut tokens = Vec::new();
             assert!(dbg!(parse_test(parse_line(&mut tokens), code)).is_ok());
-
-
         }
     }
-
 
     // TODO find why this test fails wheras cpclib_common::tests::parse_string succeed. I do not get the differences
     #[test]
@@ -6525,7 +6515,7 @@ endif"
     }
 
     #[test]
-    fn test_bitwise_or(){
+    fn test_bitwise_or() {
         let res = dbg!(parse_test(expr, "1|2"));
         let res = res.as_ref().unwrap();
         match res {

@@ -1928,11 +1928,12 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn is_buildcpr(&self) -> bool {
-        match & self {
+        match &self {
             LocatedTokenInner::BuildCpr => true,
             _ => false
         }
     }
+
     fn is_equ(&self) -> bool {
         match &self {
             LocatedTokenInner::Equ { .. } => true,
