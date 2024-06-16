@@ -1047,7 +1047,7 @@ impl ExprResult {
 
     pub fn int(&self) -> Result<i32, ExpressionTypeError> {
         match self {
-            ExprResult::Float(f) => Ok((f.into_inner() + 0.5) as _), // ensure 2.9 is treated as 3
+            ExprResult::Float(f) => Ok((f.into_inner() + 0.5).floor() as _), // ensure 2.9 is treated as 3
             ExprResult::Value(i) => Ok(*i),
             ExprResult::Char(i) => Ok(*i as i32),
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
