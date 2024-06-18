@@ -749,7 +749,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
 /// TODO
 pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let dir_start = input.checkpoint();
-    let _ = preceded(my_space0, parse_directive_word(b"MACRO")).parse_next(input)?;
+    let _ = parse_directive_word(b"MACRO").parse_next(input)?;
 
     // macro name
     let name = cut_err(parse_label(false).context("MACRO: wrong name")).parse_next(input)?; // TODO use a specific function for that
@@ -1025,8 +1025,9 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
     Ok(token)
 }
 
+#[inline]
 pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    let _ = my_space0(input)?;
+   // let _ = my_space0(input)?;
     let confined_start = input.checkpoint();
 
     let _ = parse_directive_word(b"CONFINED").parse_next(input)?;
@@ -1559,6 +1560,8 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Pars
 pub fn parse_z80_directive_with_block(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
+
     if input.state.options().is_orgams() {
         alt((
             parse_macro.context("Error in macro"),
