@@ -130,7 +130,7 @@ impl CprAssembler {
             .clone()
         {
             let max = (first as u32 + 0x4000).min(0xFFFF) as u16;
-            if max > self.pages.selected_active_page_info().unwrap().limit {
+            if max > self.pages.selected_active_page_info().unwrap().output_limit {
                 dbg!(max, self.pages.selected_active_page_info());
                 todo!()
             }

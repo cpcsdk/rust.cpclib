@@ -20,7 +20,8 @@ pub struct PageInformation {
     /// Current address used by the code
     pub(crate) logical_codeadr: u16,
     /// Maximum possible address to write to
-    pub(crate) limit: u16,
+    pub(crate) output_limit: u16,
+    pub(crate) code_limit: u16,
     /// List of pretected zones
     pub(crate) protected_areas: Vec<ProtectedArea>,
     pub(crate) fail_next_write_if_zero: bool,
@@ -36,7 +37,8 @@ impl Default for PageInformation {
             maxadr: 0,
             logical_outputadr: 0,
             logical_codeadr: 0,
-            limit: 0xFFFF,
+            output_limit: 0xFFFF,
+            code_limit: 0xFFFF,
             protected_areas: Vec::new(),
             fail_next_write_if_zero: false,
             delayed_commands: DelayedCommands::default()
@@ -78,17 +80,17 @@ impl PageInformation {
         self.maxadr = 0;
         self.logical_outputadr = 0;
         self.logical_codeadr = 0;
-        self.limit = 0xFFFF;
+        self.output_limit = 0xFFFF;
         self.fail_next_write_if_zero = false;
         self.delayed_commands.clear();
     }
 
     pub fn set_limit(&mut self, l: u16) -> Result<(), AssemblerError> {
-        if l > self.limit {
+        if l > self.output_limit {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
                     "Cannot set a limit of &{:X} as a former limit of &{:X} is already set up",
-                    l, self.limit
+                    l, self.output_limit
                 )
             });
         }
@@ -102,7 +104,7 @@ impl PageInformation {
             });
         }
 
-        self.limit = l;
+        self.output_limit = l;
         Ok(())
     }
 }

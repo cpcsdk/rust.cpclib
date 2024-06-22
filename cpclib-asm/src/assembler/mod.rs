@@ -1381,13 +1381,21 @@ impl Env {
         self.logical_to_physical_address(self.logical_output_address() as u16)
     }
 
+    pub fn physical_code_address(&self) -> PhysicalAddress {
+        self.logical_to_physical_address(self.logical_code_address() as u16)
+    }
+
     /// Return the address of dollar
     pub fn logical_code_address(&self) -> u16 {
         self.active_page_info().logical_codeadr
     }
 
-    pub fn limit_address(&self) -> u16 {
-        self.active_page_info().limit
+    pub fn output_limit_address(&self) -> u16 {
+        self.active_page_info().output_limit
+    }
+
+    pub fn code_limit_address(&self) -> u16 {
+        self.active_page_info().code_limit
     }
 
     pub fn start_address(&self) -> Option<u16> {
@@ -1474,19 +1482,28 @@ impl Env {
 
         // dbg!(self.output_address(), &v);
         let physical_output_address: PhysicalAddress = self.physical_output_address();
+        let physical_code_address: PhysicalAddress = self.physical_code_address();
 
         // Check if it is legal to output the value
         // if self.logical_code_address() > self.limit_address() || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
-        if self.physical_output_address().address() > self.limit_address()
+        if self.physical_output_address().address() > self.output_limit_address()
             || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
         {
-            // dbg!(self.logical_output_address() > self.limit_address(), self.active_page_info().fail_next_write_if_zero && self.logical_output_address()==0);
-
             return Err(AssemblerError::OutputExceedsLimits(
                 physical_output_address,
-                self.limit_address() as _
+                self.output_limit_address() as _
             ));
         }
+
+        if self.logical_code_address() > self.code_limit_address() 
+        || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+    {
+
+        return Err(AssemblerError::OutputExceedsLimits(
+            physical_code_address,
+            self.code_limit_address() as _
+        ));
+    }
         for protected_area in &self.active_page_info().protected_areas {
             if protected_area.contains(&(self.logical_code_address() as u16)) {
                 return Err(AssemblerError::OutputProtected {
@@ -1938,29 +1955,44 @@ impl Env {
     /// TODO set the limit for the current page
     fn visit_limit<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
+        let in_crunched_section = self.crunched_section_state.is_some();
+
 
         if value <= 0 {
-            return Err(AssemblerError::AlreadyRenderedError(format!(
+            return Err(AssemblerError::AssemblingError{msg: format!(
                 "It is a nonsense to define a limit of {value}"
-            )));
+            )});
         }
 
-        if value > 0x10000 {
-            return Err(AssemblerError::AlreadyRenderedError(format!(
+        if value > 0xffff {
+            return Err(AssemblerError::AssemblingError{msg: format!(
                 "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
-            )));
+        )});
         }
 
-        self.active_page_info_mut().limit = value as _;
+        if in_crunched_section {
+            self.active_page_info_mut().code_limit = value as _;
+            if self.code_limit_address() <= self.maximum_address() {
+                return Err(AssemblerError::OutputAlreadyExceedsLimits(
+                    self.code_limit_address() as _
+                ));
+            }
+            if self.code_limit_address() == 0 {
+                eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
+            }
+        } else {
+            self.active_page_info_mut().output_limit = value as _;
+            if self.output_limit_address() <= self.maximum_address() {
+                return Err(AssemblerError::OutputAlreadyExceedsLimits(
+                    self.output_limit_address() as _
+                ));
+            }
+            if self.output_limit_address() == 0 {
+                eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
+            }
+        }
 
-        if self.limit_address() <= self.maximum_address() {
-            return Err(AssemblerError::OutputAlreadyExceedsLimits(
-                self.limit_address() as _
-            ));
-        }
-        if self.limit_address() == 0 {
-            eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
-        }
+
         Ok(())
     }
 
@@ -2810,6 +2842,22 @@ impl Env {
         self.output_bytes(data)
     }
 
+
+    fn build_crunched_section_env(&mut self, span: Option<&Z80Span>) -> Self {
+        let mut crunched_env = self.clone();
+        crunched_env.crunched_section_state = CrunchedSectionState::new(span.cloned()).into();
+        // codeadr stays the same
+        crunched_env.active_page_info_mut().logical_outputadr = 0;
+        crunched_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
+        crunched_env.active_page_info_mut().maxadr = 0;
+        crunched_env.active_page_info_mut().output_limit = 0xFFFF; // disable limit (to be redone in the area)
+        crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
+        crunched_env.output_address = 0;
+
+        crunched_env
+    }
+
+
     /// Handle a crunched section.
     /// bytes generated during previous pass or previous loop are provided TO NOT crunched them an additional time if they are similar
     pub fn visit_crunched_section<'tokens, T: Visited + ListingElement + MayHaveSpan + Sync>(
@@ -2837,24 +2885,14 @@ impl Env {
         // }
         // }
 
-        let could_display_warning_message = self.active_page_info().limit != 0xFFFF
+        let could_display_warning_message = self.active_page_info().output_limit != 0xFFFF
             || !self.active_page_info().protected_areas.is_empty();
 
         // from here, the modifications to the memory will be forgotten afterwise.
         // for this reason everything is done in a cloned environnement
         // TODO to have a more stable memory function, see if we can keep some steps between the passes
         // TODO OR play all the passes directly now
-        let mut crunched_env = self.clone();
-        crunched_env.crunched_section_state = CrunchedSectionState::new(span.cloned()).into();
-        // codeadr stays the same
-        crunched_env.active_page_info_mut().logical_outputadr = 0; // relocated output at 0 to be sure to have 64kb available
-                                                                   // XXX probably a wrong behavior/to see with users
-
-        crunched_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
-        crunched_env.active_page_info_mut().maxadr = 0;
-        crunched_env.active_page_info_mut().limit = 0xFFFF; // disable limit (to be redone in the area)
-        crunched_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
-        crunched_env.output_address = 0;
+        let mut crunched_env = self.build_crunched_section_env(span);
 
         self.output_trigger
             .as_mut()
@@ -2872,6 +2910,7 @@ impl Env {
                 None => e
             }
         })?;
+        
         self.output_trigger
             .as_mut()
             .map(|t| t.leave_crunched_section());
@@ -3581,7 +3620,7 @@ impl Env {
         confined_env.active_page_info_mut().logical_outputadr = 0;
         confined_env.active_page_info_mut().startadr = None; // reset the counter to obtain the bytes
         confined_env.active_page_info_mut().maxadr = 0;
-        confined_env.active_page_info_mut().limit = 0xFFFF; // disable limit (to be redone in the area)
+        confined_env.active_page_info_mut().output_limit = 0xFFFF; // disable limit (to be redone in the area)
         confined_env.active_page_info_mut().protected_areas.clear(); // remove protected areas
         confined_env.output_address = 0;
         // TODO: forbid a subset of instructions to ensure it works properly

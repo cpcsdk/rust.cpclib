@@ -6,9 +6,10 @@
 
 	limit 0x1e0 ; limit not taken into account in the crunched section
 
+	; Here the output address totally differs so we need to test the limit in the code space
 	LZAPU
 		assert $ == 0x100
-		limit 0x1e0 ; limit taken into account in the crunched section
+		limit 0x1e1 ; limit taken into account in the crunched section
 		defs 0x100 ; write over the limit => must fail
 		assert $ == 0x200
 	LZCLOSE
