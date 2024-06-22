@@ -285,6 +285,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
         use crate::cfg::DiscConfig;
 
         // Retrieve the format description
+        // fallback to standard data
         let cfg = if let Some(desc_fname) = sub.get_one::<String>("FORMAT_FILE") {
             crate::cfg::DiscConfig::new(desc_fname)?
         }
@@ -296,7 +297,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             }
         }
         else {
-            unreachable!();
+            DiscConfig::single_head_data_format()
         };
 
         // Make the dsk based on the format
