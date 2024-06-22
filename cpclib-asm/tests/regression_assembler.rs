@@ -19,7 +19,7 @@ pub fn test_binary_or_operation() {
 
     let binary = assemble(code).unwrap();
 
-    assert_eq!(&binary, &[0x70]);
+    assert_eq!(&binary, &[0b00010000 | 0b10000000]);
 }
 
 #[test]
