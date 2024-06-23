@@ -409,7 +409,7 @@ impl HardCodedFunction {
             HardCodedFunction::PenAtToMode1Byte => {
                 Ok(cpclib_image::pixels::mode1::pen_to_pixel_byte(
                     (params[0].int()? as u8 % 4).into(),
-                    (params[1].int()? as u8 % 4).into()
+                    params[1].int()? as u8 % 4
                 )
                 .into())
             },

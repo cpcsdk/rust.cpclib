@@ -58,10 +58,10 @@ pub fn defb<E: Into<Expr>>(val: E) -> Token {
 
 /// Generate defb directive from a slice of expression
 pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token
-where E: Copy {
+where E: Clone {
     let mut data = Vec::new();
     for val in elements {
-        let val = *val;
+        let val = val.clone();
         let expr = val.into();
         data.push(expr);
     }
@@ -255,6 +255,14 @@ macro_rules! inc_r8 {
                     Register8::$reg.into()
                 )
             }
+
+            /// Generate the opcode dec $reg
+            #[allow(missing_docs)] pub fn [<dec_ $reg:lower>] () -> Token {
+                token_for_opcode_one_arg(
+                    Mnemonic::Dec,
+                    Register8::$reg.into()
+                )
+            }
         }
     )*}
 }
@@ -267,6 +275,14 @@ macro_rules! inc_r16 {
             #[allow(missing_docs)] pub fn [<inc_ $reg:lower>] () -> Token {
                 token_for_opcode_one_arg(
                     Mnemonic::Inc,
+                    Register16::$reg.into()
+                )
+            }
+
+            /// Generate the opcode dec $reg
+            #[allow(missing_docs)] pub fn [<dec_ $reg:lower>] () -> Token {
+                token_for_opcode_one_arg(
+                    Mnemonic::Dec,
                     Register16::$reg.into()
                 )
             }
@@ -340,6 +356,33 @@ ld_r8_expr! {
     E
     H
     L
+}
+
+
+
+macro_rules! ld_r8_r8 {
+    ($($reg:ident,$reg2:ident)*) => {$(
+        paste::paste! {
+            /// Generate the opcode LD $reg, reg
+            #[allow(missing_docs)] pub fn [<ld_ $reg:lower _ $reg2:lower>]() -> Token {
+                token_for_opcode_two_args(
+                    Mnemonic::Ld,
+                    Register8::$reg.into(),
+                    Register8::$reg2.into(),
+                )
+            }
+        }
+    )*}
+}
+
+ld_r8_r8! {
+    A,A A,B A,C A,D A,E A,H A,L
+    B,A B,B B,C B,D B,E B,H B,L
+    C,A C,B C,C C,D C,E C,H C,L
+    D,A D,B D,C D,D D,E D,H D,L
+    E,A E,B E,C E,D E,E E,H E,L
+    H,A H,B H,C H,D H,E H,H H,L
+    L,A L,B L,C L,D L,E L,H L,L
 }
 
 #[allow(missing_docs)]
