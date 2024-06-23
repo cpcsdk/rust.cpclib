@@ -283,9 +283,10 @@ pub enum UnaryFunction {
 
 impl Display for UnaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
+    //    panic!();
         let repr = match self {
-            UnaryFunction::High => "HI",
-            UnaryFunction::Low => "LO",
+            UnaryFunction::High => "high",
+            UnaryFunction::Low => "low",
             UnaryFunction::Memory => "memory",
             UnaryFunction::Floor => "floor",
             UnaryFunction::Ceil => "ceil",
@@ -755,8 +756,15 @@ impl Expr {
     pub fn to_simplified_string(&self) -> String {
         let exp = self.to_string();
         let exp = exp.trim();
-        let exp = exp.strip_prefix('(').unwrap_or(exp);
-        let exp = exp.strip_suffix(')').unwrap_or(exp);
+
+        let exp = if exp.starts_with('(') && exp.ends_with(')') {
+            let exp = exp.strip_prefix('(').unwrap_or(exp);
+            let exp = exp.strip_suffix(')').unwrap_or(exp);
+            exp
+        } else {
+            exp
+        };
+
         exp.to_owned()
     }
 }
