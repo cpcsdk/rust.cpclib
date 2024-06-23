@@ -802,7 +802,7 @@ impl Display for Expr {
 
             UnaryOperation(op, exp) => write!(format, "{}{}", op, exp),
             UnaryTokenOperation(op, tok) => write!(format, "{}({})", op, tok),
-            BinaryOperation(op, exp1, exp2) => write!(format, "{}({},{})", op, exp1, exp2)
+            BinaryOperation(op, exp1, exp2) => write!(format, "({} {} {})", exp1, op, exp2)
         }
     }
 }

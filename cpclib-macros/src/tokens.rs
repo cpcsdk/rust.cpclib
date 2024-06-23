@@ -1,7 +1,7 @@
-use cpclib_asm::preamble::{
+use cpclib_asm::{preamble::{
     BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register16, Register8,
     StableTickerAction, Token, UnaryFunction
-};
+}, BinaryOperation};
 use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;
 use quote::TokenStreamExt;
@@ -268,6 +268,7 @@ impl MyToTokens for Token {
             },
 
             Self::Equ { label, expr } => {
+                eprintln!("Trying to do {label} equ {expr}");
                 two_named_params("Equ", "label", label, "expr", expr, tokens);
             },
 
@@ -439,6 +440,36 @@ impl MyToTokens for UnaryFunction {
     }
 }
 
+impl MyToTokens for BinaryOperation {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        tokens.append(Ident::new("BinaryOperation", Span::call_site()));
+        tokens.append(Punct::new(':', Spacing::Joint));
+        tokens.append(Punct::new(':', Spacing::Joint));
+
+        let code = match self {
+            BinaryOperation::RightShift => "RightShift",
+            BinaryOperation::LeftShift => "LeftShift",
+            BinaryOperation::Add => "Add",
+            BinaryOperation::Sub => "Sub",
+            BinaryOperation::Mul => "Mul",
+            BinaryOperation::Div => "Div",
+            BinaryOperation::Mod => "Mod",
+            BinaryOperation::BinaryAnd => "BinaryAnd",
+            BinaryOperation::BinaryOr => "BinaryOr",
+            BinaryOperation::BinaryXor => "BinaryXor",
+            BinaryOperation::BooleanAnd => "BooleanAnd",
+            BinaryOperation::BooleanOr => "BooleanOr",
+            BinaryOperation::Equal => "Equal",
+            BinaryOperation::Different => "Different",
+            BinaryOperation::LowerOrEqual => "LowerOrEqual",
+            BinaryOperation::GreaterOrEqual => "GreaterOrEqual",
+            BinaryOperation::StrictlyGreater => "StrictlyGreater",
+            BinaryOperation::StrictlyLower => "StrictlyLower",
+        };
+        no_param(code, tokens);
+    }
+}
+
 impl MyToTokens for BinaryFunction {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("BinaryFunction", Span::call_site()));
@@ -484,6 +515,10 @@ impl MyToTokens for Expr {
 
             Expr::BinaryFunction(func, arg1, arg2) => {
                 three_params("BinaryFunction", func, arg1, arg2, tokens);
+            },
+
+            Expr::BinaryOperation(oper, arg1, arg2) => {
+                three_params("BinaryOperation", oper, arg1, arg2, tokens);
             },
 
             _ => unimplemented!("Expr::{:?}", self)

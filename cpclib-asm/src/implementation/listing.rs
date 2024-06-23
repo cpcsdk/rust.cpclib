@@ -25,12 +25,11 @@ pub trait ListingExt {
 
     fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError>;
 
-    /// Compute the size of the listing.
+    /// Compute the size of the listing by assembling it.
     /// The listing has a size only if its tokens has a size
     fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
         Ok(self.to_bytes()?.len())
     }
-
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;

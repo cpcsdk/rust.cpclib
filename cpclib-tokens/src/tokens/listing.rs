@@ -240,6 +240,14 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
         self.listing.extend_from_slice(&other.listing);
     }
 
+    /// Insert a copy of listing to the appropriate location
+    pub fn insert_listing(&mut self, other: &Self, position: usize) {
+        for (idx, token) in other.iter().enumerate() {
+            self.listing.insert(idx+position, token.clone())
+        }
+    }
+
+
     pub fn set_duration(&mut self, duration: usize) {
         let duration = Some(duration);
         self.duration = duration;
@@ -253,6 +261,7 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
     pub fn get(&self, idx: usize) -> Option<&T> {
         self.listing.get(idx)
     }
+
 }
 
 // pub trait ListingTrait {

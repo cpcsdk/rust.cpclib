@@ -245,6 +245,26 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
     }
 }
 
+
+macro_rules! add_r8 {
+    ($($reg:ident)*) => {$(
+        paste::paste! {
+            /// Generate the opcode inc $reg
+            #[allow(missing_docs)] pub fn [<add_ $reg:lower>] () -> Token {
+                token_for_opcode_two_args(
+                    Mnemonic::Add,
+                    Register8::A.into(),
+                    Register8::$reg.into()
+                )
+            }
+        }
+    )*}
+}
+add_r8! { A B C D E H L}
+
+
+
+
 macro_rules! inc_r8 {
     ($($reg:ident)*) => {$(
         paste::paste! {
@@ -331,6 +351,7 @@ ld_r16_expr! {
     Bc
     De
     Hl
+    Sp
 }
 
 macro_rules! ld_r8_expr {
