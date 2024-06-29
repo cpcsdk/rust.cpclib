@@ -89,8 +89,8 @@ pub struct OcpPal {
     cycling_delay: u8,
     palettes: [Palette; NB_PAL],
 
-    excluded: [u8; NB_PAL],
-    projected: [u8; NB_PAL],
+    excluded: [u8; 16],
+    projected: [u8; 16],
 
 }
 
@@ -109,9 +109,12 @@ impl OcpPal {
 
         let mut palettes: [Palette; NB_PAL] = Default::default();//arrays::from_iter((0..NB_PAL).into_iter().map(|_| Palette::default())).unwrap();
         for pen in 0..=16i32 {
-            let ga_ink = data.next().unwrap();
-            let ink = Ink::from_gate_array_color_number(ga_ink);
-            palettes[pen as usize].set(pen, ink);
+            for idx in 0..NB_PAL {
+                let ga_ink = data.next().unwrap();
+                let ink = Ink::from_gate_array_color_number(ga_ink);
+                dbg!(pen, idx, ink);
+                palettes[idx].set(pen, ink);
+            }
         }
 
         let excluded = data.next_chunk().unwrap();
