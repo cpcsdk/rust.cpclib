@@ -12,7 +12,7 @@ use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
-use cpclib::image::ocp;
+use cpclib::image::ocp::{self, OcpPal};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
@@ -28,10 +28,18 @@ pub mod built_info {
 macro_rules! specify_palette {
     ($e:expr) => {
         $e.arg(
+            Arg::new("OCP_PAL")
+            .long("pal")
+            .required(false)
+            .help("OCP PAL file. The first palette among 12 is used") // TODO specify a way to select any palette
+            .value_parser(value_parser!(std::path::PathBuf))
+        )
+        .arg(
             Arg::new("PENS")
                 .long("pens")
                 .required(false)
                 .help("Separated list of ink number. Use ',' as a separater")
+                .conflicts_with("OCP_PAL")
         )
         .arg(
             Arg::new("PEN0")
@@ -39,6 +47,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 0")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -47,6 +56,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 1")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -55,6 +65,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 2")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -63,6 +74,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 3")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -71,6 +83,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 4")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -79,6 +92,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 5")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -87,6 +101,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 6")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -95,6 +110,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 7")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -103,6 +119,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 8")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -111,6 +128,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 9")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -119,6 +137,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 10")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -127,6 +146,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 11")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -135,6 +155,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 12")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -143,6 +164,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 13")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -151,6 +173,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 14")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -159,12 +182,13 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Ink number of the pen 15")
                 .conflicts_with("PENS")
+                .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
     };
 }
 
-pub fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
+pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, AmsdosError> {
     if matches.contains_id("PENS") {
         let numbers = matches
             .get_one::<String>("PENS")
@@ -172,7 +196,13 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
             .split(",")
             .map(|ink| ink.parse::<u8>().unwrap())
             .collect::<Vec<_>>();
-        return Some(numbers.into());
+        return Ok(Some(numbers.into()));
+    }
+    else if let Some(fname) = matches.get_one::<PathBuf>("OCP_PAL") {
+        let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
+        let data = data.make_contiguous();
+        let pal = OcpPal::from_buffer(data);
+        return Ok(Some(pal.palette(0).clone()));
     }
     else {
         let mut one_pen_set = false;
@@ -186,10 +216,10 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Option<Palette> {
         }
 
         if one_pen_set {
-            return Some(palette);
+            return Ok(Some(palette));
         }
         else {
-            return None;
+            return Ok(None);
         }
     }
 }
@@ -492,7 +522,6 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         })
     }
     else {
-        dbg!(
             // Standard case
             if matches.get_flag("OVERSCAN") {
                 OutputFormat::CPCMemory {
@@ -513,7 +542,6 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                     display_address: DisplayCRTCAddress::new_standard_from_page(3)
                 }
             }
-        )
     }
 }
 
@@ -529,7 +557,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         .unwrap();
     let mut transformations = TransformationsList::default();
 
-    let palette = get_requested_palette(matches);
+    let palette = get_requested_palette(matches)?;
 
     if matches.get_flag("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
@@ -794,6 +822,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
             // Create a snapshot with a standard screen
             let mut sna = Snapshot::default();
+
+
+    
 
             match &conversion {
                 Output::CPCMemoryStandard(memory, _) => {

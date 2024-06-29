@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::bitsets;
+use cpclib_common::bitvec::vec::BitVec;
 use cpclib_common::riff::{RiffChunk, RiffCode};
 use num_enum::TryFromPrimitive;
 
@@ -79,7 +80,7 @@ pub struct Snapshot {
     header: [u8; HEADER_SIZE],
     /// Memory for V2 snapshot or V3 before saving
     memory: SnapshotMemory,
-    memory_already_written: bitsets::DenseBitSet,
+    memory_already_written: BitVec,
     /// list of chuncks; memory chuncks are removed once memory is written
     chunks: Vec<SnapshotChunk>,
 
@@ -367,7 +368,7 @@ impl Default for Snapshot {
             ],
             memory: SnapshotMemory::default_64(),
             chunks: Vec::new(),
-            memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 4, 0), // 64kbits
+            memory_already_written: BitVec::repeat(false, BANK_SIZE*4*1), // 64kbits
             debug: false
         };
 
@@ -631,6 +632,26 @@ impl Snapshot {
         self.set_byte(address, value);
     }
 
+    #[inline(always)]
+    pub fn nb_pages(&self) -> usize {
+        self.memory.nb_pages()
+    }
+
+    /// Ensure the sna has the appropriate number of pages
+    pub fn resize(&mut self, nb_pages: usize) {
+        self.unwrap_memory_chunks();
+
+        while self.nb_pages() < nb_pages {
+            self.memory = self.memory.increased_size();
+        }
+        while self.nb_pages() > nb_pages {
+            self.memory = self.memory.decreased_size();
+        }
+
+        self.set_memory_size_header(64* self.nb_pages() as u16);
+        self.memory_already_written.resize_with(self.nb_pages()*0x1_0000, |_| false)
+    }
+
     /// To play easier with memory, remove all the memory chunks and use a linearized memory version
     /// Memory array MUST be empty before calling this method
     pub fn unwrap_memory_chunks(&mut self) {
@@ -752,11 +773,11 @@ impl Snapshot {
 
             for (idx, byte) in data.iter().enumerate() {
                 let current_pos = address + idx;
-                if self.memory_already_written.test(current_pos) {
+                if *self.memory_already_written.get(current_pos).unwrap() {
                     eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
                 }
                 self.memory.memory_mut()[current_pos] = *byte;
-                self.memory_already_written.set(current_pos);
+                self.memory_already_written.set(current_pos, true);
             }
 
             Ok(())
@@ -807,7 +828,22 @@ impl Snapshot {
 
 #[cfg(test)]
 mod tests {
+    use similar_asserts::assert_eq;
+
+    use crate::{Snapshot, BANK_SIZE};
+
     use super::SnapshotMemory;
+
+    #[test]
+    fn test_resize() {
+        let mut sna = Snapshot::default();
+        assert_eq!(sna.nb_pages(), 1);
+        assert_eq!(sna.memory_dump().len(), BANK_SIZE*4);
+
+        sna.resize(2);
+        assert_eq!(sna.nb_pages(), 2);
+        assert_eq!(sna.memory_dump().len(), BANK_SIZE*4*2);
+    }
 
     #[test]
     fn test_memory() {

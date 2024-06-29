@@ -299,6 +299,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b4930d2cb77ce62f89ee5d5289b4ac049559b1c45539271f5ed4fdc7db34545"
 
 [[package]]
+name = "arrays"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c9810d892911da7c1cc723e12a5c47645ae4f82daf5e6d73cc73f1cc6fcf1e1"
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1613,6 +1619,7 @@ name = "cpclib-image"
 version = "0.7.1"
 dependencies = [
  "anyhow",
+ "arrays",
  "as-slice",
  "contracts",
  "cpclib-common",

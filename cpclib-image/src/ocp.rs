@@ -1,3 +1,7 @@
+use cpclib_common::itertools::Itertools;
+
+use crate::{ga::{Ink, Palette}, image::Mode};
+
 /// ! Utility code related to OCP
 
 pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
@@ -73,4 +77,49 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
     }
 
     res
+}
+
+
+const NB_PAL:usize = 12;
+
+
+pub struct OcpPal {
+    screen_mode: Mode,
+    cycling: bool,
+    cycling_delay: u8,
+    palettes: [Palette; NB_PAL],
+
+    excluded: [u8; NB_PAL],
+    projected: [u8; NB_PAL],
+
+}
+
+impl OcpPal {
+    /// Get the palette of interest (0..12)
+    pub fn palette(&self, nb: usize) -> &Palette {
+        assert!(nb<12);
+        &self.palettes[nb]
+    }
+    pub fn from_buffer(data: &[u8]) -> Self {
+        let mut data = data.into_iter().cloned();
+
+        let screen_mode: Mode = (data.next().unwrap()).into();
+        let cycling = data.next().unwrap() == 0xff;
+        let cycling_delay = data.next().unwrap();
+
+        let mut palettes: [Palette; NB_PAL] = Default::default();//arrays::from_iter((0..NB_PAL).into_iter().map(|_| Palette::default())).unwrap();
+        for pen in 0..=16i32 {
+            let ga_ink = data.next().unwrap();
+            let ink = Ink::from_gate_array_color_number(ga_ink);
+            palettes[pen as usize].set(pen, ink);
+        }
+
+        let excluded = data.next_chunk().unwrap();
+        let projected = data.next_chunk().unwrap();
+
+        assert!(data.next().is_none());
+
+        Self { screen_mode, cycling, cycling_delay, palettes, excluded, projected}
+
+    }
 }

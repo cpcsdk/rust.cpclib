@@ -2532,6 +2532,13 @@ impl Env {
                     let mmr = mmr as u8;
                     self.ga_mmr = mmr;
 
+                    // ensure the page are present in the snapshot
+                    if mmr >= 0xc4 {
+                        if self.sna.pages_info.len() < 2 {
+                            self.sna.resize(2.max(self.sna.pages_info.len()));
+                        }
+                    }
+
                     // we do not change the output address (there is no reason to do that)
                 }
             },
@@ -2547,6 +2554,7 @@ impl Env {
                 else {
                     self.free_banks.select_next()?;
                 }
+
 
                 self.ga_mmr = 0xC0;
                 self.output_address = 0;
@@ -2597,11 +2605,11 @@ impl Env {
         }
 
         let page = page as usize;
-        let nb_pages = self.sna.pages_info.len();
-        let expected_nb = nb_pages.max(page + 1);
-        if expected_nb > nb_pages {
-            self.sna.resize(expected_nb);
+        let expected_nb_pages = self.sna.pages_info.len().max(page + 1);
+        if expected_nb_pages > self.sna.pages_info.len() {
+            self.sna.resize(expected_nb_pages);
         }
+        debug_assert_eq!(self.sna.pages_info.len(), expected_nb_pages);
 
         self.output_address = self.logical_output_address();
         self.update_dollar();

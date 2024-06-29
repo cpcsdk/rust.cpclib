@@ -17,8 +17,10 @@ impl Default for SnaAssembler {
         let mut sna = Snapshot::default(); // Snapshot::new_6128().unwrap();
         sna.unwrap_memory_chunks();
 
-        let pages_info = vec![Default::default(); 2];
-        let written_bytes = BitVec::repeat(false, 0x4000 * 2 * 4);
+        let nb_pages = (sna.memory_size_header()/64) as usize;
+
+        let pages_info = vec![Default::default(); nb_pages];
+        let written_bytes = BitVec::repeat(false, 0x4000 * 4 * nb_pages);
 
         SnaAssembler {
             sna,
@@ -43,9 +45,13 @@ impl DerefMut for SnaAssembler {
 }
 
 impl SnaAssembler {
-    pub fn resize(&mut self, expected_nb: usize) {
-        self.pages_info.resize(expected_nb, Default::default());
-        self.written_bytes.resize(expected_nb * 0x1_0000, false);
+    pub fn resize(&mut self, nb_pages: usize) {
+        self.pages_info.resize(nb_pages, Default::default());
+        self.written_bytes.resize(nb_pages * 0x1_0000, false);
+        self.sna.resize(nb_pages);
+
+        debug_assert_eq!(nb_pages, self.pages_info.len());
+        debug_assert_eq!(self.sna.nb_pages(), self.pages_info.len());
     }
 }
 

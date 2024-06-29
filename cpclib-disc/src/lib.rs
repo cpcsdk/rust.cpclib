@@ -1,11 +1,11 @@
 //#![feature(register_attr)]
 //#![register_attr(get)]
 
+use std::collections::VecDeque;
 #[cfg(feature = "cmdline")]
 use std::fs::File;
 #[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
-#[cfg(feature = "cmdline")]
 use std::path::Path;
 #[cfg(feature = "cmdline")]
 use std::str::FromStr;
@@ -36,6 +36,7 @@ pub mod hfe;
 
 use custom_error::custom_error;
 
+use crate::amsdos::AmsdosHeader;
 use crate::edsk::ExtendedDsk;
 #[cfg(feature = "hfe")]
 use crate::hfe::Hfe;
@@ -468,4 +469,40 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                                 .last(true)
                            )
                        )
+}
+
+
+
+/// Open the file and remove the header if any
+/// 
+pub fn read<P: AsRef<Path>>(p: P) -> Result< (VecDeque<u8>, Option<AmsdosHeader>), AmsdosError > {
+    let data = std::fs::read(p)
+        .map_err(|e| AmsdosError::IO(e.to_string()))?;
+
+    Ok(split_header(data))
+}
+
+/// Extract the header from binary data
+pub fn split_header<D: Into<VecDeque<u8>>>(data: D) -> (VecDeque<u8>, Option<AmsdosHeader>) {
+    let mut data = data.into();
+
+    // get a slice on the data to ease its cut
+    let header = if data.len() >= 128 {
+        // by construction there is only one slice
+        let header = AmsdosHeader::from_buffer(data.as_slices().0);
+
+        if header.represent_a_valid_file() {
+            data.drain(..128);
+            Some(header)
+        }
+        else {
+            None
+        }
+    }
+    else {
+        None
+    };
+
+    (data, header)
+
 }

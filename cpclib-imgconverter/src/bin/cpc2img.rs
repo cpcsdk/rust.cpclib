@@ -1,8 +1,9 @@
 use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
+use cpclib::disc::amsdos::AmsdosError;
 use cpclib::image::image::{ColorMatrix, Mode};
 use cpclib_imgconverter::{self, get_requested_palette};
 
-fn main() {
+fn main() -> Result<(), AmsdosError>{
     let cmd = cpclib_imgconverter::specify_palette!(clap::Command::new("cpc2png")
         .about("Generate PNG from CPC files")
         .subcommand_required(true)
@@ -48,7 +49,7 @@ fn main() {
         .arg(Arg::new("OUTPUT").required(true)));
 
     let matches = cmd.get_matches();
-    let palette = get_requested_palette(&matches).unwrap_or_default();
+    let palette = get_requested_palette(&matches)?.unwrap_or_default();
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
@@ -86,4 +87,6 @@ fn main() {
     // save the generated file
     let img = matrix.as_image();
     img.save(output_fname).expect("Error while saving the file");
+
+    Ok(())
 }
