@@ -210,7 +210,7 @@ impl Default for Snapshot {
                 0x00,
                 0x00,
                 0x00,
-                0x80,
+                0x40, // 0x80 <= nb of kilobytes
                 0x00,
                 0x02,
                 0x00,
@@ -367,7 +367,7 @@ impl Default for Snapshot {
             ],
             memory: SnapshotMemory::default_64(),
             chunks: Vec::new(),
-            memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 8, 0),
+            memory_already_written: bitsets::DenseBitSet::with_capacity_and_state(PAGE_SIZE * 4, 0), // 64kbits
             debug: false
         };
 
@@ -375,6 +375,11 @@ impl Default for Snapshot {
         assert_eq!(end_string.len(), 20);
         let start = sna.header.len() - 20;
         sna.header[start..].copy_from_slice(end_string);
+
+        assert_eq!(
+            sna.memory.memory().len(),
+            sna.memory_size_header() as usize * 1024
+        );
         sna
     }
 }
@@ -734,11 +739,13 @@ impl Snapshot {
     /// ```
     /// TODO: re-implement with set_byte
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
-        if address + data.len() > 0x10000 * 2 {
+
+        let last_used_address = address + data.len() - 1;
+        if last_used_address >= 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
         }
         else {
-            if address < 0x10000 && (address + data.len()) >= 0x10000 {
+            if address < 0x10000 && last_used_address >= 0x10000 {
                 eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
             }
             // TODO add warning when writting in other banks
