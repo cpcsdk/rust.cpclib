@@ -166,6 +166,37 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
     }
 }
 
+
+pub fn list_extend(list1: ExprResult, list2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+    match list1 {
+        ExprResult::List(mut l) => {
+            match list2 {
+                ExprResult::List(l2) => {
+                    for item in l2 {
+                        l.push(item);
+                    }
+                    Ok(ExprResult::List(l))
+                },
+                _ => {
+                    Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                        Box::new(AssemblerError::AssemblingError {
+                            msg: format!("{} is not a list", list2)
+                        })
+                    )))
+                },
+            }
+        },
+        _ => {
+            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{} is not a list", list1)
+                })
+            )))
+        },
+    }
+}
+
+
 pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match list {
         ExprResult::List(mut l) => {

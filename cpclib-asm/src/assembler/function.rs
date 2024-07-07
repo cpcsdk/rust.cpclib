@@ -6,7 +6,7 @@ use std::sync::RwLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
-use cpclib_tokens::{Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
+use cpclib_tokens::{CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
 use either::Either;
 
 use super::list::{
@@ -22,8 +22,9 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
+use crate::list::list_extend;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
-use crate::section::*;
+use crate::{section::*, Cruncher};
 use crate::Visited;
 
 /// Returns the expression of the RETURN directive
@@ -216,6 +217,7 @@ lazy_static::lazy_static! {
         "list_sort": Function::HardCoded(HardCodedFunction::ListSort),
         "list_argsort": Function::HardCoded(HardCodedFunction::ListArgsort),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
+        "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
@@ -235,6 +237,7 @@ lazy_static::lazy_static! {
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
         "section_used": Function::HardCoded(HardCodedFunction::SectionUsed),
+        "binary_transform": Function::HardCoded(HardCodedFunction::BinaryTransform)
     };
 }
 
@@ -258,6 +261,7 @@ pub enum HardCodedFunction {
     ListSublist,
     ListLen,
     ListPush,
+    ListExtend,
     ListSort,
     ListArgsort,
 
@@ -282,7 +286,9 @@ pub enum HardCodedFunction {
     StringFromList,
 
     Load,
-    Assemble
+    Assemble,
+
+    BinaryTransform
 }
 
 impl HardCodedFunction {
@@ -332,7 +338,10 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStart => Some(1),
             HardCodedFunction::SectionStop => Some(1),
             HardCodedFunction::SectionLength => Some(1),
-            HardCodedFunction::SectionUsed => Some(1)
+            HardCodedFunction::SectionUsed => Some(1),
+
+            HardCodedFunction::BinaryTransform => Some(2),
+            HardCodedFunction::ListExtend => Some(2),
         }
     }
 
@@ -457,6 +466,7 @@ impl HardCodedFunction {
             },
             HardCodedFunction::ListGet => list_get(&params[0], params[1].int()? as _),
             HardCodedFunction::ListPush => list_push(params[0].clone(), params[1].clone()),
+            HardCodedFunction::ListExtend => list_extend(params[0].clone(), params[1].clone()),
 
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
             HardCodedFunction::ListLen => list_len(&params[0]),
@@ -520,7 +530,34 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStart => section_start(params[0].string()?, env),
             HardCodedFunction::SectionStop => section_stop(params[0].string()?, env),
             HardCodedFunction::SectionLength => section_length(params[0].string()?, env),
-            HardCodedFunction::SectionUsed => section_used(params[0].string()?, env)
+            HardCodedFunction::SectionUsed => section_used(params[0].string()?, env),
+
+            HardCodedFunction::BinaryTransform => {
+
+                let crunch_type = params[1].string()?;
+                let crunch_type = match crunch_type.to_uppercase().as_bytes() {
+                    b"LZEXO" => CrunchType::LZEXO,
+                    b"LZ4" => CrunchType::LZ4,
+                    b"LZ48" => CrunchType::LZ48,
+                    b"LZ49" => CrunchType::LZ49,
+                    b"LZSHRINKLER" => CrunchType::Shrinkler,
+                    b"LZX7" => CrunchType::LZX7,
+                    b"LZX0" => CrunchType::LZX0,
+                    b"LZAPU" => CrunchType::LZAPU,
+                    _ => return Err(AssemblerError::AssemblingError { msg: format!("{crunch_type} is not a valid crunch") })
+                };
+
+                let data = 
+                    params[0]
+                    .list_content()
+                    .iter()
+                    .map(|item| item.int().map(|v| v as u8))
+                    .collect::<Result<Vec<u8>, _>>()?;
+
+                let data = crunch_type.crunch(&data)?;
+                let data = ExprResult::from(data.as_slice());
+                Ok(data.into())
+            }
         }
     }
 }

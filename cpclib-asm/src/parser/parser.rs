@@ -866,6 +866,7 @@ pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     Ok(token)
 }
 
+
 /// Parse a sub-listing part that aims at being crunched after being assembled at first pass
 pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let crunched_start = input.checkpoint();
