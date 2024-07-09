@@ -51,6 +51,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .action(ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("dot")
+                .long("dot")
+                .alias("grapĥviz")
+                .help("Generate the .dot representation of the selected bndbuild.yml file")
+                .action(ArgAction::SetTrue)
+        )
+        .arg(
             Arg::new("file")
                 .short('f')
                 .long("file")
@@ -66,6 +73,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .long("watch")
                 .action(ArgAction::SetTrue)
                 .help("Watch the targets and permanently rebuild them when needed.")
+                .conflicts_with("dot")
         )
         .arg(
             Arg::new("list")
@@ -73,18 +81,21 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .long("list")
                 .action(ArgAction::SetTrue)
                 .help("List the available targets")
+                .conflicts_with("dot")
         )
         .arg(
             Arg::new("init")
                 .long("init")
                 .action(ArgAction::SetTrue)
                 .help("Init a new project by creating it")
+                .conflicts_with("dot")
         )
         .arg(
             Arg::new("add")
                 .long("add")
                 .short('a')
                 .help("Add a new basm target in an existing bndbuild.yml (or create it)")
+                .conflicts_with("dot")
                 .action(ArgAction::Set)
         )
         .arg(
@@ -282,31 +293,37 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .collect::<Vec<&std::path::Path>>()
         };
 
-        // Execute the targets
-        let mut first_loop = true;
-        let watch_requested = matches.get_flag("watch");
-        loop {
-            for tgt in targets.iter() {
-                if first_loop || builder.outdated(tgt).unwrap_or(false) {
-                    builder.execute(tgt).map_err(|e| {
-                        if targets_provided {
-                            e
-                        }
-                        else {
-                            BndBuilderError::DefaultTargetError {
-                                source: Box::new(e)
+        if matches.get_flag("dot") {
+            let dot = builder.to_dot();
+            println!("{dot}")
+
+        } else {
+            // Execute the targets
+            let mut first_loop = true;
+            let watch_requested = matches.get_flag("watch");
+            loop {
+                for tgt in targets.iter() {
+                    if first_loop || builder.outdated(tgt).unwrap_or(false) {
+                        builder.execute(tgt).map_err(|e| {
+                            if targets_provided {
+                                e
                             }
-                        }
-                    })?;
+                            else {
+                                BndBuilderError::DefaultTargetError {
+                                    source: Box::new(e)
+                                }
+                            }
+                        })?;
+                    }
                 }
-            }
 
-            if !watch_requested {
-                break;
-            }
+                if !watch_requested {
+                    break;
+                }
 
-            std::thread::sleep(std::time::Duration::from_millis(1000)); // sleep 1s before trying to build
-            first_loop = false;
+                std::thread::sleep(std::time::Duration::from_millis(1000)); // sleep 1s before trying to build
+                first_loop = false;
+            }
         }
     }
 

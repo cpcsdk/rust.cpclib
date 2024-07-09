@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::Path;
 
+use dot_writer::{Attributes, DotWriter, Style};
 use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;
 
@@ -107,5 +108,41 @@ impl Rules {
             tracked: self,
             g
         })
+    }
+}
+
+
+
+impl Rules {
+    pub fn to_dot(&self) -> String {
+        let mut output_bytes = Vec::new();
+        {
+            let mut writer = DotWriter::from(&mut output_bytes);
+            writer.set_pretty_print(true);
+
+            let mut digraph = writer.digraph();
+            digraph
+                .set_rank_direction(dot_writer::RankDirection::BottomTop)
+                .node_attributes()
+                    .set_style(Style::Filled)
+                    .set_shape(dot_writer::Shape::Rectangle)
+                    ;
+
+            for rule in self.rules() {
+                let deps = rule.dependencies();
+                let tgts = rule.targets();
+
+                for dep in deps {
+                    for tgt in tgts {
+                        digraph.edge(
+                            format!("\"{}\"", dep.display().to_string()),
+                            format!("\"{}\"", tgt.display().to_string()));
+                    }
+                }
+
+            }
+        }
+
+        String::from_utf8_lossy(&output_bytes).into_owned()
     }
 }

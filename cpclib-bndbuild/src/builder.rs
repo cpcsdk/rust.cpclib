@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::io::{BufReader, Read};
+use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
@@ -19,6 +20,14 @@ self_cell::self_cell! {
 
 pub struct BndBuilder {
     inner: BndBuilderInner
+}
+
+impl Deref for BndBuilder {
+    type Target = rules::Rules;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner.borrow_owner()
+    }
 }
 
 impl BndBuilder {
@@ -63,7 +72,7 @@ impl BndBuilder {
     ) -> Result<Self, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
-            println!(
+            eprintln!(
                 "> Set working directory to: {}",
                 working_directory.display()
             );
