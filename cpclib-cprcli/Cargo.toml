@@ -1,6 +1,9 @@
 [package]
 name = "cpclib-cprcli"
 version = "0.3.0"
+description = "Command line tool to manipulate CPRg"
+
+
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
