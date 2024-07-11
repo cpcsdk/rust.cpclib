@@ -4,6 +4,7 @@ use std::fmt::Display;
 use std::ops::Sub;
 use std::path::Path;
 
+use cpclib_common::itertools::Itertools;
 use dot_writer::{Attributes, DotWriter, Shape, Style};
 use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;
@@ -131,11 +132,15 @@ impl Rules {
 
             let mut all_deps = HashSet::<String>::default();
             let mut all_tgts = HashSet::<String>::default();
+            
 
             for rule in self.rules() {
 
                 let deps = rule.dependencies();
                 let tgts = rule.targets();
+                let cmd = rule.commands().iter()
+                    .map(|cmd| cmd.to_string())
+                    .join("\\l");
 
 
 
@@ -143,9 +148,13 @@ impl Rules {
                     None
                 } else {
                     let mut rule_node = digraph.node_auto();
-                    rule_node
-                        .set("shape", "point", false)
-                    ;
+                    if cmd.is_empty() {
+                        rule_node
+                            .set("shape", "point", false);
+                    } else {
+                        rule_node
+                            .set_label(&cmd);
+                    }
                     Some(rule_node.id())
                 };
 
