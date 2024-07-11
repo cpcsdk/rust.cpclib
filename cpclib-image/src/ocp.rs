@@ -1,4 +1,3 @@
-
 use crate::ga::{Ink, Palette};
 use crate::image::Mode;
 
