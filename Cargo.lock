@@ -1376,7 +1376,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -1409,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-asm"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "aho-corasick",
  "arrayref",
@@ -1460,7 +1460,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basic"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "arrayref",
  "built",
@@ -1480,7 +1480,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basm"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "build-deps",
  "built",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bdasm"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "built",
  "clap 4.5.7",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1543,7 +1543,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-common"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "bitfield",
  "bitflags 2.5.0",
@@ -1566,14 +1566,14 @@ dependencies = [
 
 [[package]]
 name = "cpclib-cpr"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "cpclib-common",
 ]
 
 [[package]]
 name = "cpclib-cprcli"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "colored",
  "cpclib-common",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-crunchers"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "built",
  "cc",
@@ -1593,7 +1593,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-disc"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "arrayref",
  "built",
@@ -1617,7 +1617,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-image"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "arrays",
@@ -1632,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-imgconverter"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "built",
@@ -1645,7 +1645,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-macros"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sna"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "built",
  "cfg-if",
@@ -1675,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-tokens"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "beef",
  "built",
@@ -1695,7 +1695,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-visual-bndbuild"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "built",
  "cpclib-bndbuild",
@@ -1714,7 +1714,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-wasm"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "console_error_panic_hook",
  "cpclib-asm",
@@ -1728,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfer"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "arrayref",
  "built",
@@ -1750,7 +1750,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfertool"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -1783,7 +1783,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-z80emu"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "cfg-if",
  "cpclib-asm",
@@ -6370,7 +6370,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "visual-basm"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "built",
  "claui",
