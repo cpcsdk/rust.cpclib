@@ -359,7 +359,20 @@ impl Display for AssemblerError {
 }
 
 impl AssemblerError {
+    pub fn is_already_rendered(&self) -> bool {
+        match self {
+            AssemblerError::AlreadyRenderedError(_) => true,
+            _ => false
+        }
+    }
+
+
     pub fn format(&self, f: &mut std::fmt::Formatter<'_>, complete: bool) -> std::fmt::Result {
+
+
+        dbg!(self);
+       // panic!();
+
         match self {
             AssemblerError::SyntaxError { error } => {
                 let mut source_files = SimpleFiles::new();
@@ -450,6 +463,7 @@ impl AssemblerError {
                             _ => unreachable!("{:?}", e.1)
                         }
                     })
+                    .unique()
                     .join("\n");
                 write!(f, "{}", str)
             },
@@ -524,7 +538,7 @@ impl AssemblerError {
             },
 
             AssemblerError::MultipleErrors { errors } => {
-                for e in errors.iter() {
+                for e in errors.iter().map(|e| e.to_string()).unique() {
                     writeln!(f, "{}", e)?;
                 }
                 Ok(())
