@@ -1,4 +1,3 @@
-use cpclib_common::itertools::Itertools;
 
 use crate::ga::{Ink, Palette};
 use crate::image::Mode;

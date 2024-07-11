@@ -1,11 +1,10 @@
-use std::any::Any;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::ops::Sub;
 use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
-use dot_writer::{Attributes, DotWriter, Shape, Style};
+use dot_writer::{Attributes, DotWriter, Style};
 use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;
 
