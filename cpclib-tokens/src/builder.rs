@@ -245,7 +245,6 @@ pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
     }
 }
 
-
 macro_rules! add_r8 {
     ($($reg:ident)*) => {$(
         paste::paste! {
@@ -261,9 +260,6 @@ macro_rules! add_r8 {
     )*}
 }
 add_r8! { A B C D E H L}
-
-
-
 
 macro_rules! inc_r8 {
     ($($reg:ident)*) => {$(
@@ -378,8 +374,6 @@ ld_r8_expr! {
     H
     L
 }
-
-
 
 macro_rules! ld_r8_r8 {
     ($($reg:ident,$reg2:ident)*) => {$(

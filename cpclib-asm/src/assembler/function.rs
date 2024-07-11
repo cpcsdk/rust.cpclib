@@ -6,7 +6,9 @@ use std::sync::RwLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::lazy_static;
-use cpclib_tokens::{CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token};
+use cpclib_tokens::{
+    CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token
+};
 use either::Either;
 
 use super::list::{
@@ -24,8 +26,8 @@ use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::list::list_extend;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
-use crate::{section::*, Cruncher};
-use crate::Visited;
+use crate::section::*;
+use crate::{Cruncher, Visited};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -341,7 +343,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionUsed => Some(1),
 
             HardCodedFunction::BinaryTransform => Some(2),
-            HardCodedFunction::ListExtend => Some(2),
+            HardCodedFunction::ListExtend => Some(2)
         }
     }
 
@@ -533,7 +535,6 @@ impl HardCodedFunction {
             HardCodedFunction::SectionUsed => section_used(params[0].string()?, env),
 
             HardCodedFunction::BinaryTransform => {
-
                 let crunch_type = params[1].string()?;
                 let crunch_type = match crunch_type.to_uppercase().as_bytes() {
                     b"LZEXO" => CrunchType::LZEXO,
@@ -544,11 +545,14 @@ impl HardCodedFunction {
                     b"LZX7" => CrunchType::LZX7,
                     b"LZX0" => CrunchType::LZX0,
                     b"LZAPU" => CrunchType::LZAPU,
-                    _ => return Err(AssemblerError::AssemblingError { msg: format!("{crunch_type} is not a valid crunch") })
+                    _ => {
+                        return Err(AssemblerError::AssemblingError {
+                            msg: format!("{crunch_type} is not a valid crunch")
+                        })
+                    },
                 };
 
-                let data = 
-                    params[0]
+                let data = params[0]
                     .list_content()
                     .iter()
                     .map(|item| item.int().map(|v| v as u8))

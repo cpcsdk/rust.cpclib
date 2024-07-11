@@ -283,7 +283,7 @@ pub enum UnaryFunction {
 
 impl Display for UnaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-    //    panic!();
+        //    panic!();
         let repr = match self {
             UnaryFunction::High => "high",
             UnaryFunction::Low => "low",
@@ -761,7 +761,8 @@ impl Expr {
             let exp = exp.strip_prefix('(').unwrap_or(exp);
             let exp = exp.strip_suffix(')').unwrap_or(exp);
             exp
-        } else {
+        }
+        else {
             exp
         };
 

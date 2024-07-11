@@ -471,13 +471,9 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                        )
 }
 
-
-
 /// Open the file and remove the header if any
-/// 
-pub fn read<P: AsRef<Path>>(p: P) -> Result< (VecDeque<u8>, Option<AmsdosHeader>), AmsdosError > {
-    let data = std::fs::read(p)
-        .map_err(|e| AmsdosError::IO(e.to_string()))?;
+pub fn read<P: AsRef<Path>>(p: P) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AmsdosError> {
+    let data = std::fs::read(p).map_err(|e| AmsdosError::IO(e.to_string()))?;
 
     Ok(split_header(data))
 }
@@ -504,5 +500,4 @@ pub fn split_header<D: Into<VecDeque<u8>>>(data: D) -> (VecDeque<u8>, Option<Ams
     };
 
     (data, header)
-
 }

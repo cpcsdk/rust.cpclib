@@ -166,8 +166,10 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
     }
 }
 
-
-pub fn list_extend(list1: ExprResult, list2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_extend(
+    list1: ExprResult,
+    list2: ExprResult
+) -> Result<ExprResult, crate::AssemblerError> {
     match list1 {
         ExprResult::List(mut l) => {
             match list2 {
@@ -195,7 +197,6 @@ pub fn list_extend(list1: ExprResult, list2: ExprResult) -> Result<ExprResult, c
         },
     }
 }
-
 
 pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match list {

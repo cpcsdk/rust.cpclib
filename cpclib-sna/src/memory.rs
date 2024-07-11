@@ -56,7 +56,6 @@ impl std::fmt::Debug for SnapshotMemory {
 
 #[allow(missing_docs)]
 impl SnapshotMemory {
-
     pub fn nb_pages(&self) -> usize {
         match self {
             SnapshotMemory::Empty(_) => 0,
@@ -68,7 +67,7 @@ impl SnapshotMemory {
             SnapshotMemory::ThreeHundredHeightyFourKb(_) => 6,
             SnapshotMemory::FourHundredFortyHeightKb(_) => 7,
             SnapshotMemory::FiveHundredTwelveKb(_) => 8,
-            SnapshotMemory::FiveHundredSeventySixKb(_) => 9,
+            SnapshotMemory::FiveHundredSeventySixKb(_) => 9
         }
     }
 

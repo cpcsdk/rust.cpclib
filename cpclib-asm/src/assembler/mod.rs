@@ -1495,15 +1495,14 @@ impl Env {
             ));
         }
 
-        if self.logical_code_address() > self.code_limit_address() 
-        || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
-    {
-
-        return Err(AssemblerError::OutputExceedsLimits(
-            physical_code_address,
-            self.code_limit_address() as _
-        ));
-    }
+        if self.logical_code_address() > self.code_limit_address()
+            || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
+        {
+            return Err(AssemblerError::OutputExceedsLimits(
+                physical_code_address,
+                self.code_limit_address() as _
+            ));
+        }
         for protected_area in &self.active_page_info().protected_areas {
             if protected_area.contains(&(self.logical_code_address() as u16)) {
                 return Err(AssemblerError::OutputProtected {
@@ -1957,17 +1956,18 @@ impl Env {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
         let in_crunched_section = self.crunched_section_state.is_some();
 
-
         if value <= 0 {
-            return Err(AssemblerError::AssemblingError{msg: format!(
-                "It is a nonsense to define a limit of {value}"
-            )});
+            return Err(AssemblerError::AssemblingError {
+                msg: format!("It is a nonsense to define a limit of {value}")
+            });
         }
 
-        if value > 0xffff {
-            return Err(AssemblerError::AssemblingError{msg: format!(
+        if value > 0xFFFF {
+            return Err(AssemblerError::AssemblingError {
+                msg: format!(
                 "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
-        )});
+        )
+            });
         }
 
         if in_crunched_section {
@@ -1980,7 +1980,8 @@ impl Env {
             if self.code_limit_address() == 0 {
                 eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
             }
-        } else {
+        }
+        else {
             self.active_page_info_mut().output_limit = value as _;
             if self.output_limit_address() <= self.maximum_address() {
                 return Err(AssemblerError::OutputAlreadyExceedsLimits(
@@ -1991,7 +1992,6 @@ impl Env {
                 eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
             }
         }
-
 
         Ok(())
     }
@@ -2533,7 +2533,7 @@ impl Env {
                     self.ga_mmr = mmr;
 
                     // ensure the page are present in the snapshot
-                    if mmr >= 0xc4 {
+                    if mmr >= 0xC4 {
                         if self.sna.pages_info.len() < 2 {
                             self.sna.resize(2.max(self.sna.pages_info.len()));
                         }
@@ -2554,7 +2554,6 @@ impl Env {
                 else {
                     self.free_banks.select_next()?;
                 }
-
 
                 self.ga_mmr = 0xC0;
                 self.output_address = 0;
@@ -2850,7 +2849,6 @@ impl Env {
         self.output_bytes(data)
     }
 
-
     fn build_crunched_section_env(&mut self, span: Option<&Z80Span>) -> Self {
         let mut crunched_env = self.clone();
         crunched_env.crunched_section_state = CrunchedSectionState::new(span.cloned()).into();
@@ -2864,7 +2862,6 @@ impl Env {
 
         crunched_env
     }
-
 
     /// Handle a crunched section.
     /// bytes generated during previous pass or previous loop are provided TO NOT crunched them an additional time if they are similar
@@ -2918,7 +2915,7 @@ impl Env {
                 None => e
             }
         })?;
-        
+
         self.output_trigger
             .as_mut()
             .map(|t| t.leave_crunched_section());

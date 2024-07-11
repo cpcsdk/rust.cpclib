@@ -17,7 +17,7 @@ impl Default for SnaAssembler {
         let mut sna = Snapshot::default(); // Snapshot::new_6128().unwrap();
         sna.unwrap_memory_chunks();
 
-        let nb_pages = (sna.memory_size_header()/64) as usize;
+        let nb_pages = (sna.memory_size_header() / 64) as usize;
 
         let pages_info = vec![Default::default(); nb_pages];
         let written_bytes = BitVec::repeat(false, 0x4000 * 4 * nb_pages);

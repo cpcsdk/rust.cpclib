@@ -114,8 +114,6 @@ impl Rules {
     }
 }
 
-
-
 impl Rules {
     pub fn to_dot(&self) -> String {
         let mut output_bytes = Vec::new();
@@ -127,91 +125,76 @@ impl Rules {
             digraph
                 .set_rank_direction(dot_writer::RankDirection::BottomTop)
                 .node_attributes()
-                    .set_style(Style::Filled)
-                    .set_shape(dot_writer::Shape::Rectangle);
+                .set_style(Style::Filled)
+                .set_shape(dot_writer::Shape::Rectangle);
 
             let mut all_deps = HashSet::<String>::default();
             let mut all_tgts = HashSet::<String>::default();
-            
 
             for rule in self.rules() {
-
                 let deps = rule.dependencies();
                 let tgts = rule.targets();
-                let cmd = rule.commands().iter()
+                let cmd = rule
+                    .commands()
+                    .iter()
                     .map(|cmd| cmd.to_string())
                     .join("\\l");
 
-
-
                 let mut rule_id = if deps.is_empty() {
                     None
-                } else {
+                }
+                else {
                     let mut rule_node = digraph.node_auto();
                     if cmd.is_empty() {
-                        rule_node
-                            .set("shape", "point", false);
-                    } else {
-                        rule_node
-                            .set_label(&cmd);
+                        rule_node.set("shape", "point", false);
+                    }
+                    else {
+                        rule_node.set_label(&cmd);
                     }
                     Some(rule_node.id())
                 };
-
-
 
                 for dep in deps {
                     let dep = format!("\"{}\"", dep.display().to_string());
                     all_deps.insert(dep.clone());
 
-
-                    rule_id.as_mut().map(|rule_id| digraph.edge(
-                        &dep,
-                        rule_id.clone()
-                    ));
+                    rule_id
+                        .as_mut()
+                        .map(|rule_id| digraph.edge(&dep, rule_id.clone()));
                 }
 
                 for tgt in tgts {
                     let tgt = format!("\"{}\"", tgt.display().to_string());
                     all_tgts.insert(tgt.clone());
 
-
-                    rule_id.as_mut().map(|rule_id| digraph.edge(
-                        rule_id.clone(),
-                        &tgt
-                    ));
-                    
+                    rule_id
+                        .as_mut()
+                        .map(|rule_id| digraph.edge(rule_id.clone(), &tgt));
                 }
-
             }
 
             for tgt in all_tgts.iter() {
                 digraph
-                .node_named(tgt)
+                    .node_named(tgt)
                     .set_font_color(dot_writer::Color::Blue)
                     .set("style", "rounded", false);
             }
 
             for tgt in all_tgts.sub(&all_deps) {
                 digraph
-                .node_named(&tgt)
+                    .node_named(&tgt)
                     .set_font_color(dot_writer::Color::Red)
                     .set("shape", "folder", false);
             }
 
             for dep in all_deps.sub(&all_tgts) {
                 digraph
-                .node_named(&dep)
+                    .node_named(&dep)
                     .set("fontcolor", "darkgreen", false)
                     .set("shape", "cylinder", false)
                     .set_style(Style::Rounded);
-
             }
-            
-
-
         }
-
 
         String::from_utf8_lossy(&output_bytes).into_owned()
     }

@@ -1,7 +1,8 @@
-use cpclib_asm::{preamble::{
+use cpclib_asm::preamble::{
     BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register16, Register8,
     StableTickerAction, Token, UnaryFunction
-}, BinaryOperation};
+};
+use cpclib_asm::BinaryOperation;
 use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;
 use quote::TokenStreamExt;
@@ -464,7 +465,7 @@ impl MyToTokens for BinaryOperation {
             BinaryOperation::LowerOrEqual => "LowerOrEqual",
             BinaryOperation::GreaterOrEqual => "GreaterOrEqual",
             BinaryOperation::StrictlyGreater => "StrictlyGreater",
-            BinaryOperation::StrictlyLower => "StrictlyLower",
+            BinaryOperation::StrictlyLower => "StrictlyLower"
         };
         no_param(code, tokens);
     }

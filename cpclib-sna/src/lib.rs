@@ -368,7 +368,7 @@ impl Default for Snapshot {
             ],
             memory: SnapshotMemory::default_64(),
             chunks: Vec::new(),
-            memory_already_written: BitVec::repeat(false, BANK_SIZE*4*1), // 64kbits
+            memory_already_written: BitVec::repeat(false, BANK_SIZE * 4 * 1), // 64kbits
             debug: false
         };
 
@@ -648,8 +648,9 @@ impl Snapshot {
             self.memory = self.memory.decreased_size();
         }
 
-        self.set_memory_size_header(64* self.nb_pages() as u16);
-        self.memory_already_written.resize_with(self.nb_pages()*0x1_0000, |_| false)
+        self.set_memory_size_header(64 * self.nb_pages() as u16);
+        self.memory_already_written
+            .resize_with(self.nb_pages() * 0x1_0000, |_| false)
     }
 
     /// To play easier with memory, remove all the memory chunks and use a linearized memory version
@@ -760,7 +761,6 @@ impl Snapshot {
     /// ```
     /// TODO: re-implement with set_byte
     pub fn add_data(&mut self, data: &[u8], address: usize) -> Result<(), SnapshotError> {
-
         let last_used_address = address + data.len() - 1;
         if last_used_address >= 0x10000 * 2 {
             Err(SnapshotError::NotEnougSpaceAvailable)
@@ -830,19 +830,18 @@ impl Snapshot {
 mod tests {
     use similar_asserts::assert_eq;
 
-    use crate::{Snapshot, BANK_SIZE};
-
     use super::SnapshotMemory;
+    use crate::{Snapshot, BANK_SIZE};
 
     #[test]
     fn test_resize() {
         let mut sna = Snapshot::default();
         assert_eq!(sna.nb_pages(), 1);
-        assert_eq!(sna.memory_dump().len(), BANK_SIZE*4);
+        assert_eq!(sna.memory_dump().len(), BANK_SIZE * 4);
 
         sna.resize(2);
         assert_eq!(sna.nb_pages(), 2);
-        assert_eq!(sna.memory_dump().len(), BANK_SIZE*4*2);
+        assert_eq!(sna.memory_dump().len(), BANK_SIZE * 4 * 2);
     }
 
     #[test]

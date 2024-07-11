@@ -1912,7 +1912,10 @@ impl ListingElement for LocatedTokenInner {
                 op: _
             } => todo!(),
             Self::Equ { label, expr } => {
-                Cow::Owned(Token::Equ { label: label.as_str().into(), expr: expr.to_expr().into_owned() })
+                Cow::Owned(Token::Equ {
+                    label: label.as_str().into(),
+                    expr: expr.to_expr().into_owned()
+                })
             },
             Self::SetN {
                 label: _,

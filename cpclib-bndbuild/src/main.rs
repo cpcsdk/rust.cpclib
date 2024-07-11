@@ -296,8 +296,8 @@ fn inner_main() -> Result<(), BndBuilderError> {
         if matches.get_flag("dot") {
             let dot = builder.to_dot();
             println!("{dot}")
-
-        } else {
+        }
+        else {
             // Execute the targets
             let mut first_loop = true;
             let watch_requested = matches.get_flag("watch");

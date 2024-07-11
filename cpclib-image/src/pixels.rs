@@ -218,20 +218,15 @@ pub mod mode1 {
         [compute(pen1), compute(pen2), compute(pen3), compute(pen4)]
     }
 
-    pub fn pen_to_bits_position<P: Into<PixelPosition>>(pixel: P) -> [u8;2] {
+    pub fn pen_to_bits_position<P: Into<PixelPosition>>(pixel: P) -> [u8; 2] {
         let pixel = pixel.into();
-
 
         let mut pos = match pixel {
             // pixel pos [0,1,2,3]            bit1 idx                        bit0 idx
             PixelPosition::First => [BitMapping::FirstBit1 as u8, BitMapping::FirstBit0 as u8],
-            PixelPosition::Second => {
-                [BitMapping::SecondBit1 as u8, BitMapping::SecondBit0 as u8]
-            },
+            PixelPosition::Second => [BitMapping::SecondBit1 as u8, BitMapping::SecondBit0 as u8],
             PixelPosition::Third => [BitMapping::ThirdBit1 as u8, BitMapping::ThirdBit0 as u8],
-            PixelPosition::Fourth => {
-                [BitMapping::FourthBit1 as u8, BitMapping::FourthBit0 as u8]
-            },
+            PixelPosition::Fourth => [BitMapping::FourthBit1 as u8, BitMapping::FourthBit0 as u8]
         };
         pos.reverse(); // reverse because reading order is opposite to storage order
         pos
@@ -246,8 +241,6 @@ pub mod mode1 {
         else {
             pen
         };
-
-
 
         // Bits of interest (attention order is good when reading it, not using it...)
         let bits_position: [u8; 2] = pen_to_bits_position(pixel);

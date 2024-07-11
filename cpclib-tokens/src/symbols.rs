@@ -49,7 +49,7 @@ impl Display for PhysicalAddress {
             },
             PhysicalAddress::Bank(address) => {
                 write!(f, "0x{:X} in bank {}", address.address(), address.bank())
-            },
+            }
         }
     }
 }

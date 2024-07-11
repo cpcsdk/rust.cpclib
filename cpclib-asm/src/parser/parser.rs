@@ -866,7 +866,6 @@ pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     Ok(token)
 }
 
-
 /// Parse a sub-listing part that aims at being crunched after being assembled at first pass
 pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let crunched_start = input.checkpoint();
@@ -1028,7 +1027,7 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
 
 #[inline]
 pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-   // let _ = my_space0(input)?;
+    // let _ = my_space0(input)?;
     let confined_start = input.checkpoint();
 
     let _ = parse_directive_word(b"CONFINED").parse_next(input)?;

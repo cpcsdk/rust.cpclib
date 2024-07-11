@@ -3,7 +3,7 @@ use cpclib::disc::amsdos::AmsdosError;
 use cpclib::image::image::{ColorMatrix, Mode};
 use cpclib_imgconverter::{self, get_requested_palette};
 
-fn main() -> Result<(), AmsdosError>{
+fn main() -> Result<(), AmsdosError> {
     let cmd = cpclib_imgconverter::specify_palette!(clap::Command::new("cpc2png")
         .about("Generate PNG from CPC files")
         .subcommand_required(true)

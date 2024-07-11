@@ -641,7 +641,6 @@ impl Listing {
     //
     //     dbg!(&self);
     // }
-
 }
 
 impl From<&[u8]> for Listing {
