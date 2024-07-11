@@ -460,3 +460,15 @@ fn expect_failure(fname: &str) {
         panic!();
     }
 }
+
+
+
+#[test]
+fn test_at2_akm() {
+    let args_parser = build_args_parser();
+    let args =
+        args_parser.get_matches_from(&["basm", "--db", "tests/asm/at2/test_akm.asm"]);
+
+    process(&args).expect("Error while assembling AT2/AKM");
+
+}

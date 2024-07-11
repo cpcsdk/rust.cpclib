@@ -368,11 +368,6 @@ impl AssemblerError {
 
 
     pub fn format(&self, f: &mut std::fmt::Formatter<'_>, complete: bool) -> std::fmt::Result {
-
-
-        dbg!(self);
-       // panic!();
-
         match self {
             AssemblerError::SyntaxError { error } => {
                 let mut source_files = SimpleFiles::new();
