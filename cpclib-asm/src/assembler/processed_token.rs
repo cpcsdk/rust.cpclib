@@ -714,6 +714,8 @@ where
         }
     }
 
+    env.cleanup_warnings();
+
     Ok(())
 }
 

@@ -1783,6 +1783,7 @@ impl Env {
 }
 
 impl Env {
+    #[inline(always)]
     pub fn add_warning(&mut self, warning: AssemblerWarning) {
         if self.options().assemble_options().enable_warnings {
             self.warnings.push(warning);
@@ -4031,12 +4032,8 @@ impl Env {
 
 /// Warnings related code
 impl Env {
-    pub fn cleanup_warnings(&mut self) {
-        if !self.options().assemble_options().enable_warnings {
-            assert!(self.warnings.is_empty());
-            return;
-        }
 
+    fn merge_overriding_warnings(&mut self) {
         // Filter the warnings to merge overriding
         let mut current_warning_idx = 1; // index to the last warning to treat
         let mut previous_warning_idx = 0; // index to the previous warning treated (diff with current_warning_idx can be higher than 1 when there are several consecutive warnings for OverrideMemory)
@@ -4141,9 +4138,12 @@ impl Env {
         // change the length  of the vector to remove all eated ones
         self.warnings.truncate(previous_warning_idx + 1);
 
+    }
+
+    fn render_warnings(&mut self) {
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
-            if let AssemblerError::AssemblingError { msg } = w {
+            if let AssemblerError::AssemblingError {..} = w {
                 // nothing to do
             }
             else {
@@ -4152,6 +4152,16 @@ impl Env {
                 }
             }
         });
+    }
+
+    pub fn cleanup_warnings(&mut self) {
+        if !self.options().assemble_options().enable_warnings {
+            debug_assert!(self.warnings.is_empty());
+            return;
+        }
+
+        self.merge_overriding_warnings();
+        self.render_warnings();
     }
 }
 
