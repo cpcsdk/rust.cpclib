@@ -20,10 +20,10 @@ fn main() {
         "Visual BndBuild",
         native_options,
         Box::new(move |cc| {
-            Box::new(cpclib_visual_bndbuild::BndBuildApp::new(
+            Ok(Box::new(cpclib_visual_bndbuild::BndBuildApp::new(
                 cc,
                 matches.get_one::<String>("INPUT")
-            ))
+            )))
         })
     )
     .unwrap();

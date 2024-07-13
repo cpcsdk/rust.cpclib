@@ -321,7 +321,7 @@ impl BndBuildApp {
     fn update_menu(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             if self.job.is_some() {
-                ui.set_enabled(false);
+                ui.disable();
             }
 
             egui::menu::bar(ui, |ui| {
@@ -341,7 +341,7 @@ impl BndBuildApp {
                         ui.menu_button("Open Recent", |ui| {
                             for fname in self.recent_files.clone().iter().rev() {
                                 if ui
-                                    .add(Button::new(fname.display().to_string()).wrap(false))
+                                    .add(Button::new(fname.display().to_string()).wrap_mode(egui::TextWrapMode::Extend))
                                     .clicked()
                                 {
                                     self.load(fname);
