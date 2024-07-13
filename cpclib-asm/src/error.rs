@@ -373,7 +373,6 @@ impl AssemblerError {
         }
     }
 
-
     pub fn format(&self, f: &mut std::fmt::Formatter<'_>, complete: bool) -> std::fmt::Result {
         match self {
             AssemblerError::SyntaxError { error } => {

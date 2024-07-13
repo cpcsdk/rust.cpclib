@@ -3168,7 +3168,6 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 
 macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident, $cls:tt) => {{
-
         $env.update_dollar();
         match $token {
             $cls::Align(ref boundary, ref fill) => $env.visit_align(boundary, fill.as_ref()),
@@ -4031,7 +4030,6 @@ impl Env {
 
 /// Warnings related code
 impl Env {
-
     fn merge_overriding_warnings(&mut self) {
         // Filter the warnings to merge overriding
         let mut current_warning_idx = 1; // index to the last warning to treat
@@ -4136,13 +4134,12 @@ impl Env {
         }
         // change the length  of the vector to remove all eated ones
         self.warnings.truncate(previous_warning_idx + 1);
-
     }
 
     fn render_warnings(&mut self) {
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
-            if let AssemblerError::AssemblingError {..} = w {
+            if let AssemblerError::AssemblingError { .. } = w {
                 // nothing to do
             }
             else {

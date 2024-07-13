@@ -182,9 +182,7 @@ pub fn parse<'arg>(
     };
 
     let res = crate::parse_z80_with_context_builder(code, builder)
-        .map_err(|e| {
-            BasmError::from(e.render())
-        });
+        .map_err(|e| BasmError::from(e.render()));
 
     if options.show_progress {
         Progress::progress().remove_parse(&fname);
@@ -539,7 +537,6 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     // standard assembling
     let (listing, options) = parse(matches)?;
     let env = assemble(matches, &listing, options).map_err(move |error| {
-
         BasmError::ErrorWithListing {
             error: Box::new(error),
             listing
