@@ -58,6 +58,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .action(ArgAction::SetTrue)
         )
         .arg(
+            Arg::new("show")
+                .long("show")
+                .help("Show the file AFTER interpreting the templates")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("dot")
+        )
+        .arg(
             Arg::new("file")
                 .short('f')
                 .long("file")
@@ -73,7 +80,7 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .long("watch")
                 .action(ArgAction::SetTrue)
                 .help("Watch the targets and permanently rebuild them when needed.")
-                .conflicts_with("dot")
+                .conflicts_with_all(["dot", "show"])
         )
         .arg(
             Arg::new("list")
@@ -237,7 +244,13 @@ fn inner_main() -> Result<(), BndBuilderError> {
             }
         }
 
-        let builder = BndBuilder::from_fname(fname)?;
+        let content = BndBuilder::decode_from_fname(fname)?;
+        if matches.get_flag("show") {
+            println!("{content}");
+            return Ok(());
+        }
+
+        let builder = BndBuilder::from_string(content)?;
 
         if let Some(add) = matches.get_one::<String>("add") {
             let targets = [add];

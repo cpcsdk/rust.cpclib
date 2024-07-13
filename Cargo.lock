@@ -1531,6 +1531,7 @@ dependencies = [
  "glob",
  "globmatch",
  "lazy-regex",
+ "minijinja",
  "self_cell",
  "serde",
  "serde_yaml",
@@ -2170,7 +2171,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.1",
 ]
 
 [[package]]
@@ -3245,7 +3246,7 @@ dependencies = [
  "bitflags 2.5.0",
  "com",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.1",
  "thiserror",
  "widestring",
  "winapi",
@@ -3985,6 +3986,15 @@ dependencies = [
  "log",
  "objc",
  "paste",
+]
+
+[[package]]
+name = "minijinja"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "933ee10775d58fca8238a84fe165dfe4bde8b07d7574f24d76ffea91170f3ac6"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -6733,7 +6743,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.1",
  "log",
  "metal",
  "naga",

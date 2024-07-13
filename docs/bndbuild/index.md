@@ -67,3 +67,7 @@ They are:
 - `rm` to delete files
 - `xfer` to transfer to the CPC with the M4 card
 - `extern` to launch any command available on the machine
+
+## Templating
+
+A jinja-like templating is used to generate the final yaml file : <https://docs.rs/minijinja/latest/minijinja/syntax/index.html>.
