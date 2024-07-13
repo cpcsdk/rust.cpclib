@@ -3168,7 +3168,6 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 
 macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident, $cls:tt) => {{
-        //     dbg!($token);
 
         $env.update_dollar();
         match $token {
@@ -5539,7 +5538,6 @@ where
             let src = arg2.get_register16().unwrap();
             // Fake instruction splitted in 2 bits operations
             {
-                println!("{:?}, {:?}", dst.split(), src.split());
                 let bytes_high = assemble_ld(
                     &DataAccess::Register8(dst.high().unwrap()),
                     &DataAccess::Register8(src.high().unwrap()),
