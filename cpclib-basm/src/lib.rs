@@ -183,8 +183,7 @@ pub fn parse<'arg>(
 
     let res = crate::parse_z80_with_context_builder(code, builder)
         .map_err(|e| {
-            debug_assert!(e.is_already_rendered());
-            BasmError::from(e)
+            BasmError::from(e.render())
         });
 
     if options.show_progress {

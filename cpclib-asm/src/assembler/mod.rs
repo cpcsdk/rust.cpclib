@@ -412,7 +412,6 @@ pub struct Env {
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
-    string_warning_done: bool,
     warnings: Vec<AssemblerWarning>,
 
     /// Counter to disable some instruction in rorg stuff
@@ -472,7 +471,6 @@ impl Clone for Env {
             run_options: self.run_options.clone(),
             output_trigger: self.output_trigger.clone(),
             symbols_output: self.symbols_output.clone(),
-            string_warning_done: self.string_warning_done.clone(),
             warnings: self.warnings.clone(),
             nested_rorg: self.nested_rorg.clone(),
             sections: self.sections.clone(),
@@ -551,7 +549,6 @@ impl Default for Env {
 
             crunched_section_state: None,
 
-            string_warning_done: false,
             warnings: Vec::new(),
             nested_rorg: 0,
 

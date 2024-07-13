@@ -366,6 +366,13 @@ impl AssemblerError {
         }
     }
 
+    pub fn render(self) -> Self {
+        match &self {
+            Self::AlreadyRenderedError(_) => self,
+            _ => Self::AlreadyRenderedError(self.to_string())
+        }
+    }
+
 
     pub fn format(&self, f: &mut std::fmt::Formatter<'_>, complete: bool) -> std::fmt::Result {
         match self {
