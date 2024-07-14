@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-basm"
-version = "0.8.1"
+version = "0.8.2"
 description = "z80 assembler relying on cpclib-asm"
 
 authors.workspace = true
