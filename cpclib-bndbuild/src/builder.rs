@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::path::Path;
 
 use cpclib_common::itertools::Itertools;
-use minijinja::{context, Environment};
+use minijinja::{context, Environment, Error, ErrorKind};
 
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
@@ -98,6 +98,13 @@ impl BndBuilder {
 
         // apply jinja templating
         let mut env = Environment::new();
+        fn error(error: String) -> Result<String, Error> {
+            Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    error
+                ))
+        }
+        env.add_function("fail", error);
         for (key, value) in definitions {
             let key = key.as_ref();
             let value = value.as_ref();
