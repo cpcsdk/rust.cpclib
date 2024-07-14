@@ -55,8 +55,10 @@ impl BndBuilder {
         Self::decode_from_fname_with_definitions(fname, &Vec::<(String, String)>::new())
     }
 
-    pub fn decode_from_fname_with_definitions<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str> >(fname: P, definitions: &[(S1, S2)]) -> Result<String, BndBuilderError> {
-
+    pub fn decode_from_fname_with_definitions<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str>>(
+        fname: P,
+        definitions: &[(S1, S2)]
+    ) -> Result<String, BndBuilderError> {
         let fname = fname.as_ref();
         let file = std::fs::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
@@ -79,7 +81,8 @@ impl BndBuilder {
 
     pub fn decode_from_reader<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str>>(
         mut rdr: impl Read,
-        working_directory: Option<P>, definitions: &[(S1, S2)]
+        working_directory: Option<P>,
+        definitions: &[(S1, S2)]
     ) -> Result<String, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
@@ -99,10 +102,7 @@ impl BndBuilder {
         // apply jinja templating
         let mut env = Environment::new();
         fn error(error: String) -> Result<String, Error> {
-            Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    error
-                ))
+            Err(Error::new(ErrorKind::InvalidOperation, error))
         }
         env.add_function("fail", error);
         for (key, value) in definitions {
