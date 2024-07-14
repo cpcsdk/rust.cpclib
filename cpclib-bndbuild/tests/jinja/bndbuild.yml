@@ -1,0 +1,8 @@
+{% set source = "test.asm" %}
+
+- dep: {{source}}
+  tgt: test.o
+  cmd: basm {{source}} -o test.o
+
+- tgt: distclean
+  cmd: -rm test.o
