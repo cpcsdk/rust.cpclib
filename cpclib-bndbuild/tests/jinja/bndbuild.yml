@@ -1,8 +1,38 @@
-{% set source = "test.asm" %}
+#!/bndbuild
+# bndbuild -DCPCADDR=<myip> m4  if you want a specific address for the M4
+# bndbuild -DASSEMBLER=rasm m4 if you want to assemble with rasm (needs to be on the PATH) instead of basm
+# bndbuild DASSEMBLER=rasm  --dot | dot -Tpng | display if you want to see the dependency tree for rasm-based construction
+
+{%- if not CPCADDR -%}
+{%-   set CPCADDR = "192.168.1.26" -%}
+{%- endif -%}
+{{ASSEMBLER}}
+
+{%- if not ASSEMBLER -%}
+{%-   set ASSEMBLER = "basm" -%}
+{%- endif -%}
+{{ASSEMBLER}}
+
+{%- macro assemble(base) -%}
+{%-  if ASSEMBLER == "rasm" -%}
+        extern rasm {{base}}
+{%-  elif ASSEMBLER == "basm" -%}
+        basm {{base}}
+{%-  else -%}
+{{-     fail("wrong ASSEMBER value: " + ASSEMBLER) }}
+{%-  endif -%}
+{%- endmacro -%}
+
+{%- set source = "test.asm" -%}
+{%- set prog = "TEST" %}
 
 - dep: {{source}}
-  tgt: test.o
-  cmd: basm {{source}} -o test.o
+  tgt: {{prog}}
+  cmd: {{assemble(source)}}
 
 - tgt: distclean
-  cmd: -rm test.o
+  cmd: -rm {{prog}}
+
+- dep: {{prog}}
+  tgt: m4
+  cmd: xfer {{CPCADDR}} -y {{prog}}
