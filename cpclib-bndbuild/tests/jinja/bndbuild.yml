@@ -1,7 +1,7 @@
 #!/bndbuild
 # bndbuild -DCPCADDR=<myip> m4  if you want a specific address for the M4
 # bndbuild -DASSEMBLER=rasm m4 if you want to assemble with rasm (needs to be on the PATH) instead of basm
-# bndbuild DASSEMBLER=rasm  --dot | dot -Tpng | display if you want to see the dependency tree for rasm-based construction
+# bndbuild -DASSEMBLER=rasm  --dot | dot -Tpng | display if you want to see the dependency tree for rasm-based construction
 
 {%- if not CPCADDR -%}
 {%-   set CPCADDR = "192.168.1.26" -%}
