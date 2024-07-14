@@ -52,6 +52,11 @@ impl BndBuilder {
     }
 
     pub fn decode_from_fname<P: AsRef<Path>>(fname: P) -> Result<String, BndBuilderError> {
+        Self::decode_from_fname_with_definitions(fname, &Vec::<(String, String)>::new())
+    }
+
+    pub fn decode_from_fname_with_definitions<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str> >(fname: P, definitions: &[(S1, S2)]) -> Result<String, BndBuilderError> {
+
         let fname = fname.as_ref();
         let file = std::fs::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
@@ -64,7 +69,7 @@ impl BndBuilder {
         let working_directory = if path.is_dir() { Some(path) } else { None };
 
         let rdr = BufReader::new(file);
-        Self::decode_from_reader(rdr, working_directory)
+        Self::decode_from_reader(rdr, working_directory, definitions)
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
@@ -72,9 +77,9 @@ impl BndBuilder {
         std::fs::write(path, contents)
     }
 
-    pub fn decode_from_reader<P: AsRef<Path>>(
+    pub fn decode_from_reader<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str>>(
         mut rdr: impl Read,
-        working_directory: Option<P>
+        working_directory: Option<P>, definitions: &[(S1, S2)]
     ) -> Result<String, BndBuilderError> {
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
@@ -93,9 +98,12 @@ impl BndBuilder {
 
         // apply jinja templating
         let mut env = Environment::new();
-        env.add_template("bndbuild.yml", &content).unwrap();
-        let tmpl = env.get_template("bndbuild.yml").unwrap();
-        tmpl.render(context!())
+        for (key, value) in definitions {
+            let key = key.as_ref();
+            let value = value.as_ref();
+            env.add_global(key, value);
+        }
+        env.render_str(&content, context!())
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))
     }
 

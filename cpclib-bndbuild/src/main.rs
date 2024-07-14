@@ -91,6 +91,14 @@ fn inner_main() -> Result<(), BndBuilderError> {
                 .conflicts_with("dot")
         )
         .arg(
+            Arg::new("DEFINE_SYMBOL")
+                .help("Provide a symbol with its value (default set to 1)")
+                .long("define")
+                .short('D')
+                .action(ArgAction::Append)
+                .number_of_values(1)
+        )
+        .arg(
             Arg::new("init")
                 .long("init")
                 .action(ArgAction::SetTrue)
@@ -244,7 +252,26 @@ fn inner_main() -> Result<(), BndBuilderError> {
             }
         }
 
-        let content = BndBuilder::decode_from_fname(fname)?;
+
+    // Get the variables definition
+    let definitions = if let Some(definitions) = matches.get_many::<String>("DEFINE_SYMBOL") {
+        definitions.into_iter().map(|definition| {
+            let (symbol, value) = {
+                match definition.split_once("=") {
+                    Some((symbol, value)) => (symbol, value),
+                    None => (definition.as_str(), "1")
+                }
+            };
+            (symbol, value)
+        })
+        .collect_vec()
+    } else {
+        Default::default()
+    };
+
+
+
+        let content = BndBuilder::decode_from_fname_with_definitions(fname, &definitions)?;
         if matches.get_flag("show") {
             println!("{content}");
             return Ok(());
