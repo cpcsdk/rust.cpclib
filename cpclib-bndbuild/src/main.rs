@@ -1,9 +1,5 @@
-use cpclib_bndbuild::executor::*;
 use cpclib_bndbuild::runners::RunnerWithClap;
-use cpclib_bndbuild::{
-    build_args_parser, built_info, process_matches, BndBuilder, BndBuilderError
-};
-use cpclib_common::itertools::Itertools;
+use cpclib_bndbuild::{build_args_parser, process_matches, BndBuilderError};
 
 fn main() {
     match inner_main() {
