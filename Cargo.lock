@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1696,7 +1696,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-visual-bndbuild"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "built",
  "cpclib-bndbuild",
@@ -2188,7 +2188,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330c60081dcc4c72131f8eb70510f1ac07223e5d4163db481a04a0befcffa412"
 dependencies = [
- "libloading 0.7.4",
+ "libloading 0.8.4",
 ]
 
 [[package]]
@@ -3247,7 +3247,7 @@ dependencies = [
  "bitflags 2.6.0",
  "com",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.4",
  "thiserror",
  "widestring",
  "winapi",
@@ -6916,7 +6916,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.4",
  "log",
  "metal 0.27.0",
  "naga 0.19.2",
@@ -6957,7 +6957,7 @@ dependencies = [
  "js-sys",
  "khronos-egl",
  "libc",
- "libloading 0.7.4",
+ "libloading 0.8.4",
  "log",
  "metal 0.28.0",
  "naga 0.20.0",
