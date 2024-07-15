@@ -6,12 +6,13 @@ use serde::{Deserialize, Deserializer};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
     Basm(StandardTask),
-    Rm(StandardTask),
-    Echo(StandardTask),
-    ImgConverter(StandardTask),
-    Xfer(StandardTask),
+    BndBuild(StandardTask),
     Disc(StandardTask),
-    Extern(StandardTask)
+    Echo(StandardTask),
+    Extern(StandardTask),
+    ImgConverter(StandardTask),
+    Rm(StandardTask),
+    Xfer(StandardTask),
 }
 
 impl Display for Task {
@@ -66,6 +67,14 @@ impl Display for Task {
                     s.args
                 )
             }
+            Task::BndBuild(s) => {
+                write!(
+                    f,
+                    "{}bndbuild {}",
+                    if s.ignore_error { "-" } else { "" },
+                    s.args
+                )
+            },
         }
     }
 }
@@ -93,12 +102,13 @@ impl<'de> Deserialize<'de> for Task {
 
                 match code {
                     "basm" | "assemble" => Ok(Task::Basm(std)),
-                    "echo" | "print" => Ok(Task::Echo(std)),
-                    "rm" | "del" => Ok(Task::Rm(std)),
-                    "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
-                    "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
-                    "extern" => Ok(Task::Extern(std)),
+                    "bndbuild" => Ok(Task::BndBuild(std)),
                     "dsk" | "disc" => Ok(Task::Disc(std)),
+                    "echo" | "print" => Ok(Task::Echo(std)),
+                    "extern" => Ok(Task::Extern(std)),
+                    "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
+                    "rm" | "del" => Ok(Task::Rm(std)),
+                    "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
                     _ => Err(Error::custom(format!("{code} is invalid")))
                 }
             }
@@ -113,12 +123,17 @@ impl<'de> Deserialize<'de> for Task {
 }
 
 impl Task {
-    pub fn new_dsk(args: &str) -> Self {
-        Self::Disc(StandardTask::new(args))
-    }
 
     pub fn new_basm(args: &str) -> Self {
         Self::Basm(StandardTask::new(args))
+    }
+
+    pub fn new_bndbuild(args: &str) -> Self {
+        Self::BndBuild(StandardTask::new(args))
+    }
+
+    pub fn new_dsk(args: &str) -> Self {
+        Self::Disc(StandardTask::new(args))
     }
 
     pub fn new_rm(args: &str) -> Self {
@@ -141,7 +156,8 @@ impl Task {
             | Task::ImgConverter(t)
             | Task::Xfer(t)
             | Task::Extern(t)
-            | Task::Disc(t) => &t.args
+            | Task::Disc(t)
+            | Task::BndBuild(t) => &t.args
         }
     }
 
@@ -153,7 +169,8 @@ impl Task {
             | Task::ImgConverter(t)
             | Task::Xfer(t)
             | Task::Extern(t)
-            | Task::Disc(t) => t.ignore_error
+            | Task::Disc(t) 
+            | Task::BndBuild(t) => t.ignore_error
         }
     }
 
@@ -165,7 +182,8 @@ impl Task {
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
             | Task::Extern(ref mut t)
-            | Task::Disc(ref mut t) => t.ignore_error = ignore
+            | Task::Disc(ref mut t) 
+            | Task::BndBuild(ref mut t) => t.ignore_error = ignore
         }
 
         self
@@ -180,6 +198,7 @@ impl Task {
             Task::Xfer(_) => true, // wrong when downloading files
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
+            Task::BndBuild(_) => false,
             Task::Disc(_) => false // wrong for winape
         }
     }
