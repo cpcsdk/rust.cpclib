@@ -63,6 +63,7 @@ Each rule can have the following keys:
 The commands are either included by the application (so limited to cpclib commands and os agnostic) or accessible externally (no limitation, but os dependent).
 They are:
 - `basm` to launch [basm assembler](../BASM)
+- `bndbuild` to launch ` bndbuild` itself for another task or configuration file
 - `img2cpc` to make [image conversion](../cpclib-imgconverter)
 - `rm` to delete files
 - `xfer` to transfer to the CPC with the M4 card
