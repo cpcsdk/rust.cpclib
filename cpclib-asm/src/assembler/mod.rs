@@ -3355,12 +3355,8 @@ pub fn visit_located_token(
     let nb_additional_warnings = env.warnings.len() - nb_warnings;
     for i in 0..nb_additional_warnings {
         let warning = &mut env.warnings[i + nb_warnings];
-        if !warning.is_located() {
-            *warning = AssemblerError::RelocatedWarning {
-                warning: Box::new(warning.clone()),
-                span: span.clone()
-            };
-        }
+        *warning = warning.clone().locate_warning(span.clone());
+
         // TODO check why it has been done this way
         //      maybe source code is not retrained and there are random crashes ?
         //     anyway I comment it now because it breaks warning merge

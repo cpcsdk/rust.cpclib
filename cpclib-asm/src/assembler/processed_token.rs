@@ -1009,7 +1009,7 @@ where
                                     msg: format!("Header has been removed for {txt}")
                                 };
                                 let warning = if let Some(span) = possible_span {
-                                    warning.locate(span.clone())
+                                    warning.locate_warning(span.clone())
                                 }
                                 else {
                                     warning

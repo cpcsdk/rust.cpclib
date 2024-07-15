@@ -341,7 +341,10 @@ impl BndBuildApp {
                         ui.menu_button("Open Recent", |ui| {
                             for fname in self.recent_files.clone().iter().rev() {
                                 if ui
-                                    .add(Button::new(fname.display().to_string()).wrap_mode(egui::TextWrapMode::Extend))
+                                    .add(
+                                        Button::new(fname.display().to_string())
+                                            .wrap_mode(egui::TextWrapMode::Extend)
+                                    )
                                     .clicked()
                                 {
                                     self.load(fname);

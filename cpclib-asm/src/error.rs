@@ -340,6 +340,18 @@ impl AssemblerError {
             }
         }
     }
+
+    pub fn locate_warning(self, span: Z80Span) -> Self {
+        if self.is_located() {
+            self
+        }
+        else {
+            AssemblerError::RelocatedWarning {
+                span,
+                warning: Box::new(self)
+            }
+        }
+    }
 }
 
 pub(crate) const LD_WRONG_SOURCE: &'static str = "LD: error in the source";
