@@ -33,7 +33,7 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Extern(_) => (EXTERN_RUNNER.deref() as &dyn Runner, task.args()),
         Task::ImgConverter(_) => (IMGCONV_RUNNER.deref() as &dyn Runner, task.args()),
         Task::Rm(_) => (RM_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Xfer(_) => (XFER_RUNNER.deref() as &dyn Runner, task.args()),
+        Task::Xfer(_) => (XFER_RUNNER.deref() as &dyn Runner, task.args())
     };
 
     runner.run(args).or_else(|e| {

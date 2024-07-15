@@ -12,7 +12,7 @@ pub enum Task {
     Extern(StandardTask),
     ImgConverter(StandardTask),
     Rm(StandardTask),
-    Xfer(StandardTask),
+    Xfer(StandardTask)
 }
 
 impl Display for Task {
@@ -66,7 +66,7 @@ impl Display for Task {
                     if s.ignore_error { "-" } else { "" },
                     s.args
                 )
-            }
+            },
             Task::BndBuild(s) => {
                 write!(
                     f,
@@ -74,7 +74,7 @@ impl Display for Task {
                     if s.ignore_error { "-" } else { "" },
                     s.args
                 )
-            },
+            }
         }
     }
 }
@@ -123,7 +123,6 @@ impl<'de> Deserialize<'de> for Task {
 }
 
 impl Task {
-
     pub fn new_basm(args: &str) -> Self {
         Self::Basm(StandardTask::new(args))
     }
@@ -169,7 +168,7 @@ impl Task {
             | Task::ImgConverter(t)
             | Task::Xfer(t)
             | Task::Extern(t)
-            | Task::Disc(t) 
+            | Task::Disc(t)
             | Task::BndBuild(t) => t.ignore_error
         }
     }
@@ -182,7 +181,7 @@ impl Task {
             | Task::Xfer(ref mut t)
             | Task::ImgConverter(ref mut t)
             | Task::Extern(ref mut t)
-            | Task::Disc(ref mut t) 
+            | Task::Disc(ref mut t)
             | Task::BndBuild(ref mut t) => t.ignore_error = ignore
         }
 

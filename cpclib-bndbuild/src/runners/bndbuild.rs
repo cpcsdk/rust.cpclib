@@ -1,5 +1,5 @@
-
 use cpclib_common::clap::{self, Command};
+
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
 
@@ -29,22 +29,20 @@ impl RunnerWithClap for BndBuildRunner {
 
 impl Runner for BndBuildRunner {
     fn inner_run(&self, itr: &[String]) -> Result<(), String> {
-		// backup of cwd
-		let cwd = std::env::current_dir().unwrap();
+        // backup of cwd
+        let cwd = std::env::current_dir().unwrap();
 
-		// this will change the cwd
+        // this will change the cwd
         let matches = self.get_matches(itr)?;
-        crate::process_matches(self.command.clone(), &matches)
-			.map_err(|e| e.to_string())?;
+        crate::process_matches(self.command.clone(), &matches).map_err(|e| e.to_string())?;
 
-		// restoration of cwd
-		std::env::set_current_dir(cwd).unwrap();
+        // restoration of cwd
+        std::env::set_current_dir(cwd).unwrap();
 
-		Ok(())
+        Ok(())
     }
 
     fn get_command(&self) -> &str {
         "bndbuild"
     }
 }
-
