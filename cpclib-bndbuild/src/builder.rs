@@ -60,6 +60,25 @@ impl BndBuilder {
         definitions: &[(S1, S2)]
     ) -> Result<String, BndBuilderError> {
         let fname = fname.as_ref();
+
+        // when a folder is provided try to look for a build file
+        let fname = if fname.is_dir() {
+            let mut selected = fname.to_owned();
+            for extra in ["bndbuild.yml", "build.bnd"] {
+                let tentative = fname.join(extra);
+                if tentative.is_file() {
+                    selected = tentative;
+                    break
+                }
+            }
+            selected
+        } else {
+            fname.to_owned()
+        };
+        let fname = fname.as_path();
+        
+
+
         let file = std::fs::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
                 fname: fname.display().to_string(),
