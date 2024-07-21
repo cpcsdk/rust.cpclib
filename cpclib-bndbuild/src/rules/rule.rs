@@ -203,8 +203,8 @@ impl Rule {
     }
 
     pub fn is_up_to_date(&self) -> bool {
-        // No need to try if one is missing
-        if self.targets.iter().any(|p| !p.exists()) {
+        // No need to try if phony or if one file is missing
+        if self.is_phony() || self.targets.iter().any(|p| !p.exists()) {
             return false;
         }
 
