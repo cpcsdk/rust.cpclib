@@ -76,7 +76,7 @@ cpclib-z80emu = { version = "0.8.0", path = "cpclib-z80emu", default-features = 
 # standard dependencies
 ambassador = "0.3.7"
 anyhow = "1.0.86"
-arrayref = "0.3.7"
+arrayref = "0.3.8"
 as-slice = "0.2.1"
 assert_matches = "1.5.0"
 bitfield = "0.14.0"
@@ -85,11 +85,11 @@ bitsets = "0.1.1"
 bitvec = "1.0.1"
 built = { version = "0.7.4", features = ["chrono"] }
 camino = "1.1.7"
-cc = "1.1.2"
+cc = "1.1.7"
 cfg-if = "1.0.0"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
-clap = "4.5.9"
+clap = "4.5.13"
 codespan-reporting = "0.11.1"
 contracts = "0.6.3"
 crc = "3.2.1"
@@ -103,7 +103,7 @@ either = "1.13.0"
 encoding_rs = { version = "0.8.34", default-features = false, features = [
   "alloc",
 ] }
-enumn = "0.1.13"
+enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "11.3.0"
 exitcode = "1.1.2"
@@ -115,7 +115,7 @@ globset = "0.4.14"
 hashbag = "0.1.12"
 hotwatch = { version = "0.5.0" }
 hxcfe = "0.1.5"
-image = "0.25.1"
+image = "0.25.2"
 indicatif = "0.17.8"
 itertools = "0.12.1"
 lazy_static = "1.5.0"
@@ -125,9 +125,9 @@ matches = "0.1.10"
 minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.3"
-num_enum = "0.7.2"
+num_enum = "0.7.3"
 num-bigint = "0.4.6"
-ordered-float = "4.2.1"
+ordered-float = "4.2.2"
 ouroboros = "0.18.4"
 parking_lot = "0.12.3"
 paste = "1.0.15"
@@ -155,7 +155,7 @@ smol_str = "0.2.2"
 strsim = "0.11.1"
 subprocess = { version = "0.2.9" }
 substring = "1.4.5"
-syn = "2.0.71"
+syn = "2.0.72"
 tempfile = "3.10.1"
 term_grid = { version = "0.2.0" }
 termize = { version = "0.1.1" }
@@ -163,13 +163,13 @@ test-generator = "0.3.1"
 thiserror = "1.0"
 time = "0.3.36"
 velcro = "0.5.4"
-winnow = { version = "0.6.13", features = ["simd"] }
+winnow = { version = "0.6.18", features = ["simd"] }
 
 # gui based dependencies
 eframe = "0.28"
 egui = "0.28"
 claui = { git = "https://github.com/rgiot/claui.git" }
-egui_code_editor = "0.2.8"
+egui_code_editor = "0.2.9"
 egui_file = "0.18"
 open = "5.3.0"
 
