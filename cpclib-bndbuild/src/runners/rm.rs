@@ -26,12 +26,12 @@ impl RmRunner {
     }
 }
 impl Runner for RmRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         let mut errors = String::new();
 
         for fname in itr
             .into_iter()
-            .map(|s| s.as_str())
+            .map(|s| s.as_ref())
             //    .map(|s| glob(s).unwrap())
             .map(expand_glob)
             .flatten()

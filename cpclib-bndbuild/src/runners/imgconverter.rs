@@ -1,7 +1,7 @@
 use cpclib_common::clap::{Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
+use crate::{built_info, task::IMG2CPC_CMDS};
 
 pub struct ImgConverterRunner {
     command: Command
@@ -39,7 +39,7 @@ impl RunnerWithClap for ImgConverterRunner {
 }
 
 impl Runner for ImgConverterRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         let args = self.get_clap_command().clone();
 
         let matches = self.get_matches(itr)?;
@@ -52,6 +52,6 @@ impl Runner for ImgConverterRunner {
     }
 
     fn get_command(&self) -> &str {
-        "img2cpc"
+        &IMG2CPC_CMDS[0]
     }
 }

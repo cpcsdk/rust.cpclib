@@ -1,10 +1,18 @@
+use std::fmt::Debug;
+
+use cpclib_common::itertools::Itertools;
+
+use crate::task::EXTERN_CMDS;
+
 use super::Runner;
 
 #[derive(Default)]
 pub struct ExternRunner {}
 impl ExternRunner {}
 impl Runner for ExternRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+        let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+
         // WARNING
         // Deactivated because if makes fail normal progam on Linux
         // however, it was maybe mandatory for Windows
@@ -45,6 +53,6 @@ impl Runner for ExternRunner {
     }
 
     fn get_command(&self) -> &str {
-        "extern"
+        &EXTERN_CMDS[0]
     }
 }

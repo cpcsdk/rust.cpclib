@@ -1,7 +1,7 @@
 use cpclib_common::clap::{self, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
+use crate::{built_info, task::BNDBUILD_CMDS};
 
 pub struct BndBuildRunner {
     command: clap::Command
@@ -28,7 +28,7 @@ impl RunnerWithClap for BndBuildRunner {
 }
 
 impl Runner for BndBuildRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         // backup of cwd
         let cwd = std::env::current_dir().unwrap();
 
@@ -43,6 +43,6 @@ impl Runner for BndBuildRunner {
     }
 
     fn get_command(&self) -> &str {
-        "bndbuild"
+        &BNDBUILD_CMDS[0]
     }
 }

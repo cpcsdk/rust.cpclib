@@ -1,10 +1,12 @@
 use std::fmt::Display;
 
+use cpclib_common::itertools::Itertools;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
+    Cp(StandardTask),
     Basm(StandardTask),
     BndBuild(StandardTask),
     Disc(StandardTask),
@@ -15,67 +17,37 @@ pub enum Task {
     Xfer(StandardTask)
 }
 
+pub const BASM_CMDS: &[&'static str] = &["basm", "assemble"];
+pub const BNDBUILD_CMDS: &[&'static str] = &["bndbuild", "build"];
+pub const CP_CMDS: &[&'static str] = &["cp", "copy"];
+pub const DISC_CMDS: &[&'static str] = &["dsk", "disc"];
+pub const ECHO_CMDS: &[&'static str] = &["echo", "print"];
+pub const EXTERN_CMDS: &[&'static str] = &["extern"];
+pub const IMG2CPC_CMDS: &[&'static str] = &["img2cpc", "imgconverter"];
+pub const RM_CMDS: &[&'static str] = &["rm", "del"];
+pub const XFER_CMDS: &[&'static str] = &["xfer", "cpcwifi", "m4"];
+
 impl Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Task::Basm(s) => {
-                write!(
-                    f,
-                    "{}basm {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::Rm(s) => write!(f, "{}rm {}", if s.ignore_error { "-" } else { "" }, s.args),
-            Task::Echo(s) => {
-                write!(
-                    f,
-                    "{}echo {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::ImgConverter(s) => {
-                write!(
-                    f,
-                    "{}img2cpc {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::Xfer(s) => {
-                write!(
-                    f,
-                    "{}xfer {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::Disc(s) => {
-                write!(
-                    f,
-                    "{}disc {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::Extern(s) => {
-                write!(
-                    f,
-                    "{}extern {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            },
-            Task::BndBuild(s) => {
-                write!(
-                    f,
-                    "{}bndbuild {}",
-                    if s.ignore_error { "-" } else { "" },
-                    s.args
-                )
-            }
-        }
+        let (cmd, s) = match self {
+            Task::Basm(s) => (&BASM_CMDS[0], s),
+            Task::BndBuild(s) => (&BNDBUILD_CMDS[0], s),
+            Task::Cp(s) => (&CP_CMDS[0], s),
+            Task::Disc(s) => (&DISC_CMDS[0], s),
+            Task::Echo(s) => (&ECHO_CMDS[0], s),
+            Task::Extern(s) => (&EXTERN_CMDS[0], s),
+            Task::ImgConverter(s) => (&IMG2CPC_CMDS[0], s),
+            Task::Rm(s) => (&RM_CMDS[0], s),
+            Task::Xfer(s) => (&XFER_CMDS[0], s),
+        };
+
+        write!(
+            f,
+            "{}{} {}",
+            if s.ignore_error { "-" } else { "" },
+            cmd,
+            s.args
+        )
     }
 }
 
@@ -100,17 +72,38 @@ impl<'de> Deserialize<'de> for Task {
                     ignore_error: ignore
                 };
 
-                match code {
-                    "basm" | "assemble" => Ok(Task::Basm(std)),
-                    "bndbuild" => Ok(Task::BndBuild(std)),
-                    "dsk" | "disc" => Ok(Task::Disc(std)),
-                    "echo" | "print" => Ok(Task::Echo(std)),
-                    "extern" => Ok(Task::Extern(std)),
-                    "img2cpc" | "imgconverter" => Ok(Task::ImgConverter(std)),
-                    "rm" | "del" => Ok(Task::Rm(std)),
-                    "xfer" | "cpcwifi" | "m4" => Ok(Task::Xfer(std)),
-                    _ => Err(Error::custom(format!("{code} is invalid")))
+
+                if BASM_CMDS.iter().contains(&code) {
+                    Ok(Task::Basm(std))
+                } 
+                else if BNDBUILD_CMDS.iter().contains(&code) {
+                    Ok(Task::BndBuild(std))
                 }
+                else if CP_CMDS.iter().contains(&code) {
+                    Ok(Task::Cp(std))
+                }
+                else if DISC_CMDS.iter().contains(&code) {
+                    Ok(Task::Disc(std))
+                }
+                else if ECHO_CMDS.iter().contains(&code) {
+                    Ok(Task::Echo(std))
+                }
+                else if EXTERN_CMDS.iter().contains(&code) {
+                    Ok(Task::Extern(std))
+                }
+                else if IMG2CPC_CMDS.iter().contains(&code) {
+                    Ok(Task::ImgConverter(std))
+                }
+                else if RM_CMDS.iter().contains(&code) {
+                    Ok(Task::Rm(std))
+                }
+                else if XFER_CMDS.iter().contains(&code) {
+                    Ok(Task::Xfer(std))
+                }
+                else {
+                    Err(Error::custom(format!("{code} is an invalid command")))
+                }
+
             }
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -147,7 +140,8 @@ impl Task {
         Self::ImgConverter(StandardTask::new(args))
     }
 
-    pub fn args(&self) -> &str {
+
+    fn standard_task(&self) -> &StandardTask {
         match self {
             Task::Basm(t)
             | Task::Rm(t)
@@ -156,35 +150,36 @@ impl Task {
             | Task::Xfer(t)
             | Task::Extern(t)
             | Task::Disc(t)
-            | Task::BndBuild(t) => &t.args
+            | Task::BndBuild(t)
+            | Task::Cp(t) => t,
         }
+    }
+
+    fn standard_task_mut(&mut self) -> &mut StandardTask {
+        match self {
+            Task::Basm(t)
+            | Task::Rm(t)
+            | Task::Echo(t)
+            | Task::ImgConverter(t)
+            | Task::Xfer(t)
+            | Task::Extern(t)
+            | Task::Disc(t)
+            | Task::BndBuild(t)
+            | Task::Cp(t) => t,
+        }
+    }
+
+
+    pub fn args(&self) -> &str {
+        &self.standard_task().args
     }
 
     pub fn ignore_errors(&self) -> bool {
-        match self {
-            Task::Basm(t)
-            | Task::Rm(t)
-            | Task::Echo(t)
-            | Task::ImgConverter(t)
-            | Task::Xfer(t)
-            | Task::Extern(t)
-            | Task::Disc(t)
-            | Task::BndBuild(t) => t.ignore_error
-        }
+        self.standard_task().ignore_error
     }
 
     pub fn set_ignore_errors(mut self, ignore: bool) -> Self {
-        match self {
-            Task::Basm(ref mut t)
-            | Task::Rm(ref mut t)
-            | Task::Echo(ref mut t)
-            | Task::Xfer(ref mut t)
-            | Task::ImgConverter(ref mut t)
-            | Task::Extern(ref mut t)
-            | Task::Disc(ref mut t)
-            | Task::BndBuild(ref mut t) => t.ignore_error = ignore
-        }
-
+        self.standard_task_mut().ignore_error = ignore;
         self
     }
 
@@ -198,7 +193,8 @@ impl Task {
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
             Task::BndBuild(_) => false,
-            Task::Disc(_) => false // wrong for winape
+            Task::Disc(_) => false,
+            Task::Cp(_) => false
         }
     }
 }

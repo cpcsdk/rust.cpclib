@@ -46,6 +46,7 @@ build-deps = "0.1.4"
 [dev-dependencies]
 test-generator = "0.3.1"
 serial_test = "3.1.1"
+tempfile = {workspace = true}
 
 [[bin]]
 name = "bndbuild"

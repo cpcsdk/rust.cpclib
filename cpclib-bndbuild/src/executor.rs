@@ -4,6 +4,7 @@ use cpclib_common::lazy_static::lazy_static;
 
 use crate::runners::basm::BasmRunner;
 use crate::runners::bndbuild::BndBuildRunner;
+use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
@@ -16,6 +17,7 @@ use crate::task::Task;
 lazy_static! {
     pub static ref BASM_RUNNER: BasmRunner = BasmRunner::default();
     pub static ref BNDBUILD_RUNNER: BndBuildRunner = BndBuildRunner::default();
+    pub static ref CP_RUNNER: CpRunner = CpRunner::default();
     pub static ref DISC_RUNNER: DiscManagerRunner = DiscManagerRunner::default();
     pub static ref ECHO_RUNNER: EchoRunner = EchoRunner::default();
     pub static ref EXTERN_RUNNER: ExternRunner = ExternRunner::default();
@@ -25,18 +27,17 @@ lazy_static! {
 }
 
 pub fn execute(task: &Task) -> Result<(), String> {
-    let (runner, args) = match task {
-        Task::Basm(_) => (BASM_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::BndBuild(_) => (BNDBUILD_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Disc(_) => (DISC_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Echo(_) => (ECHO_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Extern(_) => (EXTERN_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::ImgConverter(_) => (IMGCONV_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Rm(_) => (RM_RUNNER.deref() as &dyn Runner, task.args()),
-        Task::Xfer(_) => (XFER_RUNNER.deref() as &dyn Runner, task.args())
-    };
-
-    runner.run(args).or_else(|e| {
+    match task {
+        Task::Basm(_) => BASM_RUNNER.run(task.args()),
+        Task::BndBuild(_) => BNDBUILD_RUNNER.run(task.args()),
+        Task::Cp(_) => CP_RUNNER.run(task.args()),
+        Task::Disc(_) => DISC_RUNNER.run(task.args()),
+        Task::Echo(_) => ECHO_RUNNER.run(task.args()),
+        Task::Extern(_) => EXTERN_RUNNER.run(task.args()),
+        Task::ImgConverter(_) => IMGCONV_RUNNER.run(task.args()),
+        Task::Rm(_) => RM_RUNNER.run(task.args()),
+        Task::Xfer(_) => XFER_RUNNER.run(task.args()),
+    }.or_else(|e| {
         if task.ignore_errors() {
             println!("\t\tError ignored. {}", e);
             Ok(())

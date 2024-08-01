@@ -1536,6 +1536,7 @@ dependencies = [
  "serde_yaml",
  "serial_test",
  "shlex",
+ "tempfile",
  "test-generator",
  "thiserror",
  "topologic",

@@ -1,7 +1,7 @@
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
+use crate::{built_info, task::BASM_CMDS};
 
 pub struct BasmRunner {
     command: clap::Command
@@ -53,7 +53,7 @@ impl RunnerWithClap for BasmRunner {
 }
 
 impl Runner for BasmRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         let matches = self.get_matches(itr)?;
 
         if matches.get_flag("version") {
@@ -79,6 +79,6 @@ impl Runner for BasmRunner {
     }
 
     fn get_command(&self) -> &str {
-        "basm"
+        &BASM_CMDS[0]
     }
 }

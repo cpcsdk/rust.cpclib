@@ -1,9 +1,12 @@
+use std::fmt::Debug;
+
 use cpclib_common::clap::{ArgMatches, Command};
 use glob::glob;
 use shlex::split;
 
 pub mod basm;
 pub mod bndbuild;
+pub mod cp;
 pub mod disc;
 pub mod echo;
 pub mod r#extern;
@@ -45,7 +48,7 @@ pub trait Runner {
     }
 
     /// Implement the command specific action
-    fn inner_run(&self, itr: &[String]) -> Result<(), String>;
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String>;
 
     fn get_command(&self) -> &str;
 }
@@ -53,10 +56,10 @@ pub trait Runner {
 pub trait RunnerWithClap: Runner {
     fn get_clap_command(&self) -> &Command;
 
-    fn get_matches(&self, itr: &[String]) -> Result<ArgMatches, String> {
+    fn get_matches<S: AsRef<str>>(&self, itr: &[S]) -> Result<ArgMatches, String> {
         self.get_clap_command()
             .clone()
-            .try_get_matches_from(itr)
+            .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
             .map_err(|e| e.to_string())
     }
 

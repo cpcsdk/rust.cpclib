@@ -1,7 +1,7 @@
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
+use crate::{built_info, task::XFER_CMDS};
 
 pub struct XferRunner {
     command: clap::Command
@@ -39,7 +39,7 @@ impl RunnerWithClap for XferRunner {
 }
 
 impl Runner for XferRunner {
-    fn inner_run(&self, itr: &[String]) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         let matches = self.get_matches(itr)?;
 
         if matches.get_flag("version") {
@@ -51,6 +51,6 @@ impl Runner for XferRunner {
     }
 
     fn get_command(&self) -> &str {
-        "xfer"
+        &XFER_CMDS[0]
     }
 }
