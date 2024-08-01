@@ -68,16 +68,15 @@ impl BndBuilder {
                 let tentative = fname.join(extra);
                 if tentative.is_file() {
                     selected = tentative;
-                    break
+                    break;
                 }
             }
             selected
-        } else {
+        }
+        else {
             fname.to_owned()
         };
         let fname = fname.as_path();
-        
-
 
         let file = std::fs::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
