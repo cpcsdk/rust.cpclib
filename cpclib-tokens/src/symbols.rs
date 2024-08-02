@@ -517,6 +517,13 @@ impl Value {
         }
     }
 
+    pub fn is_expr(&self) -> bool {
+        match self {
+            Value::Expr(_) => true,
+            _ => false
+        }
+    }
+
     pub fn integer(&self) -> Option<i32> {
         match self {
             Value::Expr(ExprResult::Value(i)) => Some(*i),

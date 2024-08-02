@@ -156,20 +156,27 @@ impl SymbolOutputGenerator {
     }
 
     pub fn fill_remu_snapshot_chunk(&self, symbs: &impl SymbolsTableTrait, remu: &mut RemuChunk) {
-        for (k, v) in symbs
+        for (k, raw) in symbs
             .expression_symbol()
             .iter()
-            .filter(|(s, _v)| self.keep_symbol(s))
+            .filter(|(s, _)| self.keep_symbol(s))
         {
             // Get the symbol
             let k = k.value();
 
             // get a possible value when using u16
-            let v = Self::symbol_to_u16(v);
+            let v = Self::symbol_to_u16(raw);
 
             // TODO handle aliases
             if let Some(v) = v {
-                let entry = RemuEntry::new_label(k.to_string(), v, 0);
+                let k = k.to_string();
+
+                let entry = if raw.is_expr() {
+                    RemuEntry::new_alias(k, v)
+                } else {
+                    RemuEntry::new_label(k, v, 0) // TODO properly handle bank
+                };
+                
                 remu.add_entry(&entry);
             }
         }
