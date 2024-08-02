@@ -1,7 +1,8 @@
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::{built_info, task::XFER_CMDS};
+use crate::built_info;
+use crate::task::XFER_CMDS;
 
 pub struct XferRunner {
     command: clap::Command

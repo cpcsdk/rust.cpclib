@@ -1,10 +1,7 @@
-use std::fmt::Debug;
-
 use cpclib_common::itertools::Itertools;
 
-use crate::task::EXTERN_CMDS;
-
 use super::Runner;
+use crate::task::EXTERN_CMDS;
 
 #[derive(Default)]
 pub struct ExternRunner {}

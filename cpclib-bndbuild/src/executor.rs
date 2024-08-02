@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use cpclib_common::lazy_static::lazy_static;
 
 use crate::runners::basm::BasmRunner;
@@ -36,8 +34,9 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Extern(_) => EXTERN_RUNNER.run(task.args()),
         Task::ImgConverter(_) => IMGCONV_RUNNER.run(task.args()),
         Task::Rm(_) => RM_RUNNER.run(task.args()),
-        Task::Xfer(_) => XFER_RUNNER.run(task.args()),
-    }.or_else(|e| {
+        Task::Xfer(_) => XFER_RUNNER.run(task.args())
+    }
+    .or_else(|e| {
         if task.ignore_errors() {
             println!("\t\tError ignored. {}", e);
             Ok(())

@@ -1,7 +1,8 @@
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::{built_info, task::BASM_CMDS};
+use crate::built_info;
+use crate::task::BASM_CMDS;
 
 pub struct BasmRunner {
     command: clap::Command

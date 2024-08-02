@@ -1,8 +1,7 @@
 use cpclib_common::itertools::Itertools;
 
-use crate::task::ECHO_CMDS;
-
 use super::Runner;
+use crate::task::ECHO_CMDS;
 
 #[derive(Default)]
 pub struct EchoRunner {}

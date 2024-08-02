@@ -1,7 +1,8 @@
 use cpclib_common::clap::{Arg, ArgAction, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::{built_info, task::IMG2CPC_CMDS};
+use crate::built_info;
+use crate::task::IMG2CPC_CMDS;
 
 pub struct ImgConverterRunner {
     command: Command

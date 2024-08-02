@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use cpclib_common::clap::{ArgMatches, Command};
 use glob::glob;
 use shlex::split;

@@ -2,7 +2,8 @@ use cpclib_common::clap::{self, Command};
 use cpclib_disc::dsk_manager_build_arg_parser;
 
 use super::{Runner, RunnerWithClap};
-use crate::{built_info, task::DISC_CMDS};
+use crate::built_info;
+use crate::task::DISC_CMDS;
 
 pub struct DiscManagerRunner {
     command: clap::Command

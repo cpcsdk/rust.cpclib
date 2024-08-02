@@ -1,7 +1,8 @@
 use cpclib_common::clap::{self, Command};
 
 use super::{Runner, RunnerWithClap};
-use crate::{built_info, task::BNDBUILD_CMDS};
+use crate::built_info;
+use crate::task::BNDBUILD_CMDS;
 
 pub struct BndBuildRunner {
     command: clap::Command

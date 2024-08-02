@@ -38,7 +38,7 @@ impl Display for Task {
             Task::Extern(s) => (&EXTERN_CMDS[0], s),
             Task::ImgConverter(s) => (&IMG2CPC_CMDS[0], s),
             Task::Rm(s) => (&RM_CMDS[0], s),
-            Task::Xfer(s) => (&XFER_CMDS[0], s),
+            Task::Xfer(s) => (&XFER_CMDS[0], s)
         };
 
         write!(
@@ -72,10 +72,9 @@ impl<'de> Deserialize<'de> for Task {
                     ignore_error: ignore
                 };
 
-
                 if BASM_CMDS.iter().contains(&code) {
                     Ok(Task::Basm(std))
-                } 
+                }
                 else if BNDBUILD_CMDS.iter().contains(&code) {
                     Ok(Task::BndBuild(std))
                 }
@@ -103,7 +102,6 @@ impl<'de> Deserialize<'de> for Task {
                 else {
                     Err(Error::custom(format!("{code} is an invalid command")))
                 }
-
             }
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -140,7 +138,6 @@ impl Task {
         Self::ImgConverter(StandardTask::new(args))
     }
 
-
     fn standard_task(&self) -> &StandardTask {
         match self {
             Task::Basm(t)
@@ -151,7 +148,7 @@ impl Task {
             | Task::Extern(t)
             | Task::Disc(t)
             | Task::BndBuild(t)
-            | Task::Cp(t) => t,
+            | Task::Cp(t) => t
         }
     }
 
@@ -165,10 +162,9 @@ impl Task {
             | Task::Extern(t)
             | Task::Disc(t)
             | Task::BndBuild(t)
-            | Task::Cp(t) => t,
+            | Task::Cp(t) => t
         }
     }
-
 
     pub fn args(&self) -> &str {
         &self.standard_task().args
