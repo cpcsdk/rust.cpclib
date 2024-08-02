@@ -320,11 +320,26 @@ pub fn assemble<'arg>(
             }
         })?;
 
-    env.handle_post_actions().map_err(|e| {
-        BasmError::AssemblerError {
-            error: AssemblerError::AlreadyRenderedError(e.to_string())
-        }
-    })?;
+    let _ = env.handle_post_actions()
+        .map(|remu| {
+            if let Some(remu) = remu  {
+                if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {
+                    let content = remu.data();
+                    std::fs::write(fname, content)
+                        .map_err(|e| BasmError::Io { io: e, ctx: format!("Error while saving {fname}") })
+                }
+                else {
+                    Ok(())
+                }
+            } else {
+                Ok(())
+            }
+        })
+        .map_err(|e| {
+            BasmError::AssemblerError {
+                error: AssemblerError::AlreadyRenderedError(e.to_string())
+            }
+        })?;
 
     if let Some(dest) = matches.get_one::<String>("SYMBOLS_OUTPUT") {
         let kind = matches.get_one::<String>("SYMBOLS_KIND").unwrap();
@@ -611,6 +626,12 @@ pub fn build_args_parser() -> clap::Command {
                     .arg(Arg::new("LISTING_OUTPUT")
                         .help("Filename of the listing output.")
                         .long("lst")
+                        .value_hint(ValueHint::FilePath)
+                    )
+                    .arg(Arg::new("REMU_OUTPUT")
+                        .help("Filename to store the remu file used by Ace to import label and debug information")
+                        .long("remu")
+                        .alias("ace")
                         .value_hint(ValueHint::FilePath)
                     )
                     .arg(Arg::new("SYMBOLS_OUTPUT")

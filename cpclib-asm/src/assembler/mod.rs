@@ -992,7 +992,7 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    pub fn handle_post_actions(&mut self) -> Result<(), AssemblerError> {
+    pub fn handle_post_actions(&mut self) -> Result<Option<RemuChunk>, AssemblerError> {
         self.handle_print()?;
         self.handle_assert()?;
 
@@ -1010,12 +1010,12 @@ impl Env {
         self.handle_breakpoints(&mut remu.as_mut())?;
         self.handle_sna_symbols(&mut remu.as_mut())?;
 
-        if let Some(remu) = remu {
-            self.sna.add_chunk(remu);
+        if let Some(remu) = &remu {
+            self.sna.add_chunk(remu.clone());
         }
 
         self.saved_files = Some(self.handle_file_save()?);
-        Ok(())
+        Ok(remu)
     }
 
     // Add the symbols in the snapshot
