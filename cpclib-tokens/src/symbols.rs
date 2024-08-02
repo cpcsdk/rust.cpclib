@@ -97,6 +97,14 @@ impl PhysicalAddress {
             _ => panic!()
         }
     }
+
+    pub fn remu_bank(&self) -> u16 {
+        match self {
+            PhysicalAddress::Memory(m) => (4*m.page as u16  + (m.address / 0x4000)) as _,
+            PhysicalAddress::Bank(b) => b.bank() as _,
+            PhysicalAddress::Cpr(c) => c.bloc() as _,
+        }
+    }
 }
 
 impl From<MemoryPhysicalAddress> for PhysicalAddress {
