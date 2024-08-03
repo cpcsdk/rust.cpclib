@@ -81,7 +81,6 @@ as-slice = "0.2.1"
 assert_matches = "1.5.0"
 bitfield = "0.14.0"
 bitflags = "2.6.0"
-bitsets = "0.1.1"
 bitvec = "1.0.1"
 built = { version = "0.7.4", features = ["chrono"] }
 camino = "1.1.7"

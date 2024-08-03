@@ -17,7 +17,6 @@ independent = true
 [dependencies]
 bitfield.workspace = true
 bitflags.workspace = true
-bitsets.workspace = true
 bitvec.workspace = true
 
 itertools.workspace = true

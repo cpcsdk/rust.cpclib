@@ -712,12 +712,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bitsets"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f143e23a5377a19ba0c61b60c8627a5394455bceaec409432030d57aed207f67"
-
-[[package]]
 name = "bitstream-io"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1569,7 +1563,6 @@ version = "0.8.0"
 dependencies = [
  "bitfield",
  "bitflags 2.6.0",
- "bitsets",
  "bitvec",
  "clap 4.5.13",
  "itertools 0.12.1",
