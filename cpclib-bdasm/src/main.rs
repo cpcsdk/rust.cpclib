@@ -5,8 +5,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
 
+use camino::Utf8PathBuf;
 use clap;
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
@@ -180,12 +180,12 @@ fn main() {
 						Arg::new("INPUT")
 							.help("Input binary file to disassemble.")
 							.action(ArgAction::Set)
-                            .value_parser(clap::value_parser!(PathBuf))
+                            .value_parser(clap::value_parser!(Utf8PathBuf))
 							.required(true)
 					)
 					.arg(
 						Arg::new("ORIGIN")
-							.help("Disassembling origin (ATTENTION hexadecimal only)")
+							.help("Disassembling origin")
 							.short('o')
 							.long("origin")
 							.action(ArgAction::Set)
@@ -224,7 +224,7 @@ fn main() {
 					.get_matches();
 
     // Get the bytes to disassemble
-    let input_filename: &PathBuf = matches.get_one("INPUT").unwrap();
+    let input_filename: &Utf8PathBuf = matches.get_one("INPUT").unwrap();
     let mut input_bytes = Vec::new();
     let mut file = File::open(input_filename).expect("Unable to open file");
     file.read_to_end(&mut input_bytes)

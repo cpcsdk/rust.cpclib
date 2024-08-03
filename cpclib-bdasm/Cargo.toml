@@ -21,6 +21,7 @@ cpclib-disc.workspace = true
 clap.workspace = true
 const_format.workspace = true
 time = "0.3.36"
+camino.workspace = true
 
 [features]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
