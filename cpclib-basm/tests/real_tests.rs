@@ -1,17 +1,15 @@
 use std::process::Command;
+use std::sync::LazyLock;
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::error::AssemblerError;
 use cpclib_basm::{build_args_parser, process, BasmError};
 use cpclib_common::itertools::Itertools;
-use cpclib_common::lazy_static;
 use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
 
-lazy_static::lazy_static! {
-    static ref  LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::default();
-}
+static LOCK: LazyLock<parking_lot::Mutex<()>> = LazyLock::new(|| parking_lot::Mutex::default());
 
 fn manual_cleanup() {
     for fname in &[
@@ -98,10 +96,8 @@ fn expect_warning_but_success(real_fname: &str) {
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
         .expect("Unable to read_source");
 
-    lazy_static::lazy_static! {
-        static ref RE1: Regex = Regex::new(r";.*$").unwrap();
-        static ref RE2: Regex = Regex::new(r":\s*:").unwrap();
-    }
+    static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
+    static RE2: LazyLock<Regex> = LazyLock::new(|| Regex::new(r":\s*:").unwrap());
 
     let mut content = content
         .split("\n")
@@ -192,10 +188,8 @@ fn expect_one_line_success(real_fname: &str) {
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
         .expect("Unable to read_source");
 
-    lazy_static::lazy_static! {
-        static ref RE1: Regex = Regex::new(r";.*$").unwrap();
-        static ref RE2: Regex = Regex::new(r":\s*:").unwrap();
-    }
+    static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
+    static RE2: LazyLock<Regex> = LazyLock::new(|| Regex::new(r":\s*:").unwrap());
 
     let mut content = content
         .split("\n")
@@ -277,10 +271,8 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
         .expect("Unable to read_source");
 
-    lazy_static::lazy_static! {
-        static ref RE1: Regex = Regex::new(r"(?m)([^\\])\n").unwrap();
-        static ref RE2: Regex = Regex::new(r"(?m)\\\n").unwrap();
-    }
+    static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)([^\\])\n").unwrap());
+    static RE2: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)\\\n").unwrap());
 
     let content = content.replace("\r", "");
     let content = RE1.replace_all(&content, "$1\n\n\n");

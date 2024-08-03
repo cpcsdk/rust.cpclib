@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(const_mut_refs)]
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -6,25 +7,23 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
+use clap;
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::error::ParseError;
 use cpclib_common::winnow::Parser;
 use cpclib_disc::amsdos::AmsdosHeader;
-use {clap, lazy_static};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-lazy_static::lazy_static! {
-    static ref DESC_BEFORE: String = format!(
-        "Profile {} compiled: {}",
-        built_info::PROFILE,
-        built_info::BUILT_TIME_UTC
-    );
-}
+static DESC_BEFORE: &str = const_format::formatc!(
+    "Profile {} compiled: {}",
+    built_info::PROFILE,
+    built_info::BUILT_TIME_UTC
+);
 
 /// Several expressions can refere to addresses
 /// TODO move it in a public library

@@ -1,13 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
+use std::sync::LazyLock;
 
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator, prelude};
 use cpclib_common::smallvec::{smallvec, SmallVec};
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::{lazy_static, strsim};
+use cpclib_common::strsim;
 use delegate::delegate;
 use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext};
 use regex::Regex;
@@ -100,9 +101,9 @@ impl PhysicalAddress {
 
     pub fn remu_bank(&self) -> u16 {
         match self {
-            PhysicalAddress::Memory(m) => (4*m.page as u16  + (m.address / 0x4000)) as _,
+            PhysicalAddress::Memory(m) => (4 * m.page as u16 + (m.address / 0x4000)) as _,
             PhysicalAddress::Bank(b) => b.bank() as _,
-            PhysicalAddress::Cpr(c) => c.bloc() as _,
+            PhysicalAddress::Cpr(c) => c.bloc() as _
         }
     }
 }
@@ -895,9 +896,7 @@ impl SymbolsTable {
 
         // handle the labels build with patterns
         // Get the replacement strings
-        lazy_static::lazy_static! {
-            static ref RE: Regex = Regex::new(r"\{+[^\}]+\}+").unwrap();
-        }
+        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
         let mut replace = HashSet::new();
         for cap in RE.captures_iter(&symbol) {
             if cap[0] != symbol {

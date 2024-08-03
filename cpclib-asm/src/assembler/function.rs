@@ -2,10 +2,9 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::RwLock;
+use std::sync::{LazyLock, RwLock};
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::lazy_static;
 use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token
 };
@@ -199,8 +198,8 @@ pub enum Function {
     HardCoded(HardCodedFunction)
 }
 
-lazy_static::lazy_static! {
-     static ref HARD_CODED_FUNCTIONS: HashMap<&'static str, Function> = velcro::hash_map! {
+static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLock::new(|| {
+    velcro::hash_map! {
         "mode0_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode0ByteToPenAt),
         "mode1_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode1ByteToPenAt),
         "mode2_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode2ByteToPenAt),
@@ -240,8 +239,8 @@ lazy_static::lazy_static! {
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
         "section_used": Function::HardCoded(HardCodedFunction::SectionUsed),
         "binary_transform": Function::HardCoded(HardCodedFunction::BinaryTransform)
-    };
-}
+    }
+});
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HardCodedFunction {

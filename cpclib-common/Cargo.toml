@@ -21,7 +21,6 @@ bitsets.workspace = true
 bitvec.workspace = true
 
 itertools.workspace = true
-lazy_static.workspace = true
 winnow = {workspace = true, features=["simd"]}
 num.workspace = true
 num-bigint.workspace = true

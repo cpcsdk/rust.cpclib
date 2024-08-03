@@ -1,13 +1,12 @@
 use core::time::Duration;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use cpclib_common::itertools::Itertools;
 #[cfg(feature = "indicatif")]
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-lazy_static::lazy_static! {
-    static ref PROGRESS: Arc<Mutex<Progress>> = Arc::new(Mutex::new(Progress::new()));
-}
+static PROGRESS: LazyLock<Arc<Mutex<Progress>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(Progress::new())));
 
 const REFRESH_RATE: Duration = Duration::from_millis(250);
 const PROGRESS_STYLE: &'static str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{len:3} {wide_msg}";

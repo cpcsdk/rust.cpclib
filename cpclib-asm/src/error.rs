@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
+use std::sync::LazyLock;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 use codespan_reporting::files::SimpleFiles;
@@ -1008,15 +1009,13 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
             }
         }
     }
-    cpclib_common::lazy_static::lazy_static! {
-        static ref GUESSER_LUT: HashMap<&'static str, EndKind> = {
-            let mut hash = HashMap::new();
+    static GUESSER_LUT: LazyLock<HashMap<&'static str, EndKind>> = LazyLock::new(|| {
+        let mut hash = HashMap::new();
 
-            hash.insert(LD_WRONG_DESTINATION, EndKind::CommaOrEnd);
+        hash.insert(LD_WRONG_DESTINATION, EndKind::CommaOrEnd);
 
-            hash
-        };
-    }
+        hash
+    });
 
     let guesser = GUESSER_LUT.get(ctx).unwrap_or(&EndKind::End);
 
@@ -1035,20 +1034,22 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
 
 fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
     // phf is not currently usable
-    cpclib_common::lazy_static::lazy_static! {
-        static ref NOTES_LUT: HashMap<&'static str, Vec<String>> = {
-            let mut hash = HashMap::new();
 
-            hash.insert(LD_WRONG_DESTINATION, vec![
+    static NOTES_LUT: LazyLock<HashMap<&'static str, Vec<String>>> = LazyLock::new(|| {
+        let mut hash = HashMap::new();
+
+        hash.insert(
+            LD_WRONG_DESTINATION,
+            vec![
                 "Possible destinations are:".to_owned(),
                 " - 16 bits registers: AF, HL, BC, DE, IX, IY".to_owned(),
                 " - 8 bits registers: A, B, C, D, E, H, L, IXH, IXL, IYH, IYL, I".to_owned(),
-                " - addresses: (address), (hl), (de), (bc), (IX+delta), (IY+delta)".to_owned()
-            ]);
+                " - addresses: (address), (hl), (de), (bc), (IX+delta), (IY+delta)".to_owned(),
+            ]
+        );
 
-            hash
-        };
-    }
+        hash
+    });
 
     NOTES_LUT.get(ctx).cloned()
 }

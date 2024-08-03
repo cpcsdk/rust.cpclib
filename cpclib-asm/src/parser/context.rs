@@ -2,9 +2,8 @@ use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{LazyLock, RwLock};
 
-use cpclib_common::lazy_static;
 use cpclib_common::winnow::BStr;
 use either::Either;
 use regex::Regex;
@@ -282,9 +281,7 @@ impl ParserOptions {
         let fname: Cow<str> = if let Some(env) = env {
             let mut fname = fname.to_owned();
 
-            lazy_static::lazy_static! {
-                static ref RE: Regex = Regex::new(r"\{+[^\}]+\}+").unwrap();
-            }
+            static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
             let mut replace = HashSet::new();
             for cap in RE.captures_iter(&fname) {
                 if cap[0] != fname {

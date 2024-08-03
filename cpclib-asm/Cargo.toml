@@ -37,7 +37,6 @@ globset.workspace = true
 hashbag.workspace = true
 indicatif = {workspace = true, optional=true}
 line-span = "0.1"
-lazy_static.workspace = true
 libc.workspace = true
 matches.workspace = true
 ouroboros.workspace = true

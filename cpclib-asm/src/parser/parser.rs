@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
@@ -10,6 +10,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow;
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
@@ -20,7 +21,6 @@ use cpclib_common::winnow::stream::{
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
 use cpclib_common::winnow::{BStr, PResult, Parser};
-use cpclib_common::{lazy_static, winnow};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
@@ -347,56 +347,99 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"WEND"
 ];
 
+static _DOTTED_END_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
+    END_DIRECTIVE
+        .iter()
+        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
+        .collect_vec()
+});
+
 // tODO use hash-based structures
-lazy_static::lazy_static! {
-    static ref _DOTTED_STAND_ALONE_DIRECTIVE: Vec<String> = STAND_ALONE_DIRECTIVE
-                                                .iter()
-                                                .map(|d| format!(".{}", unsafe{std::str::from_utf8_unchecked(d)}))
-                                                .collect_vec();
-    static ref _DOTTED_START_DIRECTIVE: Vec<String> = START_DIRECTIVE
-                                                .iter()
-                                                .map(|d| format!(".{}", {unsafe{std::str::from_utf8_unchecked(d)}}))
-                                                .collect_vec();
-    static ref _DOTTED_END_DIRECTIVE: Vec<String> = END_DIRECTIVE
-                                                .iter()
-                                                .map(|d| format!(".{}", unsafe{std::str::from_utf8_unchecked(d)}))
-                                                .collect_vec();
-    static ref DOTTED_STAND_ALONE_DIRECTIVE: Vec<&'static [u8]> = _DOTTED_STAND_ALONE_DIRECTIVE.iter().map(String::as_str).map(str::as_bytes).collect_vec();
-    static ref DOTTED_START_DIRECTIVE: Vec<&'static [u8]> = _DOTTED_START_DIRECTIVE.iter().map(String::as_str).map(str::as_bytes).collect_vec();
-    static ref DOTTED_END_DIRECTIVE: Vec<&'static [u8]> = _DOTTED_END_DIRECTIVE.iter().map(String::as_str).map(str::as_bytes).collect_vec();
+static _DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
+    STAND_ALONE_DIRECTIVE
+        .iter()
+        .map(|d| format!(".{}", unsafe { std::str::from_utf8_unchecked(d) }))
+        .collect_vec()
+});
 
+static _DOTTED_START_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
+    START_DIRECTIVE
+        .iter()
+        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
+        .collect_vec()
+});
 
-    static ref DOTTED_IMPOSSIBLE_NAMES: Vec<&'static [u8]> = REGISTERS
+static DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    _DOTTED_STAND_ALONE_DIRECTIVE
+        .iter()
+        .map(String::as_str)
+        .map(str::as_bytes)
+        .collect_vec()
+});
+static DOTTED_START_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    _DOTTED_START_DIRECTIVE
+        .iter()
+        .map(String::as_str)
+        .map(str::as_bytes)
+        .collect_vec()
+});
+static DOTTED_END_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    _DOTTED_END_DIRECTIVE
+        .iter()
+        .map(String::as_str)
+        .map(str::as_bytes)
+        .collect_vec()
+});
+
+static DOTTED_IMPOSSIBLE_NAMES: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    REGISTERS
         .into_iter()
         .chain(INSTRUCTIONS.into_iter())
         .chain(DOTTED_STAND_ALONE_DIRECTIVE.iter())
         .chain(DOTTED_START_DIRECTIVE.iter())
         .chain(DOTTED_END_DIRECTIVE.iter())
         .cloned()
-        .collect();
+        .collect()
+});
 
-    static ref IMPOSSIBLE_NAMES: Vec<&'static [u8]> = REGISTERS
+static IMPOSSIBLE_NAMES: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    REGISTERS
         .into_iter()
         .chain(INSTRUCTIONS.into_iter())
         .chain(STAND_ALONE_DIRECTIVE.into_iter())
         .chain(START_DIRECTIVE.into_iter())
         .chain(END_DIRECTIVE.into_iter())
         .cloned()
-        .collect();
+        .collect()
+});
 
-    static ref IMPOSSIBLE_NAMES_ORGAMS: Vec<&'static [u8]> = REGISTERS
+static IMPOSSIBLE_NAMES_ORGAMS: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
+    REGISTERS
         .into_iter()
         .chain(INSTRUCTIONS.into_iter())
         .chain(STAND_ALONE_DIRECTIVE_ORGAMS.into_iter())
         .chain(START_DIRECTIVE_ORGAMS.into_iter())
         .chain(END_DIRECTIVE_ORGAMS.into_iter())
         .cloned()
-        .collect();
+        .collect()
+});
 
-    static ref MIN_MAX_LABEL_SIZE: (usize, usize) = DOTTED_IMPOSSIBLE_NAMES.iter().map(|l| l.len()).minmax().into_option().unwrap();
-    static ref DOTTED_MIN_MAX_LABEL_SIZE:  (usize, usize) = DOTTED_IMPOSSIBLE_NAMES.iter().map(|l| l.len()).minmax().into_option().unwrap();
-
-}
+static MIN_MAX_LABEL_SIZE: LazyLock<(usize, usize)> = LazyLock::new(|| {
+    DOTTED_IMPOSSIBLE_NAMES
+        .iter()
+        .map(|l| l.len())
+        .minmax()
+        .into_option()
+        .unwrap()
+});
+static DOTTED_MIN_MAX_LABEL_SIZE: LazyLock<(usize, usize)> = LazyLock::new(|| {
+    DOTTED_IMPOSSIBLE_NAMES
+        .iter()
+        .map(|l| l.len())
+        .minmax()
+        .into_option()
+        .unwrap()
+});
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files

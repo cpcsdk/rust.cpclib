@@ -173,11 +173,12 @@ impl SymbolOutputGenerator {
 
                 let entry = if raw.is_expr() {
                     RemuEntry::new_alias(k, v)
-                } else {
+                }
+                else {
                     let remu_bank = raw.address().unwrap().remu_bank();
                     RemuEntry::new_label(k, v, remu_bank as _)
                 };
-                
+
                 remu.add_entry(&entry);
             }
         }

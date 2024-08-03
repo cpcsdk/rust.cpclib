@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, Write};
-use std::ops::Neg;
+use std::ops::{Deref, Neg};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -31,7 +31,6 @@ use std::time::Instant;
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::lazy_static::__Deref;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::UpdateSlice;
@@ -3169,13 +3168,13 @@ pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerE
 macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident, $cls:tt) => {{
         $env.update_dollar();
-        match $token {
+        match &$token {
             $cls::Align(ref boundary, ref fill) => $env.visit_align(boundary, fill.as_ref()),
             $cls::Assert(ref exp, ref txt) => {
                 visit_assert(exp, txt.as_ref(), $env, $span)?;
                 Ok(())
             },
-            $cls::AssemblerControl(cmd) => $env.visit_assembler_control(cmd, $span),
+            $cls::AssemblerControl(ref cmd) => $env.visit_assembler_control(cmd, $span),
             $cls::Assign { label, expr, op } => $env.visit_assign(label, expr, op.as_ref()),
 
             $cls::Basic(ref variables, ref hidden_lines, ref code) => {

@@ -17,8 +17,8 @@ use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
 use winnow::token::take_while;
 use winnow::{PResult, Parser};
 pub use {
-    bitfield, bitflags, bitsets, bitvec, itertools, lazy_static, num, resolve_path, smallvec,
-    smol_str, strsim, winnow
+    bitfield, bitflags, bitsets, bitvec, itertools, num, resolve_path, smallvec, smol_str, strsim,
+    winnow
 };
 
 #[inline]

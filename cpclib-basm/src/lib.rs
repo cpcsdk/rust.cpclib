@@ -6,6 +6,7 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::LazyLock;
 
 use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
@@ -13,11 +14,11 @@ use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
 use cpclib_asm::progress::{normalize, Progress};
 use cpclib_asm::AssemblingOptionFlags;
+use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::Parser;
-use cpclib_common::{clap, lazy_static};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
@@ -320,18 +321,24 @@ pub fn assemble<'arg>(
             }
         })?;
 
-    let _ = env.handle_post_actions()
+    let _ = env
+        .handle_post_actions()
         .map(|remu| {
-            if let Some(remu) = remu  {
+            if let Some(remu) = remu {
                 if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {
                     let content = remu.data();
-                    std::fs::write(fname, content)
-                        .map_err(|e| BasmError::Io { io: e, ctx: format!("Error while saving {fname}") })
+                    std::fs::write(fname, content).map_err(|e| {
+                        BasmError::Io {
+                            io: e,
+                            ctx: format!("Error while saving {fname}")
+                        }
+                    })
                 }
                 else {
                     Ok(())
                 }
-            } else {
+            }
+            else {
                 Ok(())
             }
         })
@@ -584,13 +591,14 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
     }
 }
 
-lazy_static::lazy_static! {
-    static ref EMBEDDED_FILES_NAME: Vec<String> = EmbeddedFiles::iter().map(|s|s.into_owned()).collect_vec();
-    static ref EMBEDDED_FILES: Vec<PossibleValue>  = EMBEDDED_FILES_NAME.iter()
+static EMBEDDED_FILES_NAME: LazyLock<Vec<String>> =
+    LazyLock::new(|| EmbeddedFiles::iter().map(|s| s.into_owned()).collect_vec());
+static EMBEDDED_FILES: LazyLock<Vec<PossibleValue>> = LazyLock::new(|| {
+    EMBEDDED_FILES_NAME
+        .iter()
         .map(|s| PossibleValue::from(s.as_str()))
-        .collect_vec();
-
-}
+        .collect_vec()
+});
 
 /// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command {

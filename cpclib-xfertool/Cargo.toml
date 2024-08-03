@@ -27,7 +27,6 @@ custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
 getset.workspace = true
-lazy_static.workspace = true
 matches.workspace = true
 serde = { workspace = true, features = ["derive"] }
 tempfile.workspace = true

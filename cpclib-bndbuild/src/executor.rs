@@ -1,4 +1,4 @@
-use cpclib_common::lazy_static::lazy_static;
+use std::sync::LazyLock;
 
 use crate::runners::basm::BasmRunner;
 use crate::runners::bndbuild::BndBuildRunner;
@@ -12,17 +12,17 @@ use crate::runners::xfer::XferRunner;
 use crate::runners::Runner;
 use crate::task::Task;
 
-lazy_static! {
-    pub static ref BASM_RUNNER: BasmRunner = BasmRunner::default();
-    pub static ref BNDBUILD_RUNNER: BndBuildRunner = BndBuildRunner::default();
-    pub static ref CP_RUNNER: CpRunner = CpRunner::default();
-    pub static ref DISC_RUNNER: DiscManagerRunner = DiscManagerRunner::default();
-    pub static ref ECHO_RUNNER: EchoRunner = EchoRunner::default();
-    pub static ref EXTERN_RUNNER: ExternRunner = ExternRunner::default();
-    pub static ref IMGCONV_RUNNER: ImgConverterRunner = ImgConverterRunner::default();
-    pub static ref RM_RUNNER: RmRunner = RmRunner::default();
-    pub static ref XFER_RUNNER: XferRunner = XferRunner::default();
-}
+pub static BASM_RUNNER: LazyLock<BasmRunner> = LazyLock::new(|| BasmRunner::default());
+pub static BNDBUILD_RUNNER: LazyLock<BndBuildRunner> = LazyLock::new(|| BndBuildRunner::default());
+pub static CP_RUNNER: LazyLock<CpRunner> = LazyLock::new(|| CpRunner::default());
+pub static DISC_RUNNER: LazyLock<DiscManagerRunner> =
+    LazyLock::new(|| DiscManagerRunner::default());
+pub static ECHO_RUNNER: LazyLock<EchoRunner> = LazyLock::new(|| EchoRunner::default());
+pub static EXTERN_RUNNER: LazyLock<ExternRunner> = LazyLock::new(|| ExternRunner::default());
+pub static IMGCONV_RUNNER: LazyLock<ImgConverterRunner> =
+    LazyLock::new(|| ImgConverterRunner::default());
+pub static RM_RUNNER: LazyLock<RmRunner> = LazyLock::new(|| RmRunner::default());
+pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(|| XferRunner::default());
 
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {

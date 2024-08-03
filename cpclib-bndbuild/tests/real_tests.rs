@@ -1,10 +1,10 @@
 // tests cannot be run in parallel as they change cwd
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 use cpclib_bndbuild::BndBuilder;
-use cpclib_common::lazy_static;
 use test_generator;
-lazy_static::lazy_static! { static ref MUT: Mutex<()> = Mutex::new(()); }
+
+static MUT: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[test_generator::test_resources("cpclib-bndbuild/tests/valid/parse*.yml")]
 fn expect_successful_parse(real_fname: &str) {

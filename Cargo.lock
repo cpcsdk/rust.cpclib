@@ -1305,6 +1305,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_format"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a214c7af3d04997541b18d432afaff4c455e79e2029079647e72fc2bd27673"
+dependencies = [
+ "const_format_proc_macros",
+ "konst",
+]
+
+[[package]]
+name = "const_format_proc_macros"
+version = "0.2.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7f6ff08fd20f4f299298a28e2dfa8a8ba1036e6cd2460ac1de7b425d76f2500"
+dependencies = [
+ "proc-macro2 1.0.86",
+ "quote 1.0.36",
+ "unicode-xid 0.2.4",
+]
+
+[[package]]
 name = "contracts"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1440,7 +1461,6 @@ dependencies = [
  "globset",
  "hashbag",
  "indicatif",
- "lazy_static",
  "libc",
  "line-span",
  "matches",
@@ -1483,6 +1503,7 @@ version = "0.8.2"
 dependencies = [
  "build-deps",
  "built",
+ "const_format",
  "cpclib-asm",
  "cpclib-common",
  "cpclib-disc",
@@ -1505,10 +1526,10 @@ version = "0.8.2"
 dependencies = [
  "built",
  "clap 4.5.13",
+ "const_format",
  "cpclib-asm",
  "cpclib-common",
  "cpclib-disc",
- "lazy_static",
  "time",
 ]
 
@@ -1552,7 +1573,6 @@ dependencies = [
  "bitvec",
  "clap 4.5.13",
  "itertools 0.12.1",
- "lazy_static",
  "num",
  "num-bigint",
  "rayon",
@@ -1768,7 +1788,6 @@ dependencies = [
  "either",
  "getset",
  "hotwatch",
- "lazy_static",
  "matches",
  "notify",
  "path-absolutize",
@@ -3696,6 +3715,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
+name = "konst"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330f0e13e6483b8c34885f7e6c9f19b1a7bd449c673fbb948a51c99d66ef74f4"
+dependencies = [
+ "konst_macro_rules",
+]
+
+[[package]]
+name = "konst_macro_rules"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37"
+
+[[package]]
 name = "kqueue"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3814,7 +3848,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e310b3a6b5907f99202fcdb4960ff45b93735d7c7d96b760fcff8db2dc0e103d"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
