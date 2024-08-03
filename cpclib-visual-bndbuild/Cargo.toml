@@ -19,6 +19,7 @@ independent = true
 cpclib-bndbuild.workspace = true
 cpclib-common = {workspace=true, features=["cmdline"]}
 
+camino = {workspace=true, features=["serde1"]}
 eframe = {workspace=true, features=["persistence"]}
 egui_file.workspace = true
 env_logger.workspace = true

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::ops::Sub;
 
-use camino::Utf8Path;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use dot_writer::{Attributes, DotWriter, Style};
 use serde::{self, Deserialize};

@@ -29,7 +29,7 @@ either.workspace = true
 getset.workspace = true
 matches.workspace = true
 serde = { workspace = true, features = ["derive"] }
-tempfile.workspace = true
+camino-tempfile.workspace = true
 
 path-absolutize = {workspace = true, optional = false }
 curl = {workspace = true, optional = false }

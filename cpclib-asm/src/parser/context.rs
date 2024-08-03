@@ -1,10 +1,10 @@
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{LazyLock, RwLock};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::BStr;
 use either::Either;
 use regex::Regex;
@@ -356,12 +356,11 @@ impl ParserOptions {
                     return Ok(current_path);
                 }
                 else {
-                    let glob =
-                        GlobBuilder::new(current_path.as_path().as_str())
-                            .case_insensitive(true)
-                            .literal_separator(true)
-                            .build()
-                            .unwrap();
+                    let glob = GlobBuilder::new(current_path.as_path().as_str())
+                        .case_insensitive(true)
+                        .literal_separator(true)
+                        .build()
+                        .unwrap();
                     let matcher = glob.compile_matcher();
 
                     for entry in std::fs::read_dir(search).unwrap() {
@@ -487,7 +486,11 @@ impl ParserContext {
     #[inline]
     pub fn set_current_filename<P: Into<Utf8PathBuf>>(&mut self, file: P) {
         let file = file.into();
-        self.current_filename = Some(file.canonicalize().map(|p| Utf8PathBuf::from_path_buf(p).unwrap()).unwrap_or(file))
+        self.current_filename = Some(
+            file.canonicalize()
+                .map(|p| Utf8PathBuf::from_path_buf(p).unwrap())
+                .unwrap_or(file)
+        )
     }
 
     #[inline]

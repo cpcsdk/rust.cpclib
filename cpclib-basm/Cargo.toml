@@ -20,7 +20,6 @@ cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
 
-camino.workspace = true
 const_format.workspace = true
 diff = "0.1.13"
 parking_lot.workspace = true
@@ -28,7 +27,7 @@ time.workspace = true
 
 [dev-dependencies]
 test-generator.workspace = true
-tempfile.workspace = true
+camino-tempfile.workspace = true
 pretty_assertions.workspace = true
 criterion.workspace = true
 globset.workspace = true

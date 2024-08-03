@@ -1,6 +1,6 @@
 use std::fs;
-use std::path::Path;
 
+use cpclib_common::camino::Utf8Path;
 use curl::easy::{Easy, Form};
 use curl::Error;
 use custom_error::custom_error;
@@ -189,7 +189,7 @@ impl CpcXfer {
         header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError>
     where
-        P: AsRef<Path>
+        P: AsRef<Utf8Path>
     {
         self.upload_impl(path.as_ref(), m4_path, header)
     }
@@ -197,11 +197,11 @@ impl CpcXfer {
     #[allow(clippy::similar_names)]
     pub fn upload_impl(
         &self,
-        path: &Path,
+        path: &Utf8Path,
         m4_path: &str,
         header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError> {
-        let local_fname = path.to_str().unwrap();
+        let local_fname = path.as_str();
 
         if m4_path.len() > 255 {
             panic!(
@@ -225,12 +225,12 @@ impl CpcXfer {
         };
 
         // TODO manage more cases in order to allow to provide a destination folder or a destination filename or a different name
-        let destination = Path::new(m4_path).join(
-            Path::new(local_fname)
+        let destination = Utf8Path::new(m4_path).join(
+            Utf8Path::new(local_fname)
                 .file_name()
                 .expect("Unable to retreive the filename of the file to upload")
         );
-        let destination = destination.to_str().unwrap().to_owned();
+        let destination = destination.to_string();
 
         let mut form = Form::new();
         form.part("upfile")
@@ -248,7 +248,7 @@ impl CpcXfer {
 
     /// Directly sends the SNA to the M4. SNA is first saved as a V2 version as M4 is unable to read other ones
     pub fn upload_and_run_sna(&self, sna: &Snapshot) -> Result<(), XferError> {
-        use tempfile::Builder;
+        use camino_tempfile::Builder;
         let file = Builder::new()
             .prefix("xfer")
             .suffix(".sna")
@@ -277,7 +277,7 @@ impl CpcXfer {
         })
     }
 
-    pub fn upload_and_run<P: AsRef<Path>>(
+    pub fn upload_and_run<P: AsRef<Utf8Path>>(
         &self,
         path: P,
         header: Option<(AmsdosFileType, u16, u16)>
@@ -287,15 +287,12 @@ impl CpcXfer {
 
     fn upload_and_run_impl(
         &self,
-        path: &Path,
+        path: &Utf8Path,
         header: Option<(AmsdosFileType, u16, u16)>
     ) -> Result<(), XferError> {
         // We are sure it is not a snapshot there
         self.upload_impl(path, "/tmp", header)?;
-        self.run(&format!(
-            "/tmp/{}",
-            path.file_name().unwrap().to_str().unwrap()
-        ))?;
+        self.run(&format!("/tmp/{}", path.file_name().unwrap()))?;
         Ok(())
     }
 
@@ -368,9 +365,9 @@ impl CpcXfer {
             Some('/') => Ok(relative.to_owned()),
             _ => {
                 let cwd = self.current_working_directory()?;
-                let absolute = Path::new(&cwd).join(relative);
+                let absolute = Utf8Path::new(&cwd).join(relative);
 
-                let absolute = absolute.absolutize().unwrap();
+                let absolute = absolute.as_std_path().absolutize().unwrap();
                 let path: String = absolute.to_str().unwrap().into();
                 if cfg!(target_os = "windows") {
                     return Ok(path.replace("C:\\", "/"));
@@ -394,7 +391,7 @@ impl CpcXfer {
 
 /// Send and run the file on the CPC.
 /// Snapshot V3 are downgraded to the V2 version
-pub fn send_and_run_file<P: AsRef<Path>>(
+pub fn send_and_run_file<P: AsRef<Utf8Path>>(
     xfer: &CpcXfer,
     fname: P,
     run: bool
@@ -403,12 +400,12 @@ pub fn send_and_run_file<P: AsRef<Path>>(
     let fname = fname.as_ref();
     // Snapshot needs to be converted in V2 format and handled differently
     if let Some(extension) = fname.extension() {
-        let extension = extension.to_str().unwrap().to_ascii_lowercase();
+        let extension = extension.to_ascii_lowercase();
         if extension == "sna" {
             let sna = sna::Snapshot::load(fname).expect("Error while loading snapshot");
             if sna.version_header() == 3 {
                 eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I think not)");
-                let sna_fname = fname.file_name().unwrap().to_str().unwrap();
+                let sna_fname = fname.file_name().unwrap();
                 sna.save(sna_fname, sna::SnapshotVersion::V2).unwrap();
                 xfer.upload_and_run(sna_fname, None)
                     .expect("Unable to launch SNA");

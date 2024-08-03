@@ -386,11 +386,13 @@ fn assemble_failure(code: &str, verify: VerifyOutput) {
 }
 
 fn test_assemble(code: &str, success: bool, verify: VerifyOutput) {
-    let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let input_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let input_fname = input_file.path().as_os_str().to_str().unwrap();
     std::fs::write(input_fname, code).unwrap();
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = Command::new("../target/debug/basm")

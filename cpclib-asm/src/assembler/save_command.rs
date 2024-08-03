@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use camino::Utf8PathBuf;
+use cpclib_common::camino::Utf8PathBuf;
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::Head;

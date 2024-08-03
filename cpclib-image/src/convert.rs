@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::path::Path;
 
 use cpclib_common::bitfield::{BitRange, BitRangeMut};
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use image as im;
 
@@ -1108,13 +1108,13 @@ impl<'a> ImageConverter<'a> {
         output: &'a OutputFormat
     ) -> anyhow::Result<Output>
     where
-        P: AsRef<Path>
+        P: AsRef<Utf8Path>
     {
         Self::convert_impl(input_file.as_ref(), palette, mode, transformations, output)
     }
 
     fn convert_impl(
-        input_file: &Path,
+        input_file: &Utf8Path,
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
@@ -1240,7 +1240,7 @@ impl<'a> ImageConverter<'a> {
     /// Load the initial image
     /// TODO make compatibility tests are alike
     /// TODO propagate errors when needed
-    fn load_sprite(&mut self, input_file: &Path) -> Sprite {
+    fn load_sprite(&mut self, input_file: &Utf8Path) -> Sprite {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone());
         self.palette = sprite.palette();
@@ -1248,7 +1248,7 @@ impl<'a> ImageConverter<'a> {
         sprite
     }
 
-    fn load_color_matrix(&self, input_file: &Path) -> ColorMatrix {
+    fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix {
         let img = im::open(input_file)
             .unwrap_or_else(|_| panic!("Unable to convert {:?} properly.", input_file));
         let mat = ColorMatrix::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);

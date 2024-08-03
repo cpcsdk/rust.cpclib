@@ -19,6 +19,7 @@ bitfield.workspace = true
 bitflags.workspace = true
 bitvec.workspace = true
 
+camino.workspace = true
 itertools.workspace = true
 winnow = {workspace = true, features=["simd"]}
 num.workspace = true

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 
-use camino::Utf8Path;
+use cpclib_common::camino::Utf8Path;
 use cpclib_tokens::tokens::*;
 
 use crate::error::*;

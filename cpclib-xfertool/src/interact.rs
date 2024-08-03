@@ -1,3 +1,4 @@
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::winnow::Parser;
 use cpclib_xfer::CpcXfer;
 use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
@@ -280,7 +281,7 @@ ls                  List the files in the current M4 directory.
                 },
 
                 XferCommand::Put(arg1) => {
-                    let path = std::path::Path::new(&arg1);
+                    let path = Utf8Path::new(&arg1);
                     if !path.exists() {
                         eprintln!("{arg1} does not exists");
                         return;

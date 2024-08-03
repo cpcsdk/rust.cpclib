@@ -6,11 +6,11 @@ mod syntax;
 use std::collections::HashSet;
 use std::io::Read;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use cpclib_bndbuild::rules::Rule;
 use cpclib_bndbuild::BndBuilder;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use eframe::egui::{self, RichText};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
@@ -42,14 +42,14 @@ static CTRL_R: KeyboardShortcut = KeyboardShortcut {
 #[serde(default)]
 pub struct BndBuildApp {
     /// The provided filename by the user
-    filename: Option<std::path::PathBuf>,
+    filename: Option<Utf8PathBuf>,
 
     /// Recently opened files
-    recent_files: Vec<std::path::PathBuf>,
+    recent_files: Vec<Utf8PathBuf>,
 
     /// Watched target
     #[serde(skip)]
-    watched: Option<std::path::PathBuf>,
+    watched: Option<Utf8PathBuf>,
     #[serde(skip)]
     watch_logs: String,
 
@@ -86,9 +86,9 @@ pub struct BndBuildApp {
 
     /// Target to build requested by button
     #[serde(skip)]
-    requested_target: Option<PathBuf>,
+    requested_target: Option<Utf8PathBuf>,
     /// Target hovered to highlight dependencies
-    hovered_target: Option<PathBuf>,
+    hovered_target: Option<Utf8PathBuf>,
 
     /// stdout redirection
     #[serde(skip)]
@@ -150,14 +150,14 @@ impl Default for BndBuildApp {
 }
 
 /// Store the list of targets level per level
-struct Layers<'builder>(Vec<Vec<&'builder Path>>);
+struct Layers<'builder>(Vec<Vec<&'builder Utf8Path>>);
 /// Cache up to date information to not recompute it 60 times per seconds
 struct UpToDate<'builder>(HashMap<&'builder Rule, bool>);
 /// Store the list of dependecies
-struct DependencyOf(HashMap<PathBuf, HashSet<PathBuf>>);
+struct DependencyOf(HashMap<Utf8PathBuf, HashSet<Utf8PathBuf>>);
 
 impl Deref for DependencyOf {
-    type Target = HashMap<PathBuf, HashSet<PathBuf>>;
+    type Target = HashMap<Utf8PathBuf, HashSet<Utf8PathBuf>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -165,7 +165,7 @@ impl Deref for DependencyOf {
 }
 
 impl<'builder> Deref for Layers<'builder> {
-    type Target = Vec<Vec<&'builder Path>>;
+    type Target = Vec<Vec<&'builder Utf8Path>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -215,8 +215,8 @@ impl<'builder> From<&'builder BndBuilder> for Layers<'builder> {
 
 impl<'builder> From<&'builder BndBuilder> for DependencyOf {
     fn from(builder: &'builder BndBuilder) -> Self {
-        let mut dep_of: HashMap<PathBuf, HashSet<PathBuf>> = Default::default();
-        let targets: Vec<&'builder Path> = builder.targets();
+        let mut dep_of: HashMap<Utf8PathBuf, HashSet<Utf8PathBuf>> = Default::default();
+        let targets: Vec<&'builder Utf8Path> = builder.targets();
         for task in targets.iter() {
             let deps = builder.get_layered_dependencies_for(task.into());
             let deps = deps.into_iter().flatten();
@@ -269,7 +269,7 @@ impl BuilderAndCache {
 }
 
 impl BndBuildApp {
-    pub fn new<P: AsRef<Path>>(cc: &eframe::CreationContext<'_>, path: Option<P>) -> Self {
+    pub fn new<P: AsRef<Utf8Path>>(cc: &eframe::CreationContext<'_>, path: Option<P>) -> Self {
         let mut app = if let Some(storage) = cc.storage {
             let mut app: BndBuildApp =
                 eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
@@ -293,7 +293,7 @@ impl BndBuildApp {
         app
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, path: P) {
+    pub fn load<P: AsRef<Utf8Path>>(&mut self, path: P) {
         let path = path.as_ref();
         match cpclib_bndbuild::BndBuilder::from_fname(path) {
             Ok(builder) => {
@@ -342,7 +342,7 @@ impl BndBuildApp {
                             for fname in self.recent_files.clone().iter().rev() {
                                 if ui
                                     .add(
-                                        Button::new(fname.display().to_string())
+                                        Button::new(fname.to_string())
                                             .wrap_mode(egui::TextWrapMode::Extend)
                                     )
                                     .clicked()
@@ -392,7 +392,7 @@ impl BndBuildApp {
     fn update_status_and_shortcuts(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::bottom("bottom").show(ctx, |ui| {
             match &self.filename {
-                Some(fname) => ui.label(fname.display().to_string()),
+                Some(fname) => ui.label(fname.to_string()),
                 None => ui.label("No file loaded")
             };
 
@@ -484,7 +484,7 @@ impl BndBuildApp {
                         for tgt in layer.iter() {
                             let rule = bnl.borrow_owner().get_rule(tgt);
 
-                            let txt = tgt.display().to_string();
+                            let txt = tgt.to_string();
                             let txt = if let Some(watched) = self.watched.as_ref()
                                 && watched == tgt
                             {
@@ -558,8 +558,7 @@ impl BndBuildApp {
                                 self.hovered_target = Some(tgt.into());
                             }
                             button.context_menu(|ui| {
-                                if tgt.exists()
-                                    && ui.button(&format!("Open \"{}\"", tgt.display())).clicked()
+                                if tgt.exists() && ui.button(&format!("Open \"{}\"", tgt)).clicked()
                                 {
                                     match open::that(tgt) {
                                         Ok(_) => {},
@@ -642,7 +641,9 @@ impl eframe::App for BndBuildApp {
 
         // Handle file opening
         if self.request_open {
-            let mut dialog = egui_file::FileDialog::open_file(self.filename.clone());
+            let mut dialog = egui_file::FileDialog::open_file(
+                self.filename.clone().map(|p| p.into_std_path_buf())
+            );
             dialog.open();
             self.open_file_dialog = dialog.into();
             self.file_error = None;
@@ -674,7 +675,7 @@ impl eframe::App for BndBuildApp {
             None
         };
         if let Some(p) = p {
-            self.load(p);
+            self.load(Utf8PathBuf::try_from(p).unwrap());
         }
 
         // Handle reload
@@ -689,7 +690,9 @@ impl eframe::App for BndBuildApp {
         if self.request_save_as {
             self.request_save_as = false;
 
-            let mut dialog = egui_file::FileDialog::save_file(self.filename.clone());
+            let mut dialog = egui_file::FileDialog::save_file(
+                self.filename.clone().map(|p| p.into_std_path_buf())
+            );
             dialog.open();
             self.save_file_dialog = dialog.into();
             self.file_error = None;
@@ -699,7 +702,7 @@ impl eframe::App for BndBuildApp {
             if dialog.show(ctx).selected() {
                 if let Some(path) = dialog.path() {
                     self.request_save = true;
-                    self.filename = Some(path.to_path_buf());
+                    self.filename = Some(path.to_path_buf().try_into().unwrap());
                 }
             }
         }
@@ -784,11 +787,11 @@ impl eframe::App for BndBuildApp {
                     .unwrap_or(false)
                 {
                     self.watch_logs
-                        .push_str(&format!("{} needs to be rebuilt", watched.display()));
+                        .push_str(&format!("{} needs to be rebuilt", watched));
                     if self.requested_target.is_some() {
                         self.watch_logs.push_str(&format!(
                             "Build delayed in favor of {}",
-                            self.requested_target.as_ref().unwrap().display()
+                            self.requested_target.as_ref().unwrap()
                         ));
                     }
                     else {

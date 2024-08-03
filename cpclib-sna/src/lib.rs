@@ -3,9 +3,9 @@
 use std::fs::File;
 use std::io::prelude::*;
 use std::ops::Deref;
-use std::path::Path;
 
 use cpclib_common::bitvec::vec::BitVec;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::riff::{RiffChunk, RiffCode};
 use num_enum::TryFromPrimitive;
 
@@ -405,7 +405,7 @@ impl Snapshot {
         }
     }
 
-    pub fn load<P: AsRef<Path>>(filename: P) -> Result<Self, String> {
+    pub fn load<P: AsRef<Utf8Path>>(filename: P) -> Result<Self, String> {
         let filename = filename.as_ref();
 
         // Read the full content of the file
@@ -531,11 +531,11 @@ impl Snapshot {
 
     /// Save the snapshot V2 on disc
     #[deprecated]
-    pub fn save_sna<P: AsRef<Path>>(&self, fname: P) -> Result<(), std::io::Error> {
+    pub fn save_sna<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.save(fname, SnapshotVersion::V2)
     }
 
-    pub fn save<P: AsRef<Path>>(
+    pub fn save<P: AsRef<Utf8Path>>(
         &self,
         fname: P,
         version: SnapshotVersion

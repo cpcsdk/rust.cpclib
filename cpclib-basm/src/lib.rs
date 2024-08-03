@@ -7,13 +7,13 @@ use std::io::Write;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use camino::Utf8Path;
 use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
 use cpclib_asm::progress::{normalize, Progress};
 use cpclib_asm::AssemblingOptionFlags;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};

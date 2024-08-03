@@ -14,7 +14,6 @@
 #![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::identity_op)]
 
-use std::path::Path;
 use std::str::FromStr;
 
 use comfy_table::{Table, *};
@@ -170,7 +169,7 @@ fn main() {
     // Load a snapshot or generate an empty one
     let mut sna = if matches.contains_id("inSnapshot") {
         let fname = matches.get_one::<String>("inSnapshot").unwrap();
-        let path = Path::new(&fname);
+        let path = Utf8Path::new(&fname);
         Snapshot::load(path).expect("Error while loading the snapshot")
     }
     else {

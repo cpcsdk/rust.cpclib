@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 
-use camino::Utf8Path;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use topologic::AcyclicDependencyGraph;
 

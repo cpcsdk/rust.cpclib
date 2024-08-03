@@ -6,11 +6,11 @@ use std::collections::VecDeque;
 use std::fs::File;
 #[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
-use std::path::Path;
 #[cfg(feature = "cmdline")]
 use std::str::FromStr;
 
 use amsdos::AmsdosError;
+use cpclib_common::camino::Utf8Path;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
 use disc::Disc;
@@ -60,17 +60,17 @@ impl From<AmsdosError> for DskManagerError {
 }
 
 #[cfg(feature = "hfe")]
-pub fn new_disc<P: AsRef<std::path::Path>>(path: Option<P>) -> Hfe {
+pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> Hfe {
     Hfe::default()
 }
 
 #[cfg(not(feature = "hfe"))]
-pub fn new_disc<P: AsRef<std::path::Path>>(path: Option<P>) -> ExtendedDsk {
+pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> ExtendedDsk {
     ExtendedDsk::default()
 }
 
 #[cfg(feature = "hfe")]
-pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> Result<Hfe, String> {
+pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<Hfe, String> {
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
@@ -85,14 +85,14 @@ pub fn open_disc<P: AsRef<std::path::Path>>(path: P, fail_if_missing: bool) -> R
 }
 
 #[cfg(not(feature = "hfe"))]
-pub fn open_disc<P: AsRef<std::path::Path>>(
+pub fn open_disc<P: AsRef<Utf8Path>>(
     path: P,
     fail_if_missing: bool
 ) -> Result<ExtendedDsk, String> {
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
-            return Err(format!("{} does not exists", path.display()));
+            return Err(format!("{} does not exists", path));
         }
         else {
             return Ok(new_disc(Some(path)));
@@ -106,6 +106,8 @@ pub fn open_disc<P: AsRef<std::path::Path>>(
 
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
+    use cpclib_common::camino::Utf8Path;
+
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
     let behavior = amsdos::AmsdosAddBehavior::ReplaceIfPresent;
 
@@ -205,12 +207,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                 .add_file_sequentially(head, track, sector, &content)
                 .unwrap_or_else(|_| panic!("Unable to add {file}"));
 
-            let base_label = Path::new(file)
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .replace('.', "_");
+            let base_label = Utf8Path::new(file).file_name().unwrap().replace('.', "_");
             listing.add(builder::equ(format!("{}_head", &base_label), head));
             listing.add(builder::equ(format!("{}_track", &base_label), track));
             listing.add(builder::equ(format!("{}_sector", &base_label), sector));
@@ -472,8 +469,8 @@ pub fn dsk_manager_build_arg_parser() -> Command {
 }
 
 /// Open the file and remove the header if any
-pub fn read<P: AsRef<Path>>(p: P) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AmsdosError> {
-    let data = std::fs::read(p).map_err(|e| AmsdosError::IO(e.to_string()))?;
+pub fn read<P: AsRef<Utf8Path>>(p: P) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AmsdosError> {
+    let data = std::fs::read(p.as_ref()).map_err(|e| AmsdosError::IO(e.to_string()))?;
 
     Ok(split_header(data))
 }

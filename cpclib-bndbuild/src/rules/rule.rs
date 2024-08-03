@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};

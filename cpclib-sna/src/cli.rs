@@ -333,17 +333,9 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
     let mut rl = Editor::<(), _>::new().unwrap();
     if rl.load_history("snapshot.txt").is_err() {}
     loop {
-        let fname1 = std::path::Path::new(fname)
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let fname1 = Utf8Path::new(fname).file_name().unwrap();
         let prompt = if let Some((fname2, _)) = &sna2 {
-            let fname2 = std::path::Path::new(fname2)
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap();
+            let fname2 = Utf8Path::new(fname2).file_name().unwrap();
             format!("{} vs {} > ", fname1, fname2)
         }
         else {

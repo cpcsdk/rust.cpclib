@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 
-use camino::Utf8Path;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use minijinja::{context, Environment, Error, ErrorKind};
 

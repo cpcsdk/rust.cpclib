@@ -21,10 +21,9 @@ cpclib = { workspace=true, features = ["cmdline"] }
 anyhow.workspace = true
 crossbeam-channel.workspace = true
 exitcode.workspace = true
-tempfile.workspace = true
+camino-tempfile.workspace = true
 
 notify = {workspace = true, optional = true}
-
 
 [build-dependencies]
 built.workspace = true

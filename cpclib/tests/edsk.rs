@@ -76,7 +76,7 @@ mod tests {
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/pirate.dsk").unwrap();
         test_single_dsk(&dsk);
 
-        let f = tempfile::NamedTempFile::new().unwrap();
+        let f = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         let tmp_file = f.path();
         dsk.save(tmp_file).unwrap();
         let dsk = cpclib::disc::edsk::ExtendedDsk::open(tmp_file).unwrap();
@@ -95,7 +95,7 @@ mod tests {
         let dsk = cpclib::disc::edsk::ExtendedDsk::open("./tests/dsk/bf2sides.dsk").unwrap();
         test_double_head_bf_edsk(&dsk);
 
-        let f = tempfile::NamedTempFile::new().unwrap();
+        let f = camino_tempfile::NamedUtf8TempFile::new().unwrap();
 
         let tmp_file = f.path();
         dsk.save(tmp_file).unwrap();
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn save_edsk() {
-        let f = tempfile::NamedTempFile::new().unwrap();
+        let f = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         let tmp_file = f.path();
         let dsk1 = cpclib::disc::edsk::ExtendedDsk::open("tests/dsk/pirate.dsk").unwrap();
         dsk1.save(tmp_file).unwrap();

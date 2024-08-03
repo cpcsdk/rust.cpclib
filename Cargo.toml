@@ -84,6 +84,7 @@ bitflags = "2.6.0"
 bitvec = "1.0.1"
 built = { version = "0.7.4", features = ["chrono"] }
 camino = "1.1.7"
+camino-tempfile = "1.1.1"
 cc = "1.1.7"
 cfg-if = "1.0.0"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
@@ -155,7 +156,6 @@ strsim = "0.11.1"
 subprocess = { version = "0.2.9" }
 substring = "1.4.5"
 syn = "2.0.72"
-tempfile = "3.10.1"
 term_grid = { version = "0.2.0" }
 termize = { version = "0.1.1" }
 test-generator = "0.3.1"

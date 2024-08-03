@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use anyhow::Context;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -1065,7 +1066,7 @@ impl Sprite {
         matrix.as_sprite(mode, palette)
     }
 
-    pub fn convert_from_fname<P: AsRef<std::path::Path>>(
+    pub fn convert_from_fname<P: AsRef<Utf8Path>>(
         fname: P,
         mode: Mode,
         conversion: ConversionRule,

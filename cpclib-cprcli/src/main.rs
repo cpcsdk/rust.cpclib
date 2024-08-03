@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 use std::ops::Sub;
-use std::path::PathBuf;
 
 use commands::Command;
-use cpclib_common::clap::builder::ValueParser;
+use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::clap::{self, Arg, ArgAction};
+use cpclib_common::utf8pathbuf_value_parser;
 use cpclib_cpr::Cpr;
 
 mod commands;
@@ -38,7 +38,7 @@ fn main() {
                 .long("cpr1")
                 .required(true)
                 .action(ArgAction::Set)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(|p: &str| utf8pathbuf_value_parser(true)(p))
         )
         .arg(
             Arg::new("INPUT2")
@@ -46,16 +46,16 @@ fn main() {
                 .long("cpr2")
                 .required(false)
                 .action(ArgAction::Set)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(|p: &str| utf8pathbuf_value_parser(true)(p))
         );
     let args = cmd.get_matches();
 
     let mut cpr = {
-        let cpr_fname = args.get_one::<PathBuf>("INPUT").unwrap();
+        let cpr_fname = args.get_one::<Utf8PathBuf>("INPUT").unwrap();
         Cpr::load(cpr_fname).unwrap()
     };
 
-    let mut cpr2 = if let Some(cpr_fname2) = args.get_one::<PathBuf>("INPUT2") {
+    let mut cpr2 = if let Some(cpr_fname2) = args.get_one::<Utf8PathBuf>("INPUT2") {
         Some(Cpr::load(cpr_fname2).unwrap())
     }
     else {

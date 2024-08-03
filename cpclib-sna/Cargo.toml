@@ -29,7 +29,7 @@ rustyline = { workspace = true, optional = true}
 minus = {workspace=true, optional = true}
 
 [dev-dependencies]
-tempfile.workspace = true
+camino-tempfile.workspace = true
 similar-asserts.workspace = true
 
 [build-dependencies]

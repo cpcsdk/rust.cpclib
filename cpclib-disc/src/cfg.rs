@@ -2,9 +2,9 @@ use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::path::Path;
 use std::str::FromStr;
 
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools;
 use cpclib_common::winnow::ascii::{line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
@@ -87,7 +87,7 @@ impl DiscConfig {
     }
 
     /// Create a configuration from the provided file
-    pub fn new<P: AsRef<Path>>(p: P) -> Result<Self, DiscConfigError> {
+    pub fn new<P: AsRef<Utf8Path>>(p: P) -> Result<Self, DiscConfigError> {
         let mut content = String::new();
         let mut f = File::open(p.as_ref())?;
         f.read_to_string(&mut content)?;

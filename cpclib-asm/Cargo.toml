@@ -24,7 +24,7 @@ cpclib-image.workspace = true
 
 arrayref.workspace = true
 assert_matches.workspace = true
-camino.workspace = true
+camino-tempfile.workspace = true
 cfg-if.workspace = true
 choice_nocase.workspace = true
 codespan-reporting.workspace = true
@@ -47,7 +47,6 @@ rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
 smartstring.workspace = true
 substring.workspace = true
-tempfile.workspace = true
 velcro.workspace = true
 
 rayon-cond = {version="0.3.0", optional= true}

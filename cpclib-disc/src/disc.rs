@@ -1,4 +1,4 @@
-use std::path::Path;
+use cpclib_common::camino::Utf8Path;
 
 use crate::amsdos::{
     AmsdosAddBehavior, AmsdosError, AmsdosFile, AmsdosFileName, AmsdosManagerMut,
@@ -10,9 +10,9 @@ pub trait Disc {
     fn open<P>(path: P) -> Result<Self, String>
     where
         Self: Sized,
-        P: AsRef<Path>;
+        P: AsRef<Utf8Path>;
     fn save<P>(&self, path: P) -> Result<(), String>
-    where P: AsRef<Path>;
+    where P: AsRef<Utf8Path>;
 
     fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8;
     fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8;

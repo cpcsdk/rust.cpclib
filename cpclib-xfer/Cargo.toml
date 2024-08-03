@@ -18,6 +18,7 @@ cpclib-disc.workspace = true
 cpclib-sna.workspace = true
 cpclib-common.workspace = true
 
+camino-tempfile.workspace = true
 arrayref.workspace = true
 cfg-if.workspace = true
 custom_error.workspace = true
@@ -27,7 +28,6 @@ getset.workspace = true
 matches.workspace = true
 #memchr.workspace = true
 serde.workspace = true
-tempfile.workspace = true
 
 path-absolutize = { workspace = true, optional = false }
 curl = { workspace = true, optional = false }

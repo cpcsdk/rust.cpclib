@@ -55,7 +55,8 @@ fn command_for_generated_test(
 }
 
 fn specific_test(folder: &str, fname: &str) {
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = Command::new("../target/debug/basm")
@@ -87,10 +88,12 @@ fn expect_warning_but_success(real_fname: &str) {
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
@@ -131,7 +134,8 @@ fn expect_warning_but_success(real_fname: &str) {
     dbg!(&content);
 
     if !content.is_empty() {
-        let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+        let input_file =
+            camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
         let input_fname = input_file.path().as_os_str().to_str().unwrap();
         std::fs::write(input_fname, content).unwrap();
 
@@ -179,10 +183,12 @@ fn expect_one_line_success(real_fname: &str) {
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
@@ -223,7 +229,8 @@ fn expect_one_line_success(real_fname: &str) {
     dbg!(&content);
 
     if !content.is_empty() {
-        let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+        let input_file =
+            camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
         let input_fname = input_file.path().as_os_str().to_str().unwrap();
         std::fs::write(input_fname, content).unwrap();
 
@@ -262,10 +269,12 @@ fn expect_several_empty_lines_success(real_fname: &str) {
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
     let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
@@ -281,7 +290,8 @@ fn expect_several_empty_lines_success(real_fname: &str) {
 
     eprintln!("{}", &content);
 
-    let input_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let input_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let input_fname = input_file.path().as_os_str().to_str().unwrap();
     std::fs::write(input_fname, content).unwrap();
 
@@ -316,10 +326,12 @@ fn expect_listing_success(fname: &str) {
 
     manual_cleanup();
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let listing_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
     let res = Command::new("../target/debug/basm")
@@ -355,10 +367,12 @@ fn expect_symbols_success(fname: &str) {
     let sym_gt = &fname["cpclib-basm/tests/asm/".len()..];
     let fname = sym_gt.replace(".sym", ".asm");
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let symbol_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let symbol_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let symbol_fname = symbol_file.path().as_os_str().to_str().unwrap();
 
     let res = Command::new("../target/debug/basm")
@@ -399,7 +413,8 @@ fn expect_success(fname: &str) {
 
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = command_for_generated_test(fname, output_fname);
@@ -412,7 +427,7 @@ fn expect_success(fname: &str) {
         {
             // control with an equivalent file
             let equiv_output_file =
-                tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+                camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
             let equiv_output_fname = equiv_output_file.path().as_os_str().to_str().unwrap();
 
             let res_equiv = command_for_generated_test(&equiv_fname, equiv_output_fname);
@@ -451,7 +466,8 @@ fn expect_failure(fname: &str) {
 
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
 
-    let output_file = tempfile::NamedTempFile::new().expect("Unable to build temporary file");
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let res = command_for_generated_test(fname, output_fname);

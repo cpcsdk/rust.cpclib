@@ -13,6 +13,7 @@
 #![feature(slice_take)]
 #![feature(write_all_vectored)]
 
+// mod rewrite;
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;
 

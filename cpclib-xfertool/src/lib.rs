@@ -2,15 +2,12 @@
 pub mod interact;
 pub mod parser;
 
-use std::path::PathBuf;
-
-use cpclib_common::clap;
-use cpclib_common::clap::builder::TypedValueParser;
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::{clap, utf8pathbuf_value_parser};
 use cpclib_xfer::{send_and_run_file, CpcXfer};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::clap::builder::PathBufValueParser;
 use crate::clap::{ArgAction, Command};
 
 pub mod built_info {
@@ -38,14 +35,7 @@ pub fn build_args_parser() -> clap::Command {
         clap::Arg::new("fname")
         .help("Filename to send and execute. Can be an executable (Amsdos header expected) or a snapshot V2")
         .value_parser(
-            PathBufValueParser::new()
-                .try_map(|p: PathBuf| {
-                    if p.exists() {
-                        Ok(p)
-                    } else {
-                        Err(format!("{} does not exists", p.display().to_string()))
-                    }
-                })
+            |p: &str| {utf8pathbuf_value_parser(true)(p)}
         )
         .required(true)
     );
@@ -74,14 +64,7 @@ pub fn build_args_parser() -> clap::Command {
             clap::Arg::new("fname")
             .help("Filename to send to the CPC")
             .value_parser(
-                PathBufValueParser::new()
-                    .try_map(|p: PathBuf| {
-                        if p.exists() {
-                            Ok(p)
-                        } else {
-                            Err(format!("{} does not exists", p.display().to_string()))
-                        }
-                    })
+                |p: &str| {utf8pathbuf_value_parser(true)(p)}
             )
             .required(true)
         )/* To implement when needed
@@ -151,11 +134,11 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
         xfer.reset_cpc()?;
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
-        let fname: &PathBuf = p_opt.get_one("fname").unwrap();
+        let fname: &Utf8PathBuf = p_opt.get_one("fname").unwrap();
         send_and_run_file(&xfer, &fname, false);
     }
     else if let Some(y_opt) = matches.subcommand_matches("-y") {
-        let fname: &PathBuf = y_opt.get_one("fname").unwrap();
+        let fname: &Utf8PathBuf = y_opt.get_one("fname").unwrap();
 
         // Simple file sending
         send_and_run_file(&xfer, &fname, true);
@@ -180,7 +163,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
                             notify::event::EventKind::Modify(_) | notify::event::EventKind::Create(_),
                         ..
                     }) => {
-                        send_and_run_file(&xfer, &fname, true);
+                        send_and_run_file(&xfer, fname, true);
                     },
                     _ => {}
                 }

@@ -2,6 +2,9 @@
 
 pub mod riff;
 
+use std::str::FromStr;
+
+use camino::Utf8PathBuf;
 #[cfg(feature = "cmdline")]
 pub use clap;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -17,9 +20,25 @@ use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
 use winnow::token::take_while;
 use winnow::{PResult, Parser};
 pub use {
-    bitfield, bitflags, bitvec, itertools, num, resolve_path, smallvec, smol_str, strsim,
+    bitfield, bitflags, bitvec, camino, itertools, num, resolve_path, smallvec, smol_str, strsim,
     winnow
 };
+
+pub fn utf8pathbuf_value_parser(must_exist: bool) -> impl Fn(&str) -> Result<Utf8PathBuf, String> {
+    move |p: &str| {
+        match Utf8PathBuf::from_str(p) {
+            Ok(p) => {
+                if !must_exist || p.exists() {
+                    Ok(p)
+                }
+                else {
+                    Err(format!("{} does not exists", p))
+                }
+            },
+            Err(_) => Err(format!("{} is not a valid filename.", p))
+        }
+    }
+}
 
 #[inline]
 ///  (prefix) space number suffix

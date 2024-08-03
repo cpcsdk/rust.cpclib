@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 
-use camino::Utf8PathBuf;
-use clap;
 use clap::{Arg, ArgAction, Command};
 use cpclib_asm::preamble::*;
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::clap;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::error::ParseError;
 use cpclib_common::winnow::Parser;

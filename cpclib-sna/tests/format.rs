@@ -1,7 +1,7 @@
 use std::fs::read;
 
+use camino_tempfile::NamedUtf8TempFile;
 use cpclib_sna::{Snapshot, SnapshotVersion};
-use tempfile::NamedTempFile;
 
 #[test]
 fn sna_loadv3() {
@@ -15,7 +15,7 @@ fn sna_loadv2() {
     let sna = Snapshot::load("tests/loop4000_v2.sna").unwrap();
     assert_eq!(sna.version(), SnapshotVersion::V2);
 
-    let file = NamedTempFile::new().unwrap();
+    let file = NamedUtf8TempFile::new().unwrap();
     let fname = file.path();
     sna.save(fname, SnapshotVersion::V2).unwrap();
 
@@ -31,7 +31,7 @@ fn sna_loadv3_savev2() {
     let sna = Snapshot::new_6128().unwrap();
     assert_eq!(sna.version(), SnapshotVersion::V3);
 
-    let file = NamedTempFile::new().unwrap();
+    let file = NamedUtf8TempFile::new().unwrap();
     let fname = file.path();
 
     sna.save(fname, SnapshotVersion::V2).unwrap();

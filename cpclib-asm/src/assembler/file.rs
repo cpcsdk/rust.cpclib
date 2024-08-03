@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_disc::amsdos::AmsdosHeader;
 use either::Either;
 

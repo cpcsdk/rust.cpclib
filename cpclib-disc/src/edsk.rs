@@ -2,10 +2,10 @@
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
 use std::string::ToString;
 
 use cpclib_common::bitflags::bitflags;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::{zip, Itertools};
 use delegate::delegate;
 use getset::Getters;
@@ -1159,7 +1159,7 @@ impl ExtendedDsk {
 impl Disc for ExtendedDsk {
     /// open an extended dsk from an existing file
     fn open<P>(path: P) -> Result<Self, String>
-    where P: AsRef<Path> {
+    where P: AsRef<Utf8Path> {
         let path = path.as_ref();
         // Read the whole file
         let buffer = {
@@ -1174,7 +1174,7 @@ impl Disc for ExtendedDsk {
 
     /// Save the dsk in a file one disc
     fn save<P>(&self, path: P) -> Result<(), String>
-    where P: AsRef<Path> {
+    where P: AsRef<Utf8Path> {
         let path = path.as_ref();
         let mut file_buffer = File::create(path).map_err(|e| e.to_string())?;
         let mut memory_buffer = Vec::new();

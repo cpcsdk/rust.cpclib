@@ -1,11 +1,12 @@
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 
 use anyhow::{self, Error};
+use camino_tempfile as tempfile;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
+use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib::common::clap;
 use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
@@ -26,13 +27,14 @@ pub mod built_info {
 
 #[macro_export]
 macro_rules! specify_palette {
+
     ($e:expr) => {
         $e.arg(
             Arg::new("OCP_PAL")
             .long("pal")
             .required(false)
             .help("OCP PAL file. The first palette among 12 is used") // TODO specify a way to select any palette
-            .value_parser(value_parser!(std::path::PathBuf))
+            .value_parser(|p: &str| cpclib::common::utf8pathbuf_value_parser(true)(p))
         )
         .arg(
             Arg::new("PENS")
@@ -198,7 +200,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
             .collect::<Vec<_>>();
         return Ok(Some(numbers.into()));
     }
-    else if let Some(fname) = matches.get_one::<PathBuf>("OCP_PAL") {
+    else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
         let pal = OcpPal::from_buffer(data);
@@ -232,7 +234,7 @@ macro_rules! export_palette {
                 .short('p')
                 .required(false)
                 .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(clap::value_parser!(Utf8PathBuf))
                 .help("Name of the binary file that contains the palette (Gate Array format)"),
         )
         .arg(
@@ -241,7 +243,7 @@ macro_rules! export_palette {
             .short('i')
             .required(false)
             .action(ArgAction::Set)
-            .value_parser(clap::value_parser!(PathBuf))
+            .value_parser(clap::value_parser!(Utf8PathBuf))
             .help("Name of the binary file that will contain the ink numbers (usefull for system based color change)")
         )
         .arg(
@@ -249,7 +251,7 @@ macro_rules! export_palette {
                 .long("palette_fadeout")
                 .required(false)
                 .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(clap::value_parser!(Utf8PathBuf))
                 .help("Name of the file that will contain all the steps for a fade out transition (Gate Array format)")
         )
         .arg(
@@ -257,7 +259,7 @@ macro_rules! export_palette {
                 .long("ink_fadeout")
                 .required(false)
                 .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(clap::value_parser!(Utf8PathBuf))
                 .help("Name of the file that will contain all the steps for a fade out transition")
         )
     };
@@ -265,13 +267,13 @@ macro_rules! export_palette {
 
 macro_rules! do_export_palette {
     ($arg:expr, $palette:ident) => {
-        if let Some(palette_fname) = $arg.get_one::<PathBuf>("EXPORT_PALETTE") {
+        if let Some(palette_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_PALETTE") {
             let mut file = File::create(palette_fname).expect("Unable to create the palette file");
             let p: Vec<u8> = $palette.into();
             file.write_all(&p).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.get_one::<PathBuf>("EXPORT_PALETTE_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_PALETTE_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
                 acc.extend(&x.to_gate_array_with_default(0.into()));
@@ -284,7 +286,7 @@ macro_rules! do_export_palette {
             file.write_all(&bytes).unwrap();
         }
 
-        if let Some(palette_fname) = $arg.get_one::<PathBuf>("EXPORT_INKS") {
+        if let Some(palette_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INKS") {
             let mut file = File::create(palette_fname).expect("Unable to create the inks file");
             let inks = $palette
                 .inks()
@@ -294,7 +296,7 @@ macro_rules! do_export_palette {
             file.write_all(&inks).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.get_one::<PathBuf>("EXPORT_INK_FADEOUT") {
+        if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INK_FADEOUT") {
             let palettes = $palette.rgb_fadout();
             let bytes = palettes
                 .iter()
@@ -549,7 +551,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
 fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
-    let input_file = matches.get_one::<PathBuf>("SOURCE").unwrap();
+    let input_file = matches.get_one::<Utf8PathBuf>("SOURCE").unwrap();
     let output_mode = matches
         .get_one::<String>("MODE")
         .unwrap()
@@ -654,10 +656,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     .and_then(|conf_fname: &String| {
                         let mut file = File::create(conf_fname)
                             .expect("Unable to create the configuration file");
-                        let fname = std::path::Path::new(conf_fname)
+                        let fname = Utf8Path::new(conf_fname)
                             .file_stem()
-                            .unwrap()
-                            .to_str()
                             .unwrap()
                             .replace(".", "_");
                         writeln!(&mut file, "{}_WIDTH equ {}", fname, bytes_width).unwrap();
@@ -680,21 +680,13 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 do_export_palette!(sub_tile, palette);
 
                 // Save the binary data of the tiles
-                let tile_fname = Path::new(
+                let tile_fname = Utf8Path::new(
                     sub_tile
                         .get_one::<String>("SPRITE_FNAME")
                         .expect("Missing tileset name")
                 );
-                let base = tile_fname
-                    .with_extension("")
-                    .as_os_str()
-                    .to_str()
-                    .unwrap()
-                    .to_owned();
-                let extension = tile_fname
-                    .extension()
-                    .map(|s| s.to_str().unwrap_or(""))
-                    .unwrap_or("");
+                let base = tile_fname.with_extension("").to_string();
+                let extension = tile_fname.extension().unwrap_or("");
                 for (i, data) in tile_set.iter().enumerate() {
                     let current_filename = format!("{}_{:03}.{}", base, i, extension);
                     let mut file = File::create(current_filename.clone())
@@ -767,19 +759,20 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             let file = assemble_to_amsdos_file(&code, filename).unwrap();
 
             if sub_exec.is_some() {
-                let filename = Path::new(filename);
+                let filename = Utf8Path::new(filename);
                 let folder = filename.parent().unwrap();
-                let folder = if folder == Path::new("") {
+                let folder = if folder == Utf8Path::new("") {
                     std::env::current_dir().unwrap()
                 }
                 else {
                     folder.canonicalize().unwrap()
                 };
+                let folder = Utf8PathBuf::from_path_buf(folder).unwrap();
                 file.save_in_folder(folder)?;
             }
             else {
                 let fname = sub_dsk.unwrap().get_one::<String>("DSK").unwrap();
-                let p = std::path::Path::new(fname);
+                let p = Utf8Path::new(fname);
 
                 let mut dsk = {
                     if p.exists() {
@@ -866,9 +859,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
                     let xfer = CpcXfer::new(sub_m4.get_one::<String>("CPCM4").unwrap());
 
-                    let tmp_file_name = f.path().to_str().unwrap();
+                    let tmp_file_name = f.path();
                     xfer.upload_and_run(tmp_file_name, None)
-                        .expect("An error occured while transfering the snapshot");
+                        .expect("An error occurred while transferring the snapshot");
                 }
             }
         }
@@ -888,7 +881,7 @@ pub fn build_args_parser() -> clap::Command {
 //                            .last(true)
                             .required(true)
                             .value_parser(|source: &str| {
-                              let p = std::path::PathBuf::from(source);
+                              let p = Utf8PathBuf::from(source);
                               if p.exists() {
                                   Ok(p)
                               }
@@ -960,16 +953,14 @@ pub fn build_args_parser() -> clap::Command {
                             .help("executable to generate")
                             .required(true)
                             .value_parser(|fname: &str|{
-                                let fname = std::path::PathBuf::from(fname);
+                                let fname = Utf8PathBuf::from(fname);
                                 if let Some(ext) = fname.extension() {
-                                    let ext = ext.to_os_string().into_string().unwrap();
                                     if ext.len() > 3 {
                                         return Err(format!("{} is not a valid amsdos extension.", ext));
                                     }
                                 }
 
                                 if let Some(stem) = fname.file_stem() {
-                                    let stem = stem.to_os_string().into_string().unwrap();
                                     if stem.len() > 8 {
                                         return Err(format!("{} is not a valid amsdos file stem.", stem))
                                     }
@@ -1177,7 +1168,10 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                 notify::Config::default()
             )?;
             watcher.watch(
-                &std::path::Path::new(matches.get_one::<PathBuf>("SOURCE").unwrap()),
+                matches
+                    .get_one::<Utf8PathBuf>("SOURCE")
+                    .unwrap()
+                    .as_std_path(),
                 RecursiveMode::NonRecursive
             )?;
 

@@ -27,9 +27,9 @@ use std::ops::{Deref, Neg};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
@@ -1746,11 +1746,11 @@ impl Env {
         self.sna_version
     }
 
-    pub fn save_sna<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), std::io::Error> {
+    pub fn save_sna<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), std::io::Error> {
         self.sna().save(fname, self.sna_version())
     }
 
-    pub fn save_cpr<P: AsRef<std::path::Path>>(&self, fname: P) -> Result<(), AssemblerError> {
+    pub fn save_cpr<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), AssemblerError> {
         let cpr_asm = self.cpr.as_ref().unwrap();
         let cpr = cpr_asm.build_cpr()?;
         cpr.save(fname)

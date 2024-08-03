@@ -1,6 +1,3 @@
-use std::env;
-use std::path::Path;
-
 fn main() {
     static_vcruntime::metabuild();
 

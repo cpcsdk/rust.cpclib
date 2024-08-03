@@ -1,6 +1,6 @@
 use std::env::current_dir;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
@@ -116,7 +116,7 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
         let add = matches.get_one::<String>("add");
 
         // Read it
-        if !std::path::Path::new(fname).exists() {
+        if !Utf8Path::new(fname).exists() {
             if add.is_some() {
                 std::fs::File::create(fname).expect("create empty {fname}");
             }

@@ -360,8 +360,8 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
 
     #[test]
     fn test_build() {
-        use tempfile::NamedTempFile;
-        let file = NamedTempFile::new().unwrap();
+        use camino_tempfile::NamedUtf8TempFile;
+        let file = NamedUtf8TempFile::new().unwrap();
         let path = file.into_temp_path();
 
         let cfg = cpclib::disc::cfg::DiscConfig::from_str(SINGLE_SIDED).unwrap();

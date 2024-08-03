@@ -14,7 +14,6 @@
 
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::PathBuf;
 
 use cpclib_basic::{binary_parser, BasicProgram};
 use cpclib_common::clap;
@@ -32,7 +31,7 @@ fn main() -> std::io::Result<()> {
                 .short('b')
                 .help("Amstrad basic file")
                 .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(cpclib_common::utf8pathbuf_value_parser(true))
                 .required_unless_present("BASIC_SOURCE")
         )
         .arg(

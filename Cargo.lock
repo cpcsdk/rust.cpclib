@@ -919,6 +919,19 @@ name = "camino"
 version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0ec6b951b160caa93cc0c7b209e5a3bff7aae9062213451ac99493cd844c239"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "camino-tempfile"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb905055fa81e4d427f919b2cd0d76a998267de7d225ea767a1894743a5263c2"
+dependencies = [
+ "camino",
+ "tempfile",
+]
 
 [[package]]
 name = "cast"
@@ -1395,6 +1408,7 @@ dependencies = [
  "anyhow",
  "arrayref",
  "built",
+ "camino-tempfile",
  "cfg-if",
  "cpclib-asm",
  "cpclib-basic",
@@ -1417,7 +1431,6 @@ dependencies = [
  "path-absolutize",
  "pretty_assertions",
  "serde",
- "tempfile",
  "time",
 ]
 
@@ -1431,7 +1444,7 @@ dependencies = [
  "beef",
  "build-deps",
  "built",
- "camino",
+ "camino-tempfile",
  "cc",
  "cfg-if",
  "chardetng",
@@ -1468,7 +1481,6 @@ dependencies = [
  "serde",
  "smartstring",
  "substring",
- "tempfile",
  "velcro",
 ]
 
@@ -1498,7 +1510,7 @@ version = "0.8.2"
 dependencies = [
  "build-deps",
  "built",
- "camino",
+ "camino-tempfile",
  "const_format",
  "cpclib-asm",
  "cpclib-common",
@@ -1511,7 +1523,6 @@ dependencies = [
  "pretty_assertions",
  "regex",
  "serial_test",
- "tempfile",
  "test-generator",
  "time",
 ]
@@ -1521,8 +1532,6 @@ name = "cpclib-bdasm"
 version = "0.8.2"
 dependencies = [
  "built",
- "camino",
- "clap 4.5.13",
  "const_format",
  "cpclib-asm",
  "cpclib-common",
@@ -1538,7 +1547,7 @@ dependencies = [
  "assert_cmd",
  "build-deps",
  "built",
- "camino",
+ "camino-tempfile",
  "cpclib-asm",
  "cpclib-basm",
  "cpclib-common",
@@ -1555,7 +1564,6 @@ dependencies = [
  "serde_yaml",
  "serial_test",
  "shlex",
- "tempfile",
  "test-generator",
  "thiserror",
  "topologic",
@@ -1568,6 +1576,7 @@ dependencies = [
  "bitfield",
  "bitflags 2.6.0",
  "bitvec",
+ "camino",
  "clap 4.5.13",
  "itertools 0.12.1",
  "num",
@@ -1615,7 +1624,7 @@ version = "0.8.1"
 dependencies = [
  "arrayref",
  "built",
- "camino",
+ "camino-tempfile",
  "cfg-if",
  "cpclib-common",
  "cpclib-tokens",
@@ -1629,7 +1638,6 @@ dependencies = [
  "matches",
  "serde",
  "simple_logger",
- "tempfile",
  "thiserror",
 ]
 
@@ -1654,11 +1662,11 @@ version = "0.8.1"
 dependencies = [
  "anyhow",
  "built",
+ "camino-tempfile",
  "cpclib",
  "crossbeam-channel",
  "exitcode",
  "notify",
- "tempfile",
 ]
 
 [[package]]
@@ -1677,6 +1685,7 @@ name = "cpclib-sna"
 version = "0.8.1"
 dependencies = [
  "built",
+ "camino-tempfile",
  "cfg-if",
  "comfy-table",
  "cpclib-common",
@@ -1688,7 +1697,6 @@ dependencies = [
  "rustyline",
  "serde",
  "similar-asserts",
- "tempfile",
 ]
 
 [[package]]
@@ -1716,6 +1724,7 @@ name = "cpclib-visual-bndbuild"
 version = "0.4.0"
 dependencies = [
  "built",
+ "camino",
  "cpclib-bndbuild",
  "cpclib-common",
  "eframe 0.28.1",
@@ -1750,6 +1759,7 @@ version = "0.8.0"
 dependencies = [
  "arrayref",
  "built",
+ "camino-tempfile",
  "cfg-if",
  "cpclib-common",
  "cpclib-disc",
@@ -1762,7 +1772,6 @@ dependencies = [
  "matches",
  "path-absolutize",
  "serde",
- "tempfile",
  "ureq",
 ]
 
@@ -1773,6 +1782,7 @@ dependencies = [
  "anyhow",
  "arrayref",
  "built",
+ "camino-tempfile",
  "cfg-if",
  "cpclib-common",
  "cpclib-disc",
@@ -1792,7 +1802,6 @@ dependencies = [
  "rustyline-derive",
  "serde",
  "subprocess",
- "tempfile",
  "term_grid",
  "termize",
  "time",

@@ -1,5 +1,4 @@
-use std::path::Path;
-
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
 use cpclib_common::itertools::Itertools;
 
@@ -40,15 +39,18 @@ impl Runner for CpRunner {
             .map(expand_glob)
             .flatten()
             .collect_vec();
-        let files = fnames.iter().map(|fname| Path::new(fname)).collect_vec();
+        let files = fnames
+            .iter()
+            .map(|fname| Utf8Path::new(fname))
+            .collect_vec();
         let dest = files.last();
 
-        let copy = |from: &Path, to: &Path, error: &mut String| {
+        let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
             std::fs::copy(from, to).map_err(|e| {
                 error.push_str(&format!(
                     "Error when copying {} to {}. {}.\n",
-                    from.display(),
-                    to.display(),
+                    from,
+                    to,
                     e.to_string()
                 ))
             });
@@ -78,7 +80,7 @@ impl Runner for CpRunner {
             _ => {
                 let dest = dest.unwrap();
                 if !dest.is_dir() {
-                    errors.push_str(&format!("{} must be a directory.", dest.display()))
+                    errors.push_str(&format!("{} must be a directory.", dest))
                 }
                 else {
                     let files = &files[..files.len() - 1];
@@ -114,8 +116,8 @@ mod test {
 
     fn test_copy_successful() {
         // prepare the files for the test
-        let mut src = tempfile::NamedTempFile::new().unwrap();
-        let dst = tempfile::NamedTempFile::new().unwrap();
+        let mut src = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let dst = camino_tempfile::NamedUtf8TempFile::new().unwrap();
 
         src.as_file_mut().write("test".as_bytes()).unwrap();
 
@@ -128,8 +130,7 @@ mod test {
 
         // Run the test
         let cp = CpRunner::default();
-        cp.inner_run(&[src.display().to_string(), dst.display().to_string()])
-            .unwrap();
+        cp.inner_run(&[src.to_string(), dst.to_string()]).unwrap();
         assert!(dst.exists());
     }
 }

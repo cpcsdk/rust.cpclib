@@ -2,10 +2,10 @@ use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::Iterator;
-use std::path::Path;
 
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 use thiserror::Error;
@@ -1833,7 +1833,7 @@ impl AmsdosFile {
     }
 
     /// Read a file from disc and success if there is no io error and if the header if correct
-    pub fn open_valid<P: AsRef<Path>>(path: P) -> Result<Self, AmsdosError> {
+    pub fn open_valid<P: AsRef<Utf8Path>>(path: P) -> Result<Self, AmsdosError> {
         let mut f = File::open(path.as_ref())?;
         let mut content = Vec::new();
         f.read_to_end(&mut content)?;
@@ -1899,7 +1899,7 @@ impl AmsdosFile {
     }
 
     /// Save the file at the given path (header and data)
-    pub fn save_in_folder<P: AsRef<Path>>(&self, folder: P) -> std::io::Result<()> {
+    pub fn save_in_folder<P: AsRef<Utf8Path>>(&self, folder: P) -> std::io::Result<()> {
         use std::io::Write;
 
         let folder = folder.as_ref();

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::time::Instant;
 
-use camino::Utf8PathBuf;
+use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 
 use super::Env;
