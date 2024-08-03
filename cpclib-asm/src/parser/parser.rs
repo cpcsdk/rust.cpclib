@@ -24,7 +24,7 @@ use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{FlagValue, SnapshotVersion};
 use cpclib_tokens::ListingElement;
-use crc::*;
+//use crc::*;
 use either::Either;
 use obtained::LocatedTokenInner;
 
@@ -35,7 +35,7 @@ use super::*;
 use crate::parser::parser::winnow::combinator::repeat_till;
 use crate::preamble::*;
 
-const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
+//const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Z80ParserErrorKind {
