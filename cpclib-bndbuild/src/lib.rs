@@ -1,6 +1,6 @@
 use std::env::current_dir;
-use std::path::Path;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
@@ -188,14 +188,8 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
                 println!(
                     "{}{}: {}",
                     if rule.is_enabled() { "" } else { "[disabled] " },
-                    rule.targets()
-                        .iter()
-                        .map(|f| f.display().to_string())
-                        .join(" "),
-                    rule.dependencies()
-                        .iter()
-                        .map(|f| f.display().to_string())
-                        .join(" "),
+                    rule.targets().iter().map(|f| f.to_string()).join(" "),
+                    rule.dependencies().iter().map(|f| f.to_string()).join(" "),
                 );
                 if let Some(help) = rule.help() {
                     println!("\t{}", help);
@@ -220,7 +214,7 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
                 .unwrap()
                 .into_iter()
                 .map(|s| s.as_ref())
-                .collect::<Vec<&std::path::Path>>()
+                .collect::<Vec<&Utf8Path>>()
         };
 
         if matches.get_flag("dot") {
@@ -384,15 +378,15 @@ pub fn build_args_parser() -> clap::Command {
         )
 }
 
-pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
+pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
     let path = path
         .map(|p| p.to_owned())
-        .unwrap_or_else(|| current_dir().unwrap());
+        .unwrap_or_else(|| Utf8PathBuf::from_path_buf(current_dir().unwrap()).unwrap());
 
     if !path.is_dir() {
         return Err(BndBuilderError::AnyError(format!(
             "{} is not a valid directory",
-            path.display()
+            path
         )));
     }
 
@@ -400,7 +394,7 @@ pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
     if bndbuild_yml.exists() {
         return Err(BndBuilderError::AnyError(format!(
             "{} already exists",
-            bndbuild_yml.display()
+            bndbuild_yml
         )));
     }
 
@@ -408,7 +402,7 @@ pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
     if main_asm.exists() {
         return Err(BndBuilderError::AnyError(format!(
             "{} already exists",
-            main_asm.display()
+            main_asm
         )));
     }
 
@@ -416,7 +410,7 @@ pub fn init_project(path: Option<&Path>) -> Result<(), BndBuilderError> {
     if main_asm.exists() {
         return Err(BndBuilderError::AnyError(format!(
             "{} already exists",
-            data_asm.display()
+            data_asm
         )));
     }
 
@@ -458,12 +452,13 @@ fn expand_glob(p: &str) -> Vec<String> {
                         .map(|p2| {
                             match p2 {
                                 Ok(p) => {
-                                    let p = p.display().to_string();
-                                    if p.starts_with(".\\") {
-                                        p[2..].to_owned()
+                                    let p = Utf8PathBuf::from_path_buf(p).unwrap();
+                                    let s = p.to_string();
+                                    if s.starts_with(".\\") {
+                                        s[2..].to_owned()
                                     }
                                     else {
-                                        p
+                                        s
                                     }
                                 },
                                 Err(_e) => p.clone()

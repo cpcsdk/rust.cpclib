@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
-use std::path::Path;
 
+use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use minijinja::{context, Environment, Error, ErrorKind};
 
@@ -46,16 +46,20 @@ impl BndBuilder {
         BndBuilder { inner }
     }
 
-    pub fn from_fname<P: AsRef<Path>>(fname: P) -> Result<Self, BndBuilderError> {
+    pub fn from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<Self, BndBuilderError> {
         let content = Self::decode_from_fname(fname)?;
         Self::from_string(content)
     }
 
-    pub fn decode_from_fname<P: AsRef<Path>>(fname: P) -> Result<String, BndBuilderError> {
+    pub fn decode_from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<String, BndBuilderError> {
         Self::decode_from_fname_with_definitions(fname, &Vec::<(String, String)>::new())
     }
 
-    pub fn decode_from_fname_with_definitions<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str>>(
+    pub fn decode_from_fname_with_definitions<
+        P: AsRef<Utf8Path>,
+        S1: AsRef<str>,
+        S2: AsRef<str>
+    >(
         fname: P,
         definitions: &[(S1, S2)]
     ) -> Result<String, BndBuilderError> {
@@ -80,24 +84,24 @@ impl BndBuilder {
 
         let file = std::fs::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
-                fname: fname.display().to_string(),
+                fname: fname.to_string(),
                 error: e
             }
         })?;
 
-        let path = std::path::Path::new(fname).parent().unwrap();
+        let path = Utf8Path::new(fname).parent().unwrap();
         let working_directory = if path.is_dir() { Some(path) } else { None };
 
         let rdr = BufReader::new(file);
         Self::decode_from_reader(rdr, working_directory, definitions)
     }
 
-    pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+    pub fn save<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<()> {
         let contents = self.inner.borrow_owner().to_string();
-        std::fs::write(path, contents)
+        std::fs::write(path.as_ref(), contents)
     }
 
-    pub fn decode_from_reader<P: AsRef<Path>, S1: AsRef<str>, S2: AsRef<str>>(
+    pub fn decode_from_reader<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         mut rdr: impl Read,
         working_directory: Option<P>,
         definitions: &[(S1, S2)]
@@ -106,7 +110,7 @@ impl BndBuilder {
             let working_directory = working_directory.as_ref();
             std::env::set_current_dir(working_directory).map_err(|e| {
                 BndBuilderError::WorkingDirectoryError {
-                    fname: working_directory.display().to_string(),
+                    fname: working_directory.to_string(),
                     error: e
                 }
             })?;
@@ -143,33 +147,33 @@ impl BndBuilder {
     }
 
     /// Return the default target if any
-    pub fn default_target(&self) -> Option<&Path> {
+    pub fn default_target(&self) -> Option<&Utf8Path> {
         self.inner.borrow_owner().default_target()
     }
 
     /// Execute the target after all its predecessors
-    pub fn execute<P: AsRef<Path>>(&self, target: P) -> Result<(), BndBuilderError> {
+    pub fn execute<P: AsRef<Utf8Path>>(&self, target: P) -> Result<(), BndBuilderError> {
         self.inner.borrow_dependent().execute(target)
     }
 
-    pub fn outdated<P: AsRef<Path>>(&self, target: P) -> Result<bool, BndBuilderError> {
+    pub fn outdated<P: AsRef<Utf8Path>>(&self, target: P) -> Result<bool, BndBuilderError> {
         self.inner.borrow_dependent().outdated(target, true)
     }
 
-    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Path>> {
+    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Utf8Path>> {
         self.inner.borrow_dependent().get_layered_dependencies()
     }
 
-    pub fn get_layered_dependencies_for<'a, P: AsRef<Path>>(
+    pub fn get_layered_dependencies_for<'a, P: AsRef<Utf8Path>>(
         &'a self,
         p: &'a P
-    ) -> Vec<HashSet<&'a Path>> {
+    ) -> Vec<HashSet<&'a Utf8Path>> {
         self.inner
             .borrow_dependent()
             .get_layered_dependencies_for(p)
     }
 
-    pub fn get_rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
+    pub fn get_rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
         self.inner.borrow_owner().rule(tgt)
     }
 
@@ -177,7 +181,7 @@ impl BndBuilder {
         self.inner.borrow_owner().rules()
     }
 
-    pub fn targets<'a>(&'a self) -> Vec<&'a Path> {
+    pub fn targets<'a>(&'a self) -> Vec<&'a Utf8Path> {
         self.rules()
             .iter()
             .map(|r| r.targets())

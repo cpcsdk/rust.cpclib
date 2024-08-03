@@ -1535,6 +1535,7 @@ dependencies = [
  "assert_cmd",
  "build-deps",
  "built",
+ "camino",
  "cpclib-asm",
  "cpclib-basm",
  "cpclib-common",

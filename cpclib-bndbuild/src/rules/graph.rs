@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
-use std::path::{Path, PathBuf};
 
+use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use topologic::AcyclicDependencyGraph;
 
@@ -10,9 +10,9 @@ use crate::BndBuilderError;
 
 #[derive(Clone)]
 pub struct Graph<'r> {
-    pub(crate) node2tracked: BTreeMap<&'r Path, usize>,
+    pub(crate) node2tracked: BTreeMap<&'r Utf8Path, usize>,
     pub(crate) tracked: &'r Rules,
-    pub(crate) g: AcyclicDependencyGraph<&'r Path>
+    pub(crate) g: AcyclicDependencyGraph<&'r Utf8Path>
 }
 
 #[derive(Default)]
@@ -22,7 +22,7 @@ struct ExecutionState {
 }
 
 impl<'r> Graph<'r> {
-    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Path>> {
+    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Utf8Path>> {
         let mut res = self.g.get_forward_dependency_topological_layers();
         let orphans = self
             .tracked
@@ -31,7 +31,7 @@ impl<'r> Graph<'r> {
             .filter(|rule| rule.dependencies().is_empty())
             .flat_map(|r| r.targets())
             .map(|p| p.as_path())
-            .collect::<HashSet<&Path>>();
+            .collect::<HashSet<&Utf8Path>>();
         if !orphans.is_empty() {
             res.push(orphans);
         }
@@ -39,8 +39,11 @@ impl<'r> Graph<'r> {
         res
     }
 
-    pub fn get_layered_dependencies_for<P: AsRef<Path>>(&self, p: &'r P) -> Vec<HashSet<&Path>> {
-        let p: &Path = p.as_ref();
+    pub fn get_layered_dependencies_for<P: AsRef<Utf8Path>>(
+        &self,
+        p: &'r P
+    ) -> Vec<HashSet<&Utf8Path>> {
+        let p: &Utf8Path = p.as_ref();
         let mut layers = self.g.get_forward_dependency_topological_layers();
         let mut nodes = self.g.get_forward_dependencies(&p);
         nodes.insert(p);
@@ -54,15 +57,15 @@ impl<'r> Graph<'r> {
         layers.into_iter().filter(|l| !l.is_empty()).collect_vec()
     }
 
-    pub fn show_dependencies(&self, p: &PathBuf) {
-        let layers = self.get_layered_dependencies_for(p);
+    pub fn show_dependencies<P: AsRef<Utf8Path>>(&self, p: P) {
+        let layers = self.get_layered_dependencies_for(&p);
 
         for layer in layers {
             println!("{:?}", layer)
         }
     }
 
-    pub fn outdated<P: AsRef<Path>>(
+    pub fn outdated<P: AsRef<Utf8Path>>(
         &self,
         p: P,
         skip_rules_without_commands: bool
@@ -89,14 +92,14 @@ impl<'r> Graph<'r> {
         Ok(res)
     }
 
-    pub fn rule<P: AsRef<Path>>(&self, p: P) -> Option<&Rule> {
+    pub fn rule<P: AsRef<Utf8Path>>(&self, p: P) -> Option<&Rule> {
         let p = p.as_ref();
         self.node2tracked
             .get(p)
             .map(|idx| self.tracked.rule_at(*idx))
     }
 
-    pub fn execute<P: AsRef<Path>>(&self, p: P) -> Result<(), BndBuilderError> {
+    pub fn execute<P: AsRef<Utf8Path>>(&self, p: P) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
         println!("> Compute dependencies");
 
@@ -114,7 +117,7 @@ impl<'r> Graph<'r> {
             }
             else {
                 return Err(BndBuilderError::ExecuteError {
-                    fname: p.display().to_string(),
+                    fname: p.to_string(),
                     msg: "no rule to build it".to_owned()
                 });
             }
@@ -132,7 +135,7 @@ impl<'r> Graph<'r> {
 
     fn execute_layer(
         &self,
-        layer: HashSet<&Path>,
+        layer: HashSet<&Utf8Path>,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
         layer
@@ -142,36 +145,31 @@ impl<'r> Graph<'r> {
         Ok(())
     }
 
-    fn execute_rule<P: AsRef<Path>>(
+    fn execute_rule<P: AsRef<Utf8Path>>(
         &self,
         p: P,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
         state.task_count += 1;
-        println!(
-            "[{}/{}] Handle {}",
-            state.task_count,
-            state.nb_deps,
-            p.display()
-        );
+        println!("[{}/{}] Handle {}", state.task_count, state.nb_deps, p);
 
         if let Some(&rule_idx) = self.node2tracked.get(p) {
             let rule = self.tracked.rule_at(rule_idx);
 
             if !rule.is_enabled() {
-                return Err(BndBuilderError::DisabledTarget(p.display().to_string()));
+                return Err(BndBuilderError::DisabledTarget(p.to_string()));
             }
 
             let done = rule.is_up_to_date();
             if done {
-                println!("\t{} is already up to date", p.display());
+                println!("\t{} is already up to date", p);
             }
             else {
                 for task in rule.commands() {
                     execute(task).map_err(|e| {
                         BndBuilderError::ExecuteError {
-                            fname: p.display().to_string(),
+                            fname: p.to_string(),
                             msg: e
                         }
                     })?;
@@ -181,12 +179,12 @@ impl<'r> Graph<'r> {
         else {
             if !p.exists() {
                 return Err(BndBuilderError::ExecuteError {
-                    fname: p.display().to_string(),
+                    fname: p.to_string(),
                     msg: "no rule to build it".to_owned()
                 });
             }
             else {
-                println!("\t{} is already up to date", p.display())
+                println!("\t{} is already up to date", p)
             }
         }
 

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use std::ops::Sub;
-use std::path::Path;
 
+use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use dot_writer::{Attributes, DotWriter, Style};
 use serde::{self, Deserialize};
@@ -45,15 +45,15 @@ impl Rules {
     }
 
     /// Get the rule for this target (of course None is returned for leaf files)
-    pub fn rule<P: AsRef<Path>>(&self, tgt: P) -> Option<&Rule> {
+    pub fn rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
         let tgt = tgt.as_ref();
 
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
             tgt.strip_prefix(r"./").unwrap()
         }
-        else if tgt.to_str().unwrap().starts_with(r".\") {
-            Path::new(&tgt.to_str().unwrap()[2..])
+        else if tgt.as_str().starts_with(r".\") {
+            Utf8Path::new(&tgt.as_str()[2..])
         }
         else {
             tgt
@@ -64,14 +64,14 @@ impl Rules {
             .find(|r| r.targets().iter().any(|tgt2| tgt2 == &tgt))
     }
 
-    pub fn default_target(&self) -> Option<&Path> {
+    pub fn default_target(&self) -> Option<&Utf8Path> {
         self.rules.get(0).map(|r| r.target(0))
     }
 
     // TODO implement a version with less copy
     pub fn to_deps(&self) -> Result<Graph, BndBuilderError> {
-        let mut g = AcyclicDependencyGraph::<&Path>::new();
-        let mut node2tracked_idx: BTreeMap<&Path, usize> = BTreeMap::new();
+        let mut g = AcyclicDependencyGraph::<&Utf8Path>::new();
+        let mut node2tracked_idx: BTreeMap<&Utf8Path, usize> = BTreeMap::new();
 
         for (idx, rule) in self.rules.iter().enumerate() {
             if !rule.is_enabled() {
@@ -79,13 +79,13 @@ impl Rules {
             }
 
             for p in rule.targets().iter() {
-                let p: &Path = p.as_ref();
+                let p: &Utf8Path = p.as_ref();
                 // link the rule to the target
                 if node2tracked_idx.contains_key(p) {
                     let other_rule_idx = node2tracked_idx.get(p).unwrap();
                     let other_rule = &self.rules[*other_rule_idx];
                     return Err(BndBuilderError::DependencyError(
-                        format! {"{} has already a rule to build it:\n{:?}", p.display(), other_rule}
+                        format! {"{} has already a rule to build it:\n{:?}", p, other_rule}
                     ));
                 }
                 else {
@@ -95,11 +95,7 @@ impl Rules {
                 // link the target to the dependencies
                 for p2 in rule.dependencies().iter() {
                     g.depend_on(p, p2).map_err(|_e| {
-                        BndBuilderError::DependencyError(format!(
-                            "{} and {}",
-                            p.display(),
-                            p2.display()
-                        ))
+                        BndBuilderError::DependencyError(format!("{} and {}", p, p2))
                     })?;
                 }
             }
@@ -154,7 +150,7 @@ impl Rules {
                 };
 
                 for dep in deps {
-                    let dep = format!("\"{}\"", dep.display().to_string());
+                    let dep = format!("\"{}\"", dep.to_string());
                     all_deps.insert(dep.clone());
 
                     rule_id
@@ -163,7 +159,7 @@ impl Rules {
                 }
 
                 for tgt in tgts {
-                    let tgt = format!("\"{}\"", tgt.display().to_string());
+                    let tgt = format!("\"{}\"", tgt.to_string());
                     all_tgts.insert(tgt.clone());
 
                     rule_id

@@ -16,11 +16,12 @@ homepage.workspace = true
 exclude = ["examples", "tests/dummy", "*.gif"]
 
 [dependencies]
+camino.workspace = true
+dot-writer = "0.1.3"
+lazy-regex = "3.2.0"
+minijinja = "2.1.1"
 shlex = "1.3.0"
 topologic = "1.1.0"
-lazy-regex = "3.2.0"
-dot-writer = "0.1.3"
-minijinja = "2.1.1"
 
 cpclib-common = {workspace=true, features=["cmdline"]}
 cpclib-basm = { workspace=true, default-features=false, features=["xferlib"] }
