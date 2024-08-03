@@ -1,5 +1,3 @@
-extern crate matches;
-
 #[cfg(test)]
 mod tests {
     use cpclib_asm::assembler::processed_token::build_processed_token;

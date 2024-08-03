@@ -23,8 +23,8 @@ cpclib-cpr.workspace = true
 cpclib-image.workspace = true
 
 arrayref.workspace = true
-assert_matches.workspace = true
-camino-tempfile.workspace = true
+#assert_matches.workspace = true
+#camino-tempfile.workspace = true
 cfg-if.workspace = true
 choice_nocase.workspace = true
 codespan-reporting.workspace = true
@@ -32,7 +32,7 @@ codespan-reporting.workspace = true
 custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
-encoding_rs.workspace = true
+#encoding_rs.workspace = true
 getset.workspace = true
 globset.workspace = true
 hashbag.workspace = true
@@ -44,7 +44,7 @@ paste.workspace = true
 regex.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
-smartstring.workspace = true
+#smartstring.workspace = true
 substring.workspace = true
 velcro.workspace = true
 
@@ -58,7 +58,7 @@ prettydiff = "0.6.4"
 
 [build-dependencies]
 built.workspace = true
-cc.workspace = true
+#cc.workspace = true
 build-deps = "0.1.4"
 
 #[lib]

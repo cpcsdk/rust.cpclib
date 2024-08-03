@@ -101,9 +101,7 @@ custom_error = "1.9.2"
 dbg = "1.0.4"
 delegate = "0.12.0"
 either = "1.13.0"
-encoding_rs = { version = "0.8.34", default-features = false, features = [
-  "alloc",
-] }
+#encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
 enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "11.3.0"

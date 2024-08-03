@@ -297,12 +297,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d151e35f61089500b617991b791fc8bfd237ae50cd5950803758a179b41e67a"
 
 [[package]]
-name = "arrays"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c9810d892911da7c1cc723e12a5c47645ae4f82daf5e6d73cc73f1cc6fcf1e1"
-
-[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -352,12 +346,6 @@ dependencies = [
  "predicates-tree",
  "wait-timeout",
 ]
-
-[[package]]
-name = "assert_matches"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 
 [[package]]
 name = "async-broadcast"
@@ -1428,12 +1416,9 @@ version = "0.8.2"
 dependencies = [
  "aho-corasick",
  "arrayref",
- "assert_matches",
  "beef",
  "build-deps",
  "built",
- "camino-tempfile",
- "cc",
  "cfg-if",
  "chardetng",
  "choice_nocase",
@@ -1450,7 +1435,6 @@ dependencies = [
  "custom_error",
  "delegate",
  "either",
- "encoding_rs",
  "enumflags2",
  "getset",
  "globset",
@@ -1465,7 +1449,6 @@ dependencies = [
  "regex",
  "rust-embed",
  "serde",
- "smartstring",
  "substring",
  "velcro",
 ]
@@ -1474,15 +1457,11 @@ dependencies = [
 name = "cpclib-basic"
 version = "0.8.0"
 dependencies = [
- "arrayref",
  "built",
  "cfg-if",
  "cpclib-common",
- "cpclib-disc",
  "cpclib-sna",
- "custom_error",
  "either",
- "getset",
  "num_enum",
  "paste",
  "serde",
@@ -1502,7 +1481,6 @@ dependencies = [
  "cpclib-disc",
  "cpclib-xfer",
  "criterion",
- "diff",
  "globset",
  "parking_lot",
  "pretty_assertions",
@@ -1609,14 +1587,12 @@ version = "0.8.1"
 dependencies = [
  "arrayref",
  "built",
- "camino-tempfile",
  "cfg-if",
  "cpclib-common",
  "cpclib-tokens",
  "custom_error",
  "delegate",
  "either",
- "enumn",
  "getset",
  "hxcfe",
  "log",
@@ -1630,7 +1606,6 @@ name = "cpclib-image"
 version = "0.8.1"
 dependencies = [
  "anyhow",
- "arrays",
  "as-slice",
  "cpclib-common",
  "gif 0.12.0",
@@ -1673,7 +1648,6 @@ dependencies = [
  "comfy-table",
  "cpclib-common",
  "delegate",
- "line-span",
  "minus",
  "num_enum",
  "rustyline",
@@ -5755,17 +5729,6 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
-
-[[package]]
-name = "smartstring"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
-dependencies = [
- "autocfg",
- "static_assertions",
- "version_check 0.9.4",
-]
 
 [[package]]
 name = "smithay-client-toolkit"

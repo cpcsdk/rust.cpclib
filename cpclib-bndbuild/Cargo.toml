@@ -33,7 +33,6 @@ globmatch = "0.3"
 glob = "0.3.1"
 serde_yaml = "0.9.34"
 serde.workspace = true
-assert_cmd = "2.0.15"
 thiserror = "1.0"
 self_cell = "1.0.4"
 anyhow = "1.0.86"
@@ -47,6 +46,7 @@ build-deps = "0.1.4"
 test-generator = "0.3.1"
 serial_test = "3.1.1"
 camino-tempfile = {workspace = true}
+assert_cmd = "2.0.15"
 
 [[bin]]
 name = "bndbuild"

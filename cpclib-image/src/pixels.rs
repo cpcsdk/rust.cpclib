@@ -361,7 +361,7 @@ pub mod mode1 {
 /// Mode 0 pixels specific operations
 #[allow(clippy::identity_op)]
 pub mod mode0 {
-    //use contracts::{ensures, requires};
+    // use contracts::{ensures, requires};
 
     use crate::ga::Pen;
 

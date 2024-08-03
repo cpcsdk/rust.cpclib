@@ -23,4 +23,4 @@ gif.workspace = true
 gif-dispose.workspace = true
 as-slice.workspace = true
 serde.workspace = true
-arrays = "0.2.0"
+#arrays = "0.2.0"

@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate matches;
-
 // API has changed too much, most test do not compile anymore
 #[cfg(test_disabled)]
 mod tests {

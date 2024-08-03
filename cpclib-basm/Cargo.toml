@@ -21,8 +21,7 @@ cpclib-disc.workspace = true
 
 
 const_format.workspace = true
-diff = "0.1.13"
-parking_lot.workspace = true
+#diff = "0.1.13"
 time.workspace = true
 
 [dev-dependencies]
@@ -33,6 +32,8 @@ criterion.workspace = true
 globset.workspace = true
 regex.workspace = true
 serial_test.workspace = true
+parking_lot.workspace = true
+
 
 [build-dependencies]
 built = { version = "0.7.4", features = ["chrono"] }
