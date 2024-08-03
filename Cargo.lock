@@ -1431,6 +1431,7 @@ dependencies = [
  "beef",
  "build-deps",
  "built",
+ "camino",
  "cc",
  "cfg-if",
  "chardetng",
@@ -1497,6 +1498,7 @@ version = "0.8.2"
 dependencies = [
  "build-deps",
  "built",
+ "camino",
  "const_format",
  "cpclib-asm",
  "cpclib-common",

@@ -172,7 +172,7 @@ impl std::fmt::Debug for Z80Span {
             self.context()
                 .current_filename
                 .as_ref()
-                .map(|f| f.to_str().unwrap_or("<invalid filename>"))
+                .map(|p| p.as_str())
                 .unwrap_or("<unknown filename>"),
             line,
             column,
@@ -196,7 +196,7 @@ impl Into<Source> for &Z80Span {
             self.context()
                 .current_filename
                 .as_ref()
-                .map(|fname| fname.display().to_string())
+                .map(|fname| fname.as_str().to_owned())
                 .unwrap_or_else(|| "<INLINE>".into()),
             line as _,
             column

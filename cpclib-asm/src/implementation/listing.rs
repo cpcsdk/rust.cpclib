@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt;
 
+use camino::Utf8Path;
 use cpclib_tokens::tokens::*;
 
 use crate::error::*;
@@ -34,7 +35,7 @@ pub trait ListingExt {
     /// If field `duration` is set, returns it. Otherwise, compute it
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Save the listing on disc in a string version
-    fn save<P: AsRef<std::path::Path>>(&self, path: P) -> ::std::io::Result<()> {
+    fn save<P: AsRef<Utf8Path>>(&self, path: P) -> ::std::io::Result<()> {
         use std::fs::File;
         use std::io::prelude::*;
 

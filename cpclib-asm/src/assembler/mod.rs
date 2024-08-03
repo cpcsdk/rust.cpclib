@@ -24,10 +24,10 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::io::{stdout, Write};
 use std::ops::{Deref, Neg};
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::itertools::Itertools;
@@ -349,7 +349,7 @@ impl CharsetEncoding {
 #[allow(missing_docs)]
 pub struct Env {
     /// Lookup directory when searching for a file. Must be pushed at each import directive and pop after
-    lookup_directory_stack: Vec<PathBuf>,
+    lookup_directory_stack: Vec<Utf8PathBuf>,
 
     /// Current pass
     pass: AssemblingPass,
@@ -431,7 +431,7 @@ pub struct Env {
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
 
-    included_paths: HashSet<PathBuf>,
+    included_paths: HashSet<Utf8PathBuf>,
 
     map_counter: i32,
 
@@ -760,32 +760,32 @@ impl Env {
 
 /// Include once handling {
 impl Env {
-    fn has_included(&self, path: &PathBuf) -> bool {
+    fn has_included(&self, path: &Utf8PathBuf) -> bool {
         self.included_paths.contains(path)
     }
 
-    fn mark_included(&mut self, path: PathBuf) {
+    fn mark_included(&mut self, path: Utf8PathBuf) {
         self.included_paths.insert(path);
     }
 }
 
 /// Handle the file search relatively to the current file
 impl Env {
-    fn set_current_working_directory<P: Into<PathBuf>>(&mut self, p: P) {
+    fn set_current_working_directory<P: Into<Utf8PathBuf>>(&mut self, p: P) {
         self.lookup_directory_stack.push(p.into())
     }
 
-    pub fn enter_current_working_file<P: AsRef<Path>>(&mut self, f: P) {
+    pub fn enter_current_working_file<P: AsRef<Utf8Path>>(&mut self, f: P) {
         let f = f.as_ref();
         debug_assert!(f.is_file() || f.starts_with("inner://"));
         self.set_current_working_directory(f.parent().unwrap());
     }
 
-    pub fn leave_current_working_file(&mut self) -> Option<PathBuf> {
+    pub fn leave_current_working_file(&mut self) -> Option<Utf8PathBuf> {
         self.lookup_directory_stack.pop()
     }
 
-    pub fn get_current_working_directory(&self) -> Option<&Path> {
+    pub fn get_current_working_directory(&self) -> Option<&Utf8Path> {
         self.lookup_directory_stack.last().map(|p| p.as_path())
     }
 

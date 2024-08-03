@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 
+use camino::Utf8PathBuf;
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::Head;
@@ -19,7 +20,7 @@ use crate::progress::{self, Progress};
 pub struct SaveCommand {
     from: Option<i32>,
     size: Option<i32>,
-    filename: std::path::PathBuf,
+    filename: Utf8PathBuf,
     save_type: Option<SaveType>,
     disc_filename: Option<String>,
     ga_mmr: u8
@@ -159,7 +160,7 @@ impl SaveCommand {
                     AssemblerError::AssemblingError {
                         msg: format!(
                             "Error while saving \"{}\". {}",
-                            &self.filename.display(),
+                            &self.filename,
                             e.to_string()
                         )
                     }

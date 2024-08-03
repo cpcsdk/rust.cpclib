@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, RwLock};
 
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::BStr;
 use either::Either;
 use regex::Regex;
@@ -94,7 +95,7 @@ impl ParsingStateVerified for Token {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ParserOptions {
     /// Search path to find files
-    pub search_path: Vec<PathBuf>,
+    pub search_path: Vec<Utf8PathBuf>,
     /// When activated, the parser also read and parse the include-like directives (deactivated by default)
     pub read_referenced_files: bool,
     pub show_progress: bool,
@@ -128,7 +129,7 @@ impl ParserOptions {
 
 pub struct ParserContextBuilder {
     options: ParserOptions,
-    current_filename: Option<PathBuf>,
+    current_filename: Option<Utf8PathBuf>,
     context_name: Option<String>,
     state: ParsingState
 }
@@ -151,7 +152,7 @@ impl From<ParserContext> for ParserContextBuilder {
 }
 
 impl ParserContextBuilder {
-    pub fn current_filename(&self) -> Option<&Path> {
+    pub fn current_filename(&self) -> Option<&Utf8Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }
 
@@ -159,7 +160,7 @@ impl ParserContextBuilder {
         self.context_name.as_ref().map(|s| s.as_str())
     }
 
-    pub fn set_current_filename<S: Into<PathBuf>>(mut self, fname: S) -> ParserContextBuilder {
+    pub fn set_current_filename<S: Into<Utf8PathBuf>>(mut self, fname: S) -> ParserContextBuilder {
         self.current_filename = Some(fname.into());
         self
     }
@@ -214,7 +215,7 @@ impl ParserOptions {
     pub fn add_search_path<P: Into<PathBuf>>(&mut self, path: P) -> Result<(), AssemblerError> {
         let path = path.into();
 
-        if std::path::Path::new(&path).is_dir() {
+        if path.is_dir() {
             let path = path.canonicalize().unwrap();
 
             // manual fix for for windows. No idea why
@@ -273,17 +274,18 @@ impl ParserOptions {
         &self,
         fname: &str,
         env: Option<&Env>
-    ) -> Result<PathBuf, either::Either<AssemblerError, Vec<String>>> {
+    ) -> Result<Utf8PathBuf, either::Either<AssemblerError, Vec<String>>> {
         use globset::*;
         let mut does_not_exists = Vec::new();
+        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
 
+        let re = RE.deref();
         // Make the expansion in the filename
         let fname: Cow<str> = if let Some(env) = env {
             let mut fname = fname.to_owned();
 
-            static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
             let mut replace = HashSet::new();
-            for cap in RE.captures_iter(&fname) {
+            for cap in re.captures_iter(&fname) {
                 if cap[0] != fname {
                     replace.insert(cap[0].to_owned());
                 }
@@ -319,26 +321,26 @@ impl ParserOptions {
 
         // early exit if the fname goes in an embedding file
         if fname.starts_with("inner://") {
-            return Ok(std::path::Path::new(fname).into());
+            return Ok(Utf8Path::new(fname).into());
         }
 
-        let fname = std::path::Path::new(fname);
+        let fname = Utf8Path::new(fname);
 
         // check if file exists
         if fname.is_file() {
             return Ok(fname.into());
         }
-        does_not_exists.push(fname.to_str().unwrap().to_owned());
+        does_not_exists.push(fname.as_str().to_owned());
 
         // otherwhise, try with the current directory of the environment
         if let Some(env) = env.as_ref() {
             if let Some(search) = env.get_current_working_directory() {
                 let current_path = search.join(fname);
                 if current_path.is_file() {
-                    return Ok(current_path);
+                    return Ok(current_path.try_into().unwrap());
                 }
                 else {
-                    does_not_exists.push(current_path.to_str().unwrap().to_owned());
+                    does_not_exists.push(current_path.to_string());
                 }
             }
         }
@@ -347,7 +349,7 @@ impl ParserOptions {
         {
             // loop over all possibilities
             for search in &self.search_path {
-                assert!(std::path::Path::new(&search).is_dir());
+                assert!(Utf8Path::new(&search).is_dir());
                 let current_path = search.join(fname);
 
                 if current_path.is_file() {
@@ -355,7 +357,7 @@ impl ParserOptions {
                 }
                 else {
                     let glob =
-                        GlobBuilder::new(current_path.as_path().display().to_string().as_str())
+                        GlobBuilder::new(current_path.as_path().as_str())
                             .case_insensitive(true)
                             .literal_separator(true)
                             .build()
@@ -366,11 +368,11 @@ impl ParserOptions {
                         let entry = entry.unwrap();
                         let path = entry.path();
                         if matcher.is_match(&path) {
-                            return Ok(path);
+                            return Ok(path.try_into().unwrap());
                         }
                     }
 
-                    does_not_exists.push(current_path.to_str().unwrap().to_owned());
+                    does_not_exists.push(current_path.as_str().to_owned());
                 }
             }
         }
@@ -397,7 +399,7 @@ pub struct ParserContext {
     /// The current state is at the end (it is modified when in a struct)
     pub state: ParsingState,
     /// Filename that is currently parsed
-    pub current_filename: Option<PathBuf>,
+    pub current_filename: Option<Utf8PathBuf>,
     /// Current context (mainly when playing with macros)
     pub context_name: Option<String>,
     pub options: ParserOptions,
@@ -471,7 +473,7 @@ impl ParserContext {
     }
 
     #[inline]
-    pub fn filename(&self) -> Option<&Path> {
+    pub fn filename(&self) -> Option<&Utf8Path> {
         self.current_filename.as_ref().map(|p| p.as_path())
     }
 
@@ -483,9 +485,9 @@ impl ParserContext {
 
     /// Specify the path that contains the code
     #[inline]
-    pub fn set_current_filename<P: Into<PathBuf>>(&mut self, file: P) {
+    pub fn set_current_filename<P: Into<Utf8PathBuf>>(&mut self, file: P) {
         let file = file.into();
-        self.current_filename = Some(file.canonicalize().unwrap_or(file))
+        self.current_filename = Some(file.canonicalize().map(|p| Utf8PathBuf::from_path_buf(p).unwrap()).unwrap_or(file))
     }
 
     #[inline]

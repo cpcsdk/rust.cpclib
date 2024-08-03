@@ -2,9 +2,9 @@ use std::borrow::{Borrow, Cow};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
-use std::path::PathBuf;
 use std::sync::Arc;
 
+use camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
@@ -76,7 +76,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
 struct IncbinState {
-    contents: BTreeMap<PathBuf, Vec<u8>>
+    contents: BTreeMap<Utf8PathBuf, Vec<u8>>
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -120,14 +120,14 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
-struct IncludeState(BTreeMap<PathBuf, IncludeStateInner>);
+struct IncludeState(BTreeMap<Utf8PathBuf, IncludeStateInner>);
 
 impl IncludeState {
     /// By constructon fname exists and is correct
     fn retreive_listing(
         &mut self,
         env: &mut Env,
-        fname: &PathBuf
+        fname: &Utf8PathBuf
     ) -> Result<&mut IncludeStateInner, AssemblerError> {
         if cfg!(target_arch = "wasm32") {
             return Err(AssemblerError::AssemblingError {

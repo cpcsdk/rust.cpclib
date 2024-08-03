@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
 
+use camino::{Utf8Path, Utf8PathBuf};
 use cpclib_disc::amsdos::AmsdosHeader;
 use either::Either;
 
@@ -12,13 +12,13 @@ use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
 use crate::progress::Progress;
 
-type Fname<'a, 'b> = either::Either<&'a Path, (&'a str, &'b Env)>;
+type Fname<'a, 'b> = either::Either<&'a Utf8Path, (&'a str, &'b Env)>;
 
 pub fn get_filename(
     fname: &str,
     options: &ParserOptions,
     env: Option<&Env>
-) -> Result<PathBuf, AssemblerError> {
+) -> Result<Utf8PathBuf, AssemblerError> {
     options.get_path_for(fname, env).map_err(|e| {
         match e {
             either::Either::Left(asm) => asm,
@@ -70,7 +70,7 @@ pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>,
         either::Either::Left(p) => p.into()
     };
 
-    let fname_repr = fname.to_str().unwrap();
+    let fname_repr = fname.as_str();
 
     let progress = if options.show_progress {
         Progress::progress().add_load(fname_repr);
@@ -116,7 +116,7 @@ pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>,
 
 /// Read the content of the source file.
 /// Uses the context to obtain the appropriate file other the included directories
-pub fn read_source<P: AsRef<Path>>(
+pub fn read_source<P: AsRef<Utf8Path>>(
     fname: P,
     options: &ParserOptions
 ) -> Result<String, AssemblerError> {

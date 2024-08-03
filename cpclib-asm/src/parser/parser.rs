@@ -2890,7 +2890,7 @@ pub fn parse_assembler_control_print_parse(
                 .state
                 .current_filename
                 .as_ref()
-                .map(|p| p.display().to_string())
+                .map(|p| p.to_string())
                 .unwrap_or_else(|| {
                     input
                         .state

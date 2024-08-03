@@ -4,10 +4,10 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io;
 use std::io::Write;
-use std::path::Path;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
+use camino::Utf8Path;
 use cpclib_asm::assembler::file::get_filename;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
@@ -141,7 +141,7 @@ pub fn parse<'arg>(
     options.add_search_path_from_file(&filename); // we ignore the potential error
     if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {
         for directory in directories {
-            if !Path::new(directory).is_dir() {
+            if !Utf8Path::new(directory).is_dir() {
                 return Err(BasmError::NotAValidDirectory {
                     path: directory.to_owned()
                 });
@@ -232,7 +232,7 @@ pub fn assemble<'arg>(
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
         for path in files {
-            let file = Path::new(path);
+            let file = Utf8Path::new(path);
             if !file.is_file() {
                 return Err(BasmError::NotAValidFile {
                     file: path.to_owned()

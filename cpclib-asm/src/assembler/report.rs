@@ -1,7 +1,7 @@
 use std::fmt::Display;
-use std::path::PathBuf;
 use std::time::Instant;
 
+use camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 
 use super::Env;
@@ -14,7 +14,7 @@ pub struct Report<'env> {
 
 #[derive(Clone, Debug)]
 pub struct SavedFile {
-    pub(crate) name: PathBuf,
+    pub(crate) name: Utf8PathBuf,
     pub(crate) size: usize
 }
 
@@ -40,7 +40,7 @@ impl<'env> Display for Report<'env> {
             let saved = self
                 .saved_files
                 .iter()
-                .map(|s| format!("Saved \"{}\" for {} bytes.\n", s.name.display(), s.size))
+                .map(|s| format!("Saved \"{}\" for {} bytes.\n", s.name, s.size))
                 .join("");
             write!(f, "{}", saved)?;
         }
