@@ -18,7 +18,6 @@ cpclib-common.workspace = true
 
 cfg-if.workspace = true
 delegate.workspace = true
-matches.workspace = true
 serde.workspace = true
 num_enum.workspace = true
 comfy-table = {version="7.1.1", optional = true}

@@ -39,7 +39,6 @@ hashbag.workspace = true
 indicatif = {workspace = true, optional=true}
 line-span = "0.1"
 libc.workspace = true
-matches.workspace = true
 ouroboros.workspace = true
 paste.workspace = true
 regex.workspace = true

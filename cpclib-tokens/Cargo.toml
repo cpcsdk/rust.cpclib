@@ -21,7 +21,6 @@ cfg-if.workspace = true
 delegate.workspace = true
 either.workspace = true
 evalexpr.workspace = true
-matches.workspace = true
 ordered-float.workspace = true
 paste.workspace = true
 remain.workspace = true

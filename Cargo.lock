@@ -1415,7 +1415,6 @@ dependencies = [
  "either",
  "getset",
  "log",
- "matches",
  "paste",
  "path-absolutize",
  "pretty_assertions",
@@ -1459,7 +1458,6 @@ dependencies = [
  "indicatif",
  "libc",
  "line-span",
- "matches",
  "ouroboros",
  "paste",
  "prettydiff",
@@ -1485,7 +1483,6 @@ dependencies = [
  "custom_error",
  "either",
  "getset",
- "matches",
  "num_enum",
  "paste",
  "serde",
@@ -1623,7 +1620,6 @@ dependencies = [
  "getset",
  "hxcfe",
  "log",
- "matches",
  "serde",
  "simple_logger",
  "thiserror",
@@ -1678,7 +1674,6 @@ dependencies = [
  "cpclib-common",
  "delegate",
  "line-span",
- "matches",
  "minus",
  "num_enum",
  "rustyline",
@@ -1698,7 +1693,6 @@ dependencies = [
  "delegate",
  "either",
  "evalexpr",
- "matches",
  "ordered-float",
  "paste",
  "regex",
@@ -1756,7 +1750,6 @@ dependencies = [
  "delegate",
  "either",
  "getset",
- "matches",
  "path-absolutize",
  "serde",
  "ureq",
@@ -1782,7 +1775,6 @@ dependencies = [
  "either",
  "getset",
  "hotwatch",
- "matches",
  "notify",
  "path-absolutize",
  "rustyline",
@@ -3934,12 +3926,6 @@ checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "matches"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 
 [[package]]
 name = "maybe-rayon"
