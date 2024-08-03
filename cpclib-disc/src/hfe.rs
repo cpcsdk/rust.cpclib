@@ -25,7 +25,7 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
 use hxcfe::{Hxcfe, Img, TrackEncoding};
-use tempfile::{Builder, NamedTempFile};
+use camino_tempfile::{Builder, NamedUtf8TempFile};
 
 use crate::builder::build_edsk_from_cfg;
 use crate::cfg::DiscConfig;
@@ -47,25 +47,23 @@ impl Default for Hfe {
 }
 
 impl Disc for Hfe {
-    fn open<P: AsRef<Path>>(fname: P) -> Result<Self, String> {
+    fn open<P: AsRef<Utf8Path>>(fname: P) -> Result<Self, String> {
         let hxcfe = Hxcfe::get();
         hxcfe.load(fname.as_ref()).map(|img| Hfe { img })
     }
 
     fn save<P>(&self, path: P) -> Result<(), String>
-    where P: AsRef<Path> {
+    where P: AsRef<Utf8Path> {
         let path = path.as_ref();
         let format = match path
             .extension()
-            .unwrap()
-            .to_str()
             .unwrap()
             .to_lowercase()
             .as_str()
         {
             "dsk" | "edsk" => "AMSTRADCPC_DSK",
             "hfe" => "HXC_HFE",
-            _ => return Err(format!("i do not know how to save {}", path.display()))
+            _ => return Err(format!("i do not know how to save {}", path))
         };
         self.img.save(path, format)
     }
@@ -159,7 +157,6 @@ impl From<ExtendedDsk> for Hfe {
             .unwrap();
         let fname = tmp.into_temp_path();
         let fname = fname.to_path_buf();
-        let fname = fname.to_str().unwrap();
         dsk.save(&fname).unwrap();
 
         // Reload it as an hfe

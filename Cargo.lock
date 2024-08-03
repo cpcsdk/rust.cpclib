@@ -1587,12 +1587,14 @@ version = "0.8.1"
 dependencies = [
  "arrayref",
  "built",
+ "camino-tempfile",
  "cfg-if",
  "cpclib-common",
  "cpclib-tokens",
  "custom_error",
  "delegate",
  "either",
+ "enumn",
  "getset",
  "hxcfe",
  "log",
@@ -5180,9 +5182,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.10.5"
+version = "1.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91213439dad192326a0d7c6ee3955910425f441d7038e0d6933b0aec5c4517f"
+checksum = "4219d74c6b67a3654a9fbebc4b419e22126d13d2f3c4a07ee0cb61ff79a79619"
 dependencies = [
  "aho-corasick",
  "memchr",

@@ -74,7 +74,7 @@ pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<H
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
-            return Err(format!("{} does not exists", path.display()));
+            return Err(format!("{} does not exists", path));
         }
         else {
             return Ok(new_disc(Some(path)));

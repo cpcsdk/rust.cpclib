@@ -19,7 +19,6 @@ cpclib-common.workspace = true
 
 
 arrayref.workspace = true
-#enumn.workspace = true
 cfg-if.workspace = true
 custom_error.workspace = true
 delegate.workspace = true
@@ -28,10 +27,12 @@ getset.workspace = true
 #memchr.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-#camino-tempfile.workspace = true
+camino-tempfile.workspace = true
 
 log = {workspace = true, optional = true }
 simple_logger = { workspace = true, optional = true}
+enumn = {workspace = true, optional = true}
+
 
 # Only allow it on linux, because it fails on other platforms right now
 hxcfe = {workspace = true, optional = true}
@@ -45,7 +46,7 @@ default = ["dskmanager", "catalog", "hideur"]
 dskmanager = ["cmdline"]
 catalog = ["cmdline", "log", "simple_logger"]
 hideur = ["cmdline"]
-hfe = ["hxcfe"]
+hfe = ["hxcfe", "enumn"]
 cmdline = ["cpclib-common/cmdline"]
 
 [[bin]]
