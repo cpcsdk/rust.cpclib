@@ -22,6 +22,5 @@ anyhow.workspace = true
 gif.workspace = true
 gif-dispose.workspace = true
 as-slice.workspace = true
-contracts.workspace = true
 serde.workspace = true
 arrays = "0.2.0"

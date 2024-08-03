@@ -91,7 +91,7 @@ chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
 clap = "4.5.13"
 codespan-reporting = "0.11.1"
-contracts = "0.6.3"
+#contracts = "0.6.3"
 const_format = {version="0.2.32", features = ["fmt"]}
 crc = "3.2.1"
 criterion = "0.5.1"

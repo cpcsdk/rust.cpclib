@@ -361,7 +361,7 @@ pub mod mode1 {
 /// Mode 0 pixels specific operations
 #[allow(clippy::identity_op)]
 pub mod mode0 {
-    use contracts::{ensures, requires};
+    //use contracts::{ensures, requires};
 
     use crate::ga::Pen;
 
@@ -402,8 +402,8 @@ pub mod mode0 {
 
     /// For a given byte, returns the left and right represented pixels
     /// TODO rewrite using BitMapping and factorizing code
-    #[ensures(ret[0].number()<16)]
-    #[ensures(ret[1].number()<16)]
+    //#[ensures(ret[0].number()<16)]
+    //#[ensures(ret[1].number()<16)]
     pub fn byte_to_pens(b: u8) -> [Pen; 2] {
         let mut pen0 = 0;
         for pos in [7, 3, 5, 1].into_iter().rev() {
@@ -425,7 +425,7 @@ pub mod mode0 {
     }
 
     /// Convert a couple of pen and pixel position to the corresponding byte value
-    #[requires(pen.number()<16)]
+    //#[requires(pen.number()<16)]
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         let bits_position: [u8; 4] = {
             let mut pos = match pixel {
