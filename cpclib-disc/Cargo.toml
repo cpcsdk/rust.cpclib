@@ -27,7 +27,6 @@ getset.workspace = true
 #memchr.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-camino-tempfile.workspace = true
 
 log = {workspace = true, optional = true }
 simple_logger = { workspace = true, optional = true}
@@ -36,6 +35,10 @@ enumn = {workspace = true, optional = true}
 
 # Only allow it on linux, because it fails on other platforms right now
 hxcfe = {workspace = true, optional = true}
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+
 
 [build-dependencies]
 built.workspace = true

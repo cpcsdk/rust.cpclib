@@ -2,14 +2,14 @@
 
 use std::fs;
 
+use camino_tempfile::NamedUtf8TempFile;
 use cpclib_basm::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
 use criterion::{criterion_group, criterion_main, Criterion};
 use globset::Glob;
-use tempfile::NamedTempFile;
 
 #[inline]
-fn command_for_generated_test(fname: &str, output_file: &NamedTempFile) {
+fn command_for_generated_test(fname: &str, output_file: &NamedUtf8TempFile) {
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let args_parser = build_args_parser();
@@ -35,7 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .map(|name| {
             (
                 name,
-                tempfile::NamedTempFile::new().expect("Unable to build temporary file")
+                NamedUtf8TempFile::new().expect("Unable to build temporary file")
             )
         })
         .collect_vec();

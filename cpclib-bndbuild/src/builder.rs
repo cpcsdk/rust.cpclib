@@ -4,7 +4,7 @@ use std::ops::Deref;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
-use minijinja::{context, Environment, Error, ErrorKind};
+use minijinja::{context, path_loader, Environment, Error, ErrorKind};
 
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
@@ -126,6 +126,28 @@ impl BndBuilder {
         fn error(error: String) -> Result<String, Error> {
             Err(Error::new(ErrorKind::InvalidOperation, error))
         }
+
+        pub fn path_loader<'x, P: AsRef<std::path::Path> + 'x>(
+            dir: P
+        ) -> impl for<'a> Fn(&'a str) -> Result<Option<String>, Error> + Send + Sync + 'static
+        {
+            let dir = dir.as_ref().to_path_buf();
+            move |name| {
+                let path = dir.join(name); // TODO add a safety ??
+                match std::fs::read_to_string(path) {
+                    Ok(result) => Ok(Some(result)),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                    Err(err) => {
+                        Err(
+                            Error::new(ErrorKind::InvalidOperation, "could not read template")
+                                .with_source(err)
+                        )
+                    },
+                }
+            }
+        }
+
+        env.set_loader(path_loader(std::env::current_dir().unwrap()));
         env.add_function("fail", error);
         for (key, value) in definitions {
             let key = key.as_ref();

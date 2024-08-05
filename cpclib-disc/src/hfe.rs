@@ -21,11 +21,11 @@
 // unsigned char track0s1_encoding; // alternate track_encoding for track 0 Side 1
 // }picfileformatheader;
 
+use camino_tempfile::{Builder, NamedUtf8TempFile};
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use enumn::N;
 use hxcfe::{Hxcfe, Img, TrackEncoding};
-use camino_tempfile::{Builder, NamedUtf8TempFile};
 
 use crate::builder::build_edsk_from_cfg;
 use crate::cfg::DiscConfig;
@@ -55,12 +55,7 @@ impl Disc for Hfe {
     fn save<P>(&self, path: P) -> Result<(), String>
     where P: AsRef<Utf8Path> {
         let path = path.as_ref();
-        let format = match path
-            .extension()
-            .unwrap()
-            .to_lowercase()
-            .as_str()
-        {
+        let format = match path.extension().unwrap().to_lowercase().as_str() {
             "dsk" | "edsk" => "AMSTRADCPC_DSK",
             "hfe" => "HXC_HFE",
             _ => return Err(format!("i do not know how to save {}", path))
