@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib"
-version = "0.8.0"
+version = "0.9.0"
 description = "Set of tools and libraries to ease demomaking on the Amstrad CPC platform. WIP"
 keywords = ["amstrad", "demo", "z80", "dsk" ,"sna"]
 categories = ["command-line-utilities", "development-tools", "emulators"]
