@@ -6,7 +6,7 @@ use ureq::Response;
 use flate2::read::GzDecoder;
 use tar::Archive;
 
-use crate::{runners::r#extern::ExternRunner, task::{ACE_CMDS, CPCEC_CMDS}};
+use crate::{runners::r#extern::ExternRunner, task::{ACE_CMDS, CPCEC_CMDS, WINAPE_CMDS}};
 
 use super::Runner;
 
@@ -14,6 +14,7 @@ use super::Runner;
 pub enum Emulator {
     Ace(AceVersion),
 	Cpcec(CpcecVersion),
+	Winape(WinapeVersion)
 }
 
 impl Default for Emulator {
@@ -46,6 +47,19 @@ impl Default for CpcecVersion {
 }
 
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum WinapeVersion {
+    v2_0b2 
+}
+
+impl Default for WinapeVersion {
+	fn default() -> Self {
+		WinapeVersion::v2_0b2
+	}
+}
+
+
+
 pub enum ArchiveFormat {
 	TarGz,
 	Zip
@@ -63,6 +77,7 @@ impl Emulator {
         match self {
             Emulator::Ace(version) => version.configuration(),
 			Emulator::Cpcec(version) => version.configuration(),
+			Emulator::Winape(version) =>  version.configuration(),
         }
     }
 }
@@ -94,6 +109,22 @@ cfg_match! {
 							folder: "cpcec20240505",
 							archive_format: ArchiveFormat::Zip,
 							exec_fname: "CPCEC.EXE" // TODO see how to handle the fact it is windows file. Do we need to compile the linux version ?
+						}
+					},
+				}
+			}
+		}
+
+
+		impl WinapeVersion {
+			pub fn configuration(&self) -> EmulatorConfiguration {
+				match self {
+					WinapeVersion::v2_0b2 => {
+						EmulatorConfiguration {
+							download_url: "http://www.winape.net/download/WinAPE20B2.zip",
+							folder: "winape_2_0b2",
+							archive_format: ArchiveFormat::Zip,
+							exec_fname: "WinApe.exe" 
 						}
 					},
 				}
@@ -232,6 +263,7 @@ impl Runner for EmulatorRunner {
         match self.emu {
 			Emulator::Ace(_) => &ACE_CMDS[0],
 			Emulator::Cpcec(_) => &CPCEC_CMDS[0],
+			Emulator::Winape(_) => &WINAPE_CMDS[0],
 		}
     }
 }

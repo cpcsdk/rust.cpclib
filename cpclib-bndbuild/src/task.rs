@@ -4,7 +4,7 @@ use cpclib_common::itertools::Itertools;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
-use crate::runners::emulator::{AceVersion, CpcecVersion, Emulator};
+use crate::runners::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -51,6 +51,7 @@ impl Display for Task {
                 match e {
                     Emulator::Ace(_) => &ACE_CMDS[0],
                     Emulator::Cpcec(_) => &CPCEC_CMDS[0],
+                    Emulator::Winape(_) => &WINAPE_CMDS[0],
                 },
                 s
             ),
@@ -95,7 +96,7 @@ impl<'de> Deserialize<'de> for Task {
                     Ok(Task::Emulator(Emulator::Cpcec(CpcecVersion::default()), std))
                 }
                 else if WINAPE_CMDS.iter().contains(&code) {
-                    todo!()
+                    Ok(Task::Emulator(Emulator::Winape(WinapeVersion::default()), std))
                 }
                 else if BASM_CMDS.iter().contains(&code) {
                     Ok(Task::Basm(std))
