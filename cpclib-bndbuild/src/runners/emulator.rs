@@ -141,7 +141,7 @@ cfg_match! {
 					download_url: "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
 					folder : "AceWakePoint",
 					archive_format: ArchiveFormat::Zip,
-					exec_fname: "AceWakePoint/AceDL/AceDL.exe"
+					exec_fname: "AceDL.exe"
 				}}
 			}
 		}
@@ -155,6 +155,21 @@ cfg_match! {
 							folder: "cpcec20240505",
 							archive_format: ArchiveFormat::Zip,
 							exec_fname: "CPCEC.EXE"
+						}
+					},
+				}
+			}
+		}
+
+		impl WinapeVersion {
+			pub fn configuration(&self) -> EmulatorConfiguration {
+				match self {
+					WinapeVersion::v2_0b2 => {
+						EmulatorConfiguration {
+							download_url: "http://www.winape.net/download/WinAPE20B2.zip",
+							folder: "winape_2_0b2",
+							archive_format: ArchiveFormat::Zip,
+							exec_fname: "WinApe.exe" 
 						}
 					},
 				}
@@ -186,8 +201,12 @@ impl EmulatorConfiguration {
 	}
 
 	pub fn cache_folder(&self) -> Utf8PathBuf {
-		let proj_dirs = ProjectDirs::from("net.cpcscene", "Benediction", "BND Build").unwrap();
+		let proj_dirs = ProjectDirs::from("net.cpcscene", "benediction", "bnd build").unwrap();
 		let base_cache = proj_dirs.cache_dir();
+
+		if !base_cache.exists() {
+			std::fs::create_dir_all(base_cache);
+		}
 
 		base_cache.join(self.folder).try_into().unwrap()
 	}
@@ -199,6 +218,9 @@ impl EmulatorConfiguration {
 	pub fn install(&self) {
 		// get the file
 		let dest = self.cache_folder();
+
+
+
 		let resp = self.download().unwrap();
 		let mut input = resp.into_reader();
 
@@ -212,6 +234,7 @@ impl EmulatorConfiguration {
 			ArchiveFormat::Zip => {
 				let mut buffer = Vec::new();
 				input.read_to_end(&mut buffer).unwrap();
+				dbg!(&dest);
 				zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).unwrap();
 			},
 		}

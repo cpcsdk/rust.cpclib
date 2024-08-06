@@ -1,10 +1,12 @@
+# execute properly both on linux and windows
 - tgt: ace
   cmd: ace ../../../cpclib/tests/dsk/harley.dsk -autoRunFile '-CED-.exe'
 
+# execute properly both on linux and windows
 - tgt: cpcec
   cmd: cpcec ../../../cpclib/tests/dsk/harley.dsk 
 
 
-# Fails under linux to provide the file
+# Fail to properly provide the file both on linux and windows
 - tgt: winape
   cmd: winape ../../../cpclib/tests/dsk/harley.dsk /A:-CED-.exe
