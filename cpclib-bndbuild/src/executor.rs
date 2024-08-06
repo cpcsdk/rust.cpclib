@@ -5,6 +5,7 @@ use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
+use crate::runners::emulator::EmulatorRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::r#extern::ExternRunner;
 use crate::runners::rm::RmRunner;
@@ -26,6 +27,9 @@ pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(|| XferRunner::defa
 
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {
+        Task::Emulator(e,_ ) => {
+            EmulatorRunner{emu:e.clone()}.run(task.args())
+        },
         Task::Basm(_) => BASM_RUNNER.run(task.args()),
         Task::BndBuild(_) => BNDBUILD_RUNNER.run(task.args()),
         Task::Cp(_) => CP_RUNNER.run(task.args()),

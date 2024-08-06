@@ -1,3 +1,5 @@
+#![feature(cfg_match)]
+
 use std::env::current_dir;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};

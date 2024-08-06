@@ -7,6 +7,7 @@ pub mod bndbuild;
 pub mod cp;
 pub mod disc;
 pub mod echo;
+pub mod emulator;
 pub mod r#extern;
 pub mod imgconverter;
 pub mod rm;
