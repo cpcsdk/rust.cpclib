@@ -1,2 +1,2 @@
 - tgt: ace
-  cmd: ace ../../../cpclib/tests/dsk/harley.dsk
+  cmd: ace ../../../cpclib/tests/dsk/harley.dsk -autoRunFile '-CED-.exe'
