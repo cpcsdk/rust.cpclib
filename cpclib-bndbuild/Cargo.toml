@@ -41,6 +41,7 @@ tar = "0.4.41"
 thiserror = "1.0"
 topologic = "1.1.0"
 ureq.workspace = true
+zip-extract = "=0.1.3"
 
 [build-dependencies]
 built.workspace = true

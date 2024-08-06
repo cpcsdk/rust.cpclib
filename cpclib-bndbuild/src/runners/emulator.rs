@@ -1,16 +1,19 @@
+use std::{ io::{Cursor, Read}};
+
 use cpclib_common::{camino::Utf8PathBuf, itertools::Itertools};
 use directories::ProjectDirs;
 use ureq::Response;
 use flate2::read::GzDecoder;
 use tar::Archive;
 
-use crate::{runners::r#extern::ExternRunner, task::ACE_CMDS};
+use crate::{runners::r#extern::ExternRunner, task::{ACE_CMDS, CPCEC_CMDS}};
 
 use super::Runner;
 
 #[derive(Clone, Debug, PartialEq,Eq, Hash)]
 pub enum Emulator {
-    Ace(AceVersion)
+    Ace(AceVersion),
+	Cpcec(CpcecVersion),
 }
 
 impl Default for Emulator {
@@ -30,6 +33,19 @@ impl Default for AceVersion {
 	}
 }
 
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CpcecVersion {
+    v20240505 
+}
+
+impl Default for CpcecVersion {
+	fn default() -> Self {
+		CpcecVersion::v20240505
+	}
+}
+
+
 pub enum ArchiveFormat {
 	TarGz,
 	Zip
@@ -45,7 +61,8 @@ pub struct EmulatorConfiguration {
 impl Emulator {
     pub fn configuration(&self) -> EmulatorConfiguration {
         match self {
-            Emulator::Ace(version) => version.configuration()
+            Emulator::Ace(version) => version.configuration(),
+			Emulator::Cpcec(version) => version.configuration(),
         }
     }
 }
@@ -67,6 +84,22 @@ cfg_match! {
 					}
 			}
 		}
+
+		impl CpcecVersion {
+			pub fn configuration(&self) -> EmulatorConfiguration {
+				match self {
+					CpcecVersion::v20240505 => {
+						EmulatorConfiguration {
+							download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
+							folder: "cpcec20240505",
+							archive_format: ArchiveFormat::Zip,
+							exec_fname: "CPCEC.EXE" // TODO see how to handle the fact it is windows file. Do we need to compile the linux version ?
+						}
+					},
+				}
+			}
+		}
+
 	}
 	cfg(target_os = "windows") =>
 	{
@@ -75,10 +108,25 @@ cfg_match! {
 				match self {
 					AceVersion::WakePoint => EmulatorConfiguration{
 					download_url: "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
-					folder : "TODO",
+					folder : "AceWakePoint",
 					archive_format: ArchiveFormat::Zip,
-					exec_fname: "TODO"
+					exec_fname: "AceWakePoint/AceDL/AceDL.exe"
 				}}
+			}
+		}
+
+		impl CpcecVersion {
+			pub fn configuration(&self) -> EmulatorConfiguration {
+				match self {
+					CpcecVersion::v20240505 => {
+						EmulatorConfiguration {
+							download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
+							folder: "cpcec20240505",
+							archive_format: ArchiveFormat::Zip,
+							exec_fname: "CPCEC.EXE"
+						}
+					},
+				}
 			}
 		}
 	}
@@ -118,18 +166,23 @@ impl EmulatorConfiguration {
 	}
 
 	pub fn install(&self) {
+		// get the file
 		let dest = self.cache_folder();
-		
 		let resp = self.download().unwrap();
-		let input = resp.into_reader();
+		let mut input = resp.into_reader();
 
+		// uncompress it
 		match self.archive_format {
 			ArchiveFormat::TarGz => {
 				let gz = GzDecoder::new(input);
 				let mut archive = Archive::new(gz);
 				archive.unpack(dest).unwrap();
 			}
-				ArchiveFormat::Zip => todo!(),
+			ArchiveFormat::Zip => {
+				let mut buffer = Vec::new();
+				input.read_to_end(&mut buffer).unwrap();
+				zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).unwrap();
+			},
 		}
 
 	}
@@ -158,6 +211,14 @@ impl Runner for EmulatorRunner {
 		// Build the command
 		let mut command = Vec::with_capacity(1+itr.len());
 		let fname = cfg.exec_fname();
+
+		#[cfg(target_os="linux")]
+		{
+			if fname.as_str().to_lowercase().ends_with(".exe") {
+				command.push("wine");
+			}
+		}
+
 		command.push(fname.as_str());
 		for arg in itr.into_iter() {
 			command.push(arg.as_ref());
@@ -170,6 +231,7 @@ impl Runner for EmulatorRunner {
     fn get_command(&self) -> &str {
         match self.emu {
 			Emulator::Ace(_) => &ACE_CMDS[0],
+			Emulator::Cpcec(_) => &CPCEC_CMDS[0],
 		}
     }
 }
