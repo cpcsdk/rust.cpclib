@@ -2,9 +2,9 @@ use std::collections::HashSet;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 
-use cpclib_common::camino::Utf8Path;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-use minijinja::{context, path_loader, Environment, Error, ErrorKind};
+use minijinja::{context, Environment, Error, ErrorKind};
 
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
@@ -21,8 +21,10 @@ self_cell::self_cell! {
     }
 }
 
+
+
 pub struct BndBuilder {
-    inner: BndBuilderInner
+    inner: BndBuilderInner,
 }
 
 impl Deref for BndBuilder {
@@ -48,12 +50,13 @@ impl BndBuilder {
         BndBuilder { inner }
     }
 
-    pub fn from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<Self, BndBuilderError> {
-        let content = Self::decode_from_fname(fname)?;
+    pub fn from_path<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
+        let (p, content) = Self::decode_from_fname(fname)?;
         Self::from_string(content)
+            .map(|build| (p, build))
     }
 
-    pub fn decode_from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<String, BndBuilderError> {
+    pub fn decode_from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, String), BndBuilderError> {
         Self::decode_from_fname_with_definitions(fname, &Vec::<(String, String)>::new())
     }
 
@@ -64,7 +67,7 @@ impl BndBuilder {
     >(
         fname: P,
         definitions: &[(S1, S2)]
-    ) -> Result<String, BndBuilderError> {
+    ) -> Result<(Utf8PathBuf, String), BndBuilderError> {
         let fname = fname.as_ref();
 
         // when a folder is provided try to look for a build file
@@ -96,6 +99,7 @@ impl BndBuilder {
 
         let rdr = BufReader::new(file);
         Self::decode_from_reader(rdr, working_directory, definitions)
+            .map(|s| (fname.to_owned(), s))
     }
 
     pub fn save<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<()> {

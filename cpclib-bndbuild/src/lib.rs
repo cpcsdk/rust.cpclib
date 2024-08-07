@@ -173,7 +173,7 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
             Default::default()
         };
 
-        let content = BndBuilder::decode_from_fname_with_definitions(fname, &definitions)?;
+        let (_path, content) = BndBuilder::decode_from_fname_with_definitions(fname, &definitions)?;
         if matches.get_flag("show") {
             println!("{content}");
             return Ok(());
