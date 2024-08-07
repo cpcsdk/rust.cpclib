@@ -27,9 +27,7 @@ pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(|| XferRunner::defa
 
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {
-        Task::Emulator(e,_ ) => {
-            EmulatorRunner{emu:e.clone()}.run(task.args())
-        },
+        Task::Emulator(e, _) => EmulatorRunner { emu: e.clone() }.run(task.args()),
         Task::Basm(_) => BASM_RUNNER.run(task.args()),
         Task::BndBuild(_) => BNDBUILD_RUNNER.run(task.args()),
         Task::Cp(_) => CP_RUNNER.run(task.args()),

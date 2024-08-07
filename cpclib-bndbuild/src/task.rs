@@ -20,7 +20,6 @@ pub enum Task {
     Xfer(StandardTask)
 }
 
-
 pub const ACE_CMDS: &[&'static str] = &["ace", "acedl"];
 pub const WINAPE_CMDS: &[&'static str] = &["winape"];
 pub const CPCEC_CMDS: &[&'static str] = &["cpcec"];
@@ -47,14 +46,16 @@ impl Display for Task {
             Task::ImgConverter(s) => (&IMG2CPC_CMDS[0], s),
             Task::Rm(s) => (&RM_CMDS[0], s),
             Task::Xfer(s) => (&XFER_CMDS[0], s),
-            Task::Emulator(e, s) => (
-                match e {
-                    Emulator::Ace(_) => &ACE_CMDS[0],
-                    Emulator::Cpcec(_) => &CPCEC_CMDS[0],
-                    Emulator::Winape(_) => &WINAPE_CMDS[0],
-                },
-                s
-            ),
+            Task::Emulator(e, s) => {
+                (
+                    match e {
+                        Emulator::Ace(_) => &ACE_CMDS[0],
+                        Emulator::Cpcec(_) => &CPCEC_CMDS[0],
+                        Emulator::Winape(_) => &WINAPE_CMDS[0]
+                    },
+                    s
+                )
+            },
         };
 
         write!(
@@ -88,15 +89,20 @@ impl<'de> Deserialize<'de> for Task {
                     ignore_error: ignore
                 };
 
-
                 if ACE_CMDS.iter().contains(&code) {
                     Ok(Task::Emulator(Emulator::Ace(AceVersion::default()), std))
                 }
                 else if CPCEC_CMDS.iter().contains(&code) {
-                    Ok(Task::Emulator(Emulator::Cpcec(CpcecVersion::default()), std))
+                    Ok(Task::Emulator(
+                        Emulator::Cpcec(CpcecVersion::default()),
+                        std
+                    ))
                 }
                 else if WINAPE_CMDS.iter().contains(&code) {
-                    Ok(Task::Emulator(Emulator::Winape(WinapeVersion::default()), std))
+                    Ok(Task::Emulator(
+                        Emulator::Winape(WinapeVersion::default()),
+                        std
+                    ))
                 }
                 else if BASM_CMDS.iter().contains(&code) {
                     Ok(Task::Basm(std))
@@ -175,7 +181,7 @@ impl Task {
             | Task::Disc(t)
             | Task::BndBuild(t)
             | Task::Cp(t)
-            | Task::Emulator(_, t)=> t
+            | Task::Emulator(_, t) => t
         }
     }
 
@@ -190,8 +196,7 @@ impl Task {
             | Task::Disc(t)
             | Task::BndBuild(t)
             | Task::Cp(t)
-            | Task::Emulator(_, t)=> t
-            
+            | Task::Emulator(_, t) => t
         }
     }
 
@@ -214,7 +219,7 @@ impl Task {
             Task::Basm(_) => false, // wrong when displaying stuff
             Task::Rm(_) => false,
             Task::Echo(_) => true,
-            Task::Emulator(_, _) => true,
+            Task::Emulator(..) => true,
             Task::Xfer(_) => true, // wrong when downloading files
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,

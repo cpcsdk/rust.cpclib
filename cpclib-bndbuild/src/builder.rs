@@ -9,7 +9,7 @@ use minijinja::{context, Environment, Error, ErrorKind};
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
 
-pub const EXPECTED_FILENAMES: &'static[&'static str] = &["bndbuild.yml", "build.bnd"];
+pub const EXPECTED_FILENAMES: &'static [&'static str] = &["bndbuild.yml", "build.bnd"];
 
 self_cell::self_cell! {
     /// WARNING the BndBuilder changes the current working directory.
@@ -21,10 +21,8 @@ self_cell::self_cell! {
     }
 }
 
-
-
 pub struct BndBuilder {
-    inner: BndBuilderInner,
+    inner: BndBuilderInner
 }
 
 impl Deref for BndBuilder {
@@ -52,11 +50,12 @@ impl BndBuilder {
 
     pub fn from_path<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
         let (p, content) = Self::decode_from_fname(fname)?;
-        Self::from_string(content)
-            .map(|build| (p, build))
+        Self::from_string(content).map(|build| (p, build))
     }
 
-    pub fn decode_from_fname<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, String), BndBuilderError> {
+    pub fn decode_from_fname<P: AsRef<Utf8Path>>(
+        fname: P
+    ) -> Result<(Utf8PathBuf, String), BndBuilderError> {
         Self::decode_from_fname_with_definitions(fname, &Vec::<(String, String)>::new())
     }
 
@@ -98,8 +97,7 @@ impl BndBuilder {
         let working_directory = if path.is_dir() { Some(path) } else { None };
 
         let rdr = BufReader::new(file);
-        Self::decode_from_reader(rdr, working_directory, definitions)
-            .map(|s| (fname.to_owned(), s))
+        Self::decode_from_reader(rdr, working_directory, definitions).map(|s| (fname.to_owned(), s))
     }
 
     pub fn save<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<()> {

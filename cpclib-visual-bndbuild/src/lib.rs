@@ -298,7 +298,9 @@ impl BndBuildApp {
         match cpclib_bndbuild::BndBuilder::from_path(path) {
             Ok((ref path, builder)) => {
                 self.filename = Some(path.into());
-                self.file_content = std::fs::read_to_string(path).ok().map(|s| s.replace('\r',"")); // read a second time, but the file exists
+                self.file_content = std::fs::read_to_string(path)
+                    .ok()
+                    .map(|s| s.replace('\r', "")); // read a second time, but the file exists
 
                 self.builder_and_layers = BuilderAndCache::from(builder).into();
 

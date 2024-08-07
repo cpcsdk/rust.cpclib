@@ -115,7 +115,8 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
         // Get the file
         let fname = if let Some(fname) = matches.get_one::<String>("file") {
             fname.as_str()
-        } else {
+        }
+        else {
             let mut selected = &EXPECTED_FILENAMES[1];
             for fname in EXPECTED_FILENAMES {
                 if Utf8Path::new(fname).exists() {
