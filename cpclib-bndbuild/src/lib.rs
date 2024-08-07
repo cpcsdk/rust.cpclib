@@ -113,7 +113,17 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
         }
 
         // Get the file
-        let fname: &String = matches.get_one("file").unwrap();
+        let fname = if let Some(fname) = matches.get_one::<String>("file") {
+            fname.as_str()
+        } else {
+            let mut selected = &EXPECTED_FILENAMES[1];
+            for fname in EXPECTED_FILENAMES {
+                if Utf8Path::new(fname).exists() {
+                    selected = fname;
+                }
+            }
+            selected
+        };
 
         let add = matches.get_one::<String>("add");
 
@@ -313,7 +323,6 @@ pub fn build_args_parser() -> clap::Command {
                 .action(ArgAction::Set)
                 .value_name("FILE")
                 .value_hint(ValueHint::FilePath)
-                .default_value("bndbuild.yml")
                 .help("Provide the YAML file for the given project.")
         )
         .arg(

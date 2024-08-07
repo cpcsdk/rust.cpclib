@@ -9,6 +9,8 @@ use minijinja::{context, path_loader, Environment, Error, ErrorKind};
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
 
+pub const EXPECTED_FILENAMES: &'static[&'static str] = &["bndbuild.yml", "build.bnd"];
+
 self_cell::self_cell! {
     /// WARNING the BndBuilder changes the current working directory.
     /// This is probably a problematic behavior. Need to think about it later
@@ -68,7 +70,7 @@ impl BndBuilder {
         // when a folder is provided try to look for a build file
         let fname = if fname.is_dir() {
             let mut selected = fname.to_owned();
-            for extra in ["bndbuild.yml", "build.bnd"] {
+            for extra in EXPECTED_FILENAMES {
                 let tentative = fname.join(extra);
                 if tentative.is_file() {
                     selected = tentative;
