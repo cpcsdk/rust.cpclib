@@ -2,7 +2,7 @@ use cpclib_common::clap::{ArgMatches, Command};
 use glob::glob;
 use shlex::split;
 
-pub mod basm;
+pub mod assembler;
 pub mod bndbuild;
 pub mod cp;
 pub mod disc;

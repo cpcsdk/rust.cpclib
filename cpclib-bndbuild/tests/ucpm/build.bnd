@@ -11,7 +11,7 @@ ace {{dsk}}
 {%- macro build_data(data) -%}
 - tgt: {{data}}.o
   dep: {{data}}.asm
-  cmd: basm {{data}}.asm -o {{data}}.o
+  cmd: rasm {{data}}.asm -ob {{data}}.o
 
 {%- endmacro -%}
 

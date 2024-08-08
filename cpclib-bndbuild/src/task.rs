@@ -4,12 +4,13 @@ use cpclib_common::itertools::Itertools;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
+use crate::runners::assembler::{Assembler, RasmVersion};
 use crate::runners::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
     Cp(StandardTask),
-    Basm(StandardTask),
+    Assembler(Assembler, StandardTask),
     BndBuild(StandardTask),
     Disc(StandardTask),
     Echo(StandardTask),
@@ -31,28 +32,27 @@ pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
+pub const RASM_CMDS: &[&str] = &["rasm"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 impl Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
-            Task::Basm(s) => (&BASM_CMDS[0], s),
-            Task::BndBuild(s) => (&BNDBUILD_CMDS[0], s),
-            Task::Cp(s) => (&CP_CMDS[0], s),
-            Task::Disc(s) => (&DISC_CMDS[0], s),
-            Task::Echo(s) => (&ECHO_CMDS[0], s),
-            Task::Extern(s) => (&EXTERN_CMDS[0], s),
-            Task::ImgConverter(s) => (&IMG2CPC_CMDS[0], s),
-            Task::Rm(s) => (&RM_CMDS[0], s),
-            Task::Xfer(s) => (&XFER_CMDS[0], s),
+            Task::Assembler(a, s) => {
+                (a.get_command(), s)
+            },
+            Task::BndBuild(s) => (BNDBUILD_CMDS[0], s),
+            Task::Cp(s) => (CP_CMDS[0], s),
+            Task::Disc(s) => (DISC_CMDS[0], s),
+            Task::Echo(s) => (ECHO_CMDS[0], s),
+            Task::Extern(s) => (EXTERN_CMDS[0], s),
+            Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
+            Task::Rm(s) => (RM_CMDS[0], s),
+            Task::Xfer(s) => (XFER_CMDS[0], s),
             Task::Emulator(e, s) => {
                 (
-                    match e {
-                        Emulator::Ace(_) => &ACE_CMDS[0],
-                        Emulator::Cpcec(_) => &CPCEC_CMDS[0],
-                        Emulator::Winape(_) => &WINAPE_CMDS[0]
-                    },
+                    e.get_command(),
                     s
                 )
             },
@@ -105,7 +105,10 @@ impl<'de> Deserialize<'de> for Task {
                     ))
                 }
                 else if BASM_CMDS.iter().contains(&code) {
-                    Ok(Task::Basm(std))
+                    Ok(Task::Assembler(Assembler::Basm, std))
+                }
+                else if RASM_CMDS.iter().contains(&code) {
+                    Ok(Task::Assembler(Assembler::Rasm(RasmVersion::default()), std))
                 }
                 else if BNDBUILD_CMDS.iter().contains(&code) {
                     Ok(Task::BndBuild(std))
@@ -147,7 +150,7 @@ impl<'de> Deserialize<'de> for Task {
 
 impl Task {
     pub fn new_basm(args: &str) -> Self {
-        Self::Basm(StandardTask::new(args))
+        Self::Assembler(Assembler::Basm, StandardTask::new(args))
     }
 
     pub fn new_bndbuild(args: &str) -> Self {
@@ -172,7 +175,7 @@ impl Task {
 
     fn standard_task(&self) -> &StandardTask {
         match self {
-            Task::Basm(t)
+            Task::Assembler(_, t)
             | Task::Rm(t)
             | Task::Echo(t)
             | Task::ImgConverter(t)
@@ -187,7 +190,7 @@ impl Task {
 
     fn standard_task_mut(&mut self) -> &mut StandardTask {
         match self {
-            Task::Basm(t)
+            Task::Assembler(_, t)
             | Task::Rm(t)
             | Task::Echo(t)
             | Task::ImgConverter(t)
@@ -216,7 +219,7 @@ impl Task {
     // TODO deeply check the arguments of the commands because here we may be wrong ...
     pub fn is_phony(&self) -> bool {
         match self {
-            Task::Basm(_) => false, // wrong when displaying stuff
+            Task::Assembler(..) => false, // wrong when displaying stuff
             Task::Rm(_) => false,
             Task::Echo(_) => true,
             Task::Emulator(..) => true,
@@ -256,7 +259,7 @@ mod test {
         let task: Task = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Basm(StandardTask {
+            Task::Assembler(crate::runners::assembler::Assembler::Basm, StandardTask {
                 args: "toto.asm -o toto.o".to_owned(),
                 ignore_error: false
             })
@@ -266,7 +269,7 @@ mod test {
         let task: Task = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Basm(StandardTask {
+            Task::Assembler(crate::runners::assembler::Assembler::Basm, StandardTask {
                 args: "toto.asm -o toto.o".to_owned(),
                 ignore_error: true
             })

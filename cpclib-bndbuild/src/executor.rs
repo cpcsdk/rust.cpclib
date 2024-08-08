@@ -1,11 +1,11 @@
 use std::sync::LazyLock;
 
-use crate::runners::basm::BasmRunner;
+use crate::delegated::DelegatedRunner;
+use crate::runners::assembler::BasmRunner;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
-use crate::runners::emulator::EmulatorRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::r#extern::ExternRunner;
 use crate::runners::rm::RmRunner;
@@ -26,8 +26,13 @@ pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(XferRunner::default
 
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {
-        Task::Emulator(e, _) => EmulatorRunner { emu: e.clone() }.run(task.args()),
-        Task::Basm(_) => BASM_RUNNER.run(task.args()),
+        Task::Emulator(e, _) => DelegatedRunner { app: e.configuration(), cmd: e.get_command().to_owned() }.run(task.args()),
+        Task::Assembler(a, _) => {
+            match a {
+                crate::runners::assembler::Assembler::Basm => BASM_RUNNER.run(task.args()),
+                crate::runners::assembler::Assembler::Rasm(v) => DelegatedRunner{app: v.configuration(), cmd: a.get_command().to_owned()}.run(task.args()),
+            }
+        },
         Task::BndBuild(_) => BNDBUILD_RUNNER.run(task.args()),
         Task::Cp(_) => CP_RUNNER.run(task.args()),
         Task::Disc(_) => DISC_RUNNER.run(task.args()),

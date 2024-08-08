@@ -19,6 +19,7 @@ pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
+pub mod delegated;
 
 pub use builder::*;
 
