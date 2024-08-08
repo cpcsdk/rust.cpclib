@@ -1,0 +1,23 @@
+# This project only use delegated commands.
+# No one comes from benediction
+
+- tgt: ace
+  dep: show.sna
+  cmd: ace show.sna
+
+- tgt: show.sna
+  dep: martine.scr/MARTIN.SCR martine.scr/MARTIN.PAL show.asm
+  cmd: rasm show.asm -oi show.sna -map
+
+- tgt: martine.scr/MARTIN.SCR martine.scr/MARTIN.PAL
+  dep: martine-logo.png
+  cmd: martine  -in  martine-logo.png -mode 1 -noheader -out martine.scr
+
+- tgt: clean
+  pnony: true
+  cmd: -rm martine.scr # ATM it is buggy as it is a folderand not handled
+
+- tgt: distclean
+  dep: clean
+  phony: true
+  cmd: -rm show.sna

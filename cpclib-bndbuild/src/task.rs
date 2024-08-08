@@ -17,6 +17,7 @@ pub enum Task {
     Emulator(Emulator, StandardTask),
     Extern(StandardTask),
     ImgConverter(StandardTask),
+    Martine(StandardTask),
     Rm(StandardTask),
     Xfer(StandardTask)
 }
@@ -32,6 +33,7 @@ pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
+pub const MARTINE_CMDS: &[&str] = &["martine"];
 pub const RASM_CMDS: &[&str] = &["rasm"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
@@ -48,7 +50,8 @@ impl Display for Task {
             Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Emulator(e, s) => (e.get_command(), s)
+            Task::Emulator(e, s) => (e.get_command(), s),
+            Task::Martine(s) => (MARTINE_CMDS[0], s),
         };
 
         write!(
@@ -124,6 +127,9 @@ impl<'de> Deserialize<'de> for Task {
                 else if IMG2CPC_CMDS.iter().contains(&code) {
                     Ok(Task::ImgConverter(std))
                 }
+                else if MARTINE_CMDS.iter().contains(&code) {
+                    Ok(Task::Martine(std))
+                }
                 else if RM_CMDS.iter().contains(&code) {
                     Ok(Task::Rm(std))
                 }
@@ -172,14 +178,15 @@ impl Task {
     fn standard_task(&self) -> &StandardTask {
         match self {
             Task::Assembler(_, t)
-            | Task::Rm(t)
-            | Task::Echo(t)
-            | Task::ImgConverter(t)
-            | Task::Xfer(t)
-            | Task::Extern(t)
-            | Task::Disc(t)
             | Task::BndBuild(t)
             | Task::Cp(t)
+            | Task::Disc(t)
+            | Task::Echo(t)
+            | Task::Extern(t)
+            | Task::ImgConverter(t)
+            | Task::Martine(t)
+            | Task::Rm(t)
+            | Task::Xfer(t)
             | Task::Emulator(_, t) => t
         }
     }
@@ -194,6 +201,7 @@ impl Task {
             | Task::Extern(t)
             | Task::Disc(t)
             | Task::BndBuild(t)
+            | Task::Martine(t)
             | Task::Cp(t)
             | Task::Emulator(_, t) => t
         }
@@ -220,6 +228,7 @@ impl Task {
             Task::Echo(_) => true,
             Task::Emulator(..) => true,
             Task::Xfer(_) => true, // wrong when downloading files
+            Task::Martine(t) => false,
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
             Task::BndBuild(_) => false,
