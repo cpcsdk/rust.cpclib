@@ -10,6 +10,7 @@ pub mod echo;
 pub mod emulator;
 pub mod r#extern;
 pub mod imgconverter;
+pub mod impdisc;
 pub mod martine;
 pub mod rm;
 pub mod xfer;

@@ -13,6 +13,7 @@ pub enum Task {
     Assembler(Assembler, StandardTask),
     BndBuild(StandardTask),
     Disc(StandardTask),
+    ImpDsk(StandardTask),
     Echo(StandardTask),
     Emulator(Emulator, StandardTask),
     Extern(StandardTask),
@@ -30,6 +31,7 @@ pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
+pub const IMPDISC_CMDS: &[&str] = &["impdsk", "impdisc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
@@ -52,6 +54,7 @@ impl Display for Task {
             Task::Xfer(s) => (XFER_CMDS[0], s),
             Task::Emulator(e, s) => (e.get_command(), s),
             Task::Martine(s) => (MARTINE_CMDS[0], s),
+            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
         };
 
         write!(
@@ -127,6 +130,9 @@ impl<'de> Deserialize<'de> for Task {
                 else if IMG2CPC_CMDS.iter().contains(&code) {
                     Ok(Task::ImgConverter(std))
                 }
+                else if IMPDISC_CMDS.iter().contains(&code) {
+                    Ok(Task::ImpDsk(std))
+                }
                 else if MARTINE_CMDS.iter().contains(&code) {
                     Ok(Task::Martine(std))
                 }
@@ -181,6 +187,7 @@ impl Task {
             | Task::BndBuild(t)
             | Task::Cp(t)
             | Task::Disc(t)
+            | Task::ImpDsk(t)
             | Task::Echo(t)
             | Task::Extern(t)
             | Task::ImgConverter(t)
@@ -200,6 +207,7 @@ impl Task {
             | Task::Xfer(t)
             | Task::Extern(t)
             | Task::Disc(t)
+            | Task::ImpDsk(t)
             | Task::BndBuild(t)
             | Task::Martine(t)
             | Task::Cp(t)
@@ -233,6 +241,7 @@ impl Task {
             Task::Extern(_) => false,
             Task::BndBuild(_) => false,
             Task::Disc(_) => false,
+            Task::ImpDsk(_) => false,
             Task::Cp(_) => false
         }
     }

@@ -25,3 +25,6 @@ PAL
 	incbin "martine.scr/MARTIN.PAL", 3+12, 1
 	incbin "martine.scr/MARTIN.PAL", 3+12+12, 1
 	incbin "martine.scr/MARTIN.PAL", 3+12+12+12, 1
+
+
+	save "SHOW.SCR", 0xc000, 0x4000, DSK, "SHOW.DSK"

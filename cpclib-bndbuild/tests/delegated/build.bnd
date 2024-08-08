@@ -5,9 +5,13 @@
   dep: show.sna
   cmd: ace show.sna
 
-- tgt: show.sna
+- tgt: show.sna SHOW.DSK
   dep: martine.scr/MARTIN.SCR martine.scr/MARTIN.PAL show.asm
   cmd: rasm show.asm -oi show.sna -map
+
+- tgt: SHOW.SCR
+  dep: SHOW.DSK
+  cmd: impdsk -dsk SHOW.DSK -get -amsdosfile SHOW.SCR
 
 - tgt: martine.scr/MARTIN.SCR martine.scr/MARTIN.PAL
   dep: martine-logo.png
