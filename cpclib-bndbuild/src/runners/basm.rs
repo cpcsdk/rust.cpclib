@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 use cpclib_common::itertools::Itertools;

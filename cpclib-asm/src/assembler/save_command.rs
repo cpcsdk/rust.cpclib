@@ -79,7 +79,7 @@ impl SaveCommand {
         let data = env.get_memory(from as _, size as _);
 
         // Add the header if any
-        let object: either::Either<Vec<u8>, AmsdosFile> = match (self.save_type) {
+        let object: either::Either<Vec<u8>, AmsdosFile> = match self.save_type {
             Some(r#type) => {
                 let loading_address = from as u16;
                 let execution_address = match env.run_options {
