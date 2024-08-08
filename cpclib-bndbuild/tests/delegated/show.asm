@@ -14,7 +14,7 @@
 	repeat 4
 		ld a, (hl)
 		out (c), c : out (c), a
-		inc a
+		inc c
 		inc hl
 	rend
 
