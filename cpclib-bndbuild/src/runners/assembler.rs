@@ -72,8 +72,9 @@ cfg_match! {
                         DelegateApplicationDescription {
                             download_url: "https://github.com/EdouardBERGE/rasm/releases/download/v2.2.5/rasm_win64.exe", // we assume a modern CPU
                             folder : "rasm_consolidation",
-                            archive_format: ArchiveFormat::TarGz,
-                            exec_fname: "rasm.exe"
+                            archive_format: ArchiveFormat::Raw,
+                            exec_fname: "rasm.exe",
+                            compile: None
                         }
                     }
             }

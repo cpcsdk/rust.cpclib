@@ -59,7 +59,13 @@ impl DelegateApplicationDescription {
         // uncompress it
         match self.archive_format {
 			ArchiveFormat::Raw => {
-				unimplemented!()
+				println!(">> Save to {}", self.exec_fname());
+                let mut buffer = Vec::new();
+                input.read_to_end(&mut buffer).unwrap();
+                std::fs::create_dir_all(&dest);
+				std::fs::write(self.exec_fname(), &buffer)
+                    .map_err(|e| e.to_string())
+                ?;
 			}
             ArchiveFormat::TarGz => {
 				println!(">> Open archive");

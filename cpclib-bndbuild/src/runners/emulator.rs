@@ -120,7 +120,8 @@ cfg_match! {
                     download_url: "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
                     folder : "AceWakePoint",
                     archive_format: ArchiveFormat::Zip,
-                    exec_fname: "AceDL.exe"
+                    exec_fname: "AceDL.exe",
+                    compile: None
                 }}
             }
         }
@@ -133,7 +134,8 @@ cfg_match! {
                             download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
-                            exec_fname: "CPCEC.EXE"
+                            exec_fname: "CPCEC.EXE",
+                            compile: None
                         }
                     },
                 }
@@ -148,7 +150,8 @@ cfg_match! {
                             download_url: "http://www.winape.net/download/WinAPE20B2.zip",
                             folder: "winape_2_0b2",
                             archive_format: ArchiveFormat::Zip,
-                            exec_fname: "WinApe.exe"
+                            exec_fname: "WinApe.exe",
+                            compile: None
                         }
                     },
                 }
