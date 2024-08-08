@@ -132,9 +132,8 @@ impl Rules {
                 let cmd = rule
                     .commands()
                     .iter()
-                    .map(|cmd| cmd.to_string()
-                        .replace("\"", "\\\"")
-                        //.replace("\n", "<br/>")
+                    .map(
+                        |cmd| cmd.to_string().replace("\"", "\\\"") //.replace("\n", "<br/>")
                     )
                     .join("\\l");
 

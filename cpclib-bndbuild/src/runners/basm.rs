@@ -1,4 +1,3 @@
-
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 use cpclib_common::itertools::Itertools;
 
@@ -57,7 +56,6 @@ impl RunnerWithClap for BasmRunner {
 
 impl Runner for BasmRunner {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
-
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         let matches = self.get_matches(&itr)?;
 

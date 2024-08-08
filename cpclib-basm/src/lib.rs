@@ -287,9 +287,9 @@ pub fn assemble<'arg>(
                 .build(value);
 
             let span = Z80Span::new_extra(value, &ctx);
-            let value = alt((string_expr, parse_value)).parse(span.into())
-                    .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))
-                    ?;
+            let value = alt((string_expr, parse_value))
+                .parse(span.into())
+                .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
 
             assemble_options
                 .symbols_mut()

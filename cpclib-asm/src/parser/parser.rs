@@ -5130,9 +5130,7 @@ pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80
 /// Read a value
 #[inline]
 pub fn parse_value(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    let (val, span) = cpclib_common::parse_value
-        .with_taken()
-        .parse_next(input)?;
+    let (val, span) = cpclib_common::parse_value.with_taken().parse_next(input)?;
 
     let span = input.clone().update_slice(span);
     Ok(LocatedExpr::Value(val as i32, span.into()))
