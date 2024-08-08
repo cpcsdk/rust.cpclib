@@ -53,6 +53,6 @@ impl Runner for ImgConverterRunner {
     }
 
     fn get_command(&self) -> &str {
-        &IMG2CPC_CMDS[0]
+        IMG2CPC_CMDS[0]
     }
 }

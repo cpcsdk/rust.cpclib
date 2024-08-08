@@ -153,7 +153,7 @@ impl PauseCommand {
             writer,
             "{}",
             if let Some(span) = &self.0 {
-                build_simple_error_message(msg, &span, Severity::Note)
+                build_simple_error_message(msg, span, Severity::Note)
             }
             else {
                 msg.to_owned()
@@ -241,6 +241,7 @@ impl BreakpointCommand {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct DelayedCommands {
     failed_assert_commands: Vec<FailedAssertCommand>,
     save_commands: BTreeMap<u8, Vec<SaveCommand>>, // commands are ordered per ga_mmr
@@ -248,16 +249,6 @@ pub struct DelayedCommands {
     breakpoint_commands: Vec<BreakpointCommand>
 }
 
-impl Default for DelayedCommands {
-    fn default() -> Self {
-        Self {
-            failed_assert_commands: Vec::new(),
-            save_commands: Default::default(),
-            print_commands: Vec::new(),
-            breakpoint_commands: Vec::new()
-        }
-    }
-}
 
 impl DelayedCommands {
     pub fn clear(&mut self) {

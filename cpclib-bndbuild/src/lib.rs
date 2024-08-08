@@ -225,7 +225,6 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
             matches
                 .get_many::<String>("target")
                 .unwrap()
-                .into_iter()
                 .map(|s| s.as_ref())
                 .collect::<Vec<&Utf8Path>>()
         };
@@ -455,7 +454,7 @@ fn expand_glob(p: &str) -> Vec<String> {
 
     expended
         .into_iter()
-        .map(|p| {
+        .flat_map(|p| {
             globmatch::Builder::new(p.as_str())
                 .build("." /* std::env::current_dir().unwrap() */)
                 .map(|builder| {
@@ -488,7 +487,6 @@ fn expand_glob(p: &str) -> Vec<String> {
                 })
                 .unwrap_or(vec![p])
         })
-        .flatten()
         .collect_vec()
 }
 

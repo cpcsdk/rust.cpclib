@@ -44,7 +44,7 @@ pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     let fmtexp = cpclib_tokens::FormattedExpr::Raw(exp);
     let token = LocatedTokenInner::Fail(Some(vec![fmtexp]));
 
-    let token = token.into_located_token_between(&input_start, input.clone());
+    let token = token.into_located_token_between(&input_start, *input);
 
     Ok(token)
 }
@@ -67,7 +67,7 @@ pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
     };
 
     let token = LocatedTokenInner::Repeat(amount, listing, None, None, None);
-    let token = token.into_located_token_between(&input_start, input.clone());
+    let token = token.into_located_token_between(&input_start, *input);
 
     Ok(token)
 }
@@ -101,13 +101,11 @@ pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
         // span goes from left to right with operator between
         let left_bytes = left.span().as_bstr();
         let right_bytes = right.span().as_bstr();
-        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).abs()
-            as usize
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).unsigned_abs()
             + right_bytes.len();
         let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
-        let span = input
-            .clone()
-            .update_slice(unsafe { std::mem::transmute(span) });
+        let span = (*input)
+            .update_slice(unsafe { &*span });
 
         expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
     }
@@ -158,13 +156,11 @@ pub fn parse_orgams_ordered_expression(
         // span goes from left to right with operator between
         let left_bytes = left.span().as_bstr();
         let right_bytes = right.span().as_bstr();
-        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).abs()
-            as usize
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).unsigned_abs()
             + right_bytes.len();
         let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
-        let span = input
-            .clone()
-            .update_slice(unsafe { std::mem::transmute(span) });
+        let span = (*input)
+            .update_slice(unsafe { &*span });
 
         expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
     }

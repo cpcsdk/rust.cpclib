@@ -50,15 +50,15 @@ pub enum Expr {
     Rnd
 }
 
-impl Into<Cow<'_, Expr>> for Expr {
-    fn into(self) -> Cow<'static, Expr> {
-        Cow::Owned(self)
+impl From<Expr> for Cow<'_, Expr> {
+    fn from(val: Expr) -> Self {
+        Cow::Owned(val)
     }
 }
 
-impl<'e> Into<Cow<'e, Expr>> for &'e Expr {
-    fn into(self) -> Cow<'e, Expr> {
-        Cow::Borrowed(self)
+impl<'e> From<&'e Expr> for Cow<'e, Expr> {
+    fn from(val: &'e Expr) -> Self {
+        Cow::Borrowed(val)
     }
 }
 
@@ -445,7 +445,7 @@ impl ExprElement for Expr {
     type Token = Token;
 
     fn to_expr(&self) -> Cow<Expr> {
-        Cow::Borrowed(&self)
+        Cow::Borrowed(self)
     }
 
     fn is_negated(&self) -> bool {
@@ -1175,7 +1175,7 @@ impl ExprResult {
     pub fn matrix_width(&self) -> usize {
         match self {
             ExprResult::Matrix { .. } => {
-                self.matrix_rows().get(0).map(|r| r.list_len()).unwrap_or(0)
+                self.matrix_rows().first().map(|r| r.list_len()).unwrap_or(0)
             },
             _ => panic!("not a matrix")
         }
@@ -1369,7 +1369,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
                 any.sub(b)
             },
             (ExprResult::Bool(_), any) => {
-                let b = rhs.as_type(&any)?;
+                let b = rhs.as_type(any)?;
                 b.sub(any)
             },
 
@@ -1416,7 +1416,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
                 any.sub(b)
             },
             (ExprResult::Bool(_), any) => {
-                let b = rhs.as_type(&any)?;
+                let b = rhs.as_type(any)?;
                 b.sub(any)
             },
 
@@ -1713,18 +1713,12 @@ impl std::fmt::UpperHex for ExprResult {
 
 impl std::ops::AddAssign for ExprResult {
     fn add_assign(&mut self, rhs: Self) {
-        match self.clone().add(rhs) {
-            Ok(v) => *self = v,
-            Err(_) => {}
-        }
+        if let Ok(v) = self.clone().add(rhs) { *self = v }
     }
 }
 
 impl std::ops::SubAssign for ExprResult {
     fn sub_assign(&mut self, rhs: Self) {
-        match self.clone().sub(rhs) {
-            Ok(v) => *self = v,
-            Err(_) => {}
-        }
+        if let Ok(v) = self.clone().sub(rhs) { *self = v }
     }
 }

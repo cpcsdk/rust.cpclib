@@ -355,15 +355,15 @@ impl AssemblerError {
     }
 }
 
-pub(crate) const LD_WRONG_SOURCE: &'static str = "LD: error in the source";
-pub(crate) const LD_WRONG_DESTINATION: &'static str = "LD: error in the destination";
+pub(crate) const LD_WRONG_SOURCE: &str = "LD: error in the source";
+pub(crate) const LD_WRONG_DESTINATION: &str = "LD: error in the destination";
 
-pub(crate) const JP_WRONG_PARAM: &'static str = "JP: error in the destination";
-pub(crate) const JR_WRONG_PARAM: &'static str = "JR: error in the destination";
-pub(crate) const CALL_WRONG_PARAM: &'static str = "CALL: error in the destination";
+pub(crate) const JP_WRONG_PARAM: &str = "JP: error in the destination";
+pub(crate) const JR_WRONG_PARAM: &str = "JR: error in the destination";
+pub(crate) const CALL_WRONG_PARAM: &str = "CALL: error in the destination";
 
-pub(crate) const SNASET_WRONG_LABEL: &'static str = "SNASET: error in the option naming";
-pub(crate) const SNASET_MISSING_COMMA: &'static str = "SNASET: missing comma";
+pub(crate) const SNASET_WRONG_LABEL: &str = "SNASET: error in the option naming";
+pub(crate) const SNASET_MISSING_COMMA: &str = "SNASET: missing comma";
 
 impl Display for AssemblerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -429,7 +429,7 @@ impl AssemblerError {
                                         .map(|p| p.as_os_str().to_str().unwrap());
 
                                 let filename = filename.unwrap_or_else(|| {
-                                    e.0.state.context_name().unwrap_or_else(|| "no file")
+                                    e.0.state.context_name().unwrap_or("no file")
                                 });
                                 let filename = Box::new(filename.to_owned());
 
@@ -584,7 +584,7 @@ impl AssemblerError {
                 context: _
             } => todo!(),
 
-            AssemblerError::BasicError { error } => write!(f, "{}", error.to_string()),
+            AssemblerError::BasicError { error } => write!(f, "{}", error),
             AssemblerError::AssemblingError { msg } => write!(f, "{}", msg),
             AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
             AssemblerError::AssertionFailed {
@@ -778,7 +778,7 @@ impl AssemblerError {
             AssemblerError::ForIssue { error, span } => {
                 if span.is_some() {
                     let msg = build_simple_error_message(
-                        &format!("FOR: error in loop"),
+                        "FOR: error in loop",
                         span.as_ref().unwrap(),
                         Severity::Error
                     );
@@ -792,7 +792,7 @@ impl AssemblerError {
             AssemblerError::WhileIssue { error, span } => {
                 if span.is_some() {
                     let msg = build_simple_error_message(
-                        &format!("WHILE: error in loop"),
+                        "WHILE: error in loop",
                         span.as_ref().unwrap(),
                         Severity::Error
                     );

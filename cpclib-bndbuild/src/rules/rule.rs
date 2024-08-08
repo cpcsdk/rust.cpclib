@@ -15,8 +15,7 @@ where D: Deserializer<'de> {
     let r = shlex::split(&s).or(Some(vec![])).unwrap();
     let r = r
         .into_iter()
-        .map(|s| expand_glob(s.as_ref()))
-        .flatten()
+        .flat_map(|s| expand_glob(s.as_ref()))
         .map(|s| {
             if s.starts_with(r"./") || s.starts_with(r".\") {
                 s[2..].to_owned()
@@ -25,7 +24,7 @@ where D: Deserializer<'de> {
                 s
             }
         })
-        .map(|s| Utf8PathBuf::from(s))
+        .map(Utf8PathBuf::from)
         .collect_vec();
 
     Ok(r)
@@ -155,19 +154,17 @@ impl Rule {
     ) -> Self {
         Self {
             targets: targets
-                .into_iter()
-                .map(|s| expand_glob(s.as_ref()))
-                .flatten()
-                .map(|s| Utf8PathBuf::from(s))
+                .iter()
+                .flat_map(|s| expand_glob(s.as_ref()))
+                .map(Utf8PathBuf::from)
                 .collect_vec(),
             dependencies: dependencies
-                .into_iter()
-                .map(|s| expand_glob(s.as_ref()))
-                .flatten()
-                .map(|s| Utf8PathBuf::from(s))
+                .iter()
+                .flat_map(|s| expand_glob(s.as_ref()))
+                .map(Utf8PathBuf::from)
                 .collect_vec(),
             commands: commands
-                .into_iter()
+                .iter()
                 .map(|t| (t.clone()).into())
                 .collect_vec(),
             help: None,
@@ -218,7 +215,7 @@ impl Rule {
     }
 
     pub fn help(&self) -> Option<&str> {
-        self.help.as_ref().map(|s| s.as_str())
+        self.help.as_deref()
     }
 
     pub fn target(&self, idx: usize) -> &Utf8Path {

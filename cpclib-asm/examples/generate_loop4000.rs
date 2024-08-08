@@ -9,7 +9,7 @@ fn build_sna(code: &str) -> Snapshot {
         .expect("Unable to assemble z80 code");
     let sna = env.sna().clone();
 
-    return sna;
+    sna
 }
 
 fn main() {

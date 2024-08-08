@@ -34,7 +34,7 @@ impl TryInto<Cpr> for &CprAssembler {
         for (code, page) in self.codes.iter().zip(self.pages.pages.iter()) {
             let bank: Bank = page.try_into().map_err(|e: AssemblerError| {
                 AssemblerError::AssemblingError {
-                    msg: format!("Error when building CPR bloc {}. {}", code.1, e.to_string())
+                    msg: format!("Error when building CPR bloc {}. {}", code.1, e)
                 }
             })?;
             let riff_code = RiffCode::from(code.1.as_str());
@@ -126,7 +126,6 @@ impl CprAssembler {
             .selected_active_page_info()
             .unwrap()
             .startadr
-            .clone()
         {
             let max = (first as u32 + 0x4000).min(0xFFFF) as u16;
             if max > self.pages.selected_active_page_info().unwrap().output_limit {

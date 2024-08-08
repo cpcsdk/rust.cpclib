@@ -579,8 +579,7 @@ impl ColorMatrix {
             let pens = self
                 .get_line(y)
                 .iter()
-                .enumerate()
-                .map(|(_x, ink)| -> Pen {
+                .map(|ink| -> Pen {
                     let pen = line_palette.get_pen_for_ink(*ink);
                     if let Some(pen) = pen {
                         pen

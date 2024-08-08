@@ -163,12 +163,12 @@ where
 
     let base = encoding as u32;
     let mut number = 0;
-    for digit in digits.into_iter().filter(|&&digit| digit != b'_') {
+    for digit in digits.iter().filter(|&&digit| digit != b'_') {
         let digit = *digit;
-        let digit = if digit >= b'0' && digit <= b'9' {
+        let digit = if digit.is_ascii_digit() {
             digit - b'0'
         }
-        else if digit >= b'a' && digit <= b'f' {
+        else if (b'a'..=b'f').contains(&digit) {
             digit - b'a' + 10
         }
         else {

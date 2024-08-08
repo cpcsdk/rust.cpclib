@@ -100,7 +100,7 @@ fn main() -> std::io::Result<()> {
 
     // Get filename and extension
     let filename = {
-        let user = matches.get_one::<u8>("USER").cloned().unwrap_or(0);
+        let user = matches.get_one::<u8>("USER").copied().unwrap_or(0);
         let (filename, extension) = {
             let parts = complete_filename.split('.').collect::<Vec<_>>();
             let (filename, extension) = match parts.len() {

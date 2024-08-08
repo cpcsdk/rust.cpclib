@@ -52,13 +52,10 @@ fn expand_param<'p, P: MacroParamElement>(
     }
     else {
         let l = m.list_argument();
-        beef::lean::Cow::owned(format!(
-            "{}",
-            l.iter()
+        beef::lean::Cow::owned(l.iter()
                 .map(|p| expand_param(p.deref(), env))
                 .collect::<Result<Vec<_>, AssemblerError>>()?
-                .join(",")
-        ))
+                .join(",").to_string())
     };
 
     Ok(extended)
@@ -132,7 +129,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
                 else {
                     let mut search = CompactString::with_capacity(argname.len() + 2);
                     search += "{";
-                    search += &argname;
+                    search += argname;
                     search += "}";
                     (search, &expanded[..])
                 };
@@ -140,10 +137,10 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
                 listing = listing.replace(pattern.as_str(), replacement).into();
                 // sadly this dumb way is faster than the ahocarasick one ...
             }
-            return Ok(listing.into_owned());
+            Ok(listing.into_owned())
 
             //(patterns, replacement)
-        };
+        }
     }
 
     #[inline]
@@ -279,10 +276,9 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
             .r#struct()
             .content()
             .iter()
-            .zip_longest(self.args.iter()) // by construction longest is the struct template
-            .enumerate()
+            .zip_longest(self.args.iter())
             .map(
-                |(_idx, current_information)| -> Result<String, AssemblerError> {
+                |current_information| -> Result<String, AssemblerError> {
                     let ((name, token), provided_param) = {
                         match current_information {
                             EitherOrBoth::Both((name, token), provided_param) => {
@@ -313,7 +309,7 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                     }
                                 }
                                 None => {
-                                    if c.len() == 0 {
+                                    if c.is_empty() {
                                         return Err(AssemblerError::AssemblingError {
                                             msg: format!("A value is expected for {} (no default value is provided)", name)
                                         })
@@ -368,7 +364,7 @@ impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
                                     else {
                                         provided_param2
                                             .list_argument()
-                                            .into_iter()
+                                            .iter()
                                             .zip_longest(current_default_args)
                                             .map(|a| {
                                                 match a {

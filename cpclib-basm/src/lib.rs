@@ -113,8 +113,8 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-pub fn parse<'arg>(
-    matches: &'arg ArgMatches
+pub fn parse(
+    matches: &ArgMatches
 ) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches
@@ -139,7 +139,7 @@ pub fn parse<'arg>(
         },
         Err(_) => todo!()
     }
-    options.add_search_path_from_file(&filename); // we ignore the potential error
+    options.add_search_path_from_file(filename); // we ignore the potential error
     if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Utf8Path::new(directory).is_dir() {
@@ -155,7 +155,7 @@ pub fn parse<'arg>(
 
     // get the source code if any
     let (builder, code) = if matches.contains_id("INPUT") {
-        builder = builder.set_current_filename(&filename);
+        builder = builder.set_current_filename(filename);
         let fname = get_filename(filename, &options, None)?;
 
         let src = read_source(fname, &options)?;
@@ -175,7 +175,7 @@ pub fn parse<'arg>(
 
     let fname = builder
         .current_filename()
-        .map(|fname| normalize(fname))
+        .map(normalize)
         .unwrap_or_else(|| builder.context_name().unwrap())
         .to_owned();
 
@@ -195,8 +195,8 @@ pub fn parse<'arg>(
 
 /// Assemble the given code
 /// TODO use options to configure the base symbole table
-pub fn assemble<'arg>(
-    matches: &'arg ArgMatches,
+pub fn assemble(
+    matches: &ArgMatches,
     listing: &LocatedListing,
     parse_options: ParserOptions
 ) -> Result<Env, BasmError> {
@@ -252,7 +252,7 @@ pub fn assemble<'arg>(
                         .map_err(|e| {
                             let _span = token.possible_span().unwrap();
                             let span = token.possible_span().unwrap();
-                            let e: AssemblerError = e.into();
+                            let e: AssemblerError = e;
                             e.locate(span.clone())
                         })
                         .map_err(|e| BasmError::InvalidSymbolFile { msg: e.to_string() })?;
@@ -315,7 +315,7 @@ pub fn assemble<'arg>(
 
     let options = EnvOptions::new(parse_options, assemble_options);
     let (_tokens, mut env) =
-        visit_tokens_all_passes_with_options(&listing, options).map_err(|(_t_, mut env, e)| {
+        visit_tokens_all_passes_with_options(listing, options).map_err(|(_t_, mut env, e)| {
             env.handle_print(); // do the prints even if there is an assembling issue
             BasmError::AssemblerError {
                 error: AssemblerError::AlreadyRenderedError(e.to_string())
@@ -404,26 +404,23 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         })?;
 
         #[cfg(feature = "xferlib")]
-        match matches.get_one::<String>("TO_M4") {
-            Some(m4) => {
-                #[cfg(feature = "indicatif")]
-                let bar = if show_progress {
-                    Some(Progress::progress().add_bar("Send to M4"))
-                }
-                else {
-                    None
-                };
+        if let Some(m4) = matches.get_one::<String>("TO_M4") {
+            #[cfg(feature = "indicatif")]
+            let bar = if show_progress {
+                Some(Progress::progress().add_bar("Send to M4"))
+            }
+            else {
+                None
+            };
 
-                let xfer = CpcXfer::new(m4);
-                xfer.upload_and_run(pc_filename, None)
-                    .expect("An error occured while transfering the snapshot");
+            let xfer = CpcXfer::new(m4);
+            xfer.upload_and_run(pc_filename, None)
+                .expect("An error occured while transfering the snapshot");
 
-                #[cfg(feature = "indicatif")]
-                if let Some(bar) = bar {
-                    Progress::progress().remove_bar_ok(&bar);
-                }
-            },
-            None => {}
+            #[cfg(feature = "indicatif")]
+            if let Some(bar) = bar {
+                Progress::progress().remove_bar_ok(&bar);
+            }
         }
     }
     else if cfg!(feature = "xferlib")
@@ -581,14 +578,14 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
         }
 
         // keep only the first 10
-        return Err(AssemblerError::MultipleErrors {
+        Err(AssemblerError::MultipleErrors {
             errors: warnings.into_iter().take(KEPT).collect_vec()
         }
-        .into());
+        .into())
     }
     else {
         save(matches, &env)?;
-        return Ok((env, warnings));
+        Ok((env, warnings))
     }
 }
 
@@ -656,7 +653,7 @@ pub fn build_args_parser() -> clap::Command {
                 )
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
-                            .args(&["DB_LIST", "OUTPUT"])
+                            .args(["DB_LIST", "OUTPUT"])
                             .required(false)
                     )
 					.arg(
@@ -814,15 +811,15 @@ pub fn build_args_parser() -> clap::Command {
     )
     .group(
         // only one type of header can be provided
-        ArgGroup::new("HEADER").args(&["BINARY_HEADER", "BASIC_HEADER"])
+        ArgGroup::new("HEADER").args(["BINARY_HEADER", "BASIC_HEADER"])
     )
     .group(
         // only one type of output can be provided
-        ArgGroup::new("ARTEFACT_TYPE").args(&["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT", "CPR"])
+        ArgGroup::new("ARTEFACT_TYPE").args(["BINARY_HEADER", "BASIC_HEADER", "SNAPSHOT", "CPR"])
     )
     .group(
         ArgGroup::new("ANY_INPUT")
-            .args(&["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
+            .args(["INLINE", "INPUT", "LIST_EMBEDDED", "VIEW_EMBEDDED"])
             //  .required(true)
           //  .conflicts_with("version")
     )

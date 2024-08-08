@@ -14,6 +14,6 @@ impl Runner for EchoRunner {
     }
 
     fn get_command(&self) -> &str {
-        &ECHO_CMDS[0]
+        ECHO_CMDS[0]
     }
 }

@@ -44,6 +44,6 @@ impl Runner for BndBuildRunner {
     }
 
     fn get_command(&self) -> &str {
-        &BNDBUILD_CMDS[0]
+        BNDBUILD_CMDS[0]
     }
 }

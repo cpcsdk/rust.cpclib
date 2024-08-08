@@ -474,7 +474,7 @@ impl DisplayAddress {
     /// Check of the configuration correspond to an overscan
     pub fn is_overscan(self) -> bool {
         match self.buffer() {
-            0 | 1 | 2 => false,
+            0..=2 => false,
             3 => true,
             _ => panic!()
         }
@@ -567,23 +567,20 @@ pub enum OutputFormat {
 impl OutputFormat {
     /// For formats manipulating a display address, modify it vertically in order to make scroll the image
     pub fn vertically_shift_display_address(&mut self, delta: i32) {
-        match self {
-            Self::CPCMemory {
+        if let Self::CPCMemory {
                 output_dimension,
                 display_address
-            } => {
-                if delta >= 0 {
-                    for _ in 0..delta * i32::from(output_dimension.nb_word_columns()) {
-                        display_address.move_to_next_word();
-                    }
+            } = self {
+            if delta >= 0 {
+                for _ in 0..delta * i32::from(output_dimension.nb_word_columns()) {
+                    display_address.move_to_next_word();
                 }
-                else {
-                    for _ in 0..(-delta) * i32::from(output_dimension.nb_word_columns()) {
-                        display_address.move_to_previous_word();
-                    }
+            }
+            else {
+                for _ in 0..(-delta) * i32::from(output_dimension.nb_word_columns()) {
+                    display_address.move_to_previous_word();
                 }
-            },
-            _ => {}
+            }
         }
     }
 

@@ -20,13 +20,13 @@ impl Runner for ExternRunner {
         let cwd = std::env::current_dir().map_err(|e| {
             format!(
                 "Unable to get the current working directory {}.",
-                e.to_string()
+                e
             )
         })?;
         let cwd = std::fs::canonicalize(cwd).map_err(|e| {
             format!(
                 "Unable to get the current working directory {}.",
-                e.to_string()
+                e
             )
         })?;
 
@@ -37,11 +37,11 @@ impl Runner for ExternRunner {
         }
         let mut handle = cmd
             .spawn()
-            .map_err(|e| format!("Error while launching {}. {}", &itr[0], e.to_string()))?;
+            .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
         let status = handle
             .wait()
-            .map_err(|e| format!("Error while executing {}. {}", &itr[0], e.to_string()))?;
+            .map_err(|e| format!("Error while executing {}. {}", &itr[0], e))?;
 
         if !status.success() {
             return Err("Error while launching the command.".to_owned());
@@ -50,6 +50,6 @@ impl Runner for ExternRunner {
     }
 
     fn get_command(&self) -> &str {
-        &EXTERN_CMDS[0]
+        EXTERN_CMDS[0]
     }
 }

@@ -20,19 +20,19 @@ pub enum Task {
     Xfer(StandardTask)
 }
 
-pub const ACE_CMDS: &[&'static str] = &["ace", "acedl"];
-pub const WINAPE_CMDS: &[&'static str] = &["winape"];
-pub const CPCEC_CMDS: &[&'static str] = &["cpcec"];
+pub const ACE_CMDS: &[&str] = &["ace", "acedl"];
+pub const WINAPE_CMDS: &[&str] = &["winape"];
+pub const CPCEC_CMDS: &[&str] = &["cpcec"];
 
-pub const BASM_CMDS: &[&'static str] = &["basm", "assemble"];
-pub const BNDBUILD_CMDS: &[&'static str] = &["bndbuild", "build"];
-pub const CP_CMDS: &[&'static str] = &["cp", "copy"];
-pub const DISC_CMDS: &[&'static str] = &["dsk", "disc"];
-pub const ECHO_CMDS: &[&'static str] = &["echo", "print"];
-pub const EXTERN_CMDS: &[&'static str] = &["extern"];
-pub const IMG2CPC_CMDS: &[&'static str] = &["img2cpc", "imgconverter"];
-pub const RM_CMDS: &[&'static str] = &["rm", "del"];
-pub const XFER_CMDS: &[&'static str] = &["xfer", "cpcwifi", "m4"];
+pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
+pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
+pub const CP_CMDS: &[&str] = &["cp", "copy"];
+pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
+pub const ECHO_CMDS: &[&str] = &["echo", "print"];
+pub const EXTERN_CMDS: &[&str] = &["extern"];
+pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
+pub const RM_CMDS: &[&str] = &["rm", "del"];
+pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 impl Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

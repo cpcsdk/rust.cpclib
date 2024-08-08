@@ -157,7 +157,7 @@ impl ParserContextBuilder {
     }
 
     pub fn context_name(&self) -> Option<&str> {
-        self.context_name.as_ref().map(|s| s.as_str())
+        self.context_name.as_deref()
     }
 
     pub fn set_current_filename<S: Into<Utf8PathBuf>>(mut self, fname: S) -> ParserContextBuilder {
@@ -220,7 +220,7 @@ impl ParserOptions {
 
             // manual fix for for windows. No idea why
             let path = path.to_str().unwrap();
-            const PREFIX: &'static str = "\\\\?\\";
+            const PREFIX: &str = "\\\\?\\";
             let path = if path.starts_with(PREFIX) {
                 path[PREFIX.len()..].to_string()
             }
@@ -236,7 +236,7 @@ impl ParserOptions {
             Err(AssemblerError::IOError {
                 msg: format!(
                     "{} is not a path and cannot be added in the search path",
-                    path.to_str().unwrap().to_string()
+                    path.to_str().unwrap()
                 )
             })
         }
@@ -260,8 +260,8 @@ impl ParserOptions {
                 Err(AssemblerError::IOError {
                     msg: format!(
                         "Unable to add search path for {}. {}",
-                        file.to_str().unwrap().to_string(),
-                        err.to_string()
+                        file.to_str().unwrap(),
+                        err
                     )
                 })
             },
@@ -377,7 +377,7 @@ impl ParserOptions {
         }
 
         // No file found
-        return Err(Either::Right(does_not_exists));
+        Err(Either::Right(does_not_exists))
     }
 
     pub fn set_flavor(&mut self, flavor: AssemblerFlavor) -> &mut Self {
@@ -427,7 +427,7 @@ impl Clone for ParserContext {
         Self {
             current_filename: self.current_filename.clone(),
             context_name: self.context_name.clone(),
-            state: self.state.clone(),
+            state: self.state,
             source: self.source,
             options: self.options.clone(),
             line_col_lut: RwLock::default() /* no need to copy paste the datastructure if it is never used */
@@ -468,7 +468,7 @@ impl ParserContext {
 impl ParserContext {
     #[inline]
     pub fn context_name(&self) -> Option<&str> {
-        self.context_name.as_ref().map(|b| b.as_str())
+        self.context_name.as_deref()
     }
 
     #[inline]

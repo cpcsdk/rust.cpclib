@@ -101,7 +101,7 @@ pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>,
         let mut content = Vec::new();
         f.read_to_end(&mut content).map_err(|e| {
             AssemblerError::IOError {
-                msg: format!("Unable to read {:?}. {}", fname, e.to_string())
+                msg: format!("Unable to read {:?}. {}", fname, e)
             }
         })?;
 
@@ -128,7 +128,7 @@ pub fn read_source<P: AsRef<Utf8Path>>(
     let content = content.make_contiguous();
     // handle_source_encoding(fname.to_str().unwrap(), &content)
 
-    Ok(String::from_utf8_lossy(&content).into_owned())
+    Ok(String::from_utf8_lossy(content).into_owned())
 }
 
 // Never fail

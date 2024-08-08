@@ -75,7 +75,7 @@ pub trait Disc {
 
         let mut manager = AmsdosManagerMut::new_from_disc(self, head);
 
-        manager.add_file(&file, system, read_only, behavior)?;
+        manager.add_file(file, system, read_only, behavior)?;
 
         Ok(())
     }
@@ -91,9 +91,9 @@ pub trait Disc {
         let filename: AmsdosFileName = filename.into();
 
         if !filename.is_valid() {
-            return Err(AmsdosError::WrongFileName {
+            Err(AmsdosError::WrongFileName {
                 msg: format!("{:?}", filename)
-            });
+            })
         }
         else {
             let manager = AmsdosManagerNonMut::new_from_disc(self, head);

@@ -2,7 +2,6 @@
 use std::sync::{LazyLock, Mutex};
 
 use cpclib_bndbuild::BndBuilder;
-use test_generator;
 
 static MUT: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 

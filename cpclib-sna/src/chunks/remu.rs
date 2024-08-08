@@ -77,11 +77,11 @@ impl RemuChunk {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
-        let c = Self {
-            riff: RiffChunk::new(code, content)
-        };
+        
 
-        c
+        Self {
+            riff: RiffChunk::new(code, content)
+        }
     }
 
     pub fn add_entry(&mut self, entry: &RemuEntry) {

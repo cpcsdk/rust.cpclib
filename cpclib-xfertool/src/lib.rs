@@ -135,13 +135,13 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
         let fname: &Utf8PathBuf = p_opt.get_one("fname").unwrap();
-        send_and_run_file(&xfer, &fname, false);
+        send_and_run_file(&xfer, fname, false);
     }
     else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname: &Utf8PathBuf = y_opt.get_one("fname").unwrap();
 
         // Simple file sending
-        send_and_run_file(&xfer, &fname, true);
+        send_and_run_file(&xfer, fname, true);
 
         #[cfg(feature = "watch")]
         if y_opt.get_flag("WATCH") {
@@ -157,15 +157,12 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
             watcher.watch(std::path::Path::new(&fname), RecursiveMode::NonRecursive)?;
 
             for res in rx {
-                match res {
-                    Ok(notify::event::Event {
+                if let Ok(notify::event::Event {
                         kind:
                             notify::event::EventKind::Modify(_) | notify::event::EventKind::Create(_),
                         ..
-                    }) => {
-                        send_and_run_file(&xfer, fname, true);
-                    },
-                    _ => {}
+                    }) = res {
+                    send_and_run_file(&xfer, fname, true);
                 }
             }
         }

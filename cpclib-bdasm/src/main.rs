@@ -40,10 +40,10 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
             let address = if let Expr::Label(l) = e
                 && l == "$"
             {
-                current_address.clone().unwrap() // address before instruction
+                current_address.unwrap() // address before instruction
             }
             else {
-                let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
+                let delta = e.eval().unwrap().int().unwrap() + 2;
                 (*current_address.as_ref().unwrap() as i32 + delta) as _
             };
             labels.push(address);
@@ -58,7 +58,7 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
 
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
             current_address = Some(address.eval().unwrap().int().unwrap() as u16);
-            current_address.clone()
+            current_address
         }
         else {
             let nb_bytes = current_instruction.number_of_bytes().unwrap();
@@ -112,12 +112,8 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
     };
 
     let update_expr_address = move |e: &mut Expr, value: u16| {
-        match address_to_label.get(&value) {
-            Some(label) => {
-                *e = Expr::Label(SmolStr::from(*label));
-                return;
-            },
-            None => {}
+        if let Some(label) = address_to_label.get(&value) {
+            *e = Expr::Label(SmolStr::from(*label));
         }
     };
 
@@ -125,7 +121,7 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
     for current_instruction in listing.iter_mut() {
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
             current_address = Some(address.eval().unwrap().int().unwrap() as u16);
-            current_address.clone()
+            current_address
         }
         else {
             let nb_bytes = current_instruction.number_of_bytes().unwrap();
@@ -149,10 +145,10 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
             let address = if let Expr::Label(l) = e
                 && l == "$"
             {
-                current_address.clone().unwrap() // address before instruction
+                current_address.unwrap() // address before instruction
             }
             else {
-                let delta = (e.eval().unwrap().int().unwrap() + 2) as i32;
+                let delta = e.eval().unwrap().int().unwrap() + 2;
                 (*current_address.as_ref().unwrap() as i32 + delta) as _
             };
 
@@ -175,7 +171,7 @@ fn main() {
 					.version(built_info::PKG_VERSION)
 					.author("Krusty/Benediction")
 					.about("Benediction disassembler")
-					.before_help(&DESC_BEFORE[..])
+					.before_help(DESC_BEFORE)
 					.arg(
 						Arg::new("INPUT")
 							.help("Input binary file to disassemble.")

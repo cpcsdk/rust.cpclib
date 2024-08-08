@@ -23,10 +23,10 @@ fn parse_string<'src>(
         &content[..0] // we remove " (it is not present for the others)
     }
     else {
-        &content[..]
+        content
     };
 
-    let string = input.clone().update_slice(string);
+    let string = (*input).update_slice(string);
     Ok(string)
 }
 

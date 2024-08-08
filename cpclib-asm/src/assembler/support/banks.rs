@@ -118,7 +118,7 @@ impl DecoratedPage {
 
 impl DecoratedPages {
     pub fn selected_index(&self) -> Option<usize> {
-        self.selected_index.clone()
+        self.selected_index
     }
 
     pub fn selected_written_bytes(&self) -> Option<&BitVec> {

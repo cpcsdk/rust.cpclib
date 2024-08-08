@@ -6,7 +6,7 @@ use crate::preamble::*;
 
 /// TODO replace JR nn by JR $+nn in order to assemble even with current address is unknown
 
-pub const TABINSTRFDCB: [&'static str; 256] = [
+pub const TABINSTRFDCB: [&str; 256] = [
     "RLC (IY+nn), B",
     "RLC (IY+nn), C",
     "RLC (IY+nn), D",
@@ -265,7 +265,7 @@ pub const TABINSTRFDCB: [&'static str; 256] = [
     "SET 7,(IY+nn), A"
 ];
 
-pub const TABINSTRDDCB: [&'static str; 256] = [
+pub const TABINSTRDDCB: [&str; 256] = [
     "RLC (IX+nn), B",
     "RLC (IX+nn), C",
     "RLC (IX+nn), D",
@@ -524,7 +524,7 @@ pub const TABINSTRDDCB: [&'static str; 256] = [
     "SET 7,(IX+nn), A"
 ];
 
-pub const TABINSTRCB: [&'static str; 256] = [
+pub const TABINSTRCB: [&str; 256] = [
     "RLC B",
     "RLC C",
     "RLC D",
@@ -783,7 +783,7 @@ pub const TABINSTRCB: [&'static str; 256] = [
     "SET 7,A"
 ];
 
-pub const TABINSTRED: [&'static str; 256] = [
+pub const TABINSTRED: [&str; 256] = [
     "",
     "",
     "",
@@ -1042,7 +1042,7 @@ pub const TABINSTRED: [&'static str; 256] = [
     ""
 ];
 
-pub const TABINSTRDD: [&'static str; 256] = [
+pub const TABINSTRDD: [&str; 256] = [
     "",
     "",
     "",
@@ -1301,7 +1301,7 @@ pub const TABINSTRDD: [&'static str; 256] = [
     ""
 ];
 
-pub const TABINSTRFD: [&'static str; 256] = [
+pub const TABINSTRFD: [&str; 256] = [
     "",
     "",
     "",
@@ -1560,7 +1560,7 @@ pub const TABINSTRFD: [&'static str; 256] = [
     ""
 ];
 
-pub const TABINSTR: [&'static str; 256] = [
+pub const TABINSTR: [&str; 256] = [
     "NOP",
     "LD BC,nnnn",
     "LD (BC),A",
@@ -1952,16 +1952,16 @@ pub fn disassemble_without_argument(
     lut: &[&'static str; 256]
 ) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
-    string_to_token(&representation)
+    string_to_token(representation)
 }
 
 /// Thje method never fails now => it generate a db opcode
 pub fn string_to_token(representation: &str) -> Result<Token, String> {
-    if representation.len() == 0 {
+    if representation.is_empty() {
         Err("Empty opcode".to_string())
     }
     else {
-        Token::parse_token(&representation)
+        Token::parse_token(representation)
     }
 }
 
@@ -2031,7 +2031,7 @@ mod test {
         for code in 0..=255 {
             let repr = tab[code as usize];
 
-            if repr.len() == 0 {
+            if repr.is_empty() {
                 continue;
             }
 
@@ -2070,9 +2070,8 @@ mod test {
     fn disass_for_table_and_prefix(tab: &[&'static str; 256], prefix: &[u8]) {
         // Concatenate list of list of bytes
         let merge = |list: &[&[u8]]| -> Vec<u8> {
-            list.into_iter()
-                .map(|&bytes| bytes.iter())
-                .flatten()
+            list.iter()
+                .flat_map(|&bytes| bytes.iter())
                 .copied()
                 .collect()
         };
@@ -2080,7 +2079,7 @@ mod test {
         for code in 0..=255 {
             let repr = tab[code as usize];
 
-            if repr.len() == 0 {
+            if repr.is_empty() {
                 continue;
             }
 

@@ -36,6 +36,6 @@ impl Runner for DiscManagerRunner {
     }
 
     fn get_command(&self) -> &str {
-        &DISC_CMDS[0]
+        DISC_CMDS[0]
     }
 }

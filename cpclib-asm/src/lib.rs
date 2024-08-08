@@ -207,9 +207,8 @@ impl AssemblingOptions {
         writer: W
     ) -> &mut Self {
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
-        self.output_builder
-            .as_mut()
-            .map(|b| b.write().unwrap().on());
+        if let Some(b) = self.output_builder
+            .as_mut() { b.write().unwrap().on() }
         self
     }
 }
@@ -267,8 +266,8 @@ pub fn assemble_to_amsdos_file(
 
     Ok(AmsdosFile::binary_file_from_buffer(
         &amsdos_filename,
-        env.loading_address().unwrap() as u16,
-        env.execution_address().unwrap() as u16,
+        env.loading_address().unwrap(),
+        env.execution_address().unwrap(),
         &env.produced_bytes()
     )?)
 }

@@ -16,9 +16,9 @@ pub enum AceMemMapType {
     AsicIOPage
 }
 
-impl Into<u8> for &AceMemMapType {
-    fn into(self) -> u8 {
-        match self {
+impl From<&AceMemMapType> for u8 {
+    fn from(val: &AceMemMapType) -> Self {
+        match val {
             AceMemMapType::Undefined => 0,
             AceMemMapType::MainRam(_) => 1,
             AceMemMapType::ExtensionRam(..) => 2,
@@ -119,7 +119,7 @@ impl<'a> AceSymbol<'a> {
         let mut buffer = vec![0u8; buffer_len];
 
         buffer[0] = name_len as _;
-        for (idx, b) in name.as_bytes().into_iter().enumerate() {
+        for (idx, b) in name.as_bytes().iter().enumerate() {
             buffer[1 + idx] = *b;
         }
 
@@ -266,9 +266,9 @@ impl<'a> From<&'a [u8; 216]> for AceBreakPoint<'a> {
     }
 }
 
-impl<'a> Into<[u8; 216]> for AceBreakPoint<'a> {
-    fn into(self) -> [u8; 216] {
-        self.buffer.into_owned()
+impl<'a> From<AceBreakPoint<'a>> for [u8; 216] {
+    fn from(val: AceBreakPoint<'a>) -> Self {
+        val.buffer.into_owned()
     }
 }
 
@@ -296,7 +296,7 @@ impl<'a> AceBreakPoint<'a> {
     pub fn with_condition(self, condition: &str) -> Self {
         assert!(condition.len() < 127);
         let mut buffer = self.buffer.into_owned();
-        for (idx, b) in condition.as_bytes().into_iter().enumerate() {
+        for (idx, b) in condition.as_bytes().iter().enumerate() {
             buffer[0x10 + idx] = *b;
         }
         buffer[0x10 + condition.len()] = 0;
@@ -307,7 +307,7 @@ impl<'a> AceBreakPoint<'a> {
         assert!(user_name.len() < 63);
         let mut buffer = self.buffer.into_owned();
 
-        for (idx, b) in user_name.as_bytes().into_iter().enumerate() {
+        for (idx, b) in user_name.as_bytes().iter().enumerate() {
             buffer[0x90 + idx] = *b;
         }
         buffer[0x90 + user_name.len()] = 0;

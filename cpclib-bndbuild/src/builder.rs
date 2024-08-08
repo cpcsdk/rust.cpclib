@@ -9,7 +9,7 @@ use minijinja::{context, Environment, Error, ErrorKind};
 use crate::rules::{self, Graph, Rule};
 use crate::BndBuilderError;
 
-pub const EXPECTED_FILENAMES: &'static [&'static str] = &["bndbuild.yml", "build.bnd"];
+pub const EXPECTED_FILENAMES: &[&str] = &["bndbuild.yml", "build.bnd"];
 
 self_cell::self_cell! {
     /// WARNING the BndBuilder changes the current working directory.
@@ -29,7 +29,7 @@ impl Deref for BndBuilder {
     type Target = rules::Rules;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner.borrow_owner()
+        self.inner.borrow_owner()
     }
 }
 
@@ -165,7 +165,7 @@ impl BndBuilder {
     pub fn from_string(content: String) -> Result<Self, BndBuilderError> {
         // extract information from the file
         let rules: rules::Rules =
-            serde_yaml::from_str(&content).map_err(|e| BndBuilderError::ParseError(e))?;
+            serde_yaml::from_str(&content).map_err(BndBuilderError::ParseError)?;
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 
@@ -207,11 +207,10 @@ impl BndBuilder {
         self.inner.borrow_owner().rules()
     }
 
-    pub fn targets<'a>(&'a self) -> Vec<&'a Utf8Path> {
+    pub fn targets(&self) -> Vec<&Utf8Path> {
         self.rules()
             .iter()
-            .map(|r| r.targets())
-            .flatten()
+            .flat_map(|r| r.targets())
             .map(|p| p.as_path())
             .collect_vec()
     }

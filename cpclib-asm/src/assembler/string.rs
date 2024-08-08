@@ -58,8 +58,8 @@ impl PreprocessedFormattedExpr {
                 Ok(PreprocessedFormattedExpr::ExprResult(value))
             },
             FormattedExpr::Formatted(format, expr) => {
-                let value = env.resolve_expr_may_fail_in_first_pass(expr)?.int()? as i32;
-                Ok(PreprocessedFormattedExpr::Formatted(format.clone(), value))
+                let value = env.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
+                Ok(PreprocessedFormattedExpr::Formatted(*format, value))
             }
         }
     }

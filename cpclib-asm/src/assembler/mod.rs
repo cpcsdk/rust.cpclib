@@ -74,14 +74,14 @@ enum OutputKind {
 const MAX_SIZE: usize = 4;
 const MMR_PAGES_SELECTION: [u8; 9] = [
     0xC0,
-    0b11_000_0_01,
-    0b11_001_0_01,
-    0b11_010_0_01,
-    0b11_011_0_01,
-    0b11_100_0_01,
-    0b11_101_0_01,
-    0b11_110_0_01,
-    0b11_111_0_01
+    0b1100_0001,
+    0b1100_1001,
+    0b1101_0001,
+    0b1101_1001,
+    0b1110_0001,
+    0b1110_1001,
+    0b1111_0001,
+    0b1111_1001
 ];
 
 #[allow(missing_docs)]
@@ -148,7 +148,7 @@ impl EnvOptions {
 /// Add the encoding of an indexed structure
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     //  if idx < -127 || idx > 128 {
-    if idx < -128 || idx > 127 {
+    if !(-128..=127).contains(&idx) {
         // TODO raise a warning to get the line/file
         eprintln!("Index error {}", idx);
     }
@@ -292,6 +292,12 @@ impl CrunchedSectionState {
 #[derive(Clone)]
 pub struct CharsetEncoding {
     lut: std::collections::HashMap<char, i32>
+}
+
+impl Default for CharsetEncoding {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CharsetEncoding {
@@ -454,24 +460,24 @@ impl Clone for Env {
             options: self.options.clone(),
             can_skip_next_passes: (*self.can_skip_next_passes.read().unwrap().deref()).into(),
             request_additional_pass: (*self.request_additional_pass.read().unwrap().deref()).into(),
-            pass: self.pass.clone(),
-            real_nb_passes: self.real_nb_passes.clone(),
+            pass: self.pass,
+            real_nb_passes: self.real_nb_passes,
             crunched_section_state: self.crunched_section_state.clone(),
             stable_counters: self.stable_counters.clone(),
-            ga_mmr: self.ga_mmr.clone(),
-            output_address: self.output_address.clone(),
+            ga_mmr: self.ga_mmr,
+            output_address: self.output_address,
             sna: self.sna.clone(),
-            sna_version: self.sna_version.clone(),
+            sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
-            macro_seed: self.macro_seed.clone(),
+            macro_seed: self.macro_seed,
             charset_encoding: self.charset_encoding.clone(),
-            byte_written: self.byte_written.clone(),
+            byte_written: self.byte_written,
             symbols: self.symbols.clone(),
-            run_options: self.run_options.clone(),
+            run_options: self.run_options,
             output_trigger: self.output_trigger.clone(),
             symbols_output: self.symbols_output.clone(),
             warnings: self.warnings.clone(),
-            nested_rorg: self.nested_rorg.clone(),
+            nested_rorg: self.nested_rorg,
             sections: self.sections.clone(),
             current_section: self.current_section.clone(),
             saved_files: self.saved_files.clone(),
@@ -732,7 +738,7 @@ impl Env {
             },
             (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
                 self.symbols_mut()
-                    .update_symbol_to_value(&label.to_owned(), value)?;
+                    .update_symbol_to_value(label, value)?;
                 Ok(())
             },
             (..) => {
@@ -803,11 +809,11 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         let repr = SimplerAssemblerError(&e).to_string();
         if self.previous_pass_discarded_errors.contains(&repr) {
-            return Err(e);
+            Err(e)
         }
         else {
             self.current_pass_discarded_errors.insert(repr);
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -834,13 +840,11 @@ impl Env {
         if self.cpr.is_some() {
             OutputKind::Cpr
         }
+        else if self.free_banks.selected_index.is_some() {
+            OutputKind::FreeBank
+        }
         else {
-            if self.free_banks.selected_index.is_some() {
-                OutputKind::FreeBank
-            }
-            else {
-                OutputKind::Snapshot
-            }
+            OutputKind::Snapshot
         }
     }
 }
@@ -915,13 +919,11 @@ impl Env {
                     self.pass.next_pass()
                 }
             }
+            else if !*self.request_additional_pass.read().unwrap() {
+                AssemblingPass::Finished
+            }
             else {
-                if !*self.request_additional_pass.read().unwrap() {
-                    AssemblingPass::Finished
-                }
-                else {
-                    AssemblingPass::SecondPass
-                }
+                AssemblingPass::SecondPass
             };
         }
 
@@ -940,7 +942,7 @@ impl Env {
             self.run_options = None;
 
             self.sna.reset_written_bytes();
-            self.cpr.as_mut().map(|cpr| cpr.reset_written_bytes());
+            if let Some(cpr) = self.cpr.as_mut() { cpr.reset_written_bytes() }
             self.free_banks.reset_written_bytes();
 
             self.warnings.retain(|elem| !elem.is_override_memory());
@@ -1075,12 +1077,10 @@ impl Env {
                 };
                 eprint!("{}", info);
 
-                winape_chunk
-                    .as_mut()
-                    .map(|chunk| chunk.add_breakpoint(brk.winape()));
-                ace_chunk
-                    .as_mut()
-                    .map(|chunk| chunk.add_breakpoint(brk.ace()));
+                if let Some(chunk) = winape_chunk
+                    .as_mut() { chunk.add_breakpoint(brk.winape()) }
+                if let Some(chunk) = ace_chunk
+                    .as_mut() { chunk.add_breakpoint(brk.ace()) }
 
                 // TODO check it is not consummed at first loop
                 if let Some(chunk) = remu {
@@ -1237,13 +1237,13 @@ impl Env {
                     self.ga_mmr = *page;
                     self.sna.pages_info[activepage].nb_files_to_save() as u64
                 })
-                .sum::<u64>() as u64;
+                .sum::<u64>();
             nb_files_to_save += self
                 .free_banks
                 .pages
                 .iter()
                 .map(|b| b.1.nb_files_to_save() as u64)
-                .sum::<u64>() as u64;
+                .sum::<u64>();
 
             nb_files_to_save
         };
@@ -1374,11 +1374,11 @@ impl Env {
     }
 
     pub fn physical_output_address(&self) -> PhysicalAddress {
-        self.logical_to_physical_address(self.logical_output_address() as u16)
+        self.logical_to_physical_address(self.logical_output_address())
     }
 
     pub fn physical_code_address(&self) -> PhysicalAddress {
-        self.logical_to_physical_address(self.logical_code_address() as u16)
+        self.logical_to_physical_address(self.logical_code_address())
     }
 
     /// Return the address of dollar
@@ -1500,7 +1500,7 @@ impl Env {
             ));
         }
         for protected_area in &self.active_page_info().protected_areas {
-            if protected_area.contains(&(self.logical_code_address() as u16)) {
+            if protected_area.contains(&{ self.logical_code_address() }) {
                 return Err(AssemblerError::OutputProtected {
                     area: protected_area.clone(),
                     address: self.logical_code_address() as _
@@ -1539,7 +1539,7 @@ impl Env {
         };
 
         let r#override = if already_used {
-            let r#override = AssemblerWarning::OverrideMemory(physical_output_address.clone(), 1);
+            let r#override = AssemblerWarning::OverrideMemory(physical_output_address, 1);
             if self.allow_memory_override() {
                 self.add_warning(r#override);
                 true
@@ -1729,7 +1729,7 @@ impl Env {
             panic!("Unable to compute size now");
         }
         else {
-            (self.logical_output_address() - self.start_address().unwrap()) as u16
+            self.logical_output_address() - self.start_address().unwrap()
         }
     }
 
@@ -1819,7 +1819,7 @@ impl Env {
             }
         }
         else {
-            code_adr.clone()
+            code_adr
         };
 
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
@@ -1889,7 +1889,7 @@ impl Env {
             return Err(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
-                msg: format!("Breakpoint with an expression is not yet implemented")
+                msg: "Breakpoint with an expression is not yet implemented".to_string()
             });
         }
 
@@ -1942,7 +1942,7 @@ impl Env {
         listing: &[T]
     ) -> Result<(), AssemblerError> {
         for token in listing.iter() {
-            let _res = token.visited(self)?;
+            token.visited(self)?;
         }
 
         Ok(())
@@ -2035,7 +2035,7 @@ impl Env {
                 symbol: self
                     .symbols()
                     .extend_local_and_patterns_for_symbol(label)
-                    .map(|s| std::convert::Into::<SmolStr>::into(s))
+                    .map(std::convert::Into::<SmolStr>::into)
                     .unwrap_or_else(|_| SmolStr::from(label)),
                 kind: self.symbols().kind(label)?.into()
             })
@@ -2050,10 +2050,7 @@ impl Env {
             }
 
             // If the current address is not set up, we force it to be 0
-            let value = match self.symbols().current_address() {
-                Ok(address) => address,
-                Err(_) => 0
-            };
+            let value = self.symbols().current_address().unwrap_or_default();
             let addr = self.logical_to_physical_address(value);
 
             self.add_symbol_to_symbol_table(label, addr)
@@ -2254,7 +2251,7 @@ impl Env {
             return Err(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
-                msg: format!("BUG in assembler. This has to be handled in processed_tokens")
+                msg: "BUG in assembler. This has to be handled in processed_tokens".to_string()
             });
         }
         else if cmd.is_print_at_parse_state() {
@@ -2296,7 +2293,7 @@ impl Env {
         }
         else {
             self.logical_code_address()
-        } as u16
+        }
             % boundary
             != 0
         {
@@ -2351,9 +2348,8 @@ impl Env {
         self.active_page_info_mut().logical_codeadr = code_adr;
 
         self.update_dollar();
-        self.output_trigger
-            .as_mut()
-            .map(|o| o.replace_code_address(&code_adr.into()));
+        if let Some(o) = self.output_trigger
+            .as_mut() { o.replace_code_address(&code_adr.into()) }
 
         if let Some(warning) = warning {
             self.add_warning(warning);
@@ -2423,9 +2419,8 @@ impl Env {
         else {
             self.add_symbol_to_symbol_table(destination.as_str(), value.clone())?;
         }
-        self.output_trigger
-            .as_mut()
-            .map(|o| o.replace_code_address(&value));
+        if let Some(o) = self.output_trigger
+            .as_mut() { o.replace_code_address(&value) }
 
         // increase next one
         let delta = match delta {
@@ -2502,7 +2497,7 @@ impl Env {
                 self.free_banks.selected_index = None;
 
                 if output_kind == OutputKind::Cpr {
-                    if exp < 0 || exp > 31 {
+                    if !(0..=31).contains(&exp) {
                         return Err(AssemblerError::AssemblingError {
                             msg: format!("Value {exp} is not compatible. [0-31]")
                         });
@@ -2522,7 +2517,7 @@ impl Env {
                     // Snapshot output
 
                     let mmr = exp;
-                    if mmr < 0xC0 || mmr > 0xC7 {
+                    if !(0xC0..=0xC7).contains(&mmr) {
                         return Err(AssemblerError::MMRError { value: mmr });
                     }
 
@@ -2530,10 +2525,8 @@ impl Env {
                     self.ga_mmr = mmr;
 
                     // ensure the page are present in the snapshot
-                    if mmr >= 0xC4 {
-                        if self.sna.pages_info.len() < 2 {
-                            self.sna.resize(2.max(self.sna.pages_info.len()));
-                        }
+                    if mmr >= 0xC4 && self.sna.pages_info.len() < 2 {
+                        self.sna.resize(2.max(self.sna.pages_info.len()));
                     }
 
                     // we do not change the output address (there is no reason to do that)
@@ -2589,15 +2582,14 @@ impl Env {
                     "{} is invalid. BANKSET only accept values from 0 to 7",
                     page
                 )
-                .into()
             });
         }
 
         if page == 0 {
-            self.ga_mmr = 0b11_000_0_00;
+            self.ga_mmr = 0b1100_0000;
         }
         else {
-            self.ga_mmr = 0b11_000_0_10 + ((page - 1) << 3);
+            self.ga_mmr = 0b1100_0010 + ((page - 1) << 3);
         }
 
         let page = page as usize;
@@ -2784,7 +2776,7 @@ impl Env {
         }
 
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
-        let mmr = self.ga_mmr.clone();
+        let mmr = self.ga_mmr;
 
         let page_info = self.active_page_info_mut();
         page_info.add_save_command(SaveCommand::new(
@@ -2896,9 +2888,8 @@ impl Env {
         // TODO OR play all the passes directly now
         let mut crunched_env = self.build_crunched_section_env(span);
 
-        self.output_trigger
-            .as_mut()
-            .map(|t| t.enter_crunched_section());
+        if let Some(t) = self.output_trigger
+            .as_mut() { t.enter_crunched_section() }
 
         visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
@@ -2913,9 +2904,8 @@ impl Env {
             }
         })?;
 
-        self.output_trigger
-            .as_mut()
-            .map(|t| t.leave_crunched_section());
+        if let Some(t) = self.output_trigger
+            .as_mut() { t.leave_crunched_section() }
 
         // get the new data and crunch it if needed
         let bytes = crunched_env.produced_bytes();
@@ -2944,14 +2934,13 @@ impl Env {
             previous_crunched_bytes.replace(crunched);
             previous_bytes.replace(bytes);
         }
-        else {
-        }
+        
 
         let _bytes = previous_bytes.as_ref().unwrap();
         let crunched = previous_crunched_bytes.as_ref().unwrap();
 
         // inject the crunched data
-        self.visit_incbin(&crunched).map_err(|e| {
+        self.visit_incbin(crunched).map_err(|e| {
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
@@ -2965,12 +2954,10 @@ impl Env {
 
         // update the symbol table with the new symbols obtained in the crunched section
         std::mem::swap(self.symbols_mut(), crunched_env.symbols_mut());
-        let can_skip_next_passes = (*self.can_skip_next_passes.read().unwrap().deref()
-            & *crunched_env.can_skip_next_passes.read().unwrap())
-        .into(); // report missing symbols from the crunched area to the current area
-        let request_additional_pass = (*self.request_additional_pass.read().unwrap().deref()
-            | *crunched_env.request_additional_pass.read().unwrap())
-        .into();
+        let can_skip_next_passes = *self.can_skip_next_passes.read().unwrap().deref()
+            & *crunched_env.can_skip_next_passes.read().unwrap(); // report missing symbols from the crunched area to the current area
+        let request_additional_pass = *self.request_additional_pass.read().unwrap().deref()
+            | *crunched_env.request_additional_pass.read().unwrap();
         *self.can_skip_next_passes.write().unwrap() = can_skip_next_passes;
         *self.request_additional_pass.write().unwrap() = request_additional_pass;
 
@@ -3522,7 +3509,7 @@ impl Env {
                                 Some(counter_value),
                                 i as _,
                                 code,
-                                span.clone()
+                                span
                             )?;
                         }
                     },
@@ -3582,9 +3569,8 @@ impl Env {
         self.update_dollar();
         let value = self.active_page_info_mut().logical_codeadr;
 
-        self.output_trigger
-            .as_mut()
-            .map(|o| o.replace_code_address(&value.into()));
+        if let Some(o) = self.output_trigger
+            .as_mut() { o.replace_code_address(&value.into()) }
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3701,7 +3687,7 @@ impl Env {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
-                        msg: format!("Infinite loop")
+                        msg: "Infinite loop".to_string()
                     }
                 )))
                 .into(),
@@ -3713,7 +3699,7 @@ impl Env {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
-                        msg: format!("Negative step is not yet handled")
+                        msg: "Negative step is not yet handled".to_string()
                     }
                 )))
                 .into(),
@@ -3756,8 +3742,8 @@ impl Env {
     {
         let mut i = 0;
         loop {
-            i = i + 1;
-            self.inner_visit_repeat(None, None, i as _, code, span.clone())?;
+            i += 1;
+            self.inner_visit_repeat(None, None, i as _, code, span)?;
             let res = self.resolve_expr_must_never_fail(cond)?;
             if res.bool()? {
                 break;
@@ -3812,7 +3798,7 @@ impl Env {
         let counter_name = counter_name
             .as_ref()
             .map(|counter| format!("{{{}}}", counter));
-        let counter_name = counter_name.as_ref().map(|s| s.as_str());
+        let counter_name = counter_name.as_deref();
         if let Some(counter_name) = counter_name {
             if self.symbols().contains_symbol(counter_name)? {
                 return Err(AssemblerError::RepeatIssue {
@@ -3842,7 +3828,7 @@ impl Env {
                 Some(counter_value.clone()),
                 i as _,
                 code,
-                span.clone()
+                span
             )?;
             // handle the counter update
             counter_value += step_value.clone();
@@ -3882,17 +3868,12 @@ impl Env {
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
             if self.pass.is_listing_pass() {
-                self.output_trigger
-                    .as_mut()
-                    .map(|trigger| trigger.repeat_iteration(counter_name, counter_value.as_ref()));
+                if let Some(trigger) = self.output_trigger
+                    .as_mut() { trigger.repeat_iteration(counter_name, counter_value.as_ref()) }
             }
         }
-        else {
-            if self.pass.is_listing_pass() {
-                self.output_trigger.as_mut().map(|trigger| {
-                    trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
-                });
-            }
+        else if self.pass.is_listing_pass() {
+            if let Some(trigger) = self.output_trigger.as_mut() { trigger.repeat_iteration("<new iteration>", counter_value.as_ref()) }
         }
 
         if let Some(counter_value) = &counter_value {
@@ -3988,9 +3969,8 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
-        self.output_trigger
-            .as_mut()
-            .map(|o| o.replace_code_address(&address.into()));
+        if let Some(o) = self.output_trigger
+            .as_mut() { o.replace_code_address(&address.into()) }
 
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
@@ -4083,7 +4063,7 @@ impl Env {
                         };
 
                         let new_span =
-                            Z80Span::from(prev_span.0.clone().update_slice(txt.as_bytes()));
+                            Z80Span::from(prev_span.0.update_slice(txt.as_bytes()));
 
                         (Some(new_size), Some(new_span))
                     }
@@ -4109,12 +4089,10 @@ impl Env {
                         *span = new_span;
                     }
                 }
-                else {
-                    if let AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size) =
-                        &mut self.warnings[previous_warning_idx]
-                    {
-                        *prev_size = new_size;
-                    }
+                else if let AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size) =
+                    &mut self.warnings[previous_warning_idx]
+                {
+                    *prev_size = new_size;
                 }
             }
             else {
@@ -4189,9 +4167,8 @@ impl Env {
             // self.symbols_mut().set_current_label(label)?;
             // }
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
-            self.output_trigger
-                .as_mut()
-                .map(|o| o.replace_code_address(&value));
+            if let Some(o) = self.output_trigger
+                .as_mut() { o.replace_code_address(&value) }
             self.add_symbol_to_symbol_table(label, value)
         }
     }
@@ -4225,9 +4202,8 @@ impl Env {
             }
 
             let value: ExprResult = self.map_counter.into();
-            self.output_trigger
-                .as_mut()
-                .map(|o| o.replace_code_address(&value));
+            if let Some(o) = self.output_trigger
+                .as_mut() { o.replace_code_address(&value) }
             self.add_symbol_to_symbol_table(label, value)?;
 
             self.map_counter = self.map_counter.wrapping_add(delta);
@@ -4255,9 +4231,8 @@ impl Env {
             self.resolve_expr_may_fail_in_first_pass(exp)?
         };
 
-        self.output_trigger
-            .as_mut()
-            .map(|o| o.replace_code_address(&value));
+        if let Some(o) = self.output_trigger
+            .as_mut() { o.replace_code_address(&value) }
 
         let label = self.handle_global_and_local_labels(label)?;
         // XXX Disabled behavior the 12/01/2024
@@ -4455,7 +4430,7 @@ impl Env {
         code: S2
     ) -> Result<Vec<u8>, AssemblerError> {
         let hidden_lines = hidden_lines.map(|h| {
-            h.into_iter()
+            h.iter()
                 .map(|e| self.resolve_expr_must_never_fail(e))
                 .collect::<Result<Vec<_>, AssemblerError>>()
         });
@@ -4537,20 +4512,18 @@ pub fn visit_stableticker<S: AsRef<str>>(
                 .map(|stop| env.stable_counters.release_counter(stop.as_ref()))
                 .unwrap_or_else(|| env.stable_counters.release_last_counter())
             {
-                if !env.pass.is_listing_pass() {
-                    if env.symbols().contains_symbol(&label)? {
-                        env.add_warning(AssemblerWarning::AlreadyRenderedError(format!(
-                            "Symbol {label} has been overwritten"
-                        )));
-                    }
+                if !env.pass.is_listing_pass() && env.symbols().contains_symbol(&label)? {
+                    env.add_warning(AssemblerWarning::AlreadyRenderedError(format!(
+                        "Symbol {label} has been overwritten"
+                    )));
                 }
 
                 // force the injection of the value
                 env.symbols_mut().set_symbol_to_value(label, count)?;
-                return Ok(());
+                Ok(())
             }
             else {
-                return Err(AssemblerError::NoActiveCounter);
+                Err(AssemblerError::NoActiveCounter)
             }
         }
     }
@@ -4567,7 +4540,7 @@ pub fn assemble_defs_item<E: ExprEvaluationExt>(
         Err(e) => {
             env.add_error_discardable_one_pass(e)?;
             *env.request_additional_pass.write().unwrap() = true; // we expect to obtain this value later
-            0.into()
+            0
         }
     };
 
@@ -4672,8 +4645,8 @@ where
         Mnemonic::ExMemSp => assemble_ex_memsp(arg1.as_ref().unwrap()),
         Mnemonic::Dec | Mnemonic::Inc => assemble_inc_dec(mnemonic, arg1.as_ref().unwrap(), env),
         Mnemonic::Djnz => assemble_djnz(arg1.as_ref().unwrap(), env),
-        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
-        Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
+        Mnemonic::In => assemble_in(arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), env),
+        Mnemonic::Ld => assemble_ld(arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), env),
         Mnemonic::Ldi
         | Mnemonic::Ldd
         | Mnemonic::Ldir
@@ -4709,7 +4682,7 @@ where
         | Mnemonic::Otir
         | Mnemonic::Rld
         | Mnemonic::Rrd => assemble_no_arg(mnemonic),
-        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), &arg2.as_ref().unwrap(), env),
+        Mnemonic::Out => assemble_out(arg1.as_ref().unwrap(), arg2.as_ref().unwrap(), env),
         Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
             assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap(), env)
         },
@@ -4887,7 +4860,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
         Err(_msg) => Err(AssemblerError::UnknownAssemblingAddress),
         Ok(root) => {
             let delta = (address - i32::from(root)) - opcode_delta;
-            if delta > 127 || delta < -128 {
+            if !(-128..=127).contains(&delta) {
                 Err(AssemblerError::InvalidArgument {
                     msg: format!(
                         "Address 0x{:x} relative to 0x{:x} is too far {}",
@@ -4913,7 +4886,7 @@ fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, AssemblerE
         }
         else {
             return Err(AssemblerError::InvalidArgument {
-                msg: format!("RET: wrong argument for ret")
+                msg: "RET: wrong argument for ret".to_string()
             });
         }
     }
@@ -5029,7 +5002,7 @@ where
                 address as u8
             }
             else {
-                env.absolute_to_relative_may_fail_in_first_pass(address, 2)? as u8
+                env.absolute_to_relative_may_fail_in_first_pass(address, 2)?
             };
             if flag_code.is_some() {
                 // jr - flag
@@ -5093,7 +5066,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
             address as u8
         }
         else {
-            env.absolute_to_relative_may_fail_in_first_pass(address, 1 + 1)? as u8
+            env.absolute_to_relative_may_fail_in_first_pass(address, 1 + 1)?
         };
         bytes.push(0x10);
         bytes.push(relative);
@@ -5382,7 +5355,7 @@ impl Env {
                     Register8::B => -6
                 };
                 if delta < 0 {
-                    byte -= delta.abs() as u8;
+                    byte -= delta.unsigned_abs();
                 }
                 else {
                     byte += delta as u8;
@@ -5780,7 +5753,6 @@ where
                         &DataAccess::Register8(src.low().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
                 bytes.extend(
                     assemble_ld(
@@ -5788,7 +5760,6 @@ where
                         &DataAccess::Register8(src.high().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
             }
         }
@@ -5835,7 +5806,6 @@ where
                         &DataAccess::Register8(src.low().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
                 bytes.extend(
                     assemble_ld(
@@ -5843,7 +5813,6 @@ where
                         &DataAccess::Register8(src.high().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
             }
         }
@@ -5857,25 +5826,23 @@ where
                     assemble_ld(
                         &DataAccess::Register8(dst.low().unwrap()),
                         &DataAccess::IndexRegister16WithIndex(
-                            src.clone(),
+                            src,
                             idx.0,
                             idx.1.to_expr().into_owned()
                         ),
                         env
                     )?
-                    .into_iter()
                 );
                 bytes.extend(
                     assemble_ld(
                         &DataAccess::Register8(dst.high().unwrap()),
                         &DataAccess::IndexRegister16WithIndex(
-                            src.clone(),
+                            src,
                             idx.0,
                             idx.1.to_expr().into_owned().add(1)
                         ),
                         env
                     )?
-                    .into_iter()
                 );
             }
         }
@@ -5887,26 +5854,24 @@ where
                 bytes.extend(
                     assemble_ld(
                         &DataAccess::IndexRegister16WithIndex(
-                            dst.clone(),
+                            dst,
                             index.0,
                             index.1.to_expr().into_owned()
                         ),
                         &DataAccess::Register8(src.low().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
                 bytes.extend(
                     assemble_ld(
                         &DataAccess::IndexRegister16WithIndex(
-                            dst.clone(),
+                            dst,
                             index.0,
                             index.1.to_expr().into_owned().add(1)
                         ),
                         &DataAccess::Register8(src.high().unwrap()),
                         env
                     )?
-                    .into_iter()
                 );
             }
         }
@@ -6007,22 +5972,20 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         bytes.push(0xED);
         bytes.push(0x70);
     }
-    else {
-        if arg2.is_port_c() && arg1.is_register8() {
-            let reg = arg1.get_register8().unwrap();
-            {
-                bytes.push(0xED);
-                bytes.push(0b0100_0000 | (register8_to_code(reg) << 3))
-            }
+    else if arg2.is_port_c() && arg1.is_register8() {
+        let reg = arg1.get_register8().unwrap();
+        {
+            bytes.push(0xED);
+            bytes.push(0b0100_0000 | (register8_to_code(reg) << 3))
         }
-        else if arg2.is_port_n() {
-            let exp = arg2.get_expression().unwrap();
-            {
-                if arg1.is_register_a() {
-                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
-                    bytes.push(0xDB);
-                    bytes.push(val);
-                }
+    }
+    else if arg2.is_port_n() {
+        let exp = arg2.get_expression().unwrap();
+        {
+            if arg1.is_register_a() {
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                bytes.push(0xDB);
+                bytes.push(val);
             }
         }
     }
@@ -6052,22 +6015,20 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         bytes.push(0xED);
         bytes.push(0x71);
     }
-    else {
-        if arg1.is_port_c() {
-            if arg2.is_register8() {
-                let reg = arg2.get_register8().unwrap();
-                bytes.push(0xED);
-                bytes.push(0b0100_0001 | (register8_to_code(reg) << 3))
-            }
+    else if arg1.is_port_c() {
+        if arg2.is_register8() {
+            let reg = arg2.get_register8().unwrap();
+            bytes.push(0xED);
+            bytes.push(0b0100_0001 | (register8_to_code(reg) << 3))
         }
-        else if arg1.is_port_n() {
-            let exp = arg1.get_expression().unwrap();
-            {
-                if arg2.is_register_a() {
-                    let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
-                    bytes.push(0xD3);
-                    bytes.push(val);
-                }
+    }
+    else if arg1.is_port_n() {
+        let exp = arg1.get_expression().unwrap();
+        {
+            if arg2.is_register_a() {
+                let val = (env.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                bytes.push(0xD3);
+                bytes.push(val);
             }
         }
     }
@@ -6387,7 +6348,7 @@ where
             let bit = (env.resolve_expr_may_fail_in_first_pass(e)?.int()? & 0xFF) as u8;
             if bit > 7 {
                 return Err(AssemblerError::InvalidArgument {
-                    msg: format!("{}: {} is an invalid value", mnemonic.to_string(), bit)
+                    msg: format!("{}: {} is an invalid value", mnemonic, bit)
                 });
             }
             bit
@@ -6436,7 +6397,7 @@ where
                     Register8::B => -6
                 };
                 if fix < 0 {
-                    code -= fix.abs() as u8;
+                    code -= fix.unsigned_abs();
                 }
                 else {
                     code += fix as u8;

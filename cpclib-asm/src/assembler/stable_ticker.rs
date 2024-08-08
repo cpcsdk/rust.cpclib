@@ -39,7 +39,7 @@ impl StableTickerCounters {
             Some(self.counters.remove(idx))
         }
         else {
-            return None;
+            None
         }
     }
 

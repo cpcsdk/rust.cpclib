@@ -36,12 +36,11 @@ impl Runner for CpRunner {
         let fnames = itr
             .iter()
             .map(|s| s.as_ref())
-            .map(expand_glob)
-            .flatten()
+            .flat_map(expand_glob)
             .collect_vec();
         let files = fnames
             .iter()
-            .map(|fname| Utf8Path::new(fname))
+            .map(Utf8Path::new)
             .collect_vec();
         let dest = files.last();
 
@@ -51,7 +50,7 @@ impl Runner for CpRunner {
                     "Error when copying {} to {}. {}.\n",
                     from,
                     to,
-                    e.to_string()
+                    e
                 ))
             });
         };
@@ -101,7 +100,7 @@ impl Runner for CpRunner {
     }
 
     fn get_command(&self) -> &'static str {
-        &CP_CMDS[0]
+        CP_CMDS[0]
     }
 }
 

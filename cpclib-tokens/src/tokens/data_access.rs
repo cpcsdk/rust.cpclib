@@ -240,28 +240,28 @@ macro_rules! data_access_impl_most_methods {
 
     fn is_register8(&self) -> bool {
         match self {
-            Self::Register8(_, ..) => true,
+            Self::Register8(..) => true,
             _ => false
         }
     }
 
     fn is_register16(&self) -> bool {
         match self {
-            Self::Register16(_, ..) => true,
+            Self::Register16(..) => true,
             _ => false
         }
     }
 
     fn is_indexregister8(&self) -> bool {
         match self {
-            Self::IndexRegister8(_, ..) => true,
+            Self::IndexRegister8(..) => true,
             _ => false
         }
     }
 
     fn is_indexregister16(&self) -> bool {
         match self {
-            Self::IndexRegister16(_, ..) => true,
+            Self::IndexRegister16(..) => true,
             _ => false
         }
     }
@@ -275,21 +275,21 @@ macro_rules! data_access_impl_most_methods {
 
     fn is_memory(&self) -> bool {
         match self {
-            Self::Memory(_, ..) => true,
+            Self::Memory(..) => true,
             _ => false
         }
     }
 
     fn is_address_in_register16(&self) -> bool {
         match self {
-            Self::MemoryRegister16(_, ..) => true,
+            Self::MemoryRegister16(..) => true,
             _ => false
         }
     }
 
     fn is_address_in_indexregister16(&self) -> bool {
         match self {
-            Self::MemoryIndexRegister16(_, ..) => true,
+            Self::MemoryIndexRegister16(..) => true,
             _ => false
         }
     }
@@ -306,7 +306,7 @@ macro_rules! data_access_impl_most_methods {
         match self {
             Self::IndexRegister16(ref reg, ..) => Some(*reg),
             Self::MemoryIndexRegister16(ref reg, ..) => Some(*reg),
-            Self::IndexRegister16WithIndex(reg, .., _) => Some(*reg),
+            Self::IndexRegister16WithIndex(reg, ..) => Some(*reg),
             _ => None
         }
     }

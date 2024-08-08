@@ -21,7 +21,7 @@ fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize
             let bytes = bytes.collect_vec();
             let hex = bytes.iter().map(|byte| format!("{:02X}", byte)).join(" ");
 
-            let addr = DATA_WIDTH * i + (from) as usize;
+            let addr = DATA_WIDTH * i + (from);
 
             let chars = bytes
                 .iter()
@@ -107,7 +107,7 @@ impl Command {
             if let Some(cpr2) = cpr2.as_ref() {
                 let bank2 = cpr2
                     .bank_by_code(bank.code())
-                    .expect(&format!("Bank {} unavailable in cpr2", bank.code()));
+                    .unwrap_or_else(|| panic!("Bank {} unavailable in cpr2", bank.code()));
                 let mem2 = mem_to_string(bank2, None, None);
 
                 let summary = diff_lines(&mem, &mem2);

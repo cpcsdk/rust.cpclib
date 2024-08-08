@@ -1,7 +1,7 @@
 use cpclib_crunchers::shrinkler::ShrinklerConfiguration;
 use cpclib_crunchers::CompressMethod;
 
-static DATA_TO_CRUNCH: &'static [u8] = "AAAAAAAAAAAAAAAAABNBNBNBNBAAAAAAAAACVCBCBCA".as_bytes();
+static DATA_TO_CRUNCH: &[u8] = "AAAAAAAAAAAAAAAAABNBNBNBNBAAAAAAAAACVCBCBCA".as_bytes();
 
 fn crunch_any(method: CompressMethod) {
     let res = method.compress(DATA_TO_CRUNCH);

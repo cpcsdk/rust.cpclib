@@ -70,7 +70,7 @@ fn lz49_encode_block(
 /// Apply the lz49 crunching algorithm on the input data
 /// This is just a dummy manual translation
 pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8> {
-    assert!(data.len() > 0);
+    assert!(!data.is_empty());
 
     let length = data.len();
 
@@ -153,5 +153,5 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8> {
     }
 
     lz49_encode_block(&mut odata, data, literaloffset, literal, 0, 0);
-    return odata;
+    odata
 }

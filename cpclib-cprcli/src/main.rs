@@ -55,18 +55,12 @@ fn main() {
         Cpr::load(cpr_fname).unwrap()
     };
 
-    let mut cpr2 = if let Some(cpr_fname2) = args.get_one::<Utf8PathBuf>("INPUT2") {
-        Some(Cpr::load(cpr_fname2).unwrap())
-    }
-    else {
-        None
-    };
+    let mut cpr2 = args.get_one::<Utf8PathBuf>("INPUT2").map(|cpr_fname2| Cpr::load(cpr_fname2).unwrap());
 
     if let Some(banks) = args.get_many::<i64>("SELECTED_BANKS") {
         let cprs = [&cpr].into_iter().chain(cpr2.as_ref());
         let available = cprs
-            .map(|cpr| cpr.banks().iter().map(|b| b.number()))
-            .flatten()
+            .flat_map(|cpr| cpr.banks().iter().map(|b| b.number()))
             .collect::<HashSet<u8>>();
         let to_keep = banks.map(|b| *b as u8).collect::<HashSet<u8>>();
 

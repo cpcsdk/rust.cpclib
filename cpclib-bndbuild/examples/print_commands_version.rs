@@ -1,5 +1,4 @@
 use cpclib_bndbuild::rules::Rules;
-use serde_yaml;
 
 fn main() {
     // Hardcoded executable for samourai

@@ -30,11 +30,10 @@ impl Runner for RmRunner {
         let mut errors = String::new();
 
         for fname in itr
-            .into_iter()
+            .iter()
             .map(|s| s.as_ref())
             //    .map(|s| glob(s).unwrap())
-            .map(expand_glob)
-            .flatten()
+            .flat_map(expand_glob)
         //    .map(|e| dbg!(e.unwrap()))
         {
             match std::fs::remove_file(&fname) {
@@ -45,7 +44,7 @@ impl Runner for RmRunner {
                     errors.push_str(&format!(
                         "Unable to remove {}:{}.\n",
                         fname, // .display()
-                        e.to_string()
+                        e
                     ))
                 }
             };

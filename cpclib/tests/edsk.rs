@@ -48,7 +48,7 @@ mod tests {
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
-                0.into()
+                0
             )
             .is_some());
 
@@ -57,7 +57,7 @@ mod tests {
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
-                1.into()
+                1
             )
             .is_none());
 
@@ -66,7 +66,7 @@ mod tests {
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
-                2.into()
+                2
             )
             .is_none());
     }
@@ -460,7 +460,7 @@ mod tests {
                 .track_bytes(cpclib::disc::edsk::Head::A, idx as u8)
                 .unwrap();
             let obtained = track_bytes.iter().map(|&v| v as usize).sum::<usize>();
-            let nb = track_bytes.iter().count();
+            let nb = track_bytes.len();
             let gap = track.gap3_length();
             let track_size = track.compute_track_size();
 

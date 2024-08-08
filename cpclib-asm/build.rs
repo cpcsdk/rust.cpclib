@@ -1,5 +1,4 @@
 use std::env;
-use std::path::Path;
 
 fn build() {
     built::write_built_file().expect("Failed to acquire build-time information");

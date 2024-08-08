@@ -219,13 +219,13 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
         ExprResult::List(l) => {
             // https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
             fn argsort<T: Ord>(data: &[T]) -> Vec<ExprResult> {
-                let mut indices = (0..data.len()).map(|i| ExprResult::from(i)).collect_vec();
+                let mut indices = (0..data.len()).map(ExprResult::from).collect_vec();
                 indices.sort_by_key(|i| &data[i.int().unwrap() as usize]);
                 indices
             }
 
             let l = argsort(l);
-            Ok(ExprResult::List(l.into()))
+            Ok(ExprResult::List(l))
         },
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -244,7 +244,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                 .enumerate()
                 .map(|(idx, v)| {
                     let v = v.int()?;
-                    if v < 0 || v > 255 {
+                    if !(0..=255).contains(&v) {
                         Err(AssemblerError::AssemblingError {
                             msg: format!("{} at {} is not a valid byte value", v, idx)
                         })
@@ -260,7 +260,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("string_from_list must take a list as an argument")
+                    msg: "string_from_list must take a list as an argument".to_string()
                 })
             )))
         },
@@ -311,7 +311,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("string_push called with wrong types")
+                    msg: "string_push called with wrong types".to_string()
                 })
             )))
         },

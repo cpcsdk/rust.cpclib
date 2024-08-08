@@ -25,37 +25,28 @@ impl Default for Emulator {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum AceVersion {
+    #[default]
     WakePoint // 2024/06/21
 }
 
-impl Default for AceVersion {
-    fn default() -> Self {
-        AceVersion::WakePoint
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum CpcecVersion {
+    #[default]
     v20240505
 }
 
-impl Default for CpcecVersion {
-    fn default() -> Self {
-        CpcecVersion::v20240505
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum WinapeVersion {
+    #[default]
     v2_0b2
 }
 
-impl Default for WinapeVersion {
-    fn default() -> Self {
-        WinapeVersion::v2_0b2
-    }
-}
 
 pub enum ArchiveFormat {
     TarGz,
@@ -235,7 +226,7 @@ impl EmulatorConfiguration {
     }
 
     fn download(&self) -> Result<Response, ureq::Error> {
-        ureq::get(&self.download_url).call()
+        ureq::get(self.download_url).call()
     }
 }
 
@@ -266,7 +257,7 @@ impl Runner for EmulatorRunner {
         }
 
         command.push(fname.as_str());
-        for arg in itr.into_iter() {
+        for arg in itr.iter() {
             command.push(arg.as_ref());
         }
 
@@ -276,9 +267,9 @@ impl Runner for EmulatorRunner {
 
     fn get_command(&self) -> &str {
         match self.emu {
-            Emulator::Ace(_) => &ACE_CMDS[0],
-            Emulator::Cpcec(_) => &CPCEC_CMDS[0],
-            Emulator::Winape(_) => &WINAPE_CMDS[0]
+            Emulator::Ace(_) => ACE_CMDS[0],
+            Emulator::Cpcec(_) => CPCEC_CMDS[0],
+            Emulator::Winape(_) => WINAPE_CMDS[0]
         }
     }
 }

@@ -140,7 +140,7 @@ impl<'r> Graph<'r> {
     ) -> Result<(), BndBuilderError> {
         layer
             .into_iter()
-            .map(|p| self.execute_rule(&p, state))
+            .map(|p| self.execute_rule(p, state))
             .collect::<Result<Vec<()>, BndBuilderError>>()?;
         Ok(())
     }
@@ -176,16 +176,14 @@ impl<'r> Graph<'r> {
                 }
             }
         }
+        else if !p.exists() {
+            return Err(BndBuilderError::ExecuteError {
+                fname: p.to_string(),
+                msg: "no rule to build it".to_owned()
+            });
+        }
         else {
-            if !p.exists() {
-                return Err(BndBuilderError::ExecuteError {
-                    fname: p.to_string(),
-                    msg: "no rule to build it".to_owned()
-                });
-            }
-            else {
-                println!("\t{} is already up to date", p)
-            }
+            println!("\t{} is already up to date", p)
         }
 
         Ok(())

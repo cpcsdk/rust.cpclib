@@ -383,9 +383,9 @@ impl Ink {
     /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn green_quantity(&self) -> InkComponentQuantity {
         match self.value {
-            0 | 3 | 6 | 1 | 4 | 7 | 2 | 5 | 8 => InkComponentQuantity::Zero,
-            9 | 12 | 15 | 10 | 13 | 16 | 11 | 14 | 17 => InkComponentQuantity::Half,
-            18 | 21 | 24 | 19 | 22 | 25 | 20 | 23 | 26 => InkComponentQuantity::Full,
+            0..=8 => InkComponentQuantity::Zero,
+            9..=17 => InkComponentQuantity::Half,
+            18..=26 => InkComponentQuantity::Full,
             _ => unreachable!()
         }
     }
@@ -447,7 +447,7 @@ impl Ink {
 
     pub fn from_gate_array_color_number(col: u8) -> Ink {
         let idx = INKS_GA_VALUE.iter().position(|i| *i == col).unwrap();
-        INKS[idx].clone()
+        INKS[idx]
     }
 
     pub fn from_hardware_color_number(col: u8) -> Ink {
@@ -1152,13 +1152,13 @@ impl Palette {
     }
 }
 
-impl Into<Vec<u8>> for &Palette {
-    fn into(self) -> Vec<u8> {
+impl From<&Palette> for Vec<u8> {
+    fn from(val: &Palette) -> Self {
         let mut vec = Vec::with_capacity(16);
         for pen in 0..17 {
             let pen = Pen::from(pen);
-            if self.contains_pen(pen) {
-                vec.push(self.get(&pen).into());
+            if val.contains_pen(pen) {
+                vec.push(val.get(&pen).into());
             }
             else {
                 vec.push(0x54); // No pens => ink black
@@ -1227,11 +1227,11 @@ mod tests {
         const RGB_RATIOS: &[InkComponentQuantity] =
             &[InkComponentQuantity::Zero, InkComponentQuantity::Full];
         let rgb_palette = RGB_RATIOS
-            .into_iter()
-            .cartesian_product(RGB_RATIOS.into_iter())
-            .cartesian_product(RGB_RATIOS.into_iter())
+            .iter()
+            .cartesian_product(RGB_RATIOS)
+            .cartesian_product(RGB_RATIOS)
             .map(|t| (*t.0 .0, *t.0 .1, *t.1))
-            .map(|qty| Ink::from(qty));
+            .map(Ink::from);
         let rgb_palette = Palette::from(rgb_palette);
     }
 }

@@ -339,7 +339,7 @@ impl CpcXfer {
         self.ls_request(&directory)?;
 
         // Ensure theire is a / at the end
-        if directory.chars().rev().next().unwrap() != '/' {
+        if !directory.ends_with('/') {
             directory.push('/');
         }
         let cwd = self.current_working_directory()?;

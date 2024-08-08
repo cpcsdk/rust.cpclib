@@ -5,7 +5,7 @@ use cpclib_basm::*;
 #[test]
 fn bankset_check_save() {
     let args_parser = build_args_parser();
-    let args = args_parser.get_matches_from(&["basm", "-I", "tests/asm/", "good_bankset.asm"]);
+    let args = args_parser.get_matches_from(["basm", "-I", "tests/asm/", "good_bankset.asm"]);
     let (env, _) = process(&args).expect("Unable to assemble the file");
 
     let sna = env.sna();
@@ -24,7 +24,7 @@ fn bankset_check_save() {
     static data_1_3: [u8; 4] = [130, 140, 150, 160];
 
     // check the content of the snapshot
-    assert_eq!(&mem[0x0000..(0x0000 + 4)], &data_0_0);
+    assert_eq!(&mem[0x0000..4], &data_0_0);
 
     assert_eq!(&mem[0x4000..(0x4000 + 4)], &data_0_1);
 

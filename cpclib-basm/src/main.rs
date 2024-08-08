@@ -49,5 +49,5 @@ fn main() {
         })
         .unwrap()
         .join()
-        .unwrap()
+        .unwrap();
 }

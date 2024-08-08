@@ -41,9 +41,9 @@ pub enum Head {
     Unspecified
 }
 
-impl Into<i32> for Head {
-    fn into(self) -> i32 {
-        match self {
+impl From<Head> for i32 {
+    fn from(val: Head) -> Self {
+        match val {
             Head::A => 0,
             Head::B => 1,
             Head::Unspecified => 0
@@ -972,8 +972,8 @@ pub struct ExtendedDsk {
 impl Default for ExtendedDsk {
     fn default() -> Self {
         let cfg = crate::cfg::DiscConfig::single_head_data42_format();
-        let dsk = crate::builder::build_edsk_from_cfg(&cfg);
-        dsk
+        
+        crate::builder::build_edsk_from_cfg(&cfg)
     }
 }
 

@@ -139,7 +139,7 @@ mod tests {
         assert_eq!(fname2.name(), "TEST");
         assert_eq!(fname2.user(), 0);
 
-        let mut fname3 = fname2.clone();
+        let mut fname3 = fname2;
         fname3.set_extension("BAS");
         assert_eq!(fname3.extension(), "BAS");
 
@@ -267,7 +267,7 @@ mod tests {
 
         let catalog_data = dsk.consecutive_sectors_read_bytes(0, 0, 0xC1, 4).unwrap();
         let entry_data = &catalog_data[..32];
-        let entry = AmsdosEntry::from_slice(0, &entry_data);
+        let entry = AmsdosEntry::from_slice(0, entry_data);
         println!("{:?}", entry_data);
         println!("{:?}", entry);
         assert_eq!(entry_data[0], entry.amsdos_filename().user());

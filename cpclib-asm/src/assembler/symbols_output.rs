@@ -141,7 +141,7 @@ impl SymbolOutputGenerator {
             // store if we have a representation
             if let Some(v) = v {
                 let symb = AceSymbol::new(
-                    &k,
+                    k,
                     v,
                     cpclib_sna::AceMemMapType::Undefined,
                     AceSymbolType::Absolute
@@ -211,7 +211,7 @@ impl SymbolOutputGenerator {
             return false;
         }
         if sym.value() == "$$" {
-            return false;
+            false
         }
         else if self.all_allowed {
             !Self::is_included(&self.forbidden, sym)

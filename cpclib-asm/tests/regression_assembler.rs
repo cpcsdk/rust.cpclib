@@ -71,7 +71,7 @@ pub fn macro_local_labels() {
 
     // just check that it assemble
     let binary = assemble(code).unwrap();
-    assert!(binary.len() != 0);
+    assert!(!binary.is_empty());
 }
 
 #[test]

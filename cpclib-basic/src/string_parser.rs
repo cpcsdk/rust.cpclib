@@ -18,11 +18,11 @@ type BasicOneTokenResult<'src> = PResult<BasicToken, ContextError<StrContext>>;
 type BasicLineResult<'src> = PResult<BasicLine, ContextError<StrContext>>;
 
 /// Parse complete basic program"],
-pub fn parse_basic_program<'src>(
-    input: &mut &'src str
+pub fn parse_basic_program(
+    input: &mut &str
 ) -> PResult<BasicProgram, ContextError<StrContext>> {
     repeat(0.., parse_basic_line)
-        .map(|lines| BasicProgram::new(lines))
+        .map(BasicProgram::new)
         .parse_next(input)
 }
 
@@ -147,9 +147,9 @@ pub fn parse_space1<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 pub fn parse_char<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     one_of(|c: char| {
-        "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~".chars().position(|c2| c2==c).is_some()
+        "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~".chars().any(|c2| c2==c)
     })
-    .map(|c: char| BasicToken::SimpleToken((c as char).into()))
+    .map(|c: char| BasicToken::SimpleToken(c.into()))
     .parse_next(input)
 }
 
@@ -332,12 +332,7 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
     )
         .parse_next(input)?;
 
-    let mut tokens = if let Some(prefix) = prefix {
-        prefix
-    }
-    else {
-        Vec::new()
-    };
+    let mut tokens = prefix.unwrap_or_default();
     tokens.append(&mut expr);
 
     Ok(tokens)
@@ -1001,6 +996,41 @@ pub fn dec_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
         .parse_next(input)
 }
 
+pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
+    mut parser: P,
+    code: &'code str
+) -> BasicLine {
+    let tokens = dbg!(parser.parse(code)).expect("Parse issue");
+
+    BasicLine {
+        line_number: 10,
+        tokens,
+        forced_length: None
+    }
+}
+
+pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(
+    mut parser: P,
+    code: &'code str
+) -> BasicLine {
+    let tokens = dbg!(parser.parse(code)).expect("Parse issue");
+
+    BasicLine {
+        line_number: 10,
+        tokens: vec![tokens],
+        forced_length: None
+    }
+}
+
+pub fn test_parse_and_compare<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
+    parser: P,
+    code: &'code str,
+    bytes: &[u8]
+) {
+    let prog = test_parse(parser, code);
+    assert_eq!(bytes, prog.tokens_as_bytes().as_slice())
+}
+
 #[cfg(test)]
 mod test {
     use crate::string_parser::*;
@@ -1040,7 +1070,7 @@ mod test {
     }
 
     fn check_line_tokenisation(code: &str) -> BasicLine {
-        let res = parse_basic_line.parse(&mut &code);
+        let res = parse_basic_line.parse(code);
         match res {
             Ok(line) => {
                 println!("{:?}", &line);
@@ -1053,7 +1083,7 @@ mod test {
     }
 
     fn check_token_tokenisation(code: &str) {
-        let res = parse_instruction.parse(&mut &code);
+        let res = parse_instruction.parse(code);
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
@@ -1080,7 +1110,7 @@ mod test {
     }
 
     fn check_expression(code: &str) {
-        let res = parse_numeric_expression(NumericExpressionConstraint::None).parse(&mut &code);
+        let res = parse_numeric_expression(NumericExpressionConstraint::None).parse(code);
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
@@ -1092,7 +1122,7 @@ mod test {
     }
 
     fn check_print_expression(code: &str) {
-        let res = parse_print_expression.parse(&mut &code);
+        let res = parse_print_expression.parse(code);
         match res {
             Ok(line) => {
                 println!("{} => {:?}", code, &line);
@@ -1112,39 +1142,4 @@ mod test {
             check_print_expression(exp);
         }
     }
-}
-
-pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
-    mut parser: P,
-    code: &'code str
-) -> BasicLine {
-    let tokens = dbg!(parser.parse(&mut &code)).expect("Parse issue");
-
-    BasicLine {
-        line_number: 10,
-        tokens,
-        forced_length: None
-    }
-}
-
-pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(
-    mut parser: P,
-    code: &'code str
-) -> BasicLine {
-    let tokens = dbg!(parser.parse(code)).expect("Parse issue");
-
-    BasicLine {
-        line_number: 10,
-        tokens: vec![tokens],
-        forced_length: None
-    }
-}
-
-pub fn test_parse_and_compare<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
-    parser: P,
-    code: &'code str,
-    bytes: &[u8]
-) {
-    let prog = test_parse(parser, code);
-    assert_eq!(bytes, prog.tokens_as_bytes().as_slice())
 }

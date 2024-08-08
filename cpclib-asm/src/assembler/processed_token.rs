@@ -120,6 +120,7 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Default)]
 struct IncludeState(BTreeMap<Utf8PathBuf, IncludeStateInner>);
 
 impl IncludeState {
@@ -185,7 +186,7 @@ impl IncludeState {
         namespace: Option<&str>,
         once: bool
     ) -> Result<(), AssemblerError> {
-        let fname = get_filename(fname, &env.options().parse_options(), Some(env))?;
+        let fname = get_filename(fname, env.options().parse_options(), Some(env))?;
 
         // Process the inclusion only if necessary
         if (!once) || (!env.has_included(&fname)) {
@@ -222,11 +223,6 @@ impl IncludeState {
     }
 }
 
-impl Default for IncludeState {
-    fn default() -> Self {
-        IncludeState(BTreeMap::default())
-    }
-}
 #[self_referencing]
 struct IncludeStateInner {
     listing: LocatedListing,
@@ -369,7 +365,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
                 // replace the previously stored value
                 self.if_token_adr_to_used_decision
-                    .insert(token_adr.clone(), decision);
+                    .insert(token_adr, decision);
 
                 if decision {
                     selected_idx = Some(idx);
@@ -389,7 +385,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
                 // replace the previously stored value
                 self.if_token_adr_to_unused_decision
-                    .insert(token_adr.clone(), decision);
+                    .insert(token_adr, decision);
 
                 if decision {
                     selected_idx = Some(idx);
@@ -656,11 +652,9 @@ where
         // get filename of files that will be read in parallel
         let include_fnames = iter
             .filter(|t| t.include_is_standard_include())
-            .map(|t| get_filename(t.include_fname(), options, Some(env)))
-            .filter(|f| f.is_ok())
-            .map(|f| f.unwrap())
+            .flat_map(|t| get_filename(t.include_fname(), options, Some(env)))
             .collect::<Vec<_>>();
-        let include_fnames = include_fnames.iter().map(|t| progress::normalize(&t));
+        let include_fnames = include_fnames.iter().map(|t| progress::normalize(t));
 
         // inform the progress bar
         // add all fnames in one time
@@ -803,9 +797,9 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                     use crate::ParserContextBuilder;
                     let ctx_builder = ParserContextBuilder::default() // nothing is specified
                         //                    from(span.state.clone())
-                        .set_state(span.state.state.clone())
+                        .set_state(span.state.state)
                         .set_options(span.state.options.clone())
-                        .set_context_name(&format!(
+                        .set_context_name(format!(
                             "{}:{}:{} > {} {}:",
                             source.map(|s| s.fname()).unwrap_or_else(|| "???"),
                             source.map(|s| s.line()).unwrap_or(0),
@@ -833,7 +827,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
         self.state = Some(ProcessedTokenState::MacroCallOrBuildStruct(expand_state));
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -866,7 +860,7 @@ where
             }
 
             // Behavior based on the token
-            let res = if self.token.is_macro_definition() {
+            if self.token.is_macro_definition() {
                 // TODO really implement logic here
                 let name = self.token.macro_definition_name();
                 let arguments = self.token.macro_definition_arguments();
@@ -1031,55 +1025,49 @@ where
                         let length = self.token.incbin_length();
                         let transformation = self.token.incbin_transformation();
 
-                        match offset {
-                            Some(offset) => {
-                                let offset =
-                                    env.resolve_expr_must_never_fail(offset)?.int()? as usize;
-                                if offset >= data.len() {
-                                    return Err(AssemblerError::AssemblingError {
-                                        msg: format!(
-                                            "Unable to read {:?}. Only {} are available",
-                                            self.token.incbin_fname(),
-                                            data.len()
-                                        )
-                                    });
-                                }
-                                data = &data[offset..];
-                            },
-                            None => {}
+                        if let Some(offset) = offset {
+                            let offset =
+                                env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                            if offset >= data.len() {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} are available",
+                                        self.token.incbin_fname(),
+                                        data.len()
+                                    )
+                                });
+                            }
+                            data = &data[offset..];
                         }
 
-                        match length {
-                            Some(length) => {
-                                let length =
-                                    env.resolve_expr_must_never_fail(length)?.int()? as usize;
-                                if data.len() < length {
-                                    return Err(AssemblerError::AssemblingError {
-                                        msg: format!(
-                                            "Unable to read {:?}. Only {} bytes are available ({} expected)",
-                                            self.token.incbin_fname(),
-                                            data.len(),
-                                            length
-                                        )
-                                    });
-                                }
-                                data = &data[..length];
-                            },
-                            None => {}
+                        if let Some(length) = length {
+                            let length =
+                                env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                            if data.len() < length {
+                                return Err(AssemblerError::AssemblingError {
+                                    msg: format!(
+                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
+                                        self.token.incbin_fname(),
+                                        data.len(),
+                                        length
+                                    )
+                                });
+                            }
+                            data = &data[..length];
                         }
 
                         let data = match transformation {
                             BinaryTransformation::None => Cow::Borrowed(data),
 
                             other => {
-                                if data.len() == 0 {
+                                if data.is_empty() {
                                     return Err(AssemblerError::EmptyBinaryFile(
                                         self.token.incbin_fname().to_string()
                                     ));
                                 }
 
                                 let crunch_type = other.crunch_type().unwrap();
-                                Cow::Owned(crunch_type.crunch(&data)?)
+                                Cow::Owned(crunch_type.crunch(data)?)
                             }
                         };
 
@@ -1139,7 +1127,7 @@ where
                                     &mut listing[..];
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })
-                            .or_else(|e| {
+                            .map_err(|e| {
                                 let e = AssemblerError::MacroError {
                                     name: name.into(),
                                     root: Box::new(e)
@@ -1147,12 +1135,12 @@ where
                                 let caller_span = self.possible_span();
                                 match caller_span {
                                     Some(span) => {
-                                        Err(AssemblerError::RelocatedError {
+                                        AssemblerError::RelocatedError {
                                             error: e.into(),
                                             span: span.clone()
-                                        })
+                                        }
                                     },
-                                    None => Err(e)
+                                    None => e
                                 }
                             })?;
 
@@ -1291,7 +1279,7 @@ where
 
                 env.handle_output_trigger(outer_token);
             }
-            Ok(res)
+            Ok(())
         };
 
         really_does_the_job(possible_span.as_ref()).map_err(|e| {

@@ -145,7 +145,7 @@ impl TokenExt for Token {
         let wrap = |bytes: &[u8]| {
             use crate::disass::disassemble;
 
-            let lst = disassemble(&bytes);
+            let lst = disassemble(bytes);
             for token in lst.listing() {
                 match token {
                     Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
@@ -155,15 +155,14 @@ impl TokenExt for Token {
                 }
             }
 
-            return Ok(lst);
+            Ok(lst)
         };
 
         match self {
             Token::Defs(ref l) => {
                 l.iter()
                     .map(|(e, f)| {
-                        assemble_defs_item(e, f.as_ref(), &mut Env::default())
-                            .or_else(|err| Err(format!("Unable to assemble {}: {:?}", self, err)))
+                        assemble_defs_item(e, f.as_ref(), &mut Env::default()).map_err(|err| format!("Unable to assemble {}: {:?}", self, err))
                     })
                     .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {
                         acc.extend_from_slice(v.as_slice());

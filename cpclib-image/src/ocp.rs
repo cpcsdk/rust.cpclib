@@ -98,7 +98,7 @@ impl OcpPal {
     }
 
     pub fn from_buffer(data: &[u8]) -> Self {
-        let mut data = data.into_iter().cloned();
+        let mut data = data.iter().cloned();
 
         let screen_mode: Mode = (data.next().unwrap()).into();
         let cycling = data.next().unwrap() == 0xFF;

@@ -9,7 +9,7 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
 
-static LOCK: LazyLock<parking_lot::Mutex<()>> = LazyLock::new(|| parking_lot::Mutex::default());
+static LOCK: LazyLock<parking_lot::Mutex<()>> = LazyLock::new(parking_lot::Mutex::default);
 
 fn manual_cleanup() {
     for fname in &[
@@ -49,7 +49,7 @@ fn command_for_generated_test(
 ) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     let args_parser = build_args_parser();
     let args =
-        args_parser.get_matches_from(&["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);
+        args_parser.get_matches_from(["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);
 
     process(&args)
 }
@@ -104,7 +104,7 @@ fn expect_warning_but_success(real_fname: &str) {
 
     let mut content = content
         .split("\n")
-        .map(|l| RE1.replace(&l, "").replace('\r', ""))
+        .map(|l| RE1.replace(l, "").replace('\r', ""))
         .join(":");
     dbg!(&content);
     while RE2.is_match(&content) {
@@ -112,7 +112,7 @@ fn expect_warning_but_success(real_fname: &str) {
     }
     dbg!(&content);
 
-    let content = if content.chars().next().unwrap() == ':' {
+    let content = if content.starts_with(':') {
         &content[1..]
     }
     else {
@@ -199,7 +199,7 @@ fn expect_one_line_success(real_fname: &str) {
 
     let mut content = content
         .split("\n")
-        .map(|l| RE1.replace(&l, "").replace('\r', ""))
+        .map(|l| RE1.replace(l, "").replace('\r', ""))
         .join(":");
     dbg!(&content);
     while RE2.is_match(&content) {
@@ -207,7 +207,7 @@ fn expect_one_line_success(real_fname: &str) {
     }
     dbg!(&content);
 
-    let content = if content.chars().next().unwrap() == ':' {
+    let content = if content.starts_with(':') {
         &content[1..]
     }
     else {
@@ -431,10 +431,10 @@ fn expect_success(fname: &str) {
             let equiv_output_fname = equiv_output_file.path().as_os_str().to_str().unwrap();
 
             let res_equiv = command_for_generated_test(&equiv_fname, equiv_output_fname);
-            if !res_equiv.is_ok() {
+            if res_equiv.is_err() {
                 eprintln!(
                     "Error while assembling the equivalent file.\n{}",
-                    res.err().unwrap().to_string()
+                    res.err().unwrap()
                 );
                 panic!()
             }
@@ -452,7 +452,7 @@ fn expect_success(fname: &str) {
         eprintln!(
             "Error when assembling {}:\n{}",
             fname,
-            res.err().unwrap().to_string()
+            res.err().unwrap()
         );
         panic!()
     }
@@ -487,7 +487,7 @@ fn expect_failure(fname: &str) {
 #[test]
 fn test_at2_akm() {
     let args_parser = build_args_parser();
-    let args = args_parser.get_matches_from(&["basm", "--db", "tests/asm/at2/test_akm.asm"]);
+    let args = args_parser.get_matches_from(["basm", "--db", "tests/asm/at2/test_akm.asm"]);
 
     process(&args).expect("Error while assembling AT2/AKM");
 }

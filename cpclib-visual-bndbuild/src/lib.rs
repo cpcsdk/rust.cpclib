@@ -218,7 +218,7 @@ impl<'builder> From<&'builder BndBuilder> for DependencyOf {
         let mut dep_of: HashMap<Utf8PathBuf, HashSet<Utf8PathBuf>> = Default::default();
         let targets: Vec<&'builder Utf8Path> = builder.targets();
         for task in targets.iter() {
-            let deps = builder.get_layered_dependencies_for(task.into());
+            let deps = builder.get_layered_dependencies_for(task);
             let deps = deps.into_iter().flatten();
             for dep in deps {
                 // println!("{} highlight {}", dep.display(), task.display());
@@ -316,7 +316,7 @@ impl BndBuildApp {
     }
 
     pub fn update_cache(&mut self) {
-        self.builder_and_layers.as_mut().map(|b| b.update());
+        if let Some(b) = self.builder_and_layers.as_mut() { b.update() }
     }
 }
 
@@ -561,7 +561,7 @@ impl BndBuildApp {
                                 self.hovered_target = Some(tgt.into());
                             }
                             button.context_menu(|ui| {
-                                if tgt.exists() && ui.button(&format!("Open \"{}\"", tgt)).clicked()
+                                if tgt.exists() && ui.button(format!("Open \"{}\"", tgt)).clicked()
                                 {
                                     match open::that(tgt) {
                                         Ok(_) => {},
@@ -580,11 +580,9 @@ impl BndBuildApp {
                                         ui.close_menu();
                                     }
                                 }
-                                else {
-                                    if ui.button("Watch").clicked() {
-                                        self.watched = Some(tgt.to_path_buf());
-                                        ui.close_menu();
-                                    }
+                                else if ui.button("Watch").clicked() {
+                                    self.watched = Some(tgt.to_path_buf());
+                                    ui.close_menu();
                                 }
                             });
                         }
@@ -662,7 +660,7 @@ impl eframe::App for BndBuildApp {
                     }
                     else {
                         self.file_error =
-                            format!("{} does not exists.", path.display().to_string()).into();
+                            format!("{} does not exists.", path.display()).into();
                         None
                     }
                 }

@@ -198,7 +198,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
             .split(",")
             .map(|ink| ink.parse::<u8>().unwrap())
             .collect::<Vec<_>>();
-        return Ok(Some(numbers.into()));
+        Ok(Some(numbers.into()))
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
@@ -324,12 +324,12 @@ fn palette_code(pal: &Palette) -> String {
 
     for idx in 0..(16 / 2) {
         asm += &format!("\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n", 
-            pal[2*idx + 0].gate_array(), 
+            pal[2*idx].gate_array(), 
             pal[2*idx + 1].gate_array()
         )
     }
 
-    return asm;
+    asm
 }
 
 fn standard_linked_code(mode: u8, pal: &Palette, screen: &[u8]) -> String {
@@ -480,7 +480,7 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
 
 fn parse_int(repr: &str) -> usize {
     repr.parse::<usize>()
-        .expect(&format!("Error when converting {} as integer", repr))
+        .unwrap_or_else(|_| panic!("Error when converting {} as integer", repr))
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
@@ -513,13 +513,13 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
             grid_width: tile_matches
                 .get_one::<String>("HORIZ_COUNT")
                 .map(|v| parse_int(v))
-                .map(|v| GridWidthCapture::TilesInRow(v))
+                .map(GridWidthCapture::TilesInRow)
                 .unwrap_or(GridWidthCapture::FullWidth),
 
             grid_height: tile_matches
                 .get_one::<String>("VERT_COUNT")
                 .map(|v| parse_int(v))
-                .map(|v| GridHeightCapture::TilesInColumn(v))
+                .map(GridHeightCapture::TilesInColumn)
                 .unwrap_or(GridHeightCapture::FullHeight)
         })
     }
@@ -609,7 +609,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let sub_exec = matches.subcommand_matches("exec");
     let sub_scr = matches.subcommand_matches("scr");
 
-    let output_format = get_output_format(&matches);
+    let output_format = get_output_format(matches);
     let conversion = ImageConverter::convert(
         input_file,
         dbg!(palette),
@@ -648,12 +648,12 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 let sprite_fname = sub_sprite.get_one::<String>("SPRITE_FNAME").unwrap();
                 let mut file =
                     File::create(sprite_fname).expect("Unable to create the sprite file");
-                file.write_all(&data).unwrap();
+                file.write_all(data).unwrap();
 
                 // Save the binary data of the palette if any
                 sub_sprite
                     .get_one::<String>("CONFIGURATION")
-                    .and_then(|conf_fname: &String| {
+                    .map(|conf_fname: &String| {
                         let mut file = File::create(conf_fname)
                             .expect("Unable to create the configuration file");
                         let fname = Utf8Path::new(conf_fname)
@@ -662,7 +662,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                             .replace(".", "_");
                         writeln!(&mut file, "{}_WIDTH equ {}", fname, bytes_width).unwrap();
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
-                        Some(())
+                        
                     });
             },
             _ => unreachable!()
@@ -690,7 +690,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 for (i, data) in tile_set.iter().enumerate() {
                     let current_filename = format!("{}_{:03}.{}", base, i, extension);
                     let mut file = File::create(current_filename.clone())
-                        .expect(&format!("Unable to build {}", current_filename));
+                        .unwrap_or_else(|_| panic!("Unable to build {}", current_filename));
                     file.write_all(data).unwrap();
                 }
             },
@@ -703,7 +703,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {
                 let scr = if sub_scr.contains_id("COMPRESSED") {
-                    ocp::compress(&scr)
+                    ocp::compress(scr)
                 }
                 else {
                     scr.to_vec()
@@ -806,7 +806,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
                     let code =
-                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
+                        assemble(&fullscreen_display_code(output_mode, 96 / 2, pal)).unwrap();
                     (pal, code)
                 },
 
@@ -818,13 +818,13 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
             match &conversion {
                 Output::CPCMemoryStandard(memory, _) => {
-                    sna.add_data(&memory.to_vec(), 0xC000)
+                    sna.add_data(memory.as_ref(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
                 },
                 Output::CPCMemoryOverscan(memory1, memory2, _) => {
-                    sna.add_data(&memory1.to_vec(), 0x8000)
+                    sna.add_data(memory1.as_ref(), 0x8000)
                         .expect("Unable to add the image in the snapshot");
-                    sna.add_data(&memory2.to_vec(), 0xC000)
+                    sna.add_data(memory2.as_ref(), 0xC000)
                         .expect("Unable to add the image in the snapshot");
                 },
                 _ => unreachable!()
@@ -1114,7 +1114,9 @@ pub fn build_args_parser() -> clap::Command {
                     )
                 );
 
-    let args = if cfg!(feature = "xferlib") {
+    
+
+    if cfg!(feature = "xferlib") {
         let subcommand = Command::new("m4")
             .about("Directly send the code on the M4 through a snapshot")
             .arg(Arg::new("CPCM4").help("Address of the M4").required(true));
@@ -1133,9 +1135,7 @@ pub fn build_args_parser() -> clap::Command {
     }
     else {
         args
-    };
-
-    args
+    }
 }
 
 pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
@@ -1156,7 +1156,7 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(&matches).expect("Unable to make the conversion");
+    convert(matches).expect("Unable to make the conversion");
 
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         eprintln!("hmmm seems to not be coded yet");
@@ -1185,7 +1185,7 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                         kind: notify::event::EventKind::Create(_),
                         ..
                     }) => {
-                        if let Err(e) = convert(&matches) {
+                        if let Err(e) = convert(matches) {
                             return Err(Error::msg(format!(
                                 "[ERROR] Unable to convert the image {}",
                                 e

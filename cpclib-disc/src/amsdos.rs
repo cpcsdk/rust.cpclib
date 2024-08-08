@@ -1040,7 +1040,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     }
 
     pub fn dsk_mut(&mut self) -> &mut D {
-        &mut self.disc
+        self.disc
     }
 
     fn erase_entry(&mut self, entry: &AmsdosEntry) {
@@ -1108,7 +1108,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                     self.erase_file(filename, false)?;
                 },
                 AmsdosAddBehavior::BackupIfPresent => {
-                    let mut backup_fname = filename.clone();
+                    let mut backup_fname = filename;
                     backup_fname.set_extension("BAK");
 
                     if self.entries_for(backup_fname).is_some() {
@@ -1302,13 +1302,13 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     }
 }
 
-impl<'dsk, 'mngr: 'dsk, D: Disc> Into<AmsdosManagerNonMut<'dsk, D>>
-    for &'mngr AmsdosManagerMut<'dsk, D>
+impl<'dsk, 'mngr: 'dsk, D: Disc> From<&'mngr AmsdosManagerMut<'dsk, D>>
+    for AmsdosManagerNonMut<'dsk, D>
 {
-    fn into(self) -> AmsdosManagerNonMut<'dsk, D> {
+    fn from(val: &'mngr AmsdosManagerMut<'dsk, D>) -> Self {
         AmsdosManagerNonMut {
-            disc: self.disc,
-            head: self.head
+            disc: val.disc,
+            head: val.head
         }
     }
 }
@@ -1457,7 +1457,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         // TODO set this knowledge in edsk
         let (sector2_id, track2) = {
             if (sector_pos + 1) > 8 {
-                (0 + min_sector, track + 1)
+                (min_sector, track + 1)
             }
             else {
                 (sector_pos + 1 + min_sector, track)
@@ -1844,7 +1844,7 @@ impl AmsdosFile {
     pub fn amsdos_filename(&self) -> Option<Result<AmsdosFileName, AmsdosError>> {
         match self.header() {
             Some(header) => Some(header.amsdos_filename()),
-            None => self.binary_filename.clone().map(|f| Ok(f))
+            None => self.binary_filename.map(Ok)
         }
     }
 
@@ -1858,7 +1858,7 @@ impl AmsdosFile {
         if self.all_data.len() > 128 {
             let header = AmsdosHeader::from_buffer(&self.all_data[..128]);
             if header.is_checksum_valid() {
-                return Some(header);
+                Some(header)
             }
             else {
                 None

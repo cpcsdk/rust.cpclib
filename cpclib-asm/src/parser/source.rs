@@ -30,9 +30,9 @@ impl From<InnerZ80Span> for Z80Span {
     }
 }
 
-impl Into<InnerZ80Span> for Z80Span {
-    fn into(self) -> InnerZ80Span {
-        self.0
+impl From<Z80Span> for InnerZ80Span {
+    fn from(val: Z80Span) -> Self {
+        val.0
     }
 }
 
@@ -43,9 +43,9 @@ impl AsRef<str> for Z80Span {
     }
 }
 
-impl<'a> Into<&'a str> for &'a Z80Span {
-    fn into(self) -> &'a str {
-        AsRef::as_ref(self)
+impl<'a> From<&'a Z80Span> for &'a str {
+    fn from(val: &'a Z80Span) -> Self {
+        AsRef::as_ref(val)
     }
 }
 
@@ -53,15 +53,15 @@ pub trait SourceString: Display {
     fn as_str(&self) -> &str;
 }
 
-impl Into<Symbol> for &dyn SourceString {
-    fn into(self) -> Symbol {
-        self.as_str().into()
+impl From<&dyn SourceString> for Symbol {
+    fn from(val: &dyn SourceString) -> Self {
+        val.as_str().into()
     }
 }
 
-impl Into<Symbol> for &Z80Span {
-    fn into(self) -> Symbol {
-        self.as_str().into()
+impl From<&Z80Span> for Symbol {
+    fn from(val: &Z80Span) -> Self {
+        val.as_str().into()
     }
 }
 
@@ -181,19 +181,19 @@ impl std::fmt::Debug for Z80Span {
     }
 }
 
-impl Into<SmolStr> for &Z80Span {
-    fn into(self) -> SmolStr {
-        SmolStr::from(self.as_str())
+impl From<&Z80Span> for SmolStr {
+    fn from(val: &Z80Span) -> Self {
+        SmolStr::from(val.as_str())
     }
 }
 
-impl Into<Source> for &Z80Span {
+impl From<&Z80Span> for Source {
     #[inline]
-    fn into(self) -> Source {
-        let (line, column) = self.relative_line_and_column();
+    fn from(val: &Z80Span) -> Self {
+        let (line, column) = val.relative_line_and_column();
 
         Source::new(
-            self.context()
+            val.context()
                 .current_filename
                 .as_ref()
                 .map(|fname| fname.as_str().to_owned())
@@ -275,7 +275,7 @@ impl Z80Span {
     }
 
     pub fn context(&self) -> &ParserContext {
-        &self.state
+        self.state
     }
 }
 

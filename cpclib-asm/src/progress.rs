@@ -10,8 +10,8 @@ static PROGRESS: LazyLock<Arc<Mutex<Progress>>> =
     LazyLock::new(|| Arc::new(Mutex::new(Progress::new())));
 
 const REFRESH_RATE: Duration = Duration::from_millis(250);
-const PROGRESS_STYLE: &'static str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{len:3} {wide_msg}";
-const PASS_STYLE: &'static str = "{prefix:.bold.dim>8}  [{bar}] ";
+const PROGRESS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] {pos:>3}/{len:3} {wide_msg}";
+const PASS_STYLE: &str = "{prefix:.bold.dim>8}  [{bar}] ";
 
 #[cfg(feature = "indicatif")]
 pub struct Progress {
@@ -61,7 +61,8 @@ struct CountedProgress {
 #[cfg(feature = "indicatif")]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
-        let cp = CountedProgress {
+        
+        CountedProgress {
             bar: None,
             current_items: hashbag::HashBag::new(),
             nb_done: 0,
@@ -69,8 +70,7 @@ impl CountedProgress {
             prefix: kind,
             index,
             freeze_amount
-        };
-        cp
+        }
     }
 
     fn add_item(&mut self, item: &str, multi: &MultiProgress) {
@@ -101,7 +101,7 @@ impl CountedProgress {
     }
 
     fn finished(&mut self) {
-        self.bar.as_mut().map(|bar| bar.finish());
+        if let Some(bar) = self.bar.as_mut() { bar.finish() }
     }
 
     fn update_visual(&mut self, multi: &MultiProgress) {
@@ -149,7 +149,8 @@ impl CountedProgress {
 #[cfg(not(feature = "indicatif"))]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
-        let cp = CountedProgress {
+        
+        CountedProgress {
             current_items: hashbag::HashBag::new(),
             nb_done: 0,
             nb_expected: 0,
@@ -157,8 +158,7 @@ impl CountedProgress {
             index,
             freeze_amount,
             last_tick: std::time::SystemTime::now()
-        };
-        cp
+        }
     }
 
     fn add_item(&mut self, item: &str) {
@@ -238,6 +238,12 @@ fn new_spinner() -> ProgressBar {
     );
     bar.enable_steady_tick(REFRESH_RATE);
     bar
+}
+
+impl Default for Progress {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Progress {

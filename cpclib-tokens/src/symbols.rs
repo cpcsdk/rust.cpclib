@@ -481,9 +481,9 @@ pub enum Value {
     Counter(i32)
 }
 
-impl Into<evalexpr::Value> for Value {
-    fn into(self) -> evalexpr::Value {
-        match self {
+impl From<Value> for evalexpr::Value {
+    fn from(val: Value) -> Self {
+        match val {
             Value::Expr(e) => {
                 match e {
                     ExprResult::Float(f) => evalexpr::Value::Float(f.into()),
@@ -637,15 +637,15 @@ impl From<&SmolStr> for Symbol {
     }
 }
 
-impl Into<SmolStr> for Symbol {
-    fn into(self) -> SmolStr {
-        self.0
+impl From<Symbol> for SmolStr {
+    fn from(val: Symbol) -> Self {
+        val.0
     }
 }
 
-impl Into<SmolStr> for &Symbol {
-    fn into(self) -> SmolStr {
-        self.0.clone()
+impl From<&Symbol> for SmolStr {
+    fn from(val: &Symbol) -> Self {
+        val.0.clone()
     }
 }
 
@@ -1101,7 +1101,7 @@ impl SymbolsTableTrait for SymbolsTable {
         S: AsRef<str>
     {
         Ok(self
-            .value(symbol.into())?
+            .value(symbol)?
             .map(|v| v.counter())
             .map(|v| v.unwrap())
             .or({

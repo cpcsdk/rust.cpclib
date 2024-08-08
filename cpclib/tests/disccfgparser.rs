@@ -254,7 +254,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
                 for idx in res.track_idx_iterator() {
                     let _track = res
                         .track_information_for_track(*idx.0, idx.1)
-                        .expect(&format!("Unable to get information for {:?}", idx));
+                        .unwrap_or_else(|| panic!("Unable to get information for {:?}", idx));
                     println!("{:?}", idx);
                 }
                 let edsk = cpclib::disc::builder::build_edsk_from_cfg(&res);
@@ -311,7 +311,7 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
         for idx in cfg.track_idx_iterator() {
             let _track = cfg
                 .track_information_for_track(*idx.0, idx.1)
-                .expect(&format!("Unable to get information for {:?}", idx));
+                .unwrap_or_else(|| panic!("Unable to get information for {:?}", idx));
             println!("{:?}", idx);
         }
 

@@ -65,7 +65,7 @@ impl Rules {
     }
 
     pub fn default_target(&self) -> Option<&Utf8Path> {
-        self.rules.get(0).map(|r| r.target(0))
+        self.rules.first().map(|r| r.target(0))
     }
 
     // TODO implement a version with less copy
@@ -152,7 +152,7 @@ impl Rules {
                 };
 
                 for dep in deps {
-                    let dep = format!("\"{}\"", dep.to_string());
+                    let dep = format!("\"{}\"", dep);
                     all_deps.insert(dep.clone());
 
                     rule_id
@@ -161,7 +161,7 @@ impl Rules {
                 }
 
                 for tgt in tgts {
-                    let tgt = format!("\"{}\"", tgt.to_string());
+                    let tgt = format!("\"{}\"", tgt);
                     all_tgts.insert(tgt.clone());
 
                     rule_id

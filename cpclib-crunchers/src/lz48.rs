@@ -59,7 +59,7 @@ fn lz48_encode_block(
 }
 
 pub fn lz48_encode_legacy(data: &[u8]) -> Vec<u8> {
-    assert!(data.len() > 0);
+    assert!(!data.is_empty());
 
     let length = data.len();
 
@@ -134,5 +134,5 @@ pub fn lz48_encode_legacy(data: &[u8]) -> Vec<u8> {
     }
     lz48_encode_block(&mut odata, data, literaloffset, literal, 0, 0);
 
-    return odata;
+    odata
 }

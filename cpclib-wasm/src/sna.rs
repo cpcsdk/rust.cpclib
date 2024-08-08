@@ -9,9 +9,9 @@ use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 #[wasm_bindgen]
 pub struct JsSnapshot(Snapshot);
 
-impl Into<JsSnapshot> for Snapshot {
-    fn into(self) -> JsSnapshot {
-        JsSnapshot(self)
+impl From<Snapshot> for JsSnapshot {
+    fn from(val: Snapshot) -> Self {
+        JsSnapshot(val)
     }
 }
 

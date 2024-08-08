@@ -370,17 +370,14 @@ impl HardCodedFunction {
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-        match self.nb_expected_params() {
-            Some(nb) => {
-                if nb != params.len() {
-                    return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                        self.name().into(),
-                        nb,
-                        params.len()
-                    ));
-                }
-            },
-            _ => {}
+        if let Some(nb) = self.nb_expected_params() {
+            if nb != params.len() {
+                return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
+                    self.name().into(),
+                    nb,
+                    params.len()
+                ));
+            }
         }
 
         match self {
@@ -559,7 +556,7 @@ impl HardCodedFunction {
 
                 let data = crunch_type.crunch(&data)?;
                 let data = ExprResult::from(data.as_slice());
-                Ok(data.into())
+                Ok(data)
             }
         }
     }
@@ -567,10 +564,10 @@ impl HardCodedFunction {
 
 impl Function {
     /// Be sure the function lives shorter than inner
-    pub unsafe fn new_located<'token, S1: AsRef<str>, S2: Borrow<str>>(
+    pub unsafe fn new_located<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
-        inner: Vec<ProcessedToken<'token, LocatedToken>>
+        inner: Vec<ProcessedToken<'_, LocatedToken>>
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(
@@ -583,10 +580,10 @@ impl Function {
         return Ok(Function::Located(AnyFunction::new(name, args, inner)));
     }
 
-    pub unsafe fn new_standard<'token, S1: AsRef<str>, S2: Borrow<str>>(
+    pub unsafe fn new_standard<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
-        inner: Vec<ProcessedToken<'token, Token>>
+        inner: Vec<ProcessedToken<'_, Token>>
     ) -> Result<Self, AssemblerError> {
         if inner.is_empty() {
             return Err(AssemblerError::FunctionWithEmptyBody(

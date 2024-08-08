@@ -22,7 +22,7 @@ fn test_build_dummy() {
     // assert!(std::path::Path::new(builder_fname).exists());
 
     let mut cmd = Command::cargo_bin("bndbuild").unwrap();
-    cmd.arg("-f").arg(&format!("{builder_fname}"));
+    cmd.arg("-f").arg(builder_fname);
     cmd.arg("build");
 
     cmd.assert().success();

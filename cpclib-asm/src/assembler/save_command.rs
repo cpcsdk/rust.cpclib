@@ -50,7 +50,7 @@ impl SaveCommand {
     }
 
     pub fn can_be_saved_in_parallel(&self) -> bool {
-        (&self.disc_filename).is_none()
+        self.disc_filename.is_none()
     }
 
     /// Really make the save - Prerequisit : the page is properly selected
@@ -161,7 +161,7 @@ impl SaveCommand {
                         msg: format!(
                             "Error while saving \"{}\". {}",
                             &self.filename,
-                            e.to_string()
+                            e
                         )
                     }
                 })?;

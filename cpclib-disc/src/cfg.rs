@@ -65,7 +65,7 @@ impl FromStr for DiscConfig {
     /// Generates the configuration from a &str. Panic in case of failure.
     /// The format corresponds to cpctools format from Ramlaid/Mortel.
     fn from_str(config: &str) -> Result<Self, Self::Err> {
-        match parse_config.parse(&mut config.as_bytes()) {
+        match parse_config.parse(config.as_bytes()) {
             Ok(res) => Ok(res),
             Err(error) => {
                 Err(DiscConfigError::ParseError {

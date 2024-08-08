@@ -64,10 +64,7 @@ impl<'a> Completer for XferInteractorHelper<'a> {
         }
 
         // Ensure local completion is only done for launch (at the moment)
-        match command {
-            Some("launch" | "put") => complete.extend(local.1),
-            _ => {}
-        }
+        if let Some("launch" | "put") = command { complete.extend(local.1) }
 
         // Ensure M4 completion is not used for launch
         match command {
@@ -196,7 +193,7 @@ pub struct XferInteractor<'a> {
 
 impl<'a> XferInteractor<'a> {
     pub fn treat_line(&mut self, line: &str) {
-        let parse = parse_command.parse(&mut &line);
+        let parse = parse_command.parse(line);
         if let Ok(command) = parse {
             println!("{command:?}");
 

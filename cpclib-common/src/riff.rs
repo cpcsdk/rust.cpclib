@@ -89,19 +89,19 @@ impl From<usize> for RiffLen {
     }
 }
 
-impl Into<u32> for &RiffLen {
-    fn into(self) -> u32 {
+impl From<&RiffLen> for u32 {
+    fn from(val: &RiffLen) -> Self {
         let mut size = 0;
-        for byte in self.0.iter().rev() {
+        for byte in val.0.iter().rev() {
             size = size * 256 + *byte as u32;
         }
         size
     }
 }
 
-impl Into<usize> for &RiffLen {
-    fn into(self) -> usize {
-        let size: u32 = self.into();
+impl From<&RiffLen> for usize {
+    fn from(val: &RiffLen) -> Self {
+        let size: u32 = val.into();
         size as _
     }
 }

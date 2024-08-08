@@ -70,7 +70,7 @@ impl ListingExt for Listing {
 
     fn to_bytes_with_options(&self, options: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
         let (_, env) =
-            crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)
+            crate::assembler::visit_tokens_all_passes_with_options(self.listing(), options)
                 .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
         Ok(env.produced_bytes())
     }
@@ -120,7 +120,7 @@ impl ListingExt for Listing {
 
             let next_address = if let Token::Org { val1: address, .. } = current_instruction {
                 current_address = Some(address.eval().unwrap().int().unwrap() as u16);
-                current_address.clone()
+                current_address
             }
             else {
                 let nb_bytes = current_instruction.number_of_bytes().unwrap();

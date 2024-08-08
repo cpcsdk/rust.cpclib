@@ -457,7 +457,7 @@ impl ListingOutputTrigger {
             );
         }
 
-        self.token.replace(new.clone()); // TODO remove that clone that is memory/time eager
+        self.token.replace(new); // TODO remove that clone that is memory/time eager
 
         // TODO double check if these lines are current. I doubt it is the case when having severl instructions per line
         self.bytes.clear();

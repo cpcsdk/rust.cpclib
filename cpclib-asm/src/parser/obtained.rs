@@ -460,8 +460,8 @@ impl ExprEvaluationExt for LocatedExpr {
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
 
-        let res = ensure_orgams_type(res, env);
-        res
+        
+        ensure_orgams_type(res, env)
     }
 
     /// Be sure it is always synchronized with Expr
@@ -483,7 +483,7 @@ impl ExprEvaluationExt for LocatedExpr {
             | LocatedExpr::BinaryOperation(_, box a, box b, _) => {
                 a.symbols_used()
                     .into_iter()
-                    .chain(b.symbols_used().into_iter())
+                    .chain(b.symbols_used())
                     .collect_vec()
             },
 
@@ -492,7 +492,7 @@ impl ExprEvaluationExt for LocatedExpr {
             | LocatedExpr::UnaryOperation(_, a, _) => a.symbols_used(),
 
             LocatedExpr::AnyFunction(_, l, _) | LocatedExpr::List(l, _) => {
-                l.iter().map(|e| e.symbols_used()).flatten().collect_vec()
+                l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
             LocatedExpr::UnaryTokenOperation(_, box _t, _) => {
@@ -569,9 +569,9 @@ impl From<LocatedExpr> for LocatedDataAccess {
     }
 }
 
-impl Into<DataAccess> for LocatedDataAccess {
-    fn into(self) -> DataAccess {
-        self.to_data_access()
+impl From<LocatedDataAccess> for DataAccess {
+    fn from(val: LocatedDataAccess) -> Self {
+        val.to_data_access()
     }
 }
 
@@ -625,9 +625,9 @@ impl Display for LocatedDataAccess {
     }
 }
 
-impl Into<Expr> for LocatedExpr {
-    fn into(self) -> Expr {
-        self.to_expr().into_owned()
+impl From<LocatedExpr> for Expr {
+    fn from(val: LocatedExpr) -> Self {
+        val.to_expr().into_owned()
     }
 }
 
@@ -754,7 +754,7 @@ impl LocatedMacroParam {
                     params
                         .iter()
                         .map(|p| p.to_macro_param())
-                        .map(|p| Box::new(p))
+                        .map(Box::new)
                         .collect_vec()
                 )
             },
@@ -1112,7 +1112,7 @@ impl LocatedTokenInner {
         start_checkpoint: &<InnerZ80Span as Stream>::Checkpoint,
         mut i: InnerZ80Span
     ) -> LocatedToken {
-        let input = i.clone();
+        let input = i;
 
         i.reset(start_checkpoint);
         let start_eof_offset: usize = i.eof_offset();
@@ -1782,7 +1782,7 @@ impl ListingElement for LocatedTokenInner {
                     *mne,
                     arg1.as_ref().map(|d| d.to_data_access().into_owned()),
                     arg2.as_ref().map(|d| d.to_data_access().into_owned()),
-                    arg3.clone()
+                    *arg3
                 ))
             },
             Self::Comment(cmt) => Cow::Owned(Token::Comment(cmt.to_string())),
@@ -1825,7 +1825,7 @@ impl ListingElement for LocatedTokenInner {
                 Cow::Owned(Token::Switch(
                     v.to_expr().into_owned(),
                     c.iter()
-                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), b.clone()))
+                        .map(|(e, l, b)| (e.to_expr().into_owned(), l.as_listing(), *b))
                         .collect_vec(),
                     d.as_ref().map(|d| d.as_listing())
                 ))
@@ -2627,7 +2627,7 @@ impl LocatedToken {
     // }
     // }
     pub fn context(&self) -> &ParserContext {
-        &self.span().context()
+        self.span().context()
     }
 }
 
@@ -2856,12 +2856,12 @@ impl LocatedListing {
                 };
 
                 // Build the result
-                let res = match res {
+                
+
+                match res {
                     Ok(listing) => ParseResult::SuccessComplete(listing),
                     Err(e) => ParseResult::FailureComplete(AssemblerError::SyntaxError { error: e })
-                };
-
-                return res;
+                }
             }
         }
         .build();
@@ -2946,7 +2946,7 @@ impl LocatedListing {
                         let inner_length = inner_code_ptr.offset_from(&inner_start);
                         let inner_span: &'static BStr = unsafe{std::mem::transmute(&input_code.as_bstr().as_bytes()[..inner_length])}; // remove the bytes eaten by the inner parser
 
-                        let inner_span = input_code.clone().update_slice(inner_span);
+                        let inner_span = (*input_code).update_slice(inner_span);
 
                         take::<_,_, Z80ParserError>(inner_length).parse_next(input_code).expect("BUG in parser"); // really consume from the input
 
@@ -2970,7 +2970,7 @@ impl LocatedListing {
         if let ParseResult::FailureInner(e) = inner_listing.borrow_parse_result() {
             match e {
                 ErrMode::Incomplete(e) => {
-                    return Err(ErrMode::Incomplete(e.clone()));
+                    return Err(ErrMode::Incomplete(*e));
                 },
                 ErrMode::Backtrack(e) => {
                     return Err(ErrMode::Backtrack(Z80ParserError::from_inner_error(
@@ -3155,7 +3155,7 @@ impl ListingExt for LocatedListing {
         options: crate::assembler::EnvOptions
     ) -> Result<Vec<u8>, AssemblerError> {
         let (_, env) =
-            crate::assembler::visit_tokens_all_passes_with_options(&self.listing(), options)
+            crate::assembler::visit_tokens_all_passes_with_options(self.listing(), options)
                 .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
         Ok(env.produced_bytes())
     }

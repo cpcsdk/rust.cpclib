@@ -22,42 +22,42 @@ pub fn asm_create_parser_config(file_name: &str) -> AsmParserConfig {
     }
 }
 
-impl Into<ParserContextBuilder> for &AsmParserConfig {
-    fn into(self) -> ParserContextBuilder {
-        let options: ParserOptions = self.into();
+impl From<&AsmParserConfig> for ParserContextBuilder {
+    fn from(val: &AsmParserConfig) -> Self {
+        let options: ParserOptions = val.into();
         options
             .context_builder()
-            .set_current_filename(self.file_name.clone())
+            .set_current_filename(val.file_name.clone())
     }
 }
 
-impl Into<ParserOptions> for &AsmParserConfig {
-    fn into(self) -> ParserOptions {
+impl From<&AsmParserConfig> for ParserOptions {
+    fn from(val: &AsmParserConfig) -> Self {
         let mut ctx = ParserOptions::default();
-        ctx.set_dotted_directives(self.dotted_directive);
+        ctx.set_dotted_directives(val.dotted_directive);
         ctx
     }
 }
 
-impl Into<AssemblingOptions> for &AsmParserConfig {
-    fn into(self) -> AssemblingOptions {
+impl From<&AsmParserConfig> for AssemblingOptions {
+    fn from(val: &AsmParserConfig) -> Self {
         let mut options = AssemblingOptions::default();
-        options.set_case_sensitive(self.case_sensitive);
+        options.set_case_sensitive(val.case_sensitive);
         options.set_snapshot_model(Snapshot::new_6128_v2().expect("Unable to create a snapshot"));
         // TODO add specific symbols to recognize the wasm way of life
         options
     }
 }
 
-impl Into<EnvOptions> for &AsmParserConfig {
-    fn into(self) -> EnvOptions {
-        let mut assemble_options: AssemblingOptions = self.into();
+impl From<&AsmParserConfig> for EnvOptions {
+    fn from(val: &AsmParserConfig) -> Self {
+        let mut assemble_options: AssemblingOptions = val.into();
         assemble_options
             .symbols_mut()
             .assign_symbol_to_value(Symbol::from("__CPC_PLAYGROUND__"), Value::from(true))
             .unwrap();
 
-        let parse_options: ParserOptions = self.into();
+        let parse_options: ParserOptions = val.into();
 
         EnvOptions::new(parse_options, assemble_options)
     }
@@ -104,9 +104,8 @@ pub fn asm_assemble_snapshot(
     console::log_1(&"assemble_snapshot".into());
 
     asm_parse_source(code, conf)
-        .map_err(|e| {
+        .inspect_err(|e| {
             console::log_1(&"Parse NOK".into());
-            e
         })
         .and_then(|JsAsmListing { listing }| {
             console::log_1(&"Parse OK".into());

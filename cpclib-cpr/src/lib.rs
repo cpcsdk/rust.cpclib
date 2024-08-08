@@ -9,7 +9,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use cpclib_common::winnow::Parser;
 
-const CODE_BANKS: [&'static str; 32] = [
+const CODE_BANKS: [&str; 32] = [
     "cb00", "cb01", "cb02", "cb03", "cb04", "cb05", "cb06", "cb07", "cb08", "cb09", "cb10", "cb11",
     "cb12", "cb13", "cb14", "cb15", "cb16", "cb17", "cb18", "cb19", "cb20", "cb21", "cb22", "cb23",
     "cb24", "cb25", "cb26", "cb27", "cb28", "cb29", "cb30", "cb31"
@@ -274,7 +274,7 @@ impl<'c> Deref for CartridgeBankInfo<'c> {
     type Target = CartridgeBank;
 
     fn deref(&self) -> &Self::Target {
-        &self.bank
+        self.bank
     }
 }
 
@@ -304,7 +304,7 @@ impl<'c> Deref for CprInfo<'c> {
     type Target = Cpr;
 
     fn deref(&self) -> &Self::Target {
-        &self.cpr
+        self.cpr
     }
 }
 #[cfg(test)]

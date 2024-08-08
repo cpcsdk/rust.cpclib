@@ -367,7 +367,7 @@ impl Default for Snapshot {
             ],
             memory: SnapshotMemory::default_64(),
             chunks: Vec::new(),
-            memory_already_written: BitVec::repeat(false, BANK_SIZE * 4 * 1), // 64kbits
+            memory_already_written: BitVec::repeat(false, BANK_SIZE * 4), // 64kbits
             debug: false
         };
 

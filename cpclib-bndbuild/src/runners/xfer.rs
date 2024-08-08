@@ -52,6 +52,6 @@ impl Runner for XferRunner {
     }
 
     fn get_command(&self) -> &str {
-        &XFER_CMDS[0]
+        XFER_CMDS[0]
     }
 }

@@ -82,6 +82,6 @@ impl Runner for BasmRunner {
     }
 
     fn get_command(&self) -> &str {
-        &BASM_CMDS[0]
+        BASM_CMDS[0]
     }
 }

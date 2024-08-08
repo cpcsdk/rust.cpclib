@@ -12,7 +12,8 @@ use crate::{SymbolFor, UnaryFunction};
 /// XXX Orgams only handles integer values and strings
 pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
     let e = if env.options().parse_options().is_orgams() {
-        let res = match &e {
+        
+        match &e {
             ExprResult::Float(_)
             | ExprResult::Value(_)
             | ExprResult::Char(_)
@@ -24,8 +25,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
                     e
                 )))
             },
-        };
-        res
+        }
     }
     else {
         e
@@ -465,7 +465,7 @@ impl ExprEvaluationExt for Expr {
             Expr::BinaryFunction(_, box a, box b) | Expr::BinaryOperation(_, box a, box b) => {
                 a.symbols_used()
                     .into_iter()
-                    .chain(b.symbols_used().into_iter())
+                    .chain(b.symbols_used())
                     .collect_vec()
             },
 
@@ -474,7 +474,7 @@ impl ExprEvaluationExt for Expr {
             },
 
             Expr::AnyFunction(_, l) | Expr::List(l) => {
-                l.iter().map(|e| e.symbols_used()).flatten().collect_vec()
+                l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
             Expr::UnaryTokenOperation(_, box _t) => {
