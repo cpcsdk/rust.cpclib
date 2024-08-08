@@ -33,7 +33,7 @@ impl Runner for ExternRunner {
         let mut cmd = std::process::Command::new(app);
         cmd.current_dir(cwd);
         for arg in &itr[1..] {
-            cmd.arg(dbg!(arg));
+            cmd.arg(arg);
         }
         let mut handle = cmd
             .spawn()

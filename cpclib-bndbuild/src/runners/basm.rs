@@ -1,4 +1,7 @@
+use std::fmt::Debug;
+
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
+use cpclib_common::itertools::Itertools;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
@@ -55,7 +58,9 @@ impl RunnerWithClap for BasmRunner {
 
 impl Runner for BasmRunner {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
-        let matches = self.get_matches(itr)?;
+
+        let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+        let matches = self.get_matches(&itr)?;
 
         if matches.get_flag("version") {
             println!("{}", self.get_clap_command().clone().render_version());

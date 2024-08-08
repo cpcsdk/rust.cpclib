@@ -132,7 +132,10 @@ impl Rules {
                 let cmd = rule
                     .commands()
                     .iter()
-                    .map(|cmd| cmd.to_string())
+                    .map(|cmd| cmd.to_string()
+                        .replace("\"", "\\\"")
+                        //.replace("\n", "<br/>")
+                    )
                     .join("\\l");
 
                 let mut rule_id = if deps.is_empty() {
