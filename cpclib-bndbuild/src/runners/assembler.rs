@@ -9,7 +9,7 @@ use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::task::{BASM_CMDS, RASM_CMDS};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Assembler{
+pub enum Assembler {
     Basm,
     Rasm(RasmVersion)
 }
@@ -18,14 +18,14 @@ impl Assembler {
     pub fn get_command(&self) -> &str {
         match self {
             Assembler::Basm => &BASM_CMDS[0],
-            Assembler::Rasm(_) => &RASM_CMDS[0],
+            Assembler::Rasm(_) => &RASM_CMDS[0]
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RasmVersion {
-    Consolidation2024, //V2_2_5
+    Consolidation2024 // V2_2_5
 }
 
 impl Default for RasmVersion {
@@ -33,8 +33,6 @@ impl Default for RasmVersion {
         Self::Consolidation2024
     }
 }
-
-
 
 cfg_match! {
     cfg(target_os = "linux") =>
@@ -54,7 +52,7 @@ cfg_match! {
 
                                 let command = vec!["mv", "rasm.exe", "rasm"];
                                 ExternRunner::default().inner_run(&command)?;
-                                
+
                                 Ok(())
                             }))
                         }
@@ -88,20 +86,6 @@ cfg_match! {
     _ => {
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 pub struct BasmRunner {
     command: clap::Command

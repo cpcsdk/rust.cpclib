@@ -26,11 +26,23 @@ pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(XferRunner::default
 
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {
-        Task::Emulator(e, _) => DelegatedRunner { app: e.configuration(), cmd: e.get_command().to_owned() }.run(task.args()),
+        Task::Emulator(e, _) => {
+            DelegatedRunner {
+                app: e.configuration(),
+                cmd: e.get_command().to_owned()
+            }
+            .run(task.args())
+        },
         Task::Assembler(a, _) => {
             match a {
                 crate::runners::assembler::Assembler::Basm => BASM_RUNNER.run(task.args()),
-                crate::runners::assembler::Assembler::Rasm(v) => DelegatedRunner{app: v.configuration(), cmd: a.get_command().to_owned()}.run(task.args()),
+                crate::runners::assembler::Assembler::Rasm(v) => {
+                    DelegatedRunner {
+                        app: v.configuration(),
+                        cmd: a.get_command().to_owned()
+                    }
+                    .run(task.args())
+                },
             }
         },
         Task::BndBuild(_) => BNDBUILD_RUNNER.run(task.args()),

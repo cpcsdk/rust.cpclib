@@ -1,5 +1,3 @@
-
-
 use std::default;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
@@ -46,8 +44,6 @@ pub enum WinapeVersion {
     v2_0b2
 }
 
-
-
 impl Emulator {
     pub fn configuration(&self) -> DelegateApplicationDescription {
         match self {
@@ -85,7 +81,7 @@ cfg_match! {
                             download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
-                            exec_fname: "CPCEC.EXE", // TODO see how to handle the fact it is windows file. Do we need to compile the linux version ?
+                            exec_fname: "CPCEC.EXE", // XXX there is a case issue I do not want to solve. so wine is used ...
                             compile: None
                         }
                     },
@@ -175,4 +171,3 @@ cfg_match! {
     _ => {
     }
 }
-

@@ -15,11 +15,11 @@ pub use crate::BndBuilder;
 
 pub mod builder;
 pub mod constraints;
+pub mod delegated;
 pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
-pub mod delegated;
 
 pub use builder::*;
 

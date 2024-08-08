@@ -12,21 +12,18 @@ use crate::runners::Runner;
 use crate::task::{ACE_CMDS, CPCEC_CMDS, WINAPE_CMDS};
 
 pub enum ArchiveFormat {
-	Raw,
+    Raw,
     TarGz,
     Zip
 }
-
-
 
 pub struct DelegateApplicationDescription {
     pub download_url: &'static str,
     pub folder: &'static str,
     pub exec_fname: &'static str,
     pub archive_format: ArchiveFormat,
-	pub compile: Option<Box<dyn Fn(&Utf8Path) -> Result<(), String>>>
+    pub compile: Option<Box<dyn Fn(&Utf8Path) -> Result<(), String>>>
 }
-
 
 impl DelegateApplicationDescription {
     pub fn is_cached(&self) -> bool {
@@ -52,47 +49,48 @@ impl DelegateApplicationDescription {
         // get the file
         let dest = self.cache_folder();
 
-		println!(">> Download file");
+        println!(">> Download file");
         let resp = self.download().unwrap();
         let mut input = resp.into_reader();
 
         // uncompress it
         match self.archive_format {
-			ArchiveFormat::Raw => {
-				println!(">> Save to {}", self.exec_fname());
+            ArchiveFormat::Raw => {
+                println!(">> Save to {}", self.exec_fname());
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 std::fs::create_dir_all(&dest);
-				std::fs::write(self.exec_fname(), &buffer)
-                    .map_err(|e| e.to_string())
-                ?;
-			}
+                std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
+            },
             ArchiveFormat::TarGz => {
-				println!(">> Open archive");
+                println!(">> Open archive");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
                 archive.unpack(dest.clone()).unwrap();
             },
             ArchiveFormat::Zip => {
-				println!(">> Unzip archive");
+                println!(">> Unzip archive");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).unwrap();
             }
         }
 
-		if let Some(compile) = &self.compile {
-			println!(">> Compile program");
+        if let Some(compile) = &self.compile {
+            println!(">> Compile program");
 
-			let cwd = std::env::current_dir()
-            .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
-			std::env::set_current_dir(&dest) .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
-			let res = compile(&dest);
-			std::env::set_current_dir(&cwd) .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
-			res
-		} else {
-			Ok(())
-		}
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
+            std::env::set_current_dir(&dest)
+                .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
+            let res = compile(&dest);
+            std::env::set_current_dir(&cwd)
+                .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
+            res
+        }
+        else {
+            Ok(())
+        }
     }
 
     fn download(&self) -> Result<Response, ureq::Error> {
@@ -100,15 +98,14 @@ impl DelegateApplicationDescription {
     }
 }
 
-
 pub struct DelegatedRunner {
     pub(crate) app: DelegateApplicationDescription,
-	pub(crate) cmd : String
+    pub(crate) cmd: String
 }
 
 impl Runner for DelegatedRunner {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
-        let cfg  = &self.app;
+        let cfg = &self.app;
 
         // ensure the emulator exists
         if !cfg.is_cached() {
@@ -138,6 +135,6 @@ impl Runner for DelegatedRunner {
     }
 
     fn get_command(&self) -> &str {
-       &self.cmd
+        &self.cmd
     }
 }

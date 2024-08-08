@@ -39,9 +39,7 @@ pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 impl Display for Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
-            Task::Assembler(a, s) => {
-                (a.get_command(), s)
-            },
+            Task::Assembler(a, s) => (a.get_command(), s),
             Task::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Task::Cp(s) => (CP_CMDS[0], s),
             Task::Disc(s) => (DISC_CMDS[0], s),
@@ -50,12 +48,7 @@ impl Display for Task {
             Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Emulator(e, s) => {
-                (
-                    e.get_command(),
-                    s
-                )
-            },
+            Task::Emulator(e, s) => (e.get_command(), s)
         };
 
         write!(
@@ -108,7 +101,10 @@ impl<'de> Deserialize<'de> for Task {
                     Ok(Task::Assembler(Assembler::Basm, std))
                 }
                 else if RASM_CMDS.iter().contains(&code) {
-                    Ok(Task::Assembler(Assembler::Rasm(RasmVersion::default()), std))
+                    Ok(Task::Assembler(
+                        Assembler::Rasm(RasmVersion::default()),
+                        std
+                    ))
                 }
                 else if BNDBUILD_CMDS.iter().contains(&code) {
                     Ok(Task::BndBuild(std))
@@ -259,20 +255,26 @@ mod test {
         let task: Task = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Assembler(crate::runners::assembler::Assembler::Basm, StandardTask {
-                args: "toto.asm -o toto.o".to_owned(),
-                ignore_error: false
-            })
+            Task::Assembler(
+                crate::runners::assembler::Assembler::Basm,
+                StandardTask {
+                    args: "toto.asm -o toto.o".to_owned(),
+                    ignore_error: false
+                }
+            )
         );
 
         let yaml = "-basm toto.asm -o toto.o";
         let task: Task = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Assembler(crate::runners::assembler::Assembler::Basm, StandardTask {
-                args: "toto.asm -o toto.o".to_owned(),
-                ignore_error: true
-            })
+            Task::Assembler(
+                crate::runners::assembler::Assembler::Basm,
+                StandardTask {
+                    args: "toto.asm -o toto.o".to_owned(),
+                    ignore_error: true
+                }
+            )
         );
     }
 }
