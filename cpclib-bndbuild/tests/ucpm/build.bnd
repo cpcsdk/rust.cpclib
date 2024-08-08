@@ -1,0 +1,51 @@
+{% set DSK="ucpm.dsk" %}
+{% set SNA="ucpm.sna" %}
+{%- if not CPCADDR -%}
+{%-   set CPCADDR = "192.168.1.24" -%}
+{%- endif -%}
+{%- macro ace(dsk, exec=None, debug=None) -%}
+ace {{dsk}} 
+  {%- if debug %} {{debug}} {%endif -%} 
+  {%- if exec %} -autoRunFile {{exec}} {%endif -%}
+{%- endmacro -%}
+{%- macro build_data(data) -%}
+- tgt: {{data}}.o
+  dep: {{data}}.asm
+  cmd: basm {{data}}.asm -o {{data}}.o
+
+{%- endmacro -%}
+
+
+- tgt: sna
+  dep: {{SNA}}
+
+- tgt: {{DSK}} {{SNA}} ucpm.rasm
+  dep: ucpm.asm data1.o data2.o
+  cmd: > 
+    basm ucpm.asm 
+      --snapshot -o {{SNA}}
+      --ace ucpm.rasm 
+      --override
+      -DFNAME="UCPM"
+      -DDSK="{{DSK}}"
+
+{{build_data("data1")}}
+
+{{build_data("data2")}}
+
+- tgt: emu
+  dep: {{DSK}} ucpm.rasm
+  cmd: {{ace(DSK, "UCPM", debug="ucpm.rasm")}}
+
+- tgt: m4
+  dep: {{SNA}}
+  cmd: xfer {{CPCADDR}} -y {{SNA}}
+
+- tgt: clean
+  phony: true
+  cmd: -rm data?.o ucpm.rasm
+
+- tgt: distclean
+  dep: clean
+  phony: true
+  cmd: -rm {{DSK}}
