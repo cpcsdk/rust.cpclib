@@ -21,7 +21,7 @@ fn expect_successful_parse(real_fname: &str) {
     println!("{}", real_fname);
 
     let backup = std::env::current_dir().unwrap();
-    let builder = BndBuilder::from_fname(real_fname);
+    let builder = BndBuilder::from_path(real_fname);
     std::env::set_current_dir(backup);
     if let Err(e) = builder {
         eprintln!("{}", e);
@@ -38,7 +38,7 @@ fn expect_parse_error(real_fname: &str) {
     println!("{}", std::env::current_dir().unwrap().display());
     // 	std::env::set_current_dir("..");
 
-    let builder = BndBuilder::from_fname(real_fname);
+    let builder = BndBuilder::from_path(real_fname);
     if let Err(e) = &builder {
         eprintln!("{}", e);
     }
