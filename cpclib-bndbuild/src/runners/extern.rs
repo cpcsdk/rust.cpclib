@@ -17,18 +17,10 @@ impl Runner for ExternRunner {
         //     .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
         let app = &itr[0];
 
-        let cwd = std::env::current_dir().map_err(|e| {
-            format!(
-                "Unable to get the current working directory {}.",
-                e
-            )
-        })?;
-        let cwd = std::fs::canonicalize(cwd).map_err(|e| {
-            format!(
-                "Unable to get the current working directory {}.",
-                e
-            )
-        })?;
+        let cwd = std::env::current_dir()
+            .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
+        let cwd = std::fs::canonicalize(cwd)
+            .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
 
         let mut cmd = std::process::Command::new(app);
         cmd.current_dir(cwd);

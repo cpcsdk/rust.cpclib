@@ -89,10 +89,7 @@ impl Z80ParserError {
         listing: std::sync::Arc<LocatedListing>,
         error: Box<Z80ParserError>
     ) -> Self {
-        Self(vec![(
-            *input,
-            Z80ParserErrorKind::Inner { listing, error }
-        )])
+        Self(vec![(*input, Z80ParserErrorKind::Inner { listing, error })])
     }
 }
 
@@ -130,10 +127,8 @@ impl AddContext<InnerZ80Span> for Z80ParserError {
         start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: &'static str
     ) -> Self {
-        self.0.push((
-            *input,
-            Z80ParserErrorKind::Context(StrContext::Label(ctx))
-        ));
+        self.0
+            .push((*input, Z80ParserErrorKind::Context(StrContext::Label(ctx))));
         self
     }
 }
@@ -145,8 +140,7 @@ impl AddContext<InnerZ80Span, StrContext> for Z80ParserError {
         start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: StrContext
     ) -> Self {
-        self.0
-            .push((*input, Z80ParserErrorKind::Context(ctx)));
+        self.0.push((*input, Z80ParserErrorKind::Context(ctx)));
         self
     }
 }
@@ -447,8 +441,6 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
     str: S,
     builder: ParserContextBuilder
 ) -> Result<LocatedListing, AssemblerError> {
-    
-
     LocatedListing::new_complete_source(str, builder)
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
 }
@@ -733,8 +725,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
     .parse_next(input)?;
 
     let _rorg_stop = input.checkpoint();
-    let token =
-        LocatedTokenInner::Rorg(exp, inner).into_located_token_between(&rorg_start, *input);
+    let token = LocatedTokenInner::Rorg(exp, inner).into_located_token_between(&rorg_start, *input);
     Ok(token)
 }
 
@@ -887,8 +878,8 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     )
     .parse_next(input)?;
 
-    let token = LocatedTokenInner::While(cond, inner)
-        .into_located_token_between(&while_start, *input);
+    let token =
+        LocatedTokenInner::While(cond, inner).into_located_token_between(&while_start, *input);
     Ok(token)
 }
 
@@ -943,8 +934,7 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
 
 /// Parse the switch directive
 pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    my_many0_nocollect(alt((my_space1.value(()), my_line_ending.value(()))))
-        .parse_next(input)?;
+    my_many0_nocollect(alt((my_space1.value(()), my_line_ending.value(())))).parse_next(input)?;
     let switch_start = *input;
     let _ = parse_directive_word(b"SWITCH")(input)?;
 
@@ -1090,8 +1080,8 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     )
     .parse_next(input)?;
 
-    let token = LocatedTokenInner::Confined(inner)
-        .into_located_token_between(&confined_start, *input);
+    let token =
+        LocatedTokenInner::Confined(inner).into_located_token_between(&confined_start, *input);
     Ok(token)
 }
 
@@ -1240,11 +1230,7 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
         parse_comma
     ))
     .parse_next(input)?;
-    let args = args.map(|args| {
-        args.into_iter()
-            .map(Z80Span::from)
-            .collect_vec()
-    });
+    let args = args.map(|args| args.into_iter().map(Z80Span::from).collect_vec());
 
     (my_space0, opt(line_ending)).parse_next(input)?;
 
@@ -1342,12 +1328,7 @@ pub fn parse_line_component_standard(
 
     let mut label: Option<InnerZ80Span> = if r#let.is_some() {
         // label is mandatory when there is let
-        cut_err(
-            parse_label(false)
-                .context("LET: missing label")
-                .map(Some)
-        )
-        .parse_next(input)?
+        cut_err(parse_label(false).context("LET: missing label").map(Some)).parse_next(input)?
     }
     else {
         // let was absent
@@ -2282,8 +2263,11 @@ fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToke
     // Only one argument is allowed
     if (directive.is_db() || directive.is_dw()) && directive.data_exprs().len() > 1 {
         return Err(ErrMode::Cut(
-            Z80ParserError::from_error_kind(input, ErrorKind::Many)
-                .add_context(input, &input_start, "0 or 1 arguments are expected")
+            Z80ParserError::from_error_kind(input, ErrorKind::Many).add_context(
+                input,
+                &input_start,
+                "0 or 1 arguments are expected"
+            )
         ));
     }
     Ok(directive)
@@ -2676,17 +2660,9 @@ fn parse_conditional_condition(
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTestKind, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTestKind, Z80ParserError> {
         match &code {
-            KindOfConditional::If => {
-                located_expr
-                    .map(LocatedTestKind::True)
-                    .parse_next(input)
-            },
+            KindOfConditional::If => located_expr.map(LocatedTestKind::True).parse_next(input),
 
-            KindOfConditional::IfNot => {
-                located_expr
-                    .map(LocatedTestKind::False)
-                    .parse_next(input)
-            },
+            KindOfConditional::IfNot => located_expr.map(LocatedTestKind::False).parse_next(input),
 
             KindOfConditional::IfDef => {
                 preceded(my_space0, parse_label(false))
@@ -3118,7 +3094,8 @@ fn parse_ld_normal_src(
                     parse_address,
                     parse_register8,
                     parse_indexregister8.verify(|src| {
-                        !((dst.is_register_h() || dst.is_register_l()) && (src.is_register_ixl()
+                        !((dst.is_register_h() || dst.is_register_l())
+                            && (src.is_register_ixl()
                                 || src.is_register_ixh()
                                 || src.is_register_ixl()
                                 || src.is_register_ixh()))
@@ -3163,9 +3140,10 @@ fn parse_ld_normal_src(
         }
         else {
             input.reset(&input_start);
-            Err(ErrMode::Backtrack(
-                Z80ParserError::from_error_kind(input, ErrorKind::Alt)
-            ))
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )))
         }
     }
 }
@@ -3314,9 +3292,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
 
     let name = (*input).update_slice(name);
 
-    if !end_directive_iter
-        .any(|&a| a == name.to_ascii_uppercase())
-    {
+    if !end_directive_iter.any(|&a| a == name.to_ascii_uppercase()) {
         input.reset(&start);
         return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
             &name,
@@ -4878,9 +4854,7 @@ pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken
 /// TODO
 #[inline]
 pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    parse_string
-        .map(LocatedExpr::String)
-        .parse_next(input)
+    parse_string.map(LocatedExpr::String).parse_next(input)
 }
 
 /// Parse a label(label: S)

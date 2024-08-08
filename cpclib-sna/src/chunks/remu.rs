@@ -77,8 +77,6 @@ impl RemuChunk {
         let code = code.into();
         assert_eq!(code, Self::CODE);
 
-        
-
         Self {
             riff: RiffChunk::new(code, content)
         }

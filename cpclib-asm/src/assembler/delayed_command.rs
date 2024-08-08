@@ -240,15 +240,13 @@ impl BreakpointCommand {
     }
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct DelayedCommands {
     failed_assert_commands: Vec<FailedAssertCommand>,
     save_commands: BTreeMap<u8, Vec<SaveCommand>>, // commands are ordered per ga_mmr
     print_commands: Vec<PrintOrPauseCommand>,
     breakpoint_commands: Vec<BreakpointCommand>
 }
-
 
 impl DelayedCommands {
     pub fn clear(&mut self) {

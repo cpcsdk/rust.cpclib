@@ -163,10 +163,7 @@ impl Rule {
                 .flat_map(|s| expand_glob(s.as_ref()))
                 .map(Utf8PathBuf::from)
                 .collect_vec(),
-            commands: commands
-                .iter()
-                .map(|t| (t.clone()).into())
-                .collect_vec(),
+            commands: commands.iter().map(|t| (t.clone()).into()).collect_vec(),
             help: None,
             phony: None,
             constraint: None

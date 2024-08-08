@@ -24,29 +24,23 @@ impl Default for Emulator {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AceVersion {
     #[default]
     WakePoint // 2024/06/21
 }
 
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum CpcecVersion {
     #[default]
     v20240505
 }
 
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum WinapeVersion {
     #[default]
     v2_0b2
 }
-
 
 pub enum ArchiveFormat {
     TarGz,

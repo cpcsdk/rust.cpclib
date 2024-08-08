@@ -12,7 +12,6 @@ use crate::{SymbolFor, UnaryFunction};
 /// XXX Orgams only handles integer values and strings
 pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
     let e = if env.options().parse_options().is_orgams() {
-        
         match &e {
             ExprResult::Float(_)
             | ExprResult::Value(_)

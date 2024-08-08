@@ -101,11 +101,11 @@ pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
         // span goes from left to right with operator between
         let left_bytes = left.span().as_bstr();
         let right_bytes = right.span().as_bstr();
-        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).unsigned_abs()
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) })
+            .unsigned_abs()
             + right_bytes.len();
         let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
-        let span = (*input)
-            .update_slice(unsafe { &*span });
+        let span = (*input).update_slice(unsafe { &*span });
 
         expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
     }
@@ -156,11 +156,11 @@ pub fn parse_orgams_ordered_expression(
         // span goes from left to right with operator between
         let left_bytes = left.span().as_bstr();
         let right_bytes = right.span().as_bstr();
-        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) }).unsigned_abs()
+        let size = (unsafe { right_bytes.as_ptr().byte_offset_from(left_bytes.as_ptr()) })
+            .unsigned_abs()
             + right_bytes.len();
         let span = std::ptr::slice_from_raw_parts(left_bytes.as_ptr(), size);
-        let span = (*input)
-            .update_slice(unsafe { &*span });
+        let span = (*input).update_slice(unsafe { &*span });
 
         expr = LocatedExpr::BinaryOperation(operator, Box::new(left), Box::new(right), span.into());
     }

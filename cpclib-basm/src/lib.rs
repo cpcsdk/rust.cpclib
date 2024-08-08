@@ -113,9 +113,7 @@ impl From<AssemblerError> for BasmError {
 
 /// Parse the given code.
 /// TODO read options to configure the search path
-pub fn parse(
-    matches: &ArgMatches
-) -> Result<(LocatedListing, ParserOptions), BasmError> {
+pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), BasmError> {
     let inline_fname = "<inline code>";
     let filename = matches
         .get_one::<String>("INPUT")

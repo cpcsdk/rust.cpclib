@@ -119,8 +119,7 @@ struct SwitchState<'token, T: Visited + ListingElement + Debug + Sync> {
     default: Option<SimpleListingState<'token, T>>
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-#[derive(Default)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 struct IncludeState(BTreeMap<Utf8PathBuf, IncludeStateInner>);
 
 impl IncludeState {
@@ -1026,8 +1025,7 @@ where
                         let transformation = self.token.incbin_transformation();
 
                         if let Some(offset) = offset {
-                            let offset =
-                                env.resolve_expr_must_never_fail(offset)?.int()? as usize;
+                            let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
                             if offset >= data.len() {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
@@ -1041,8 +1039,7 @@ where
                         }
 
                         if let Some(length) = length {
-                            let length =
-                                env.resolve_expr_must_never_fail(length)?.int()? as usize;
+                            let length = env.resolve_expr_must_never_fail(length)?.int()? as usize;
                             if data.len() < length {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(

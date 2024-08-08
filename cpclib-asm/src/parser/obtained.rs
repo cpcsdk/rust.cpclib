@@ -460,7 +460,6 @@ impl ExprEvaluationExt for LocatedExpr {
     fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
         let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
 
-        
         ensure_orgams_type(res, env)
     }
 
@@ -2856,7 +2855,6 @@ impl LocatedListing {
                 };
 
                 // Build the result
-                
 
                 match res {
                     Ok(listing) => ParseResult::SuccessComplete(listing),

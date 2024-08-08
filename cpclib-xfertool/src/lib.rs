@@ -158,10 +158,10 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
 
             for res in rx {
                 if let Ok(notify::event::Event {
-                        kind:
-                            notify::event::EventKind::Modify(_) | notify::event::EventKind::Create(_),
-                        ..
-                    }) = res {
+                    kind: notify::event::EventKind::Modify(_) | notify::event::EventKind::Create(_),
+                    ..
+                }) = res
+                {
                     send_and_run_file(&xfer, fname, true);
                 }
             }

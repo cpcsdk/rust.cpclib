@@ -38,20 +38,12 @@ impl Runner for CpRunner {
             .map(|s| s.as_ref())
             .flat_map(expand_glob)
             .collect_vec();
-        let files = fnames
-            .iter()
-            .map(Utf8Path::new)
-            .collect_vec();
+        let files = fnames.iter().map(Utf8Path::new).collect_vec();
         let dest = files.last();
 
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
             std::fs::copy(from, to).map_err(|e| {
-                error.push_str(&format!(
-                    "Error when copying {} to {}. {}.\n",
-                    from,
-                    to,
-                    e
-                ))
+                error.push_str(&format!("Error when copying {} to {}. {}.\n", from, to, e))
             });
         };
 

@@ -737,8 +737,7 @@ impl Env {
                 Ok(())
             },
             (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
-                self.symbols_mut()
-                    .update_symbol_to_value(label, value)?;
+                self.symbols_mut().update_symbol_to_value(label, value)?;
                 Ok(())
             },
             (..) => {
@@ -942,7 +941,9 @@ impl Env {
             self.run_options = None;
 
             self.sna.reset_written_bytes();
-            if let Some(cpr) = self.cpr.as_mut() { cpr.reset_written_bytes() }
+            if let Some(cpr) = self.cpr.as_mut() {
+                cpr.reset_written_bytes()
+            }
             self.free_banks.reset_written_bytes();
 
             self.warnings.retain(|elem| !elem.is_override_memory());
@@ -1077,10 +1078,12 @@ impl Env {
                 };
                 eprint!("{}", info);
 
-                if let Some(chunk) = winape_chunk
-                    .as_mut() { chunk.add_breakpoint(brk.winape()) }
-                if let Some(chunk) = ace_chunk
-                    .as_mut() { chunk.add_breakpoint(brk.ace()) }
+                if let Some(chunk) = winape_chunk.as_mut() {
+                    chunk.add_breakpoint(brk.winape())
+                }
+                if let Some(chunk) = ace_chunk.as_mut() {
+                    chunk.add_breakpoint(brk.ace())
+                }
 
                 // TODO check it is not consummed at first loop
                 if let Some(chunk) = remu {
@@ -2293,8 +2296,7 @@ impl Env {
         }
         else {
             self.logical_code_address()
-        }
-            % boundary
+        } % boundary
             != 0
         {
             self.output_byte(fill)?;
@@ -2348,8 +2350,9 @@ impl Env {
         self.active_page_info_mut().logical_codeadr = code_adr;
 
         self.update_dollar();
-        if let Some(o) = self.output_trigger
-            .as_mut() { o.replace_code_address(&code_adr.into()) }
+        if let Some(o) = self.output_trigger.as_mut() {
+            o.replace_code_address(&code_adr.into())
+        }
 
         if let Some(warning) = warning {
             self.add_warning(warning);
@@ -2419,8 +2422,9 @@ impl Env {
         else {
             self.add_symbol_to_symbol_table(destination.as_str(), value.clone())?;
         }
-        if let Some(o) = self.output_trigger
-            .as_mut() { o.replace_code_address(&value) }
+        if let Some(o) = self.output_trigger.as_mut() {
+            o.replace_code_address(&value)
+        }
 
         // increase next one
         let delta = match delta {
@@ -2888,8 +2892,9 @@ impl Env {
         // TODO OR play all the passes directly now
         let mut crunched_env = self.build_crunched_section_env(span);
 
-        if let Some(t) = self.output_trigger
-            .as_mut() { t.enter_crunched_section() }
+        if let Some(t) = self.output_trigger.as_mut() {
+            t.enter_crunched_section()
+        }
 
         visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
             let e = AssemblerError::CrunchedSectionError { error: e.into() };
@@ -2904,8 +2909,9 @@ impl Env {
             }
         })?;
 
-        if let Some(t) = self.output_trigger
-            .as_mut() { t.leave_crunched_section() }
+        if let Some(t) = self.output_trigger.as_mut() {
+            t.leave_crunched_section()
+        }
 
         // get the new data and crunch it if needed
         let bytes = crunched_env.produced_bytes();
@@ -2934,7 +2940,6 @@ impl Env {
             previous_crunched_bytes.replace(crunched);
             previous_bytes.replace(bytes);
         }
-        
 
         let _bytes = previous_bytes.as_ref().unwrap();
         let crunched = previous_crunched_bytes.as_ref().unwrap();
@@ -3569,8 +3574,9 @@ impl Env {
         self.update_dollar();
         let value = self.active_page_info_mut().logical_codeadr;
 
-        if let Some(o) = self.output_trigger
-            .as_mut() { o.replace_code_address(&value.into()) }
+        if let Some(o) = self.output_trigger.as_mut() {
+            o.replace_code_address(&value.into())
+        }
 
         // execute the listing
         self.nested_rorg += 1; // used to disable page functionalities
@@ -3868,12 +3874,15 @@ impl Env {
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
             if self.pass.is_listing_pass() {
-                if let Some(trigger) = self.output_trigger
-                    .as_mut() { trigger.repeat_iteration(counter_name, counter_value.as_ref()) }
+                if let Some(trigger) = self.output_trigger.as_mut() {
+                    trigger.repeat_iteration(counter_name, counter_value.as_ref())
+                }
             }
         }
         else if self.pass.is_listing_pass() {
-            if let Some(trigger) = self.output_trigger.as_mut() { trigger.repeat_iteration("<new iteration>", counter_value.as_ref()) }
+            if let Some(trigger) = self.output_trigger.as_mut() {
+                trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
+            }
         }
 
         if let Some(counter_value) = &counter_value {
@@ -3969,8 +3978,9 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
-        if let Some(o) = self.output_trigger
-            .as_mut() { o.replace_code_address(&address.into()) }
+        if let Some(o) = self.output_trigger.as_mut() {
+            o.replace_code_address(&address.into())
+        }
 
         if self.run_options.is_some() {
             return Err(AssemblerError::RunAlreadySpecified);
@@ -4062,8 +4072,7 @@ impl Env {
                             std::str::from_utf8(slice).unwrap()
                         };
 
-                        let new_span =
-                            Z80Span::from(prev_span.0.update_slice(txt.as_bytes()));
+                        let new_span = Z80Span::from(prev_span.0.update_slice(txt.as_bytes()));
 
                         (Some(new_size), Some(new_span))
                     }
@@ -4167,8 +4176,9 @@ impl Env {
             // self.symbols_mut().set_current_label(label)?;
             // }
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
-            if let Some(o) = self.output_trigger
-                .as_mut() { o.replace_code_address(&value) }
+            if let Some(o) = self.output_trigger.as_mut() {
+                o.replace_code_address(&value)
+            }
             self.add_symbol_to_symbol_table(label, value)
         }
     }
@@ -4202,8 +4212,9 @@ impl Env {
             }
 
             let value: ExprResult = self.map_counter.into();
-            if let Some(o) = self.output_trigger
-                .as_mut() { o.replace_code_address(&value) }
+            if let Some(o) = self.output_trigger.as_mut() {
+                o.replace_code_address(&value)
+            }
             self.add_symbol_to_symbol_table(label, value)?;
 
             self.map_counter = self.map_counter.wrapping_add(delta);
@@ -4231,8 +4242,9 @@ impl Env {
             self.resolve_expr_may_fail_in_first_pass(exp)?
         };
 
-        if let Some(o) = self.output_trigger
-            .as_mut() { o.replace_code_address(&value) }
+        if let Some(o) = self.output_trigger.as_mut() {
+            o.replace_code_address(&value)
+        }
 
         let label = self.handle_global_and_local_labels(label)?;
         // XXX Disabled behavior the 12/01/2024
@@ -5747,20 +5759,16 @@ where
             let dst = arg1.get_register16().unwrap();
             let src = arg2.get_register16().unwrap();
             {
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::Register8(src.low().unwrap()),
-                        env
-                    )?
-                );
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::Register8(src.high().unwrap()),
-                        env
-                    )?
-                );
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()),
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                )?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()),
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                )?);
             }
         }
         else if (arg1.is_register_hl() && arg2.is_indexregister16())
@@ -5800,20 +5808,16 @@ where
 
             // general > indexed
             {
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::IndexRegister8(dst.low()),
-                        &DataAccess::Register8(src.low().unwrap()),
-                        env
-                    )?
-                );
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::IndexRegister8(dst.high()),
-                        &DataAccess::Register8(src.high().unwrap()),
-                        env
-                    )?
-                );
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister8(dst.low()),
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                )?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister8(dst.high()),
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                )?);
             }
         }
         else if arg1.is_register16() && arg2.is_indexregister_with_index() {
@@ -5822,28 +5826,20 @@ where
             let idx = arg2.get_index().unwrap();
 
             {
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::IndexRegister16WithIndex(
-                            src,
-                            idx.0,
-                            idx.1.to_expr().into_owned()
-                        ),
-                        env
-                    )?
-                );
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::IndexRegister16WithIndex(
-                            src,
-                            idx.0,
-                            idx.1.to_expr().into_owned().add(1)
-                        ),
-                        env
-                    )?
-                );
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.low().unwrap()),
+                    &DataAccess::IndexRegister16WithIndex(src, idx.0, idx.1.to_expr().into_owned()),
+                    env
+                )?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register8(dst.high().unwrap()),
+                    &DataAccess::IndexRegister16WithIndex(
+                        src,
+                        idx.0,
+                        idx.1.to_expr().into_owned().add(1)
+                    ),
+                    env
+                )?);
             }
         }
         else if arg1.is_indexregister_with_index() && arg2.is_register16() {
@@ -5851,28 +5847,24 @@ where
             let index = arg1.get_index().unwrap();
             let src = arg2.get_register16().unwrap();
             {
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::IndexRegister16WithIndex(
-                            dst,
-                            index.0,
-                            index.1.to_expr().into_owned()
-                        ),
-                        &DataAccess::Register8(src.low().unwrap()),
-                        env
-                    )?
-                );
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::IndexRegister16WithIndex(
-                            dst,
-                            index.0,
-                            index.1.to_expr().into_owned().add(1)
-                        ),
-                        &DataAccess::Register8(src.high().unwrap()),
-                        env
-                    )?
-                );
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister16WithIndex(
+                        dst,
+                        index.0,
+                        index.1.to_expr().into_owned()
+                    ),
+                    &DataAccess::Register8(src.low().unwrap()),
+                    env
+                )?);
+                bytes.extend(assemble_ld(
+                    &DataAccess::IndexRegister16WithIndex(
+                        dst,
+                        index.0,
+                        index.1.to_expr().into_owned().add(1)
+                    ),
+                    &DataAccess::Register8(src.high().unwrap()),
+                    env
+                )?);
             }
         }
         else if arg1.is_register16()

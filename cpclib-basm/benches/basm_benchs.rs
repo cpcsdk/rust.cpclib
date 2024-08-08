@@ -13,15 +13,8 @@ fn command_for_generated_test(fname: &str, output_file: &NamedUtf8TempFile) {
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
     let args_parser = build_args_parser();
-    let args = args_parser.get_matches_from([
-        "basm",
-        "-I",
-        "tests/asm/",
-        "-i",
-        "-o",
-        output_fname,
-        fname
-    ]);
+    let args =
+        args_parser.get_matches_from(["basm", "-I", "tests/asm/", "-i", "-o", output_fname, fname]);
     process(&args).expect("basm failed");
 }
 

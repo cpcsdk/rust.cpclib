@@ -662,7 +662,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                             .replace(".", "_");
                         writeln!(&mut file, "{}_WIDTH equ {}", fname, bytes_width).unwrap();
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
-                        
                     });
             },
             _ => unreachable!()
@@ -1113,8 +1112,6 @@ pub fn build_args_parser() -> clap::Command {
                         .help("Number of pixel lines to keep.")
                     )
                 );
-
-    
 
     if cfg!(feature = "xferlib") {
         let subcommand = Command::new("m4")

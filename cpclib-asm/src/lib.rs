@@ -207,8 +207,9 @@ impl AssemblingOptions {
         writer: W
     ) -> &mut Self {
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
-        if let Some(b) = self.output_builder
-            .as_mut() { b.write().unwrap().on() }
+        if let Some(b) = self.output_builder.as_mut() {
+            b.write().unwrap().on()
+        }
         self
     }
 }

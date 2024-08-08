@@ -1175,7 +1175,10 @@ impl ExprResult {
     pub fn matrix_width(&self) -> usize {
         match self {
             ExprResult::Matrix { .. } => {
-                self.matrix_rows().first().map(|r| r.list_len()).unwrap_or(0)
+                self.matrix_rows()
+                    .first()
+                    .map(|r| r.list_len())
+                    .unwrap_or(0)
             },
             _ => panic!("not a matrix")
         }
@@ -1713,12 +1716,16 @@ impl std::fmt::UpperHex for ExprResult {
 
 impl std::ops::AddAssign for ExprResult {
     fn add_assign(&mut self, rhs: Self) {
-        if let Ok(v) = self.clone().add(rhs) { *self = v }
+        if let Ok(v) = self.clone().add(rhs) {
+            *self = v
+        }
     }
 }
 
 impl std::ops::SubAssign for ExprResult {
     fn sub_assign(&mut self, rhs: Self) {
-        if let Ok(v) = self.clone().sub(rhs) { *self = v }
+        if let Ok(v) = self.clone().sub(rhs) {
+            *self = v
+        }
     }
 }

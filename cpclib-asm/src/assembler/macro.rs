@@ -52,10 +52,13 @@ fn expand_param<'p, P: MacroParamElement>(
     }
     else {
         let l = m.list_argument();
-        beef::lean::Cow::owned(l.iter()
+        beef::lean::Cow::owned(
+            l.iter()
                 .map(|p| expand_param(p.deref(), env))
                 .collect::<Result<Vec<_>, AssemblerError>>()?
-                .join(",").to_string())
+                .join(",")
+                .to_string()
+        )
     };
 
     Ok(extended)

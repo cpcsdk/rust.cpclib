@@ -55,7 +55,9 @@ fn main() {
         Cpr::load(cpr_fname).unwrap()
     };
 
-    let mut cpr2 = args.get_one::<Utf8PathBuf>("INPUT2").map(|cpr_fname2| Cpr::load(cpr_fname2).unwrap());
+    let mut cpr2 = args
+        .get_one::<Utf8PathBuf>("INPUT2")
+        .map(|cpr_fname2| Cpr::load(cpr_fname2).unwrap());
 
     if let Some(banks) = args.get_many::<i64>("SELECTED_BANKS") {
         let cprs = [&cpr].into_iter().chain(cpr2.as_ref());

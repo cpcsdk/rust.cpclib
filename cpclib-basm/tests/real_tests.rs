@@ -449,11 +449,7 @@ fn expect_success(fname: &str) {
         }
     }
     else {
-        eprintln!(
-            "Error when assembling {}:\n{}",
-            fname,
-            res.err().unwrap()
-        );
+        eprintln!("Error when assembling {}:\n{}", fname, res.err().unwrap());
         panic!()
     }
 }

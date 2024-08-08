@@ -64,7 +64,9 @@ impl<'a> Completer for XferInteractorHelper<'a> {
         }
 
         // Ensure local completion is only done for launch (at the moment)
-        if let Some("launch" | "put") = command { complete.extend(local.1) }
+        if let Some("launch" | "put") = command {
+            complete.extend(local.1)
+        }
 
         // Ensure M4 completion is not used for launch
         match command {

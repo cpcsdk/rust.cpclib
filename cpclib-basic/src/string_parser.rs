@@ -18,9 +18,7 @@ type BasicOneTokenResult<'src> = PResult<BasicToken, ContextError<StrContext>>;
 type BasicLineResult<'src> = PResult<BasicLine, ContextError<StrContext>>;
 
 /// Parse complete basic program"],
-pub fn parse_basic_program(
-    input: &mut &str
-) -> PResult<BasicProgram, ContextError<StrContext>> {
+pub fn parse_basic_program(input: &mut &str) -> PResult<BasicProgram, ContextError<StrContext>> {
     repeat(0.., parse_basic_line)
         .map(BasicProgram::new)
         .parse_next(input)

@@ -972,7 +972,7 @@ pub struct ExtendedDsk {
 impl Default for ExtendedDsk {
     fn default() -> Self {
         let cfg = crate::cfg::DiscConfig::single_head_data42_format();
-        
+
         crate::builder::build_edsk_from_cfg(&cfg)
     }
 }

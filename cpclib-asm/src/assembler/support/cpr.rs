@@ -121,12 +121,7 @@ impl CprAssembler {
     pub fn set_byte(&mut self, address: u16, byte: u8) -> Result<(), AssemblerError> {
         // update the page limit to unsure that 16kb is used at max
 
-        if let Some(first) = self
-            .pages
-            .selected_active_page_info()
-            .unwrap()
-            .startadr
-        {
+        if let Some(first) = self.pages.selected_active_page_info().unwrap().startadr {
             let max = (first as u32 + 0x4000).min(0xFFFF) as u16;
             if max > self.pages.selected_active_page_info().unwrap().output_limit {
                 dbg!(max, self.pages.selected_active_page_info());

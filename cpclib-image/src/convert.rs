@@ -568,9 +568,10 @@ impl OutputFormat {
     /// For formats manipulating a display address, modify it vertically in order to make scroll the image
     pub fn vertically_shift_display_address(&mut self, delta: i32) {
         if let Self::CPCMemory {
-                output_dimension,
-                display_address
-            } = self {
+            output_dimension,
+            display_address
+        } = self
+        {
             if delta >= 0 {
                 for _ in 0..delta * i32::from(output_dimension.nb_word_columns()) {
                     display_address.move_to_next_word();

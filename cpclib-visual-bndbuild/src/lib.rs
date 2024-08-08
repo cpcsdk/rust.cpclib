@@ -316,7 +316,9 @@ impl BndBuildApp {
     }
 
     pub fn update_cache(&mut self) {
-        if let Some(b) = self.builder_and_layers.as_mut() { b.update() }
+        if let Some(b) = self.builder_and_layers.as_mut() {
+            b.update()
+        }
     }
 }
 
@@ -659,8 +661,7 @@ impl eframe::App for BndBuildApp {
                         Some(path.to_owned())
                     }
                     else {
-                        self.file_error =
-                            format!("{} does not exists.", path.display()).into();
+                        self.file_error = format!("{} does not exists.", path.display()).into();
                         None
                     }
                 }

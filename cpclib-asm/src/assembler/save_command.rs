@@ -158,11 +158,7 @@ impl SaveCommand {
             either::Left(data) => {
                 std::fs::write(&self.filename, &data).map_err(|e| {
                     AssemblerError::AssemblingError {
-                        msg: format!(
-                            "Error while saving \"{}\". {}",
-                            &self.filename,
-                            e
-                        )
+                        msg: format!("Error while saving \"{}\". {}", &self.filename, e)
                     }
                 })?;
             }

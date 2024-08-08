@@ -61,7 +61,6 @@ struct CountedProgress {
 #[cfg(feature = "indicatif")]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
-        
         CountedProgress {
             bar: None,
             current_items: hashbag::HashBag::new(),
@@ -101,7 +100,9 @@ impl CountedProgress {
     }
 
     fn finished(&mut self) {
-        if let Some(bar) = self.bar.as_mut() { bar.finish() }
+        if let Some(bar) = self.bar.as_mut() {
+            bar.finish()
+        }
     }
 
     fn update_visual(&mut self, multi: &MultiProgress) {
@@ -149,7 +150,6 @@ impl CountedProgress {
 #[cfg(not(feature = "indicatif"))]
 impl CountedProgress {
     pub fn new(kind: &'static str, index: usize, freeze_amount: bool) -> Self {
-        
         CountedProgress {
             current_items: hashbag::HashBag::new(),
             nb_done: 0,
