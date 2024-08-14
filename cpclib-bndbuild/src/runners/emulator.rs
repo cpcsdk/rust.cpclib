@@ -1,4 +1,4 @@
-use std::default;
+use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::task::{ACE_CMDS, CPCEC_CMDS, WINAPE_CMDS};
@@ -22,6 +22,23 @@ impl Emulator {
             Emulator::Ace(_) => ACE_CMDS[0],
             Emulator::Cpcec(_) => CPCEC_CMDS[0],
             Emulator::Winape(_) => WINAPE_CMDS[0]
+        }
+    }
+
+    pub fn window_name_corresponds(&self, window_name: &str) -> bool{
+        match self {
+            Emulator::Ace(_) => {
+                window_name.starts_with("ACE-DL -")
+            },
+            Emulator::Cpcec(_) => todo!(),
+            Emulator::Winape(_) => todo!(),
+        }
+    }
+
+    pub fn screenshots_folder(&self) -> Utf8PathBuf {
+        match self {
+            Emulator::Ace(v) => v.screenshots_folder(),
+            _ => unimplemented!()
         }
     }
 }
@@ -51,6 +68,15 @@ impl Emulator {
             Emulator::Cpcec(version) => version.configuration(),
             Emulator::Winape(version) => version.configuration()
         }
+    }
+}
+
+impl AceVersion {
+    pub fn screenshots_folder(&self) -> Utf8PathBuf {
+        let conf = self.configuration();
+        let path = conf.cache_folder().join("export").join("screenshot");
+        path
+
     }
 }
 

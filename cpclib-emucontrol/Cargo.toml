@@ -1,0 +1,19 @@
+[package]
+name = "cpclib-emucontrol"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+
+cpclib-bndbuild.workspace = true
+cpclib-common.workspace = true
+camino-tempfile.workspace = true
+clap = {version="4.5.15", features=["derive"]}
+bon = "1.2.1"
+xcap = "0.0.11"
+enigo = "0.2.1"
+glob = "*"

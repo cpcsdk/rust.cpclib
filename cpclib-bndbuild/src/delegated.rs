@@ -103,6 +103,12 @@ pub struct DelegatedRunner {
     pub(crate) cmd: String
 }
 
+impl DelegatedRunner {
+    pub fn new(app: DelegateApplicationDescription, cmd: String) -> Self {
+        Self { app, cmd}
+    }
+}
+
 impl Runner for DelegatedRunner {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
         let cfg = &self.app;
