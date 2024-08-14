@@ -73,6 +73,9 @@ fn main() {
     let enigo = Enigo::new(&Settings::default()).unwrap();
     let mut robot = Robot::new(&emu, window, enigo);
 
+    #[cfg(windows)]
+    std::thread::sleep(Duration::from_millis(1000*3));
+
     let res = match cli.command {
         Commands::Orgams { src, dst, jump } => {
             if jump && !cli.keepemulator {
@@ -81,7 +84,7 @@ fn main() {
                 exit(-1);
             }
 
-            println!("!!! Current limitation: Ace must be configure as Amstrad old and must have enough memory. !!!");
+            println!("!!! Current limitation: Ace must be configure as Amstrad old, with a French keyboards, a French firmware, and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
             robot.handle_orgams(&src, dst.as_ref().map(|s| s.as_str()), jump)
         }
     };

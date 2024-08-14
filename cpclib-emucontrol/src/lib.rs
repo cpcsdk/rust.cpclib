@@ -247,11 +247,54 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.click_key(Key::Unicode(c))
     }
 
-    fn click_key(&mut self, key: Key) {
+        #[cfg(target_os="linux")]
+        fn click_key(&mut self, key: Key) {
+
+
+
+
         self.enigo.key(key, enigo::Direction::Press).unwrap();
         Self::wait_a_bit();
         self.enigo.key(key, enigo::Direction::Release).unwrap();
         Self::wait_a_bit();
+    }
+
+
+        #[cfg(windows)]
+        fn click_key(&mut self, key: Key) {
+        dbg!(&key);
+
+        #[cfg(windows)]
+        let key = match key {
+            // https://boostrobotics.eu/windows-key-codes/
+            Key::Unicode(v) if v >= '0' && v <= '9' => {
+                let nb = (v as u32 - '0' as u32);
+
+                self.enigo.key(Key::LShift, enigo::Direction::Press).unwrap();
+                Self::wait_a_bit();
+                Self::wait_a_bit();
+
+                let lut = ['à', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç'][nb as usize];
+                dbg!(nb, lut);
+                let key = Key::Unicode(lut);
+
+                self.enigo.key(key, enigo::Direction::Press).unwrap();
+                Self::wait_a_bit();
+                Self::wait_a_bit();
+                self.enigo.key(key, enigo::Direction::Release).unwrap();
+                Self::wait_a_bit();
+                Self::wait_a_bit();
+
+                self.enigo.key(Key::LShift, enigo::Direction::Release).unwrap();
+                Self::wait_a_bit();
+            }
+            _ => {
+                self.enigo.key(key, enigo::Direction::Press).unwrap();
+                Self::wait_a_bit();
+                self.enigo.key(key, enigo::Direction::Release).unwrap();
+                Self::wait_a_bit();
+            }
+        };
     }
 }
 
@@ -339,9 +382,12 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
     fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         // Open orgams
-        // French setup ?
         println!("> Launch orgams and open file {src} from drive a");
+        // French setup ?
+        #[cfg(target_os="linux")]
         let mut keys = vec![Key::Unicode('ù')];
+        #[cfg(windows)]
+        let mut keys = vec![Key::Unicode('ù') /*Key::Other(165)*/];
         keys.extend_from_slice(&[Key::Unicode('o'), Key::Unicode(','), Key::Unicode('"')]);
         for c in src.chars() {
             keys.push(Key::Unicode(c));
