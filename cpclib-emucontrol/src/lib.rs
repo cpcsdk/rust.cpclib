@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::path::absolute;
 use std::time::Duration;
 
 use bon::builder;
@@ -34,8 +35,10 @@ impl EmulatorConf {
         if let Some(drive_a) = &self.drive_a {
             match emu {
                 Emulator::Ace(_) => args.push(drive_a.to_string()),
-                Emulator::Cpcec(_) => todo!(),
-                Emulator::Winape(_) => todo!()
+                Emulator::Cpcec(_) => args.push(drive_a.to_string()),
+                Emulator::Winape(_) => {
+                    args.push(absolute(drive_a.to_string()).unwrap().display().to_string())
+                }
             }
         }
 
@@ -197,16 +200,32 @@ impl Robot {
         }
     }
 
+
+    pub fn handle_raw_text<S: AsRef<str>>(&mut self, text: S) {
+        let text = text.as_ref();
+        let text = text.replace(r"\n", "\n");
+        let text = &text;
+
+        match self {
+            Robot::Ace(r) => r.type_text(text),
+            Robot::Cpcec(r) => r.type_text(text),
+            Robot::Winape(r) => r.type_text(text)
+        }
+    }
+
+
     pub fn handle_orgams(
         &mut self,
+        drivea: Option<&str>,
+        albireo: Option<&str>,
         src: &str,
         dst: Option<&str>,
         jump: bool
     ) -> Result<(), String> {
         match self {
-            Robot::Ace(r) => r.handle_orgams(src, dst, jump),
-            Robot::Cpcec(r) => r.handle_orgams(src, dst, jump),
-            Robot::Winape(r) => r.handle_orgams(src, dst, jump)
+            Robot::Ace(r) => r.handle_orgams(drivea, albireo, src, dst, jump),
+            Robot::Cpcec(r) => r.handle_orgams(drivea, albireo, src, dst, jump),
+            Robot::Winape(r) => r.handle_orgams(drivea, albireo, src, dst, jump)
         }
     }
 
@@ -236,7 +255,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
 impl<E: UsedEmulator> RobotImpl<E> {
     fn type_text(&mut self, txt: &str) {
         for c in txt.chars() {
-            self.click_char(c);
+            self.click_char(dbg!(c));
         }
     }
 
@@ -247,7 +266,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
     }
 
     fn click_char(&mut self, c: char) {
-        self.click_key(Key::Unicode(c))
+        let key = match c {
+            '\n' => Key::Return,
+            _ => Key::Unicode(c)
+        };
+        self.click_key(key)
     }
 
         #[cfg(target_os="linux")]
@@ -258,7 +281,9 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         self.enigo.key(key, enigo::Direction::Press).unwrap();
         Self::wait_a_bit();
+        Self::wait_a_bit();
         self.enigo.key(key, enigo::Direction::Release).unwrap();
+        Self::wait_a_bit();
         Self::wait_a_bit();
     }
 
@@ -305,14 +330,37 @@ impl<E: UsedEmulator> RobotImpl<E> {
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
+
+    pub fn unidos_select_drive(
+        &mut self,
+        drivea: Option<&str>,
+        albireo: Option<&str>) {
+            if drivea.is_some() {
+                self.type_text("load\"dfa:");
+                self.click_key(Key::Return);
+            }
+            else if albireo.is_some() {
+                self.type_text("load\"sd:");
+                self.click_key(Key::Return);               
+            } else {
+                panic!("No storage selected");
+            }
+        }
+}
+
+
+impl<E: UsedEmulator> RobotImpl<E> {
     pub fn handle_orgams(
         &mut self,
+        drivea: Option<&str>,
+        albireo: Option<&str>,
         src: &str,
         dst: Option<&str>,
         jump: bool
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
+        self.unidos_select_drive(drivea, albireo);
 
         self.orgams_load(src)
             .map_err(|screen| {

@@ -16,6 +16,21 @@ fn assemble_z80tests_correct() {
 		.assert().success();
 }
 
+#[test]
+#[serial]
+#[timeout(60000)]
+fn assemble_z80tests_albireo_correct() {
+	let mut cmd = Command::cargo_bin("emucontrol").unwrap();
+	cmd
+		.args(&[
+			"--albireo", "./tests/ORG/",
+		  	"orgams",
+			"--src", "z80tests.o"
+			])
+		.assert().success();
+}
+
+
 
 #[test]
 #[serial]

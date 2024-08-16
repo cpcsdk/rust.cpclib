@@ -26,18 +26,37 @@ impl Emulator {
     }
 
     pub fn window_name_corresponds(&self, window_name: &str) -> bool{
+        let window_name = window_name.trim();
+        dbg!(window_name);
         match self {
             Emulator::Ace(_) => {
                 window_name.starts_with("ACE-DL -")
             },
-            Emulator::Cpcec(_) => todo!(),
-            Emulator::Winape(_) => todo!(),
+            Emulator::Cpcec(_) =>  window_name.starts_with("CPCEC ")
+            ,
+            Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
         }
     }
 
     pub fn screenshots_folder(&self) -> Utf8PathBuf {
         match self {
             Emulator::Ace(v) => v.screenshots_folder(),
+            _ => unimplemented!()
+        }
+    }
+
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        match self {
+            Emulator::Ace(v) => v.roms_folder(),
+            Emulator::Cpcec(v) => v.roms_folder(),
+            Emulator::Winape(v) => v.roms_folder(),
+            _ => unimplemented!()
+        }
+    }
+
+    pub fn albireo_folder(&self) -> Utf8PathBuf {
+        match self {
+            Emulator::Ace(v) => v.albireo_folder(),
             _ => unimplemented!()
         }
     }
@@ -78,7 +97,37 @@ impl AceVersion {
         path
 
     }
+
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        let conf = self.configuration();
+        let path = conf.cache_folder().join("media").join("rom");
+        path
+
+    }
+
+    pub fn albireo_folder(&self) -> Utf8PathBuf {
+        let conf = self.configuration();
+        let path = conf.cache_folder().join("media").join("albireo1");
+        path
+
+    }
 }
+
+
+impl CpcecVersion {
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        let conf = self.configuration();
+        conf.cache_folder()
+    }
+}
+
+impl WinapeVersion {
+    pub fn roms_folder(&self) -> Utf8PathBuf {
+        let conf = self.configuration();
+        conf.cache_folder().join("ROM")
+    }
+}
+
 
 cfg_match! {
     cfg(target_os = "linux") =>

@@ -17,6 +17,7 @@ bon = "1.2.1"
 xcap = "0.0.11"
 enigo = "0.2.1"
 glob = "*"
+fs_extra = "*"
 
 [dev-dependencies]
 assert_cmd = "2.0.16"
