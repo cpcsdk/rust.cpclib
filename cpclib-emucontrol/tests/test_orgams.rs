@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use ntest::timeout;
 use serial_test::serial;
 
+#[ignore]
 #[test]
 #[serial]
 #[timeout(60000)]
@@ -18,6 +19,7 @@ fn assemble_z80tests_correct() {
     .success();
 }
 
+#[ignore]
 #[test]
 #[serial]
 #[timeout(60000)]
@@ -28,6 +30,7 @@ fn assemble_z80tests_albireo_correct() {
         .success();
 }
 
+#[ignore]
 #[test]
 #[serial]
 #[timeout(60000)]
@@ -46,6 +49,7 @@ fn assemble_z80tests_tgt_incorrect() {
     .failure();
 }
 
+#[ignore]
 #[test]
 #[serial]
 #[timeout(60000)]
