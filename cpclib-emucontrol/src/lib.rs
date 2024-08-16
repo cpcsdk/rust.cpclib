@@ -11,6 +11,9 @@ use enigo::{Direction, Enigo, Key, Keyboard};
 use xcap::image::{open, GenericImageView, ImageBuffer, Rgba};
 use xcap::Window;
 
+
+type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
+
 pub enum AmstradRom {
     Orgams
 }
@@ -91,7 +94,7 @@ struct WinapeUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
-    fn screenshot(robot: &mut RobotImpl<Self>) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+    fn screenshot(robot: &mut RobotImpl<Self>) -> Screenshot {
         let folder = robot.emu.screenshots_folder();
         let before_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
             .unwrap()
@@ -268,25 +271,28 @@ impl<E: UsedEmulator> RobotImpl<E> {
         let key = match key {
             // https://boostrobotics.eu/windows-key-codes/
             Key::Unicode(v) if v >= '0' && v <= '9' => {
-                let nb = (v as u32 - '0' as u32);
 
-                self.enigo.key(Key::LShift, enigo::Direction::Press).unwrap();
-                Self::wait_a_bit();
-                Self::wait_a_bit();
+                if false {
+                    let nb = (v as u32 - '0' as u32);
 
-                let lut = ['à', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç'][nb as usize];
-                dbg!(nb, lut);
-                let key = Key::Unicode(lut);
+                    self.enigo.key(Key::RShift, enigo::Direction::Press).unwrap();
+                    Self::wait_a_bit();
+                    Self::wait_a_bit();
 
-                self.enigo.key(key, enigo::Direction::Press).unwrap();
-                Self::wait_a_bit();
-                Self::wait_a_bit();
-                self.enigo.key(key, enigo::Direction::Release).unwrap();
-                Self::wait_a_bit();
-                Self::wait_a_bit();
+                    let lut = ['à', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç'][nb as usize];
+                    dbg!(nb, lut);
+                    let key = Key::Unicode(lut);
 
-                self.enigo.key(Key::LShift, enigo::Direction::Release).unwrap();
-                Self::wait_a_bit();
+                    self.enigo.key(key, enigo::Direction::Press).unwrap();
+                    Self::wait_a_bit();
+                    Self::wait_a_bit();
+                    self.enigo.key(key, enigo::Direction::Release).unwrap();
+
+                    self.enigo.key(Key::RShift, enigo::Direction::Release).unwrap();
+                    Self::wait_a_bit();
+                }
+
+                self.enigo.text(dbg!(&format!("{v}"))).unwrap();
             }
             _ => {
                 self.enigo.key(key, enigo::Direction::Press).unwrap();
@@ -307,17 +313,27 @@ impl<E: UsedEmulator> RobotImpl<E> {
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
-        let res = self.orgams_assemble(src);
-        match res {
-            Ok(_) => {
+
+        self.orgams_load(src)
+            .map_err(|screen| {
+                ("Error while loading".to_string(), screen)
+            })
+            .and_then(|_| {
+                self.orgams_assemble(src)
+                .map_err(|screen| ("Error while assembling".to_string(), screen))
+            })
+
+            .and_then(|_| {
                 if jump {
                     self.orgams_jump()
+                    .map_err(|screen| ("Error while jumping".to_string(), screen))
                 }
                 else {
                     self.orgams_save(dst)
+                    .map_err(|screen| ("Error while saving".to_string(), screen))
                 }
-            },
-            Err(screen) => {
+            })
+            .map_err(|(msg, screen)| {
                 let path = {
                     let tempfile = camino_tempfile::Builder::new()
                         .prefix("bnd_stuff")
@@ -329,17 +345,17 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 };
                 screen.save(&path).unwrap();
                 open(&path).unwrap();
-                Err(format!("An error occured. Look at {}", path.to_string()))
-            }
-        }
+                format!("An error occurred.\n{msg}\nLook at {}.", path.to_string())
+            })
+
     }
 
-    fn orgams_jump(&mut self) -> Result<(), String> {
+    fn orgams_jump(&mut self) -> Result<(), Screenshot> {
         self.click_char('j');
         Ok(())
     }
 
-    fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), String> {
+    fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
         println!("> Save result");
         // handle saving
         self.click_key(Key::Unicode('b'));
@@ -374,28 +390,32 @@ impl<E: UsedEmulator> RobotImpl<E> {
             if pix_of_interest == &Rgba([247, 247, 247, 255])
                 || pix_of_interest == &Rgba([255, 243, 249, 255])
             {
-                println!("  error.");
-                return Err("Error while saving {dst}".to_owned());
+                return Err(screen);
             }
         }
     }
 
-    fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_load(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         // Open orgams
         println!("> Launch orgams and open file {src} from drive a");
+
         // French setup ?
-        #[cfg(target_os="linux")]
         let mut keys = vec![Key::Unicode('ù')];
-        #[cfg(windows)]
-        let mut keys = vec![Key::Unicode('ù') /*Key::Other(165)*/];
         keys.extend_from_slice(&[Key::Unicode('o'), Key::Unicode(','), Key::Unicode('"')]);
         for c in src.chars() {
             keys.push(Key::Unicode(c));
         }
         keys.extend_from_slice(&[Key::Unicode('"'), Key::Return]);
         self.click_keys(&keys);
-        self.wait_orgams_loading();
+
+
+        let res = self.wait_orgams_loading();
         println!("  done.");
+
+        res
+    }
+
+    fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
 
         println!("> Assemble {src}");
         self.enigo
@@ -448,7 +468,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
-    fn wait_orgams_loading(&mut self) {
+    fn wait_orgams_loading(&mut self) -> Result<(), Screenshot> {
         #[derive(PartialEq)]
         enum State {
             Basic,
@@ -457,10 +477,10 @@ impl<E: UsedEmulator> RobotImpl<E> {
         };
 
         // we check a specific pixel that goes from blue to black then purple
-        let coord_of_interest = (8, 48); // 2 to work on Amstrad plus and old
         let mut state = State::Basic;
         while state != State::Loaded {
             let screen = E::screenshot(self);
+            let coord_of_interest = (8, 48); // 2 to work on Amstrad plus and old
             let pix_of_interest = screen.get_pixel(coord_of_interest.0, coord_of_interest.1);
 
             state = match state {
@@ -487,7 +507,17 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 State::Loaded => State::Loaded
             };
 
+            let coord_of_interest = (56, 508); // XXX Plus (63, 508)
+            let pix_of_interest = screen.get_pixel(coord_of_interest.0, coord_of_interest.1);
+            if pix_of_interest == &Rgba([247, 247, 247, 255])
+                || pix_of_interest == &Rgba([255, 243, 249, 255])
+            {
+                return Err(screen);
+            }
+
             std::thread::sleep(Duration::from_millis(1000 / 10));
         }
+
+        Ok(())
     }
 }
