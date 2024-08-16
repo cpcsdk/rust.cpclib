@@ -12,7 +12,6 @@ use enigo::{Direction, Enigo, Key, Keyboard};
 use xcap::image::{open, GenericImageView, ImageBuffer, Rgba};
 use xcap::Window;
 
-
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 pub enum AmstradRom {
@@ -38,7 +37,7 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) => {
                     args.push(absolute(drive_a.to_string()).unwrap().display().to_string())
-                }
+                },
             }
         }
 
@@ -200,7 +199,6 @@ impl Robot {
         }
     }
 
-
     pub fn handle_raw_text<S: AsRef<str>>(&mut self, text: S) {
         let text = text.as_ref();
         let text = text.replace(r"\n", "\n");
@@ -212,7 +210,6 @@ impl Robot {
             Robot::Winape(r) => r.type_text(text)
         }
     }
-
 
     pub fn handle_orgams(
         &mut self,
@@ -273,12 +270,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.click_key(key)
     }
 
-        #[cfg(target_os="linux")]
-        fn click_key(&mut self, key: Key) {
-
-
-
-
+    #[cfg(target_os = "linux")]
+    fn click_key(&mut self, key: Key) {
         self.enigo.key(key, enigo::Direction::Press).unwrap();
         Self::wait_a_bit();
         Self::wait_a_bit();
@@ -287,20 +280,20 @@ impl<E: UsedEmulator> RobotImpl<E> {
         Self::wait_a_bit();
     }
 
-
-        #[cfg(windows)]
-        fn click_key(&mut self, key: Key) {
+    #[cfg(windows)]
+    fn click_key(&mut self, key: Key) {
         dbg!(&key);
 
         #[cfg(windows)]
         let key = match key {
             // https://boostrobotics.eu/windows-key-codes/
             Key::Unicode(v) if v >= '0' && v <= '9' => {
-
                 if false {
                     let nb = (v as u32 - '0' as u32);
 
-                    self.enigo.key(Key::RShift, enigo::Direction::Press).unwrap();
+                    self.enigo
+                        .key(Key::RShift, enigo::Direction::Press)
+                        .unwrap();
                     Self::wait_a_bit();
                     Self::wait_a_bit();
 
@@ -313,12 +306,14 @@ impl<E: UsedEmulator> RobotImpl<E> {
                     Self::wait_a_bit();
                     self.enigo.key(key, enigo::Direction::Release).unwrap();
 
-                    self.enigo.key(Key::RShift, enigo::Direction::Release).unwrap();
+                    self.enigo
+                        .key(Key::RShift, enigo::Direction::Release)
+                        .unwrap();
                     Self::wait_a_bit();
                 }
 
                 self.enigo.text(dbg!(&format!("{v}"))).unwrap();
-            }
+            },
             _ => {
                 self.enigo.key(key, enigo::Direction::Press).unwrap();
                 Self::wait_a_bit();
@@ -330,24 +325,20 @@ impl<E: UsedEmulator> RobotImpl<E> {
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
-
-    pub fn unidos_select_drive(
-        &mut self,
-        drivea: Option<&str>,
-        albireo: Option<&str>) {
-            if drivea.is_some() {
-                self.type_text("load\"dfa:");
-                self.click_key(Key::Return);
-            }
-            else if albireo.is_some() {
-                self.type_text("load\"sd:");
-                self.click_key(Key::Return);               
-            } else {
-                panic!("No storage selected");
-            }
+    pub fn unidos_select_drive(&mut self, drivea: Option<&str>, albireo: Option<&str>) {
+        if drivea.is_some() {
+            self.type_text("load\"dfa:");
+            self.click_key(Key::Return);
         }
+        else if albireo.is_some() {
+            self.type_text("load\"sd:");
+            self.click_key(Key::Return);
+        }
+        else {
+            panic!("No storage selected");
+        }
+    }
 }
-
 
 impl<E: UsedEmulator> RobotImpl<E> {
     pub fn handle_orgams(
@@ -363,22 +354,19 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.unidos_select_drive(drivea, albireo);
 
         self.orgams_load(src)
-            .map_err(|screen| {
-                ("Error while loading".to_string(), screen)
-            })
+            .map_err(|screen| ("Error while loading".to_string(), screen))
             .and_then(|_| {
                 self.orgams_assemble(src)
-                .map_err(|screen| ("Error while assembling".to_string(), screen))
+                    .map_err(|screen| ("Error while assembling".to_string(), screen))
             })
-
             .and_then(|_| {
                 if jump {
                     self.orgams_jump()
-                    .map_err(|screen| ("Error while jumping".to_string(), screen))
+                        .map_err(|screen| ("Error while jumping".to_string(), screen))
                 }
                 else {
                     self.orgams_save(dst)
-                    .map_err(|screen| ("Error while saving".to_string(), screen))
+                        .map_err(|screen| ("Error while saving".to_string(), screen))
                 }
             })
             .map_err(|(msg, screen)| {
@@ -395,7 +383,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 open(&path).unwrap();
                 format!("An error occurred.\n{msg}\nLook at {}.", path.to_string())
             })
-
     }
 
     fn orgams_jump(&mut self) -> Result<(), Screenshot> {
@@ -456,7 +443,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
         keys.extend_from_slice(&[Key::Unicode('"'), Key::Return]);
         self.click_keys(&keys);
 
-
         let res = self.wait_orgams_loading();
         println!("  done.");
 
@@ -464,7 +450,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
     }
 
     fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
-
         println!("> Assemble {src}");
         self.enigo
             .key(Key::Control, enigo::Direction::Press)

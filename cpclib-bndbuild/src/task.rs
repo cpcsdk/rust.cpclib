@@ -54,7 +54,7 @@ impl Display for Task {
             Task::Xfer(s) => (XFER_CMDS[0], s),
             Task::Emulator(e, s) => (e.get_command(), s),
             Task::Martine(s) => (MARTINE_CMDS[0], s),
-            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
+            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s)
         };
 
         write!(

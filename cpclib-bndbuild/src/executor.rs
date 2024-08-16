@@ -7,9 +7,9 @@ use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
-use crate::runners::r#extern::ExternRunner;
 use crate::runners::impdisc::ImpDskVersion;
 use crate::runners::martine::MartineVersion;
+use crate::runners::r#extern::ExternRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::runners::{martine, Runner};
@@ -53,14 +53,20 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Echo(_) => ECHO_RUNNER.run(task.args()),
         Task::Extern(_) => EXTERN_RUNNER.run(task.args()),
         Task::ImgConverter(_) => IMGCONV_RUNNER.run(task.args()),
-        Task::ImpDsk(_) => DelegatedRunner {
-            app: ImpDskVersion::default().configuration(),
-            cmd: ImpDskVersion::default().get_command().to_owned()
-        }.run(task.args()),
-        Task::Martine(_) => DelegatedRunner {
-            app: MartineVersion::default().configuration(),
-            cmd: MartineVersion::default().get_command().to_owned()
-        }.run(task.args()),
+        Task::ImpDsk(_) => {
+            DelegatedRunner {
+                app: ImpDskVersion::default().configuration(),
+                cmd: ImpDskVersion::default().get_command().to_owned()
+            }
+            .run(task.args())
+        },
+        Task::Martine(_) => {
+            DelegatedRunner {
+                app: MartineVersion::default().configuration(),
+                cmd: MartineVersion::default().get_command().to_owned()
+            }
+            .run(task.args())
+        },
         Task::Rm(_) => RM_RUNNER.run(task.args()),
         Task::Xfer(_) => XFER_RUNNER.run(task.args())
     }

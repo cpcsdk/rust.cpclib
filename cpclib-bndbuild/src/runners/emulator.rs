@@ -25,16 +25,13 @@ impl Emulator {
         }
     }
 
-    pub fn window_name_corresponds(&self, window_name: &str) -> bool{
+    pub fn window_name_corresponds(&self, window_name: &str) -> bool {
         let window_name = window_name.trim();
         dbg!(window_name);
         match self {
-            Emulator::Ace(_) => {
-                window_name.starts_with("ACE-DL -")
-            },
-            Emulator::Cpcec(_) =>  window_name.starts_with("CPCEC ")
-            ,
-            Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
+            Emulator::Ace(_) => window_name.starts_with("ACE-DL -"),
+            Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
+            Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus")
         }
     }
 
@@ -95,24 +92,20 @@ impl AceVersion {
         let conf = self.configuration();
         let path = conf.cache_folder().join("export").join("screenshot");
         path
-
     }
 
     pub fn roms_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration();
         let path = conf.cache_folder().join("media").join("rom");
         path
-
     }
 
     pub fn albireo_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration();
         let path = conf.cache_folder().join("media").join("albireo1");
         path
-
     }
 }
-
 
 impl CpcecVersion {
     pub fn roms_folder(&self) -> Utf8PathBuf {
@@ -127,7 +120,6 @@ impl WinapeVersion {
         conf.cache_folder().join("ROM")
     }
 }
-
 
 cfg_match! {
     cfg(target_os = "linux") =>

@@ -105,7 +105,7 @@ pub struct DelegatedRunner {
 
 impl DelegatedRunner {
     pub fn new(app: DelegateApplicationDescription, cmd: String) -> Self {
-        Self { app, cmd}
+        Self { app, cmd }
     }
 }
 
