@@ -12,7 +12,7 @@ use crate::runners::martine::MartineVersion;
 use crate::runners::r#extern::ExternRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
-use crate::runners::{martine, Runner};
+use crate::runners::Runner;
 use crate::task::Task;
 
 pub static BASM_RUNNER: LazyLock<BasmRunner> = LazyLock::new(BasmRunner::default);

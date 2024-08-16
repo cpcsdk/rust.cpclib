@@ -9,7 +9,6 @@ use ureq::Response;
 
 use crate::runners::r#extern::ExternRunner;
 use crate::runners::Runner;
-use crate::task::{ACE_CMDS, CPCEC_CMDS, WINAPE_CMDS};
 
 pub enum ArchiveFormat {
     Raw,

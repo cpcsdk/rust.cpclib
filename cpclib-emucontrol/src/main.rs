@@ -3,10 +3,8 @@ use std::time::Duration;
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use cpclib_bndbuild::runners::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
-use cpclib_common::camino::Utf8Path;
 use cpclib_emucontrol::{get_emulator_window, start_emulator, EmulatorConf, Robot};
 use enigo::{Enigo, Settings};
-use fs_extra::dir::CopyOptions;
 
 #[derive(Parser, Debug)]
 struct Cli {
