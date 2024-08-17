@@ -11,7 +11,10 @@ loop
 	inc hl
 	jp loop
 
-txt 	incbin "data1.o" : incbin 'data2.o' : defb 0
+txt incbin "data1.o" : incbin 'data2.o' 
+	incbin "orgams/DATA3.BIN", 128 ; no automatic header removal :(
+	                               ; because orgams is not pedentic
+								   ; on amsdos header
 LAST_ADDRESS
 
 	save "UCPM", FIRST_ADDRESS, \

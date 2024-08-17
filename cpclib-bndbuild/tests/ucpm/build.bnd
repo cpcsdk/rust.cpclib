@@ -19,12 +19,13 @@ ace {{dsk}}
 - tgt: sna
   dep: {{SNA}}
 
-- tgt: {{DSK}} {{SNA}} ucpm.rasm
-  dep: ucpm.asm data1.o data2.o
+- tgt: {{DSK}} {{SNA}} ucpm.rasm ucpm.lst
+  dep: ucpm.asm data1.o data2.o orgams/DATA3.BIN
   cmd: > 
     basm ucpm.asm 
       --snapshot -o {{SNA}}
       --ace ucpm.rasm 
+      --lst ucpm.lst
       --override
       -DFNAME="UCPM"
       -DDSK="{{DSK}}"
@@ -32,6 +33,10 @@ ace {{dsk}}
 {{build_data("data1")}}
 
 {{build_data("data2")}}
+
+- tgt: orgams/DATA3.BIN
+  dep: orgams/DATA3.O
+  cmd: orgams --from orgams --src DATA3.O --dst DATA3.BIN
 
 - tgt: emu
   dep: {{DSK}} ucpm.rasm
@@ -50,4 +55,7 @@ ace {{dsk}}
   phony: true
   cmd: -rm {{DSK}}
 
+- tgt: monogasm
+  phony: true
+  cmd: emu --albireo orgams  -k run --text  ùo,"DATA3.O\n
 
