@@ -1,11 +1,12 @@
 use std::sync::LazyLock;
 
 use cpclib_runner::delegated::DelegatedRunner;
+use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
-use crate::runners::assembler::{Assembler, BasmRunner};
+use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
@@ -29,15 +30,25 @@ pub static XFER_RUNNER: LazyLock<XferRunner> = LazyLock::new(XferRunner::default
 pub fn execute(task: &Task) -> Result<(), String> {
     match task {
         Task::Emulator(e, _) => {
-            DelegatedRunner {
-                app: e.configuration(),
-                cmd: e.get_command().to_owned()
+            match e {
+                crate::runners::emulator::Emulator::DirectAccess(e) => {
+                    DelegatedRunner {
+                        app: e.configuration(),
+                        cmd: e.get_command().to_owned()
+                    }
+                    .run(task.args())
+                },
+                crate::runners::emulator::Emulator::ControlledAccess => {
+                    EmuControlledRunner::default().run(task.args())
+                },
             }
-            .run(task.args())
         },
         Task::Assembler(a, _) => {
             match a {
                 Assembler::Basm => BASM_RUNNER.run(task.args()),
+                Assembler::Orgams => {
+                    OrgamsRunner::default().run(task.args())
+                }
                 Assembler::Extern(e) => {
                     DelegatedRunner {
                         app: e.configuration(),

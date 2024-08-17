@@ -1598,6 +1598,7 @@ dependencies = [
  "build-deps",
  "built",
  "camino-tempfile",
+ "clap 4.5.15",
  "cpclib-asm",
  "cpclib-basm",
  "cpclib-common",
@@ -1695,17 +1696,13 @@ name = "cpclib-emucontrol"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
- "bon",
- "camino-tempfile",
  "clap 4.5.15",
  "cpclib-common",
  "cpclib-runner",
- "enigo",
  "fs_extra",
  "glob",
  "ntest",
  "serial_test",
- "xcap",
 ]
 
 [[package]]
@@ -1749,13 +1746,18 @@ dependencies = [
 name = "cpclib-runner"
 version = "0.1.0"
 dependencies = [
+ "bon",
+ "camino-tempfile",
+ "clap 4.5.15",
  "cpclib-common",
  "directories",
+ "enigo",
  "flate2",
  "glob",
  "shlex",
  "tar",
  "ureq",
+ "xcap",
  "zip-extract",
 ]
 

@@ -6,11 +6,11 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::RunnerWithClap;
 use lazy_regex::regex_captures;
 use thiserror::Error;
 
 use crate::executor::*;
-use crate::runners::RunnerWithClap;
 pub use crate::BndBuilder;
 
 pub mod builder;

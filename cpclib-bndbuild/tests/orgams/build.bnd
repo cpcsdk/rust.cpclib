@@ -1,0 +1,31 @@
+{% set FROM="cpcfolder" %}
+{% set SRC="BORDER.O" %}
+{% set DST="BORDER" %}
+
+# Note :
+# 0 is written in #BOOT.CFG of the albireo folder. It means unidos does not try to access the other drives (and we do not lost time with a wrong drive configuration)
+# of course, an emulator is used to assemble the file
+
+
+# `bndbuild edit` to open monogams on the source
+# `bndbuild exec` to assemble and launch the executable
+# `bndbuild cpc` to launch an my CPC
+
+- tgt: exec
+  dep: {{FROM}}/{{DST}}
+  cmd: emu --albireo {{FROM}} -k run --text run"BORDER\n
+
+
+- tgt: cpc
+  dep: {{FROM}}/{{DST}}
+  cmd: xfer 192.168.1.26 -y {{FROM}}/{{DST}}
+
+
+- tgt: {{FROM}}/{{DST}}
+  dep: {{FROM}}/{{SRC}}
+  cmd: orgams --from {{FROM}} --src {{SRC}} --dst {{DST}}
+
+# open monogams to edit the file
+- tgt: edit
+  phony: true
+  cmd: emu --albireo {{FROM}} -k run --text ùo,"{{SRC}}\n   # There is a bug to fix here. To use quotes would be better

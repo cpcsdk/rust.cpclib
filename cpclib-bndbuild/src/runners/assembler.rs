@@ -1,23 +1,103 @@
-use cpclib_common::clap::{self, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
+use cpclib_common::camino::{Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::emucontrol::{handle_arguments, Cli};
 use cpclib_runner::runner::assembler::ExternAssembler;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
-use crate::task::BASM_CMDS;
+use crate::task::{BASM_CMDS, ORGAMS_CMDS};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Assembler {
     Basm,
+    Orgams,
     Extern(ExternAssembler)
 }
 
 impl Assembler {
     pub fn get_command(&self) -> &str {
         match self {
-            Assembler::Basm => &BASM_CMDS[0],
+            Assembler::Basm => BASM_CMDS[0],
+            Assembler::Orgams => ORGAMS_CMDS[0],
             Assembler::Extern(a) => a.get_command()
         }
+    }
+}
+
+#[derive(Parser, Debug)]
+struct OrgamsCli {
+    #[arg(
+        short,
+        long,
+        value_name = "DATA_SOURCE",
+        help = "Data source (a folder for using albireo or a disc image)"
+    )]
+    from: Utf8PathBuf,
+
+    #[arg(short, long, value_name="SRC", help="Input file to assemble")]
+    src: String,
+
+    #[arg(
+        short,
+        long,
+        help = "Filename to save. By default use the one provided by orgams"
+    )]
+    dst: Option<String>,
+}
+
+pub struct OrgamsRunner {
+    command: clap::Command
+}
+
+impl Default for OrgamsRunner {
+    fn default() -> Self {
+        let command = <OrgamsCli as CommandFactory>::command();
+        Self { command }
+    }
+}
+
+impl RunnerWithClap for OrgamsRunner {
+    fn get_clap_command(&self) -> &Command {
+        &self.command
+    }
+}
+
+impl Runner for OrgamsRunner {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+        let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+        itr.insert(0, "orgams");
+        let matches = self.get_matches(&itr)?;
+
+        let mut real_arguments = Vec::new();
+        real_arguments.push("orgams");
+        let from = matches.get_one::<Utf8PathBuf>("from").unwrap();
+        if from.is_dir() {
+            real_arguments.push("--albireo");
+        } else {
+            real_arguments.push("--drivea");
+        }
+        real_arguments.push(from.as_str());
+
+        real_arguments.push("--emulator");
+        real_arguments.push("ace");
+
+        real_arguments.push("orgams");
+        
+        real_arguments.push("--src");
+        real_arguments.push(matches.get_one::<String>("src").unwrap());
+
+        if let Some(dst) = matches.get_one::<String>("dst") {
+            real_arguments.push("--dst");
+            real_arguments.push(dst);
+        }
+
+        let cli = Cli::parse_from(real_arguments);
+        handle_arguments(cli)
+    }
+
+    fn get_command(&self) -> &str {
+        "orgams"
     }
 }
 

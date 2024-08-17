@@ -106,6 +106,7 @@ dbg = "1.0.4"
 delegate = "0.12.0"
 either = "1.13.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
+enigo = "0.2.1"
 enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "11.3.0"
@@ -165,6 +166,7 @@ thiserror = "1.0"
 time = "0.3.36"
 velcro = "0.5.4"
 winnow = { version = "0.6.18", features = ["simd"] }
+xcap = "0.0.11"
 
 # gui based dependencies
 eframe = "0.28"

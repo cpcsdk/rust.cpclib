@@ -1,4 +1,3 @@
-use cpclib_bndbuild::runners::RunnerWithClap;
 use cpclib_bndbuild::{build_args_parser, process_matches, BndBuilderError};
 
 fn main() {

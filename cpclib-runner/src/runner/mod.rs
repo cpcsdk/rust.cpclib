@@ -6,4 +6,4 @@ pub mod emulator;
 pub mod impdisc;
 pub mod martine;
 
-pub use runner::{ExternRunner, Runner};
+pub use runner::{ExternRunner, Runner, RunnerWithClap};

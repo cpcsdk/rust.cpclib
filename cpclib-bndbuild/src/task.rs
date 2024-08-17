@@ -1,9 +1,10 @@
 use std::fmt::Display;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
 use cpclib_runner::runner::emulator::{
-    AceVersion, CpcecVersion, Emulator, WinapeVersion, ACE_CMD, CPCEC_CMD, WINAPE_CMD
+    AceVersion, CpcecVersion, WinapeVersion, ACE_CMD, CPCEC_CMD, WINAPE_CMD
 };
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -11,6 +12,7 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::runners::assembler::Assembler;
+use crate::runners::emulator::Emulator;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -28,6 +30,7 @@ pub enum Task {
     Xfer(StandardTask)
 }
 
+pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
 pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
@@ -41,6 +44,7 @@ pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
+pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
@@ -94,22 +98,28 @@ impl<'de> Deserialize<'de> for Task {
                 };
 
                 if ACE_CMDS.iter().contains(&code) {
-                    Ok(Task::Emulator(Emulator::Ace(AceVersion::default()), std))
+                    Ok(Task::Emulator(Emulator::new_ace_default(), std))
                 }
                 else if CPCEC_CMDS.iter().contains(&code) {
                     Ok(Task::Emulator(
-                        Emulator::Cpcec(CpcecVersion::default()),
+                        Emulator::new_cpcec_default(),
                         std
                     ))
                 }
                 else if WINAPE_CMDS.iter().contains(&code) {
                     Ok(Task::Emulator(
-                        Emulator::Winape(WinapeVersion::default()),
+                        Emulator::new_winape_default(),
                         std
                     ))
                 }
+                else if EMUCTRL_CMDS.iter().contains(&code) {
+                    Ok(Task::Emulator(Emulator::new_controlled_access(), std))
+                }
                 else if BASM_CMDS.iter().contains(&code) {
                     Ok(Task::Assembler(Assembler::Basm, std))
+                }
+                else if ORGAMS_CMDS.iter().contains(&code) {
+                    Ok(Task::Assembler(Assembler::Orgams, std))
                 }
                 else if RASM_CMDS.iter().contains(&code) {
                     Ok(Task::Assembler(

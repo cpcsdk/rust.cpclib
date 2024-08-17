@@ -30,7 +30,6 @@ impl Emulator {
 
     pub fn window_name_corresponds(&self, window_name: &str) -> bool {
         let window_name = window_name.trim();
-        dbg!(window_name);
         match self {
             Emulator::Ace(_) => window_name.starts_with("ACE-DL -"),
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
@@ -241,3 +240,6 @@ cfg_match! {
     _ => {
     }
 }
+
+
+
