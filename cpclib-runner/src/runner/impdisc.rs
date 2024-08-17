@@ -1,34 +1,35 @@
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
-use crate::task::MARTINE_CMDS;
 
-pub enum MartineVersion {
-    V0_39
+pub const IMPDISC_CMD: &str = "impdsk";
+
+pub enum ImpDskVersion {
+    V0_24
 }
 
-impl Default for MartineVersion {
+impl Default for ImpDskVersion {
     fn default() -> Self {
-        MartineVersion::V0_39
+        ImpDskVersion::V0_24
     }
 }
 
-impl MartineVersion {
+impl ImpDskVersion {
     pub fn get_command(&self) -> &str {
-        MARTINE_CMDS[0]
+        IMPDISC_CMD
     }
 }
 
 cfg_match! {
     cfg(target_os = "linux") =>
     {
-        impl MartineVersion {
+        impl ImpDskVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    MartineVersion::V0_39  =>
+                    ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip", // we assume a modern CPU
-                            folder : "martine_0_39",
+                            download_url: "https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-linux-amd64.zip", // we assume a modern CPU
+                            folder : "ImpDsk_0_24",
                             archive_format: ArchiveFormat::Zip,
-                            exec_fname: "martine.linux",
+                            exec_fname: "binaries/dsk-linux-amd64",
                             compile: None
                         }
                     }
@@ -37,15 +38,15 @@ cfg_match! {
     }
     cfg(target_os = "windows") =>
     {
-        impl MartineVersion {
+        impl ImpDskVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    MartineVersion::V0_39  =>
+                    ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip",
-                            folder : "martine_0_39",
+                            download_url: "https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-windows-amd64.zip",
+                            folder : "ImpDsk_0_24",
                             archive_format: ArchiveFormat::Zip,
-                            exec_fname: "martine.exe",
+                            exec_fname: "binaries/dsk-windows-amd64.exe",
                             compile: None
                         }
                     }

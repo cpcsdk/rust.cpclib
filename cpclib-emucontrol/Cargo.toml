@@ -8,7 +8,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-cpclib-bndbuild.workspace = true
+cpclib-runner.workspace = true
 cpclib-common.workspace = true
 camino-tempfile.workspace = true
 clap = {version="4.5.15", features=["derive"]}

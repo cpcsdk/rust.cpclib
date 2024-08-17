@@ -4,10 +4,10 @@ use std::path::absolute;
 use std::time::Duration;
 
 use bon::builder;
-use cpclib_bndbuild::delegated::DelegatedRunner;
-use cpclib_bndbuild::runners::emulator::Emulator;
-use cpclib_bndbuild::runners::Runner;
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::delegated::DelegatedRunner;
+use cpclib_runner::runner::emulator::Emulator;
+use cpclib_runner::runner::Runner;
 use enigo::{Direction, Enigo, Key, Keyboard};
 use xcap::image::{open, GenericImageView, ImageBuffer, Rgba};
 use xcap::Window;

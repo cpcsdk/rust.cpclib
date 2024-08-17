@@ -1,7 +1,20 @@
 use cpclib_common::itertools::Itertools;
 
-use super::Runner;
-use crate::task::EXTERN_CMDS;
+use crate::runner::arguments::get_all_args;
+
+pub trait Runner {
+    /// Run the task and return true if successfull
+    fn run(&self, arguments: &str) -> Result<(), String> {
+        println!("\t$ {} {}", self.get_command(), arguments);
+        let args = get_all_args(&arguments.replace(r"\", r"\\").replace("\"", "\\\""));
+        self.inner_run(&args)
+    }
+
+    /// Implement the command specific action
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String>;
+
+    fn get_command(&self) -> &str;
+}
 
 #[derive(Default)]
 pub struct ExternRunner {}
@@ -42,6 +55,6 @@ impl Runner for ExternRunner {
     }
 
     fn get_command(&self) -> &str {
-        EXTERN_CMDS[0]
+        "external"
     }
 }

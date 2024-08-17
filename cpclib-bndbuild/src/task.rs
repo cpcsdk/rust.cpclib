@@ -1,11 +1,16 @@
 use std::fmt::Display;
 
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
+use cpclib_runner::runner::emulator::{
+    AceVersion, CpcecVersion, Emulator, WinapeVersion, ACE_CMD, CPCEC_CMD, WINAPE_CMD
+};
+use cpclib_runner::runner::impdisc::IMPDISC_CMD;
+use cpclib_runner::runner::martine::MARTINE_CMD;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
-use crate::runners::assembler::{Assembler, RasmVersion};
-use crate::runners::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
+use crate::runners::assembler::Assembler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -23,20 +28,20 @@ pub enum Task {
     Xfer(StandardTask)
 }
 
-pub const ACE_CMDS: &[&str] = &["ace", "acedl"];
-pub const WINAPE_CMDS: &[&str] = &["winape"];
-pub const CPCEC_CMDS: &[&str] = &["cpcec"];
+pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
+pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
+pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
-pub const IMPDISC_CMDS: &[&str] = &["impdsk", "impdisc"];
+pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
-pub const MARTINE_CMDS: &[&str] = &["martine"];
-pub const RASM_CMDS: &[&str] = &["rasm"];
+pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
+pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
@@ -108,7 +113,9 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if RASM_CMDS.iter().contains(&code) {
                     Ok(Task::Assembler(
-                        Assembler::Rasm(RasmVersion::default()),
+                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
+                            RasmVersion::default()
+                        )),
                         std
                     ))
                 }

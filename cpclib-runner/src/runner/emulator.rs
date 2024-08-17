@@ -1,7 +1,10 @@
 use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
-use crate::task::{ACE_CMDS, CPCEC_CMDS, WINAPE_CMDS};
+
+pub const ACE_CMD: &str = "ace";
+pub const WINAPE_CMD: &str = "winape";
+pub const CPCEC_CMD: &str = "cpcec";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Emulator {
@@ -19,9 +22,9 @@ impl Default for Emulator {
 impl Emulator {
     pub fn get_command(&self) -> &str {
         match self {
-            Emulator::Ace(_) => ACE_CMDS[0],
-            Emulator::Cpcec(_) => CPCEC_CMDS[0],
-            Emulator::Winape(_) => WINAPE_CMDS[0]
+            Emulator::Ace(_) => ACE_CMD,
+            Emulator::Cpcec(_) => CPCEC_CMD,
+            Emulator::Winape(_) => WINAPE_CMD
         }
     }
 
@@ -74,7 +77,7 @@ pub enum CpcecVersion {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum WinapeVersion {
     #[default]
-    v2_0b2
+    V2_0b2
 }
 
 impl Emulator {
@@ -160,7 +163,7 @@ cfg_match! {
         impl WinapeVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    WinapeVersion::v2_0b2 => {
+                    WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
                             download_url: "http://www.winape.net/download/WinAPE20B2.zip",
                             folder: "winape_2_0b2",
@@ -208,7 +211,7 @@ cfg_match! {
         impl WinapeVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    WinapeVersion::v2_0b2 => {
+                    WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
                             download_url: "http://www.winape.net/download/WinAPE20B2.zip",
                             folder: "winape_2_0b2",

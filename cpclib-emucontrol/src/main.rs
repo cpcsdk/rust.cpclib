@@ -2,8 +2,8 @@ use std::process::exit;
 use std::time::Duration;
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
-use cpclib_bndbuild::runners::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
 use cpclib_emucontrol::{get_emulator_window, start_emulator, EmulatorConf, Robot};
+use cpclib_runner::runner::emulator::{AceVersion, CpcecVersion, Emulator, WinapeVersion};
 use enigo::{Enigo, Settings};
 
 #[derive(Parser, Debug)]

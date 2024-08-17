@@ -1,18 +1,18 @@
 use std::sync::LazyLock;
 
-use crate::delegated::DelegatedRunner;
-use crate::runners::assembler::BasmRunner;
+use cpclib_runner::delegated::DelegatedRunner;
+use cpclib_runner::runner::impdisc::ImpDskVersion;
+use cpclib_runner::runner::martine::MartineVersion;
+use cpclib_runner::runner::{ExternRunner, Runner};
+
+use crate::runners::assembler::{Assembler, BasmRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
-use crate::runners::impdisc::ImpDskVersion;
-use crate::runners::martine::MartineVersion;
-use crate::runners::r#extern::ExternRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
-use crate::runners::Runner;
 use crate::task::Task;
 
 pub static BASM_RUNNER: LazyLock<BasmRunner> = LazyLock::new(BasmRunner::default);
@@ -37,10 +37,10 @@ pub fn execute(task: &Task) -> Result<(), String> {
         },
         Task::Assembler(a, _) => {
             match a {
-                crate::runners::assembler::Assembler::Basm => BASM_RUNNER.run(task.args()),
-                crate::runners::assembler::Assembler::Rasm(v) => {
+                Assembler::Basm => BASM_RUNNER.run(task.args()),
+                Assembler::Extern(e) => {
                     DelegatedRunner {
-                        app: v.configuration(),
+                        app: e.configuration(),
                         cmd: a.get_command().to_owned()
                     }
                     .run(task.args())

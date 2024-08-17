@@ -1,89 +1,23 @@
-use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::assembler::ExternAssembler;
 
-use super::r#extern::ExternRunner;
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
-use crate::task::{BASM_CMDS, RASM_CMDS};
+use crate::task::BASM_CMDS;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Assembler {
     Basm,
-    Rasm(RasmVersion)
+    Extern(ExternAssembler)
 }
 
 impl Assembler {
     pub fn get_command(&self) -> &str {
         match self {
             Assembler::Basm => &BASM_CMDS[0],
-            Assembler::Rasm(_) => &RASM_CMDS[0]
+            Assembler::Extern(a) => a.get_command()
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum RasmVersion {
-    Consolidation2024 // V2_2_5
-}
-
-impl Default for RasmVersion {
-    fn default() -> Self {
-        Self::Consolidation2024
-    }
-}
-
-cfg_match! {
-    cfg(target_os = "linux") =>
-    {
-        impl RasmVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
-                match self {
-                    RasmVersion::Consolidation2024  =>
-                        DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.5.zip", // we assume a modern CPU
-                            folder : "rasm_consolidation",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "rasm",
-                            compile: Some(Box::new(|path: &Utf8Path| -> Result<(), String>{
-                                let command = vec!["make"];
-                                ExternRunner::default().inner_run(&command)?;
-
-                                let command = vec!["mv", "rasm.exe", "rasm"];
-                                ExternRunner::default().inner_run(&command)?;
-
-                                Ok(())
-                            }))
-                        }
-                    }
-            }
-        }
-
-    }
-    cfg(target_os = "windows") =>
-    {
-        impl RasmVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
-                match self {
-                    RasmVersion::Consolidation2024  =>
-                        DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/releases/download/v2.2.5/rasm_win64.exe", // we assume a modern CPU
-                            folder : "rasm_consolidation",
-                            archive_format: ArchiveFormat::Raw,
-                            exec_fname: "rasm.exe",
-                            compile: None
-                        }
-                    }
-            }
-        }
-
-    }
-    cfg(target_os = "macos") =>
-    {
-
-    }
-    _ => {
     }
 }
 

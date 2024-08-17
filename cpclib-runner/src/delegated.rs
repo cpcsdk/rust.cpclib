@@ -1,14 +1,12 @@
 use std::io::{Cursor, Read};
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_common::itertools::Itertools;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use tar::Archive;
 use ureq::Response;
 
-use crate::runners::r#extern::ExternRunner;
-use crate::runners::Runner;
+use crate::runner::runner::{ExternRunner, Runner};
 
 pub enum ArchiveFormat {
     Raw,
@@ -98,8 +96,8 @@ impl DelegateApplicationDescription {
 }
 
 pub struct DelegatedRunner {
-    pub(crate) app: DelegateApplicationDescription,
-    pub(crate) cmd: String
+    pub app: DelegateApplicationDescription,
+    pub cmd: String
 }
 
 impl DelegatedRunner {

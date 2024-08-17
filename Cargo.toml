@@ -2,26 +2,29 @@
 members = [
   "cpclib-asm",
   "cpclib-basic",
+  "cpclib-basm",
+  "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-common",
   "cpclib-cpr",
+  "cpclib-cprcli", 
   "cpclib-crunchers",
   "cpclib-disc",
+  "cpclib-emucontrol", 
   "cpclib-image",
+  "cpclib-imgconverter",
   "cpclib-macros",
+  "cpclib-runner", 
   "cpclib-sna",
   "cpclib-tokens",
-  "cpclib-xfer",
-  "cpclib-xfertool",
-  #  "cpclib-xferfs",
-  "cpclib-z80emu",
-  "cpclib",
-  "cpclib-basm",
-  "cpclib-bdasm",
-  "cpclib-imgconverter",
   "cpclib-visual-basm",
   "cpclib-visual-bndbuild",
-  "cpclib-wasm", "cpclib-cprcli", "cpclib-emucontrol", 
+  "cpclib-wasm", 
+  "cpclib-xfer",
+  "cpclib-xfertool",
+  "cpclib-z80emu",
+  "cpclib",
+  #  "cpclib-xferfs",
 ]
 
 resolver = "2"
@@ -48,6 +51,7 @@ cpclib-disc = { version = "0.8.0", path = "cpclib-disc", default-features = fals
 cpclib-image = { version = "0.8.0", path = "cpclib-image", default-features = false }
 cpclib-imgconverter = { version = "0.8.0", path = "cpclib-imgconverter", default-features = false }
 cpclib-macros = { version = "0.8.0", path = "cpclib-macros", default-features = false }
+cpclib-runner = { version = "0.1.0", path = "cpclib-runner", default-features = false }
 cpclib-sna = { version = "0.8.0", path = "cpclib-sna", default-features = false }
 cpclib-tokens = { version = "0.8.0", path = "cpclib-tokens", default-features = false }
 cpclib-visual-bndbuild = { version = "0.4.0", path = "cpclib-visual-bndbuild", default-features = false }
@@ -144,6 +148,7 @@ self_cell = "1.0.4"
 semver = "1.0.23"
 serde = { version = "1.0.204", features = ["derive"] }
 serial_test = "3.1.1"
+shlex = "1.3.0"
 similar-asserts = "1.5.0"
 simple_logger = { version = "4.3.3" }
 smallvec = "1.13.2"

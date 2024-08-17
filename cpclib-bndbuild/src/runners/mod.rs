@@ -1,58 +1,14 @@
 use cpclib_common::clap::{ArgMatches, Command};
-use glob::glob;
-use shlex::split;
+use cpclib_runner::runner::Runner;
 
 pub mod assembler;
 pub mod bndbuild;
 pub mod cp;
 pub mod disc;
 pub mod echo;
-pub mod emulator;
-pub mod r#extern;
 pub mod imgconverter;
-pub mod impdisc;
-pub mod martine;
 pub mod rm;
 pub mod xfer;
-
-/// Get all args (split string as done in shell and apply glob matching)
-fn get_all_args(arguments: &str) -> Vec<String> {
-    let init_args = split(arguments).unwrap_or_default();
-    let mut res = Vec::new();
-    for p in init_args {
-        match glob(&p) {
-            Ok(entries) => {
-                let mut added = 0;
-                for entry in entries {
-                    match entry {
-                        Ok(p) => res.push(p.display().to_string()),
-                        Err(e) => res.push(e.path().display().to_string())
-                    }
-                    added += 1;
-                }
-                if added == 0 {
-                    res.push(p);
-                }
-            },
-            Err(_) => res.push(p)
-        }
-    }
-    res
-}
-
-pub trait Runner {
-    /// Run the task and return true if successfull
-    fn run(&self, arguments: &str) -> Result<(), String> {
-        println!("\t$ {} {}", self.get_command(), arguments);
-        let args = get_all_args(&arguments.replace(r"\", r"\\").replace("\"", "\\\""));
-        self.inner_run(&args)
-    }
-
-    /// Implement the command specific action
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String>;
-
-    fn get_command(&self) -> &str;
-}
 
 pub trait RunnerWithClap: Runner {
     fn get_clap_command(&self) -> &Command;
