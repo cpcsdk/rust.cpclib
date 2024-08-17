@@ -8,7 +8,6 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-
 cpclib-bndbuild.workspace = true
 cpclib-common.workspace = true
 camino-tempfile.workspace = true
@@ -16,8 +15,10 @@ clap = {version="4.5.15", features=["derive"]}
 bon = "1.2.1"
 xcap = "0.0.11"
 enigo = "0.2.1"
-glob = "*"
-fs_extra = "*"
+glob = "0.3.1"
+
+[target.'cfg(windows)'.dependencies]
+fs_extra = "1.3.0"
 
 [dev-dependencies]
 assert_cmd = "2.0.16"

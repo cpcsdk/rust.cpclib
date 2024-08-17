@@ -134,7 +134,7 @@ fn main() {
     // I had issues with symlinks on windows. no time to search why
     #[cfg(windows)]
     if let Some(albireo) = &cli.albireo {
-        let option = CopyOptions::new()
+        let option = fs_extra::dir::CopyOptions::new()
             .copy_inside(true)
             .overwrite(true)
             .skip_exist(false)
@@ -204,7 +204,7 @@ fn main() {
 
     #[cfg(windows)]
     if let Some(albireo) = &cli.albireo {
-        let option = CopyOptions::new()
+        let option = fs_extra::dir::CopyOptions::new()
             .copy_inside(true)
             .overwrite(true)
             .skip_exist(false)
