@@ -7,11 +7,10 @@ use bon::builder;
 use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::itertools::Itertools;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-use xcap::image::{open, ImageBuffer, Rgba};
-use xcap::Window;
-
 #[cfg(windows)]
 use fs_extra;
+use xcap::image::{open, ImageBuffer, Rgba};
+use xcap::Window;
 
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::runner::emulator::Emulator;
@@ -561,8 +560,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
     }
 }
 
-
-
 #[derive(Parser, Debug)]
 pub struct Cli {
     #[arg(
@@ -632,7 +629,6 @@ pub enum Commands {
     }
 }
 
-
 pub const EMUCTRL_CMD: &str = "cpc";
 
 pub struct EmuControlledRunner {
@@ -641,7 +637,9 @@ pub struct EmuControlledRunner {
 
 impl Default for EmuControlledRunner {
     fn default() -> Self {
-        Self { command: Cli::command() }
+        Self {
+            command: Cli::command()
+        }
     }
 }
 
@@ -659,21 +657,17 @@ impl Runner for EmuControlledRunner {
     }
 }
 
-
 impl RunnerWithClap for EmuControlledRunner {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-
 pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
-
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e.to_string()))?;
     }
-
 
     let builder = EmulatorConf::builder()
         .maybe_drive_a(cli.drive_a.clone())
@@ -686,10 +680,10 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
         Emu::Cpcec => Emulator::Cpcec(Default::default())
     };
 
-
-    { // ensure emulator is isntalled
+    {
+        // ensure emulator is isntalled
         let conf = emu.configuration();
-        if ! conf.is_cached() {
+        if !conf.is_cached() {
             conf.install()?;
         }
     }
@@ -776,8 +770,8 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
             if jump && !cli.keepemulator {
                 robot.close();
                 Err("You must request to keep the emulator open with -k".to_string())
-            } else {
-
+            }
+            else {
                 println!("!!! Current limitation: Ace must be configure as\n - Amstrad old\n - with a French keyboard\n - a French firmware\n - Unidos with nova and albireo\n - and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
 
                 robot.handle_orgams(
@@ -809,7 +803,8 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
     if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {
         if cli.keepemulator {
             eprintln!("Albireo folder not cleaned");
-        } else {
+        }
+        else {
             std::fs::rename(&backup_folder, &emu_folder).unwrap();
         }
     }
@@ -818,15 +813,16 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
     if let Some(albireo) = &cli.albireo {
         if cli.keepemulator {
             eprintln!("Albireo folder not cleaned");
-        } else {
-        let option = fs_extra::dir::CopyOptions::new()
-            .copy_inside(true)
-            .overwrite(true)
-            .skip_exist(false)
-            .content_only(true);
-        let emu_folder = emu.albireo_folder();
-        std::fs::remove_dir_all(&albireo).unwrap();
-        fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
+        }
+        else {
+            let option = fs_extra::dir::CopyOptions::new()
+                .copy_inside(true)
+                .overwrite(true)
+                .skip_exist(false)
+                .content_only(true);
+            let emu_folder = emu.albireo_folder();
+            std::fs::remove_dir_all(&albireo).unwrap();
+            fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
         }
     }
 

@@ -22,10 +22,11 @@ pub struct DelegateApplicationDescription {
     pub compile: Option<Box<dyn Fn(&Utf8Path) -> Result<(), String>>>
 }
 
-
 pub fn base_cache_foder() -> Utf8PathBuf {
     let proj_dirs = ProjectDirs::from("net.cpcscene", "benediction", "bnd build").unwrap();
-    Utf8Path::from_path(proj_dirs.cache_dir()).unwrap().to_owned()
+    Utf8Path::from_path(proj_dirs.cache_dir())
+        .unwrap()
+        .to_owned()
 }
 
 pub fn clear_base_cache_folder() -> std::io::Result<()> {
@@ -55,7 +56,9 @@ impl DelegateApplicationDescription {
         // get the file
         let dest = self.cache_folder();
 
-        let resp = self.download().map_err(|e| format!("Unable to download the expected file. {}", e.to_string()))?;
+        let resp = self
+            .download()
+            .map_err(|e| format!("Unable to download the expected file. {}", e.to_string()))?;
         let mut input = resp.into_reader();
 
         // uncompress it

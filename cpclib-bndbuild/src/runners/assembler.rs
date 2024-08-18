@@ -1,5 +1,5 @@
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
-use cpclib_common::camino::{Utf8PathBuf};
+use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{handle_arguments, Cli};
 use cpclib_runner::runner::assembler::ExternAssembler;
@@ -35,7 +35,7 @@ struct OrgamsCli {
     )]
     from: Utf8PathBuf,
 
-    #[arg(short, long, value_name="SRC", help="Input file to assemble")]
+    #[arg(short, long, value_name = "SRC", help = "Input file to assemble")]
     src: String,
 
     #[arg(
@@ -43,7 +43,7 @@ struct OrgamsCli {
         long,
         help = "Filename to save. By default use the one provided by orgams"
     )]
-    dst: Option<String>,
+    dst: Option<String>
 }
 
 pub struct OrgamsRunner {
@@ -74,7 +74,8 @@ impl Runner for OrgamsRunner {
         let from = matches.get_one::<Utf8PathBuf>("from").unwrap();
         if from.is_dir() {
             real_arguments.push("--albireo");
-        } else {
+        }
+        else {
             real_arguments.push("--drivea");
         }
         real_arguments.push(from.as_str());
@@ -83,7 +84,7 @@ impl Runner for OrgamsRunner {
         real_arguments.push("ace");
 
         real_arguments.push("orgams");
-        
+
         real_arguments.push("--src");
         real_arguments.push(matches.get_one::<String>("src").unwrap());
 

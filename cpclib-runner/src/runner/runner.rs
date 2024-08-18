@@ -36,7 +36,6 @@ pub trait RunnerWithClap: Runner {
     }
 }
 
-
 #[derive(Default)]
 pub struct ExternRunner {}
 impl ExternRunner {}

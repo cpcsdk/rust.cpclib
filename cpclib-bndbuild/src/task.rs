@@ -101,16 +101,10 @@ impl<'de> Deserialize<'de> for Task {
                     Ok(Task::Emulator(Emulator::new_ace_default(), std))
                 }
                 else if CPCEC_CMDS.iter().contains(&code) {
-                    Ok(Task::Emulator(
-                        Emulator::new_cpcec_default(),
-                        std
-                    ))
+                    Ok(Task::Emulator(Emulator::new_cpcec_default(), std))
                 }
                 else if WINAPE_CMDS.iter().contains(&code) {
-                    Ok(Task::Emulator(
-                        Emulator::new_winape_default(),
-                        std
-                    ))
+                    Ok(Task::Emulator(Emulator::new_winape_default(), std))
                 }
                 else if EMUCTRL_CMDS.iter().contains(&code) {
                     Ok(Task::Emulator(Emulator::new_controlled_access(), std))

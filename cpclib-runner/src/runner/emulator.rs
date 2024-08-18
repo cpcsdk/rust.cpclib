@@ -64,13 +64,14 @@ impl Emulator {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AceVersion {
     #[default]
+    ZenSummer, // 2024/08/18
     WakePoint // 2024/06/21
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum CpcecVersion {
     #[default]
-    v20240505
+    V20240505
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
@@ -123,6 +124,31 @@ impl WinapeVersion {
     }
 }
 
+
+#[cfg(target_os="linux")]
+const fn linux_ace_desc(download_url: &'static str, folder: &'static str) -> DelegateApplicationDescription{
+    DelegateApplicationDescription{
+        download_url,
+        folder,
+        archive_format:ArchiveFormat::TarGz,
+        exec_fname:"AceDL",
+        compile:None
+    }
+}
+
+#[cfg(windows)]
+const fn windows_ace_desc(download_url: &'static str, folder: &'static str) -> DelegateApplicationDescription{
+    DelegateApplicationDescription{
+        download_url,
+        folder,
+        archive_format:ArchiveFormat::Zip,
+        exec_fname:"AceDL.exe",
+        compile:None
+    }
+}
+
+
+
 cfg_match! {
     cfg(target_os = "linux") =>
     {
@@ -130,22 +156,16 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    AceVersion::WakePoint =>
-                        DelegateApplicationDescription {
-                            download_url: "http://www.roudoudou.com/ACE-DL/BZen.tar.gz", // we assume a modern CPU
-                            folder : "AceWakePoint",
-                            archive_format: ArchiveFormat::TarGz,
-                            exec_fname: "AceDL",
-                            compile: None
-                        }
-                    }
+                    AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz", "AceWakePoint"),
+                    AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz", "AceZenSummer")
+                }
             }
         }
 
         impl CpcecVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    CpcecVersion::v20240505 => {
+                    CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
                             download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
                             folder: "cpcec20240505",
@@ -181,20 +201,21 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    AceVersion::WakePoint => DelegateApplicationDescription{
-                    download_url: "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
-                    folder : "AceWakePoint",
-                    archive_format: ArchiveFormat::Zip,
-                    exec_fname: "AceDL.exe",
-                    compile: None
-                }}
+                    AceVersion::WakePoint => windows_ace_desc(
+                    "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
+                    "AceWakePoint"),
+                    AceVersion::ZenSummer => windows_ace_desc(
+                        "http://www.roudoudou.com/ACE-DL/Win64Summer.zip",
+                        "AceZenSummer"
+                    )
+                }
             }
         }
 
         impl CpcecVersion {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
-                    CpcecVersion::v20240505 => {
+                    CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
                             download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
                             folder: "cpcec20240505",
@@ -240,6 +261,3 @@ cfg_match! {
     _ => {
     }
 }
-
-
-

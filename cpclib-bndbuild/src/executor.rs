@@ -46,9 +46,7 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Assembler(a, _) => {
             match a {
                 Assembler::Basm => BASM_RUNNER.run(task.args()),
-                Assembler::Orgams => {
-                    OrgamsRunner::default().run(task.args())
-                }
+                Assembler::Orgams => OrgamsRunner::default().run(task.args()),
                 Assembler::Extern(e) => {
                     DelegatedRunner {
                         app: e.configuration(),

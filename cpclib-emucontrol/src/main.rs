@@ -4,7 +4,6 @@ use std::time::Duration;
 use clap::Parser;
 use cpclib_runner::emucontrol::{handle_arguments, Cli};
 
-
 fn main() {
     let cli = Cli::parse();
     let res = handle_arguments(cli);
@@ -17,4 +16,3 @@ fn main() {
         }
     }
 }
-
