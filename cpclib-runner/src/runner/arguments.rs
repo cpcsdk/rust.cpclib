@@ -4,7 +4,6 @@ use shlex::split;
 /// Get all args (split string as done in shell and apply glob matching)
 pub fn get_all_args(arguments: &str) -> Result<Vec<String>, String> {
     let init_args = split(arguments).ok_or_else(|| format!("There are errors in the arguments: {}", arguments))?;
-    dbg!(&init_args);
     let mut res = Vec::new();
     for p in init_args {
         match glob(&p) {

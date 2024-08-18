@@ -606,7 +606,7 @@ impl Env {
     }
 
     pub fn get_fname<E: ExprEvaluationExt + Debug>(&self, exp: &E) -> Result<String, AssemblerError> {
-        let fname = match dbg!(self.resolve_expr_must_never_fail(exp)) {
+        let fname = match self.resolve_expr_must_never_fail(exp) {
             Ok(fname) => Ok(fname),
             Err(e) => match &e {
                 // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
@@ -2776,7 +2776,6 @@ impl Env {
 
             let dsk_fname = dsk_fname.as_ref().unwrap();
             let lower_fname = dsk_fname.to_ascii_lowercase();
-            dbg!(&lower_fname);
             match disc {
                 DiscType::Dsk => {
                     if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk")) {
