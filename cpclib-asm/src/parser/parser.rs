@@ -1578,8 +1578,9 @@ enum LabelModifier {
 /// Accept "fname" as in most assemblers and fname as in vasm
 pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     alt((
-        parse_label(false).map(|l| LocatedExpr::Label(l.into())),
-        alt((parse_string, parse_stringlike_without_quote)).map(|s: UnescapedString| LocatedExpr::String(s)),
+        parse_string.map(|s: UnescapedString| LocatedExpr::String(s)),
+        terminated(parse_label(false), not(alt(("/", "://")))).map(|l| LocatedExpr::Label(l.into())),
+        parse_stringlike_without_quote.map(|s: UnescapedString| LocatedExpr::String(s)),
     )).parse_next(input)
 }
 

@@ -605,14 +605,31 @@ impl Env {
         &mut self.symbols
     }
 
-    pub fn get_fname<E: ExprEvaluationExt>(&self, exp: &E) -> Result<String, AssemblerError> {
-        let fname = dbg!(self.resolve_expr_may_fail_in_first_pass(exp)?);
+    pub fn get_fname<E: ExprEvaluationExt + Debug>(&self, exp: &E) -> Result<String, AssemblerError> {
+        let fname = match dbg!(self.resolve_expr_must_never_fail(exp)) {
+            Ok(fname) => Ok(fname),
+            Err(e) => match &e {
+                // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
+                AssemblerError::UnknownSymbol { symbol, .. } |
+                AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { symbol, .. }
+                , .. }
+                 => {
+                    let exp_str = exp.to_string();
+                    if exp_str.as_str() == symbol.as_str() {
+                        Ok(exp_str.into())
+                    } else {
+                        Err(e)
+                    }
+                },
+                _ => Err(e)
+            },
+        }?;
         let fname = if fname.is_string() {
             fname.string()?.to_owned()
         } else {
             fname.to_string()
         };
-        dbg!(Ok(fname))
+        Ok(fname)
     }
 
     /// Compute the expression thanks to the symbol table of the environment.
@@ -2688,7 +2705,7 @@ impl Env {
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
-    pub fn visit_save<E: ExprEvaluationExt>(
+    pub fn visit_save<E: ExprEvaluationExt + Debug>(
         &mut self,
         amsdos_fname: &E,
         address: Option<&E>,
@@ -2824,7 +2841,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_snainit<E: ExprEvaluationExt>(&mut self, fname: &E) -> Result<(), AssemblerError> {
+    pub fn visit_snainit<E: ExprEvaluationExt + Debug>(&mut self, fname: &E) -> Result<(), AssemblerError> {
 
 
         let fname = self.get_fname(fname)?;
