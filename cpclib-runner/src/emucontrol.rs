@@ -816,6 +816,8 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
     };
     
     if emu.is_ace() {
+        let emu_folder = emu.albireo_folder();
+
         if let Some(albireo) = &cli.albireo {
             #[cfg(unix)]
             {
@@ -921,14 +923,16 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
                 .overwrite(true)
                 .skip_exist(false)
                 .content_only(true);
-                std::fs::remove_dir_all(&albireo).unwrap();
+                let albireo = cli.albireo.as_ref().unwrap();
+                std::fs::remove_dir_all(albireo).unwrap();
                 fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
-            }
 
             // restore previous
             if backup_folder.exists() {
                 std::fs::rename(&backup_folder, &emu_folder).unwrap();
             }
+        }
+
         }
     }
 

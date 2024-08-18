@@ -12,6 +12,7 @@ use crate::task::Task;
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<Utf8PathBuf>, D::Error>
 where D: Deserializer<'de> {
     let s = String::deserialize(deserializer)?;
+
     let r = shlex::split(&s).or(Some(vec![])).unwrap();
     let r = r
         .into_iter()

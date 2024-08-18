@@ -133,7 +133,9 @@ impl Rules {
                     .commands()
                     .iter()
                     .map(
-                        |cmd| cmd.to_string().replace("\"", "\\\"") //.replace("\n", "<br/>")
+                        |cmd| cmd.to_string()
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"") //.replace("\n", "<br/>")
                     )
                     .join("\\l");
 

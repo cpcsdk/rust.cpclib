@@ -23,9 +23,11 @@ cpc --emu ace --drivea "{{dsk}}"  --disable-rom orgams --disable-rom unidos
   dep: {{SNA}}
 
 - tgt: dsk
-  dep: {{DSK}}
+  dep: "\"{{DSK}}\"" # These ugly quotes are mandatory because
+                     # of spaces in filename and yaml string encoding
+                     # best is to avoid spaces
 
-- tgt: {{DSK}} {{SNA}} ucpm.rasm ucpm.lst
+- tgt: "\"{{DSK}}\" {{SNA}} ucpm.rasm ucpm.lst"
   dep: ucpm.asm data1.o data2.o orgams/DATA3.BIN
   cmd: > 
     basm ucpm.asm 
@@ -50,7 +52,7 @@ cpc --emu ace --drivea "{{dsk}}"  --disable-rom orgams --disable-rom unidos
   cmd: emu --albireo orgams  -k run --text  'ùo,"DATA3.O\n'
 
 - tgt: emu
-  dep: {{DSK}} ucpm.rasm
+  dep: "\"{{DSK}}\" ucpm.rasm"
   cmd: -{{ace(DSK, "UCPM", debug="ucpm.rasm")}}
 
 - tgt: m4
