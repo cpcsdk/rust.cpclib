@@ -15,7 +15,7 @@
 
 - tgt: exec
   dep: {{FROM}}/{{DST}}
-  cmd: emu --albireo {{FROM}} -k run --text run"BORDER\n
+  cmd: emu --albireo {{FROM}} -k run --text "run\"BORDER\n"
 
 
 - tgt: cpc
@@ -30,4 +30,8 @@
 # open monogams to edit the file
 - tgt: edit
   phony: true
-  cmd: emu --albireo {{FROM}} -k run --text ùo,"{{SRC}}\n   # There is a bug to fix here. To use quotes would be better
+  cmd: emu --albireo {{FROM}} -k run --text "ùo,\"{{SRC}}\n"
+
+- tgt: distclean
+  phony: true
+  cmd: -rm {{FROM}}/{{DST}}

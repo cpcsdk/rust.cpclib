@@ -19,9 +19,9 @@
 
 - tgt: clean
   pnony: true
-  cmd: -rm martine.scr # ATM it is buggy as it is a folderand not handled
+  cmd: -rm martine.scr
 
 - tgt: distclean
   dep: clean
   phony: true
-  cmd: -rm show.sna
+  cmd: -rm show.sna SHOW.DSK

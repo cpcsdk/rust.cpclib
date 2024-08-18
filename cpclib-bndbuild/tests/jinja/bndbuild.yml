@@ -16,7 +16,7 @@
 
 {%- macro assemble(base) -%}
 {%-  if ASSEMBLER == "rasm" -%}
-        extern rasm {{base}}
+        rasm {{base}}
 {%-  elif ASSEMBLER == "basm" -%}
         basm {{base}}
 {%-  else -%}
