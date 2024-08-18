@@ -10,6 +10,9 @@ use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use xcap::image::{open, ImageBuffer, Rgba};
 use xcap::Window;
 
+#[cfg(windows)]
+use fs_extra;
+
 use crate::delegated::DelegatedRunner;
 use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
