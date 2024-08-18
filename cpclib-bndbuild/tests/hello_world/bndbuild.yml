@@ -1,3 +1,5 @@
+#!/usr/bin/env -S bndbuild -f
+
 - tgt: dsk
   dep: hello1.dsk hello2.dsk
   help: In this example, we add files to a dsk directly from basm (hello1.dsk) or as a postprocessing (hello2.dsk)

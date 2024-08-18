@@ -352,9 +352,9 @@ impl ListingElement for Token {
         }
     }
 
-    fn incbin_fname(&self) -> &str {
+    fn incbin_fname(&self) -> &Self::Expr {
         match self {
-            Self::Incbin { fname, .. } => fname.as_ref(),
+            Self::Incbin { fname, .. } => fname,
             _ => unreachable!()
         }
     }
@@ -380,9 +380,9 @@ impl ListingElement for Token {
         }
     }
 
-    fn include_fname(&self) -> &str {
+    fn include_fname(&self) -> &Self::Expr {
         match self {
-            Self::Include(fname, ..) => fname.as_ref(),
+            Self::Include(fname, ..) => fname,
             _ => unreachable!()
         }
     }

@@ -1,3 +1,4 @@
+use cpclib_common::smol_str::SmolStr;
 use paste;
 
 /// ! Utility code to build more easily tokens to manipulate in code generators
@@ -234,9 +235,9 @@ pub fn exx() -> Token {
 }
 
 #[allow(missing_docs)]
-pub fn incbin<S: AsRef<str>>(fname: S) -> Token {
+pub fn incbin<S: Into<SmolStr>>(fname: S) -> Token {
     Token::Incbin {
-        fname: fname.as_ref().to_string(),
+        fname: Expr::String(fname.into()),
         transformation: BinaryTransformation::None,
         offset: None,
         length: None,

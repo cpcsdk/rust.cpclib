@@ -958,14 +958,14 @@ pub enum LocatedTokenInner {
         Option<LocatedListing>
     ),
     Incbin {
-        fname: UnescapedString,
+        fname: LocatedExpr,
         offset: Option<LocatedExpr>,
         length: Option<LocatedExpr>,
         extended_offset: Option<LocatedExpr>,
         off: bool,
         transformation: BinaryTransformation
     },
-    Include(UnescapedString, Option<Z80Span>, bool),
+    Include(LocatedExpr, Option<Z80Span>, bool),
     Iterate(
         Z80Span,
         either::Either<Vec<LocatedExpr>, LocatedExpr>,
@@ -1026,11 +1026,11 @@ pub enum LocatedTokenInner {
     Run(LocatedExpr, Option<LocatedExpr>),
 
     Save {
-        filename: UnescapedString,
+        filename: LocatedExpr,
         address: Option<LocatedExpr>,
         size: Option<LocatedExpr>,
         save_type: Option<SaveType>,
-        dsk_filename: Option<UnescapedString>,
+        dsk_filename: Option<LocatedExpr>,
         side: Option<LocatedExpr>
     },
     Section(Z80Span),
@@ -1040,7 +1040,7 @@ pub enum LocatedTokenInner {
         expr: Option<LocatedExpr>
     },
     Skip(LocatedExpr),
-    SnaInit(UnescapedString),
+    SnaInit(LocatedExpr),
     SnaSet(SnapshotFlag, FlagValue),
     StableTicker(StableTickerAction<Z80Span>),
     StartingIndex {
@@ -1516,9 +1516,9 @@ impl ListingElement for LocatedToken {
         }
     }
 
-    fn incbin_fname(&self) -> &str {
+    fn incbin_fname(&self) -> &Self::Expr {
         match &self.inner {
-            either::Left(LocatedTokenInner::Incbin { fname, .. }) => fname.as_ref(),
+            either::Left(LocatedTokenInner::Incbin { fname, .. }) => fname,
             _ => unimplemented!()
         }
     }
@@ -1544,9 +1544,9 @@ impl ListingElement for LocatedToken {
         }
     }
 
-    fn include_fname(&self) -> &str {
+    fn include_fname(&self) -> &Self::Expr {
         match &self.inner {
-            either::Left(LocatedTokenInner::Include(fname, ..)) => fname.as_ref(),
+            either::Left(LocatedTokenInner::Include(fname, ..)) => fname,
             _ => unreachable!()
         }
     }
@@ -2273,9 +2273,9 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn incbin_fname(&self) -> &str {
+    fn incbin_fname(&self) -> &Self::Expr {
         match &self {
-            LocatedTokenInner::Incbin { fname, .. } => fname.as_ref(),
+            LocatedTokenInner::Incbin { fname, .. } => fname,
             _ => unimplemented!()
         }
     }
@@ -2301,9 +2301,9 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn include_fname(&self) -> &str {
+    fn include_fname(&self) -> &Self::Expr {
         match &self {
-            LocatedTokenInner::Include(fname, ..) => fname.as_ref(),
+            LocatedTokenInner::Include(fname, ..) => fname,
             _ => unreachable!()
         }
     }
@@ -2472,8 +2472,10 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn include_is_standard_include(&self) -> bool {
+        dbg!("include_is_standard_include is no more accurate and needs to be updated/removed");
+
         self.is_include() && 
-        !self.include_fname().contains('{') && // no expansion
+       /* !self.include_fname().contains('{') && */ // no expansion
         !self.include_once()
     }
 

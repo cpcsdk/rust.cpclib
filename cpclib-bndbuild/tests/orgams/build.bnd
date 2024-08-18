@@ -1,3 +1,5 @@
+#!/usr/bin/env -S bndbuild -f
+
 {% set FROM="cpcfolder" %}
 {% set SRC="BORDER.O" %}
 {% set DST="BORDER" %}

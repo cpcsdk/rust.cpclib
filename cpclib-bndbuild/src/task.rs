@@ -16,18 +16,18 @@ use crate::runners::emulator::Emulator;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
-    Cp(StandardTask),
-    Assembler(Assembler, StandardTask),
-    BndBuild(StandardTask),
-    Disc(StandardTask),
-    ImpDsk(StandardTask),
-    Echo(StandardTask),
-    Emulator(Emulator, StandardTask),
-    Extern(StandardTask),
-    ImgConverter(StandardTask),
-    Martine(StandardTask),
-    Rm(StandardTask),
-    Xfer(StandardTask)
+    Cp(StandardTaskArguments),
+    Assembler(Assembler, StandardTaskArguments),
+    BndBuild(StandardTaskArguments),
+    Disc(StandardTaskArguments),
+    ImpDsk(StandardTaskArguments),
+    Echo(StandardTaskArguments),
+    Emulator(Emulator, StandardTaskArguments),
+    Extern(StandardTaskArguments),
+    ImgConverter(StandardTaskArguments),
+    Martine(StandardTaskArguments),
+    Rm(StandardTaskArguments),
+    Xfer(StandardTaskArguments)
 }
 
 pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
@@ -92,7 +92,7 @@ impl<'de> Deserialize<'de> for Task {
                 else {
                     (code, false)
                 };
-                let std = StandardTask {
+                let std = StandardTaskArguments {
                     args: next.to_owned(),
                     ignore_error: ignore
                 };
@@ -169,30 +169,30 @@ impl<'de> Deserialize<'de> for Task {
 
 impl Task {
     pub fn new_basm(args: &str) -> Self {
-        Self::Assembler(Assembler::Basm, StandardTask::new(args))
+        Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }
 
     pub fn new_bndbuild(args: &str) -> Self {
-        Self::BndBuild(StandardTask::new(args))
+        Self::BndBuild(StandardTaskArguments::new(args))
     }
 
     pub fn new_dsk(args: &str) -> Self {
-        Self::Disc(StandardTask::new(args))
+        Self::Disc(StandardTaskArguments::new(args))
     }
 
     pub fn new_rm(args: &str) -> Self {
-        Self::Rm(StandardTask::new(args))
+        Self::Rm(StandardTaskArguments::new(args))
     }
 
     pub fn new_echo(args: &str) -> Self {
-        Self::Echo(StandardTask::new(args))
+        Self::Echo(StandardTaskArguments::new(args))
     }
 
     pub fn new_imgconverter(args: &str) -> Self {
-        Self::ImgConverter(StandardTask::new(args))
+        Self::ImgConverter(StandardTaskArguments::new(args))
     }
 
-    fn standard_task(&self) -> &StandardTask {
+    fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             Task::Assembler(_, t)
             | Task::BndBuild(t)
@@ -209,7 +209,7 @@ impl Task {
         }
     }
 
-    fn standard_task_mut(&mut self) -> &mut StandardTask {
+    fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             Task::Assembler(_, t)
             | Task::Rm(t)
@@ -227,15 +227,15 @@ impl Task {
     }
 
     pub fn args(&self) -> &str {
-        &self.standard_task().args
+        &self.standard_task_arguments().args
     }
 
     pub fn ignore_errors(&self) -> bool {
-        self.standard_task().ignore_error
+        self.standard_task_arguments().ignore_error
     }
 
     pub fn set_ignore_errors(mut self, ignore: bool) -> Self {
-        self.standard_task_mut().ignore_error = ignore;
+        self.standard_task_arguments_mut().ignore_error = ignore;
         self
     }
 
@@ -259,15 +259,15 @@ impl Task {
 }
 
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
-pub struct StandardTask {
+pub struct StandardTaskArguments {
     args: String,
     ignore_error: bool
 }
 
-impl StandardTask {
-    pub fn new(args: &str) -> Self {
+impl StandardTaskArguments {
+    pub fn new<S: Into<String>>(args: S) -> Self {
         Self {
-            args: args.to_string(),
+            args: args.into(),
             ignore_error: false
         }
     }
@@ -276,7 +276,7 @@ impl StandardTask {
 #[cfg(test)]
 mod test {
     use super::Task;
-    use crate::task::StandardTask;
+    use crate::task::StandardTaskArguments;
 
     #[test]
     fn test_deserialize_task() {
@@ -286,7 +286,7 @@ mod test {
             task,
             Task::Assembler(
                 crate::runners::assembler::Assembler::Basm,
-                StandardTask {
+                StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
                     ignore_error: false
                 }
@@ -299,7 +299,7 @@ mod test {
             task,
             Task::Assembler(
                 crate::runners::assembler::Assembler::Basm,
-                StandardTask {
+                StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
                     ignore_error: true
                 }

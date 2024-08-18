@@ -137,7 +137,7 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         },
         Err(_) => todo!()
     }
-    options.add_search_path_from_file(filename); // we ignore the potential error
+    let _ = options.add_search_path_from_file(filename); // we ignore the potential error
     if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {
         for directory in directories {
             if !Utf8Path::new(directory).is_dir() {
@@ -287,12 +287,14 @@ pub fn assemble(
             let span = Z80Span::new_extra(value, &ctx);
             let value = alt((string_expr, parse_value))
                 .parse(span.into())
-                .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
+                .map_err(|_e| BasmError::InvalidArgument(format!(" unable to parse the constant definition.\nBe sure numbers are properly encoded or strings have quote escaped when launched from a shell.\n{}",  definition)))?;
 
+            let value = value.eval()?;
             assemble_options
                 .symbols_mut()
-                .assign_symbol_to_value(symbol, value.eval()?)
+                .assign_symbol_to_value(symbol, value.clone())
                 .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
+            println!("Assigned {} to {}", value, symbol);
         }
     }
 

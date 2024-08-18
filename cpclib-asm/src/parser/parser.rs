@@ -1575,9 +1575,12 @@ enum LabelModifier {
     Macro
 }
 
-/// ACcept "fname" as in most assemblers and fname as in vasm
-pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
-    alt((parse_string, parse_stringlike_without_quote)).parse_next(input)
+/// Accept "fname" as in most assemblers and fname as in vasm
+pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+    alt((
+        parse_label(false).map(|l| LocatedExpr::Label(l.into())),
+        alt((parse_string, parse_stringlike_without_quote)).map(|s: UnescapedString| LocatedExpr::String(s)),
+    )).parse_next(input)
 }
 
 #[inline]
@@ -1988,7 +1991,7 @@ pub fn parse_save(
             not((parse_word(b"DIRECT"), my_space0, "-1")).parse_next(input)?;
         }
 
-        let filename = parse_fname.parse_next(input)?;
+        let filename = located_expr.parse_next(input)?;
 
         let address = opt(preceded(parse_comma, opt(located_expr))).parse_next(input)?;
 

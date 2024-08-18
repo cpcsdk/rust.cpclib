@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use bon::builder;
 use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
@@ -12,23 +13,31 @@ use fs_extra;
 use xcap::image::{open, ImageBuffer, Rgba};
 use xcap::Window;
 
+use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
+use crate::embedded::EmbeddedRoms;
 use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum AmstradRom {
-    Orgams
+    Orgams,
+    Unidos
 }
 
+#[derive(Debug)]
 #[builder]
 pub struct EmulatorConf {
-    pub(crate) drive_a: Option<String>,
-    pub(crate) drive_b: Option<String>,
+    pub(crate) drive_a: Option<Utf8PathBuf>,
+    pub(crate) drive_b: Option<Utf8PathBuf>,
     #[builder(default)]
-    pub(crate) roms_configuration: HashSet<AmstradRom>
+    pub(crate) roms_configuration: HashSet<AmstradRom>,
+    #[builder(default)]
+    pub(crate) debug_files: Vec<Utf8PathBuf>,
+    pub(crate) auto_run: Option<String>
 }
 
 impl EmulatorConf {
@@ -61,6 +70,28 @@ impl EmulatorConf {
                 Emulator::Winape(_) => todo!()
             }
         }
+
+        if !self.debug_files.is_empty() {
+            match emu {
+                Emulator::Ace(_) => {
+                    for fname in &self.debug_files {
+                        args.push(fname.to_string());
+                    }
+                },
+                _ => eprintln!("Debug files are currently ignored. TODO convert them in the appropriate format")
+            }
+        }
+
+        if let Some(run) = &self.auto_run {
+            match emu {
+                Emulator::Ace(_) => {
+                    args.push("-autoRunFile".to_owned());
+                    args.push(run.clone())
+                },
+                _ => unimplemented!()
+            }
+        }
+
         args
     }
 }
@@ -594,6 +625,16 @@ pub struct Cli {
     #[arg(short, long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
     clear_cache: bool,
 
+
+    #[arg(short, long, action = ArgAction::Append, help = "rasm-compatible debug file (for ace ATM)")]
+    debug: Vec<Utf8PathBuf>,
+
+    #[arg(short='r', long, aliases = ["auto", "run", "autoRunFile"], action = ArgAction::Set, help = "The file to run" )]
+    auto_run_file: Option<String>,
+
+    #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
+    disable_rom: Vec<AmstradRom>,
+
     #[command(subcommand)]
     command: Commands
 }
@@ -625,7 +666,9 @@ pub enum Commands {
 
     Run {
         #[arg(short, long, help = "Simple text to type")]
-        text: Option<String>
+        text: Option<String>,
+
+
     }
 }
 
@@ -671,7 +714,10 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
 
     let builder = EmulatorConf::builder()
         .maybe_drive_a(cli.drive_a.clone())
-        .maybe_drive_b(cli.drive_b.clone());
+        .maybe_drive_b(cli.drive_b.clone())
+        .debug_files(cli.debug.clone())
+        .maybe_auto_run(cli.auto_run_file.clone())
+        ;
     let conf = builder.build();
 
     let emu = match cli.emulator {
@@ -689,49 +735,113 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
     }
 
     // setup emulator
-    // TODO do it conditionally
-    // copy the non standard roms
-    let needed_roms = [
-        "unidos.rom",
-        "unitools.rom",
-        "albireo.rom",
-        "nova.rom",
-        "parados12.fixedanyslot.fixedname.quiet.rom"
-    ];
-    for rom in needed_roms {
-        let dst = emu.roms_folder().join(rom);
+    // copy the non standard roms and configure the emu (at least ace)
+    let ace_conf_path = dbg!(Utf8Path::new("/home/romain/.config/ACE-DL_futuristics/config.cfg")); // todo get it programmatically
+    let mut ace_conf = AceConfig::open(ace_conf_path);
 
-        if !dst.exists() {
-            let src = std::path::Path::new("roms").join(rom);
-            std::fs::copy(src, dst).unwrap();
-        }
-    }
+    let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
+        (AmstradRom::Unidos, &[
+            ("unidos.rom", 7),
+            ("nova.rom", 8),
+            ("albireo.rom", 9),
+            ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
+        ]),
+        (
+            AmstradRom::Orgams, &[
+                ("Orgams_FF240128.e0f", 15),
 
-    #[cfg(unix)]
-    let albireo_backup_and_original = if let Some(albireo) = &cli.albireo {
-        let emu_folder = emu.albireo_folder();
-        let backup_folder = emu_folder
-            .parent()
-            .unwrap()
-            .join(emu_folder.file_name().unwrap().to_owned() + ".bak");
-
-        if backup_folder.exists() {
-            std::fs::remove_dir_all(&backup_folder).unwrap();
-        }
-
-        std::fs::rename(&emu_folder, &backup_folder).unwrap();
-
-        std::os::unix::fs::symlink(
-            std::path::absolute(&albireo).unwrap(),
-            std::path::absolute(&emu_folder).unwrap()
+            ]
         )
-        .unwrap();
-
-        Some((backup_folder, emu_folder))
+    ];
+    /*
+    for fname in EmbeddedRoms::iter() {
+        println!("{fname}");
     }
-    else {
-        None
+    */
+    for (kind, roms) in extra_roms {
+        let remove =  cli.disable_rom.contains(kind);
+
+        for (rom, slot) in roms.iter() {
+            let dst = emu.roms_folder().join(rom);
+            let exists = dst.exists();
+
+            if !exists && !remove {
+                let src = format!("roms://{rom}");
+                println!("Install {} in {}", src, dst);
+                let data = EmbeddedRoms::get(&src).expect(&format!("{src} not embedded"));
+                std::fs::write(&dst, data.data).unwrap();
+            }
+            else if exists && remove {
+                std::fs::remove_file(&dst).unwrap();
+            }
+
+            let key = format!("ROM{slot}");
+            if remove {
+                ace_conf.remove(&key);
+            } else {
+                ace_conf.set(key, dst.to_string());
+            }
+
+
+
+
+        }
+    ace_conf.save(ace_conf_path);
+        
+
+
+        
+    }
+
+    let albireo_backup_and_original =  {
+        if emu.is_ace() {
+            let emu_folder = emu.albireo_folder();
+            let backup_folder = emu_folder
+                .parent()
+                .unwrap()
+                .join(emu_folder.file_name().unwrap().to_owned() + ".bak");
+
+            if backup_folder.exists() {
+                std::fs::remove_dir_all(&backup_folder).unwrap();
+            }
+
+            if emu_folder.exists() {
+                std::fs::rename(&emu_folder, &backup_folder).unwrap();
+            }
+
+            Some((backup_folder, emu_folder))
+        } else {
+            None
+        }
     };
+    
+    if emu.is_ace() {
+        if let Some(albireo) = &cli.albireo {
+            #[cfg(unix)]
+            {
+                let  (backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
+
+                std::os::unix::fs::symlink(
+                    std::path::absolute(&albireo).unwrap(),
+                    std::path::absolute(&emu_folder).unwrap()
+                )
+                .unwrap();
+            }
+
+            #[cfg(windows)]
+            {
+                let option = fs_extra::dir::CopyOptions::new()
+                .copy_inside(true)
+                .overwrite(true)
+                .skip_exist(false)
+                .content_only(true);
+                fs_extra::dir::copy(albireo, &emu_folder, &option).unwrap();
+            }
+
+        } else {
+            // we do nothing, albireo folder will not exists
+        };
+}
 
     // I had issues with symlinks on windows. no time to search why
     #[cfg(windows)]
@@ -799,30 +909,26 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
         robot.close();
     }
 
-    #[cfg(unix)]
     if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {
         if cli.keepemulator {
-            eprintln!("Albireo folder not cleaned");
+            eprintln!("Albireo folder not cleaned automatically. you'll have to do it if necessary");
         }
         else {
-            std::fs::rename(&backup_folder, &emu_folder).unwrap();
-        }
-    }
-
-    #[cfg(windows)]
-    if let Some(albireo) = &cli.albireo {
-        if cli.keepemulator {
-            eprintln!("Albireo folder not cleaned");
-        }
-        else {
-            let option = fs_extra::dir::CopyOptions::new()
+            #[cfg(windows)]
+            { // need to copy back modifications
+                let option = fs_extra::dir::CopyOptions::new()
                 .copy_inside(true)
                 .overwrite(true)
                 .skip_exist(false)
                 .content_only(true);
-            let emu_folder = emu.albireo_folder();
-            std::fs::remove_dir_all(&albireo).unwrap();
-            fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
+                std::fs::remove_dir_all(&albireo).unwrap();
+                fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
+            }
+
+            // restore previous
+            if backup_folder.exists() {
+                std::fs::rename(&backup_folder, &emu_folder).unwrap();
+            }
         }
     }
 

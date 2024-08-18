@@ -17,7 +17,8 @@ txt incbin "data1.o" : incbin 'data2.o'
 								   ; on amsdos header
 LAST_ADDRESS
 
-	save "UCPM", FIRST_ADDRESS, \
-		LAST_ADDRESS-FIRST_ADDRESS, \
-		DSK, \
-		"ucpm.dsk"
+	save UCPM_EXEC, \ ; Amsdos fname provided in command line
+		FIRST_ADDRESS, \ ; Load address
+		LAST_ADDRESS-FIRST_ADDRESS, \ ; Length
+		DSK, \ ; request to save in a dsk
+		UCPM_DSK ; dsk fname provided in command line

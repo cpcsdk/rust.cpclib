@@ -7,7 +7,7 @@ pub trait Runner {
     /// Run the task and return true if successfull
     fn run(&self, arguments: &str) -> Result<(), String> {
         println!("\t$ {} {}", self.get_command(), arguments);
-        let args = get_all_args(&arguments.replace(r"\", r"\\").replace("\"", "\\\""));
+        let args = get_all_args(arguments)?;
         self.inner_run(&args)
     }
 

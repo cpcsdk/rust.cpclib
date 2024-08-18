@@ -115,6 +115,7 @@ gag = "1.0.0"
 getset = "0.1.2"
 gif = "0.12" # XXX may be copatible with gif-dispose
 gif-dispose = "4.0.1"
+glob = "0.3.1"
 globset = "0.4.14"
 hashbag = "0.1.12"
 hotwatch = { version = "0.5.0" }

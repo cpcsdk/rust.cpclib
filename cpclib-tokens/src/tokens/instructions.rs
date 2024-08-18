@@ -484,8 +484,6 @@ pub enum CharsetFormat {
     Interval(Expr, Expr, Expr)
 }
 
-/// TODO use a more complete type that can use a subset of functions to generate a string
-pub type Filename = String;
 
 pub trait ToSimpleToken {
     /// Convert the token in its simplest form
@@ -614,7 +612,7 @@ pub enum Token {
 
     /// Include of an asm file _0 contains the name of the file, _1 contains the content of the file. It is not loaded at the creation of the Token because there is not enough context to know where to load file
     Incbin {
-        fname: Filename,
+        fname: Expr,
         offset: Option<Expr>,
         length: Option<Expr>,
         extended_offset: Option<Expr>,
@@ -622,7 +620,7 @@ pub enum Token {
         transformation: BinaryTransformation
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
-    Include(Filename, Option<SmolStr>, bool),
+    Include(Expr, Option<SmolStr>, bool),
     Iterate(SmolStr, Vec<Expr>, Listing),
 
     Label(SmolStr),
@@ -688,11 +686,11 @@ pub enum Token {
     Run(Expr, Option<Expr>),
 
     Save {
-        filename: Filename,
+        filename: Expr,
         address: Option<Expr>,
         size: Option<Expr>,
         save_type: Option<SaveType>,
-        dsk_filename: Option<String>,
+        dsk_filename: Option<Expr>,
         side: Option<Expr>
     },
     Section(SmolStr),
@@ -705,7 +703,7 @@ pub enum Token {
     },
     Skip(Expr),
     /// This directive setup a value for a given flag of the snapshot
-    SnaInit(Filename),
+    SnaInit(Expr),
     SnaSet(
         cpclib_sna::flags::SnapshotFlag,
         cpclib_sna::flags::FlagValue

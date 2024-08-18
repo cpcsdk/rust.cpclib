@@ -11,7 +11,7 @@ homepage.workspace = true
 cpclib-runner.workspace = true
 cpclib-common.workspace = true
 clap = {workspace=true, features=["derive"]}
-glob = "0.3.1"
+glob.workspace = true
 
 
 

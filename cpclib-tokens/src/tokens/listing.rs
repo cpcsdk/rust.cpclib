@@ -116,18 +116,21 @@ where Self: Debug + Sized + Sync
     fn if_else(&self) -> Option<&[Self]>;
 
     fn is_incbin(&self) -> bool;
-    fn incbin_fname(&self) -> &str;
+    fn incbin_fname(&self) -> &Self::Expr;
     fn incbin_offset(&self) -> Option<&Self::Expr>;
     fn incbin_length(&self) -> Option<&Self::Expr>;
     fn incbin_transformation(&self) -> &BinaryTransformation;
 
     fn is_include(&self) -> bool;
-    fn include_fname(&self) -> &str;
+    fn include_fname(&self) -> &Self::Expr;
     fn include_namespace(&self) -> Option<&str>;
     fn include_once(&self) -> bool;
     fn include_is_standard_include(&self) -> bool {
+        dbg!("include_is_standard_include is no more accurate and needs to be updated/removed");
+     //   let has_bracket = self.incbin_fname().to_string().contains('{');
+
         self.is_include() && 
-        !self.include_fname().contains('{') && // no expansion
+       /* !self.include_fname().contains('{') &&*/ // no expansion
         !self.include_once()
     }
 

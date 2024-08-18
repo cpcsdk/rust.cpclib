@@ -1,3 +1,5 @@
+#!/usr/bin/env -S bndbuild -f
+
 # execute properly both on linux and windows
 - tgt: ace
   cmd: ace ../../../cpclib/tests/dsk/harley.dsk -autoRunFile '-CED-.exe'

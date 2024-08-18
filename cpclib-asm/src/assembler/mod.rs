@@ -605,6 +605,16 @@ impl Env {
         &mut self.symbols
     }
 
+    pub fn get_fname<E: ExprEvaluationExt>(&self, exp: &E) -> Result<String, AssemblerError> {
+        let fname = dbg!(self.resolve_expr_may_fail_in_first_pass(exp)?);
+        let fname = if fname.is_string() {
+            fname.string()?.to_owned()
+        } else {
+            fname.to_string()
+        };
+        dbg!(Ok(fname))
+    }
+
     /// Compute the expression thanks to the symbol table of the environment.
     /// If the expression is not solvable in first pass, 0 is returned.
     /// If the expression is not solvable in second pass, an error is returned
@@ -2678,13 +2688,13 @@ impl Env {
 
     // BUG the file is saved in any case EVEN if there is a crash in the assembler later
     // TODO delay the save but retreive the data now
-    pub fn visit_save<E: ExprEvaluationExt, S1: SourceString, S2: SourceString>(
+    pub fn visit_save<E: ExprEvaluationExt>(
         &mut self,
-        filename: S1,
+        amsdos_fname: &E,
         address: Option<&E>,
         size: Option<&E>,
         save_type: Option<&SaveType>,
-        dsk_filename: Option<S2>,
+        dsk_fname: Option<&E>,
         _side: Option<&E>
     ) -> Result<(), AssemblerError> {
         if cfg!(target_arch = "wasm32") {
@@ -2693,13 +2703,23 @@ impl Env {
             });
         }
 
+        let amsdos_fname = self.get_fname(amsdos_fname)?;
+
+        let dsk_fname = match dsk_fname {
+            Some(fname) => {
+                Some(self.get_fname(fname)?)
+            },
+            None => None
+        };
+
+
         let from = match address {
             Some(address) => {
                 let address = self.resolve_expr_must_never_fail(address)?.int()?;
                 if address < 0 {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!(
-                            "Cannot SAVE {filename} as the address ({address}) is invalid."
+                            "Cannot SAVE {amsdos_fname} as the address ({address}) is invalid."
                         )
                     });
                 }
@@ -2712,7 +2732,7 @@ impl Env {
                 let size = self.resolve_expr_must_never_fail(size)?.int()?;
                 if size < 0 {
                     return Err(AssemblerError::AssemblingError {
-                        msg: format!("Cannot SAVE {filename} as the size ({size}) is invalid.")
+                        msg: format!("Cannot SAVE {amsdos_fname} as the size ({size}) is invalid.")
                     });
                 }
                 Some(size)
@@ -2725,7 +2745,7 @@ impl Env {
                 if 0x10000 - *from < *size {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!(
-                            "Cannot SAVE {filename} as the address+size ({}) is out of bounds.",
+                            "Cannot SAVE {amsdos_fname} as the address+size ({}) is out of bounds.",
                             *from + *size
                         )
                     });
@@ -2736,27 +2756,28 @@ impl Env {
 
         // Check filename validity
         if let Some(&SaveType::Disc(disc)) = &save_type {
-            let fname = dsk_filename.as_ref().unwrap();
-            let fname = fname.as_str();
-            let lower_fname = fname.to_ascii_lowercase();
+
+            let dsk_fname = dsk_fname.as_ref().unwrap();
+            let lower_fname = dsk_fname.to_ascii_lowercase();
+            dbg!(&lower_fname);
             match disc {
                 DiscType::Dsk => {
                     if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk")) {
                         return Err(AssemblerError::InvalidArgument {
-                            msg: format!("{fname} has not a DSK compatible extension")
+                            msg: format!("{dsk_fname} has not a DSK compatible extension")
                         });
                     }
                 },
                 DiscType::Hfe => {
                     if !lower_fname.ends_with(".hfe") {
                         return Err(AssemblerError::InvalidArgument {
-                            msg: format!("{fname} has not a HFE compatible extension")
+                            msg: format!("{dsk_fname} has not a HFE compatible extension")
                         });
                     }
 
                     #[cfg(not(feature = "hfe"))]
                     Err(AssemblerError::InvalidArgument {
-                        msg: format!("{fname} cannot be saved. No HFE support is included with this version of basm")
+                        msg: format!("{dsk_fname} cannot be saved. No HFE support is included with this version of basm")
                     })?
                 },
                 DiscType::Auto => {
@@ -2765,14 +2786,14 @@ impl Env {
                         || lower_fname.ends_with(".hfe"))
                     {
                         return Err(AssemblerError::InvalidArgument {
-                            msg: format!("{fname} has not a DSK or HFE compatible extension")
+                            msg: format!("{dsk_fname} has not a DSK or HFE compatible extension")
                         });
                     }
 
                     #[cfg(not(feature = "hfe"))]
                     if lower_fname.ends_with(".hfe") {
                         Err(AssemblerError::InvalidArgument {
-                            msg: format!("{fname} cannot be saved. No HFE support is included with this version of basm")
+                            msg: format!("{dsk_fname} cannot be saved. No HFE support is included with this version of basm")
                         })?
                     }
                 }
@@ -2786,9 +2807,9 @@ impl Env {
         page_info.add_save_command(SaveCommand::new(
             from,
             size,
-            filename.as_str().to_owned(),
+            amsdos_fname.as_str().to_owned(),
             save_type.cloned(),
-            dsk_filename.map(|s| s.as_str().to_owned()),
+             dsk_fname,
             mmr
         ));
 
@@ -2803,8 +2824,11 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_snainit<S: SourceString>(&mut self, fname: S) -> Result<(), AssemblerError> {
-        let fname = fname.as_str();
+    pub fn visit_snainit<E: ExprEvaluationExt>(&mut self, fname: &E) -> Result<(), AssemblerError> {
+
+
+        let fname = self.get_fname(fname)?;
+
         if !self.pass.is_first_pass() {
             return Ok(());
         }
@@ -3261,7 +3285,7 @@ macro_rules! visit_token_impl {
                 expr
             } => $env.visit_next_and_co(label, source, expr.as_ref(), true),
             $cls::Save {
-                filename,
+                ref filename,
                 address,
                 size,
                 save_type,
@@ -3273,7 +3297,7 @@ macro_rules! visit_token_impl {
                     address.as_ref(),
                     size.as_ref(),
                     save_type.as_ref(),
-                    dsk_filename.as_ref().map(|s| s),
+                    dsk_filename.as_ref(),
                     side.as_ref()
                 )
             },

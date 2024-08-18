@@ -472,6 +472,7 @@ where
     else if token.is_include() {
         // we cannot use the real method onf IncludeState because it modifies env and here wa cannot
         let fname = token.include_fname();
+        let fname = env.get_fname(fname)?;
         let options = env.options().parse_options();
         match get_filename(fname, options, Some(env)) {
             Ok(fname) => {
@@ -651,7 +652,11 @@ where
         // get filename of files that will be read in parallel
         let include_fnames = iter
             .filter(|t| t.include_is_standard_include())
-            .flat_map(|t| get_filename(t.include_fname(), options, Some(env)))
+            .flat_map(|t| {
+                let fname = t.include_fname();
+                let fname = env.get_fname(fname)?;
+                get_filename(fname, options, Some(env))
+            })
             .collect::<Vec<_>>();
         let include_fnames = include_fnames.iter().map(|t| progress::normalize(t));
 
@@ -973,6 +978,7 @@ where
 
                         // Handle file loading
                         let fname = self.token.incbin_fname();
+                        let fname = env.get_fname(fname)?;
                         let fname = get_filename(fname, options.parse_options(), Some(env))?;
 
                         // get the data for the given file
@@ -1072,9 +1078,11 @@ where
                     },
 
                     Some(ProcessedTokenState::Include(ref mut state)) => {
+                        let fname = env.get_fname(self.token.include_fname())?;
+
                         state.handle(
                             env,
-                            self.token.include_fname(),
+                            &fname,
                             self.token.include_namespace(),
                             self.token.include_once()
                         )

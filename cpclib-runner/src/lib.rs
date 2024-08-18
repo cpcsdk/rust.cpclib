@@ -4,5 +4,6 @@ pub use {enigo, xcap};
 
 pub mod delegated;
 pub mod emucontrol;
-pub mod orgams;
 pub mod runner;
+pub mod embedded;
+pub mod ace_config;

@@ -1,12 +1,15 @@
-{% set DSK="ucpm.dsk" %}
+#!/usr/bin/env -S bndbuild -f
+
+{% set DSK="u c p m.dsk" %} # Spaces for the fun
 {% set SNA="ucpm.sna" %}
-{%- if not CPCADDR -%}
+{%- if not CPCADDR -%} {# Modify hard coded address #}
 {%-   set CPCADDR = "192.168.1.24" -%}
 {%- endif -%}
 {%- macro ace(dsk, exec=None, debug=None) -%}
-ace {{dsk}} 
-  {%- if debug %} {{debug}} {%endif -%} 
-  {%- if exec %} -autoRunFile {{exec}} {%endif -%}
+cpc --emu ace --drivea "{{dsk}}"  --disable-rom orgams --disable-rom unidos
+  {%- if debug %} --debug {{debug}} {%endif -%} 
+  {%- if exec %} --autoRunFile {{exec}} {%endif -%}
+  run
 {%- endmacro -%}
 {%- macro build_data(data) -%}
 - tgt: {{data}}.o
@@ -19,6 +22,9 @@ ace {{dsk}}
 - tgt: sna
   dep: {{SNA}}
 
+- tgt: dsk
+  dep: {{DSK}}
+
 - tgt: {{DSK}} {{SNA}} ucpm.rasm ucpm.lst
   dep: ucpm.asm data1.o data2.o orgams/DATA3.BIN
   cmd: > 
@@ -27,8 +33,8 @@ ace {{dsk}}
       --ace ucpm.rasm 
       --lst ucpm.lst
       --override
-      -DFNAME="UCPM"
-      -DDSK="{{DSK}}"
+      -DUCPM_EXEC=\"UCPM\" # this is a string
+      -DUCPM_DSK="\"{{DSK}}\"" # this is a string with spaces
 
 {{build_data("data1")}}
 
@@ -38,9 +44,14 @@ ace {{dsk}}
   dep: orgams/DATA3.O
   cmd: orgams --from orgams --src DATA3.O --dst DATA3.BIN
 
+
+- tgt: monogams
+  phony: true
+  cmd: emu --albireo orgams  -k run --text  'ùo,"DATA3.O\n'
+
 - tgt: emu
   dep: {{DSK}} ucpm.rasm
-  cmd: {{ace(DSK, "UCPM", debug="ucpm.rasm")}}
+  cmd: -{{ace(DSK, "UCPM", debug="ucpm.rasm")}}
 
 - tgt: m4
   dep: {{SNA}}
@@ -48,14 +59,9 @@ ace {{dsk}}
 
 - tgt: clean
   phony: true
-  cmd: -rm data?.o ucpm.rasm
+  cmd: -rm data?.o ucpm.rasm ucpm.lst orgams/DATA3.BIN
 
 - tgt: distclean
   dep: clean
   phony: true
-  cmd: -rm {{DSK}}
-
-- tgt: monogasm
-  phony: true
-  cmd: emu --albireo orgams  -k run --text  ùo,"DATA3.O\n
-
+  cmd: -rm "{{DSK}}" {{SNA}}

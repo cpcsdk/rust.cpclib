@@ -20,6 +20,12 @@ impl Default for Emulator {
 }
 
 impl Emulator {
+    pub fn is_ace(&self) -> bool {
+        match self {
+            Emulator::Ace(_) => true,
+            _ => false
+        }
+    }
     pub fn get_command(&self) -> &str {
         match self {
             Emulator::Ace(_) => ACE_CMD,

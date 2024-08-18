@@ -14,11 +14,12 @@ use crate::progress::Progress;
 
 type Fname<'a, 'b> = either::Either<&'a Utf8Path, (&'a str, &'b Env)>;
 
-pub fn get_filename(
-    fname: &str,
+pub fn get_filename<S: AsRef<str>>(
+    fname: S,
     options: &ParserOptions,
     env: Option<&Env>
 ) -> Result<Utf8PathBuf, AssemblerError> {
+    let fname = fname.as_ref();
     options.get_path_for(fname, env).map_err(|e| {
         match e {
             either::Either::Left(asm) => asm,
