@@ -7,13 +7,14 @@ pub struct AceConfig {
 
 
 impl AceConfig {
-	pub fn open(path: &Utf8Path) -> Self {
-		let ini = Ini::load_from_file(path).unwrap();
+	pub fn open<P: AsRef<Utf8Path>>(path: P) -> Self {
+		dbg!(&path.as_ref());
+		let ini = Ini::load_from_file(path.as_ref()).unwrap();
 		AceConfig { ini }
 	}
 
-	pub fn save(&self, path: &Utf8Path) {
-		self.ini.write_to_file(path).unwrap();
+	pub fn save<P: AsRef<Utf8Path>>(&self, path: P) {
+		self.ini.write_to_file(path.as_ref()).unwrap();
 	}
 
 	pub fn remove(&mut self, key: &str) {

@@ -351,6 +351,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 self.enigo.text(dbg!(&format!("{v}"))).unwrap();
             },
             _ => {
+                dbg!(key);
                 self.enigo.key(key, enigo::Direction::Press).unwrap();
                 Self::wait_a_bit();
                 self.enigo.key(key, enigo::Direction::Release).unwrap();
@@ -736,8 +737,8 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
 
     // setup emulator
     // copy the non standard roms and configure the emu (at least ace)
-    let ace_conf_path = dbg!(Utf8Path::new("/home/romain/.config/ACE-DL_futuristics/config.cfg")); // todo get it programmatically
-    let mut ace_conf = AceConfig::open(ace_conf_path);
+    let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
+    let mut ace_conf = AceConfig::open(&ace_conf_path);
 
     let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
         (AmstradRom::Unidos, &[
@@ -786,7 +787,7 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
 
 
         }
-    ace_conf.save(ace_conf_path);
+    ace_conf.save(&ace_conf_path);
         
 
 

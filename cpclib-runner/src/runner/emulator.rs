@@ -1,4 +1,7 @@
+use std::path::PathBuf;
+
 use cpclib_common::camino::Utf8PathBuf;
+use directories::BaseDirs;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 
@@ -20,6 +23,13 @@ impl Default for Emulator {
 }
 
 impl Emulator {
+
+    pub fn ace_version(&self) -> Option<&AceVersion> {
+        match self {
+            Emulator::Ace(v) => Some(v),
+            _ => None
+        }
+    }
     pub fn is_ace(&self) -> bool {
         match self {
             Emulator::Ace(_) => true,
@@ -74,6 +84,20 @@ pub enum AceVersion {
     WakePoint // 2024/06/21
 }
 
+
+impl AceVersion {
+    pub fn config_file(&self) -> Utf8PathBuf {
+        let p = match self {
+            Self::ZenSummer => {
+
+                BaseDirs::new().unwrap().config_local_dir().join("ACE-DL_futuristics/config.cfg")
+            }
+            _ => unimplemented!()
+        };
+
+        Utf8PathBuf::from_path_buf(p).unwrap()
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum CpcecVersion {
     #[default]
