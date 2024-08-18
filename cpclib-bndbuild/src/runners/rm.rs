@@ -1,4 +1,4 @@
-use cpclib_common::clap::{self, Arg, ArgAction};
+use cpclib_common::{camino::Utf8Path, clap::{self, Arg, ArgAction}};
 
 use super::Runner;
 use crate::{built_info, expand_glob};
@@ -36,7 +36,15 @@ impl Runner for RmRunner {
             .flat_map(expand_glob)
         //    .map(|e| dbg!(e.unwrap()))
         {
-            match std::fs::remove_file(&fname) {
+
+            let fname = Utf8Path::new(&fname);
+            let res = if fname.is_dir() {
+                std::fs::remove_dir_all(&fname)
+            } else {
+                std::fs::remove_file(&fname)
+            };
+
+            match res {
                 Ok(_) => {
                     println!("\t{} removed", fname /* .display() */);
                 },
