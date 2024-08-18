@@ -13,7 +13,7 @@ use xcap::Window;
 #[cfg(windows)]
 use fs_extra;
 
-use crate::delegated::DelegatedRunner;
+use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
@@ -594,6 +594,9 @@ pub struct Cli {
     #[arg(short, long, action = ArgAction::SetTrue, help = "Keep the emulator open after the interaction")]
     keepemulator: bool,
 
+    #[arg(short, long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
+    clear_cache: bool,
+
     #[command(subcommand)]
     command: Commands
 }
@@ -665,6 +668,13 @@ impl RunnerWithClap for EmuControlledRunner {
 
 
 pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
+
+    if cli.clear_cache {
+        clear_base_cache_folder()
+            .map_err(|e| format!("Unable to clear the cache folder. {}", e.to_string()))?;
+    }
+
+
     let builder = EmulatorConf::builder()
         .maybe_drive_a(cli.drive_a.clone())
         .maybe_drive_b(cli.drive_b.clone());
@@ -675,6 +685,14 @@ pub fn handle_arguments(mut cli: Cli) -> Result<(), String> {
         Emu::Winape => Emulator::Winape(Default::default()),
         Emu::Cpcec => Emulator::Cpcec(Default::default())
     };
+
+
+    { // ensure emulator is isntalled
+        let conf = emu.configuration();
+        if ! conf.is_cached() {
+            conf.install()?;
+        }
+    }
 
     // setup emulator
     // TODO do it conditionally

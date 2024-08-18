@@ -22,17 +22,26 @@ pub struct DelegateApplicationDescription {
     pub compile: Option<Box<dyn Fn(&Utf8Path) -> Result<(), String>>>
 }
 
+
+pub fn base_cache_foder() -> Utf8PathBuf {
+    let proj_dirs = ProjectDirs::from("net.cpcscene", "benediction", "bnd build").unwrap();
+    Utf8Path::from_path(proj_dirs.cache_dir()).unwrap().to_owned()
+}
+
+pub fn clear_base_cache_folder() -> std::io::Result<()> {
+    std::fs::remove_dir_all(base_cache_foder())
+}
+
 impl DelegateApplicationDescription {
     pub fn is_cached(&self) -> bool {
         self.cache_folder().exists()
     }
 
     pub fn cache_folder(&self) -> Utf8PathBuf {
-        let proj_dirs = ProjectDirs::from("net.cpcscene", "benediction", "bnd build").unwrap();
-        let base_cache = proj_dirs.cache_dir();
+        let base_cache = base_cache_foder();
 
         if !base_cache.exists() {
-            std::fs::create_dir_all(base_cache);
+            std::fs::create_dir_all(&base_cache).unwrap();
         }
 
         base_cache.join(self.folder).try_into().unwrap()
@@ -46,8 +55,7 @@ impl DelegateApplicationDescription {
         // get the file
         let dest = self.cache_folder();
 
-        println!(">> Download file");
-        let resp = self.download().unwrap();
+        let resp = self.download().map_err(|e| format!("Unable to download the expected file. {}", e.to_string()))?;
         let mut input = resp.into_reader();
 
         // uncompress it
@@ -91,6 +99,7 @@ impl DelegateApplicationDescription {
     }
 
     fn download(&self) -> Result<Response, ureq::Error> {
+        println!(">> Download file {}", self.download_url);
         ureq::get(self.download_url).call()
     }
 }
