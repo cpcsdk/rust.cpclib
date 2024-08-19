@@ -8,6 +8,9 @@ use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::runner::RunnerWithClap;
 use lazy_regex::regex_captures;
+use serde::de::IntoDeserializer;
+use serde::Deserialize;
+use task::Task;
 use thiserror::Error;
 
 use crate::executor::*;
@@ -27,50 +30,8 @@ pub mod built_info {
 }
 
 pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuilderError> {
-    let img2cpc_cmd = cpclib_imgconverter::build_args_parser()
-        .name("img2cpc")
-        .disable_help_flag(false);
 
-    // handle command specific behavior
-    if let Some(basm_matches) = matches.subcommand_matches("basm") {
-        eprintln!("Switch to basm behavior, not bndbuild one.");
-        let start = std::time::Instant::now();
-        match cpclib_basm::process(basm_matches) {
-            Ok((env, warnings)) => {
-                for warning in warnings {
-                    eprintln!("{warning}");
-                }
-
-                let report = env.report(&start);
-                println!("{report}");
-
-                std::process::exit(0);
-            },
-            Err(e) => {
-                eprintln!("Error while assembling.\n{e}");
-                std::process::exit(-1);
-            }
-        }
-    }
-    else if let Some(img2cpc) = matches.subcommand_matches("img2cpc") {
-        eprintln!("Switch to img2cpc behavior, not bndbuild one.");
-        cpclib_imgconverter::process(img2cpc, img2cpc_cmd)
-            .map_err(|e| e.to_string())
-            .expect("Error when launching img2cpc tool");
-    }
-    else if let Some(xfer) = matches.subcommand_matches("xfer") {
-        eprintln!("Switch to xfer behavior, not bndbuild one.");
-        cpclib_xfertool::process(xfer)
-            .map_err(|e| e.to_string())
-            .expect("Error when launching xfer tool");
-    }
-    else if let Some(disc) = matches.subcommand_matches("disc") {
-        eprintln!("Switch to disc behavior, not bndbuild one.");
-        cpclib_disc::dsk_manager_handle(disc)
-            .map_err(|e| e.to_string())
-            .expect("Error when launching disc tool");
-    }
-    else {
+    {
         // handle the real behavior of bndbuild
         if matches.value_source("help") == Some(parser::ValueSource::CommandLine) {
             match matches.get_one::<String>("help").unwrap().as_str() {
@@ -109,6 +70,18 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
         if matches.get_flag("init") {
             init_project(None)?;
             println!("Empty project initialized");
+            return Ok(());
+        }
+
+
+        if matches.get_flag("direct") {
+            let cmd = matches.get_many::<String>("target").unwrap().into_iter().map(|s| s.as_str())
+            .join(" ");
+
+            let task: Task = serde_yaml::from_str(&cmd)
+                .map_err(|e| BndBuilderError::ParseError(e))?;
+            execute(&task)
+                .map_err(|e| BndBuilderError::AnyError(e))?;
             return Ok(());
         }
 
@@ -281,9 +254,6 @@ pub fn build_args_parser() -> clap::Command {
         .version(built_info::PKG_VERSION)
         .disable_help_flag(true)
         .disable_version_flag(true)
-        .subcommand_negates_reqs(true)
-        .subcommand_precedence_over_arg(true)
-        .subcommands(&[basm_cmd, img2cpc_cmd.clone(), xfer_cmd, disc_cmd])
         .arg(
             Arg::new("help")
                 .long("help")
@@ -294,6 +264,13 @@ pub fn build_args_parser() -> clap::Command {
                 .default_value("bndbuild")
                 .num_args(0..=1)
                 .help("Show the help of the given subcommand CMD.")
+        )
+        .arg(
+            Arg::new("direct")
+            .action(ArgAction::SetTrue)
+            .long("direct")
+            .help("Directly execute a command without trying to read a task file")
+            .conflicts_with_all(["list", "init", "add"])
         )
         .arg(
             Arg::new("version")
@@ -380,6 +357,7 @@ pub fn build_args_parser() -> clap::Command {
                 .requires("add")
                 .default_missing_value("basm")
         )
+
         .arg(
             Arg::new("target")
                 .action(ArgAction::Append)

@@ -8,7 +8,6 @@ pub struct AceConfig {
 
 impl AceConfig {
 	pub fn open<P: AsRef<Utf8Path>>(path: P) -> Self {
-		dbg!(&path.as_ref());
 		let ini = Ini::load_from_file(path.as_ref()).unwrap();
 		AceConfig { ini }
 	}
