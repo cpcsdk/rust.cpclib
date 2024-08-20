@@ -1619,6 +1619,7 @@ dependencies = [
  "assert_cmd",
  "build-deps",
  "built",
+ "camino",
  "camino-tempfile",
  "clap 4.5.15",
  "cpclib-asm",

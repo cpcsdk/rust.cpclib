@@ -11,24 +11,53 @@ use crate::task::Task;
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<Utf8PathBuf>, D::Error>
 where D: Deserializer<'de> {
-    let s = String::deserialize(deserializer)?;
 
-    let r = shlex::split(&s).or(Some(vec![])).unwrap();
-    let r = r
-        .into_iter()
-        .flat_map(|s| expand_glob(s.as_ref()))
-        .map(|s| {
-            if s.starts_with(r"./") || s.starts_with(r".\") {
-                s[2..].to_owned()
-            }
-            else {
-                s
-            }
-        })
-        .map(Utf8PathBuf::from)
-        .collect_vec();
+    struct SequenceOrList;
 
-    Ok(r)
+    impl SequenceOrList {
+        fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
+            let r = shlex::split(&s).or(Some(vec![])).unwrap();
+            r
+                .into_iter()
+                .flat_map(|s| expand_glob(s.as_ref()))
+                .map(|s| {
+                    if s.starts_with(r"./") || s.starts_with(r".\") {
+                        s[2..].to_owned()
+                    }
+                    else {
+                        s
+                    }
+                })
+                .map(Utf8PathBuf::from)
+                .collect_vec()
+        }
+    }
+    impl<'de> Visitor<'de> for SequenceOrList {
+
+        type Value = Vec<Utf8PathBuf>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("file names or list of file names")
+        }
+
+        fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+        where E: serde::de::Error {
+            let r = self.paths_form_str(s);
+            Ok(r)
+        }
+
+        fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
+        where A: serde::de::SeqAccess<'de> {
+            let res: Vec<&str> = Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
+            let res = res.into_iter()
+                .map(|s| self.paths_form_str(&s))
+                .flatten()
+                .collect::<Vec<_>>();
+            Ok(res)
+        }
+    }
+
+    deserializer.deserialize_any(SequenceOrList)
 }
 
 impl Display for Rule {

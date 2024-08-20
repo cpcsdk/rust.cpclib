@@ -37,6 +37,7 @@ serde.workspace = true
 shlex.workspace = true
 thiserror = "1.0"
 topologic = "1.1.0"
+camino = {workspace=true, features=["serde1"]}
 
 [build-dependencies]
 built.workspace = true
