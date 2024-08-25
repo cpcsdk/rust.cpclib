@@ -172,7 +172,7 @@ const fn windows_ace_desc(download_url: &'static str, folder: &'static str) -> D
         download_url,
         folder,
         archive_format:ArchiveFormat::Zip,
-        exec_fname:"AceDL.exe",
+        exec_fname: "AceDL.exe",
         compile:None
     }
 }

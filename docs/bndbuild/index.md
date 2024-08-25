@@ -3,13 +3,16 @@
 ## Synopsis
 
 Makefile-like tool tailored to build Amstrad CPC project.
-It embeds various cpclib tools such as basm, m4, img2cpc but can still execute external programs such as rasm, winape.
+It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but can still execute external programs such as `rasm`, `winape`, `ace` it is able to download and install or any command.
 
-The rules are described in a `yaml` file. Check for example the test project in <tests/dummy> folder.
+The rules are described in a `yaml` file. Check for example a simple test project at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy> folder, or a more complicated one that use various commands and templating at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/ucpm>.
 
 ## Help
 
 ```
+bndbuild --help`
+Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any benedicition crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.
+
 Benediction CPC demo project builder
 
 Usage: bndbuilder [OPTIONS] [TARGET]...
@@ -21,20 +24,47 @@ Arguments:
 Options:
   -h, --help [<CMD>]
           Show the help of the given subcommand CMD.
-
+          
           [default: bndbuild]
           [possible values: img2cpc, basm, rm, bndbuild, xfer]
+
+      --direct
+          Directly execute a command without trying to read a task file
 
   -V, --version
           Print version
 
+      --dot
+          Generate the .dot representation of the selected bndbuild.yml file
+
+      --show
+          Show the file AFTER interpreting the templates
+
   -f, --file <FILE>
           Provide the YAML file for the given project.
 
-          [default: bndbuild.yml]
-
   -w, --watch
           Watch the targets and permanently rebuild them when needed.
+
+  -l, --list
+          List the available targets
+
+  -D, --define <DEFINE_SYMBOL>
+          Provide a symbol with its value (default set to 1)
+
+      --init
+          Init a new project by creating it
+
+  -a, --add <add>
+          Add a new basm target in an existing bndbuild.yml (or create it)
+
+  -d, --dep <dep>
+          The source files
+
+  -k, --kind <kind>
+          The kind of command to be added in the yaml file
+          
+          [possible values: basm, img2cpc, xfer]
 ```
 
 ## Example

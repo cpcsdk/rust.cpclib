@@ -22,6 +22,20 @@ impl ListingElement for Token {
         Cow::Borrowed(self)
     }
 
+    fn is_print(&self) -> bool  {
+        match self {
+            Self::Print(..) => true,
+            _ => false
+        }
+    }
+
+    fn is_label(&self) -> bool {
+        match self {
+            Self::Label(..) => true,
+            _ => false
+        }
+    }
+
     fn is_equ(&self) -> bool {
         match self {
             Token::Equ { .. } => true,

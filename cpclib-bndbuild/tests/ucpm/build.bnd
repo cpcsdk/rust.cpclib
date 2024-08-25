@@ -49,7 +49,7 @@ cpc --emu ace --drivea "{{dsk}}"  --disable-rom orgams --disable-rom unidos
 
 - tgt: monogams
   phony: true
-  cmd: emu --albireo orgams  -k run --text  'ùo,"DATA3.O\n'
+  cmd: orgams --from orgams  --src DATA3.O --edit
 
 - tgt: emu
   dep: "\"{{DSK}}\" ucpm.rasm"

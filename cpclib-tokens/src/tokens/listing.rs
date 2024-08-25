@@ -38,6 +38,7 @@ where Self: Debug + Sized + Sync
     fn is_comment(&self) -> bool;
     fn is_set(&self) -> bool;
 
+    fn is_label(&self) -> bool;
     fn is_equ(&self) -> bool;
     fn is_assign(&self) -> bool;
     fn equ_symbol(&self) -> &str;
@@ -127,7 +128,7 @@ where Self: Debug + Sized + Sync
     fn include_once(&self) -> bool;
     fn include_is_standard_include(&self) -> bool {
         dbg!("include_is_standard_include is no more accurate and needs to be updated/removed");
-     //   let has_bracket = self.incbin_fname().to_string().contains('{');
+        //   let has_bracket = self.incbin_fname().to_string().contains('{');
 
         self.is_include() && 
        /* !self.include_fname().contains('{') &&*/ // no expansion
@@ -146,6 +147,8 @@ where Self: Debug + Sized + Sync
     fn is_dw(&self) -> bool;
     fn is_str(&self) -> bool;
     fn data_exprs(&self) -> &[Self::Expr];
+
+    fn is_print(&self) -> bool;
 
     fn to_token(&self) -> Cow<crate::Token>;
 }

@@ -533,13 +533,18 @@ impl HardCodedFunction {
             HardCodedFunction::BinaryTransform => {
                 let crunch_type = params[1].string()?;
                 let crunch_type = match crunch_type.to_uppercase().as_bytes() {
+                    #[cfg(not(target_arch = "wasm32"))]
                     b"LZEXO" => CrunchType::LZEXO,
+                    #[cfg(not(target_arch = "wasm32"))]
                     b"LZ4" => CrunchType::LZ4,
                     b"LZ48" => CrunchType::LZ48,
                     b"LZ49" => CrunchType::LZ49,
+                    #[cfg(not(target_arch = "wasm32"))]
                     b"LZSHRINKLER" => CrunchType::Shrinkler,
                     b"LZX7" => CrunchType::LZX7,
+                    #[cfg(not(target_arch = "wasm32"))]
                     b"LZX0" => CrunchType::LZX0,
+                    #[cfg(not(target_arch = "wasm32"))]
                     b"LZAPU" => CrunchType::LZAPU,
                     _ => {
                         return Err(AssemblerError::AssemblingError {

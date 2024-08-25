@@ -14,8 +14,11 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cxx = "1.0"
 libc.workspace = true
+
+[target.'cfg(not(target_arch="wasm32"))'.dependencies]
+cxx = "1.0"
+
 
 [build-dependencies]
 built.workspace = true

@@ -11,14 +11,12 @@ use crate::task::Task;
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<Utf8PathBuf>, D::Error>
 where D: Deserializer<'de> {
-
     struct SequenceOrList;
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
             let r = shlex::split(&s).or(Some(vec![])).unwrap();
-            r
-                .into_iter()
+            r.into_iter()
                 .flat_map(|s| expand_glob(s.as_ref()))
                 .map(|s| {
                     if s.starts_with(r"./") || s.starts_with(r".\") {
@@ -33,7 +31,6 @@ where D: Deserializer<'de> {
         }
     }
     impl<'de> Visitor<'de> for SequenceOrList {
-
         type Value = Vec<Utf8PathBuf>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -48,8 +45,10 @@ where D: Deserializer<'de> {
 
         fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
         where A: serde::de::SeqAccess<'de> {
-            let res: Vec<&str> = Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
-            let res = res.into_iter()
+            let res: Vec<&str> =
+                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
+            let res = res
+                .into_iter()
                 .map(|s| self.paths_form_str(&s))
                 .flatten()
                 .collect::<Vec<_>>();

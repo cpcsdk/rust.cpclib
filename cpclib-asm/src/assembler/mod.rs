@@ -605,28 +605,36 @@ impl Env {
         &mut self.symbols
     }
 
-    pub fn get_fname<E: ExprEvaluationExt + Debug>(&self, exp: &E) -> Result<String, AssemblerError> {
+    pub fn get_fname<E: ExprEvaluationExt + Debug>(
+        &self,
+        exp: &E
+    ) -> Result<String, AssemblerError> {
         let fname = match self.resolve_expr_must_never_fail(exp) {
             Ok(fname) => Ok(fname),
-            Err(e) => match &e {
-                // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
-                AssemblerError::UnknownSymbol { symbol, .. } |
-                AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { symbol, .. }
-                , .. }
-                 => {
-                    let exp_str = exp.to_string();
-                    if exp_str.as_str() == symbol.as_str() {
-                        Ok(exp_str.into())
-                    } else {
-                        Err(e)
-                    }
-                },
-                _ => Err(e)
+            Err(e) => {
+                match &e {
+                    // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
+                    AssemblerError::UnknownSymbol { symbol, .. }
+                    | AssemblerError::RelocatedError {
+                        error: box AssemblerError::UnknownSymbol { symbol, .. },
+                        ..
+                    } => {
+                        let exp_str = exp.to_string();
+                        if exp_str.as_str() == symbol.as_str() {
+                            Ok(exp_str.into())
+                        }
+                        else {
+                            Err(e)
+                        }
+                    },
+                    _ => Err(e)
+                }
             },
         }?;
         let fname = if fname.is_string() {
             fname.string()?.to_owned()
-        } else {
+        }
+        else {
             fname.to_string()
         };
         Ok(fname)
@@ -2723,12 +2731,9 @@ impl Env {
         let amsdos_fname = self.get_fname(amsdos_fname)?;
 
         let dsk_fname = match dsk_fname {
-            Some(fname) => {
-                Some(self.get_fname(fname)?)
-            },
+            Some(fname) => Some(self.get_fname(fname)?),
             None => None
         };
-
 
         let from = match address {
             Some(address) => {
@@ -2773,7 +2778,6 @@ impl Env {
 
         // Check filename validity
         if let Some(&SaveType::Disc(disc)) = &save_type {
-
             let dsk_fname = dsk_fname.as_ref().unwrap();
             let lower_fname = dsk_fname.to_ascii_lowercase();
             match disc {
@@ -2825,7 +2829,7 @@ impl Env {
             size,
             amsdos_fname.as_str().to_owned(),
             save_type.cloned(),
-             dsk_fname,
+            dsk_fname,
             mmr
         ));
 
@@ -2840,9 +2844,10 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_snainit<E: ExprEvaluationExt + Debug>(&mut self, fname: &E) -> Result<(), AssemblerError> {
-
-
+    pub fn visit_snainit<E: ExprEvaluationExt + Debug>(
+        &mut self,
+        fname: &E
+    ) -> Result<(), AssemblerError> {
         let fname = self.get_fname(fname)?;
 
         if !self.pass.is_first_pass() {

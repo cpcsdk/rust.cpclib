@@ -906,13 +906,19 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
     let kind = preceded(
         my_space0,
         alt((
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZ4").value(CrunchType::LZ4),
             parse_directive_word(b"LZ48").value(CrunchType::LZ48),
             parse_directive_word(b"LZ49").value(CrunchType::LZ49),
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX7").value(CrunchType::LZX7),
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX0").value(CrunchType::LZX0),
+            #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZAPU").value(CrunchType::LZAPU)
         ))
     )
@@ -1579,9 +1585,11 @@ enum LabelModifier {
 pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     alt((
         parse_string.map(|s: UnescapedString| LocatedExpr::String(s)),
-        terminated(parse_label(false), not(alt(("/", "://")))).map(|l| LocatedExpr::Label(l.into())),
-        parse_stringlike_without_quote.map(|s: UnescapedString| LocatedExpr::String(s)),
-    )).parse_next(input)
+        terminated(parse_label(false), not(alt(("/", "://"))))
+            .map(|l| LocatedExpr::Label(l.into())),
+        parse_stringlike_without_quote.map(|s: UnescapedString| LocatedExpr::String(s))
+    ))
+    .parse_next(input)
 }
 
 #[inline]
@@ -2432,10 +2440,12 @@ pub fn parse_directive_new(
                     choice_nocase!(b"INCBIN") => {
                         parse_incbin(BinaryTransformation::None).parse_next(input)?
                     },
+                    #[cfg(not(target_arch = "wasm32"))]
                     choice_nocase!(b"INCEXO") => {
                         parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO))
                             .parse_next(input)?
                     },
+                    #[cfg(not(target_arch = "wasm32"))]
                     choice_nocase!(b"INCLZ4") => {
                         parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4))
                             .parse_next(input)?
@@ -2451,11 +2461,13 @@ pub fn parse_directive_new(
                             .parse_next(input)?
                     },
 
+                    #[cfg(not(target_arch = "wasm32"))]
                     choice_nocase!(b"INCAPU") => {
                         parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU))
                             .parse_next(input)?
                     },
 
+                    #[cfg(not(target_arch = "wasm32"))]
                     choice_nocase!(b"INCZX0") => {
                         parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0))
                             .parse_next(input)?
@@ -2515,6 +2527,7 @@ pub fn parse_directive_new(
 
                     choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input)?,
 
+                    #[cfg(not(target_arch = "wasm32"))]
                     choice_nocase!(b"INCSHRINKLER") => {
                         parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler))
                             .parse_next(input)?
@@ -4837,6 +4850,7 @@ fn parse_snaset(
 pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     preceded(alt((b";", b"//")), take_till(0.., |ch| ch == b'\n'))
+        .take()
         .map(|string: &[u8]| {
             LocatedTokenInner::Comment(cloned.update_slice(string).into())
                 .into_located_token_direct()

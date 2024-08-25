@@ -360,11 +360,16 @@ pub enum StableTickerAction<S: AsRef<str>> {
 pub enum CrunchType {
     LZ48,
     LZ49,
+    #[cfg(not(target_arch = "wasm32"))]
     LZ4,
     LZX7,
+    #[cfg(not(target_arch = "wasm32"))]
     LZX0,
+    #[cfg(not(target_arch = "wasm32"))]
     LZEXO,
+    #[cfg(not(target_arch = "wasm32"))]
     LZAPU,
+    #[cfg(not(target_arch = "wasm32"))]
     Shrinkler
 }
 
@@ -483,7 +488,6 @@ pub enum CharsetFormat {
     /// Specify for a given interval
     Interval(Expr, Expr, Expr)
 }
-
 
 pub trait ToSimpleToken {
     /// Convert the token in its simplest form
@@ -986,11 +990,16 @@ impl fmt::Display for Token {
                             match crunch {
                                 CrunchType::LZ48 =>"INCL48",
                                 CrunchType::LZ49 => "INCL49",
+                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZ4 =>"INCLZ4",
                                 CrunchType::LZX7 =>"INCZX7",
+                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZX0 => "INCZX0",
+                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZEXO => "INCEXO",
+                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZAPU => "INCAPU",
+                                #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Shrinkler => "INCSHRINKLER",
                             }
                         }

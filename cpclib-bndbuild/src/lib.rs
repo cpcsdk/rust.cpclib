@@ -30,7 +30,6 @@ pub mod built_info {
 }
 
 pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuilderError> {
-
     {
         // handle the real behavior of bndbuild
         if matches.value_source("help") == Some(parser::ValueSource::CommandLine) {
@@ -73,15 +72,17 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
             return Ok(());
         }
 
-
         if matches.get_flag("direct") {
-            let cmd = matches.get_many::<String>("target").unwrap().into_iter().map(|s| s.as_str())
-            .join(" ");
+            let cmd = matches
+                .get_many::<String>("target")
+                .unwrap()
+                .into_iter()
+                .map(|s| s.as_str())
+                .join(" ");
 
-            let task: Task = serde_yaml::from_str(&cmd)
-                .map_err(|e| BndBuilderError::ParseError(e))?;
-            execute(&task)
-                .map_err(|e| BndBuilderError::AnyError(e))?;
+            let task: Task =
+                serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::ParseError(e))?;
+            execute(&task).map_err(|e| BndBuilderError::AnyError(e))?;
             return Ok(());
         }
 

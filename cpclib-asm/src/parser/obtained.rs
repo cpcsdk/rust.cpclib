@@ -1130,6 +1130,18 @@ pub struct LocatedToken {
     pub(crate) span: Z80Span
 }
 
+
+macro_rules! is_stuff_delegate {
+    ($name: ident) => {
+        #[inline(always)]
+        fn $name(&self) -> bool {
+            self.inner.as_ref().left()
+                .map(|inner| inner.$name())
+                .unwrap_or(false)
+        }
+    };
+}
+
 impl ListingElement for LocatedToken {
     type AssemblerControlCommand = LocatedAssemblerControlCommand;
     type DataAccess = LocatedDataAccess;
@@ -1146,9 +1158,18 @@ impl ListingElement for LocatedToken {
         }
     }
 
+    is_stuff_delegate!(is_print);
+
     fn is_buildcpr(&self) -> bool {
         match &self.inner {
             either::Left(LocatedTokenInner::BuildCpr) => true,
+            _ => false
+        }
+    }
+
+    fn is_label(&self) -> bool {
+        match &self.inner {
+            either::Left(LocatedTokenInner::Label { .. }) => true,
             _ => false
         }
     }
@@ -1446,7 +1467,10 @@ impl ListingElement for LocatedToken {
             either::Left(LocatedTokenInner::Macro { params, .. }) => {
                 params.iter().map(|a| a.as_str()).collect()
             },
-            _ => unreachable!()
+            _ => {
+                dbg!(self);
+                unreachable!()
+            }
         }
     }
 
@@ -1927,7 +1951,14 @@ impl ListingElement for LocatedTokenInner {
                 expr: _
             } => todo!(),
 
-            _ => todo!()
+            _ => todo!("Need to implement conversion  for {:?}", self)
+        }
+    }
+
+    fn is_print(&self) -> bool {
+        match self {
+            LocatedTokenInner::Print(_) => true,
+            _ => false
         }
     }
 
@@ -2488,6 +2519,10 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn macro_flavor(&self) -> AssemblerFlavor {
+        todo!()
+    }
+
+    fn is_label(&self) -> bool {
         todo!()
     }
 }
