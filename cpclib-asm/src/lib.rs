@@ -31,8 +31,8 @@ pub mod error;
 
 mod crunchers;
 
-pub mod progress;
 pub mod orgams;
+pub mod progress;
 
 use std::fmt::Debug;
 use std::io::Write;

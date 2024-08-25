@@ -2,8 +2,8 @@
 
 pub use {enigo, xcap};
 
+pub mod ace_config;
 pub mod delegated;
+pub mod embedded;
 pub mod emucontrol;
 pub mod runner;
-pub mod embedded;
-pub mod ace_config;

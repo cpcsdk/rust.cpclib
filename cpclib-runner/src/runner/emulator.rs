@@ -23,19 +23,20 @@ impl Default for Emulator {
 }
 
 impl Emulator {
-
     pub fn ace_version(&self) -> Option<&AceVersion> {
         match self {
             Emulator::Ace(v) => Some(v),
             _ => None
         }
     }
+
     pub fn is_ace(&self) -> bool {
         match self {
             Emulator::Ace(_) => true,
             _ => false
         }
     }
+
     pub fn get_command(&self) -> &str {
         match self {
             Emulator::Ace(_) => ACE_CMD,
@@ -84,14 +85,15 @@ pub enum AceVersion {
     WakePoint // 2024/06/21
 }
 
-
 impl AceVersion {
     pub fn config_file(&self) -> Utf8PathBuf {
         let p = match self {
             Self::ZenSummer => {
-
-                BaseDirs::new().unwrap().config_local_dir().join("ACE-DL_futuristics/config.cfg")
-            }
+                BaseDirs::new()
+                    .unwrap()
+                    .config_local_dir()
+                    .join("ACE-DL_futuristics/config.cfg")
+            },
             _ => unimplemented!()
         };
 
@@ -154,30 +156,33 @@ impl WinapeVersion {
     }
 }
 
-
-#[cfg(target_os="linux")]
-const fn linux_ace_desc(download_url: &'static str, folder: &'static str) -> DelegateApplicationDescription{
-    DelegateApplicationDescription{
+#[cfg(target_os = "linux")]
+const fn linux_ace_desc(
+    download_url: &'static str,
+    folder: &'static str
+) -> DelegateApplicationDescription {
+    DelegateApplicationDescription {
         download_url,
         folder,
-        archive_format:ArchiveFormat::TarGz,
-        exec_fname:"AceDL",
-        compile:None
+        archive_format: ArchiveFormat::TarGz,
+        exec_fname: "AceDL",
+        compile: None
     }
 }
 
 #[cfg(windows)]
-const fn windows_ace_desc(download_url: &'static str, folder: &'static str) -> DelegateApplicationDescription{
-    DelegateApplicationDescription{
+const fn windows_ace_desc(
+    download_url: &'static str,
+    folder: &'static str
+) -> DelegateApplicationDescription {
+    DelegateApplicationDescription {
         download_url,
         folder,
-        archive_format:ArchiveFormat::Zip,
+        archive_format: ArchiveFormat::Zip,
         exec_fname: "AceDL.exe",
-        compile:None
+        compile: None
     }
 }
-
-
 
 cfg_match! {
     cfg(target_os = "linux") =>

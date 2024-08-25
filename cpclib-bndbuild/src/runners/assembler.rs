@@ -69,16 +69,13 @@ impl Runner for OrgamsRunner {
             if from.is_dir() {
                 let src = matches.get_one::<String>("src").unwrap();
                 let tgt = matches.get_one::<String>("dst").unwrap();
-                convert_source(
-                    from.join(src), 
-                    from.join(tgt)
-                ).map_err(|e| e.to_string())
-
-            } else {
+                convert_source(from.join(src), from.join(tgt)).map_err(|e| e.to_string())
+            }
+            else {
                 unimplemented!()
             }
-        } else {
-
+        }
+        else {
             let mut real_arguments = Vec::new();
             real_arguments.push("orgams");
             if from.is_dir() {

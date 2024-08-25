@@ -1,10 +1,12 @@
-use std::{fmt::Display, ops::Deref};
+use std::fmt::Display;
+use std::ops::Deref;
 
 use beef::lean::Cow;
-use cpclib_common::{camino::Utf8Path, itertools::Itertools};
+use cpclib_common::camino::Utf8Path;
+use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{ListingElement, MacroParamElement, Token};
 
-use crate::{r#macro, parse_z80, MayHaveSpan, SourceString, TokenExt};
+use crate::{parse_z80, r#macro, MayHaveSpan, SourceString, TokenExt};
 
 #[derive(Debug)]
 pub struct ToOrgamsError(String);
@@ -31,15 +33,13 @@ pub trait ToOrgams {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError>;
 }
 
-/* 
-impl ToOrgams for Token {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
-        todo!()
-    }
-}
-    */
+// impl ToOrgams for Token {
+// fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+// todo!()
+// }
+// }
 
-impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
+impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         // we assume it is already a BASM format and not an ORGAMS format
         let handle_macro_definition = |token: &T| -> Cow<str> {
@@ -50,33 +50,39 @@ impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
             for arg in arguments_name.iter() {
                 macro_content = macro_content.replace(&format!("{{{arg}}}"), arg);
             }
-            macro_content = macro_content.replace('\n',"\n\t");
+            macro_content = macro_content.replace('\n', "\n\t");
 
             // also transform the content of the macro
             // in case of failure, fallback to the original content
             let macro_content = if let Ok(macro_content_listing) = parse_z80(&macro_content) {
                 let macro_content_listing = &macro_content_listing[..];
-                macro_content_listing.to_orgams_string()
+                macro_content_listing
+                    .to_orgams_string()
                     .map(|s| s.to_string())
                     .unwrap_or(macro_content)
-            } else {
+            }
+            else {
                 macro_content
             };
 
             let macro_args = arguments_name.into_iter().join(", ");
-            
+
             let output = format!("\tMACRO {macro_name} {macro_args}\n{macro_content}\tENDM");
             Cow::owned(output)
         };
 
         let handle_macro_call = |token: &T| -> Cow<str> {
             let name = token.macro_call_name();
-            let arguments = token.macro_call_arguments()
+            let arguments = token
+                .macro_call_arguments()
                 .into_iter()
-                .map(|s| if s.is_single() {
-                    s.single_argument()
-                }else {
-                    unimplemented!("We consider it does not happens with ORGAMS")
+                .map(|s| {
+                    if s.is_single() {
+                        s.single_argument()
+                    }
+                    else {
+                        unimplemented!("We consider it does not happens with ORGAMS")
+                    }
                 })
                 .join(",");
 
@@ -85,17 +91,15 @@ impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
         };
 
         let handle_standard_instruction = |token: &T| -> Cow<str> {
-            /*
-            if self.has_span() {
-                Cow::borrowed(self.span().as_str())
-            } else {
-                Cow::owned(self.to_string())
-            }
-            */
+            // if self.has_span() {
+            // Cow::borrowed(self.span().as_str())
+            // } else {
+            // Cow::owned(self.to_string())
+            // }
             token.to_token().to_string().into()
         };
 
-        let handle_print = |token :&T| -> Cow<str> {
+        let handle_print = |token: &T| -> Cow<str> {
             let s = Token::Comment(format!("; {}", token.to_string()))
                 .to_orgams_string()
                 .unwrap()
@@ -106,11 +110,14 @@ impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
         // This is the default behavior that changes nothing
         let repr = if self.is_macro_definition() {
             handle_macro_definition(self)
-        } else if self.is_print() {
+        }
+        else if self.is_print() {
             handle_print(self)
-        } else if self.is_call_macro_or_build_struct() {
+        }
+        else if self.is_call_macro_or_build_struct() {
             handle_macro_call(self)
-        }else {
+        }
+        else {
             handle_standard_instruction(self)
         };
 
@@ -119,42 +126,40 @@ impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
         }
 
         // ensure the is space first
-        let repr = if !self.is_comment() && 
-                    !self.is_label() &&
-                    !self.is_equ() &&
-                    !self.is_assign() {
+        let repr = if !self.is_comment() && !self.is_label() && !self.is_equ() && !self.is_assign()
+        {
             let first = repr.chars().next().unwrap();
             if first != ' ' && first != '\t' {
                 Cow::owned(format!("\t{}", repr))
-            } else {
+            }
+            else {
                 repr
             }
-        } else {
+        }
+        else {
             repr
         };
         Ok(repr)
     }
 }
 
-/*
-impl ToOrgams for Listing {
-    fn to_orgams_string(&self) -> Result<String, ToOrgamsError> {
-        todo!()
-    }
-}
-
-impl ToOrgams for LocatedListing {
-    fn to_orgams_string(&self) -> Result<String, ToOrgamsError> {
-        let mut content = String::new();
-
-        for token in self.iter() {
-
-        }
-
-        Ok(content)
-    }
-}
-*/
+// impl ToOrgams for Listing {
+// fn to_orgams_string(&self) -> Result<String, ToOrgamsError> {
+// todo!()
+// }
+// }
+//
+// impl ToOrgams for LocatedListing {
+// fn to_orgams_string(&self) -> Result<String, ToOrgamsError> {
+// let mut content = String::new();
+//
+// for token in self.iter() {
+//
+// }
+//
+// Ok(content)
+// }
+// }
 
 impl<T: ToOrgams> ToOrgams for &[T] {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
@@ -178,12 +183,14 @@ impl<T: ToOrgams> ToOrgams for &[T] {
     }
 }
 
-///
 /// COnvert a basm txt source file as a orgams text source file.
 /// There are tons of current limitations. I have only implemented what I need
 /// TODO - convert expressions to be orgams compatible. REwrite them ? Write parenthesis ?
 /// TODO - rewrite macros
-pub fn convert_source<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(src: P1, tgt: P2) -> Result<(), ToOrgamsError> {
+pub fn convert_source<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
+    src: P1,
+    tgt: P2
+) -> Result<(), ToOrgamsError> {
     let src = src.as_ref();
     let tgt = tgt.as_ref();
     let code = std::fs::read_to_string(src)

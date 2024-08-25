@@ -33,31 +33,30 @@ impl Cruncher for CrunchType {
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZAPU => Ok(CompressMethod::Apultra),
             #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default()))
-            // #[cfg(target_arch = "wasm32")]
-            // CrunchType::LZ4 => {
-            // Err(AssemblerError::AssemblingError {
-            // msg: "LZ4 compression not available".to_owned()
-            // })
-            // },
-            // #[cfg(target_arch = "wasm32")]
-            // CrunchType::LZX0 => {
-            // Err(AssemblerError::AssemblingError {
-            // msg: "LZX0 compression not available".to_owned()
-            // })
-            // },
-            // #[cfg(target_arch = "wasm32")]
-            // CrunchType::LZEXO => {
-            // Err(AssemblerError::AssemblingError {
-            // msg: "LZEXO compression not available".to_owned()
-            // })
-            // },
-            // #[cfg(target_arch = "wasm32")]
-            // CrunchType::LZAPU => {
-            // Err(AssemblerError::AssemblingError {
-            // msg: "LZAPU compression not available".to_owned()
-            // })
-            // },
+            CrunchType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())) /* #[cfg(target_arch = "wasm32")]
+                                                                                        * CrunchType::LZ4 => {
+                                                                                        * Err(AssemblerError::AssemblingError {
+                                                                                        * msg: "LZ4 compression not available".to_owned()
+                                                                                        * })
+                                                                                        * },
+                                                                                        * #[cfg(target_arch = "wasm32")]
+                                                                                        * CrunchType::LZX0 => {
+                                                                                        * Err(AssemblerError::AssemblingError {
+                                                                                        * msg: "LZX0 compression not available".to_owned()
+                                                                                        * })
+                                                                                        * },
+                                                                                        * #[cfg(target_arch = "wasm32")]
+                                                                                        * CrunchType::LZEXO => {
+                                                                                        * Err(AssemblerError::AssemblingError {
+                                                                                        * msg: "LZEXO compression not available".to_owned()
+                                                                                        * })
+                                                                                        * },
+                                                                                        * #[cfg(target_arch = "wasm32")]
+                                                                                        * CrunchType::LZAPU => {
+                                                                                        * Err(AssemblerError::AssemblingError {
+                                                                                        * msg: "LZAPU compression not available".to_owned()
+                                                                                        * })
+                                                                                        * }, */
         }?;
 
         Ok(method.compress(raw))

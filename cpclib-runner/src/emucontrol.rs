@@ -28,7 +28,6 @@ pub enum AmstradRom {
     Unidos
 }
 
-
 #[derive(Debug)]
 #[builder]
 pub struct EmulatorConf {
@@ -393,7 +392,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         self.unidos_select_drive(drivea, albireo);
 
-        let load_res = self.orgams_load(src)
+        let load_res = self
+            .orgams_load(src)
             .map_err(|screen| ("Error while loading".to_string(), screen));
 
         let next_res = if let Ok(()) = load_res {
@@ -414,25 +414,25 @@ impl<E: UsedEmulator> RobotImpl<E> {
                             .map_err(|screen| ("Error while saving".to_string(), screen))
                     }
                 })
-        } else {
+        }
+        else {
             load_res
         };
 
-        next_res
-            .map_err(|(msg, screen)| {
-                let path = {
-                    let tempfile = camino_tempfile::Builder::new()
-                        .prefix("bnd_stuff")
-                        .suffix(".png")
-                        .tempfile()
-                        .unwrap();
-                    let (_f, path) = tempfile.keep().unwrap();
-                    path
-                };
-                screen.save(&path).unwrap();
-                open(&path).unwrap();
-                format!("An error occurred.\n{msg}\nLook at {}.", path.to_string())
-            })
+        next_res.map_err(|(msg, screen)| {
+            let path = {
+                let tempfile = camino_tempfile::Builder::new()
+                    .prefix("bnd_stuff")
+                    .suffix(".png")
+                    .tempfile()
+                    .unwrap();
+                let (_f, path) = tempfile.keep().unwrap();
+                path
+            };
+            screen.save(&path).unwrap();
+            open(&path).unwrap();
+            format!("An error occurred.\n{msg}\nLook at {}.", path.to_string())
+        })
     }
 
     fn orgams_jump(&mut self) -> Result<(), Screenshot> {
@@ -642,7 +642,6 @@ pub struct EmuCli {
     #[arg(short, long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
     clear_cache: bool,
 
-
     #[arg(short, long, action = ArgAction::Append, help = "rasm-compatible debug file (for ace ATM)")]
     debug: Vec<Utf8PathBuf>,
 
@@ -667,28 +666,27 @@ use clap::Args;
 
 #[derive(Args, Clone, Debug)]
 pub struct OrgamsCli {
-        /// lists test values
-        #[arg(short, long, help = "Filename to assemble or edit")]
-        src: String,
+    /// lists test values
+    #[arg(short, long, help = "Filename to assemble or edit")]
+    src: String,
 
-        #[arg(
-            short,
-            long,
-            help = "Filename to save after assembling. By default use the one provided by orgams"
-        )]
-        dst: Option<String>,
+    #[arg(
+        short,
+        long,
+        help = "Filename to save after assembling. By default use the one provided by orgams"
+    )]
+    dst: Option<String>,
 
-        #[arg(
+    #[arg(
             short,
             long,
             action = ArgAction::SetTrue,
             requires = "dst",
             help = "Convert a Z80 source file into an ascii orgams file"
         )]
-        basm2orgams: bool,
+    basm2orgams: bool,
 
-
-        #[arg(
+    #[arg(
             short,
             long,
             action = ArgAction::SetTrue,
@@ -696,15 +694,15 @@ pub struct OrgamsCli {
             conflicts_with_all = ["dst", "jump"],
             help = "Launch the editor in an emulator"
         )]
-        edit: bool,
+    edit: bool,
 
-        #[arg(
+    #[arg(
             short,
             long,
             action = ArgAction::SetTrue,
             conflicts_with_all = ["dst", "edit"],
             help="Jump on the program instead of saving it")]
-        jump: bool
+    jump: bool
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -713,9 +711,7 @@ pub enum Commands {
 
     Run {
         #[arg(short, long, help = "Simple text to type")]
-        text: Option<String>,
-
-
+        text: Option<String>
     }
 }
 
@@ -763,8 +759,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
         .maybe_drive_a(cli.drive_a.clone())
         .maybe_drive_b(cli.drive_b.clone())
         .debug_files(cli.debug.clone())
-        .maybe_auto_run(cli.auto_run_file.clone())
-        ;
+        .maybe_auto_run(cli.auto_run_file.clone());
     let conf = builder.build();
 
     let emu = match cli.emulator {
@@ -786,38 +781,40 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
     let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
     let mut ace_conf = AceConfig::open(&ace_conf_path);
 
-    if let Some(mem) = & cli.memory {
+    if let Some(mem) = &cli.memory {
         ace_conf.set("RAM", mem);
-    } else {
+    }
+    else {
         ace_conf.set("RAM", 128);
     }
 
     // Ensure system is French. TODO handle that properly for foreign partners !
-    ace_conf.set("OS", emu.configuration().cache_folder().join("private/firmware/OS6128_FR.rom"));
+    ace_conf.set(
+        "OS",
+        emu.configuration()
+            .cache_folder()
+            .join("private/firmware/OS6128_FR.rom")
+    );
     ace_conf.set("KTRANS", 1);
     ace_conf.set("KGTRANS", 1);
 
     let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
-        (AmstradRom::Unidos, &[
-            ("unidos.rom", 7),
-            ("nova.rom", 8),
-            ("albireo.rom", 9),
-            ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
-        ]),
         (
-            AmstradRom::Orgams, &[
-                ("Orgams_FF240128.e0f", 15),
-
+            AmstradRom::Unidos,
+            &[
+                ("unidos.rom", 7),
+                ("nova.rom", 8),
+                ("albireo.rom", 9),
+                ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
             ]
-        )
+        ),
+        (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15)])
     ];
-    /*
-    for fname in EmbeddedRoms::iter() {
-        println!("{fname}");
-    }
-    */
+    // for fname in EmbeddedRoms::iter() {
+    // println!("{fname}");
+    // }
     for (kind, roms) in extra_roms {
-        let remove =  cli.disable_rom.contains(kind);
+        let remove = cli.disable_rom.contains(kind);
 
         // a minimum ammount of memory is required
         if !remove && kind == &AmstradRom::Orgams && cli.memory.is_none() {
@@ -841,14 +838,15 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
             let key = format!("ROM{slot}");
             if remove {
                 ace_conf.remove(&key);
-            } else {
+            }
+            else {
                 ace_conf.set(key, dst.to_string());
             }
         }
     }
     ace_conf.save().unwrap();
 
-    let albireo_backup_and_original =  {
+    let albireo_backup_and_original = {
         if emu.is_ace() {
             let emu_folder = emu.albireo_folder();
             let backup_folder = emu_folder
@@ -865,18 +863,19 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
             }
 
             Some((backup_folder, emu_folder))
-        } else {
+        }
+        else {
             None
         }
     };
-    
+
     if emu.is_ace() {
         let emu_folder = emu.albireo_folder();
 
         if let Some(albireo) = &cli.albireo {
             #[cfg(unix)]
             {
-                let  (backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
+                let (backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
 
                 std::os::unix::fs::symlink(
                     std::path::absolute(&albireo).unwrap(),
@@ -888,10 +887,10 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
             #[cfg(windows)]
             {
                 let option = fs_extra::dir::CopyOptions::new()
-                .copy_inside(true)
-                .overwrite(true)
-                .skip_exist(false)
-                .content_only(true);
+                    .copy_inside(true)
+                    .overwrite(true)
+                    .skip_exist(false)
+                    .content_only(true);
                 fs_extra::dir::copy(albireo, &emu_folder, &option).unwrap();
             }
         }
@@ -930,32 +929,38 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
     std::thread::sleep(Duration::from_millis(1000 * 3));
 
     let res = match cli.command {
-        Commands::Orgams(OrgamsCli { src, dst, jump , edit, basm2orgams }) => {
+        Commands::Orgams(OrgamsCli {
+            src,
+            dst,
+            jump,
+            edit,
+            basm2orgams
+        }) => {
             if basm2orgams {
                 if let Some(albi) = &cli.albireo {
                     let src = Utf8Path::new(albi).join(src);
                     let dst = dst.as_ref().unwrap();
-                    cpclib_asm::orgams::convert_source(src, dst)
-                        .map_err(|e| e.to_string())
-                } else {
+                    cpclib_asm::orgams::convert_source(src, dst).map_err(|e| e.to_string())
+                }
+                else {
                     unimplemented!()
                 }
             }
-           else {
-           
-                if (jump||edit) && !cli.keepemulator {
+            else {
+                if (jump || edit) && !cli.keepemulator {
                     robot.close();
                     Err("You must request to keep the emulator open with -k".to_string())
                 }
                 else {
                     println!("!!! Current limitation: Ace must be configure as\n - Amstrad old\n - with a French keyboard\n - a French firmware\n - Unidos with nova and albireo\n - and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
-                        robot.handle_orgams(
-                            cli.drive_a.as_ref().map(|s| s.as_str()),
-                            cli.albireo.as_ref().map(|s| s.as_str()),
-                            &src,
-                            dst.as_ref().map(|s| s.as_str()),
-                            jump, edit
-                        )
+                    robot.handle_orgams(
+                        cli.drive_a.as_ref().map(|s| s.as_str()),
+                        cli.albireo.as_ref().map(|s| s.as_str()),
+                        &src,
+                        dst.as_ref().map(|s| s.as_str()),
+                        jump,
+                        edit
+                    )
                 }
             }
         },
@@ -977,26 +982,28 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
 
     if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {
         if cli.keepemulator {
-            eprintln!("Albireo folder not cleaned automatically. you'll have to do it if necessary");
+            eprintln!(
+                "Albireo folder not cleaned automatically. you'll have to do it if necessary"
+            );
         }
         else {
             #[cfg(windows)]
-            { // need to copy back modifications
+            {
+                // need to copy back modifications
                 let option = fs_extra::dir::CopyOptions::new()
-                .copy_inside(true)
-                .overwrite(true)
-                .skip_exist(false)
-                .content_only(true);
+                    .copy_inside(true)
+                    .overwrite(true)
+                    .skip_exist(false)
+                    .content_only(true);
                 let albireo = cli.albireo.as_ref().unwrap();
                 std::fs::remove_dir_all(albireo).unwrap();
                 fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
 
-            // restore previous
-            if backup_folder.exists() {
-                std::fs::rename(&backup_folder, &emu_folder).unwrap();
+                // restore previous
+                if backup_folder.exists() {
+                    std::fs::rename(&backup_folder, &emu_folder).unwrap();
+                }
             }
-        }
-
         }
     }
 

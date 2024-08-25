@@ -629,7 +629,7 @@ impl Env {
                     },
                     _ => Err(e)
                 }
-            },
+            }
         }?;
         let fname = if fname.is_string() {
             fname.string()?.to_owned()

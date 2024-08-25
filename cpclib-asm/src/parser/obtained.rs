@@ -1130,7 +1130,6 @@ pub struct LocatedToken {
     pub(crate) span: Z80Span
 }
 
-
 macro_rules! is_stuff_delegate {
     ($($name: ident)*) => {
         $(
@@ -1143,7 +1142,6 @@ macro_rules! is_stuff_delegate {
         )*
     };
 }
-
 
 macro_rules! any_delegate {
     ( $(fn $name:ident(&self) -> $return:ty);+ ;) => {
@@ -1163,6 +1161,51 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+    is_stuff_delegate!(is_print is_buildcpr is_label is_equ is_assign is_module is_directive is_rorg is_iterate is_for is_repeat_until is_repeat is_macro_definition is_if is_include is_incbin is_call_macro_or_build_struct is_function_definition is_crunched_section is_confined is_switch is_db is_dw is_str is_set is_comment is_org is_assembler_control is_while);
+
+    any_delegate!(
+        fn equ_symbol(&self) -> &str;
+        fn equ_value(&self) -> &Self::Expr;
+        fn module_name(&self) -> &str;
+        fn while_expr(&self) -> &Self::Expr;
+        fn mnemonic(&self) -> Option<&Mnemonic>;
+        fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
+        fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
+        fn rorg_expr(&self) -> &Self::Expr;
+        fn iterate_counter_name(&self) -> &str;
+        fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;
+        fn for_label(&self) -> &str;
+        fn for_start(&self) -> &Self::Expr;
+        fn for_stop(&self) -> &Self::Expr;
+        fn for_step(&self) -> Option<&Self::Expr>;
+        fn repeat_until_condition(&self) -> &Self::Expr;
+        fn repeat_count(&self) -> &Self::Expr;
+        fn repeat_counter_name(&self) -> Option<&str>;
+        fn repeat_counter_start(&self) -> Option<&Self::Expr>;
+        fn repeat_counter_step(&self) -> Option<&Self::Expr>;
+        fn macro_definition_name(&self) -> &str;
+        fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]>;
+        fn macro_definition_code(&self) -> &str;
+        fn macro_call_name(&self) -> &str;
+        fn macro_call_arguments(&self) -> &[Self::MacroParam];
+        fn if_nb_tests(&self) -> usize;
+        fn incbin_fname(&self) -> &Self::Expr;
+        fn incbin_offset(&self) -> Option<&Self::Expr>;
+        fn incbin_length(&self) -> Option<&Self::Expr>;
+        fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation;
+        fn include_fname(&self) -> &Self::Expr;
+        fn include_namespace(&self) -> Option<&str>;
+        fn include_once(&self) -> bool;
+        fn function_definition_name(&self) -> &str;
+        fn function_definition_params(&self) -> SmallVec<[&str; 4]>;
+        fn crunched_section_kind(&self) -> &CrunchType;
+        fn switch_expr(&self) -> &Self::Expr;
+        fn data_exprs(&self) -> &[Self::Expr];
+        fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
+        fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr>;
+        fn macro_flavor(&self) -> AssemblerFlavor;
+    );
+
     fn to_token(&self) -> Cow<cpclib_tokens::Token> {
         match &self.inner {
             either::Either::Left(inner) => inner.to_token(),
@@ -1171,12 +1214,6 @@ impl ListingElement for LocatedToken {
             }
         }
     }
-
-    is_stuff_delegate!(is_print is_buildcpr is_label is_equ is_assign is_module is_directive is_rorg is_iterate is_for is_repeat_until is_repeat is_macro_definition is_if is_include is_incbin is_call_macro_or_build_struct is_function_definition is_crunched_section is_confined is_switch is_db is_dw is_str is_set is_comment is_org is_assembler_control is_while);
-
-
-
-
 
     fn is_warning(&self) -> bool {
         self.inner.is_right()
@@ -1203,7 +1240,6 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
         match &mut self.inner {
             either::Left(LocatedTokenInner::OpCode(_, arg1, ..)) => arg1.as_mut(),
@@ -1220,10 +1256,6 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
-
-
-
     fn rorg_listing(&self) -> &[Self] {
         match &self.inner {
             either::Left(LocatedTokenInner::Rorg(_, lst)) => lst,
@@ -1231,14 +1263,12 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
     fn iterate_listing(&self) -> &[Self] {
         match &self.inner {
             either::Left(LocatedTokenInner::Iterate(_, _, listing, ..)) => listing,
             _ => unreachable!()
         }
     }
-
 
     fn for_listing(&self) -> &[Self] {
         match &self.inner {
@@ -1268,8 +1298,6 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
-
     fn crunched_section_listing(&self) -> &[Self] {
         match &self.inner {
             either::Left(LocatedTokenInner::CrunchedSection(_, lst)) => lst,
@@ -1278,7 +1306,7 @@ impl ListingElement for LocatedToken {
     }
 
     fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
-         match &self.inner {
+        match &self.inner {
             either::Left(LocatedTokenInner::If(tests, ..)) => {
                 let data = &tests[idx];
                 (&data.0, &data.1)
@@ -1294,15 +1322,12 @@ impl ListingElement for LocatedToken {
         }
     }
 
-
-
     fn confined_listing(&self) -> &[Self] {
         match &self.inner {
             either::Left(LocatedTokenInner::Confined(lst)) => lst,
             _ => unreachable!()
         }
     }
-
 
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
         match &self.inner {
@@ -1332,52 +1357,6 @@ impl ListingElement for LocatedToken {
     fn assembler_control_get_listing(&self) -> &[Self] {
         self.assembler_control_command().get_listing()
     }
-
-    any_delegate!(
-        fn equ_symbol(&self) -> &str;
-        fn equ_value(&self) -> &Self::Expr;
-        fn module_name(&self) -> &str;
-        fn while_expr(&self) -> &Self::Expr;
-        fn mnemonic(&self) -> Option<&Mnemonic>;
-        fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
-        fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
-        fn rorg_expr(&self) -> &Self::Expr;
-        fn iterate_counter_name(&self) -> &str ;
-        fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;
-        fn for_label(&self) -> &str ;
-        fn for_start(&self) -> &Self::Expr;
-        fn for_stop(&self) -> &Self::Expr ;
-        fn for_step(&self) -> Option<&Self::Expr>;
-        fn repeat_until_condition(&self) -> &Self::Expr ;
-        fn repeat_count(&self) -> &Self::Expr ;
-        fn repeat_counter_name(&self) -> Option<&str> ;
-        fn repeat_counter_start(&self) -> Option<&Self::Expr>;
-        fn repeat_counter_step(&self) -> Option<&Self::Expr> ;
-        fn macro_definition_name(&self) -> &str ;
-        fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]>;
-        fn macro_definition_code(&self) -> &str;
-        fn macro_call_name(&self) -> &str ;
-        fn macro_call_arguments(&self) -> &[Self::MacroParam];
-        fn if_nb_tests(&self) -> usize;
-        fn incbin_fname(&self) -> &Self::Expr;
-        fn incbin_offset(&self) -> Option<&Self::Expr> ;
-        fn incbin_length(&self) -> Option<&Self::Expr>;
-        fn incbin_transformation(&self) -> &cpclib_tokens::BinaryTransformation;
-        fn include_fname(&self) -> &Self::Expr ;
-        fn include_namespace(&self) -> Option<&str>;
-        fn include_once(&self) -> bool;
-        fn function_definition_name(&self) -> &str;
-        fn function_definition_params(&self) -> SmallVec<[&str; 4]>;
-        fn crunched_section_kind(&self) -> &CrunchType ;
-        fn switch_expr(&self) -> &Self::Expr ;
-        fn data_exprs(&self) -> &[Self::Expr];
-        fn assembler_control_command(&self) -> &Self::AssemblerControlCommand ;
-        fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr> ;
-        fn macro_flavor(&self) -> AssemblerFlavor;
-    );
-
-
-
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -1638,7 +1617,7 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn while_listing(&self) -> &[Self] {
-       unreachable!()
+        unreachable!()
     }
 
     fn mnemonic(&self) -> Option<&Mnemonic> {
@@ -1876,11 +1855,11 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
-       unreachable!()
+        unreachable!()
     }
 
     fn if_else(&self) -> Option<&[Self]> {
-       unreachable!()
+        unreachable!()
     }
 
     fn is_include(&self) -> bool {
