@@ -70,8 +70,8 @@ impl<T:TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
         };
 
         let handle_macro_call = |token: &T| -> Cow<str> {
-            let name = self.macro_call_name();
-            let arguments = self.macro_call_arguments()
+            let name = token.macro_call_name();
+            let arguments = token.macro_call_arguments()
                 .into_iter()
                 .map(|s| if s.is_single() {
                     s.single_argument()
