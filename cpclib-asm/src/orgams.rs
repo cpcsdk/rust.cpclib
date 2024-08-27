@@ -63,7 +63,7 @@ macro_rules! expr_to_orgams {
                             format!("{}", v)
                         }
                     } else {
-                        format!("&{:x}", v)
+                        format!("{}", v)
                     }
                 },
 
@@ -94,6 +94,8 @@ macro_rules! expr_to_orgams {
                 _ => unimplemented!("{:?}", self)
             };
 
+            
+            dbg!(self, &repr);
             Ok(repr.into())
         }
     }
@@ -136,9 +138,17 @@ macro_rules! data_access_to_orgams {
             let repr = if self.is_expression() {
                 let exp = self.get_expression().unwrap();
                 return exp.to_orgams_string();
+            } else if self.is_memory() || self.is_port_n()  {
+                let exp = self.get_expression().unwrap();
+                let exp = exp.to_orgams_string()?;
+                format!("({})", exp)
+            }
+            else if self.is_register16() || self.is_register8() || self.is_indexregister16() || self.is_indexregister8() 
+                    || self.is_port_c() {
+                self.to_string().to_lowercase()
             }
             else {
-                self.to_string().to_lowercase()
+                unimplemented!("{:?}", self)
             };
 
             Ok(repr.into())
@@ -233,6 +243,7 @@ T::TestKind: ToOrgams
 
         // XXX strong limitation, does not yet handle 3 args
         let handle_opcode = |token: &T| -> String {
+
             let mut op = token.mnemonic().unwrap().to_orgams_string().unwrap().to_string();
 
             if let Some(arg) = token.mnemonic_arg1() {
@@ -381,4 +392,87 @@ pub fn convert_source<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     let orgams = lst.to_orgams_string()?;
     std::fs::write(tgt, orgams.as_bytes())
         .map_err(|e| format!("Error while saving {}. {}", tgt, e.to_string()).into())
+}
+
+
+#[cfg(test)]
+mod test{
+    use std::ops::Deref;
+
+    use cpclib_common::winnow::{error::ParseError, Parser};
+    use cpclib_tokens::{DataAccess, Expr};
+
+    use crate::{located_expr, AssemblerError, InnerZ80Span, ParserContext, ParserContextBuilder, Z80ParserError, Z80Span};
+
+    use super::ToOrgams;
+
+    #[derive(Debug)]
+    struct TestResult<O: std::fmt::Debug> {
+        ctx: Box<ParserContext>,
+        span: Z80Span,
+        res: Result<O, ParseError<InnerZ80Span, Z80ParserError>>
+    }
+
+    impl<O: std::fmt::Debug> Deref for TestResult<O> {
+        type Target = Result<O, ParseError<InnerZ80Span, Z80ParserError>>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.res
+        }
+    }
+
+    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+        let ctx = Box::new(
+            ParserContextBuilder::default()
+                .set_context_name("TEST")
+                .build(code)
+        );
+        let span = Z80Span::new_extra(code, ctx.deref());
+        (ctx, span)
+    }
+    
+    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+        mut parser: P,
+        code: &'static str
+    ) -> TestResult<O>
+    where
+        O: std::fmt::Debug
+    {
+        let (ctx, span) = ctx_and_span(code);
+        let res = parser.parse(span.0);
+        if let Err(e) = &res {
+            let e = e.inner();
+            let e = AssemblerError::SyntaxError { error: e.clone() };
+            eprintln!("Parse error: {}", e);
+        }
+
+        TestResult { ctx, span, res }
+    }
+    
+    #[test]
+    fn test_expression() {
+        assert_eq!(
+            parse_test(located_expr, "25").as_ref().unwrap().to_orgams_string().unwrap(),
+            "25"
+        );
+        assert_eq!(
+            parse_test(located_expr, "0x25").as_ref().unwrap().to_orgams_string().unwrap(),
+            "&25"
+        );
+    }
+
+
+        
+    #[test]
+    fn test_data_access() {
+        assert_eq!(
+            DataAccess::Expression(Expr::Value(25)).to_orgams_string().unwrap(),
+            "25"
+        );
+        assert_eq!(
+            DataAccess::Memory(Expr::Value(25)).to_orgams_string().unwrap(),
+            "(25)"
+        );
+
+    }
 }
