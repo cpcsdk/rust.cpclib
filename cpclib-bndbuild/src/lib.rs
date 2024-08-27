@@ -8,8 +8,6 @@ use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::runner::RunnerWithClap;
 use lazy_regex::regex_captures;
-use serde::de::IntoDeserializer;
-use serde::Deserialize;
 use task::Task;
 use thiserror::Error;
 

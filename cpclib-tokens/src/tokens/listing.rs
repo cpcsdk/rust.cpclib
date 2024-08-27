@@ -28,6 +28,10 @@ where Self: Debug + Sized + Sync
         false // self.is_equ() | self.is_set()
     }
 
+    fn is_opcode(&self) -> bool {
+        !self.is_directive()
+    }
+
     fn is_buildcpr(&self) -> bool;
     fn is_assembler_control(&self) -> bool;
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
@@ -42,7 +46,9 @@ where Self: Debug + Sized + Sync
     fn is_equ(&self) -> bool;
     fn is_assign(&self) -> bool;
     fn equ_symbol(&self) -> &str;
-    fn equ_value(&self) -> &Self::Expr; // TODO Make a located version of Equ to return a located version of the expression
+    fn equ_value(&self) -> &Self::Expr; 
+    fn assign_symbol(&self) -> &str;
+    fn assign_value(&self) -> &Self::Expr;
 
     fn is_warning(&self) -> bool;
     fn warning_token(&self) -> &Self;
@@ -151,6 +157,9 @@ where Self: Debug + Sized + Sync
     fn is_print(&self) -> bool;
 
     fn to_token(&self) -> Cow<crate::Token>;
+    fn starts_with_label(&self) -> bool {
+        self.is_label() || self.is_assign() || self.is_equ() || self.is_set()
+    }
 }
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq)]

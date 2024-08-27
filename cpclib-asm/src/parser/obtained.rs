@@ -1164,6 +1164,8 @@ impl ListingElement for LocatedToken {
     is_stuff_delegate!(is_print is_buildcpr is_label is_equ is_assign is_module is_directive is_rorg is_iterate is_for is_repeat_until is_repeat is_macro_definition is_if is_include is_incbin is_call_macro_or_build_struct is_function_definition is_crunched_section is_confined is_switch is_db is_dw is_str is_set is_comment is_org is_assembler_control is_while);
 
     any_delegate!(
+        fn assign_symbol(&self) -> &str;
+        fn assign_value(&self) -> &Self::Expr;
         fn equ_symbol(&self) -> &str;
         fn equ_value(&self) -> &Self::Expr;
         fn module_name(&self) -> &str;
@@ -1565,6 +1567,21 @@ impl ListingElement for LocatedTokenInner {
     fn equ_value(&self) -> &Self::Expr {
         match &self {
             LocatedTokenInner::Equ { expr, .. } => expr,
+            _ => unreachable!()
+        }
+    }
+
+
+    fn assign_symbol(&self) -> &str {
+        match &self {
+            LocatedTokenInner::Assign { label, .. } => label.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn assign_value(&self) -> &Self::Expr {
+        match &self {
+            LocatedTokenInner::Assign { expr, .. } => expr,
             _ => unreachable!()
         }
     }
@@ -2074,7 +2091,7 @@ impl ListingElement for LocatedTokenInner {
 
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
         match &self {
-            (LocatedTokenInner::AssemblerControl(cmd)) => cmd,
+            LocatedTokenInner::AssemblerControl(cmd) => cmd,
             _ => unreachable!()
         }
     }
@@ -2101,7 +2118,7 @@ impl ListingElement for LocatedTokenInner {
 
     fn macro_flavor(&self) -> AssemblerFlavor {
         match self {
-            (LocatedTokenInner::Macro { flavor, .. }) => *flavor,
+            LocatedTokenInner::Macro { flavor, .. } => *flavor,
             _ => unreachable!()
         }
     }

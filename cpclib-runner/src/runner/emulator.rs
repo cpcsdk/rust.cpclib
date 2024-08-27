@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use cpclib_common::camino::Utf8PathBuf;
 use directories::BaseDirs;
 

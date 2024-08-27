@@ -4,9 +4,9 @@ use std::ops::Deref;
 use beef::lean::Cow;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
-use cpclib_tokens::{ListingElement, MacroParamElement, Token};
+use cpclib_tokens::{BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token};
 
-use crate::{parse_z80, r#macro, MayHaveSpan, SourceString, TokenExt};
+use crate::{parse_z80, LocatedDataAccess, LocatedExpr, LocatedTestKind, MayHaveSpan, SourceString, TokenExt};
 
 #[derive(Debug)]
 pub struct ToOrgamsError(String);
@@ -16,15 +16,15 @@ impl Display for ToOrgamsError {
         f.write_str(&self.0)
     }
 }
-impl Into<ToOrgamsError> for &str {
+impl Into<ToOrgamsError> for String {
     fn into(self) -> ToOrgamsError {
-        ToOrgamsError(self.into())
+        ToOrgamsError(self)
     }
 }
 impl Into<ToOrgamsError> for &std::io::Error {
     fn into(self) -> ToOrgamsError {
         let content = self.to_string();
-        content.as_str().into()
+        content.into()
     }
 }
 
@@ -33,19 +33,143 @@ pub trait ToOrgams {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError>;
 }
 
-// impl ToOrgams for Token {
-// fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
-// todo!()
-// }
-// }
 
-impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
+impl ToOrgams for Mnemonic {
+    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        Ok(self.to_string().to_lowercase().into())
+    }
+}
+
+impl ToOrgams for BinaryOperation {
+    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        Ok(self.to_string().to_uppercase().into())
+    }
+}
+
+macro_rules! expr_to_orgams {
+    () => {
+        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+            let repr = match self {
+
+                Self::Value(v,..) => {
+                    if self.has_span() {
+                        // basm allow _ between numbers
+                        let span = dbg!(self.span().as_str().replace("_", ""));
+                        if span.starts_with("0x") || span.starts_with("0X") {
+                            format!("&{}", &span[2..])
+                        } else if span.starts_with("#") {
+                            format!("&{}", &span[1..])
+                        } else {
+                            format!("{}", v)
+                        }
+                    } else {
+                        format!("&{:x}", v)
+                    }
+                },
+
+                Self::Label(l) => {
+                    format!("{}", l)
+                }
+
+                Self::BinaryOperation(op, left, right, ..) => {
+                    let rleft = left.to_orgams_string()?;
+                    let rright = right.to_orgams_string()?;
+                    let rleft = rleft.as_ref();
+                    let op = op.to_orgams_string()?;
+
+                    let protect =  |expr: &Self, repr: &str| -> String {
+                        if expr.is_label() || expr.is_value() {
+                            repr.into()
+                        } else {
+                            format!("[{}]", repr).into()
+                        }
+                    };
+
+                    let rleft = protect(left, rleft.as_ref());
+                    let rright = protect(right, rright.as_ref());
+
+                    format!("{}{}{}", rleft, op, rright)
+                }
+
+                _ => unimplemented!("{:?}", self)
+            };
+
+            Ok(repr.into())
+        }
+    }
+}
+
+impl ToOrgams for LocatedExpr {
+    expr_to_orgams!();
+}
+
+impl ToOrgams for Expr {
+    expr_to_orgams!();
+}
+
+macro_rules! test_kind_to_orgams {
+    () => {
+        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+            if self.is_true_test() {
+                let expr = self.expr_unchecked();
+                Ok(format!("IF {}", expr.to_orgams_string()?).into())
+            } else {
+                Err(format!("{:?}", self).into())
+            }
+        }
+    };
+}
+
+impl ToOrgams for LocatedTestKind  {
+    test_kind_to_orgams!();
+}
+
+impl ToOrgams for TestKind  {
+    test_kind_to_orgams!();
+}
+
+
+macro_rules! data_access_to_orgams {
+    () => {
+        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+
+            let repr = if self.is_expression() {
+                let exp = self.get_expression().unwrap();
+                return exp.to_orgams_string();
+            }
+            else {
+                self.to_string().to_lowercase()
+            };
+
+            Ok(repr.into())
+        }
+        
+    };
+}
+
+
+
+impl ToOrgams for DataAccess {
+    data_access_to_orgams!();
+}
+
+impl ToOrgams for LocatedDataAccess {
+    data_access_to_orgams!();
+}
+
+impl<T> ToOrgams for T where 
+T: TokenExt + MayHaveSpan + ListingElement + ToString + ?Sized,
+T::DataAccess: ToOrgams,
+T::Expr: ToOrgams,
+T::TestKind: ToOrgams
+{
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         // we assume it is already a BASM format and not an ORGAMS format
         let handle_macro_definition = |token: &T| -> Cow<str> {
             let macro_name = token.macro_definition_name();
             let arguments_name = token.macro_definition_arguments();
             let mut macro_content = token.macro_definition_code().to_owned();
+
 
             for arg in arguments_name.iter() {
                 macro_content = macro_content.replace(&format!("{{{arg}}}"), arg);
@@ -55,7 +179,7 @@ impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
             // also transform the content of the macro
             // in case of failure, fallback to the original content
             let macro_content = if let Ok(macro_content_listing) = parse_z80(&macro_content) {
-                let macro_content_listing = &macro_content_listing[..];
+                let macro_content_listing = macro_content_listing.as_slice();
                 macro_content_listing
                     .to_orgams_string()
                     .map(|s| s.to_string())
@@ -90,7 +214,7 @@ impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
             repr.into()
         };
 
-        let handle_standard_instruction = |token: &T| -> Cow<str> {
+        let handle_standard_directive = |token: &T| -> Cow<str> {
             // if self.has_span() {
             // Cow::borrowed(self.span().as_str())
             // } else {
@@ -107,8 +231,61 @@ impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
             s.into()
         };
 
+        // XXX strong limitation, does not yet handle 3 args
+        let handle_opcode = |token: &T| -> String {
+            let mut op = token.mnemonic().unwrap().to_orgams_string().unwrap().to_string();
+
+            if let Some(arg) = token.mnemonic_arg1() {
+                op.push(' ');
+                op.push_str(&arg.to_orgams_string().unwrap())
+            }
+
+            if let Some(arg) = token.mnemonic_arg2() {
+                if token.mnemonic_arg1().is_some() {
+                    op.push(',');
+                } else {
+                    op.push(' ');
+                }
+                op.push_str(&arg.to_orgams_string().unwrap())
+            }
+
+            op
+
+        };
+
+        let handle_assign = |token: &T| -> String {
+            let label = token.assign_symbol();
+            let value = token.assign_value();
+
+            format!("{}={}", label, value.to_orgams_string().unwrap())
+        };
+
+        let handle_equ = |token: &T| -> String {
+            let label = token.equ_symbol();
+            let value = token.equ_value();
+
+            format!("{} EQU {}", label, value.to_orgams_string().unwrap())
+        };
+
+        let handle_if = |token: &T| -> String {
+            assert!(self.if_nb_tests() == 1);
+            
+            let (test, code) = token.if_test(0);
+            let mut content = format!("{}\n{}", test.to_orgams_string().unwrap(), code.to_orgams_string().unwrap());
+
+            if let Some(code) = token.if_else() {
+                content.push_str("\n\tELSE\n");
+                content.push_str(&code.to_orgams_string().unwrap());
+            }
+
+            content.push_str("\n\tENDIF\n");
+            content
+        };
+
         // This is the default behavior that changes nothing
-        let repr = if self.is_macro_definition() {
+        let repr = if self.is_opcode() {
+            Cow::owned(handle_opcode(self))
+        } else if self.is_macro_definition() {
             handle_macro_definition(self)
         }
         else if self.is_print() {
@@ -117,8 +294,17 @@ impl<T: TokenExt + MayHaveSpan + ListingElement + Display> ToOrgams for T {
         else if self.is_call_macro_or_build_struct() {
             handle_macro_call(self)
         }
+        else if self.is_assign() {
+            handle_assign(self).into()
+        }
+        else if self.is_equ(){ 
+            handle_equ(self).into()
+        }
+        else if self.is_if() {
+            handle_if(self).into()
+        }
         else {
-            handle_standard_instruction(self)
+            handle_standard_directive(self)
         };
 
         if repr.is_empty() {
@@ -171,13 +357,7 @@ impl<T: ToOrgams> ToOrgams for &[T] {
         }
 
         // TODO do it properly by coding the complete expression display
-        let content = content.replace("0x", "&");
-
-        // TODO handle that in macro call
-        let content = content.replace("(void)", "()");
-
-        // TODO handle that directly in instruction print out
-        let content = content.replace(", ", ",");
+//        let content = content.replace("0x", "&");
 
         Ok(content.into())
     }
@@ -200,5 +380,5 @@ pub fn convert_source<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     let lst = lst.as_slice();
     let orgams = lst.to_orgams_string()?;
     std::fs::write(tgt, orgams.as_bytes())
-        .map_err(|e| format!("Error while saving {}", tgt).as_str().into())
+        .map_err(|e| format!("Error while saving {}. {}", tgt, e.to_string()).into())
 }

@@ -3,9 +3,7 @@ use std::fmt::Display;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
-use cpclib_runner::runner::emulator::{
-    AceVersion, CpcecVersion, WinapeVersion, ACE_CMD, CPCEC_CMD, WINAPE_CMD
-};
+use cpclib_runner::runner::emulator::{ACE_CMD, CPCEC_CMD, WINAPE_CMD};
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use serde::de::{Error, Visitor};

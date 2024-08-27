@@ -972,7 +972,42 @@ impl fmt::Display for Token {
             Token::Equ{label, expr}
                  => write!(f, "{} EQU {}", label, expr.to_simplified_string()),
 
-            
+            Token::If(tests, default) => {
+                let get_code_string = |tokens: &[Token]| {
+                    let mut code_part = String::new();
+                    for token in tokens.iter() {
+                        if !token.starts_with_label() {
+                            code_part.push('\t');
+                        }
+                        code_part += &token.to_string();
+                        code_part += "\n";
+                    }
+                    code_part
+                };
+
+                let mut first = true;
+                for (test, code) in tests {
+                    let test_part = match test {
+                        TestKind::True(e) => format!("IF {}", e),
+                        TestKind::False(e) => format!("IFNOT {}", e),
+                        TestKind::LabelExists(l) => format!("IFDEF {}", l),
+                        TestKind::LabelDoesNotExist(l) => format!("IFNDEF {}", l),
+                        TestKind::LabelUsed(l) => format!("IFUSED {}", l),
+                        TestKind::LabelNused(l) => format!("IFNUSED {}", l),
+                    };
+
+                    let code_part = get_code_string(&code);
+                    write!(f, "\t{}{}\n{}", if first {""} else {"ELSE "},test_part, code_part)?;
+                    first = false;
+                }
+
+                if let Some(code) = default {
+                    let code_part = get_code_string(&code);
+                    write!(f, "{code_part}")?;
+                }
+
+                write!(f, "\n\tENDIF\n")
+            }
 
              Token::Incbin{
                  fname, 
@@ -1039,10 +1074,16 @@ impl fmt::Display for Token {
 
             Token::MacroCall(ref name, ref args)
                 => {use cpclib_common::itertools::Itertools;
-                    write!(f, "{} {}", name, args.clone()
-                                                .iter()
-                                                .map(|a|{a.to_string()})
-                                                .join(", "))?;
+                    let args = args.clone()
+                    .iter()
+                    .map(|a|{a.to_string()})
+                    .join(", ");
+                    let args = if args.is_empty() {
+                        "(void)".to_owned()
+                    } else {
+                        args
+                    };
+                    write!(f, "{} {}", name, args)?;
                     Ok(())
             },
 
@@ -1114,7 +1155,9 @@ impl fmt::Display for Token {
                     }
             },
 
-            _ => unimplemented!()
+
+
+            _ => unimplemented!("{:?}", self)
 
         }
     }

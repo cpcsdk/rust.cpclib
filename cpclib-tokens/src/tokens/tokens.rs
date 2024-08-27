@@ -57,6 +57,20 @@ impl ListingElement for Token {
         }
     }
 
+    fn assign_symbol(&self) -> &str {
+        match self {
+            Self::Assign { label, .. } => label.as_str(),
+            _ => unreachable!()
+        }
+    }
+
+    fn assign_value(&self) -> &Self::Expr {
+        match self {
+            Self::Assign { expr, .. } => expr,
+            _ => unreachable!()
+        }
+    }
+
     fn is_warning(&self) -> bool {
         false
     }
