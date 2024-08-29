@@ -319,9 +319,9 @@ where
         // FNAME must be encoded within a string. TO improve this aspect, it is necessary to assemble the file and manipulate the `Env` and its symbols table
         let handle_include = |token: &T| -> Result<String, ToOrgamsError> {
             let fname = token.include_fname().string();
-            let mut include = format!(" ; START Included from {fname}");
+            let mut include = format!(" ; START Included from {fname}\n");
             let content = convert_from(fname)?;
-            include.push_str(&format!(" ; STOP Included from {fname}"));
+            include.push_str(&format!("{content}\n ; STOP Included from {fname}\n"));
             Ok(include)
         };
 
