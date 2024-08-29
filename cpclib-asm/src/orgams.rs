@@ -5,13 +5,23 @@ use beef::lean::Cow;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
-    BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement,
-    MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
+    BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
 };
 
 use crate::{
-    parse_z80, LocatedDataAccess, LocatedExpr, LocatedTestKind, MayHaveSpan, SourceString, TokenExt
+    parse_z80, LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan, ParserContext, ParserContextBuilder, SourceString, TokenExt, Z80Span
 };
+
+
+fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+    let ctx = Box::new(
+        ParserContextBuilder::default()
+            .set_context_name("TEST")
+            .build(code)
+    );
+    let span = Z80Span::new_extra(code, ctx.deref());
+    (ctx, span)
+}
 
 #[derive(Debug)]
 pub struct ToOrgamsError(String);
@@ -38,6 +48,36 @@ pub trait ToOrgams {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError>;
 }
 
+macro_rules! macro_params_to_orgams {
+    () => {
+        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+            let repr: String = if self.is_single() {
+                let arg = self.single_argument();
+                let (_ctx ,mut code) = ctx_and_span(unsafe{std::mem::transmute(arg.deref())});
+                let value = crate::located_expr(&mut code);
+                match value {
+                    Ok(expr) => expr.to_orgams_string()?.into_owned(),
+                    Err(_) => arg.into_owned()
+                }
+            }
+            else {
+                unimplemented!("We consider it does not happens with ORGAMS")
+            };
+
+            Ok(repr.into())
+        }
+    };
+}
+
+
+impl ToOrgams for MacroParam {
+    macro_params_to_orgams!();
+}
+
+impl ToOrgams for LocatedMacroParam {
+    macro_params_to_orgams!();
+}
+
 impl ToOrgams for Mnemonic {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         Ok(self.to_string().to_lowercase().into())
@@ -57,7 +97,7 @@ macro_rules! expr_to_orgams {
                 Self::Value(v, ..) => {
                     if self.has_span() {
                         // basm allow _ between numbers
-                        let span = dbg!(self.span().as_str().replace("_", ""));
+                        let span = self.span().as_str().replace("_", "");
                         if span.starts_with("0x") || span.starts_with("0X") {
                             format!("&{}", &span[2..])
                         }
@@ -105,7 +145,6 @@ macro_rules! expr_to_orgams {
                 _ => unimplemented!("{:?}", self)
             };
 
-            dbg!(self, &repr);
             Ok(repr.into())
         }
     };
@@ -186,7 +225,8 @@ where
     T: TokenExt + MayHaveSpan + ListingElement + ToString + ?Sized,
     T::DataAccess: ToOrgams,
     T::Expr: ToOrgams,
-    T::TestKind: ToOrgams
+    T::TestKind: ToOrgams,
+    T::MacroParam: ToOrgams
 {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         // we assume it is already a BASM format and not an ORGAMS format
@@ -225,12 +265,7 @@ where
                 .macro_call_arguments()
                 .into_iter()
                 .map(|s| {
-                    if s.is_single() {
-                        s.single_argument()
-                    }
-                    else {
-                        unimplemented!("We consider it does not happens with ORGAMS")
-                    }
+                  s.to_orgams_string().unwrap()
                 })
                 .join(",");
 
@@ -475,7 +510,7 @@ mod test {
     use cpclib_common::winnow::Parser;
     use cpclib_tokens::{DataAccess, Expr};
 
-    use super::ToOrgams;
+    use super::{ctx_and_span, ToOrgams};
     use crate::{
         located_expr, AssemblerError, InnerZ80Span, ParserContext, ParserContextBuilder,
         Z80ParserError, Z80Span
@@ -496,15 +531,7 @@ mod test {
         }
     }
 
-    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-        let ctx = Box::new(
-            ParserContextBuilder::default()
-                .set_context_name("TEST")
-                .build(code)
-        );
-        let span = Z80Span::new_extra(code, ctx.deref());
-        (ctx, span)
-    }
+
 
     fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,
