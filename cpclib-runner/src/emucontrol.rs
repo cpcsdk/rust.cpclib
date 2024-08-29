@@ -307,6 +307,24 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.click_key(key)
     }
 
+    fn press_control_char(&mut self, c: char) {
+        self.enigo
+        .key(Key::Control, enigo::Direction::Press)
+        .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Unicode(c), enigo::Direction::Press)
+            .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Unicode(c), enigo::Direction::Release)
+            .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Control, enigo::Direction::Release)
+            .unwrap();
+    }
+
     #[cfg(target_os = "linux")]
     fn click_key(&mut self, key: Key) {
         self.enigo.key(key, enigo::Direction::Press).unwrap();
@@ -392,9 +410,17 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         self.unidos_select_drive(drivea, albireo);
 
-        let load_res = self
-            .orgams_load(src)
-            .map_err(|screen| ("Error while loading".to_string(), screen));
+        let load_res = if src.ends_with('o') || src.ends_with('O') {
+            // here we directly load an orgams file
+            self
+                .orgams_load(src)
+        } else {
+            // here we need to import
+            self.orgams_import(src)
+        }
+        .map_err(|screen| (format!("Error while loading {}", src), screen))
+        ;
+
 
         let next_res = if let Ok(()) = load_res {
             // No need to do more when we want to edit a file
@@ -439,25 +465,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.click_char('j');
         Ok(())
     }
+    fn orgams_wait_import(&mut self)  -> Result<(), Screenshot> {
+        self.orgams_wait_save()
+    }
 
-    fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
-        println!("> Save result");
-        // handle saving
-        self.click_key(Key::Unicode('b'));
-        std::thread::sleep(Duration::from_millis(2000));
-        if let Some(dst) = dst {
-            self.type_text(dst);
-            self.click_key(Key::Return);
-        }
-        else {
-            self.click_key(Key::Return);
-            std::thread::sleep(Duration::from_millis(1000));
-            self.click_key(Key::Return);
-        }
-        println!("  Filename provided.");
-
-        // wait save is done
-        std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
+    fn orgams_wait_save(&mut self)  -> Result<(), Screenshot> {
         loop {
             let screen = self.screenshot();
             let coord_of_interest = (0, 48);
@@ -478,6 +490,41 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 return Err(screen);
             }
         }
+    }
+
+    fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
+        println!("> Save result");
+        // handle saving
+        self.click_key(Key::Unicode('b'));
+        std::thread::sleep(Duration::from_millis(2000));
+        if let Some(dst) = dst {
+            self.type_text(dst);
+            self.click_key(Key::Return);
+        }
+        else {
+            self.click_key(Key::Return);
+            std::thread::sleep(Duration::from_millis(1000));
+            self.click_key(Key::Return);
+        }
+        println!("  Filename provided.");
+
+        // wait save is done
+        std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
+        self.orgams_wait_save()
+    }
+
+
+    fn orgams_import(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+        self.type_text("ùo");
+        self.click_key(Key::Return);
+
+        std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
+
+        self.press_control_char('i');
+        self.type_text(src);
+        self.click_key(Key::Return);
+
+        self.orgams_wait_import()
     }
 
     fn orgams_load(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
@@ -501,21 +548,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
     fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         println!("> Assemble {src}");
-        self.enigo
-            .key(Key::Control, enigo::Direction::Press)
-            .unwrap();
-        Self::wait_a_bit();
-        self.enigo
-            .key(Key::Unicode('1'), enigo::Direction::Press)
-            .unwrap();
-        Self::wait_a_bit();
-        self.enigo
-            .key(Key::Unicode('1'), enigo::Direction::Release)
-            .unwrap();
-        Self::wait_a_bit();
-        self.enigo
-            .key(Key::Control, enigo::Direction::Release)
-            .unwrap();
+        self.press_control_char('1');
 
         self.wait_orgams_assembling();
         println!("  done.");
