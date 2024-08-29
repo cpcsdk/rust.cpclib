@@ -13,6 +13,178 @@ macro_rules! listing_element_impl_most_methods {
     () => {
 
         #[inline]
+        fn is_switch(&self) -> bool {
+            match self {
+                Self::Switch(..) => true,
+                _ => false
+            }
+        }
+
+
+        #[inline]
+        fn is_if(&self) -> bool {
+            match self {
+                Self::If(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_repeat(&self) -> bool {
+            match self {
+                Self::Repeat(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_for(&self) -> bool {
+            match self {
+                Self::For { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_directive(&self) -> bool {
+            match self {
+                Self::OpCode(..) => false,
+                _ => true
+            }
+        }
+
+        #[inline]
+        fn is_module(&self) -> bool {
+            match self {
+                Self::Module(..) => true,
+                _ => false
+            }
+        }
+    
+
+        #[inline]
+        fn is_while(&self) -> bool {
+            match self {
+                Self::While(..) => true,
+                _ => false
+            }
+        }
+    
+        #[inline]
+        fn is_iterate(&self) -> bool {
+            match self {
+                Self::Iterate(..) => true,
+                _ => false
+            }
+        }
+
+        
+        #[inline]
+        fn is_repeat_until(&self) -> bool {
+            match self {
+                Self::RepeatUntil(..) => true,
+                _ => false
+            }
+        }
+    
+
+    
+        #[inline]
+        fn is_include(&self) -> bool {
+            match self {
+                Self::Include(..) => true,
+                _ => false
+            }
+        }
+    
+        #[inline]
+        fn is_incbin(&self) -> bool {
+            match self {
+                Self::Incbin { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_call_macro_or_build_struct(&self) -> bool {
+            match self {
+                Self::MacroCall(..) => true,
+                _ => false
+            }
+        }
+    
+        #[inline]
+        fn is_function_definition(&self) -> bool {
+            match self {
+                Self::Function(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_crunched_section(&self) -> bool {
+            match self {
+                Self::CrunchedSection(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_rorg(&self) -> bool {
+            match self {
+                Self::Rorg(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_db(&self) -> bool {
+        match self {
+            Self::Defb(..) => true,
+            _ => false
+        }
+    }
+
+        #[inline]
+        fn is_dw(&self) -> bool {
+        match self {
+            Self::Defw(..) => true,
+            _ => false
+        }
+    }
+
+        #[inline]
+        fn is_str(&self) -> bool {
+        match self {
+            Self::Str(..) => true,
+            _ => false
+        }
+    }
+
+        #[inline]
+
+    fn is_set(&self) -> bool {
+        self.is_assign()
+    }
+
+        #[inline]
+        fn is_buildcpr(&self) -> bool {
+            match self {
+                Self::BuildCpr{..} => true,
+                _ => false
+            }
+        }
+
+
+        #[inline]
+        fn is_assembler_control(&self) -> bool {
+            match self {
+                Self::AssemblerControl(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
         fn is_assert(&self) -> bool {
             match self {
                 Self::Assert(..) => true,
@@ -20,11 +192,47 @@ macro_rules! listing_element_impl_most_methods {
             }
         }
 
+        #[inline]
+        fn is_assign(&self) -> bool {
+            match self {
+                Self::Assign { .. } => true,
+                _ => false
+            }
+        }
+
+
+        #[inline]
+        fn is_comment(&self) -> bool {
+            match self {
+                Self::Comment(..) => true,
+                _ => false
+            }
+        }
+
+    
+
+        #[inline]
+        fn is_equ(&self) -> bool {
+            match self {
+                Self::Equ { .. } => true,
+                _ => false
+            }
+        }
+
+
 
         #[inline]
         fn is_label(&self) -> bool {
             match self {
                 Self::Label(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_org(&self) -> bool {
+            match self {
+                Self::Org { .. } => true,
                 _ => false
             }
         }
@@ -57,13 +265,6 @@ impl ListingElement for Token {
 
     listing_element_impl_most_methods!();
 
-
-    fn is_equ(&self) -> bool {
-        match self {
-            Token::Equ { .. } => true,
-            _ => false
-        }
-    }
 
     fn equ_symbol(&self) -> &str {
         match self {
@@ -105,12 +306,6 @@ impl ListingElement for Token {
         unreachable!()
     }
 
-    fn is_module(&self) -> bool {
-        match self {
-            Token::Module(..) => true,
-            _ => false
-        }
-    }
 
     fn module_listing(&self) -> &[Self] {
         match self {
@@ -126,12 +321,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_while(&self) -> bool {
-        match self {
-            Token::While(..) => true,
-            _ => false
-        }
-    }
+  
 
     fn while_expr(&self) -> &Self::Expr {
         match self {
@@ -182,19 +372,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_directive(&self) -> bool {
-        match self {
-            Self::OpCode(..) => false,
-            _ => true
-        }
-    }
 
-    fn is_iterate(&self) -> bool {
-        match self {
-            Self::Iterate(..) => true,
-            _ => false
-        }
-    }
 
     fn iterate_listing(&self) -> &[Self] {
         match self {
@@ -217,12 +395,6 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_for(&self) -> bool {
-        match self {
-            Self::For { .. } => true,
-            _ => false
-        }
-    }
 
     fn for_listing(&self) -> &[Self] {
         match self {
@@ -259,12 +431,6 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_repeat_until(&self) -> bool {
-        match self {
-            Self::RepeatUntil(..) => true,
-            _ => false
-        }
-    }
 
     fn repeat_until_listing(&self) -> &[Self] {
         match self {
@@ -280,12 +446,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_repeat(&self) -> bool {
-        match self {
-            Self::Repeat(..) => true,
-            _ => false
-        }
-    }
+
 
     fn repeat_listing(&self) -> &[Self] {
         match self {
@@ -357,13 +518,6 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_if(&self) -> bool {
-        match self {
-            Token::If(..) => true,
-            _ => false
-        }
-    }
-
     fn if_nb_tests(&self) -> usize {
         match self {
             Self::If(tests, ..) => tests.len(),
@@ -381,24 +535,12 @@ impl ListingElement for Token {
         }
     }
 
+
+    #[inline]
     fn if_else(&self) -> Option<&[Self]> {
         match self {
-            Self::If(_, r#else) => r#else.as_ref().map(|l| l.as_ref()),
+            Self::If(_, r#else, ..) => r#else.as_ref().map(|l| l.as_ref()),
             _ => panic!()
-        }
-    }
-
-    fn is_include(&self) -> bool {
-        match self {
-            Token::Include(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_incbin(&self) -> bool {
-        match self {
-            Token::Incbin { .. } => true,
-            _ => false
         }
     }
 
@@ -451,19 +593,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_call_macro_or_build_struct(&self) -> bool {
-        match self {
-            Self::MacroCall(..) => true,
-            _ => false
-        }
-    }
 
-    fn is_function_definition(&self) -> bool {
-        match self {
-            Self::Function(..) => true,
-            _ => false
-        }
-    }
 
     fn function_definition_name(&self) -> &str {
         match self {
@@ -486,12 +616,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_crunched_section(&self) -> bool {
-        match self {
-            Self::CrunchedSection(..) => true,
-            _ => false
-        }
-    }
+
 
     fn crunched_section_listing(&self) -> &[Self] {
         match self {
@@ -507,12 +632,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_rorg(&self) -> bool {
-        match self {
-            Self::Rorg(..) => true,
-            _ => false
-        }
-    }
+
 
     fn rorg_listing(&self) -> &[Self] {
         match self {
@@ -536,12 +656,7 @@ impl ListingElement for Token {
         todo!()
     }
 
-    fn is_switch(&self) -> bool {
-        match self {
-            Self::Switch(..) => true,
-            _ => false
-        }
-    }
+
 
     fn switch_expr(&self) -> &Self::Expr {
         match self {
@@ -566,26 +681,7 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_db(&self) -> bool {
-        match self {
-            Self::Defb(..) => true,
-            _ => false
-        }
-    }
 
-    fn is_dw(&self) -> bool {
-        match self {
-            Self::Defw(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_str(&self) -> bool {
-        match self {
-            Self::Str(..) => true,
-            _ => false
-        }
-    }
 
     fn data_exprs(&self) -> &[Self::Expr] {
         match self {
@@ -594,43 +690,8 @@ impl ListingElement for Token {
         }
     }
 
-    fn is_set(&self) -> bool {
-        match self {
-            Self::Assign { .. } => true,
-            _ => false
-        }
-    }
-
-    fn is_comment(&self) -> bool {
-        match self {
-            Self::Comment(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_assign(&self) -> bool {
-        match self {
-            Self::Assign { .. } => true,
-            _ => false
-        }
-    }
-
-    fn is_org(&self) -> bool {
-        match self {
-            Self::Org { .. } => true,
-            _ => false
-        }
-    }
-
     fn repeat_counter_step(&self) -> Option<&Self::Expr> {
         todo!()
-    }
-
-    fn is_assembler_control(&self) -> bool {
-        match self {
-            Self::AssemblerControl(..) => true,
-            _ => false
-        }
     }
 
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
@@ -649,12 +710,7 @@ impl ListingElement for Token {
         todo!()
     }
 
-    fn is_buildcpr(&self) -> bool {
-        match self {
-            Self::BuildCpr => true,
-            _ => false
-        }
-    }
+
 }
 
 /// Standard listing is a specific implementation

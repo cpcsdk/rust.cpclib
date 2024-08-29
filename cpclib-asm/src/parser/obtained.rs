@@ -1533,26 +1533,6 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_buildcpr(&self) -> bool {
-        match &self {
-            LocatedTokenInner::BuildCpr => true,
-            _ => false
-        }
-    }
-
-    fn is_equ(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Equ { .. } => true,
-            _ => false
-        }
-    }
-
-    fn is_assign(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Assign { .. } => true,
-            _ => false
-        }
-    }
 
     fn equ_symbol(&self) -> &str {
         match &self {
@@ -1598,12 +1578,6 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_module(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Module(..) => true,
-            _ => false
-        }
-    }
 
     fn module_listing(&self) -> &[Self] {
         unimplemented!()
@@ -1616,12 +1590,7 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_while(&self) -> bool {
-        match &self {
-            LocatedTokenInner::While(..) => true,
-            _ => false
-        }
-    }
+
 
     fn while_expr(&self) -> &Self::Expr {
         match &self {
@@ -1671,19 +1640,7 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_directive(&self) -> bool {
-        match &self {
-            LocatedTokenInner::OpCode(..) => false,
-            _ => true
-        }
-    }
 
-    fn is_rorg(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Rorg(..) => true,
-            _ => false
-        }
-    }
 
     fn rorg_listing(&self) -> &[Self] {
         todo!()
@@ -1696,12 +1653,6 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_iterate(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Iterate(..) => true,
-            _ => false
-        }
-    }
 
     fn iterate_listing(&self) -> &[Self] {
         unreachable!()
@@ -1721,12 +1672,7 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_for(&self) -> bool {
-        match &self {
-            LocatedTokenInner::For { .. } => true,
-            _ => false
-        }
-    }
+
 
     fn for_listing(&self) -> &[Self] {
         todo!()
@@ -1760,12 +1706,6 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_repeat_until(&self) -> bool {
-        match &self {
-            LocatedTokenInner::RepeatUntil(..) => true,
-            _ => false
-        }
-    }
 
     fn repeat_until_listing(&self) -> &[Self] {
         todo!()
@@ -1775,13 +1715,6 @@ impl ListingElement for LocatedTokenInner {
         match &self {
             LocatedTokenInner::RepeatUntil(cond, ..) => cond,
             _ => unreachable!()
-        }
-    }
-
-    fn is_repeat(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Repeat(..) => true,
-            _ => false
         }
     }
 
@@ -1854,12 +1787,7 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_if(&self) -> bool {
-        match &self {
-            LocatedTokenInner::If(..) => true,
-            _ => false
-        }
-    }
+
 
     fn if_nb_tests(&self) -> usize {
         match &self {
@@ -1876,19 +1804,8 @@ impl ListingElement for LocatedTokenInner {
         unreachable!()
     }
 
-    fn is_include(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Include(..) => true,
-            _ => false
-        }
-    }
 
-    fn is_incbin(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Incbin { .. } => true,
-            _ => false
-        }
-    }
+
 
     fn incbin_fname(&self) -> &Self::Expr {
         match &self {
@@ -1939,19 +1856,7 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_call_macro_or_build_struct(&self) -> bool {
-        match &self {
-            LocatedTokenInner::MacroCall(..) => true,
-            _ => false
-        }
-    }
 
-    fn is_function_definition(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Function(..) => true,
-            _ => false
-        }
-    }
 
     fn function_definition_name(&self) -> &str {
         match &self {
@@ -1973,12 +1878,6 @@ impl ListingElement for LocatedTokenInner {
         todo!()
     }
 
-    fn is_crunched_section(&self) -> bool {
-        match &self {
-            LocatedTokenInner::CrunchedSection(..) => true,
-            _ => false
-        }
-    }
 
     fn crunched_section_listing(&self) -> &[Self] {
         todo!()
@@ -2002,12 +1901,6 @@ impl ListingElement for LocatedTokenInner {
         todo!()
     }
 
-    fn is_switch(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Switch(..) => true,
-            _ => false
-        }
-    }
 
     fn switch_expr(&self) -> &Self::Expr {
         match &self {
@@ -2024,26 +1917,7 @@ impl ListingElement for LocatedTokenInner {
         todo!()
     }
 
-    fn is_db(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Defb(..) => true,
-            _ => false
-        }
-    }
 
-    fn is_dw(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Defw(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_str(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Str(..) => true,
-            _ => false
-        }
-    }
 
     fn data_exprs(&self) -> &[Self::Expr] {
         match &self {
@@ -2054,35 +1928,10 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_set(&self) -> bool {
-        self.is_assign()
-    }
-
-    fn is_comment(&self) -> bool {
-        match &self {
-            LocatedTokenInner::Comment(..) => true,
-            _ => false
-        }
-    }
-
-    fn is_org(&self) -> bool {
-        match self {
-            Self::Org { .. } => true,
-            _ => false
-        }
-    }
-
-    fn repeat_counter_step(&self) -> Option<&Self::Expr> {
+     fn repeat_counter_step(&self) -> Option<&Self::Expr> {
         match self {
             LocatedTokenInner::Repeat(_, _, _, _, step) => step.as_ref(),
             _ => unreachable!()
-        }
-    }
-
-    fn is_assembler_control(&self) -> bool {
-        match self {
-            Self::AssemblerControl(_) => true,
-            _ => false
         }
     }
 
