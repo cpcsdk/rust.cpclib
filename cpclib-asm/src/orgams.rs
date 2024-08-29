@@ -77,6 +77,10 @@ macro_rules! expr_to_orgams {
                     format!("{}", l)
                 },
 
+                Self::String(s) => {
+                    format!("\"{}\"", s)
+                },
+
                 Self::BinaryOperation(op, left, right, ..) => {
                     let rleft = left.to_orgams_string()?;
                     let rright = right.to_orgams_string()?;
@@ -255,6 +259,23 @@ where
 
         let handle_assert = |token: &T| -> Result<Cow<str>, ToOrgamsError> { comment_token(token) };
 
+        let handle_data = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
+            let exprs = token.data_exprs()
+                .iter()
+                .map(|e| e.to_orgams_string())
+                .collect::<Result<Vec<_>, ToOrgamsError>>()?;
+            let exprs = exprs.into_iter().join(",");
+            let mne = if token.is_db() {
+                "BYTE"
+            } else if token.is_dw(){
+                "WORD"
+            } else {
+                unreachable!()
+            };
+
+            Ok(format!("{} {}", mne, exprs).into())
+        };
+
         // XXX strong limitation, does not yet handle 3 args
         let handle_opcode = |token: &T| -> String {
             let mut op = token
@@ -311,7 +332,7 @@ where
                 content.push_str(&code.to_orgams_string().unwrap());
             }
 
-            content.push_str("\n\tENDIF\n");
+            content.push_str("\n\tEND\n");
             content
         };
 
@@ -352,6 +373,9 @@ where
         }
         else if self.is_assert() {
             handle_assert(self)?.into()
+        }
+        else if self.is_db() || self.is_dw() {
+            handle_data(self)?.into()
         }
         else {
             handle_standard_directive(self)
