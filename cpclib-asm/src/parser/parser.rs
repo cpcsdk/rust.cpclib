@@ -1779,7 +1779,7 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
     let (string, slice) = terminated(
         opt(my_escaped(normal, '\\', escapable))
             .map(|s| s.unwrap_or_default())
-            .with_recognized(),
+            .with_taken(),
         last.context("End of string not found")
     )
     .parse_next(input)?;
@@ -1798,7 +1798,7 @@ pub fn parse_stringlike_without_quote(
     );
     let (string, slice) = opt(my_escaped(normal, '\\', escapable))
         .map(|s| s.unwrap_or_default())
-        .with_recognized()
+        .with_taken()
         .parse_next(input)?;
 
     let slice = (*input).update_slice(slice);
@@ -3433,13 +3433,13 @@ pub fn parse_macro_or_struct_call_inner(
                         separated(
                             1..,
                             alt((
-                                parse_macro_arg.with_recognized(),
+                                parse_macro_arg.with_taken(),
                                 my_space1
                                     .map(|space: InnerZ80Span| {
                                         LocatedMacroParam::Single(space.into())
                                         // string of size 0;
                                     })
-                                    .with_recognized()
+                                    .with_taken()
                             )),
                             parse_comma
                         )
@@ -3976,7 +3976,7 @@ pub fn parse_push_n_pop(
 /// ...
 #[inline]
 pub fn parse_ret(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let (cond, cond_bytes) = opt(parse_flag_test).with_recognized().parse_next(input)?;
+    let (cond, cond_bytes) = opt(parse_flag_test).with_taken().parse_next(input)?;
 
     let token = LocatedTokenInner::new_opcode(
         Mnemonic::Ret,
@@ -4038,13 +4038,13 @@ pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
                 })
             ))
         ))
-        .with_recognized()
+        .with_taken()
         .parse_next(input)?
     }
     else {
         preceded(parse_comma, parse_register_a)
             .map(Some)
-            .with_recognized()
+            .with_taken()
             .parse_next(input)?
     };
 
@@ -4078,7 +4078,7 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
         )),
         parse_comma
     ))
-    .with_recognized()
+    .with_taken()
     .parse_next(input)?;
 
     let cloned = *input;
@@ -4168,8 +4168,7 @@ pub fn parse_call_jp_or_jr(
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
-        let flag_test = opt(terminated(parse_flag_test, parse_comma))
-            .with_recognized()
+        let flag_test = opt(terminated(parse_flag_test.with_taken(), parse_comma))
             .parse_next(input)?;
 
         let dst = cut_err(
@@ -4181,7 +4180,7 @@ pub fn parse_call_jp_or_jr(
                         parse_register_hl,
                         parse_indexregister16
                     ))
-                .verify(|_| call_jp_or_jr.is_jp() && flag_test.0.is_none()), // not possible for call and for jp/jr when there is flag
+                .verify(|_| call_jp_or_jr.is_jp() && flag_test.is_none()), // not possible for call and for jp/jr when there is flag
                 parse_expr
             ))
             .context(match call_jp_or_jr {
@@ -4204,8 +4203,8 @@ pub fn parse_call_jp_or_jr(
             other => other
         };
 
-        let flag_test = flag_test.0.map(|f| {
-            let span = (*input).update_slice(flag_test.1);
+        let flag_test = flag_test.map(|(f,s)| {
+            let span = (*input).update_slice(s);
             LocatedDataAccess::FlagTest(f, span.into())
         });
 
@@ -4533,7 +4532,7 @@ pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80P
         delimited("(", located_expr, preceded(my_space0, ")")),
         delimited("[", located_expr, preceded(my_space0, "]"))
     ))
-    .with_recognized()
+    .with_taken()
     .parse_next(input)?;
     let span = (*input).update_slice(span);
 
@@ -4597,7 +4596,7 @@ pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
             preceded(my_space0, "]")
         )
     ))
-    .with_recognized()
+    .with_taken()
     .parse_next(input)?;
 
     let da = LocatedDataAccess::MemoryRegister16(
@@ -4641,7 +4640,7 @@ pub fn parse_indexregister_address(
         parse_indexregister16,
         preceded(my_space0, ")")
     )
-    .with_recognized()
+    .with_taken()
     .parse_next(input)?;
 
     let span = (*input).update_slice(res);
@@ -4737,7 +4736,7 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
             }
         })
     )
-    .with_recognized()
+    .with_taken()
     .map(|(mne, span)| {
         let span = cloned.update_slice(span);
         LocatedTokenInner::OpCode(mne, None, None, None).into_located_token_at(span)
@@ -5228,7 +5227,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
                 alt(("$$", "$"))
                     .map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into())))
             )
-                .with_recognized()
+                .with_taken()
                 .map(|((m, dollar), content)| {
                     LocatedExpr::UnaryOperation(
                         UnaryOperation::Neg,
@@ -5586,7 +5585,7 @@ pub fn token_function<'a>(
 /// Parse the duration function
 pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let (token, span) = token_function("duration")
-        .with_recognized()
+        .with_taken()
         .parse_next(input)?;
 
     let span = (*input).update_slice(span).into();
@@ -5600,7 +5599,7 @@ pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parse
 /// Parse the single opcode assembling function
 pub fn parse_assemble(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let (token, span) = token_function("opcode")
-        .with_recognized()
+        .with_taken()
         .parse_next(input)?;
 
     let span = (*input).update_slice(span).into();

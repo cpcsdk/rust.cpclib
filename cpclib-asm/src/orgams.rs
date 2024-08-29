@@ -313,6 +313,7 @@ where
 
         // XXX strong limitation, does not yet handle 3 args
         let handle_opcode = |token: &T| -> String {
+            dbg!(token);
             let mut op = token
                 .mnemonic()
                 .unwrap()
