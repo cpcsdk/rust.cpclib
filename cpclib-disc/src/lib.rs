@@ -29,6 +29,7 @@ pub mod cfg;
 pub mod disc;
 /// EDSK File format
 pub mod edsk;
+pub mod hideur;
 
 /// HFE File format
 #[cfg(feature = "hfe")]

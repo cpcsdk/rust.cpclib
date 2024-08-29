@@ -11,18 +11,20 @@ use serde::{Deserialize, Deserializer};
 
 use crate::runners::assembler::Assembler;
 use crate::runners::emulator::Emulator;
+use crate::runners::hideur::HIDEUR_CMD;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
-    Cp(StandardTaskArguments),
     Assembler(Assembler, StandardTaskArguments),
     BndBuild(StandardTaskArguments),
+    Cp(StandardTaskArguments),
     Disc(StandardTaskArguments),
-    ImpDsk(StandardTaskArguments),
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
+    Hideur(StandardTaskArguments),
     ImgConverter(StandardTaskArguments),
+    ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
     Rm(StandardTaskArguments),
     Xfer(StandardTaskArguments)
@@ -37,10 +39,11 @@ pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
-pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
+pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
+pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
@@ -55,13 +58,14 @@ impl Display for Task {
             Task::Cp(s) => (CP_CMDS[0], s),
             Task::Disc(s) => (DISC_CMDS[0], s),
             Task::Echo(s) => (ECHO_CMDS[0], s),
+            Task::Emulator(e, s) => (e.get_command(), s),
             Task::Extern(s) => (EXTERN_CMDS[0], s),
+            Task::Hideur(s) => (HIDEUR_CMDS[0], s),
             Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
+            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
+            Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Emulator(e, s) => (e.get_command(), s),
-            Task::Martine(s) => (MARTINE_CMDS[0], s),
-            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s)
         };
 
         write!(
@@ -136,6 +140,9 @@ impl<'de> Deserialize<'de> for Task {
                 else if EXTERN_CMDS.iter().contains(&code) {
                     Ok(Task::Extern(std))
                 }
+                else if HIDEUR_CMDS.iter().contains(&code) {
+                    Ok(Task::Hideur(std))
+                }
                 else if IMG2CPC_CMDS.iter().contains(&code) {
                     Ok(Task::ImgConverter(std))
                 }
@@ -199,6 +206,7 @@ impl Task {
             | Task::ImpDsk(t)
             | Task::Echo(t)
             | Task::Extern(t)
+            | Task::Hideur(t)
             | Task::ImgConverter(t)
             | Task::Martine(t)
             | Task::Rm(t)
@@ -216,6 +224,7 @@ impl Task {
             | Task::Xfer(t)
             | Task::Extern(t)
             | Task::Disc(t)
+            | Task::Hideur(t)
             | Task::ImpDsk(t)
             | Task::BndBuild(t)
             | Task::Martine(t)
@@ -246,6 +255,7 @@ impl Task {
             Task::Emulator(..) => true,
             Task::Xfer(_) => true, // wrong when downloading files
             Task::Martine(t) => false,
+            Task::Hideur(_) => false,
             Task::ImgConverter(_) => false,
             Task::Extern(_) => false,
             Task::BndBuild(_) => false,

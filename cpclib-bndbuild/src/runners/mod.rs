@@ -6,6 +6,7 @@ pub mod cp;
 pub mod disc;
 pub mod echo;
 pub mod emulator;
+pub mod hideur;
 pub mod imgconverter;
 pub mod rm;
 pub mod xfer;
