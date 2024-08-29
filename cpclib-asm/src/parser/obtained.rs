@@ -1170,7 +1170,9 @@ impl ListingElement for LocatedToken {
         is_call_macro_or_build_struct is_function_definition 
         is_crunched_section is_confined is_switch 
         is_db is_dw is_str is_set is_comment is_org 
-        is_assembler_control is_while is_assert);
+        is_assembler_control is_while is_assert
+        is_run is_breakpoint is_save
+    );
 
     any_delegate!(
         fn assign_symbol(&self) -> &str;
@@ -1215,6 +1217,9 @@ impl ListingElement for LocatedToken {
         fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
         fn assembler_control_get_max_passes(&self) -> Option<&Self::Expr>;
         fn macro_flavor(&self) -> AssemblerFlavor;
+        fn run_expr(&self) -> &Self::Expr;
+        fn org_first(&self) -> &Self::Expr;
+        fn org_second(&self) -> Option<&Self::Expr>;
     );
 
     fn to_token(&self) -> Cow<cpclib_tokens::Token> {
@@ -1492,13 +1497,22 @@ impl ListingElement for LocatedTokenInner {
 
             Self::Include(..) => todo!(),
             Self::Incbin {
-                fname: _,
-                offset: _,
-                length: _,
-                extended_offset: _,
-                off: _,
-                transformation: _
-            } => todo!(),
+                fname,
+                ref offset,
+                ref length,
+                ref extended_offset,
+                off,
+                transformation
+            } => Cow::Owned(
+                Token::Incbin { 
+                    fname: fname.to_expr().into_owned(), 
+                    offset: offset.as_ref().map(|e| e.to_expr().into_owned()), 
+                    length: length.as_ref().map(|e| e.to_expr().into_owned()), 
+                    extended_offset:  extended_offset.as_ref().map(|e| e.to_expr().into_owned()), 
+                    off: *off, 
+                    transformation: *transformation
+                }
+            ),
             Self::Macro {
                 name,
                 params,

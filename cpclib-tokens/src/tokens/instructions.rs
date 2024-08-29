@@ -1040,7 +1040,7 @@ impl fmt::Display for Token {
                         }
                     };
 
-                     write!(f, "{} \"{}\"", directive, fname)?;
+                     write!(f, "{} {}", directive, fname)?;
                      if offset.is_some() {
                          write!(f, ", {}", offset.as_ref().unwrap())?;
 

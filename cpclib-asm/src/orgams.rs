@@ -5,7 +5,7 @@ use beef::lean::Cow;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
-    BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
+    BinaryOperation, BinaryTransformation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
 };
 
 use crate::{
@@ -290,9 +290,19 @@ where
             Ok(res.into_owned().into())
         };
 
-        let handle_print = |token: &T| -> Result<Cow<str>, ToOrgamsError> { comment_token(token) };
+        let handle_org = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
+            let org1 = token.org_first();
+            let org2 = token.org_second();
 
-        let handle_assert = |token: &T| -> Result<Cow<str>, ToOrgamsError> { comment_token(token) };
+            let org1 = org1.to_orgams_string()?;
+            let repr = if let Some(org2) = org2 {
+                format!("ORG {}, {}", org1, org2.to_orgams_string()?)
+            } else {
+                format!("ORG {}", org1)
+            };
+
+            Ok(repr.into())
+        };
 
         let handle_data = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
             let exprs = token.data_exprs()
@@ -309,6 +319,11 @@ where
             };
 
             Ok(format!("{} {}", mne, exprs).into())
+        };
+
+        let handle_run = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
+            let repr = format!("ENT {}", token.run_expr().to_orgams_string()?);
+            Ok(repr.into())
         };
 
         // XXX strong limitation, does not yet handle 3 args
@@ -382,15 +397,26 @@ where
             Ok(include)
         };
 
+        let handle_incbin = |token: &T| -> Result<String, ToOrgamsError> {
+            let fname = token.incbin_fname().string();
+            let repr = format!("LOAD \"{}\"", fname);
+
+            assert!(token.incbin_length().is_none());
+            assert!(token.incbin_offset().is_none());
+            assert_eq!(token.incbin_transformation(), &BinaryTransformation::None);
+
+            Ok(repr.into())
+        };
+
         // This is the default behavior that changes nothing
         let repr = if self.is_opcode() {
             Cow::owned(handle_opcode(self))
         }
+        else if self.is_org() {
+            handle_org(self)?.into()
+        }
         else if self.is_macro_definition() {
             handle_macro_definition(self)
-        }
-        else if self.is_print() {
-            handle_print(self)?
         }
         else if self.is_call_macro_or_build_struct() {
             handle_macro_call(self)
@@ -407,11 +433,18 @@ where
         else if self.is_include() {
             handle_include(self)?.into()
         }
-        else if self.is_assert() {
-            handle_assert(self)?.into()
+        else if self.is_incbin() {
+            handle_incbin(self)?.into()
+        }
+        else if self.is_assert() || self.is_breakpoint() || self.is_print() 
+         || self.is_save() {
+            comment_token(self)?.into()
         }
         else if self.is_db() || self.is_dw() {
             handle_data(self)?.into()
+        }
+        else if self.is_run() {
+            handle_run(self)?.into()
         }
         else {
             handle_standard_directive(self)

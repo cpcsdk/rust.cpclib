@@ -12,6 +12,38 @@ use crate::DataAccess;
 macro_rules! listing_element_impl_most_methods {
     () => {
         #[inline]
+        fn is_run(&self) -> bool {
+            match self {
+                Self::Run { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_save(&self) -> bool {
+            match self {
+                Self::Save { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_breakpoint(&self) -> bool {
+            match self {
+                Self::Breakpoint { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn run_expr(&self) -> &Self::Expr {
+            match self {
+                Self::Run(exp, _) => exp,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
         fn equ_symbol(&self) -> &str {
             match self {
                 Self::Equ { label, .. } => label.as_str(),
@@ -326,6 +358,23 @@ macro_rules! listing_element_impl_most_methods {
             match self {
                 Self::Org { .. } => true,
                 _ => false
+            }
+        }
+
+        #[inline]
+        fn org_first(&self) -> &Self::Expr {
+            match self {
+                Self::Org {val1, .. } => val1,
+                _ => unreachable!()
+            }
+        }
+
+    
+        #[inline]
+        fn org_second(&self) -> Option<&Self::Expr> {
+            match self {
+                Self::Org {val2, .. } => val2.as_ref(),
+                _ => unreachable!()
             }
         }
 

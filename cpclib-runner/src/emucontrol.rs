@@ -521,6 +521,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
         std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
 
         self.press_control_char('i');
+        std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
+
         self.type_text(src);
         self.click_key(Key::Return);
 
@@ -948,7 +950,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
     let emu_thread = std::thread::spawn(move || start_emulator(&t_emu, &conf).unwrap());
 
     if cli.albireo.is_some() {
-        std::thread::sleep(Duration::from_secs(8));
+        std::thread::sleep(Duration::from_secs(5));
     }
     else {
         std::thread::sleep(Duration::from_secs(3));

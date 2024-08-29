@@ -41,6 +41,10 @@ where Self: Debug + Sized + Sync
     fn assembler_control_get_listing(&self) -> &[Self];
 
     fn is_org(&self) -> bool;
+    fn org_first(&self) -> &Self::Expr;
+    fn org_second(&self) -> Option<&Self::Expr>;
+
+
     fn is_comment(&self) -> bool;
     fn is_set(&self) -> bool;
 
@@ -156,7 +160,13 @@ where Self: Debug + Sized + Sync
     fn is_str(&self) -> bool;
     fn data_exprs(&self) -> &[Self::Expr];
 
+    fn is_run(&self) -> bool;
+    fn run_expr(&self) -> &Self::Expr;
+
+
     fn is_print(&self) -> bool;
+    fn is_breakpoint(&self) -> bool;
+    fn is_save(&self) -> bool;
 
     fn to_token(&self) -> Cow<crate::Token>;
     fn starts_with_label(&self) -> bool {
