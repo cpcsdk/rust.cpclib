@@ -11,6 +11,109 @@ use crate::DataAccess;
 #[macro_export]
 macro_rules! listing_element_impl_most_methods {
     () => {
+        #[inline]
+        fn equ_symbol(&self) -> &str {
+            match self {
+                Self::Equ { label, .. } => label.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn rorg_expr(&self) -> &Self::Expr {
+            match self {
+                Self::Rorg(exp, _) => exp,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn equ_value(&self) -> &Self::Expr {
+            match self {
+                Self::Equ { expr, .. } => expr,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn assign_symbol(&self) -> &str {
+            match self {
+                Self::Assign { label, .. } => label.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn module_name(&self) -> &str {
+            match self {
+                Self::Module(name, ..) => name.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn mnemonic(&self) -> Option<&Mnemonic> {
+            match self {
+                Self::OpCode(ref mnemonic, ..) => Some(mnemonic),
+                _ => None
+            }
+        }
+
+        #[inline]
+        fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
+            match self {
+                Self::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
+                _ => None
+            }
+        }
+
+        #[inline]
+        fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
+            match self {
+                Self::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
+                _ => None
+            }
+        }
+
+        #[inline]
+        fn iterate_counter_name(&self) -> &str {
+            match self {
+                Self::Iterate(name, ..) => name.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
+            match self {
+                Self::Iterate(_, values, ..) => values.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
+            match self {
+                Self::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
+                _ => None
+            }
+        }
+
+        #[inline]
+        fn while_expr(&self) -> &Self::Expr {
+            match self {
+                Self::While(expr, ..) => expr,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn assign_value(&self) -> &Self::Expr {
+            match self {
+                Self::Assign { expr, .. } => expr,
+                _ => unreachable!()
+            }
+        }
 
         #[inline]
         fn is_switch(&self) -> bool {
@@ -19,7 +122,6 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-
 
         #[inline]
         fn is_if(&self) -> bool {
@@ -60,7 +162,6 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-    
 
         #[inline]
         fn is_while(&self) -> bool {
@@ -69,7 +170,7 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-    
+
         #[inline]
         fn is_iterate(&self) -> bool {
             match self {
@@ -78,7 +179,6 @@ macro_rules! listing_element_impl_most_methods {
             }
         }
 
-        
         #[inline]
         fn is_repeat_until(&self) -> bool {
             match self {
@@ -86,9 +186,7 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-    
 
-    
         #[inline]
         fn is_include(&self) -> bool {
             match self {
@@ -96,7 +194,7 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-    
+
         #[inline]
         fn is_incbin(&self) -> bool {
             match self {
@@ -112,7 +210,7 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-    
+
         #[inline]
         fn is_function_definition(&self) -> bool {
             match self {
@@ -139,42 +237,41 @@ macro_rules! listing_element_impl_most_methods {
 
         #[inline]
         fn is_db(&self) -> bool {
-        match self {
-            Self::Defb(..) => true,
-            _ => false
-        }
-    }
-
-        #[inline]
-        fn is_dw(&self) -> bool {
-        match self {
-            Self::Defw(..) => true,
-            _ => false
-        }
-    }
-
-        #[inline]
-        fn is_str(&self) -> bool {
-        match self {
-            Self::Str(..) => true,
-            _ => false
-        }
-    }
-
-        #[inline]
-
-    fn is_set(&self) -> bool {
-        self.is_assign()
-    }
-
-        #[inline]
-        fn is_buildcpr(&self) -> bool {
             match self {
-                Self::BuildCpr{..} => true,
+                Self::Defb(..) => true,
                 _ => false
             }
         }
 
+        #[inline]
+        fn is_dw(&self) -> bool {
+            match self {
+                Self::Defw(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_str(&self) -> bool {
+            match self {
+                Self::Str(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+
+        fn is_set(&self) -> bool {
+            self.is_assign()
+        }
+
+        #[inline]
+        fn is_buildcpr(&self) -> bool {
+            match self {
+                Self::BuildCpr { .. } => true,
+                _ => false
+            }
+        }
 
         #[inline]
         fn is_assembler_control(&self) -> bool {
@@ -200,7 +297,6 @@ macro_rules! listing_element_impl_most_methods {
             }
         }
 
-
         #[inline]
         fn is_comment(&self) -> bool {
             match self {
@@ -209,8 +305,6 @@ macro_rules! listing_element_impl_most_methods {
             }
         }
 
-    
-
         #[inline]
         fn is_equ(&self) -> bool {
             match self {
@@ -218,8 +312,6 @@ macro_rules! listing_element_impl_most_methods {
                 _ => false
             }
         }
-
-
 
         #[inline]
         fn is_label(&self) -> bool {
@@ -245,9 +337,218 @@ macro_rules! listing_element_impl_most_methods {
             }
         }
 
+        #[inline]
+        fn for_label(&self) -> &str {
+            match self {
+                Self::For { label, .. } => label.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn for_start(&self) -> &Self::Expr {
+            match self {
+                Self::For { start, .. } => start,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn for_stop(&self) -> &Self::Expr {
+            match self {
+                Self::For { stop, .. } => stop,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn for_step(&self) -> Option<&Self::Expr> {
+            match self {
+                Self::For { step, .. } => step.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn repeat_until_condition(&self) -> &Self::Expr {
+            match self {
+                Self::RepeatUntil(cond, ..) => cond,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn repeat_count(&self) -> &Self::Expr {
+            match self {
+                Self::Repeat(e, ..) => e,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn repeat_counter_name(&self) -> Option<&str> {
+            match self {
+                Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn repeat_counter_start(&self) -> Option<&Self::Expr> {
+            match self {
+                Self::Repeat(_, _, _, start, ..) => start.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn is_macro_definition(&self) -> bool {
+            match self {
+                Self::Macro { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn macro_definition_name(&self) -> &str {
+            match self {
+                Self::Macro { name, .. } => name.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
+            match self {
+                Self::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn macro_definition_code(&self) -> &str {
+            match self {
+                Self::Macro { content, .. } => content.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn macro_call_name(&self) -> &str {
+            match self {
+                Self::MacroCall(name, _) => name.as_str(),
+                _ => panic!()
+            }
+        }
+
+        #[inline]
+        fn macro_call_arguments(&self) -> &[Self::MacroParam] {
+            match self {
+                Self::MacroCall(_, args) => args,
+                _ => panic!()
+            }
+        }
+
+        #[inline]
+        fn if_nb_tests(&self) -> usize {
+            match self {
+                Self::If(tests, ..) => tests.len(),
+                _ => panic!()
+            }
+        }
+
+        #[inline]
+        fn incbin_fname(&self) -> &Self::Expr {
+            match self {
+                Self::Incbin { fname, .. } => fname,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn incbin_offset(&self) -> Option<&Self::Expr> {
+            match self {
+                Self::Incbin { offset, .. } => offset.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn incbin_length(&self) -> Option<&Self::Expr> {
+            match self {
+                Self::Incbin { length, .. } => length.as_ref(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn incbin_transformation(&self) -> &BinaryTransformation {
+            match self {
+                Self::Incbin { transformation, .. } => transformation,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn include_fname(&self) -> &Self::Expr {
+            match self {
+                Self::Include(fname, ..) => fname,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn include_namespace(&self) -> Option<&str> {
+            match self {
+                Self::Include(_, module, _) => module.as_ref().map(|s| s.as_str()),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn include_once(&self) -> bool {
+            match self {
+                Self::Include(_, _, once) => *once,
+                _ => unreachable!()
+            }
+        }
+
+        fn function_definition_name(&self) -> &str {
+            match self {
+                Self::Function(name, ..) => name.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
+            match self {
+                Self::Function(_, params, _) => params.iter().map(|v| v.as_str()).collect(),
+                _ => unreachable!()
+            }
+        }
+
+        fn crunched_section_kind(&self) -> &CrunchType {
+            match self {
+                Self::CrunchedSection(kind, _, ..) => kind,
+                _ => unreachable!()
+            }
+        }
+
+        fn switch_expr(&self) -> &Self::Expr {
+            match self {
+                Self::Switch(expr, ..) => expr,
+                _ => unreachable!()
+            }
+        }
+
+        fn data_exprs(&self) -> &[Self::Expr] {
+            match self {
+                Self::Defb(e, ..) | Self::Defw(e, ..) | Self::Str(e, ..) => e,
+                _ => unreachable!()
+            }
+        }
     };
 }
-
 
 impl ListingElement for Token {
     type AssemblerControlCommand = StandardAssemblerControlCommand;
@@ -257,41 +558,12 @@ impl ListingElement for Token {
     type MacroParam = MacroParam;
     type TestKind = TestKind;
 
+    listing_element_impl_most_methods!();
+
     //    type Listing = BaseListing<Token>;
 
     fn to_token(&self) -> Cow<Token> {
         Cow::Borrowed(self)
-    }
-
-    listing_element_impl_most_methods!();
-
-
-    fn equ_symbol(&self) -> &str {
-        match self {
-            Token::Equ { label, .. } => label.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn equ_value(&self) -> &Self::Expr {
-        match self {
-            Token::Equ { expr, .. } => expr,
-            _ => unreachable!()
-        }
-    }
-
-    fn assign_symbol(&self) -> &str {
-        match self {
-            Self::Assign { label, .. } => label.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn assign_value(&self) -> &Self::Expr {
-        match self {
-            Self::Assign { expr, .. } => expr,
-            _ => unreachable!()
-        }
     }
 
     fn is_warning(&self) -> bool {
@@ -306,26 +578,9 @@ impl ListingElement for Token {
         unreachable!()
     }
 
-
     fn module_listing(&self) -> &[Self] {
         match self {
             Token::Module(_, lst, ..) => lst,
-            _ => unreachable!()
-        }
-    }
-
-    fn module_name(&self) -> &str {
-        match self {
-            Token::Module(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-  
-
-    fn while_expr(&self) -> &Self::Expr {
-        match self {
-            Token::While(expr, ..) => expr,
             _ => unreachable!()
         }
     }
@@ -337,42 +592,12 @@ impl ListingElement for Token {
         }
     }
 
-    fn mnemonic(&self) -> Option<&Mnemonic> {
-        match self {
-            Token::OpCode(ref mnemonic, ..) => Some(mnemonic),
-            _ => None
-        }
-    }
-
     fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
         match self {
             Token::OpCode(_, ref arg1, ..) => arg1.as_ref(),
             _ => None
         }
     }
-
-    fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
-        match self {
-            Token::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
-        match self {
-            Token::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
-            _ => None
-        }
-    }
-
-    fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
-        match self {
-            Token::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
-            _ => None
-        }
-    }
-
-
 
     fn iterate_listing(&self) -> &[Self] {
         match self {
@@ -381,56 +606,12 @@ impl ListingElement for Token {
         }
     }
 
-    fn iterate_counter_name(&self) -> &str {
-        match self {
-            Self::Iterate(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr> {
-        match self {
-            Self::Iterate(_, values, ..) => Either::Left(values),
-            _ => unreachable!()
-        }
-    }
-
-
     fn for_listing(&self) -> &[Self] {
         match self {
             Self::For { listing, .. } => listing,
             _ => unreachable!()
         }
     }
-
-    fn for_label(&self) -> &str {
-        match self {
-            Self::For { label, .. } => label.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn for_start(&self) -> &Self::Expr {
-        match self {
-            Self::For { start, .. } => start,
-            _ => unreachable!()
-        }
-    }
-
-    fn for_stop(&self) -> &Self::Expr {
-        match self {
-            Self::For { stop, .. } => stop,
-            _ => unreachable!()
-        }
-    }
-
-    fn for_step(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::For { step, .. } => step.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
 
     fn repeat_until_listing(&self) -> &[Self] {
         match self {
@@ -439,89 +620,10 @@ impl ListingElement for Token {
         }
     }
 
-    fn repeat_until_condition(&self) -> &Self::Expr {
-        match self {
-            Self::RepeatUntil(cond, ..) => cond,
-            _ => unreachable!()
-        }
-    }
-
-
-
     fn repeat_listing(&self) -> &[Self] {
         match self {
             Self::Repeat(_, listing, ..) => listing,
             _ => unreachable!()
-        }
-    }
-
-    fn repeat_count(&self) -> &Self::Expr {
-        match self {
-            Self::Repeat(e, ..) => e,
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_counter_name(&self) -> Option<&str> {
-        match self {
-            Self::Repeat(_, _, counter_name, ..) => counter_name.as_ref().map(|c| c.as_str()),
-            _ => unreachable!()
-        }
-    }
-
-    fn repeat_counter_start(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Repeat(_, _, _, start) => start.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn is_macro_definition(&self) -> bool {
-        match self {
-            Self::Macro { .. } => true,
-            _ => false
-        }
-    }
-
-    fn macro_definition_name(&self) -> &str {
-        match self {
-            Self::Macro { name, .. } => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]> {
-        match self {
-            Self::Macro { params, .. } => params.iter().map(|a| a.as_str()).collect(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_definition_code(&self) -> &str {
-        match self {
-            Self::Macro { content, .. } => content.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn macro_call_name(&self) -> &str {
-        match self {
-            Token::MacroCall(name, _) => name.as_str(),
-            _ => panic!()
-        }
-    }
-
-    fn macro_call_arguments(&self) -> &[Self::MacroParam] {
-        match self {
-            Token::MacroCall(_, args) => args,
-            _ => panic!()
-        }
-    }
-
-    fn if_nb_tests(&self) -> usize {
-        match self {
-            Self::If(tests, ..) => tests.len(),
-            _ => panic!()
         }
     }
 
@@ -535,77 +637,11 @@ impl ListingElement for Token {
         }
     }
 
-
     #[inline]
     fn if_else(&self) -> Option<&[Self]> {
         match self {
             Self::If(_, r#else, ..) => r#else.as_ref().map(|l| l.as_ref()),
             _ => panic!()
-        }
-    }
-
-    fn incbin_fname(&self) -> &Self::Expr {
-        match self {
-            Self::Incbin { fname, .. } => fname,
-            _ => unreachable!()
-        }
-    }
-
-    fn incbin_offset(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Incbin { offset, .. } => offset.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn incbin_length(&self) -> Option<&Self::Expr> {
-        match self {
-            Self::Incbin { length, .. } => length.as_ref(),
-            _ => unreachable!()
-        }
-    }
-
-    fn incbin_transformation(&self) -> &BinaryTransformation {
-        match self {
-            Self::Incbin { transformation, .. } => transformation,
-            _ => unreachable!()
-        }
-    }
-
-    fn include_fname(&self) -> &Self::Expr {
-        match self {
-            Self::Include(fname, ..) => fname,
-            _ => unreachable!()
-        }
-    }
-
-    fn include_namespace(&self) -> Option<&str> {
-        match self {
-            Self::Include(_, module, _) => module.as_ref().map(|s| s.as_str()),
-            _ => unreachable!()
-        }
-    }
-
-    fn include_once(&self) -> bool {
-        match self {
-            Self::Include(_, _, once) => *once,
-            _ => unreachable!()
-        }
-    }
-
-
-
-    fn function_definition_name(&self) -> &str {
-        match self {
-            Self::Function(name, ..) => name.as_str(),
-            _ => unreachable!()
-        }
-    }
-
-    fn function_definition_params(&self) -> SmallVec<[&str; 4]> {
-        match self {
-            Self::Function(_, params, _) => params.iter().map(|v| v.as_str()).collect(),
-            _ => unreachable!()
         }
     }
 
@@ -616,8 +652,6 @@ impl ListingElement for Token {
         }
     }
 
-
-
     fn crunched_section_listing(&self) -> &[Self] {
         match self {
             Self::CrunchedSection(_, lst) => lst,
@@ -625,25 +659,9 @@ impl ListingElement for Token {
         }
     }
 
-    fn crunched_section_kind(&self) -> &CrunchType {
-        match self {
-            Self::CrunchedSection(kind, _) => kind,
-            _ => unreachable!()
-        }
-    }
-
-
-
     fn rorg_listing(&self) -> &[Self] {
         match self {
             Self::Rorg(_, lst) => lst,
-            _ => unreachable!()
-        }
-    }
-
-    fn rorg_expr(&self) -> &Self::Expr {
-        match self {
-            Self::Rorg(exp, _) => exp,
             _ => unreachable!()
         }
     }
@@ -654,15 +672,6 @@ impl ListingElement for Token {
 
     fn confined_listing(&self) -> &[Self] {
         todo!()
-    }
-
-
-
-    fn switch_expr(&self) -> &Self::Expr {
-        match self {
-            Self::Switch(expr, ..) => expr,
-            _ => unreachable!()
-        }
     }
 
     fn switch_cases(&self) -> Box<dyn Iterator<Item = (&Self::Expr, &[Self], bool)> + '_> {
@@ -677,15 +686,6 @@ impl ListingElement for Token {
     fn switch_default(&self) -> Option<&[Self]> {
         match self {
             Self::Switch(_, _, default, ..) => default.as_ref().map(|l| l.as_slice()),
-            _ => unreachable!()
-        }
-    }
-
-
-
-    fn data_exprs(&self) -> &[Self::Expr] {
-        match self {
-            Self::Defb(e) | Self::Defw(e) | Self::Str(e) => e,
             _ => unreachable!()
         }
     }
@@ -709,8 +709,6 @@ impl ListingElement for Token {
     fn macro_flavor(&self) -> AssemblerFlavor {
         todo!()
     }
-
-
 }
 
 /// Standard listing is a specific implementation

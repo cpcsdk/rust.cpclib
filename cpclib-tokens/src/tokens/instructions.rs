@@ -625,7 +625,7 @@ pub enum Token {
     },
     // file may or may not be read during parse. If not, it is read on demand when assembling
     Include(Expr, Option<SmolStr>, bool),
-    Iterate(SmolStr, Vec<Expr>, Listing),
+    Iterate(SmolStr, either::Either<Vec<Expr>, Expr>, Listing),
 
     Label(SmolStr),
     Let(SmolStr, Expr),

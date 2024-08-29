@@ -4,9 +4,14 @@ use std::ops::Deref;
 use beef::lean::Cow;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
-use cpclib_tokens::{BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token};
+use cpclib_tokens::{
+    BinaryOperation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement,
+    MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
+};
 
-use crate::{parse_z80, LocatedDataAccess, LocatedExpr, LocatedTestKind, MayHaveSpan, SourceString, TokenExt};
+use crate::{
+    parse_z80, LocatedDataAccess, LocatedExpr, LocatedTestKind, MayHaveSpan, SourceString, TokenExt
+};
 
 #[derive(Debug)]
 pub struct ToOrgamsError(String);
@@ -33,7 +38,6 @@ pub trait ToOrgams {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError>;
 }
 
-
 impl ToOrgams for Mnemonic {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         Ok(self.to_string().to_lowercase().into())
@@ -50,26 +54,28 @@ macro_rules! expr_to_orgams {
     () => {
         fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
             let repr = match self {
-
-                Self::Value(v,..) => {
+                Self::Value(v, ..) => {
                     if self.has_span() {
                         // basm allow _ between numbers
                         let span = dbg!(self.span().as_str().replace("_", ""));
                         if span.starts_with("0x") || span.starts_with("0X") {
                             format!("&{}", &span[2..])
-                        } else if span.starts_with("#") {
+                        }
+                        else if span.starts_with("#") {
                             format!("&{}", &span[1..])
-                        } else {
+                        }
+                        else {
                             format!("{}", v)
                         }
-                    } else {
+                    }
+                    else {
                         format!("{}", v)
                     }
                 },
 
                 Self::Label(l) => {
                     format!("{}", l)
-                }
+                },
 
                 Self::BinaryOperation(op, left, right, ..) => {
                     let rleft = left.to_orgams_string()?;
@@ -77,10 +83,11 @@ macro_rules! expr_to_orgams {
                     let rleft = rleft.as_ref();
                     let op = op.to_orgams_string()?;
 
-                    let protect =  |expr: &Self, repr: &str| -> String {
+                    let protect = |expr: &Self, repr: &str| -> String {
                         if expr.is_label() || expr.is_value() {
                             repr.into()
-                        } else {
+                        }
+                        else {
                             format!("[{}]", repr).into()
                         }
                     };
@@ -89,16 +96,15 @@ macro_rules! expr_to_orgams {
                     let rright = protect(right, rright.as_ref());
 
                     format!("{}{}{}", rleft, op, rright)
-                }
+                },
 
                 _ => unimplemented!("{:?}", self)
             };
 
-            
             dbg!(self, &repr);
             Ok(repr.into())
         }
-    }
+    };
 }
 
 impl ToOrgams for LocatedExpr {
@@ -115,38 +121,43 @@ macro_rules! test_kind_to_orgams {
             if self.is_true_test() {
                 let expr = self.expr_unchecked();
                 Ok(format!("IF {}", expr.to_orgams_string()?).into())
-            } else {
+            }
+            else {
                 Err(format!("{:?}", self).into())
             }
         }
     };
 }
 
-impl ToOrgams for LocatedTestKind  {
+impl ToOrgams for LocatedTestKind {
     test_kind_to_orgams!();
 }
 
-impl ToOrgams for TestKind  {
+impl ToOrgams for TestKind {
     test_kind_to_orgams!();
 }
-
 
 macro_rules! data_access_to_orgams {
     () => {
         fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
-
             let repr = if self.is_expression() {
                 let exp = self.get_expression().unwrap();
                 return exp.to_orgams_string();
-            } else if self.is_memory() || self.is_port_n()  {
+            }
+            else if self.is_memory() || self.is_port_n() {
                 let exp = self.get_expression().unwrap();
                 let exp = exp.to_orgams_string()?;
                 format!("({})", exp)
             }
-            else if self.is_register16() || self.is_register8() || self.is_indexregister16() || self.is_indexregister8() 
-                    || self.is_port_c()
-                    || self.is_address_in_register16() || self.is_address_in_indexregister16()
-                    || self.is_flag_test() {
+            else if self.is_register16()
+                || self.is_register8()
+                || self.is_indexregister16()
+                || self.is_indexregister8()
+                || self.is_port_c()
+                || self.is_address_in_register16()
+                || self.is_address_in_indexregister16()
+                || self.is_flag_test()
+            {
                 self.to_string().to_lowercase()
             }
             else {
@@ -155,11 +166,8 @@ macro_rules! data_access_to_orgams {
 
             Ok(repr.into())
         }
-        
     };
 }
-
-
 
 impl ToOrgams for DataAccess {
     data_access_to_orgams!();
@@ -169,11 +177,12 @@ impl ToOrgams for LocatedDataAccess {
     data_access_to_orgams!();
 }
 
-impl<T> ToOrgams for T where 
-T: TokenExt + MayHaveSpan + ListingElement + ToString + ?Sized,
-T::DataAccess: ToOrgams,
-T::Expr: ToOrgams,
-T::TestKind: ToOrgams
+impl<T> ToOrgams for T
+where
+    T: TokenExt + MayHaveSpan + ListingElement + ToString + ?Sized,
+    T::DataAccess: ToOrgams,
+    T::Expr: ToOrgams,
+    T::TestKind: ToOrgams
 {
     fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
         // we assume it is already a BASM format and not an ORGAMS format
@@ -181,7 +190,6 @@ T::TestKind: ToOrgams
             let macro_name = token.macro_definition_name();
             let arguments_name = token.macro_definition_arguments();
             let mut macro_content = token.macro_definition_code().to_owned();
-
 
             for arg in arguments_name.iter() {
                 macro_content = macro_content.replace(&format!("{{{arg}}}"), arg);
@@ -237,27 +245,24 @@ T::TestKind: ToOrgams
 
         let comment_token = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
             let repr = token.to_string();
-            let repr: String = repr.lines()
-                .map(|l| format!(" ; {l}"))
-                .join("\n");
-            let token = Token::Comment(format!("; {repr}", ));
-            let res =  token.to_orgams_string()?;
+            let repr: String = repr.lines().map(|l| format!(" ; {l}")).join("\n");
+            let token = Token::Comment(format!("; {repr}",));
+            let res = token.to_orgams_string()?;
             Ok(res.into_owned().into())
         };
 
-        let handle_print = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
-            comment_token(token)
-        };
+        let handle_print = |token: &T| -> Result<Cow<str>, ToOrgamsError> { comment_token(token) };
 
-        let handle_assert = |token: &T| -> Result<Cow<str>, ToOrgamsError>  {
-            comment_token(token)
-        };
-
+        let handle_assert = |token: &T| -> Result<Cow<str>, ToOrgamsError> { comment_token(token) };
 
         // XXX strong limitation, does not yet handle 3 args
         let handle_opcode = |token: &T| -> String {
-
-            let mut op = token.mnemonic().unwrap().to_orgams_string().unwrap().to_string();
+            let mut op = token
+                .mnemonic()
+                .unwrap()
+                .to_orgams_string()
+                .unwrap()
+                .to_string();
 
             if let Some(arg) = token.mnemonic_arg1() {
                 op.push(' ');
@@ -267,14 +272,14 @@ T::TestKind: ToOrgams
             if let Some(arg) = token.mnemonic_arg2() {
                 if token.mnemonic_arg1().is_some() {
                     op.push(',');
-                } else {
+                }
+                else {
                     op.push(' ');
                 }
                 op.push_str(&arg.to_orgams_string().unwrap())
             }
 
             op
-
         };
 
         let handle_assign = |token: &T| -> String {
@@ -293,9 +298,13 @@ T::TestKind: ToOrgams
 
         let handle_if = |token: &T| -> String {
             assert!(self.if_nb_tests() == 1);
-            
+
             let (test, code) = token.if_test(0);
-            let mut content = format!("{}\n{}", test.to_orgams_string().unwrap(), code.to_orgams_string().unwrap());
+            let mut content = format!(
+                "{}\n{}",
+                test.to_orgams_string().unwrap(),
+                code.to_orgams_string().unwrap()
+            );
 
             if let Some(code) = token.if_else() {
                 content.push_str("\n\tELSE\n");
@@ -319,7 +328,8 @@ T::TestKind: ToOrgams
         // This is the default behavior that changes nothing
         let repr = if self.is_opcode() {
             Cow::owned(handle_opcode(self))
-        } else if self.is_macro_definition() {
+        }
+        else if self.is_macro_definition() {
             handle_macro_definition(self)
         }
         else if self.is_print() {
@@ -331,7 +341,7 @@ T::TestKind: ToOrgams
         else if self.is_assign() {
             handle_assign(self).into()
         }
-        else if self.is_equ(){ 
+        else if self.is_equ() {
             handle_equ(self).into()
         }
         else if self.is_if() {
@@ -397,7 +407,7 @@ impl<T: ToOrgams> ToOrgams for &[T] {
         }
 
         // TODO do it properly by coding the complete expression display
-//        let content = content.replace("0x", "&");
+        //        let content = content.replace("0x", "&");
 
         Ok(content.into())
     }
@@ -405,10 +415,9 @@ impl<T: ToOrgams> ToOrgams for &[T] {
 
 pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
     let lst = parse_z80(code)
-    .map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e.to_string())))?;
+        .map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e.to_string())))?;
     let lst = lst.as_slice();
-    lst.to_orgams_string()
-        .map(|s| s.into_owned())
+    lst.to_orgams_string().map(|s| s.into_owned())
 }
 
 pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
@@ -416,7 +425,7 @@ pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
     let code = std::fs::read_to_string(p)
         .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", p, e.to_string())))?;
     convert_source(&code)
-    .map_err(|e| format!("Error while handling {}. {}", p, e.to_string()).into())
+        .map_err(|e| format!("Error while handling {}. {}", p, e.to_string()).into())
 }
 
 /// COnvert a basm txt source file as a orgams text source file.
@@ -434,17 +443,19 @@ pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
         .map_err(|e| format!("Error while saving {}. {}", tgt, e.to_string()).into())
 }
 
-
 #[cfg(test)]
-mod test{
+mod test {
     use std::ops::Deref;
 
-    use cpclib_common::winnow::{error::ParseError, Parser};
+    use cpclib_common::winnow::error::ParseError;
+    use cpclib_common::winnow::Parser;
     use cpclib_tokens::{DataAccess, Expr};
 
-    use crate::{located_expr, AssemblerError, InnerZ80Span, ParserContext, ParserContextBuilder, Z80ParserError, Z80Span};
-
     use super::ToOrgams;
+    use crate::{
+        located_expr, AssemblerError, InnerZ80Span, ParserContext, ParserContextBuilder,
+        Z80ParserError, Z80Span
+    };
 
     #[derive(Debug)]
     struct TestResult<O: std::fmt::Debug> {
@@ -470,7 +481,7 @@ mod test{
         let span = Z80Span::new_extra(code, ctx.deref());
         (ctx, span)
     }
-    
+
     fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,
         code: &'static str
@@ -488,31 +499,40 @@ mod test{
 
         TestResult { ctx, span, res }
     }
-    
+
     #[test]
     fn test_expression() {
         assert_eq!(
-            parse_test(located_expr, "25").as_ref().unwrap().to_orgams_string().unwrap(),
+            parse_test(located_expr, "25")
+                .as_ref()
+                .unwrap()
+                .to_orgams_string()
+                .unwrap(),
             "25"
         );
         assert_eq!(
-            parse_test(located_expr, "0x25").as_ref().unwrap().to_orgams_string().unwrap(),
+            parse_test(located_expr, "0x25")
+                .as_ref()
+                .unwrap()
+                .to_orgams_string()
+                .unwrap(),
             "&25"
         );
     }
 
-
-        
     #[test]
     fn test_data_access() {
         assert_eq!(
-            DataAccess::Expression(Expr::Value(25)).to_orgams_string().unwrap(),
+            DataAccess::Expression(Expr::Value(25))
+                .to_orgams_string()
+                .unwrap(),
             "25"
         );
         assert_eq!(
-            DataAccess::Memory(Expr::Value(25)).to_orgams_string().unwrap(),
+            DataAccess::Memory(Expr::Value(25))
+                .to_orgams_string()
+                .unwrap(),
             "(25)"
         );
-
     }
 }

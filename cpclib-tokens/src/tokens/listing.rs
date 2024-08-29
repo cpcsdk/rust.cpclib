@@ -48,7 +48,7 @@ where Self: Debug + Sized + Sync
     fn is_equ(&self) -> bool;
     fn is_assign(&self) -> bool;
     fn equ_symbol(&self) -> &str;
-    fn equ_value(&self) -> &Self::Expr; 
+    fn equ_value(&self) -> &Self::Expr;
     fn assign_symbol(&self) -> &str;
     fn assign_value(&self) -> &Self::Expr;
 

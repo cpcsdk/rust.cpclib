@@ -124,7 +124,7 @@ pub trait DataAccessElem: Sized + Debug + Display {
     fn is_flag_test(&self) -> bool {
         self.get_flag_test().is_some()
     }
-    
+
     fn is_address_in_indexregister16(&self) -> bool;
     fn is_address_in_register16(&self) -> bool;
     #[inline]
