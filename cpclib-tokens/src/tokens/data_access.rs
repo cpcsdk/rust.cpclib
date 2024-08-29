@@ -119,6 +119,12 @@ pub trait DataAccessElem: Sized + Debug + Display {
     fn get_indexregister8(&self) -> Option<IndexRegister8>;
     fn get_register16(&self) -> Option<Register16>;
     fn get_register8(&self) -> Option<Register8>;
+
+    #[inline]
+    fn is_flag_test(&self) -> bool {
+        self.get_flag_test().is_some()
+    }
+    
     fn is_address_in_indexregister16(&self) -> bool;
     fn is_address_in_register16(&self) -> bool;
     #[inline]

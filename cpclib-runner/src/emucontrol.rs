@@ -940,7 +940,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
                 if let Some(albi) = &cli.albireo {
                     let src = Utf8Path::new(albi).join(src);
                     let dst = dst.as_ref().unwrap();
-                    cpclib_asm::orgams::convert_source(src, dst).map_err(|e| e.to_string())
+                    cpclib_asm::orgams::convert_from_to(src, dst).map_err(|e| e.to_string())
                 }
                 else {
                     unimplemented!()

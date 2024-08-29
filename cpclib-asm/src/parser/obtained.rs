@@ -16,13 +16,7 @@ use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    data_access_impl_most_methods, data_access_is_any_indexregister16,
-    data_access_is_any_indexregister8, data_access_is_any_register16, data_access_is_any_register8,
-    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryFunction, BinaryOperation,
-    CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest,
-    FormattedExpr, IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam,
-    MacroParamElement, Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind,
-    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
+    data_access_impl_most_methods, data_access_is_any_indexregister16, data_access_is_any_indexregister8, data_access_is_any_register16, data_access_is_any_register8, listing_element_impl_most_methods, AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryFunction, BinaryOperation, CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr, IndexRegister16, IndexRegister8, LabelPrefix, ListingElement, MacroParam, MacroParamElement, Mnemonic, Register16, Register8, SaveType, StableTickerAction, TestKind, TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
 use ouroboros::self_referencing;
 
@@ -1161,7 +1155,15 @@ impl ListingElement for LocatedToken {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
-    is_stuff_delegate!(is_print is_buildcpr is_label is_equ is_assign is_module is_directive is_rorg is_iterate is_for is_repeat_until is_repeat is_macro_definition is_if is_include is_incbin is_call_macro_or_build_struct is_function_definition is_crunched_section is_confined is_switch is_db is_dw is_str is_set is_comment is_org is_assembler_control is_while);
+    is_stuff_delegate!(
+        is_print is_buildcpr is_label is_equ 
+        is_assign is_module is_directive is_rorg 
+        is_iterate is_for is_repeat_until is_repeat 
+        is_macro_definition is_if is_include is_incbin 
+        is_call_macro_or_build_struct is_function_definition 
+        is_crunched_section is_confined is_switch 
+        is_db is_dw is_str is_set is_comment is_org 
+        is_assembler_control is_while is_assert);
 
     any_delegate!(
         fn assign_symbol(&self) -> &str;
@@ -1370,6 +1372,8 @@ impl ListingElement for LocatedTokenInner {
     type MacroParam = LocatedMacroParam;
     type TestKind = LocatedTestKind;
 
+    listing_element_impl_most_methods!();
+
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
     fn to_token(&self) -> Cow<Token> {
@@ -1526,13 +1530,6 @@ impl ListingElement for LocatedTokenInner {
             } => todo!(),
 
             _ => todo!("Need to implement conversion  for {:?}", self)
-        }
-    }
-
-    fn is_print(&self) -> bool {
-        match self {
-            LocatedTokenInner::Print(_) => true,
-            _ => false
         }
     }
 
@@ -2123,12 +2120,6 @@ impl ListingElement for LocatedTokenInner {
         }
     }
 
-    fn is_label(&self) -> bool {
-        match self {
-            LocatedTokenInner::Label { .. } => true,
-            _ => false
-        }
-    }
 }
 
 impl std::fmt::Display for LocatedToken {

@@ -8,6 +8,39 @@ use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
 use crate::DataAccess;
 
+#[macro_export]
+macro_rules! listing_element_impl_most_methods {
+    () => {
+
+        #[inline]
+        fn is_assert(&self) -> bool {
+            match self {
+                Self::Assert(..) => true,
+                _ => false
+            }
+        }
+
+
+        #[inline]
+        fn is_label(&self) -> bool {
+            match self {
+                Self::Label(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn is_print(&self) -> bool {
+            match self {
+                Self::Print(..) => true,
+                _ => false
+            }
+        }
+
+    };
+}
+
+
 impl ListingElement for Token {
     type AssemblerControlCommand = StandardAssemblerControlCommand;
     // type Element = Token;
@@ -22,19 +55,8 @@ impl ListingElement for Token {
         Cow::Borrowed(self)
     }
 
-    fn is_print(&self) -> bool {
-        match self {
-            Self::Print(..) => true,
-            _ => false
-        }
-    }
+    listing_element_impl_most_methods!();
 
-    fn is_label(&self) -> bool {
-        match self {
-            Self::Label(..) => true,
-            _ => false
-        }
-    }
 
     fn is_equ(&self) -> bool {
         match self {

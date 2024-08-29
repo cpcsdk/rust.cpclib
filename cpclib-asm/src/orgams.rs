@@ -144,7 +144,9 @@ macro_rules! data_access_to_orgams {
                 format!("({})", exp)
             }
             else if self.is_register16() || self.is_register8() || self.is_indexregister16() || self.is_indexregister8() 
-                    || self.is_port_c() {
+                    || self.is_port_c()
+                    || self.is_address_in_register16() || self.is_address_in_indexregister16()
+                    || self.is_flag_test() {
                 self.to_string().to_lowercase()
             }
             else {
@@ -233,13 +235,24 @@ T::TestKind: ToOrgams
             token.to_token().to_string().into()
         };
 
-        let handle_print = |token: &T| -> Cow<str> {
-            let s = Token::Comment(format!("; {}", token.to_string()))
-                .to_orgams_string()
-                .unwrap()
-                .to_string();
-            s.into()
+        let comment_token = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
+            let repr = token.to_string();
+            let repr: String = repr.lines()
+                .map(|l| format!(" ; {l}"))
+                .join("\n");
+            let token = Token::Comment(format!("; {repr}", ));
+            let res =  token.to_orgams_string()?;
+            Ok(res.into_owned().into())
         };
+
+        let handle_print = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
+            comment_token(token)
+        };
+
+        let handle_assert = |token: &T| -> Result<Cow<str>, ToOrgamsError>  {
+            comment_token(token)
+        };
+
 
         // XXX strong limitation, does not yet handle 3 args
         let handle_opcode = |token: &T| -> String {
@@ -293,6 +306,16 @@ T::TestKind: ToOrgams
             content
         };
 
+        // An include is injected in the file
+        // FNAME must be encoded within a string. TO improve this aspect, it is necessary to assemble the file and manipulate the `Env` and its symbols table
+        let handle_include = |token: &T| -> Result<String, ToOrgamsError> {
+            let fname = token.include_fname().string();
+            let mut include = format!(" ; START Included from {fname}");
+            let content = convert_from(fname)?;
+            include.push_str(&format!(" ; STOP Included from {fname}"));
+            Ok(include)
+        };
+
         // This is the default behavior that changes nothing
         let repr = if self.is_opcode() {
             Cow::owned(handle_opcode(self))
@@ -300,7 +323,7 @@ T::TestKind: ToOrgams
             handle_macro_definition(self)
         }
         else if self.is_print() {
-            handle_print(self)
+            handle_print(self)?
         }
         else if self.is_call_macro_or_build_struct() {
             handle_macro_call(self)
@@ -313,6 +336,12 @@ T::TestKind: ToOrgams
         }
         else if self.is_if() {
             handle_if(self).into()
+        }
+        else if self.is_include() {
+            handle_include(self)?.into()
+        }
+        else if self.is_assert() {
+            handle_assert(self)?.into()
         }
         else {
             handle_standard_directive(self)
@@ -374,22 +403,33 @@ impl<T: ToOrgams> ToOrgams for &[T] {
     }
 }
 
+pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
+    let lst = parse_z80(code)
+    .map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e.to_string())))?;
+    let lst = lst.as_slice();
+    lst.to_orgams_string()
+        .map(|s| s.into_owned())
+}
+
+pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
+    let p = p.as_ref();
+    let code = std::fs::read_to_string(p)
+        .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", p, e.to_string())))?;
+    convert_source(&code)
+    .map_err(|e| format!("Error while handling {}. {}", p, e.to_string()).into())
+}
+
 /// COnvert a basm txt source file as a orgams text source file.
 /// There are tons of current limitations. I have only implemented what I need
 /// TODO - convert expressions to be orgams compatible. REwrite them ? Write parenthesis ?
 /// TODO - rewrite macros
-pub fn convert_source<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
+pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     src: P1,
     tgt: P2
 ) -> Result<(), ToOrgamsError> {
     let src = src.as_ref();
     let tgt = tgt.as_ref();
-    let code = std::fs::read_to_string(src)
-        .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", src, e.to_string())))?;
-    let lst = parse_z80(code)
-        .map_err(|e| ToOrgamsError(format!("Error while parsing {}. {}", src, e.to_string())))?;
-    let lst = lst.as_slice();
-    let orgams = lst.to_orgams_string()?;
+    let orgams = convert_from(src)?;
     std::fs::write(tgt, orgams.as_bytes())
         .map_err(|e| format!("Error while saving {}. {}", tgt, e.to_string()).into())
 }

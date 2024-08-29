@@ -1,5 +1,5 @@
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
-use cpclib_asm::orgams::convert_source;
+use cpclib_asm::orgams::{convert_from_to, convert_source};
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
@@ -69,7 +69,7 @@ impl Runner for OrgamsRunner {
             if from.is_dir() {
                 let src = matches.get_one::<String>("src").unwrap();
                 let tgt = matches.get_one::<String>("dst").unwrap();
-                convert_source(from.join(src), from.join(tgt)).map_err(|e| e.to_string())
+                convert_from_to(from.join(src), from.join(tgt)).map_err(|e| e.to_string())
             }
             else {
                 unimplemented!()

@@ -32,6 +32,8 @@ where Self: Debug + Sized + Sync
         !self.is_directive()
     }
 
+    fn is_assert(&self) -> bool;
+
     fn is_buildcpr(&self) -> bool;
     fn is_assembler_control(&self) -> bool;
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand;
