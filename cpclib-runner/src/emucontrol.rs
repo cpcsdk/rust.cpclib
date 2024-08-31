@@ -49,9 +49,7 @@ impl EmulatorConf {
             match emu {
                 Emulator::Ace(_) => args.push(drive_a.to_string()),
                 Emulator::Cpcec(_) => args.push(drive_a.to_string()),
-                Emulator::Winape(_) => {
-                    args.push(absolute(drive_a.to_string()).unwrap().display().to_string())
-                },
+                Emulator::Winape(_) => args.push(absolute(drive_a).unwrap().display().to_string())
             }
         }
 
@@ -136,7 +134,6 @@ impl UsedEmulator for AceUsedEmulator {
         let folder = robot.emu.screenshots_folder();
         let before_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
             .unwrap()
-            .into_iter()
             .map(|p| p.unwrap().as_path().to_owned())
             .collect();
 
@@ -148,14 +145,13 @@ impl UsedEmulator for AceUsedEmulator {
             RobotImpl::<AceUsedEmulator>::wait_a_bit();
             let after_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
                 .unwrap()
-                .into_iter()
                 .map(|p| p.unwrap().as_path().to_owned())
                 .collect();
             let mut new_screenshots = after_screenshots
                 .difference(&before_screenshots)
                 .cloned()
                 .collect_vec();
-            if new_screenshots.len() > 0 {
+            if !new_screenshots.is_empty() {
                 file = Some(new_screenshots.pop().unwrap());
             }
         }
@@ -309,8 +305,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
     fn press_control_char(&mut self, c: char) {
         self.enigo
-        .key(Key::Control, enigo::Direction::Press)
-        .unwrap();
+            .key(Key::Control, enigo::Direction::Press)
+            .unwrap();
         Self::wait_a_bit();
         self.enigo
             .key(Key::Unicode(c), enigo::Direction::Press)
@@ -412,15 +408,13 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         let load_res = if src.ends_with('o') || src.ends_with('O') {
             // here we directly load an orgams file
-            self
-                .orgams_load(src)
-        } else {
+            self.orgams_load(src)
+        }
+        else {
             // here we need to import
             self.orgams_import(src)
         }
-        .map_err(|screen| (format!("Error while loading {}", src), screen))
-        ;
-
+        .map_err(|screen| (format!("Error while loading {}", src), screen));
 
         let next_res = if let Ok(()) = load_res {
             // No need to do more when we want to edit a file
@@ -457,7 +451,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
             };
             screen.save(&path).unwrap();
             open(&path).unwrap();
-            format!("An error occurred.\n{msg}\nLook at {}.", path.to_string())
+            format!("An error occurred.\n{msg}\nLook at {}.", path)
         })
     }
 
@@ -465,11 +459,12 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.click_char('j');
         Ok(())
     }
-    fn orgams_wait_import(&mut self)  -> Result<(), Screenshot> {
+
+    fn orgams_wait_import(&mut self) -> Result<(), Screenshot> {
         self.orgams_wait_save()
     }
 
-    fn orgams_wait_save(&mut self)  -> Result<(), Screenshot> {
+    fn orgams_wait_save(&mut self) -> Result<(), Screenshot> {
         loop {
             let screen = self.screenshot();
             let coord_of_interest = (0, 48);
@@ -512,7 +507,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save()
     }
-
 
     fn orgams_import(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         self.type_text("ùo");
@@ -559,7 +553,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         if result
             .pixels()
-            .into_iter()
             .any(|p| p == &Rgba([99, 247, 99, 255]) || p == &Rgba([113, 243, 107, 255]))
         {
             Ok(())
@@ -787,7 +780,7 @@ impl RunnerWithClap for EmuControlledRunner {
 pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder()
-            .map_err(|e| format!("Unable to clear the cache folder. {}", e.to_string()))?;
+            .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
     }
 
     let builder = EmulatorConf::builder()
@@ -863,7 +856,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
             if !exists && !remove {
                 let src = format!("roms://{rom}");
                 println!("Install {} in {}", src, dst);
-                let data = EmbeddedRoms::get(&src).expect(&format!("{src} not embedded"));
+                let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
                 std::fs::write(&dst, data.data).unwrap();
             }
             else if exists && remove {
@@ -913,8 +906,8 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
                 let (backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
 
                 std::os::unix::fs::symlink(
-                    std::path::absolute(&albireo).unwrap(),
-                    std::path::absolute(&emu_folder).unwrap()
+                    std::path::absolute(albireo).unwrap(),
+                    std::path::absolute(emu_folder).unwrap()
                 )
                 .unwrap();
             }
@@ -981,22 +974,20 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
                     unimplemented!()
                 }
             }
+            else if (jump || edit) && !cli.keepemulator {
+                robot.close();
+                Err("You must request to keep the emulator open with -k".to_string())
+            }
             else {
-                if (jump || edit) && !cli.keepemulator {
-                    robot.close();
-                    Err("You must request to keep the emulator open with -k".to_string())
-                }
-                else {
-                    println!("!!! Current limitation: Ace must be configure as\n - Amstrad old\n - with a French keyboard\n - a French firmware\n - Unidos with nova and albireo\n - and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
-                    robot.handle_orgams(
-                        cli.drive_a.as_ref().map(|s| s.as_str()),
-                        cli.albireo.as_ref().map(|s| s.as_str()),
-                        &src,
-                        dst.as_ref().map(|s| s.as_str()),
-                        jump,
-                        edit
-                    )
-                }
+                println!("!!! Current limitation: Ace must be configure as\n - Amstrad old\n - with a French keyboard\n - a French firmware\n - Unidos with nova and albireo\n - and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
+                robot.handle_orgams(
+                    cli.drive_a.as_deref(),
+                    cli.albireo.as_deref(),
+                    &src,
+                    dst.as_deref(),
+                    jump,
+                    edit
+                )
             }
         },
 

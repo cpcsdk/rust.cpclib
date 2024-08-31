@@ -65,7 +65,7 @@ impl Display for Task {
             Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
-            Task::Xfer(s) => (XFER_CMDS[0], s),
+            Task::Xfer(s) => (XFER_CMDS[0], s)
         };
 
         write!(

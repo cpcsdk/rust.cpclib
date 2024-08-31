@@ -123,20 +123,20 @@ impl Emulator {
 impl AceVersion {
     pub fn screenshots_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration();
-        let path = conf.cache_folder().join("export").join("screenshot");
-        path
+
+        conf.cache_folder().join("export").join("screenshot")
     }
 
     pub fn roms_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration();
-        let path = conf.cache_folder().join("media").join("rom");
-        path
+
+        conf.cache_folder().join("media").join("rom")
     }
 
     pub fn albireo_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration();
-        let path = conf.cache_folder().join("media").join("albireo1");
-        path
+
+        conf.cache_folder().join("media").join("albireo1")
     }
 }
 

@@ -15,7 +15,7 @@ where D: Deserializer<'de> {
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(&s).or(Some(vec![])).unwrap();
+            let r = shlex::split(s).or(Some(vec![])).unwrap();
             r.into_iter()
                 .flat_map(|s| expand_glob(s.as_ref()))
                 .map(|s| {
@@ -49,8 +49,7 @@ where D: Deserializer<'de> {
                 Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
             let res = res
                 .into_iter()
-                .map(|s| self.paths_form_str(&s))
-                .flatten()
+                .flat_map(|s| self.paths_form_str(s))
                 .collect::<Vec<_>>();
             Ok(res)
         }

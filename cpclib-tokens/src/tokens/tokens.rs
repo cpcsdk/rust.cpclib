@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use cpclib_common::smallvec::SmallVec;
-use either::Either;
 
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
@@ -364,16 +363,15 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn org_first(&self) -> &Self::Expr {
             match self {
-                Self::Org {val1, .. } => val1,
+                Self::Org { val1, .. } => val1,
                 _ => unreachable!()
             }
         }
 
-    
         #[inline]
         fn org_second(&self) -> Option<&Self::Expr> {
             match self {
-                Self::Org {val2, .. } => val2.as_ref(),
+                Self::Org { val2, .. } => val2.as_ref(),
                 _ => unreachable!()
             }
         }
@@ -578,7 +576,7 @@ macro_rules! listing_element_impl_most_methods {
 
         fn crunched_section_kind(&self) -> &CrunchType {
             match self {
-                Self::CrunchedSection(kind, _, ..) => kind,
+                Self::CrunchedSection(kind, ..) => kind,
                 _ => unreachable!()
             }
         }

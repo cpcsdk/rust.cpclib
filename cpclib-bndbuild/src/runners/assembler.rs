@@ -1,5 +1,5 @@
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
-use cpclib_asm::orgams::{convert_from_to, convert_source};
+use cpclib_asm::orgams::convert_from_to;
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{handle_arguments, EmuCli};

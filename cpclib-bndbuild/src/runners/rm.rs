@@ -39,10 +39,10 @@ impl Runner for RmRunner {
         {
             let fname = Utf8Path::new(&fname);
             let res = if fname.is_dir() {
-                std::fs::remove_dir_all(&fname)
+                std::fs::remove_dir_all(fname)
             }
             else {
-                std::fs::remove_file(&fname)
+                std::fs::remove_file(fname)
             };
 
             match res {

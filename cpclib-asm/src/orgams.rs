@@ -5,13 +5,14 @@ use beef::lean::Cow;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
-    BinaryOperation, BinaryTransformation, DataAccess, DataAccessElem, Expr, ExprElement, ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
+    BinaryOperation, BinaryTransformation, DataAccess, DataAccessElem, Expr, ExprElement,
+    ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
 };
 
 use crate::{
-    parse_z80, LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan, ParserContext, ParserContextBuilder, SourceString, TokenExt, Z80Span
+    parse_z80, LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan,
+    ParserContext, ParserContextBuilder, SourceString, TokenExt, Z80Span
 };
-
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
     let ctx = Box::new(
@@ -31,14 +32,14 @@ impl Display for ToOrgamsError {
         f.write_str(&self.0)
     }
 }
-impl Into<ToOrgamsError> for String {
-    fn into(self) -> ToOrgamsError {
-        ToOrgamsError(self)
+impl From<String> for ToOrgamsError {
+    fn from(val: String) -> Self {
+        ToOrgamsError(val)
     }
 }
-impl Into<ToOrgamsError> for &std::io::Error {
-    fn into(self) -> ToOrgamsError {
-        let content = self.to_string();
+impl From<&std::io::Error> for ToOrgamsError {
+    fn from(val: &std::io::Error) -> Self {
+        let content = val.to_string();
         content.into()
     }
 }
@@ -53,7 +54,7 @@ macro_rules! macro_params_to_orgams {
         fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
             let repr: String = if self.is_single() {
                 let arg = self.single_argument();
-                let (_ctx ,mut code) = ctx_and_span(unsafe{std::mem::transmute(arg.deref())});
+                let (_ctx, mut code) = ctx_and_span(unsafe { std::mem::transmute(arg.deref()) });
                 let value = crate::located_expr(&mut code);
                 match value {
                     Ok(expr) => expr.to_orgams_string()?.into_owned(),
@@ -68,7 +69,6 @@ macro_rules! macro_params_to_orgams {
         }
     };
 }
-
 
 impl ToOrgams for MacroParam {
     macro_params_to_orgams!();
@@ -263,10 +263,8 @@ where
             let name = token.macro_call_name();
             let arguments = token
                 .macro_call_arguments()
-                .into_iter()
-                .map(|s| {
-                  s.to_orgams_string().unwrap()
-                })
+                .iter()
+                .map(|s| s.to_orgams_string().unwrap())
                 .join(",");
 
             let repr = format!("{name}({arguments})");
@@ -290,38 +288,42 @@ where
             Ok(res.into_owned().into())
         };
 
-        let handle_org = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
+        let handle_org = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
             let org1 = token.org_first();
             let org2 = token.org_second();
 
             let org1 = org1.to_orgams_string()?;
             let repr = if let Some(org2) = org2 {
                 format!("ORG {}, {}", org1, org2.to_orgams_string()?)
-            } else {
+            }
+            else {
                 format!("ORG {}", org1)
             };
 
             Ok(repr.into())
         };
 
-        let handle_data = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
-            let exprs = token.data_exprs()
+        let handle_data = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
+            let exprs = token
+                .data_exprs()
                 .iter()
                 .map(|e| e.to_orgams_string())
                 .collect::<Result<Vec<_>, ToOrgamsError>>()?;
             let exprs = exprs.into_iter().join(",");
             let mne = if token.is_db() {
                 "BYTE"
-            } else if token.is_dw(){
+            }
+            else if token.is_dw() {
                 "WORD"
-            } else {
+            }
+            else {
                 unreachable!()
             };
 
             Ok(format!("{} {}", mne, exprs).into())
         };
 
-        let handle_run = |token: &T|  -> Result<Cow<str>, ToOrgamsError> { 
+        let handle_run = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
             let repr = format!("ENT {}", token.run_expr().to_orgams_string()?);
             Ok(repr.into())
         };
@@ -405,7 +407,7 @@ where
             assert!(token.incbin_offset().is_none());
             assert_eq!(token.incbin_transformation(), &BinaryTransformation::None);
 
-            Ok(repr.into())
+            Ok(repr)
         };
 
         // This is the default behavior that changes nothing
@@ -413,7 +415,7 @@ where
             Cow::owned(handle_opcode(self))
         }
         else if self.is_org() {
-            handle_org(self)?.into()
+            handle_org(self)?
         }
         else if self.is_macro_definition() {
             handle_macro_definition(self)
@@ -436,15 +438,14 @@ where
         else if self.is_incbin() {
             handle_incbin(self)?.into()
         }
-        else if self.is_assert() || self.is_breakpoint() || self.is_print() 
-         || self.is_save() {
-            comment_token(self)?.into()
+        else if self.is_assert() || self.is_breakpoint() || self.is_print() || self.is_save() {
+            comment_token(self)?
         }
         else if self.is_db() || self.is_dw() {
-            handle_data(self)?.into()
+            handle_data(self)?
         }
         else if self.is_run() {
-            handle_run(self)?.into()
+            handle_run(self)?
         }
         else {
             handle_standard_directive(self)
@@ -507,8 +508,7 @@ impl<T: ToOrgams> ToOrgams for &[T] {
 }
 
 pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
-    let lst = parse_z80(code)
-        .map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e.to_string())))?;
+    let lst = parse_z80(code).map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e)))?;
     let lst = lst.as_slice();
     lst.to_orgams_string().map(|s| s.into_owned())
 }
@@ -516,9 +516,8 @@ pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
 pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
     let p = p.as_ref();
     let code = std::fs::read_to_string(p)
-        .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", p, e.to_string())))?;
-    convert_source(&code)
-        .map_err(|e| format!("Error while handling {}. {}", p, e.to_string()).into())
+        .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", p, e)))?;
+    convert_source(&code).map_err(|e| format!("Error while handling {}. {}", p, e).into())
 }
 
 /// COnvert a basm txt source file as a orgams text source file.
@@ -533,7 +532,7 @@ pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     let tgt = tgt.as_ref();
     let orgams = convert_from(src)?;
     std::fs::write(tgt, orgams.as_bytes())
-        .map_err(|e| format!("Error while saving {}. {}", tgt, e.to_string()).into())
+        .map_err(|e| format!("Error while saving {}. {}", tgt, e).into())
 }
 
 #[cfg(test)]
@@ -546,8 +545,7 @@ mod test {
 
     use super::{ctx_and_span, ToOrgams};
     use crate::{
-        located_expr, AssemblerError, InnerZ80Span, ParserContext, ParserContextBuilder,
-        Z80ParserError, Z80Span
+        located_expr, AssemblerError, InnerZ80Span, ParserContext, Z80ParserError, Z80Span
     };
 
     #[derive(Debug)]
@@ -564,8 +562,6 @@ mod test {
             &self.res
         }
     }
-
-
 
     fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,

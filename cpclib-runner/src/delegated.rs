@@ -58,7 +58,7 @@ impl DelegateApplicationDescription {
 
         let resp = self
             .download()
-            .map_err(|e| format!("Unable to download the expected file. {}", e.to_string()))?;
+            .map_err(|e| format!("Unable to download the expected file. {}", e))?;
         let mut input = resp.into_reader();
 
         // uncompress it

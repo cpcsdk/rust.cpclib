@@ -28,8 +28,7 @@ pub fn string_to_nb(source: &str) -> u32 {
     }
 }
 
-fn main() -> Result<(), HideurError>{
-    let matches = hideur_build_arg_parser()
-        .get_matches();
+fn main() -> Result<(), HideurError> {
+    let matches = hideur_build_arg_parser().get_matches();
     hideur_handle(&matches)
 }

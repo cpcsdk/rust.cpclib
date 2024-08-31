@@ -2,14 +2,10 @@ use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 
 pub const MARTINE_CMD: &str = "martine";
 
+#[derive(Default)]
 pub enum MartineVersion {
+    #[default]
     V0_39
-}
-
-impl Default for MartineVersion {
-    fn default() -> Self {
-        MartineVersion::V0_39
-    }
 }
 
 impl MartineVersion {

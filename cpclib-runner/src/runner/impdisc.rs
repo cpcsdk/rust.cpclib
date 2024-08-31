@@ -2,14 +2,10 @@ use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 
 pub const IMPDISC_CMD: &str = "impdsk";
 
+#[derive(Default)]
 pub enum ImpDskVersion {
+    #[default]
     V0_24
-}
-
-impl Default for ImpDskVersion {
-    fn default() -> Self {
-        ImpDskVersion::V0_24
-    }
 }
 
 impl ImpDskVersion {

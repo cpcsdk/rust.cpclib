@@ -1,8 +1,10 @@
 use cpclib_disc::hideur::{hideur_build_arg_parser, hideur_handle};
 use cpclib_runner::runner::{Runner, RunnerWithClap};
-use crate::{built_info, task::HIDEUR_CMDS};
 
-pub const HIDEUR_CMD: &str = &"hideur";
+use crate::built_info;
+use crate::task::HIDEUR_CMDS;
+
+pub const HIDEUR_CMD: &str = "hideur";
 
 pub struct HideurRunner {
     command: clap::Command
@@ -10,8 +12,8 @@ pub struct HideurRunner {
 
 impl Default for HideurRunner {
     fn default() -> Self {
-		let command = hideur_build_arg_parser();
-		let command = command.no_binary_name(true).after_help(format!(
+        let command = hideur_build_arg_parser();
+        let command = command.no_binary_name(true).after_help(format!(
             "{} {} embedded by {} {}",
             cpclib_disc::built_info::PKG_NAME,
             cpclib_disc::built_info::PKG_VERSION,
@@ -19,7 +21,7 @@ impl Default for HideurRunner {
             built_info::PKG_VERSION
         ));
         Self { command }
-	}
+    }
 }
 
 impl RunnerWithClap for HideurRunner {
@@ -27,7 +29,6 @@ impl RunnerWithClap for HideurRunner {
         &self.command
     }
 }
-
 
 impl Runner for HideurRunner {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {

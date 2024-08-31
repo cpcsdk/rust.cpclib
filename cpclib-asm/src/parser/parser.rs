@@ -4168,8 +4168,8 @@ pub fn parse_call_jp_or_jr(
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
-        let flag_test = opt(terminated(parse_flag_test.with_taken(), parse_comma))
-            .parse_next(input)?;
+        let flag_test =
+            opt(terminated(parse_flag_test.with_taken(), parse_comma)).parse_next(input)?;
 
         let dst = cut_err(
             alt((
@@ -4203,7 +4203,7 @@ pub fn parse_call_jp_or_jr(
             other => other
         };
 
-        let flag_test = flag_test.map(|(f,s)| {
+        let flag_test = flag_test.map(|(f, s)| {
             let span = (*input).update_slice(s);
             LocatedDataAccess::FlagTest(f, span.into())
         });
@@ -5584,9 +5584,7 @@ pub fn token_function<'a>(
 
 /// Parse the duration function
 pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    let (token, span) = token_function("duration")
-        .with_taken()
-        .parse_next(input)?;
+    let (token, span) = token_function("duration").with_taken().parse_next(input)?;
 
     let span = (*input).update_slice(span).into();
     Ok(LocatedExpr::UnaryTokenOperation(
@@ -5598,9 +5596,7 @@ pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parse
 
 /// Parse the single opcode assembling function
 pub fn parse_assemble(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
-    let (token, span) = token_function("opcode")
-        .with_taken()
-        .parse_next(input)?;
+    let (token, span) = token_function("opcode").with_taken().parse_next(input)?;
 
     let span = (*input).update_slice(span).into();
     Ok(LocatedExpr::UnaryTokenOperation(

@@ -44,7 +44,6 @@ where Self: Debug + Sized + Sync
     fn org_first(&self) -> &Self::Expr;
     fn org_second(&self) -> Option<&Self::Expr>;
 
-
     fn is_comment(&self) -> bool;
     fn is_set(&self) -> bool;
 
@@ -162,7 +161,6 @@ where Self: Debug + Sized + Sync
 
     fn is_run(&self) -> bool;
     fn run_expr(&self) -> &Self::Expr;
-
 
     fn is_print(&self) -> bool;
     fn is_breakpoint(&self) -> bool;

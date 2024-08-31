@@ -62,9 +62,7 @@ pub fn execute(task: &Task) -> Result<(), String> {
         Task::Disc(_) => DISC_RUNNER.run(task.args()),
         Task::Echo(_) => ECHO_RUNNER.run(task.args()),
         Task::Extern(_) => EXTERN_RUNNER.run(task.args()),
-        Task::Hideur(_) => {
-            HideurRunner::default().run(task.args())
-        }
+        Task::Hideur(_) => HideurRunner::default().run(task.args()),
         Task::ImgConverter(_) => IMGCONV_RUNNER.run(task.args()),
         Task::ImpDsk(_) => {
             DelegatedRunner {

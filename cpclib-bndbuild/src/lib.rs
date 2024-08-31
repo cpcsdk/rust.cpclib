@@ -74,13 +74,11 @@ pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuil
             let cmd = matches
                 .get_many::<String>("target")
                 .unwrap()
-                .into_iter()
                 .map(|s| s.as_str())
                 .join(" ");
 
-            let task: Task =
-                serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::ParseError(e))?;
-            execute(&task).map_err(|e| BndBuilderError::AnyError(e))?;
+            let task: Task = serde_yaml::from_str(&cmd).map_err(BndBuilderError::ParseError)?;
+            execute(&task).map_err(BndBuilderError::AnyError)?;
             return Ok(());
         }
 

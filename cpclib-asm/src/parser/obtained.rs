@@ -1163,13 +1163,13 @@ impl ListingElement for LocatedToken {
     type TestKind = LocatedTestKind;
 
     is_stuff_delegate!(
-        is_print is_buildcpr is_label is_equ 
-        is_assign is_module is_directive is_rorg 
-        is_iterate is_for is_repeat_until is_repeat 
-        is_macro_definition is_if is_include is_incbin 
-        is_call_macro_or_build_struct is_function_definition 
-        is_crunched_section is_confined is_switch 
-        is_db is_dw is_str is_set is_comment is_org 
+        is_print is_buildcpr is_label is_equ
+        is_assign is_module is_directive is_rorg
+        is_iterate is_for is_repeat_until is_repeat
+        is_macro_definition is_if is_include is_incbin
+        is_call_macro_or_build_struct is_function_definition
+        is_crunched_section is_confined is_switch
+        is_db is_dw is_str is_set is_comment is_org
         is_assembler_control is_while is_assert
         is_run is_breakpoint is_save
     );
@@ -1503,16 +1503,16 @@ impl ListingElement for LocatedTokenInner {
                 ref extended_offset,
                 off,
                 transformation
-            } => Cow::Owned(
-                Token::Incbin { 
-                    fname: fname.to_expr().into_owned(), 
-                    offset: offset.as_ref().map(|e| e.to_expr().into_owned()), 
-                    length: length.as_ref().map(|e| e.to_expr().into_owned()), 
-                    extended_offset:  extended_offset.as_ref().map(|e| e.to_expr().into_owned()), 
-                    off: *off, 
+            } => {
+                Cow::Owned(Token::Incbin {
+                    fname: fname.to_expr().into_owned(),
+                    offset: offset.as_ref().map(|e| e.to_expr().into_owned()),
+                    length: length.as_ref().map(|e| e.to_expr().into_owned()),
+                    extended_offset: extended_offset.as_ref().map(|e| e.to_expr().into_owned()),
+                    off: *off,
                     transformation: *transformation
-                }
-            ),
+                })
+            },
             Self::Macro {
                 name,
                 params,

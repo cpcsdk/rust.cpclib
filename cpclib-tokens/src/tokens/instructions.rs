@@ -996,13 +996,13 @@ impl fmt::Display for Token {
                         TestKind::LabelNused(l) => format!("IFNUSED {}", l),
                     };
 
-                    let code_part = get_code_string(&code);
+                    let code_part = get_code_string(code);
                     write!(f, "\t{}{}\n{}", if first {""} else {"ELSE "},test_part, code_part)?;
                     first = false;
                 }
 
                 if let Some(code) = default {
-                    let code_part = get_code_string(&code);
+                    let code_part = get_code_string(code);
                     write!(f, "{code_part}")?;
                 }
 
