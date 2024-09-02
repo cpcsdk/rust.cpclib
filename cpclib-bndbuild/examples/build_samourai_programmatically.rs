@@ -21,7 +21,7 @@ fn main() {
 
     Rule::new(
         &["clean"],
-        &[],
+        &[] as &[&str],
         &[Task::new_rm("samourai.{lst,sym}").set_ignore_errors(true)]
     ),
 

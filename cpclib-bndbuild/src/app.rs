@@ -34,43 +34,62 @@ pub enum BndBuilderCommand {
     Dot(BndBuilder)
 }
 
+
 impl BndBuilderCommand {
-    // Execute the command and self destruct
-    pub fn execute(self) -> Result<(), BndBuilderError> {
+    pub fn is_build(&self) -> bool {
+        match self {
+            Self::Build { .. } => true,
+            _ => false
+        }
+    }
+}
+
+impl BndBuilderCommand {
+    // Execute the first step of the  command and return None if if its finished are another command with this step removed
+    pub fn execute_one_step(self) -> Result<Option<Self>, BndBuilderError> {
         match self {
             BndBuilderCommand::InnerHelp(runner) => {
-                Ok(Self::execute_help(runner.as_str()))
+                Self::execute_help(runner.as_str());
+                Ok(None)
             },
             BndBuilderCommand::Version => {
-                Ok(Self::execute_version())
+                Self::execute_version();
+                Ok(None)
+
             },
             BndBuilderCommand::Init => {
-                Self::execute_init()
+                Self::execute_init()?;
+                Ok(None)
             },
             BndBuilderCommand::Direct(args) => {
-                Self::execute_direct(args.as_str())
+                Self::execute_direct(args.as_str())?;
+                Ok(None)
             }
             BndBuilderCommand::AddTask { task, dependencies, kind, fname, builder} => {
-              Self::execute_add_task(&task, &dependencies, &kind,  builder, &fname)
+              Self::execute_add_task(&task, &dependencies, &kind,  builder, &fname)?;
+              Ok(None)
             },
             BndBuilderCommand::Show(content) => {
-               Ok(Self::execute_show(content))
+               Self::execute_show(content);
+               Ok(None)
             }
             BndBuilderCommand::List(builder) => {
-                Ok(Self::execute_list(builder))
+                Self::execute_list(builder);
+                Ok(None)
             },
             BndBuilderCommand::Build { targets, watch, builder } => {
                 Self::execute_build(targets.as_ref().map(|v| v.as_slice()), watch, builder)
             },
             BndBuilderCommand::Dot(builder) => {
-                Ok(Self::execute_dot(builder))
+                Self::execute_dot(builder);
+                Ok(None)
             },
         }
     }
 
 
     /// TODO wire parallal execution
-    fn execute_build<P: AsRef<Utf8Path>>(targets: Option<&[P]>, watch: bool, builder: BndBuilder) -> Result<(), BndBuilderError> {
+    fn execute_build<P: AsRef<Utf8Path>>(targets: Option<&[P]>, watch: bool, builder: BndBuilder) -> Result<Option<Self>, BndBuilderError> {
         let targets_provided = targets.is_some();
         let targets = match targets {
             Some(targets) => {

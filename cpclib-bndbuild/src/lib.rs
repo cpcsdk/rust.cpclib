@@ -1,7 +1,9 @@
 #![feature(cfg_match)]
 
 use std::env::current_dir;
+use std::process::exit;
 
+use app::BndBuilderApp;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
@@ -20,220 +22,19 @@ pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
+pub mod app;
 
 pub use builder::*;
+pub use cpclib_common;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-pub fn process_matches(cmd: Command, matches: &ArgMatches) -> Result<(), BndBuilderError> {
-    {
-        // handle the real behavior of bndbuild
-        if matches.value_source("help") == Some(parser::ValueSource::CommandLine) {
-            match matches.get_one::<String>("help").unwrap().as_str() {
-                "bndbuild" => {
-                    cmd.clone().print_long_help().unwrap();
-                },
-                "basm" => {
-                    BASM_RUNNER.print_help();
-                },
-                "img2cpc" => {
-                    IMGCONV_RUNNER.print_help();
-                },
-                "rm" => {
-                    RM_RUNNER.print_help();
-                },
-                "xfer" => {
-                    XFER_RUNNER.print_help();
-                },
-                _ => unimplemented!()
-            };
-
-            return Ok(());
-        }
-
-        if matches.get_flag("version") {
-            println!(
-                "{}\n{}\n{}\n{}",
-                cmd.clone().render_long_version(),
-                BASM_RUNNER.get_clap_command().render_long_version(),
-                IMGCONV_RUNNER.get_clap_command().render_long_version(),
-                XFER_RUNNER.get_clap_command().render_long_version()
-            );
-            return Ok(());
-        }
-
-        if matches.get_flag("init") {
-            init_project(None)?;
-            println!("Empty project initialized");
-            return Ok(());
-        }
-
-        if matches.get_flag("direct") {
-            let cmd = matches
-                .get_many::<String>("target")
-                .unwrap()
-                .map(|s| s.as_str())
-                .join(" ");
-
-            let task: Task = serde_yaml::from_str(&cmd).map_err(BndBuilderError::ParseError)?;
-            execute(&task).map_err(BndBuilderError::AnyError)?;
-            return Ok(());
-        }
-
-        // Get the file
-        let fname = if let Some(fname) = matches.get_one::<String>("file") {
-            fname.as_str()
-        }
-        else {
-            let mut selected = &EXPECTED_FILENAMES[1];
-            for fname in EXPECTED_FILENAMES {
-                if Utf8Path::new(fname).exists() {
-                    selected = fname;
-                }
-            }
-            selected
-        };
-
-        let add = matches.get_one::<String>("add");
-
-        // Read it
-        if !Utf8Path::new(fname).exists() {
-            if add.is_some() {
-                std::fs::File::create(fname).expect("create empty {fname}");
-            }
-            else {
-                eprintln!("{fname} does not exists.");
-                if let Some(Some(fname)) = matches
-                    .get_many::<String>("target")
-                    .map(|s| s.into_iter().next())
-                {
-                    if fname.ends_with("bndbuild.yml") {
-                        eprintln!("Have you forgotten to do \"-f {}\" ?", fname);
-                    }
-                }
-
-                if matches
-                    .get_many::<String>("target")
-                    .map(|s| s.into_iter().any(|s| s == "init"))
-                    .unwrap_or(false)
-                {
-                    eprintln!("Maybe you wanted to do --init.");
-                }
-                std::process::exit(1);
-            }
-        }
-
-        // Get the variables definition
-        let definitions = if let Some(definitions) = matches.get_many::<String>("DEFINE_SYMBOL") {
-            definitions
-                .into_iter()
-                .map(|definition| {
-                    let (symbol, value) = {
-                        match definition.split_once("=") {
-                            Some((symbol, value)) => (symbol, value),
-                            None => (definition.as_str(), "1")
-                        }
-                    };
-                    (symbol, value)
-                })
-                .collect_vec()
-        }
-        else {
-            Default::default()
-        };
-
-        let (_path, content) = BndBuilder::decode_from_fname_with_definitions(fname, &definitions)?;
-        if matches.get_flag("show") {
-            println!("{content}");
-            return Ok(());
-        }
-
-        let builder = BndBuilder::from_string(content)?;
-
-        if let Some(add) = matches.get_one::<String>("add") {
-            let targets = [add];
-            let dependencies = matches
-                .get_many::<String>("dep")
-                .map(|l| l.collect_vec())
-                .unwrap_or_default();
-            let kind = matches.get_one::<String>("kind").unwrap();
-
-            let builder = builder.add_default_rule(&targets, &dependencies, kind);
-            builder.save(fname).expect("Error when saving the file");
-            return Ok(());
-        }
-
-        // Print list if asked
-        if matches.get_flag("list") {
-            for rule in builder.rules() {
-                println!(
-                    "{}{}: {}",
-                    if rule.is_enabled() { "" } else { "[disabled] " },
-                    rule.targets().iter().map(|f| f.to_string()).join(" "),
-                    rule.dependencies().iter().map(|f| f.to_string()).join(" "),
-                );
-                if let Some(help) = rule.help() {
-                    println!("\t{}", help);
-                }
-            }
-            return Ok(());
-        }
-
-        // Get the targets
-        let targets_provided = matches.contains_id("target");
-        let targets = if !targets_provided {
-            if let Some(first) = builder.default_target() {
-                vec![first]
-            }
-            else {
-                return Err(BndBuilderError::NoTargets);
-            }
-        }
-        else {
-            matches
-                .get_many::<String>("target")
-                .unwrap()
-                .map(|s| s.as_ref())
-                .collect::<Vec<&Utf8Path>>()
-        };
-
-        if matches.get_flag("dot") {
-            let dot = builder.to_dot();
-            println!("{dot}")
-        }
-        else {
-            // Execute the targets
-            let mut first_loop = true;
-            let watch_requested = matches.get_flag("watch");
-            loop {
-                for tgt in targets.iter() {
-                    if first_loop || builder.outdated(tgt).unwrap_or(false) {
-                        builder.execute(tgt).map_err(|e| {
-                            if targets_provided {
-                                e
-                            }
-                            else {
-                                BndBuilderError::DefaultTargetError {
-                                    source: Box::new(e)
-                                }
-                            }
-                        })?;
-                    }
-                }
-
-                if !watch_requested {
-                    break;
-                }
-
-                std::thread::sleep(std::time::Duration::from_millis(1000)); // sleep 1s before trying to build
-                first_loop = false;
-            }
-        }
-    }
-
-    Ok(())
+pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
+    let cmd = BndBuilderApp::from_matches(matches.clone());
+    cmd.command()?
+        .execute_one_step()
 }
 
 pub fn build_args_parser() -> clap::Command {

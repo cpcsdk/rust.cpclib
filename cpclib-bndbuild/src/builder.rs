@@ -34,12 +34,17 @@ impl Deref for BndBuilder {
 }
 
 impl BndBuilder {
-    pub fn add_default_rule<S: AsRef<str>>(
+    pub fn add_default_rule<S1, S2>
+    (
         self,
-        targets: &[S],
-        dependencies: &[S],
+        targets: &[S1],
+        dependencies: &[S2],
         kind: &str
-    ) -> Self {
+    ) -> Self 
+    where 
+    S1: AsRef<str>,
+    S2: AsRef<str>
+    {
         let rule = Rule::new_default(targets, dependencies, kind);
         let mut rules = self.inner.into_owner();
         rules.add(rule);
