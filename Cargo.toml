@@ -23,7 +23,7 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu",
-  "cpclib",
+  "cpclib", "cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
 
@@ -138,6 +138,7 @@ path-absolutize = "3.1.1"
 pretty_assertions = "1.4.0"
 proc-macro2 = "1.0.86"
 quote = "1.0.36"
+ratatui = "0.28.1"
 rayon = "1.10.0"
 regex = "1.10.6"
 remain = "0.2.14"

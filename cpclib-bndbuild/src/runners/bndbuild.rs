@@ -35,7 +35,7 @@ impl Runner for BndBuildRunner {
 
         // this will change the cwd
         let matches = self.get_matches(itr)?;
-        crate::process_matches(self.command.clone(), &matches).map_err(|e| e.to_string())?;
+        crate::process_matches(&matches).map_err(|e| e.to_string())?;
 
         // restoration of cwd
         std::env::set_current_dir(cwd).unwrap();
