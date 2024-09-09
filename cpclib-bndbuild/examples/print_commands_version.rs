@@ -1,6 +1,4 @@
-use cpclib_bndbuild::event::{
-    BndBuilderObserved, BndBuilderObserverStrong
-};
+use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverStrong};
 use cpclib_bndbuild::BndBuilder;
 
 const YAML_RULES: &str = "

@@ -26,6 +26,13 @@ impl<E: EventObserver> Default for XferRunner<E> {
                     .help("Print version")
                     .action(ArgAction::SetTrue)
             )
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
             .after_help(format!(
                 "{} {} embedded by {} {}",
                 cpclib_xfertool::built_info::PKG_NAME,
@@ -54,6 +61,16 @@ impl<E: EventObserver> Runner for XferRunner<E> {
 
         if matches.get_flag("version") {
             o.emit_stdout(self.get_clap_command().clone().render_version().to_string());
+            return Ok(());
+        }
+
+        if matches.get_flag("help") {
+            o.emit_stdout(
+                self.get_clap_command()
+                    .clone()
+                    .render_long_help()
+                    .to_string()
+            );
             return Ok(());
         }
 

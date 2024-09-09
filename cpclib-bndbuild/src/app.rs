@@ -6,10 +6,11 @@ use clap::{parser, ArgMatches};
 use cpclib_basm::build_args_parser;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EmuControlledRunner;
+use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
 use cpclib_runner::runner::RunnerWithClap;
 
 use crate::event::{BndBuilderObserved, BndBuilderObserverWeak, ListOfBndBuilderObserverStrong};
-use crate::runners::assembler::BasmRunner;
+use crate::runners::assembler::{Assembler, BasmRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
@@ -17,8 +18,8 @@ use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_basm_cmd, is_cp_cmd, is_disc_cmd, is_emuctrl_cmd, is_img2cpc_cmd, is_rm_cmd,
-    is_xfer_cmd, Task
+    is_basm_cmd, is_cp_cmd, is_disc_cmd, is_emuctrl_cmd, is_img2cpc_cmd, is_rasm_cmd, is_rm_cmd,
+    is_xfer_cmd, StandardTaskArguments, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
 
@@ -284,6 +285,16 @@ impl BndBuilderCommand {
         else if is_img2cpc_cmd(runner) {
             ImgConverterRunner::<()>::render_help()
         }
+        else if is_rasm_cmd(runner) {
+            let task = Task::Assembler(
+                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
+                    RasmVersion::default()
+                )),
+                StandardTaskArguments::new("--help")
+            );
+            execute(&task, &()).unwrap();
+            "TODO".into()
+        }
         else if is_rm_cmd(runner) {
             RmRunner::<()>::render_help()
         }
@@ -480,10 +491,14 @@ impl BndBuilderApp {
             }
             else {
                 // Get the targets
-                let targets = matches.get_many::<String>("target").map(|targets_provided| targets_provided
+                let targets = matches
+                    .get_many::<String>("target")
+                    .map(|targets_provided| {
+                        targets_provided
                             .cloned()
                             .map(|s| Utf8PathBuf::from_str(&s).unwrap())
-                            .collect::<Vec<Utf8PathBuf>>());
+                            .collect::<Vec<Utf8PathBuf>>()
+                    });
 
                 let watch_requested = matches.get_flag("watch");
 

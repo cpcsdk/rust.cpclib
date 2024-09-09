@@ -332,7 +332,11 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
                     println!("[{tgt}]\t{line}")
                 }
             },
-            BndBuilderEvent::TaskStderr(..) => todo!(),
+            BndBuilderEvent::TaskStderr(tgt, task, txt) => {
+                for line in txt.lines() {
+                    eprintln!("[{tgt}]\t{line}")
+                }
+            },
             BndBuilderEvent::Stdout(s) => println!("{s}"),
             BndBuilderEvent::Stderr(s) => println!("{s}")
         }

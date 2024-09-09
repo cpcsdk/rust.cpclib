@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::process::Stdio;
 
 use clap::{ArgMatches, Command};
 use cpclib_common::itertools::Itertools;
@@ -75,13 +76,27 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             cmd.arg(arg);
         }
         let mut handle = cmd
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
             .spawn()
+
             .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
-        let status = handle
-            .wait()
+        let output = handle
+            .wait_with_output()
             .map_err(|e| format!("Error while executing {}. {}", &itr[0], e))?;
 
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        if !stdout.is_empty() {
+            o.emit_stdout(stdout);
+        }
+        if !stderr.is_empty() {
+            o.emit_stderr(stderr);
+        }
+        
+        let status = output.status;
         if !status.success() {
             return Err("Error while launching the command.".to_owned());
         }
