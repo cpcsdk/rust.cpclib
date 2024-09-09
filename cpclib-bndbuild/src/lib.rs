@@ -1,28 +1,32 @@
 #![feature(cfg_match)]
 
 use std::env::current_dir;
-use std::process::exit;
 
 use app::BndBuilderApp;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
-use cpclib_runner::runner::RunnerWithClap;
+use cpclib_runner::emucontrol::EMUCTRL_CMD;
+use cpclib_runner::runner::assembler::RASM_CMD;
+use cpclib_runner::runner::emulator::{CPCEC_CMD, WINAPE_CMD};
+use cpclib_runner::runner::impdisc::IMPDISC_CMD;
+use cpclib_runner::runner::martine::MARTINE_CMD;
 use lazy_regex::regex_captures;
-use task::Task;
+use runners::hideur::HIDEUR_CMD;
 use thiserror::Error;
 
 use crate::executor::*;
 pub use crate::BndBuilder;
 
+pub mod app;
 pub mod builder;
 pub mod constraints;
+pub mod event;
 pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
-pub mod app;
 
 pub use builder::*;
 pub use cpclib_common;
@@ -33,21 +37,13 @@ pub mod built_info {
 
 pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
     let cmd = BndBuilderApp::from_matches(matches.clone());
-    cmd.command()?
-        .execute_one_step()
+    cmd.command()?.execute()
 }
 
 pub fn build_args_parser() -> clap::Command {
-    let basm_cmd = cpclib_basm::build_args_parser().name("basm");
-    let img2cpc_cmd = cpclib_imgconverter::build_args_parser()
-        .name("img2cpc")
-        .disable_help_flag(false);
-    let xfer_cmd = cpclib_xfertool::build_args_parser().name("xfer");
-    let disc_cmd = cpclib_disc::dsk_manager_build_arg_parser().name("disc");
-
     Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
-        .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any benedicition crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
+        .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any Benediction crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
         .author("Krusty/Benediction")
         .version(built_info::PKG_VERSION)
         .disable_help_flag(true)
@@ -57,7 +53,26 @@ pub fn build_args_parser() -> clap::Command {
                 .long("help")
                 .short('h')
                 .value_name("CMD")
-                .value_parser(["img2cpc", "basm", "rm", "bndbuild", "xfer"])
+                .value_parser([
+                    EMUCTRL_CMD,
+                    WINAPE_CMD,
+                    CPCEC_CMD,
+                    "basm",
+                    "bndbuild",
+                    "cp",
+                    "dsk",
+                    "disc",
+                    "echo",
+                    "extern",
+                    "img2cpc",
+                    HIDEUR_CMD,
+                    IMPDISC_CMD,
+                    MARTINE_CMD,
+                    "orgams",
+                    RASM_CMD,
+                    "rm",
+                    "xfer",
+                ])
                 .default_missing_value_os("bndbuild")
                 .default_value("bndbuild")
                 .num_args(0..=1)

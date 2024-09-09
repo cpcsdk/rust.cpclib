@@ -1,15 +1,29 @@
+use std::marker::PhantomData;
+
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::event::EventObserver;
 
 use super::Runner;
 use crate::task::ECHO_CMDS;
 
-#[derive(Default)]
-pub struct EchoRunner {}
+pub struct EchoRunner<E: EventObserver> {
+    _phantom: PhantomData<E>
+}
 
-impl Runner for EchoRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Default for EchoRunner<E> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData::<E>
+        }
+    }
+}
+
+impl<E: EventObserver> Runner for EchoRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let txt = itr.iter().map(|s| s.as_ref()).join(" ");
-        println!("{txt}");
+        o.emit_stdout(format!("{txt}\n"));
         Ok(())
     }
 

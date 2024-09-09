@@ -43,8 +43,8 @@ fn main() {
     let deps = rules.to_deps().unwrap();
     println!("Try to show dependencies");
     deps.show_dependencies("samourai.sna");
-    deps.execute("samourai.sna").unwrap();
+    //  deps.execute("samourai.sna").unwrap();
 
     let deps = rules.to_deps().unwrap();
-    deps.execute("distclean").unwrap();
+    // deps.execute("distclean").unwrap();
 }

@@ -1,7 +1,7 @@
 use cpclib_common::camino::Utf8Path;
 
 use super::{ExternRunner, Runner};
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
 
 pub const RASM_CMD: &str = "rasm";
 
@@ -17,7 +17,7 @@ impl ExternAssembler {
         }
     }
 
-    pub fn configuration(&self) -> DelegateApplicationDescription {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             ExternAssembler::Rasm(r) => r.configuration()
         }
@@ -39,7 +39,7 @@ cfg_match! {
     cfg(target_os = "linux") =>
     {
         impl RasmVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
@@ -47,12 +47,12 @@ cfg_match! {
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "rasm",
-                            compile: Some(Box::new(|path: &Utf8Path| -> Result<(), String>{
+                            compile: Some(Box::new(|path: &Utf8Path, o: &E | -> Result<(), String>{
                                 let command = vec!["make"];
-                                ExternRunner::default().inner_run(&command)?;
+                                ExternRunner::default().inner_run(&command, o)?;
 
                                 let command = vec!["mv", "rasm.exe", "rasm"];
-                                ExternRunner::default().inner_run(&command)?;
+                                ExternRunner::default().inner_run(&command, o)?;
 
                                 Ok(())
                             }))

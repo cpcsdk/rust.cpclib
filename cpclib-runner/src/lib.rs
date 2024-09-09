@@ -7,3 +7,4 @@ pub mod delegated;
 pub mod embedded;
 pub mod emucontrol;
 pub mod runner;
+pub mod event;

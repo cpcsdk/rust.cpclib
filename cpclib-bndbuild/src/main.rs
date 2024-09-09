@@ -1,6 +1,8 @@
 use std::process::exit;
 
-use cpclib_bndbuild::{app::BndBuilderApp, build_args_parser, process_matches, BndBuilderError};
+use cpclib_bndbuild::app::BndBuilderApp;
+use cpclib_bndbuild::event::BndBuilderObserverStrong;
+use cpclib_bndbuild::BndBuilderError;
 
 fn main() {
     match inner_main() {
@@ -13,18 +15,16 @@ fn main() {
 }
 
 fn inner_main() -> Result<(), BndBuilderError> {
-    let command = match BndBuilderApp::new()
-        .map_err(|e| {
-            BndBuilderError::AnyError(e.to_string())
-        })?
-        {
-        Some(builder) => {
-            builder.command()?
-        },
-        None => {
-            exit(0)
-        },
-    };
+    let observer = BndBuilderObserverStrong::new_default();
 
-    command.execute_one_step()
+    let command =
+        match BndBuilderApp::new().map_err(|e| BndBuilderError::AnyError(e.to_string()))? {
+            Some(mut app) => {
+                app.add_observer(&observer);
+                app.command()?
+            },
+            None => exit(0)
+        };
+
+    command.execute()
 }

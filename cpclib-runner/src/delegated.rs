@@ -6,7 +6,8 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use ureq::Response;
 
-use crate::runner::runner::{ExternRunner, Runner};
+use crate::runner::{runner::{ExternRunner, Runner}};
+use crate::event::EventObserver;
 
 pub enum ArchiveFormat {
     Raw,
@@ -14,12 +15,12 @@ pub enum ArchiveFormat {
     Zip
 }
 
-pub struct DelegateApplicationDescription {
+pub struct DelegateApplicationDescription<E: EventObserver> {
     pub download_url: &'static str,
     pub folder: &'static str,
     pub exec_fname: &'static str,
     pub archive_format: ArchiveFormat,
-    pub compile: Option<Box<dyn Fn(&Utf8Path) -> Result<(), String>>>
+    pub compile: Option<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>>
 }
 
 pub fn base_cache_foder() -> Utf8PathBuf {
@@ -33,7 +34,7 @@ pub fn clear_base_cache_folder() -> std::io::Result<()> {
     std::fs::remove_dir_all(base_cache_foder())
 }
 
-impl DelegateApplicationDescription {
+impl<E: EventObserver>  DelegateApplicationDescription<E> {
     pub fn is_cached(&self) -> bool {
         self.cache_folder().exists()
     }
@@ -52,32 +53,32 @@ impl DelegateApplicationDescription {
         self.cache_folder().join(self.exec_fname)
     }
 
-    pub fn install(&self) -> Result<(), String> {
+    pub fn install(&self, o: &E) -> Result<(), String> {
         // get the file
         let dest = self.cache_folder();
 
         let resp = self
-            .download()
+            .download(o)
             .map_err(|e| format!("Unable to download the expected file. {}", e))?;
         let mut input = resp.into_reader();
 
         // uncompress it
         match self.archive_format {
             ArchiveFormat::Raw => {
-                println!(">> Save to {}", self.exec_fname());
+                o.emit_stdout(format!(">> Save to {}", self.exec_fname()));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 std::fs::create_dir_all(&dest);
                 std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarGz => {
-                println!(">> Open archive");
+                o.emit_stdout(">> Open archive");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
                 archive.unpack(dest.clone()).unwrap();
             },
             ArchiveFormat::Zip => {
-                println!(">> Unzip archive");
+                o.emit_stdout(">> Unzip archive");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).unwrap();
@@ -85,13 +86,13 @@ impl DelegateApplicationDescription {
         }
 
         if let Some(compile) = &self.compile {
-            println!(">> Compile program");
+            o.emit_stdout(">> Compile program");
 
             let cwd = std::env::current_dir()
                 .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
             std::env::set_current_dir(&dest)
                 .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
-            let res = compile(&dest);
+            let res = compile(&dest, o);
             std::env::set_current_dir(&cwd)
                 .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
             res
@@ -101,31 +102,33 @@ impl DelegateApplicationDescription {
         }
     }
 
-    fn download(&self) -> Result<Response, ureq::Error> {
-        println!(">> Download file {}", self.download_url);
+    fn download(&self, o: &E) -> Result<Response, ureq::Error> {
+        o.emit_stdout(format!(">> Download file {}", self.download_url));
         ureq::get(self.download_url).call()
     }
 }
 
-pub struct DelegatedRunner {
-    pub app: DelegateApplicationDescription,
+pub struct DelegatedRunner<E: EventObserver> {
+    pub app: DelegateApplicationDescription<E>,
     pub cmd: String
 }
 
-impl DelegatedRunner {
-    pub fn new(app: DelegateApplicationDescription, cmd: String) -> Self {
+impl<E: EventObserver>  DelegatedRunner<E> {
+    pub fn new(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
         Self { app, cmd }
     }
 }
 
-impl Runner for DelegatedRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for DelegatedRunner<E> {
+    type EventObserver = E;
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> 
+    {
         let cfg = &self.app;
 
         // ensure the emulator exists
         if !cfg.is_cached() {
-            println!("> Install application");
-            cfg.install();
+            o.emit_stdout(format!("> Install application"));
+            cfg.install(o);
         }
         assert!(cfg.is_cached());
 
@@ -146,7 +149,7 @@ impl Runner for DelegatedRunner {
         }
 
         // Delegate it to the appropriate luncher
-        ExternRunner::default().inner_run(&command)
+        ExternRunner::<E>::default().inner_run(&command, o)
     }
 
     fn get_command(&self) -> &str {

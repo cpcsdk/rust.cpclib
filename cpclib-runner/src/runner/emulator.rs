@@ -1,7 +1,7 @@
 use cpclib_common::camino::Utf8PathBuf;
 use directories::BaseDirs;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
 
 pub const ACE_CMD: &str = "ace";
 pub const WINAPE_CMD: &str = "winape";
@@ -111,7 +111,7 @@ pub enum WinapeVersion {
 }
 
 impl Emulator {
-    pub fn configuration(&self) -> DelegateApplicationDescription {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(version) => version.configuration(),
             Emulator::Cpcec(version) => version.configuration(),
@@ -122,19 +122,19 @@ impl Emulator {
 
 impl AceVersion {
     pub fn screenshots_folder(&self) -> Utf8PathBuf {
-        let conf = self.configuration();
+        let conf = self.configuration::<()>();
 
         conf.cache_folder().join("export").join("screenshot")
     }
 
     pub fn roms_folder(&self) -> Utf8PathBuf {
-        let conf = self.configuration();
+        let conf = self.configuration::<()>();
 
         conf.cache_folder().join("media").join("rom")
     }
 
     pub fn albireo_folder(&self) -> Utf8PathBuf {
-        let conf = self.configuration();
+        let conf = self.configuration::<()>();
 
         conf.cache_folder().join("media").join("albireo1")
     }
@@ -142,23 +142,23 @@ impl AceVersion {
 
 impl CpcecVersion {
     pub fn roms_folder(&self) -> Utf8PathBuf {
-        let conf = self.configuration();
+        let conf = self.configuration::<()>();
         conf.cache_folder()
     }
 }
 
 impl WinapeVersion {
     pub fn roms_folder(&self) -> Utf8PathBuf {
-        let conf = self.configuration();
+        let conf = self.configuration::<()>();
         conf.cache_folder().join("ROM")
     }
 }
 
 #[cfg(target_os = "linux")]
-const fn linux_ace_desc(
+const fn linux_ace_desc<E: EventObserver>(
     download_url: &'static str,
     folder: &'static str
-) -> DelegateApplicationDescription {
+) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
         download_url,
         folder,
@@ -187,7 +187,7 @@ cfg_match! {
     {
 
         impl AceVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz", "AceWakePoint"),
                     AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz", "AceZenSummer")
@@ -196,7 +196,7 @@ cfg_match! {
         }
 
         impl CpcecVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
@@ -213,7 +213,7 @@ cfg_match! {
 
 
         impl WinapeVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {

@@ -1,9 +1,9 @@
-use cpclib_bndbuild::rules::Rules;
+use cpclib_bndbuild::event::{
+    BndBuilderObserved, BndBuilderObserverStrong
+};
+use cpclib_bndbuild::BndBuilder;
 
-fn main() {
-    // Hardcoded executable for samourai
-
-    let yaml_rules = "
+const YAML_RULES: &str = "
 - targets: version
   dependencies: basm img2cpc
 
@@ -20,11 +20,14 @@ fn main() {
   commands: -rm --version
 ";
 
-    let rules: Rules = serde_yaml::from_str(yaml_rules).expect("Unable to read yaml");
+fn main() {
+    let observer = BndBuilderObserverStrong::new_default();
 
-    let deps = rules.to_deps().unwrap();
+    let mut builder = BndBuilder::from_string(YAML_RULES.into()).expect("Unable to read yaml");
+    builder.add_observer(observer.downgrade());
+
     println!("Show version of commands");
-    let r = deps.execute("version");
+    let r = builder.execute("version");
 
     match r {
         Ok(_o) => {},
