@@ -17,6 +17,7 @@ use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::runner::emulator::Emulator;
+use crate::event::EventObserver;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -99,7 +100,7 @@ pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String>
     let app = emu.configuration();
 
     let runner = DelegatedRunner::new(app, emu.get_command().into());
-    runner.inner_run(&args)
+    runner.inner_run(&args, &())
 }
 
 pub fn get_emulator_window(emu: &Emulator) -> Window {
@@ -745,25 +746,29 @@ pub enum Commands {
 
 pub const EMUCTRL_CMD: &str = "cpc";
 
-pub struct EmuControlledRunner {
-    command: Command
+pub struct EmuControlledRunner<E: EventObserver> {
+    command: Command,
+    _phantom: PhantomData<E>
 }
 
-impl Default for EmuControlledRunner {
+impl<E: EventObserver>  Default for EmuControlledRunner<E> {
     fn default() -> Self {
         Self {
-            command: EmuCli::command()
+            command: EmuCli::command(),
+            _phantom: Default::default()
         }
     }
 }
 
-impl Runner for EmuControlledRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver>  Runner for EmuControlledRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         itr.insert(0, "cpc");
         let cli = EmuCli::parse_from(itr);
 
-        handle_arguments(cli)
+        handle_arguments(cli, o)
     }
 
     fn get_command(&self) -> &str {
@@ -771,13 +776,13 @@ impl Runner for EmuControlledRunner {
     }
 }
 
-impl RunnerWithClap for EmuControlledRunner {
+impl<E: EventObserver> RunnerWithClap for EmuControlledRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
+pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -800,7 +805,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
         // ensure emulator is installed to properly handle its setup
         let conf = emu.configuration();
         if !conf.is_cached() {
-            conf.install()?;
+            conf.install(o)?;
         }
     }
 
@@ -819,7 +824,7 @@ pub fn handle_arguments(mut cli: EmuCli) -> Result<(), String> {
     // Ensure system is French. TODO handle that properly for foreign partners !
     ace_conf.set(
         "OS",
-        emu.configuration()
+        emu.configuration::<E>()
             .cache_folder()
             .join("private/firmware/OS6128_FR.rom")
     );

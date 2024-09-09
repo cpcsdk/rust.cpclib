@@ -5,7 +5,7 @@ use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
 
 fn main() {
     let cli = EmuCli::parse();
-    let res = handle_arguments(cli);
+    let res = handle_arguments(cli, &());
 
     match res {
         Ok(_) => println!("No error occurred."),

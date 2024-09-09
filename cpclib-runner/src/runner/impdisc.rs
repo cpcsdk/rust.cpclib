@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
 
 pub const IMPDISC_CMD: &str = "impdsk";
 
@@ -18,7 +18,7 @@ cfg_match! {
     cfg(target_os = "linux") =>
     {
         impl ImpDskVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {
@@ -35,7 +35,7 @@ cfg_match! {
     cfg(target_os = "windows") =>
     {
         impl ImpDskVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {

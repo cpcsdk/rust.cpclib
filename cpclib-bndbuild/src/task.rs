@@ -78,6 +78,25 @@ impl Display for Task {
     }
 }
 
+macro_rules! is_some_cmd {
+    ($($code:ident), *) => {
+        $(
+            paste::paste! {
+                #[inline]
+                pub fn [<is_ $code:lower _cmd>](code: &str) -> bool {
+                    [< $code:upper _CMDS>] .iter().contains(&code)
+                }
+            }
+        )*
+
+    };
+}
+
+is_some_cmd!(
+    ace, cpcec, winape, emuctrl, basm, rasm, orgams, bndbuild, cp, rm, echo, disc, impdisc, hideur,
+    img2cpc, martine, r#extern, xfer
+);
+
 impl<'de> Deserialize<'de> for Task {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where D: Deserializer<'de> {
@@ -99,25 +118,25 @@ impl<'de> Deserialize<'de> for Task {
                     ignore_error: ignore
                 };
 
-                if ACE_CMDS.iter().contains(&code) {
+                if is_ace_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_ace_default(), std))
                 }
-                else if CPCEC_CMDS.iter().contains(&code) {
+                else if is_cpcec_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_cpcec_default(), std))
                 }
-                else if WINAPE_CMDS.iter().contains(&code) {
+                else if is_winape_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_winape_default(), std))
                 }
-                else if EMUCTRL_CMDS.iter().contains(&code) {
+                else if is_emuctrl_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_controlled_access(), std))
                 }
-                else if BASM_CMDS.iter().contains(&code) {
+                else if is_basm_cmd(code) {
                     Ok(Task::Assembler(Assembler::Basm, std))
                 }
-                else if ORGAMS_CMDS.iter().contains(&code) {
+                else if is_orgams_cmd(code) {
                     Ok(Task::Assembler(Assembler::Orgams, std))
                 }
-                else if RASM_CMDS.iter().contains(&code) {
+                else if is_rasm_cmd(code) {
                     Ok(Task::Assembler(
                         Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
                             RasmVersion::default()
@@ -125,37 +144,37 @@ impl<'de> Deserialize<'de> for Task {
                         std
                     ))
                 }
-                else if BNDBUILD_CMDS.iter().contains(&code) {
+                else if is_bndbuild_cmd(code) {
                     Ok(Task::BndBuild(std))
                 }
-                else if CP_CMDS.iter().contains(&code) {
+                else if is_cp_cmd(code) {
                     Ok(Task::Cp(std))
                 }
-                else if DISC_CMDS.iter().contains(&code) {
+                else if is_disc_cmd(code) {
                     Ok(Task::Disc(std))
                 }
-                else if ECHO_CMDS.iter().contains(&code) {
+                else if is_echo_cmd(code) {
                     Ok(Task::Echo(std))
                 }
-                else if EXTERN_CMDS.iter().contains(&code) {
+                else if is_extern_cmd(code) {
                     Ok(Task::Extern(std))
                 }
-                else if HIDEUR_CMDS.iter().contains(&code) {
+                else if is_hideur_cmd(code) {
                     Ok(Task::Hideur(std))
                 }
-                else if IMG2CPC_CMDS.iter().contains(&code) {
+                else if is_img2cpc_cmd(code) {
                     Ok(Task::ImgConverter(std))
                 }
-                else if IMPDISC_CMDS.iter().contains(&code) {
+                else if is_impdisc_cmd(code) {
                     Ok(Task::ImpDsk(std))
                 }
-                else if MARTINE_CMDS.iter().contains(&code) {
+                else if is_martine_cmd(code) {
                     Ok(Task::Martine(std))
                 }
-                else if RM_CMDS.iter().contains(&code) {
+                else if is_rm_cmd(code) {
                     Ok(Task::Rm(std))
                 }
-                else if XFER_CMDS.iter().contains(&code) {
+                else if is_xfer_cmd(code) {
                     Ok(Task::Xfer(std))
                 }
                 else {

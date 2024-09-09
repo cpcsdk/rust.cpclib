@@ -1,16 +1,28 @@
+use std::marker::PhantomData;
+
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::event::EventObserver;
 
 use super::Runner;
 use crate::task::CP_CMDS;
 use crate::{built_info, expand_glob};
 
-#[derive(Default)]
-pub struct CpRunner {}
+pub struct CpRunner<E: EventObserver> {
+    _phantom: PhantomData<E>
+}
 
-impl CpRunner {
-    pub fn print_help(&self) {
+impl<E: EventObserver> Default for CpRunner<E> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData::<E>
+        }
+    }
+}
+
+impl<E: EventObserver> CpRunner<E> {
+    pub fn render_help() -> String {
         clap::Command::new("cp")
             .before_help("Copy files.")
             .disable_help_flag(true)
@@ -24,13 +36,15 @@ impl CpRunner {
                     .action(ArgAction::Append)
                     .help("Files to copy. Last one being the destination")
             )
-            .print_long_help()
-            .unwrap();
+            .render_long_help()
+            .to_string()
     }
 }
 
-impl Runner for CpRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for CpRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut errors = String::new();
 
         let fnames = itr
@@ -121,7 +135,8 @@ mod test {
 
         // Run the test
         let cp = CpRunner::default();
-        cp.inner_run(&[src.to_string(), dst.to_string()]).unwrap();
+        cp.inner_run(&[src.to_string(), dst.to_string()], &())
+            .unwrap();
         assert!(dst.exists());
     }
 }

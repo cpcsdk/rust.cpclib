@@ -160,10 +160,10 @@ where D: Deserializer<'de> {
 }
 
 impl Rule {
-    pub fn new_default<S1, S2>(targets: &[S1], dependencies: &[S2], kind: &str) -> Self 
-    where 
-    S1: AsRef<str>,
-    S2: AsRef<str>
+    pub fn new_default<S1, S2>(targets: &[S1], dependencies: &[S2], kind: &str) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>
     {
         let task = match kind {
             "basm" => {
@@ -179,15 +179,11 @@ impl Rule {
         Self::new(targets, dependencies, &[task])
     }
 
-    pub fn new<S1,S2,T>(
-        targets: &[S1],
-        dependencies: &[S2],
-        commands: &[T]
-    ) -> Self 
-    where 
-    S1: AsRef<str>,
-    S2: AsRef<str>,
-    T: Into<Task> + Clone
+    pub fn new<S1, S2, T>(targets: &[S1], dependencies: &[S2], commands: &[T]) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        T: Into<Task> + Clone
     {
         Self {
             targets: targets

@@ -6,10 +6,21 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{context, Environment, Error, ErrorKind};
 
+use crate::event::{
+    BndBuilderObserved, BndBuilderObserver, BndBuilderObserverWeak, ListOfBndBuilderObserverStrong,
+    RuleTaskEventDispatcher
+};
 use crate::rules::{self, Graph, Rule};
+use crate::task::Task;
 use crate::BndBuilderError;
 
 pub const EXPECTED_FILENAMES: &[&str] = &["bndbuild.yml", "build.bnd"];
+
+#[derive(Default)]
+struct ExecutionState {
+    nb_deps: usize,
+    task_count: usize
+}
 
 self_cell::self_cell! {
     /// WARNING the BndBuilder changes the current working directory.
@@ -22,7 +33,8 @@ self_cell::self_cell! {
 }
 
 pub struct BndBuilder {
-    inner: BndBuilderInner
+    inner: BndBuilderInner,
+    observers: ListOfBndBuilderObserverStrong
 }
 
 impl Deref for BndBuilder {
@@ -34,23 +46,28 @@ impl Deref for BndBuilder {
 }
 
 impl BndBuilder {
-    pub fn add_default_rule<S1, S2>
-    (
-        self,
-        targets: &[S1],
-        dependencies: &[S2],
-        kind: &str
-    ) -> Self 
-    where 
-    S1: AsRef<str>,
-    S2: AsRef<str>
+    fn task_observer<'b, 'r, 't>(
+        &'b self,
+        rule: &'r Utf8Path,
+        task: &'t Task
+    ) -> RuleTaskEventDispatcher<'b, 'r, 't, Self> {
+        RuleTaskEventDispatcher::new(self, rule, task)
+    }
+
+    pub fn add_default_rule<S1, S2>(self, targets: &[S1], dependencies: &[S2], kind: &str) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>
     {
         let rule = Rule::new_default(targets, dependencies, kind);
         let mut rules = self.inner.into_owner();
         rules.add(rule);
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps()).unwrap();
-        BndBuilder { inner }
+        BndBuilder {
+            inner,
+            observers: Default::default()
+        }
     }
 
     pub fn from_path<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
@@ -174,27 +191,125 @@ impl BndBuilder {
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 
-        Ok(BndBuilder { inner })
+        Ok(BndBuilder {
+            inner,
+            observers: Default::default()
+        })
     }
 
     /// Return the default target if any
     pub fn default_target(&self) -> Option<&Utf8Path> {
         self.inner.borrow_owner().default_target()
     }
+}
 
+impl BndBuilder {
     /// Execute the target after all its predecessors
     pub fn execute<P: AsRef<Utf8Path>>(&self, target: P) -> Result<(), BndBuilderError> {
-        self.inner.borrow_dependent().execute(target)
+        let p = target.as_ref();
+
+        self.do_compute_dependencies(p);
+        let layers = self.get_layered_dependencies_for(&p);
+
+        let mut state = ExecutionState {
+            nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
+            task_count: 0
+        };
+
+        if state.nb_deps == 0 {
+            if self.has_rule(p) {
+                self.do_run_tasks();
+                state.nb_deps = 1;
+                self.execute_rule(p, &mut state)?;
+            }
+            else {
+                return Err(BndBuilderError::ExecuteError {
+                    fname: p.to_string(),
+                    msg: "no rule to build it".to_owned()
+                });
+            }
+        }
+        else {
+            self.do_run_tasks();
+            for layer in layers.into_iter() {
+                self.execute_layer(layer, &mut state)?;
+            }
+        }
+        self.do_finish();
+
+        Ok(())
     }
 
+    fn execute_layer(
+        &self,
+        layer: HashSet<&Utf8Path>,
+        state: &mut ExecutionState
+    ) -> Result<(), BndBuilderError> {
+        layer
+            .into_iter()
+            .map(|p| self.execute_rule(p, state))
+            .collect::<Result<Vec<()>, BndBuilderError>>()?;
+        Ok(())
+    }
+
+    fn execute_rule<P: AsRef<Utf8Path>>(
+        &self,
+        p: P,
+        state: &mut ExecutionState
+    ) -> Result<(), BndBuilderError> {
+        let p = p.as_ref();
+        state.task_count += 1;
+
+        self.start_rule(p, state.task_count, state.nb_deps);
+
+        if let Some(rule) = self.rule(p) {
+            if !rule.is_enabled() {
+                return Err(BndBuilderError::DisabledTarget(p.to_string()));
+            }
+
+            let done = rule.is_up_to_date();
+            if done {
+                // nothing to do
+            }
+            else {
+                for task in rule.commands() {
+                    crate::execute(task, &Some(self.task_observer(p, task))).map_err(|e| {
+                        BndBuilderError::ExecuteError {
+                            fname: p.to_string(),
+                            msg: e
+                        }
+                    })?;
+                }
+            }
+        }
+        else if !p.exists() {
+            return Err(BndBuilderError::ExecuteError {
+                fname: p.to_string(),
+                msg: "no rule to build it".to_owned()
+            });
+        }
+        else {
+            println!("\t{} is already up to date", p)
+        }
+
+        self.stop_rule(p);
+
+        Ok(())
+    }
+}
+
+impl BndBuilder {
+    #[inline]
     pub fn outdated<P: AsRef<Utf8Path>>(&self, target: P) -> Result<bool, BndBuilderError> {
         self.inner.borrow_dependent().outdated(target, true)
     }
 
+    #[inline]
     pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Utf8Path>> {
         self.inner.borrow_dependent().get_layered_dependencies()
     }
 
+    #[inline]
     pub fn get_layered_dependencies_for<'a, P: AsRef<Utf8Path>>(
         &'a self,
         p: &'a P
@@ -204,10 +319,17 @@ impl BndBuilder {
             .get_layered_dependencies_for(p)
     }
 
+    #[inline]
     pub fn get_rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
         self.inner.borrow_owner().rule(tgt)
     }
 
+    #[inline]
+    pub fn has_rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> bool {
+        self.get_rule(tgt).is_some()
+    }
+
+    #[inline]
     pub fn rules(&self) -> &[Rule] {
         self.inner.borrow_owner().rules()
     }
@@ -218,5 +340,93 @@ impl BndBuilder {
             .flat_map(|r| r.targets())
             .map(|p| p.as_path())
             .collect_vec()
+    }
+}
+
+impl BndBuilderObserved for BndBuilder {
+    fn observers(&self) -> &[BndBuilderObserverWeak] {
+        self.observers.observers()
+    }
+
+    fn add_observer(&mut self, observer: BndBuilderObserverWeak) {
+        self.observers.add_observer(observer);
+    }
+
+    fn emit_stdout<S: AsRef<str>>(&self, s: S) {
+        self.notify(crate::event::BndBuilderEvent::Stdout(s.as_ref()))
+    }
+
+    fn emit_stderr<S: AsRef<str>>(&self, s: S) {
+        self.notify(crate::event::BndBuilderEvent::Stderr(s.as_ref()))
+    }
+
+    fn emit_task_stdout<S: AsRef<str>, P: AsRef<Utf8Path>>(&self, p: P, t: &Task, s: S) {
+        self.notify(crate::event::BndBuilderEvent::TaskStdout(
+            p.as_ref(),
+            t,
+            s.as_ref()
+        ))
+    }
+
+    fn emit_task_stderr<S: AsRef<str>, P: AsRef<Utf8Path>>(&self, p: P, t: &Task, s: S) {
+        self.notify(crate::event::BndBuilderEvent::TaskStderr(
+            p.as_ref(),
+            t,
+            s.as_ref()
+        ))
+    }
+
+    fn do_compute_dependencies<P: AsRef<Utf8Path>>(&self, p: P) {
+        self.notify(crate::event::BndBuilderEvent::ChangeState(
+            crate::event::BndBuilderState::ComputeDependencies(p.as_ref())
+        ))
+    }
+
+    fn do_run_tasks(&self) {
+        self.notify(crate::event::BndBuilderEvent::ChangeState(
+            crate::event::BndBuilderState::RunTasks
+        ))
+    }
+
+    fn do_finish(&self) {
+        self.notify(crate::event::BndBuilderEvent::ChangeState(
+            crate::event::BndBuilderState::Finish
+        ))
+    }
+
+    fn start_rule<P: AsRef<Utf8Path>>(&self, rule: P, nb: usize, out_of: usize) {
+        self.notify(crate::event::BndBuilderEvent::StartRule {
+            rule: rule.as_ref(),
+            nb,
+            out_of
+        })
+    }
+
+    fn stop_rule<P: AsRef<Utf8Path>>(&self, task: P) {
+        self.notify(crate::event::BndBuilderEvent::StopRule(task.as_ref()))
+    }
+
+    fn failed_rule<P: AsRef<Utf8Path>>(&self, task: P) {
+        self.notify(crate::event::BndBuilderEvent::FailedRule(task.as_ref()))
+    }
+
+    fn start_task(&self, rule: Option<&Utf8Path>, task: &Task) {
+        self.notify(crate::event::BndBuilderEvent::StartTask(rule, task))
+    }
+
+    fn stop_task(&self, rule: Option<&Utf8Path>, task: &Task, duration: std::time::Duration) {
+        self.notify(crate::event::BndBuilderEvent::StopTask(
+            rule, task, duration
+        ))
+    }
+
+    fn notify(&self, event: crate::event::BndBuilderEvent<'_>) {
+        for observer in self.observers() {
+            observer
+                .upgrade()
+                .unwrap()
+                .borrow_mut()
+                .update(event.clone());
+        }
     }
 }

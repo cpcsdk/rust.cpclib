@@ -1,14 +1,18 @@
+use std::marker::PhantomData;
+
 use cpclib_common::clap::{Arg, ArgAction, Command};
+use cpclib_runner::event::EventObserver;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
 use crate::task::IMG2CPC_CMDS;
 
-pub struct ImgConverterRunner {
-    command: Command
+pub struct ImgConverterRunner<E: EventObserver> {
+    command: Command,
+    _phantom: PhantomData<E>
 }
 
-impl Default for ImgConverterRunner {
+impl<E: EventObserver> Default for ImgConverterRunner<E> {
     fn default() -> Self {
         let command = cpclib_imgconverter::build_args_parser()
             .after_help(format!(
@@ -29,27 +33,35 @@ impl Default for ImgConverterRunner {
                     .exclusive(true)
             )
             .no_binary_name(true);
-        Self { command }
+        Self {
+            command,
+            _phantom: Default::default()
+        }
     }
 }
 
-impl RunnerWithClap for ImgConverterRunner {
+impl<E: EventObserver> RunnerWithClap for ImgConverterRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl Runner for ImgConverterRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for ImgConverterRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let args = self.get_clap_command().clone();
 
         let matches = self.get_matches(itr)?;
         if matches.get_flag("version") {
-            println!("{}", self.get_clap_command().clone().render_version());
+            o.emit_stdout(format!(
+                "{}\n",
+                self.get_clap_command().clone().render_version()
+            ));
             return Ok(());
         }
 
-        cpclib_imgconverter::process(&matches, args).map_err(|e| dbg!(e).to_string())
+        cpclib_imgconverter::process(&matches, args).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {

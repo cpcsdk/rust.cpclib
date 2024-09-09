@@ -1,14 +1,26 @@
+use std::marker::PhantomData;
+
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
+use cpclib_runner::event::EventObserver;
 
 use super::Runner;
 use crate::{built_info, expand_glob};
 
-#[derive(Default)]
-pub struct RmRunner {}
+pub struct RmRunner<E: EventObserver> {
+    _phantom: PhantomData<E>
+}
 
-impl RmRunner {
-    pub fn print_help(&self) {
+impl<E: EventObserver> Default for RmRunner<E> {
+    fn default() -> Self {
+        Self {
+            _phantom: Default::default()
+        }
+    }
+}
+
+impl<E: EventObserver> RmRunner<E> {
+    pub fn render_help() -> String {
         clap::Command::new("rm")
             .before_help("Delete files.")
             .disable_help_flag(true)
@@ -22,12 +34,14 @@ impl RmRunner {
                     .action(ArgAction::Append)
                     .help("Files to delete.")
             )
-            .print_long_help()
-            .unwrap();
+            .render_long_help()
+            .to_string()
     }
 }
-impl Runner for RmRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for RmRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut errors = String::new();
 
         for fname in itr
@@ -47,7 +61,7 @@ impl Runner for RmRunner {
 
             match res {
                 Ok(_) => {
-                    println!("\t{} removed", fname /* .display() */);
+                    o.emit_stdout(format!("\t{} removed", fname /* .display() */));
                 },
                 Err(e) => {
                     errors.push_str(&format!(

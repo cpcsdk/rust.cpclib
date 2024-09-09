@@ -1,14 +1,18 @@
+use std::marker::PhantomData;
+
 use cpclib_common::clap::{self, Command};
+use cpclib_runner::event::EventObserver;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
 use crate::task::BNDBUILD_CMDS;
 
-pub struct BndBuildRunner {
-    command: clap::Command
+pub struct BndBuildRunner<E: EventObserver> {
+    command: clap::Command,
+    _phantom: PhantomData<E>
 }
 
-impl Default for BndBuildRunner {
+impl<E: EventObserver> Default for BndBuildRunner<E> {
     fn default() -> Self {
         let command = crate::build_args_parser();
         let command = command.no_binary_name(true).after_help(format!(
@@ -18,18 +22,23 @@ impl Default for BndBuildRunner {
             built_info::PKG_NAME,
             built_info::PKG_VERSION
         ));
-        Self { command }
+        Self {
+            command,
+            _phantom: Default::default()
+        }
     }
 }
 
-impl RunnerWithClap for BndBuildRunner {
+impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl Runner for BndBuildRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for BndBuildRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         // backup of cwd
         let cwd = std::env::current_dir().unwrap();
 

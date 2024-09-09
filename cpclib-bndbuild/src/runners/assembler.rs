@@ -1,8 +1,11 @@
+use std::marker::PhantomData;
+
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
 use cpclib_asm::orgams::convert_from_to;
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
+use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::assembler::ExternAssembler;
 
 use super::{Runner, RunnerWithClap};
@@ -40,25 +43,31 @@ struct Orgams {
     orgams: cpclib_runner::emucontrol::OrgamsCli
 }
 
-pub struct OrgamsRunner {
-    command: clap::Command
+pub struct OrgamsRunner<E: EventObserver> {
+    command: clap::Command,
+    _phantom: PhantomData<E>
 }
 
-impl Default for OrgamsRunner {
+impl<E: EventObserver> Default for OrgamsRunner<E> {
     fn default() -> Self {
         let command = <Orgams as CommandFactory>::command();
-        Self { command }
+        Self {
+            command,
+            _phantom: Default::default()
+        }
     }
 }
 
-impl RunnerWithClap for OrgamsRunner {
+impl<E: EventObserver> RunnerWithClap for OrgamsRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl Runner for OrgamsRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for OrgamsRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         itr.insert(0, "orgams");
         let matches = self.get_matches(&itr)?;
@@ -100,7 +109,7 @@ impl Runner for OrgamsRunner {
             }
 
             let cli = EmuCli::parse_from(real_arguments);
-            handle_arguments(cli)
+            handle_arguments(cli, o)
         }
     }
 
@@ -109,11 +118,12 @@ impl Runner for OrgamsRunner {
     }
 }
 
-pub struct BasmRunner {
-    command: clap::Command
+pub struct BasmRunner<E: EventObserver> {
+    command: clap::Command,
+    _phantom: PhantomData<E>
 }
 
-impl Default for BasmRunner {
+impl<E: EventObserver> Default for BasmRunner<E> {
     fn default() -> Self {
         let command = cpclib_basm::build_args_parser();
         // let mut command = command.group(
@@ -148,23 +158,28 @@ impl Default for BasmRunner {
                 built_info::PKG_NAME,
                 built_info::PKG_VERSION
             ));
-        Self { command }
+        Self {
+            command,
+            _phantom: Default::default()
+        }
     }
 }
 
-impl RunnerWithClap for BasmRunner {
+impl<E: EventObserver> RunnerWithClap for BasmRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl Runner for BasmRunner {
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S]) -> Result<(), String> {
+impl<E: EventObserver> Runner for BasmRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         let matches = self.get_matches(&itr)?;
 
         if matches.get_flag("version") {
-            println!("{}", self.get_clap_command().clone().render_version());
+            o.emit_stdout(self.get_clap_command().clone().render_version());
             return Ok(());
         }
 
@@ -173,11 +188,11 @@ impl Runner for BasmRunner {
         match cpclib_basm::process(&matches) {
             Ok((env, warnings)) => {
                 for warning in warnings {
-                    eprintln!("{warning}");
+                    o.emit_stdout(format!("{warning}\n"));
                 }
 
                 let report = env.report(&start);
-                println!("{report}");
+                o.emit_stdout(format!("{report}"));
 
                 Ok(())
             },

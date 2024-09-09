@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
 
 pub const MARTINE_CMD: &str = "martine";
 
@@ -18,7 +18,7 @@ cfg_match! {
     cfg(target_os = "linux") =>
     {
         impl MartineVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription {
@@ -35,7 +35,7 @@ cfg_match! {
     cfg(target_os = "windows") =>
     {
         impl MartineVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription {
