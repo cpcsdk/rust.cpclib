@@ -137,6 +137,13 @@ impl<E: EventObserver> Default for BasmRunner<E> {
             .disable_help_flag(true)
             .disable_version_flag(true)
             .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
+            .arg(
                 Arg::new("version")
                     .long("version")
                     .short('V')
@@ -180,6 +187,16 @@ impl<E: EventObserver> Runner for BasmRunner<E> {
 
         if matches.get_flag("version") {
             o.emit_stdout(self.get_clap_command().clone().render_version());
+            return Ok(());
+        }
+
+        if matches.get_flag("help") {
+            o.emit_stdout(
+                self.get_clap_command()
+                    .clone()
+                    .render_long_help()
+                    .to_string()
+            );
             return Ok(());
         }
 

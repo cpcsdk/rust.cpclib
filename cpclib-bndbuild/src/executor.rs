@@ -1,4 +1,3 @@
-
 use cpclib_runner::delegated::DelegatedRunner;
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;

@@ -22,8 +22,15 @@ impl<E: EventObserver> Default for ImgConverterRunner<E> {
                 built_info::PKG_NAME,
                 built_info::PKG_VERSION
             ))
-            //  .disable_help_flag(true)
+            .disable_help_flag(true)
             .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
             .arg(
                 Arg::new("version")
                     .long("version")
@@ -54,10 +61,17 @@ impl<E: EventObserver> Runner for ImgConverterRunner<E> {
 
         let matches = self.get_matches(itr)?;
         if matches.get_flag("version") {
-            o.emit_stdout(format!(
-                "{}\n",
-                self.get_clap_command().clone().render_version()
-            ));
+            o.emit_stdout(self.get_clap_command().clone().render_version());
+            return Ok(());
+        }
+
+        if matches.get_flag("help") {
+            o.emit_stdout(
+                self.get_clap_command()
+                    .clone()
+                    .render_long_help()
+                    .to_string()
+            );
             return Ok(());
         }
 
