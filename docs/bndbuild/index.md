@@ -7,6 +7,8 @@ It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but
 
 The rules are described in a `yaml` file. Check for example a simple test project at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy> folder, or a more complicated one that use various commands and templating at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/ucpm>.
 
+The documentation is quite minimal at the moment, but included example code should be still valid and assembled propetly. The user base being quite small, lots of bugs can remain. Do note hesitate to fill issues <https://github.com/cpcsdk/rust.cpclib/issues> or propose fixes.
+
 ## Help
 
 ```
@@ -102,3 +104,9 @@ They are:
 ## Templating
 
 A jinja-like templating is used to generate the final yaml file : <https://docs.rs/minijinja/latest/minijinja/syntax/index.html>.
+
+## Download
+
+Prefer to compile yourself bndbuild. But you can still download latest versions for windows here:
+- [command line version](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe)
+- [graphical version](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/cpclib-visual-bndbuild.exe)
