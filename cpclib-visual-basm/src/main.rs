@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use cpclib_basm::*;
 
 /// #[cfg(not(target_arch = "wasm32"))]
@@ -6,7 +8,7 @@ fn main() {
     claui::run(app, |matches| {
         dbg!(matches);
 
-        match process(matches) {
+        match process(matches, Rc::new(())) {
             Ok((_env, warnings)) => {
                 let warnings = warnings
                     .iter()
