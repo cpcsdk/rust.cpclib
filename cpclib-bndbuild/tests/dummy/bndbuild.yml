@@ -18,12 +18,14 @@
   help: Convert the BMP file and generate the necessary data to build it
 
 - tgt: clean
+  phony: true
   cmd:
     - -rm *.o *.bin *.lst
     - -rm dummy_logo_conf.asm
   help: Remove all needed generated files
 
 - tgt: distclean
+  phony: true
   dep: clean
   cmd: -rm dummy.sna
   help: Remove the snapshot

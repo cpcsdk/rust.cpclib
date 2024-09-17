@@ -32,6 +32,7 @@
   cmd: {{assemble(source)}}
 
 - tgt: distclean
+  phony: true
   cmd: -rm {{prog}}
 
 - dep: {{prog}}

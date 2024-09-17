@@ -14,6 +14,8 @@
 #![allow(clippy::cast_possible_truncation)]
 #![feature(const_mut_refs)]
 
+use std::rc::Rc;
+
 use cpclib_basm::{build_args_parser, built_info, process};
 
 static DESC_BEFORE: &str = const_format::formatc!(
@@ -29,8 +31,8 @@ fn main() {
             let matches = build_args_parser().before_help(DESC_BEFORE).get_matches();
 
             let start = std::time::Instant::now();
-
-            match process(&matches) {
+            let o = Rc::new(());
+            match process(&matches, o) {
                 Ok((env, warnings)) => {
                     for warning in warnings {
                         eprintln!("{warning}");

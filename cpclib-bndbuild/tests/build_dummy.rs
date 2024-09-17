@@ -45,8 +45,8 @@ fn test_dummy_phony() {
     assert!(dbg!(builder.get_rule("build").expect("build is missing")).is_phony());
     assert!(builder.get_rule("winape").unwrap().is_phony());
 
-    assert!(!builder.get_rule("distclean").unwrap().is_phony());
-    assert!(!builder.get_rule("clean").unwrap().is_phony());
+    assert!(builder.get_rule("distclean").unwrap().is_phony());
+    assert!(builder.get_rule("clean").unwrap().is_phony());
     assert!(!builder.get_rule("./dummy_logo.o").unwrap().is_phony());
     assert!(!builder.get_rule(r".\dummy_logo.o").unwrap().is_phony());
     assert!(!builder.get_rule("dummy_logo.o").unwrap().is_phony());

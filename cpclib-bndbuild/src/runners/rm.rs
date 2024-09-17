@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
@@ -61,7 +62,7 @@ impl<E: EventObserver> Runner for RmRunner<E> {
 
             match res {
                 Ok(_) => {
-                    o.emit_stdout(format!("\t{} removed", fname /* .display() */));
+                    o.emit_stdout(&format!("\t{} removed", fname /* .display() */));
                 },
                 Err(e) => {
                     errors.push_str(&format!(

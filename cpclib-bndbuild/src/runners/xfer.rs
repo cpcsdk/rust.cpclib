@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use cpclib_common::clap::{self, Arg, ArgAction, Command};
 use cpclib_runner::event::EventObserver;
@@ -60,13 +61,14 @@ impl<E: EventObserver> Runner for XferRunner<E> {
         let matches = self.get_matches(itr)?;
 
         if matches.get_flag("version") {
-            o.emit_stdout(self.get_clap_command().clone().render_version().to_string());
+            o.emit_stdout(&self.get_clap_command().clone().render_version().to_string());
             return Ok(());
         }
 
         if matches.get_flag("help") {
             o.emit_stdout(
-                self.get_clap_command()
+                &self
+                    .get_clap_command()
                     .clone()
                     .render_long_help()
                     .to_string()

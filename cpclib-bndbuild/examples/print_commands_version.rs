@@ -1,4 +1,4 @@
-use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverStrong};
+use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverRc};
 use cpclib_bndbuild::BndBuilder;
 
 const YAML_RULES: &str = "
@@ -19,10 +19,10 @@ const YAML_RULES: &str = "
 ";
 
 fn main() {
-    let observer = BndBuilderObserverStrong::new_default();
+    let observer = BndBuilderObserverRc::new_default();
 
     let mut builder = BndBuilder::from_string(YAML_RULES.into()).expect("Unable to read yaml");
-    builder.add_observer(observer.downgrade());
+    builder.add_observer(observer);
 
     println!("Show version of commands");
     let r = builder.execute("version");

@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use clap::{Arg, ArgAction};
 use cpclib_common::clap::{self, Command};
@@ -64,13 +65,14 @@ impl<E: EventObserver> Runner for DiscManagerRunner<E> {
 
         let matches = self.get_matches(itr)?;
         if matches.get_flag("version") {
-            o.emit_stdout(self.get_clap_command().clone().render_version());
+            o.emit_stdout(&self.get_clap_command().clone().render_version());
             return Ok(());
         }
 
         if matches.get_flag("help") {
             o.emit_stdout(
-                self.get_clap_command()
+                &self
+                    .get_clap_command()
                     .clone()
                     .render_long_help()
                     .to_string()

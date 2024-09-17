@@ -1,6 +1,7 @@
 #![feature(path_file_prefix)]
 
 use std::fs;
+use std::rc::Rc;
 
 use camino_tempfile::NamedUtf8TempFile;
 use cpclib_basm::{build_args_parser, process};
@@ -15,7 +16,7 @@ fn command_for_generated_test(fname: &str, output_file: &NamedUtf8TempFile) {
     let args_parser = build_args_parser();
     let args =
         args_parser.get_matches_from(["basm", "-I", "tests/asm/", "-i", "-o", output_fname, fname]);
-    process(&args).expect("basm failed");
+    process(&args, Rc::from(())).expect("basm failed");
 }
 
 fn criterion_benchmark(c: &mut Criterion) {

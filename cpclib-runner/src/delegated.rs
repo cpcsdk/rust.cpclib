@@ -6,8 +6,8 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use ureq::Response;
 
-use crate::runner::{runner::{ExternRunner, Runner}};
 use crate::event::EventObserver;
+use crate::runner::runner::{ExternRunner, Runner};
 
 pub enum ArchiveFormat {
     Raw,
@@ -34,7 +34,7 @@ pub fn clear_base_cache_folder() -> std::io::Result<()> {
     std::fs::remove_dir_all(base_cache_foder())
 }
 
-impl<E: EventObserver>  DelegateApplicationDescription<E> {
+impl<E: EventObserver> DelegateApplicationDescription<E> {
     pub fn is_cached(&self) -> bool {
         self.cache_folder().exists()
     }
@@ -65,7 +65,7 @@ impl<E: EventObserver>  DelegateApplicationDescription<E> {
         // uncompress it
         match self.archive_format {
             ArchiveFormat::Raw => {
-                o.emit_stdout(format!(">> Save to {}", self.exec_fname()));
+                o.emit_stdout(&format!(">> Save to {}", self.exec_fname()));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 std::fs::create_dir_all(&dest);
@@ -103,7 +103,7 @@ impl<E: EventObserver>  DelegateApplicationDescription<E> {
     }
 
     fn download(&self, o: &E) -> Result<Response, ureq::Error> {
-        o.emit_stdout(format!(">> Download file {}", self.download_url));
+        o.emit_stdout(&format!(">> Download file {}", self.download_url));
         ureq::get(self.download_url).call()
     }
 }
@@ -113,7 +113,7 @@ pub struct DelegatedRunner<E: EventObserver> {
     pub cmd: String
 }
 
-impl<E: EventObserver>  DelegatedRunner<E> {
+impl<E: EventObserver> DelegatedRunner<E> {
     pub fn new(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
         Self { app, cmd }
     }
@@ -121,13 +121,13 @@ impl<E: EventObserver>  DelegatedRunner<E> {
 
 impl<E: EventObserver> Runner for DelegatedRunner<E> {
     type EventObserver = E;
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> 
-    {
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let cfg = &self.app;
 
         // ensure the emulator exists
         if !cfg.is_cached() {
-            o.emit_stdout(format!("> Install application"));
+            o.emit_stdout("> Install application");
             cfg.install(o);
         }
         assert!(cfg.is_cached());

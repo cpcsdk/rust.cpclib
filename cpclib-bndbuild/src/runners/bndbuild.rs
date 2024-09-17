@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use cpclib_common::clap::{self, Command};
 use cpclib_runner::event::EventObserver;

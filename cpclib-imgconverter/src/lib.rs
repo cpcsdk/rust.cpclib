@@ -755,7 +755,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 }
             };
 
-            let file = assemble_to_amsdos_file(&code, filename).unwrap();
+            let file = assemble_to_amsdos_file(&code, filename, Default::default()).unwrap();
 
             if sub_exec.is_some() {
                 let filename = Utf8Path::new(filename);
@@ -889,6 +889,69 @@ pub fn build_args_parser() -> clap::Command {
                               }
                             })
                    )
+
+                   .arg(
+                    Arg::new("MODE")
+                        .short('m')
+                        .long("mode")
+                        .help("Screen mode of the image to convert.")
+                        .value_name("MODE")
+                        .default_value("0")
+                        .value_parser(["0", "1", "2"])
+                )
+                .arg(
+                    Arg::new("FULLSCREEN")
+                        .long("fullscreen")
+                        .action(ArgAction::SetTrue)
+                        .help("Specify a full screen displayed using 2 non consecutive banks.")
+                        .conflicts_with("OVERSCAN")
+                )
+                .arg(
+                    Arg::new("OVERSCAN")
+                        .long("overscan")
+                        .action(ArgAction::SetTrue)
+                        .help("Specify an overscan screen (crtc meaning).")
+                )
+                .arg(
+                    Arg::new("STANDARD")
+                        .long("standard")
+                        .action(ArgAction::SetTrue)
+                        .help("Specify a standard screen manipulation.")
+                        .conflicts_with("OVERSCAN")
+                        .conflicts_with("FULLSCREEN")
+                )
+                .arg(
+                    Arg::new("SKIP_ODD_PIXELS")
+                        .long("skipoddpixels")
+                        .short('s')
+                        .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
+                        .action(ArgAction::SetTrue)
+                )
+                .arg(
+                    Arg::new("PIXEL_COLUMN_START")
+                    .long("columnstart")
+                    .required(false)
+                    .help("Number of pixel columns to skip on the left.")
+                )
+                .arg(
+                    Arg::new("PIXEL_COLUMNS_KEPT")
+                    .long("columnskept")
+                    .required(false)
+                    .help("Number of pixel columns to keep.")
+                )
+                .arg(
+                    Arg::new("PIXEL_LINE_START")
+                    .long("linestart")
+                    .required(false)
+                    .help("Number of pixel lines to skip.")
+                )
+                .arg(
+                    Arg::new("PIXEL_LINES_KEPT")
+                    .long("lineskept")
+                    .required(false)
+                    .help("Number of pixel lines to keep.")
+                )
+                
                     .subcommand(
                         Command::new("sna")
                             .about("Generate a snapshot with the converted image.")
@@ -1050,67 +1113,7 @@ pub fn build_args_parser() -> clap::Command {
 
                     ))
 
-                    .arg(
-                        Arg::new("MODE")
-                            .short('m')
-                            .long("mode")
-                            .help("Screen mode of the image to convert.")
-                            .value_name("MODE")
-                            .default_value("0")
-                            .value_parser(["0", "1", "2"])
-                    )
-                    .arg(
-                        Arg::new("FULLSCREEN")
-                            .long("fullscreen")
-                            .action(ArgAction::SetTrue)
-                            .help("Specify a full screen displayed using 2 non consecutive banks.")
-                            .conflicts_with("OVERSCAN")
-                    )
-                    .arg(
-                        Arg::new("OVERSCAN")
-                            .long("overscan")
-                            .action(ArgAction::SetTrue)
-                            .help("Specify an overscan screen (crtc meaning).")
-                    )
-                    .arg(
-                        Arg::new("STANDARD")
-                            .long("standard")
-                            .action(ArgAction::SetTrue)
-                            .help("Specify a standard screen manipulation.")
-                            .conflicts_with("OVERSCAN")
-                            .conflicts_with("FULLSCREEN")
-                    )
-                    .arg(
-                        Arg::new("SKIP_ODD_PIXELS")
-                            .long("skipoddpixels")
-                            .short('s')
-                            .help("Skip odd pixels when reading the image (usefull when the picture is mode 0 with duplicated pixels")
-                            .action(ArgAction::SetTrue)
-                    )
-                    .arg(
-                        Arg::new("PIXEL_COLUMN_START")
-                        .long("columnstart")
-                        .required(false)
-                        .help("Number of pixel columns to skip on the left.")
-                    )
-                    .arg(
-                        Arg::new("PIXEL_COLUMNS_KEPT")
-                        .long("columnskept")
-                        .required(false)
-                        .help("Number of pixel columns to keep.")
-                    )
-                    .arg(
-                        Arg::new("PIXEL_LINE_START")
-                        .long("linestart")
-                        .required(false)
-                        .help("Number of pixel lines to skip.")
-                    )
-                    .arg(
-                        Arg::new("PIXEL_LINES_KEPT")
-                        .long("lineskept")
-                        .required(false)
-                        .help("Number of pixel lines to keep.")
-                    )
+
                 );
 
     if cfg!(feature = "xferlib") {
@@ -1136,7 +1139,7 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
-    if matches.contains_id("help") {
+    if matches.get_flag("help") {
         args.print_long_help()?;
         return Ok(());
     }

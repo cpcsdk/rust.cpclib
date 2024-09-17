@@ -1,7 +1,8 @@
 use cpclib_common::camino::Utf8PathBuf;
 use directories::BaseDirs;
 
-use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::event::EventObserver;
 
 pub const ACE_CMD: &str = "ace";
 pub const WINAPE_CMD: &str = "winape";
