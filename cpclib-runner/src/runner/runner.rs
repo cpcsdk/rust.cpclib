@@ -1,5 +1,9 @@
+use std::borrow::Borrow;
+use std::io::{BufRead, BufReader};
 use std::marker::PhantomData;
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 use clap::{ArgMatches, Command};
 use cpclib_common::itertools::Itertools;
@@ -55,7 +59,7 @@ impl<E: EventObserver> Default for ExternRunner<E> {
 }
 
 impl<E: EventObserver> ExternRunner<E> {}
-impl<E: EventObserver> Runner for ExternRunner<E> {
+impl<E: EventObserver +'static> Runner for ExternRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -78,30 +82,65 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         for arg in &itr[1..] {
             cmd.arg(arg);
         }
-        let cmd = cmd
+        let mut cmd = cmd
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
-        let output = cmd
-            .wait_with_output()
+
+        // the process is running in another thread. We'll collect its outputs in yet other threads
+        let child_stdout = cmd
+            .stdout
+            .take()
+            .expect("Internal error, could not take stdout");
+        let child_stderr = cmd
+            .stderr
+            .take()
+            .expect("Internal error, could not take stderr");
+
+
+        let o: &'static E = unsafe{std::mem::transmute(o)};
+
+        let o = Arc::new(Mutex::new(o));
+        let oerr = o.clone();
+        let oout = o.clone();
+
+        let stdout_thread = thread::spawn(move || {
+            let stdout_lines = BufReader::new(child_stdout).lines();
+            for line in stdout_lines {
+                let line = line.unwrap();
+                if let Ok(o) = oout.lock() {
+                    o.emit_stdout(&line);
+                } else {
+                    unimplemented!()
+                }
+            }
+        });
+
+        let stderr_thread = thread::spawn(move || {
+            let stderr_lines = BufReader::new(child_stderr).lines();
+            for line in stderr_lines {
+                let line = line.unwrap();
+                if let Ok(o) = oerr.lock() {
+                    o.emit_stderr(&line);
+                } else {
+                    unimplemented!()
+                }
+            }
+        });
+
+
+        let status = cmd
+            .wait()
             .map_err(|e| format!("Error while executing {}. {}", &itr[0], e))?;
 
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        if !stdout.is_empty() {
-            o.emit_stdout(&stdout);
-        }
-        if !stderr.is_empty() {
-            o.emit_stderr(&stderr);
-        }
-
-        let status = output.status;
         if !status.success() {
             return Err("Error while launching the command.".to_owned());
         }
+        stdout_thread.join().unwrap();
+        stderr_thread.join().unwrap();
+
         Ok(())
     }
 

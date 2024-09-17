@@ -19,7 +19,7 @@ impl ExternAssembler {
         }
     }
 
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver+'static>(&self) -> DelegateApplicationDescription<E> {
         match self {
             ExternAssembler::Rasm(r) => r.configuration()
         }
@@ -41,7 +41,7 @@ cfg_match! {
     cfg(target_os = "linux") =>
     {
         impl RasmVersion {
-            pub fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+            pub fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {

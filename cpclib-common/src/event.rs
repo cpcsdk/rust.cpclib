@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-pub trait EventObserver: Debug {
+pub trait EventObserver: Debug + Sync{
     fn emit_stdout(&self, s: &str);
     fn emit_stderr(&self, s: &str);
 }

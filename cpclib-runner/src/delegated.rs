@@ -119,7 +119,7 @@ impl<E: EventObserver> DelegatedRunner<E> {
     }
 }
 
-impl<E: EventObserver> Runner for DelegatedRunner<E> {
+impl<E: EventObserver + 'static> Runner for DelegatedRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {

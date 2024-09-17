@@ -286,7 +286,7 @@ where E: BndBuilderObserved
 }
 
 impl<'builder, 'rule, 'task, E> EventObserver for RuleTaskEventDispatcher<'builder, 'rule, 'task, E>
-where E: BndBuilderObserved
+where E: BndBuilderObserved + Sync
 {
     #[inline]
     fn emit_stdout(&self, s: &str) {
@@ -307,7 +307,7 @@ where E: BndBuilderObserved
 
 impl<'builder, 'rule, 'task, E> BndBuilderObserver
     for RuleTaskEventDispatcher<'builder, 'rule, 'task, E>
-where E: BndBuilderObserved
+where E: BndBuilderObserved + Sync
 {
     fn update(&mut self, event: BndBuilderEvent) {
         unreachable!()
