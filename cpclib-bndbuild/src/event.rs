@@ -1,6 +1,9 @@
-use std::cell::RefCell;
+use std::borrow::{Borrow, BorrowMut};
+use std::cell::{Ref, RefCell};
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::rc::{Rc, Weak};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use camino::Utf8Path;
@@ -33,11 +36,11 @@ pub enum BndBuilderEvent<'a> {
     Stderr(&'a str)
 }
 
-pub trait BndBuilderObserver {
+pub trait BndBuilderObserver: EventObserver {
     fn update(&mut self, event: BndBuilderEvent);
 }
 
-pub trait BndBuilderObserved {
+pub trait BndBuilderObserved: Debug {
     #[inline]
     fn emit_stdout<S: AsRef<str>>(&self, s: S) {
         self.notify(BndBuilderEvent::Stdout(s.as_ref()))
@@ -94,33 +97,24 @@ pub trait BndBuilderObserved {
     }
     #[inline]
     fn notify(&self, event: BndBuilderEvent<'_>) {
-        for observer in self.observers() {
-            observer
-                .upgrade()
-                .unwrap()
-                .borrow_mut()
-                .update(event.clone());
+        let observers = self.observers().clone();
+        for observer in observers.iter() {
+            observer.update(event.clone());
         }
     }
-    fn observers(&self) -> &[BndBuilderObserverWeak];
-    fn add_observer(&mut self, observer: BndBuilderObserverWeak);
+    fn observers(&self) -> ListOfBndBuilderObserverRc;
+    fn add_observer(&mut self, observer: BndBuilderObserverRc);
 }
 
-#[derive(Clone)]
-pub struct BndBuilderObserverStrong(Rc<RefCell<Box<dyn BndBuilderObserver>>>);
-pub struct BndBuilderObserverWeak(Weak<RefCell<Box<dyn BndBuilderObserver>>>);
-pub struct ListOfBndBuilderObserverStrong(Vec<BndBuilderObserverWeak>);
+#[derive(Debug, Clone)]
+pub struct BndBuilderObserverRc(Arc<RwLock<dyn BndBuilderObserver + Sync + Send>>);
+#[derive(Clone, Debug)]
+pub struct ListOfBndBuilderObserverRc(Vec<BndBuilderObserverRc>);
 
-impl From<&BndBuilderObserverStrong> for BndBuilderObserverWeak {
-    fn from(val: &BndBuilderObserverStrong) -> Self {
-        val.downgrade()
-    }
-}
-impl BndBuilderObserverStrong {
-    pub fn new<O: BndBuilderObserver + Sized + 'static>(observer: O) -> Self {
-        let observer = Box::new(observer);
-        let observer = observer as Box<dyn BndBuilderObserver>;
-        let observer = Rc::new(RefCell::new(observer));
+impl BndBuilderObserverRc {
+    pub fn new<O: BndBuilderObserver + Sized + 'static + Sync + Send>(observer: O) -> Self {
+        let observer = RwLock::new(observer);
+        let observer = Arc::new(observer);
         Self(observer)
     }
 
@@ -129,105 +123,106 @@ impl BndBuilderObserverStrong {
         Self::new(observer)
     }
 
-    pub fn downgrade(&self) -> BndBuilderObserverWeak {
-        BndBuilderObserverWeak(Rc::downgrade(&self.0))
+    pub fn update(&self, event: BndBuilderEvent) {
+        self.0.deref().write().unwrap().deref_mut().update(event);
     }
 }
 
-impl Deref for BndBuilderObserverStrong {
-    type Target = Rc<RefCell<Box<dyn BndBuilderObserver>>>;
+impl ListOfBndBuilderObserverRc {
+    pub fn iter(&self) -> ListOfBndBuilderObserverRcIter {
+        ListOfBndBuilderObserverRcIter { list: self, idx: 0 }
+    }
+
+    pub fn add_observer(&mut self, o: BndBuilderObserverRc) {
+        self.0.push(o);
+    }
+}
+
+pub struct ListOfBndBuilderObserverRcIter<'l> {
+    list: &'l ListOfBndBuilderObserverRc,
+    idx: usize
+}
+
+impl<'l> Iterator for ListOfBndBuilderObserverRcIter<'l> {
+    type Item = BndBuilderObserverRc;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let vec = self.list.0.deref();
+        if self.idx == vec.len() {
+            None
+        }
+        else {
+            let res = vec.get(self.idx).cloned();
+            self.idx += 1;
+            res
+        }
+    }
+}
+
+impl Deref for BndBuilderObserverRc {
+    type Target = Arc<RwLock<dyn BndBuilderObserver + Sync + Send>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for BndBuilderObserverStrong {
+impl DerefMut for BndBuilderObserverRc {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl BndBuilderObserverWeak {
-    pub fn new<O: BndBuilderObserver + Sized + 'static>(
-        observer: O
-    ) -> (Rc<RefCell<Box<dyn BndBuilderObserver>>>, Self) {
-        let observer = Box::new(observer);
-        let observer = observer as Box<dyn BndBuilderObserver>;
-        let observer = Rc::new(RefCell::new(observer));
-
-        let weak = Rc::downgrade(&observer);
-
-        (observer, Self(weak))
-    }
-}
-
-impl Deref for BndBuilderObserverWeak {
-    type Target = Weak<RefCell<Box<dyn BndBuilderObserver>>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<Vec<BndBuilderObserverWeak>> for ListOfBndBuilderObserverStrong {
-    fn from(value: Vec<BndBuilderObserverWeak>) -> Self {
+impl From<Vec<BndBuilderObserverRc>> for ListOfBndBuilderObserverRc {
+    fn from(value: Vec<BndBuilderObserverRc>) -> Self {
         Self(value)
     }
 }
 
-impl Deref for ListOfBndBuilderObserverStrong {
-    type Target = Vec<BndBuilderObserverWeak>;
+impl Deref for ListOfBndBuilderObserverRc {
+    type Target = Vec<BndBuilderObserverRc>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl Clone for ListOfBndBuilderObserverStrong {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
-    }
-}
-
-impl DerefMut for ListOfBndBuilderObserverStrong {
+impl DerefMut for ListOfBndBuilderObserverRc {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl Default for ListOfBndBuilderObserverStrong {
+impl Default for ListOfBndBuilderObserverRc {
     fn default() -> Self {
         Self(Vec::with_capacity(1))
     }
 }
 
-impl Clone for BndBuilderObserverWeak {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
+impl EventObserver for ListOfBndBuilderObserverRc {
+    fn emit_stdout(&self, s: &str) {
+        for observer in self.0.clone().into_iter() {
+            observer.0.deref().read().unwrap().emit_stdout(s);
+        }
+    }
+
+    fn emit_stderr(&self, s: &str) {
+        for observer in self.0.clone().into_iter() {
+            observer.0.deref().read().unwrap().emit_stderr(s);
+        }
     }
 }
 
-impl BndBuilderObserved for ListOfBndBuilderObserverStrong {
-    fn observers(&self) -> &[BndBuilderObserverWeak] {
-        &self.0
-    }
-
-    fn add_observer(&mut self, observer: BndBuilderObserverWeak) {
-        self.0.push(observer)
-    }
-}
-
-impl EventObserver for ListOfBndBuilderObserverStrong {
-    fn emit_stdout<S: Into<String>>(&self, s: S) {
-        <Self as BndBuilderObserved>::emit_stdout(self, s.into())
-    }
-
-    fn emit_stderr<S: Into<String>>(&self, s: S) {
-        <Self as BndBuilderObserved>::emit_stderr(self, s.into())
+impl BndBuilderObserver for ListOfBndBuilderObserverRc {
+    fn update(&mut self, event: BndBuilderEvent) {
+        for observer in self.0.clone().into_iter() {
+            let mut observer = observer.0.deref().write().unwrap();
+            observer.update(event.clone());
+        }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct RuleTaskEventDispatcher<'observed, 'rule, 'task, E>
 where E: BndBuilderObserved
 {
@@ -236,6 +231,24 @@ where E: BndBuilderObserved
     task: &'task Task,
     start: std::time::Instant
 }
+
+// impl<'observed, 'rule, 'task, E: BndBuilderObserved> Into<ListOfBndBuilderObserverRc> for RuleTaskEventDispatcher<'observed, 'rule, 'task, E>
+// where E: BndBuilderObserved
+// {
+// fn into(self) -> ListOfBndBuilderObserverRc {
+// let mut list = ListOfBndBuilderObserverRc::default();
+// list.add_observer(self.into());
+// list
+// }
+// }
+
+// impl<'observed, 'rule, 'task, E: BndBuilderObserved> Into<BndBuilderObserverRc> for RuleTaskEventDispatcher<'observed, 'rule, 'task, E>
+// where E: BndBuilderObserved
+// {
+// fn into(self) -> BndBuilderObserverRc {
+// BndBuilderObserverRc(Rc::new(RefCell::new(Box::new(self.clone()))))
+// }
+// }
 
 impl<'observed, 'rule, 'task, E> Drop for RuleTaskEventDispatcher<'observed, 'rule, 'task, E>
 where E: BndBuilderObserved
@@ -276,28 +289,47 @@ impl<'builder, 'rule, 'task, E> EventObserver for RuleTaskEventDispatcher<'build
 where E: BndBuilderObserved
 {
     #[inline]
-    fn emit_stdout<S: Into<String>>(&self, s: S) {
+    fn emit_stdout(&self, s: &str) {
         match self.rule {
-            Some(rule) => self.observed.emit_task_stdout(rule, self.task, s.into()),
-            None => self.observed.emit_stdout(s.into())
+            Some(rule) => self.observed.emit_task_stdout(rule, self.task, s),
+            None => self.observed.emit_stdout(s)
         }
     }
 
     #[inline]
-    fn emit_stderr<S: Into<String>>(&self, s: S) {
+    fn emit_stderr(&self, s: &str) {
         match self.rule {
-            Some(rule) => self.observed.emit_task_stderr(rule, self.task, s.into()),
-            None => self.observed.emit_stderr(s.into())
+            Some(rule) => self.observed.emit_task_stderr(rule, self.task, s),
+            None => self.observed.emit_stderr(s)
         }
     }
 }
 
-#[derive(Default)]
+impl<'builder, 'rule, 'task, E> BndBuilderObserver
+    for RuleTaskEventDispatcher<'builder, 'rule, 'task, E>
+where E: BndBuilderObserved
+{
+    fn update(&mut self, event: BndBuilderEvent) {
+        unreachable!()
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct BndBuilderDefaultObserver {}
 
 impl BndBuilderDefaultObserver {
     pub fn new() -> Rc<RefCell<Box<dyn BndBuilderObserver>>> {
         Rc::new(RefCell::new(Box::new(BndBuilderDefaultObserver {})))
+    }
+}
+
+impl EventObserver for BndBuilderDefaultObserver {
+    fn emit_stdout(&self, s: &str) {
+        println!("{s}");
+    }
+
+    fn emit_stderr(&self, s: &str) {
+        eprintln!("{s}");
     }
 }
 

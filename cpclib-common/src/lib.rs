@@ -1,6 +1,7 @@
 #![feature(slice_take)]
 
 pub mod clap_extra;
+pub mod event;
 pub mod parse;
 pub mod riff;
 

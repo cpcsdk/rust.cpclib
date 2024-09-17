@@ -672,7 +672,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
 
     let tokens = crate::parse_z80_with_context_builder(code, builder)?;
 
-    let mut env = Env::default();
+    let mut env = Env::new(base_env.options().clone());
     env.symbols = base_env.symbols().clone();
     env.start_new_pass();
     env.visit_page_or_bank::<Expr>(None)?; // assemble in a new bank

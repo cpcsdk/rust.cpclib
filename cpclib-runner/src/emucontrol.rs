@@ -16,8 +16,8 @@ use xcap::Window;
 use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
-use crate::runner::emulator::Emulator;
 use crate::event::EventObserver;
+use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -751,7 +751,7 @@ pub struct EmuControlledRunner<E: EventObserver> {
     _phantom: PhantomData<E>
 }
 
-impl<E: EventObserver>  Default for EmuControlledRunner<E> {
+impl<E: EventObserver> Default for EmuControlledRunner<E> {
     fn default() -> Self {
         Self {
             command: EmuCli::command(),
@@ -760,7 +760,7 @@ impl<E: EventObserver>  Default for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver>  Runner for EmuControlledRunner<E> {
+impl<E: EventObserver> Runner for EmuControlledRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {

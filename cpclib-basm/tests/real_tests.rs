@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::rc::Rc;
 use std::sync::LazyLock;
 
 use cpclib_asm::assembler::Env;
@@ -51,7 +52,7 @@ fn command_for_generated_test(
     let args =
         args_parser.get_matches_from(["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);
 
-    process(&args)
+    process(&args, Rc::new(()))
 }
 
 fn specific_test(folder: &str, fname: &str) {
@@ -485,5 +486,5 @@ fn test_at2_akm() {
     let args_parser = build_args_parser();
     let args = args_parser.get_matches_from(["basm", "--db", "tests/asm/at2/test_akm.asm"]);
 
-    process(&args).expect("Error while assembling AT2/AKM");
+    process(&args, Rc::new(())).expect("Error while assembling AT2/AKM");
 }

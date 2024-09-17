@@ -22,14 +22,16 @@ use std::borrow::BorrowMut;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::io::{stdout, Write};
+use std::io::Write;
 use std::ops::{Deref, Neg};
+use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
@@ -87,18 +89,28 @@ const MMR_PAGES_SELECTION: [u8; 9] = [
 #[allow(missing_docs)]
 pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct EnvOptions {
     parse: ParserOptions,
-    assemble: AssemblingOptions
+    assemble: AssemblingOptions,
+    observer: Rc<dyn EnvEventObserver>
+}
+
+impl Default for EnvOptions {
+    fn default() -> Self {
+        Self {
+            parse: Default::default(),
+            assemble: Default::default(),
+            observer: Rc::new(())
+        }
+    }
 }
 
 impl From<AssemblingOptions> for EnvOptions {
-    fn from(opt: AssemblingOptions) -> EnvOptions {
-        EnvOptions {
-            parse: ParserOptions::default(),
-            assemble: opt
-        }
+    fn from(ass: AssemblingOptions) -> EnvOptions {
+        let mut opt = Self::default();
+        opt.assemble = ass;
+        opt
     }
 }
 
@@ -122,8 +134,16 @@ impl EnvOptions {
         }
     }
 
-    pub fn new(parse: ParserOptions, assemble: AssemblingOptions) -> Self {
-        Self { parse, assemble }
+    pub fn new(
+        parse: ParserOptions,
+        assemble: AssemblingOptions,
+        observer: Rc<dyn EnvEventObserver>
+    ) -> Self {
+        Self {
+            parse,
+            assemble,
+            observer
+        }
     }
 
     pub fn parse_options(&self) -> &ParserOptions {
@@ -351,6 +371,10 @@ impl CharsetEncoding {
     }
 }
 
+pub trait EnvEventObserver: Debug + EventObserver {}
+
+impl<T> EnvEventObserver for T where T: EventObserver + Clone + Debug {}
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -453,6 +477,12 @@ pub struct Env {
     pub(crate) assembling_control_current_output_commands: Vec<ControlOutputStore>
 }
 
+impl Default for Env {
+    fn default() -> Self {
+        Env::new(Default::default())
+    }
+}
+
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
@@ -527,67 +557,6 @@ impl fmt::Debug for Env {
             self.pass,
             self.symbols()
         )
-    }
-}
-
-impl Default for Env {
-    fn default() -> Self {
-        Self {
-            lookup_directory_stack: Vec::with_capacity(3),
-            pass: AssemblingPass::Uninitialized,
-            options: EnvOptions::default(),
-            stable_counters: StableTickerCounters::default(),
-            ga_mmr: 0xC0, // standard memory configuration
-
-            macro_seed: 0,
-            charset_encoding: CharsetEncoding::new(),
-            sna: SnaAssembler::default(),
-            sna_version: cpclib_sna::SnapshotVersion::V3,
-
-            cpr: None,
-
-            symbols: SymbolsTableCaseDependent::default(),
-            run_options: None,
-            byte_written: false,
-            output_trigger: None,
-            symbols_output: Default::default(),
-
-            crunched_section_state: None,
-
-            warnings: Vec::new(),
-            nested_rorg: 0,
-
-            sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
-            current_section: None,
-            output_address: 0,
-            free_banks: DecoratedPages::default(),
-
-            real_nb_passes: 0,
-            saved_files: None,
-            can_skip_next_passes: true.into(),
-            request_additional_pass: false.into(),
-
-            if_token_adr_to_used_decision: HashMap::default(),
-            if_token_adr_to_unused_decision: HashMap::default(),
-            requested_additional_pass: false,
-
-            functions: Default::default(),
-            return_value: None,
-
-            current_pass_discarded_errors: HashSet::default(),
-            previous_pass_discarded_errors: HashSet::default(),
-
-            included_paths: HashSet::default(),
-
-            extra_print_from_function: Vec::new().into(),
-            extra_failed_assert_from_function: Vec::new().into(),
-            map_counter: 0,
-
-            repeat_start: 1.into(),
-            repeat_step: 1.into(),
-
-            assembling_control_current_output_commands: Vec::new()
-        }
     }
 }
 
@@ -887,15 +856,17 @@ impl Env {
 impl Env {
     /// Create an environment that embeds a copy of the given table and is configured to be in the latest pass.
     /// Mainly used for tests.
+    /// TODO use bon here
     pub fn with_table(symbols: &SymbolsTable) -> Self {
-        let mut env = Self::default();
+        let mut env = Self::new(Default::default());
         env.symbols.set_table(symbols.clone());
         env.pass = AssemblingPass::SecondPass;
         env
     }
 
+    /// TODO use bon here
     pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Self {
-        let mut env = Self::default();
+        let mut env = Self::new(Default::default());
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass;
         env
@@ -1197,6 +1168,10 @@ impl Env {
         }
     }
 
+    pub fn observer(&self) -> Rc<dyn EnvEventObserver> {
+        Rc::clone(&self.options().observer)
+    }
+
     pub fn handle_print(&mut self) -> Result<(), AssemblerError> {
         let backup = self.ga_mmr;
 
@@ -1204,11 +1179,10 @@ impl Env {
         let pages_mmr = MMR_PAGES_SELECTION;
 
         let mut print_errors: Option<AssemblerError> = None;
-        let mut writer = std::io::stdout();
-        //  let mut writer = BufWriter::new(writer); seem to be slower with the buffer :()
+        let observer = self.observer();
 
         let mut handle_page_info = |page: &PageInformation| {
-            let mut l_errors = page.execute_print_or_pause(&mut writer);
+            let mut l_errors = page.execute_print_or_pause(observer.deref());
             match (&mut print_errors, &mut l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -2308,7 +2282,7 @@ impl Env {
                 span: span.cloned(),
                 print_or_error
             }
-            .execute(&mut stdout());
+            .execute(self.observer().deref()); // TODO use the true one
         }
         Ok(())
     }
@@ -3074,7 +3048,63 @@ impl Env {
 
 impl Env {
     pub fn new(options: EnvOptions) -> Self {
-        let mut env = Env::default();
+        let mut env = Self {
+            lookup_directory_stack: Vec::with_capacity(3),
+            pass: AssemblingPass::Uninitialized,
+            options: EnvOptions::default(),
+            stable_counters: StableTickerCounters::default(),
+            ga_mmr: 0xC0, // standard memory configuration
+
+            macro_seed: 0,
+            charset_encoding: CharsetEncoding::new(),
+            sna: SnaAssembler::default(),
+            sna_version: cpclib_sna::SnapshotVersion::V3,
+
+            cpr: None,
+
+            symbols: SymbolsTableCaseDependent::default(),
+            run_options: None,
+            byte_written: false,
+            output_trigger: None,
+            symbols_output: Default::default(),
+
+            crunched_section_state: None,
+
+            warnings: Vec::new(),
+            nested_rorg: 0,
+
+            sections: HashMap::<String, Arc<RwLock<Section>>>::default(),
+            current_section: None,
+            output_address: 0,
+            free_banks: DecoratedPages::default(),
+
+            real_nb_passes: 0,
+            saved_files: None,
+            can_skip_next_passes: true.into(),
+            request_additional_pass: false.into(),
+
+            if_token_adr_to_used_decision: HashMap::default(),
+            if_token_adr_to_unused_decision: HashMap::default(),
+            requested_additional_pass: false,
+
+            functions: Default::default(),
+            return_value: None,
+
+            current_pass_discarded_errors: HashSet::default(),
+            previous_pass_discarded_errors: HashSet::default(),
+
+            included_paths: HashSet::default(),
+
+            extra_print_from_function: Vec::new().into(),
+            extra_failed_assert_from_function: Vec::new().into(),
+            map_counter: 0,
+
+            repeat_start: 1.into(),
+            repeat_step: 1.into(),
+
+            assembling_control_current_output_commands: Vec::new()
+        };
+
         env.options = options;
 
         // prefill the snapshot representation with something else than the default
@@ -3187,13 +3217,21 @@ where
 
 /// Visit the tokens during a single pass. Is deprecated in favor to the mulitpass version
 #[deprecated(note = "use visit_tokens_one_pass")]
-pub fn visit_tokens<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
-    visit_tokens_one_pass(tokens)
+pub fn visit_tokens<T: Visited>(
+    tokens: &[T],
+    o: Rc<dyn EnvEventObserver>
+) -> Result<Env, AssemblerError> {
+    visit_tokens_one_pass(tokens, o)
 }
 
 /// Assemble the tokens doing one pass only (so symbols are not properly treated)
-pub fn visit_tokens_one_pass<T: Visited>(tokens: &[T]) -> Result<Env, AssemblerError> {
-    let mut env = Env::default();
+pub fn visit_tokens_one_pass<T: Visited>(
+    tokens: &[T],
+    o: Rc<dyn EnvEventObserver>
+) -> Result<Env, AssemblerError> {
+    let mut opt = EnvOptions::default();
+    opt.observer = o;
+    let mut env = Env::new(opt);
 
     for token in tokens.iter() {
         token.visited(&mut env)?;

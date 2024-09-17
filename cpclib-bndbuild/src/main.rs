@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use cpclib_bndbuild::app::BndBuilderApp;
-use cpclib_bndbuild::event::BndBuilderObserverStrong;
+use cpclib_bndbuild::event::BndBuilderObserverRc;
 use cpclib_bndbuild::BndBuilderError;
 
 fn main() {
@@ -15,12 +15,12 @@ fn main() {
 }
 
 fn inner_main() -> Result<(), BndBuilderError> {
-    let observer = BndBuilderObserverStrong::new_default();
+    let observer = BndBuilderObserverRc::new_default();
 
     let command =
         match BndBuilderApp::new().map_err(|e| BndBuilderError::AnyError(e.to_string()))? {
             Some(mut app) => {
-                app.add_observer(&observer);
+                app.add_observer(observer);
                 app.command()?
             },
             None => exit(0)

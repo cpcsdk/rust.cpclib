@@ -4,6 +4,8 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io;
 use std::io::Write;
+use std::ops::Deref;
+use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -17,6 +19,7 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::combinator::alt;
 use cpclib_common::winnow::Parser;
@@ -196,7 +199,8 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
 pub fn assemble(
     matches: &ArgMatches,
     listing: &LocatedListing,
-    parse_options: ParserOptions
+    parse_options: ParserOptions,
+    o: Rc<dyn EnvEventObserver>
 ) -> Result<Env, BasmError> {
     let _show_progress = matches.get_flag("PROGRESS");
 
@@ -294,7 +298,7 @@ pub fn assemble(
                 .symbols_mut()
                 .assign_symbol_to_value(symbol, value.clone())
                 .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
-            println!("Assigned {} to {}", value, symbol);
+            o.emit_stdout(&format!("Assigned {} to {}", value, symbol));
         }
     }
 
@@ -313,7 +317,8 @@ pub fn assemble(
         }
     }
 
-    let options = EnvOptions::new(parse_options, assemble_options);
+    let options = EnvOptions::new(parse_options, assemble_options, o);
+
     let (_tokens, mut env) =
         visit_tokens_all_passes_with_options(listing, options).map_err(|(_t_, mut env, e)| {
             env.handle_print(); // do the prints even if there is an assembling issue
@@ -458,16 +463,17 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             let bytes = env.produced_bytes();
             if !bytes.is_empty() {
                 let listing = Listing::from(bytes.as_ref());
-                println!("{}", PrintableListing::from(&Listing::from(listing)));
+                env.observer().emit_stdout(&format!(
+                    "{}",
+                    PrintableListing::from(&Listing::from(listing))
+                ));
             }
         }
         else {
             debug_assert!(matches.contains_id("OUTPUT"));
             let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
             if pc_filename.to_lowercase().ends_with(".sna") && !matches.get_flag("SNAPSHOT") {
-                eprintln!(
-                    "[WARNING] You are saving a file with .sna extension without using --sna flag"
-                );
+                env.observer().emit_stderr("[WARNING] You are saving a file with .sna extension without using --sna flag");
             }
             let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_str());
 
@@ -528,12 +534,15 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 }
 
 /// Launch the assembling of everythin
-pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+pub fn process(
+    matches: &ArgMatches,
+    o: Rc<dyn EnvEventObserver>
+) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // Handle the display of embedded files list
     if matches.get_flag("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
         for fname in EmbeddedFiles::iter() {
-            println!("{}", fname)
+            o.emit_stdout(&format!("{}", fname))
         }
         std::process::exit(0);
     }
@@ -544,11 +553,11 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
 
         match EmbeddedFiles::get(fname) {
             Some(content) => {
-                println!("{}", std::str::from_utf8(content.data.as_ref()).unwrap());
+                o.emit_stdout(std::str::from_utf8(content.data.as_ref()).unwrap());
                 std::process::exit(0);
             },
             None => {
-                eprintln!("Embedded file {fname} does not exist");
+                o.emit_stderr(&format!("Embedded file {fname} does not exist"));
                 std::process::exit(-1);
             }
         }
@@ -556,14 +565,14 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
 
     // standard assembling
     let (listing, options) = parse(matches)?;
-    let env = assemble(matches, &listing, options).map_err(move |error| {
+    let env = assemble(matches, &listing, options, o.clone()).map_err(move |error| {
         BasmError::ErrorWithListing {
             error: Box::new(error),
             listing
         }
     })?;
 
-    //  eprintln!("TODO: include parse warnings");
+    //  o.emit_stderr(format!("TODO: include parse warnings");
     // warnings.extend_from_slice(env.warnings());
     let warnings = env.warnings().to_vec();
 
@@ -571,10 +580,11 @@ pub fn process(matches: &ArgMatches) -> Result<(Env, Vec<AssemblerError>), BasmE
         const KEPT: usize = 10;
 
         if warnings.len() > KEPT {
-            eprintln!("Warnings are considered to be errors. The first 10 have been kept.");
+            o.emit_stderr("Warnings are considered to be errors. The first 10 have been kept.");
         }
         else {
-            eprintln!("Warnings are considered to be errors.");
+            o.deref()
+                .emit_stderr("Warnings are considered to be errors.");
         }
 
         // keep only the first 10

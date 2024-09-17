@@ -1,9 +1,9 @@
-use std::io::Write;
+
 
 use super::delayed_command::*;
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
-use super::Env;
+use super::{Env, EnvEventObserver};
 use crate::error::AssemblerError;
 pub type ProtectedArea = std::ops::RangeInclusive<u16>;
 
@@ -68,7 +68,7 @@ impl PageInformation {
             pub fn execute_save(&self, env: &Env, mmr: u8) -> Result<Vec<SavedFile>, AssemblerError>;
             pub fn nb_files_to_save(&self) -> usize;
             pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
-            pub fn execute_print_or_pause(&self, writer: &mut impl Write)-> Result<(), AssemblerError>;
+            pub fn execute_print_or_pause(&self, o: &dyn EnvEventObserver)-> Result<(), AssemblerError>;
             pub fn collect_breakpoints(&self)-> &[BreakpointCommand];
         }
 

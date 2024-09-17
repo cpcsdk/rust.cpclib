@@ -1,15 +1,20 @@
+use std::borrow::Borrow;
 use std::ops::Deref;
+use std::rc::Rc;
 use std::str::FromStr;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{parser, ArgMatches};
 use cpclib_basm::build_args_parser;
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
 use cpclib_runner::runner::RunnerWithClap;
 
-use crate::event::{BndBuilderObserved, BndBuilderObserverWeak, ListOfBndBuilderObserverStrong};
+use crate::event::{
+    BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
+};
 use crate::runners::assembler::{Assembler, BasmRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
@@ -25,9 +30,10 @@ use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAM
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
-    observers: ListOfBndBuilderObserverStrong
+    observers: ListOfBndBuilderObserverRc
 }
 
+#[derive(Debug)]
 pub enum BndBuilderCommandInner {
     /// Print the help of the given command
     InnerHelp(String),
@@ -60,17 +66,18 @@ pub enum BndBuilderCommandInner {
     Dot(BndBuilder)
 }
 
+#[derive(Debug)]
 pub struct BndBuilderCommand {
     inner: BndBuilderCommandInner,
-    observers: ListOfBndBuilderObserverStrong
+    observers: ListOfBndBuilderObserverRc
 }
 
 impl BndBuilderObserved for BndBuilderCommand {
-    fn observers(&self) -> &[BndBuilderObserverWeak] {
-        self.observers.observers()
+    fn observers(&self) -> ListOfBndBuilderObserverRc {
+        self.observers.clone()
     }
 
-    fn add_observer(&mut self, observer: BndBuilderObserverWeak) {
+    fn add_observer(&mut self, observer: BndBuilderObserverRc) {
         self.observers.add_observer(observer);
     }
 }
@@ -109,19 +116,19 @@ impl BndBuilderCommand {
 
         match inner {
             BndBuilderCommandInner::InnerHelp(runner) => {
-                Self::execute_help(runner.as_str(), observers);
+                Self::execute_help(runner.as_str(), &observers);
                 Ok(None)
             },
             BndBuilderCommandInner::Version => {
-                Self::execute_version(observers);
+                Self::execute_version(&observers);
                 Ok(None)
             },
             BndBuilderCommandInner::Init => {
-                Self::execute_init(observers)?;
+                Self::execute_init(&observers)?;
                 Ok(None)
             },
             BndBuilderCommandInner::Direct(args) => {
-                Self::execute_direct(args.as_str(), observers)?;
+                Self::execute_direct(args.as_str(), &observers)?;
                 Ok(None)
             },
             BndBuilderCommandInner::AddTask {
@@ -135,7 +142,7 @@ impl BndBuilderCommand {
                 Ok(None)
             },
             BndBuilderCommandInner::Show(content) => {
-                Self::execute_show(content, observers);
+                Self::execute_show(content, &observers);
                 Ok(None)
             },
             BndBuilderCommandInner::List(builder) => {
@@ -161,23 +168,28 @@ impl BndBuilderCommand {
         watch: bool,
         mut current_step: usize,
         builder: BndBuilder,
-        observers: ListOfBndBuilderObserverStrong
+        observers: ListOfBndBuilderObserverRc
     ) -> Result<Option<Self>, BndBuilderError> {
         let targets_provided = init_targets.is_some();
+
+        // get the list of targets
         let targets = match init_targets.as_ref() {
             Some(targets) => targets.clone(),
             None => {
+                assert_eq!(current_step, 0);
                 if let Some(first) = builder.default_target() {
                     vec![first.to_owned()]
                 }
                 else {
                     return Err(BndBuilderError::NoTargets);
                 }
-            },
+            }
         };
 
+        // select the right one
         let tgt = &targets[current_step];
 
+        // execute if needed
         if builder.outdated(tgt).unwrap_or(false) {
             builder.execute(tgt).map_err(|e| {
                 if targets_provided {
@@ -191,6 +203,7 @@ impl BndBuilderCommand {
             })?;
         }
 
+        // set up the next step if any
         let over = init_targets.as_ref().map(|v| v.len() - 1).unwrap_or(0) == current_step;
 
         if over {
@@ -216,13 +229,13 @@ impl BndBuilderCommand {
         }
     }
 
-    fn execute_dot(builder: BndBuilder, _observers: ListOfBndBuilderObserverStrong) {
+    fn execute_dot(builder: BndBuilder, _observers: ListOfBndBuilderObserverRc) {
         let dot = builder.to_dot();
         builder.emit_stdout(dot);
         builder.emit_stdout("\n");
     }
 
-    fn execute_list(builder: BndBuilder, observers: ListOfBndBuilderObserverStrong) {
+    fn execute_list(builder: BndBuilder, observers: ListOfBndBuilderObserverRc) {
         for rule in builder.rules() {
             builder.emit_stdout(format!(
                 "{}{}: {}\n",
@@ -231,13 +244,13 @@ impl BndBuilderCommand {
                 rule.dependencies().iter().map(|f| f.to_string()).join(" "),
             ));
             if let Some(help) = rule.help() {
-                observers.emit_stdout(format!("\t{}\n", help));
+                observers.emit_stdout(&format!("\t{}\n", help));
             }
         }
     }
 
-    fn execute_show<S: AsRef<str>>(content: S, observers: ListOfBndBuilderObserverStrong) {
-        observers.emit_stdout(content);
+    fn execute_show<S: AsRef<str>>(content: S, observers: &dyn BndBuilderObserver) {
+        observers.emit_stdout(content.as_ref());
     }
 
     fn execute_add_task<S: AsRef<str>>(
@@ -246,7 +259,7 @@ impl BndBuilderCommand {
         kind: String,
         builder: BndBuilder,
         fname: Utf8PathBuf,
-        _observers: ListOfBndBuilderObserverStrong
+        _observers: ListOfBndBuilderObserverRc
     ) -> Result<(), BndBuilderError> {
         let targets = [add];
         let builder = builder.add_default_rule(&targets, &dependencies, &kind);
@@ -254,19 +267,19 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_direct(
+    fn execute_direct<O: BndBuilderObserver>(
         cmd: &str,
-        observers: ListOfBndBuilderObserverStrong
+        observers: &O
     ) -> Result<(), BndBuilderError> {
         // TODO remove strong dependency to serde_yaml and replace it by Task
         let task: Task = serde_yaml::from_str(cmd).map_err(BndBuilderError::ParseError)?;
 
-        execute(&task, &observers).map_err(BndBuilderError::AnyError)
+        execute(&task, observers).map_err(BndBuilderError::AnyError)
     }
 
     /// Show the help of a given command
     /// TODO strenghten the help search by testing more keywords
-    fn execute_help(runner: &str, observers: ListOfBndBuilderObserverStrong) {
+    fn execute_help<O: BndBuilderObserver>(runner: &str, observers: &O) {
         let help = if is_emuctrl_cmd(runner) {
             EmuControlledRunner::<()>::render_help()
         }
@@ -292,7 +305,7 @@ impl BndBuilderCommand {
                 )),
                 StandardTaskArguments::new("--help")
             );
-            execute(&task, &()).unwrap();
+            execute(&task, observers).unwrap();
             "TODO".into()
         }
         else if is_rm_cmd(runner) {
@@ -305,11 +318,11 @@ impl BndBuilderCommand {
             unimplemented!("{runner}")
         };
 
-        observers.emit_stdout(format!("{help}\n"));
+        observers.emit_stdout(&format!("{help}\n"));
     }
 
-    fn execute_version(observers: ListOfBndBuilderObserverStrong) {
-        observers.emit_stdout(format!(
+    fn execute_version(observers: &dyn BndBuilderObserver) {
+        observers.emit_stdout(&format!(
             "{}\n{}\n{}\n{}",
             build_args_parser().clone().render_long_version(),
             BasmRunner::<()>::default()
@@ -324,7 +337,7 @@ impl BndBuilderCommand {
         ));
     }
 
-    fn execute_init(observers: ListOfBndBuilderObserverStrong) -> Result<(), BndBuilderError> {
+    fn execute_init(observers: &dyn BndBuilderObserver) -> Result<(), BndBuilderError> {
         init_project(None)?;
         observers.emit_stdout("Empty project initialized");
         Ok(())
@@ -357,8 +370,8 @@ impl BndBuilderApp {
         }
     }
 
-    pub fn add_observer<O: Into<BndBuilderObserverWeak>>(&mut self, o: O) {
-        self.observers.push(o.into());
+    pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
+        self.observers.add_observer(o.into());
     }
 
     /// Get the string that represents the builder script after interpolation
@@ -436,7 +449,7 @@ impl BndBuilderApp {
                         .get_many::<String>("target")
                         .map(|s| s.into_iter().next())
                     {
-                        if fname.ends_with("bndbuild.yml") {
+                        if EXPECTED_FILENAMES.iter().any(|end| fname.ends_with(*end)) {
                             error_msg.push_str(&format!(
                                 "\nHave you forgotten to do \"-f {}\" ?",
                                 fname
@@ -502,12 +515,12 @@ impl BndBuilderApp {
 
                 let watch_requested = matches.get_flag("watch");
 
-                Ok(BndBuilderCommandInner::Build {
+                dbg!(Ok(BndBuilderCommandInner::Build {
                     targets,
                     watch: watch_requested,
                     current_step: 0,
                     builder
-                })
+                }))
 
                 // Execute the targets
             }

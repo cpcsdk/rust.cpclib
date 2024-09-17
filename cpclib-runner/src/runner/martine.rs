@@ -1,4 +1,5 @@
-use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::event::EventObserver;
 
 pub const MARTINE_CMD: &str = "martine";
 

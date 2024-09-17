@@ -1,7 +1,9 @@
+
 use cpclib_common::camino::Utf8Path;
 
 use super::{ExternRunner, Runner};
-use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription}, event::EventObserver};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::event::EventObserver;
 
 pub const RASM_CMD: &str = "rasm";
 
@@ -47,7 +49,7 @@ cfg_match! {
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "rasm",
-                            compile: Some(Box::new(|path: &Utf8Path, o: &E | -> Result<(), String>{
+                            compile: Some(Box::new(|path: &Utf8Path, o: &E| -> Result<(), String>{
                                 let command = vec!["make"];
                                 ExternRunner::default().inner_run(&command, o)?;
 

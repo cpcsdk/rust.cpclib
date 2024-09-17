@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use cpclib_basm::*;
 
 /// ! This test file has been created to track some wrong memory handling when saving data with banksets
@@ -6,7 +8,7 @@ use cpclib_basm::*;
 fn bankset_check_save() {
     let args_parser = build_args_parser();
     let args = args_parser.get_matches_from(["basm", "-I", "tests/asm/", "good_bankset.asm"]);
-    let (env, _) = process(&args).expect("Unable to assemble the file");
+    let (env, _) = process(&args, Rc::new(())).expect("Unable to assemble the file");
 
     let sna = env.sna();
     dbg!(sna.memory_size_header(), sna.memory_dump().len());

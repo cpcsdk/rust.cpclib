@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::rc::Rc;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
@@ -84,7 +85,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
         };
         options.set_symbols(table.table());
 
-        let options = EnvOptions::new(Default::default(), options);
+        let options = EnvOptions::new(Default::default(), options, Rc::new(()));
         self.to_bytes_with_options(options)
     }
 

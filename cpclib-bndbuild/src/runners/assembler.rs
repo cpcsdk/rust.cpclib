@@ -1,7 +1,10 @@
+use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
 use cpclib_asm::orgams::convert_from_to;
+use cpclib_asm::EnvEventObserver;
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
@@ -172,13 +175,13 @@ impl<E: EventObserver> Default for BasmRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for BasmRunner<E> {
+impl<E: EventObserver + Debug + 'static> RunnerWithClap for BasmRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver> Runner for BasmRunner<E> {
+impl<E: EventObserver + Debug + 'static> Runner for BasmRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -186,13 +189,14 @@ impl<E: EventObserver> Runner for BasmRunner<E> {
         let matches = self.get_matches(&itr)?;
 
         if matches.get_flag("version") {
-            o.emit_stdout(self.get_clap_command().clone().render_version());
+            o.emit_stdout(&self.get_clap_command().clone().render_version());
             return Ok(());
         }
 
         if matches.get_flag("help") {
             o.emit_stdout(
-                self.get_clap_command()
+                &self
+                    .get_clap_command()
                     .clone()
                     .render_long_help()
                     .to_string()
@@ -202,14 +206,16 @@ impl<E: EventObserver> Runner for BasmRunner<E> {
 
         let start = std::time::Instant::now();
 
-        match cpclib_basm::process(&matches) {
+        let o: &'static E = unsafe { std::mem::transmute(o) }; // o is alive all along the function
+        let o: Rc<dyn EnvEventObserver> = Rc::new(o);
+        match cpclib_basm::process(&matches, Rc::clone(&o)) {
             Ok((env, warnings)) => {
                 for warning in warnings {
-                    o.emit_stdout(format!("{warning}\n"));
+                    o.emit_stdout(&format!("{warning}\n"));
                 }
 
                 let report = env.report(&start);
-                o.emit_stdout(format!("{report}"));
+                o.emit_stdout(&format!("{report}"));
 
                 Ok(())
             },

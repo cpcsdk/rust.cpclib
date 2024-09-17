@@ -1,20 +1,22 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
+use std::rc::Rc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{context, Environment, Error, ErrorKind};
 
 use crate::event::{
-    BndBuilderObserved, BndBuilderObserver, BndBuilderObserverWeak, ListOfBndBuilderObserverStrong,
+    BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
     RuleTaskEventDispatcher
 };
 use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
 use crate::BndBuilderError;
 
-pub const EXPECTED_FILENAMES: &[&str] = &["bndbuild.yml", "build.bnd"];
+pub const EXPECTED_FILENAMES: &[&str] = &["bndbuild.yml", "build.bnd", "bnd.build"];
 
 #[derive(Default)]
 struct ExecutionState {
@@ -34,7 +36,13 @@ self_cell::self_cell! {
 
 pub struct BndBuilder {
     inner: BndBuilderInner,
-    observers: ListOfBndBuilderObserverStrong
+    observers: ListOfBndBuilderObserverRc
+}
+
+impl Debug for BndBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BndBuilder").finish()
+    }
 }
 
 impl Deref for BndBuilder {
@@ -50,8 +58,8 @@ impl BndBuilder {
         &'b self,
         rule: &'r Utf8Path,
         task: &'t Task
-    ) -> RuleTaskEventDispatcher<'b, 'r, 't, Self> {
-        RuleTaskEventDispatcher::new(self, rule, task)
+    ) -> Rc<RuleTaskEventDispatcher<'b, 'r, 't, Self>> {
+        Rc::new(RuleTaskEventDispatcher::new(self, rule, task))
     }
 
     pub fn add_default_rule<S1, S2>(self, targets: &[S1], dependencies: &[S2], kind: &str) -> Self
@@ -273,7 +281,9 @@ impl BndBuilder {
             }
             else {
                 for task in rule.commands() {
-                    crate::execute(task, &Some(self.task_observer(p, task))).map_err(|e| {
+                    let task_observer = self.task_observer(p, task);
+                    let task_observer = task_observer.deref();
+                    crate::execute(task, task_observer).map_err(|e| {
                         BndBuilderError::ExecuteError {
                             fname: p.to_string(),
                             msg: e
@@ -344,11 +354,11 @@ impl BndBuilder {
 }
 
 impl BndBuilderObserved for BndBuilder {
-    fn observers(&self) -> &[BndBuilderObserverWeak] {
-        self.observers.observers()
+    fn observers(&self) -> ListOfBndBuilderObserverRc {
+        self.observers.clone()
     }
 
-    fn add_observer(&mut self, observer: BndBuilderObserverWeak) {
+    fn add_observer(&mut self, observer: BndBuilderObserverRc) {
         self.observers.add_observer(observer);
     }
 
@@ -421,12 +431,8 @@ impl BndBuilderObserved for BndBuilder {
     }
 
     fn notify(&self, event: crate::event::BndBuilderEvent<'_>) {
-        for observer in self.observers() {
-            observer
-                .upgrade()
-                .unwrap()
-                .borrow_mut()
-                .update(event.clone());
+        for observer in self.observers.iter() {
+            observer.write().unwrap().update(event.clone());
         }
     }
 }

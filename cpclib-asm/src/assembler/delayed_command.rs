@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
-use std::io::Write;
 
 use codespan_reporting::diagnostic::Severity;
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, RemuEntry, WinapeBreakPoint};
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -10,7 +10,7 @@ use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
 use super::string::PreprocessedFormattedString;
-use super::Env;
+use super::{Env, EnvEventObserver};
 use crate::error::{build_simple_error_message, AssemblerError};
 use crate::preamble::Z80Span;
 
@@ -87,7 +87,7 @@ impl PrintCommand {
 
     // XXX The code is the same than string_or_error
     #[inline]
-    pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
         match &self.print_or_error {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
@@ -104,24 +104,21 @@ impl PrintCommand {
                 // duplicate code to speed it up
                 match (&self.prefix, file_location) {
                     (Some(prefix), Some(loc)) => {
-                        writeln!(
-                            writer,
-                            "{}{}:{}:{} PRINT: {}",
+                        writer.emit_stdout(&format!(
+                            "{}{}:{}:{} PRINT: {}\n",
                             prefix, loc.0, loc.1, loc.2, msg
-                        )
+                        ))
                     },
 
                     (Some(prefix), None) => {
-                        writeln!(writer, "{} PRINT: {}", prefix, msg)
+                        writer.emit_stdout(&format!("{} PRINT: {}\n", prefix, msg))
                     },
 
                     (None, Some(loc)) => {
-                        writeln!(writer, "{}:{}:{} PRINT: {}", loc.0, loc.1, loc.2, msg)
+                        writer.emit_stdout(&format!("{}:{}:{} PRINT: {}", loc.0, loc.1, loc.2, msg))
                     },
 
-                    (None, None) => {
-                        writeln!(writer, "PRINT: {}", msg)
-                    }
+                    (None, None) => writer.emit_stdout(&format!("PRINT: {}", msg))
                 };
 
                 Ok(())
@@ -147,19 +144,14 @@ impl From<Option<Z80Span>> for PauseCommand {
 
 impl PauseCommand {
     #[inline]
-    pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
         let msg = "PAUSE - press enter to continue.";
-        write!(
-            writer,
-            "{}",
-            if let Some(span) = &self.0 {
+        writer.emit_stdout(&(if let Some(span) = &self.0 {
                 build_simple_error_message(msg, span, Severity::Note)
             }
             else {
                 msg.to_owned()
-            }
-        )
-        .unwrap();
+            }).to_string());
 
         let mut buf = String::new();
         std::io::stdin().read_line(&mut buf).unwrap();
@@ -190,7 +182,7 @@ impl From<PauseCommand> for PrintOrPauseCommand {
 }
 
 impl PrintOrPauseCommand {
-    pub fn execute(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
         match self {
             PrintOrPauseCommand::Print(p) => p.execute(writer),
             PrintOrPauseCommand::Pause(p) => p.execute(writer)
@@ -344,7 +336,10 @@ impl DelayedCommands {
     }
 
     /// XXX Current version completly ignore pause. TODO find a way to reactivate
-    pub fn execute_print_or_pause(&self, writer: &mut impl Write) -> Result<(), AssemblerError> {
+    pub fn execute_print_or_pause(
+        &self,
+        writer: &dyn EnvEventObserver
+    ) -> Result<(), AssemblerError> {
         let iter = self.print_commands.iter();
 
         let errors = iter

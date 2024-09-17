@@ -1,3 +1,6 @@
+use std::fmt::Debug;
+use std::rc::Rc;
+
 use cpclib_runner::delegated::DelegatedRunner;
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
@@ -5,7 +8,7 @@ use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
-use crate::event::BndBuilderObserved;
+use crate::event::{BndBuilderObserved, ListOfBndBuilderObserverRc};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
@@ -18,13 +21,14 @@ use crate::runners::xfer::XferRunner;
 use crate::task::Task;
 
 #[inline]
-pub fn execute<O: EventObserver>(task: &Task, observer: &O) -> Result<(), String> {
+pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String> {
+    let observer: &'static _ = unsafe { std::mem::transmute(observer) };
     match task {
         Task::Emulator(e, _) => {
             match e {
                 crate::runners::emulator::Emulator::DirectAccess(e) => {
                     DelegatedRunner {
-                        app: e.configuration(),
+                        app: e.configuration::<()>(),
                         cmd: e.get_command().to_owned()
                     }
                     .run(task.args(), observer)
@@ -73,7 +77,7 @@ pub fn execute<O: EventObserver>(task: &Task, observer: &O) -> Result<(), String
     }
     .or_else(|e| {
         if task.ignore_errors() {
-            observer.emit_stdout(format!("\t\tError ignored. {}", e));
+            observer.emit_stdout(&format!("\t\tError ignored. {}", e));
             Ok(())
         }
         else {

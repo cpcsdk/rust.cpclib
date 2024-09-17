@@ -256,12 +256,12 @@ where
 /// //
 pub fn assemble_to_amsdos_file(
     code: &str,
-    amsdos_filename: &str
+    amsdos_filename: &str,
+    options: EnvOptions
 ) -> Result<AmsdosFile, AssemblerError> {
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_z80_str(code)?;
-    let options = EnvOptions::default();
 
     let (_, env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)
         .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
@@ -398,7 +398,7 @@ Truc
 
     fn code_test(code: &'static str) {
         let asm_options = AssemblingOptions::new_case_insensitive();
-        let env_options = EnvOptions::new(ParserOptions::default(), asm_options);
+        let env_options = EnvOptions::new(ParserOptions::default(), asm_options, Rc::new(()));
         let res = assemble_with_options(code, env_options);
         res.map_err(|e| eprintln!("{e}")).unwrap();
     }
