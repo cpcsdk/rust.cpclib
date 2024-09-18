@@ -170,10 +170,10 @@ const fn linux_ace_desc<E: EventObserver>(
 }
 
 #[cfg(windows)]
-const fn windows_ace_desc(
+const fn windows_ace_desc<E: EventObserver>(
     download_url: &'static str,
     folder: &'static str
-) -> DelegateApplicationDescription {
+) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
         download_url,
         folder,
@@ -233,7 +233,7 @@ cfg_match! {
     cfg(target_os = "windows") =>
     {
         impl AceVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     AceVersion::WakePoint => windows_ace_desc(
                     "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
@@ -247,7 +247,7 @@ cfg_match! {
         }
 
         impl CpcecVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
@@ -263,7 +263,7 @@ cfg_match! {
         }
 
         impl WinapeVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {

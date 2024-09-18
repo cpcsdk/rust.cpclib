@@ -67,7 +67,7 @@ cfg_match! {
     cfg(target_os = "windows") =>
     {
         impl RasmVersion {
-            pub fn configuration(&self) -> DelegateApplicationDescription {
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
