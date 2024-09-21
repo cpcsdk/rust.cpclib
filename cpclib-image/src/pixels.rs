@@ -26,7 +26,7 @@ pub mod mode2 {
     /// Pixel ordering in a byte
     /// [First(), Second(), Third(), Fourth()]
     #[repr(u8)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[allow(missing_docs)]
     pub enum PixelPosition {
         First = 0,
@@ -159,7 +159,7 @@ pub mod mode1 {
     /// Pixel ordering in a byte
     /// [First(), Second(), Third(), Fourth()]
     #[repr(u8)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[allow(missing_docs)]
     pub enum PixelPosition {
         First = 0,
@@ -368,7 +368,7 @@ pub mod mode0 {
     /// Pixel ordering in a byte
     /// [First(), Second()]
     #[repr(u8)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
     #[allow(missing_docs)]
     pub enum PixelPosition {
         First = 0,

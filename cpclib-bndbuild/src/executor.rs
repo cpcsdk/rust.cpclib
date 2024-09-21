@@ -6,6 +6,7 @@ use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
+use cpclib_runner::runner::fap::FAPVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::{BndBuilderObserved, ListOfBndBuilderObserverRc};
@@ -73,7 +74,14 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
             .run(task.args(), observer)
         },
         Task::Rm(_) => RmRunner::default().run(task.args(), observer),
-        Task::Xfer(_) => XferRunner::default().run(task.args(), observer)
+        Task::Xfer(_) => XferRunner::default().run(task.args(), observer),
+        Task::Fap(standard_task_arguments) => {
+            DelegatedRunner{
+                app: FAPVersion::default().configuration(),
+                cmd: FAPVersion::default().get_command().to_owned()
+            }
+            .run(task.args(), observer)
+        },
     }
     .or_else(|e| {
         if task.ignore_errors() {

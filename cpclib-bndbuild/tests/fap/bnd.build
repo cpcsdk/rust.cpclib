@@ -1,0 +1,46 @@
+#!/usr/bin/env -S bndbuild -f
+
+#         Name of the selected music                             Size of the buffer provided by cruncher
+{%- set selected_music = "\\\"FenyxKell - Bobline.fap\\\"" -%}{%- set buff_size = "&b42"-%}
+{%- set selected_music = "\\\"Targhan - A Harmless Grenade.fap\\\"" -%}{%- set buff_size = "&b42"-%}
+{%- set selected_music = "\\\"Targhan - Hocus Pocus.fap\\\"" -%}{%- set buff_size = "&c48"-%}
+{%- set selected_music = "\\\"Tom&Jerry - Boules Et Bits (Extended).fap\\\"" -%}{%- set buff_size = "&b42"-%}
+{%- set selected_music = "\\\"Tom&Jerry - From Scratch - Part 1.fap\\\"" -%}{%- set buff_size = "&a64"-%}
+{%- set selected_music = "\\\"UltraSyd - Fractal.fap\\\"" -%}{%- set buff_size = "&b42"-%}
+
+
+{%- set player_binaries = ["Build/fap-play.bin", "Build/fap-init.bin"] -%}
+
+{%- macro fap_rule(ym_file, opt=None) %}
+{% set fap_file = ym_file | replace('.ym', '.fap') %}
+- dep: "\"ym/{{ym_file}}\""
+  tgt: "\"{{fap_file}}\""
+  cmd: fap "ym/{{ym_file}}" "{{fap_file}}" {%if opt %}{{opt}}{% endif %}
+{% endmacro -%}
+
+
+{{fap_rule("FenyxKell - Bobline.ym")}}
+{{fap_rule("Targhan - A Harmless Grenade.ym")}}
+{{fap_rule("Targhan - Hocus Pocus.ym")}}
+{{fap_rule("Tom&Jerry - Boules Et Bits (Extended).ym")}}
+{{fap_rule("Tom&Jerry - From Scratch - Part 1.ym")}}
+{{fap_rule("UltraSyd - Fractal.ym")}}
+
+
+
+- tgt: {{player_binaries |join(" ")}}
+  dep: player/*.asm
+  cmd: rasm player/FapMain.asm 
+
+- tgt: test.sna
+  dep: "{{selected_music}} {{player_binaries |join(" ")}}"
+  cmd: 'basm test.asm --snapshot -o test.sna -DMUSIC="{{selected_music}}" -DBuffSize={{buff_size}}'
+
+- tgt: ace
+  dep: test.sna
+  cmd: ace test.sna
+
+
+- tgt: clean
+  phony: true
+  cmd: -rm *.fap Build/*

@@ -4,6 +4,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
 use cpclib_runner::runner::emulator::{ACE_CMD, CPCEC_CMD, WINAPE_CMD};
+use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use serde::de::{Error, Visitor};
@@ -22,6 +23,7 @@ pub enum Task {
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
+    Fap(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     ImgConverter(StandardTaskArguments),
     ImpDsk(StandardTaskArguments),
@@ -41,6 +43,7 @@ pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
+pub const FAP_CMDS: &[&str] = &[FAP_CMD];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
@@ -65,7 +68,8 @@ impl Display for Task {
             Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
-            Task::Xfer(s) => (XFER_CMDS[0], s)
+            Task::Xfer(s) => (XFER_CMDS[0], s),
+            Task::Fap(s) =>  (FAP_CMDS[0], s),
         };
 
         write!(
@@ -94,7 +98,7 @@ macro_rules! is_some_cmd {
 
 is_some_cmd!(
     ace, cpcec, winape, emuctrl, basm, rasm, orgams, bndbuild, cp, rm, echo, disc, impdisc, hideur,
-    img2cpc, martine, r#extern, xfer
+    img2cpc, martine, r#extern, xfer, fap
 );
 
 impl<'de> Deserialize<'de> for Task {
@@ -132,6 +136,8 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_basm_cmd(code) {
                     Ok(Task::Assembler(Assembler::Basm, std))
+                } else if is_fap_cmd(code) {
+                    Ok(Task::Fap(std))
                 }
                 else if is_orgams_cmd(code) {
                     Ok(Task::Assembler(Assembler::Orgams, std))
@@ -230,7 +236,9 @@ impl Task {
             | Task::Martine(t)
             | Task::Rm(t)
             | Task::Xfer(t)
-            | Task::Emulator(_, t) => t
+            | Task::Emulator(_, t)
+            | Task::Fap(t)
+             => t
         }
     }
 
@@ -248,7 +256,9 @@ impl Task {
             | Task::BndBuild(t)
             | Task::Martine(t)
             | Task::Cp(t)
-            | Task::Emulator(_, t) => t
+            | Task::Emulator(_, t)
+            | Task::Fap(t)
+             => t
         }
     }
 
@@ -272,6 +282,7 @@ impl Task {
             Task::Rm(_) => false,
             Task::Echo(_) => true,
             Task::Emulator(..) => true,
+            Task::Fap(..) => true,
             Task::Xfer(_) => true, // wrong when downloading files
             Task::Martine(t) => false,
             Task::Hideur(_) => false,
