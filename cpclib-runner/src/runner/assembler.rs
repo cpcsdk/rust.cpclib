@@ -37,6 +37,7 @@ impl Default for RasmVersion {
     }
 }
 
+// Here we need to regularly look at rasm release file. because files often disaappear
 cfg_match! {
     cfg(target_os = "linux") =>
     {
@@ -45,7 +46,7 @@ cfg_match! {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.5.zip", // we assume a modern CPU
+                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.7.zip", // we assume a modern CPU
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "rasm",
@@ -71,10 +72,10 @@ cfg_match! {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/releases/download/v2.2.5/rasm_win64.exe", // we assume a modern CPU
+                            download_url: "https://github.com/EdouardBERGE/rasm/releases/download/v2.2.7/rasm_w64.exe", // we assume a modern CPU
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Raw,
-                            exec_fname: "rasm.exe",
+                            exec_fname: "rasm_w64.exe",
                             compile: None
                         }
                     }

@@ -80,7 +80,9 @@ fn check_jinja() {
         distclean(asm);
     };
 
+    println!("basm");
     exec("basm");
+    println!("rasm");
     exec("rasm");
 }
 

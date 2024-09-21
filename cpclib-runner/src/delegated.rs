@@ -36,7 +36,7 @@ pub fn clear_base_cache_folder() -> std::io::Result<()> {
 
 impl<E: EventObserver> DelegateApplicationDescription<E> {
     pub fn is_cached(&self) -> bool {
-        self.cache_folder().exists()
+        dbg!(self.cache_folder()).exists()
     }
 
     pub fn cache_folder(&self) -> Utf8PathBuf {
@@ -128,7 +128,7 @@ impl<E: EventObserver + 'static> Runner for DelegatedRunner<E> {
         // ensure the emulator exists
         if !cfg.is_cached() {
             o.emit_stdout("> Install application");
-            cfg.install(o);
+            cfg.install(o)?;
         }
         assert!(cfg.is_cached());
 

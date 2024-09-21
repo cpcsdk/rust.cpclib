@@ -190,7 +190,7 @@ impl BndBuilderCommand {
         let tgt = &targets[current_step];
 
         // execute if needed
-        if builder.outdated(tgt).unwrap_or(false) {
+        if builder.outdated(tgt)? {
             builder.execute(tgt).map_err(|e| {
                 if targets_provided {
                     e

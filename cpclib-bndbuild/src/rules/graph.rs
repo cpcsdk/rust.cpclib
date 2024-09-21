@@ -65,15 +65,16 @@ impl<'r> Graph<'r> {
     ) -> Result<bool, BndBuilderError> {
         let p = p.as_ref();
         // a phony rule is always outdated
-        if self.rule(p).unwrap().is_phony() {
+        if self.rule(p)?.is_phony() {
             return Ok(true);
         }
 
         let dependences = self.get_layered_dependencies_for(&p);
         let dependencies = dependences.into_iter().flatten().collect_vec();
-        let res = dependencies.into_iter().rev().any(|p| {
-            self.rule(p)
-                .map(|r| {
+
+        for p in dependencies.into_iter().rev()  {
+            let res = match self.rule(p) {
+                Ok(r) =>  {
                     if skip_rules_without_commands {
                         if r.is_phony() {
                             false
@@ -85,18 +86,32 @@ impl<'r> Graph<'r> {
                     else {
                         !r.is_up_to_date()
                     }
-                })
-                .unwrap_or(false) // ignore not existing rule. Should fail ?
-        });
-        Ok(res)
+                },
+
+                Err(BndBuilderError::UnknownTarget(msg)) => {
+                    if !p.exists() {
+                        return Err(BndBuilderError::UnknownTarget(msg));
+                    } else {
+                        false
+                    }
+                },
+                _ => todo!()
+            };
+            if res {
+                return Ok(true);
+            }
+        }
+        return Ok(false);
+              //  .unwrap_or(false) // ignore not existing rule. Should fail ?
     }
 
     #[inline]
-    pub fn rule<P: AsRef<Utf8Path>>(&self, p: P) -> Option<&Rule> {
+    pub fn rule<P: AsRef<Utf8Path>>(&self, p: P) -> Result<&Rule, BndBuilderError> {
         let p = p.as_ref();
         self.node2tracked
             .get(p)
             .map(|idx| self.tracked.rule_at(*idx))
+            .ok_or_else(|| /*todo!()*/   BndBuilderError::UnknownTarget(p.as_str().to_owned()))
     }
 
     #[inline]
