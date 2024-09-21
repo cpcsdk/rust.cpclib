@@ -420,7 +420,7 @@ impl BndBuilderApp {
             else if matches.get_flag("direct") {
                 let cmd: String = matches
                     .get_many::<String>("target")
-                    .unwrap()
+                    .ok_or_else(|| BndBuilderError::AnyError("--direct needs a command".to_owned()))?
                     .map(|s| s.as_str())
                     .join(" ");
                 return Ok(BndBuilderCommandInner::Direct(cmd));

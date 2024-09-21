@@ -110,7 +110,8 @@ impl<'de> Deserialize<'de> for Task {
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where E: serde::de::Error {
-                let (code, next) = v.split_once(" ").ok_or(Error::custom("Wrong format"))?;
+                let (code, next) = v.split_once(" ")
+                                                    .unwrap_or((v, ""));
                 let (code, ignore) = if code.starts_with("-") {
                     (&code[1..], true)
                 }
