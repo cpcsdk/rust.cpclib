@@ -173,7 +173,7 @@ impl IncludeState {
         };
 
         // handle the listing
-        env.mark_included(fname.clone());
+        env.included_marks_add(fname.clone());
 
         Ok(state)
     }
@@ -187,8 +187,10 @@ impl IncludeState {
     ) -> Result<(), AssemblerError> {
         let fname = get_filename(fname, env.options().parse_options(), Some(env))?;
 
+        let need_to_include = !once || !env.included_marks_includes(&fname);
+
         // Process the inclusion only if necessary
-        if (!once) || (!env.has_included(&fname)) {
+        if need_to_include {
             // most of the time, file has been loaded
             let state = self.retreive_listing(env, &fname)?;
 

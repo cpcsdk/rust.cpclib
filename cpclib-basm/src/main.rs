@@ -12,7 +12,6 @@
 )]
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
-#![feature(const_mut_refs)]
 
 use std::rc::Rc;
 

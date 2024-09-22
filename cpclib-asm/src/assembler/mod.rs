@@ -769,11 +769,18 @@ impl Env {
 
 /// Include once handling {
 impl Env {
-    fn has_included(&self, path: &Utf8PathBuf) -> bool {
+    #[inline]
+    fn included_marks_reset(&mut self) {
+        self.included_paths.clear();
+    }
+
+    #[inline]
+    fn included_marks_includes(&self, path: &Utf8PathBuf) -> bool {
         self.included_paths.contains(path)
     }
 
-    fn mark_included(&mut self, path: Utf8PathBuf) {
+    #[inline]
+    fn included_marks_add(&mut self, path: Utf8PathBuf) {
         self.included_paths.insert(path);
     }
 }
@@ -907,6 +914,7 @@ impl Env {
             );
         }
 
+        self.included_marks_reset();
         self.requested_additional_pass |= !self.current_pass_discarded_errors.is_empty();
 
         let mut can_change_request = true;
