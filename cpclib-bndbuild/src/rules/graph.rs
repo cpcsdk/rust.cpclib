@@ -107,7 +107,18 @@ impl<'r> Graph<'r> {
 
     #[inline]
     pub fn rule<P: AsRef<Utf8Path>>(&self, p: P) -> Result<&Rule, BndBuilderError> {
-        let p = p.as_ref();
+        let tgt = p.as_ref();
+
+        let p = if tgt.starts_with(r"./") {
+            tgt.strip_prefix(r"./").unwrap()
+        }
+        else if tgt.as_str().starts_with(r".\") {
+            Utf8Path::new(&tgt.as_str()[2..])
+        }
+        else {
+            tgt
+        };
+
         self.node2tracked
             .get(p)
             .map(|idx| self.tracked.rule_at(*idx))

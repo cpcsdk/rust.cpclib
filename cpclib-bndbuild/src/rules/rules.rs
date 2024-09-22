@@ -46,7 +46,7 @@ impl Rules {
 
     /// Get the rule for this target (of course None is returned for leaf files)
     pub fn rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
-        let tgt = tgt.as_ref();
+        let tgt = dbg!(tgt.as_ref());
 
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
@@ -58,6 +58,8 @@ impl Rules {
         else {
             tgt
         };
+
+        dbg!(&tgt);
 
         self.rules
             .iter()

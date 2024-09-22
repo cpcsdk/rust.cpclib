@@ -515,12 +515,12 @@ impl BndBuilderApp {
 
                 let watch_requested = matches.get_flag("watch");
 
-                dbg!(Ok(BndBuilderCommandInner::Build {
+                Ok(BndBuilderCommandInner::Build {
                     targets,
                     watch: watch_requested,
                     current_step: 0,
                     builder
-                }))
+                })
 
                 // Execute the targets
             }
