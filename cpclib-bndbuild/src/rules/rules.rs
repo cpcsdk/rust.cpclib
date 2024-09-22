@@ -45,6 +45,7 @@ impl Rules {
     }
 
     /// Get the rule for this target (of course None is returned for leaf files)
+    /// We can have several versions depending on OS. In case of multiplicity returns only the appropriate one
     pub fn rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
         let tgt = dbg!(tgt.as_ref());
 
@@ -59,11 +60,27 @@ impl Rules {
             tgt
         };
 
-        dbg!(&tgt);
-
-        self.rules
+        // when the rule is present several times, we only get the one of the appropriate for the filtering
+        let mut rules = self.rules
             .iter()
-            .find(|r| r.targets().iter().any(|tgt2| tgt2 == &tgt))
+            .filter(|r| r.targets().iter().any(|tgt2| tgt2 == &tgt))
+            .collect_vec();
+
+        if rules.is_empty() {
+            return None;
+        }
+        if rules.len() == 1 {
+            return rules.pop();
+        } else {
+            let indicies = rules.iter()
+                .positions(|r| r.is_enabled())
+                .collect_vec();
+            if indicies.is_empty() || indicies.len() > 1 {
+                return rules.pop(); // return any one, we know it will fail or it is ambiguous
+            }
+            assert_eq!(1, indicies.len());
+            return Some(&rules[indicies[0]]); // return the first that match
+        }
     }
 
     pub fn default_target(&self) -> Option<&Utf8Path> {
