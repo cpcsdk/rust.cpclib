@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+
 use cpclib_common::camino::Utf8Path;
 
 use crate::amsdos::{
@@ -102,3 +104,50 @@ pub trait Disc {
         }
     }
 }
+
+
+
+impl<T:Disc> Disc for Box<T> {
+    fn open<P>(path: P) -> Result<Self, String>
+    where
+        Self: Sized,
+        P: AsRef<Utf8Path> {
+        Ok(Box::new(T::open(path)?))
+    }
+
+    fn save<P>(&self, path: P) -> Result<(), String>
+    where P: AsRef<Utf8Path> {
+        self.deref().save(path)
+    }
+
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
+        self.deref().global_min_sector(side)
+    }
+
+    fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
+        self.deref().track_min_sector(side, track)
+    }
+
+    fn nb_tracks_per_head(&self) -> u8 {
+        self.deref().nb_tracks_per_head()
+    }
+
+    fn sector_read_bytes<S: Into<Head>>(
+        &self,
+        head: S,
+        track: u8,
+        sector_id: u8
+    ) -> Option<Vec<u8>> {
+        self.deref().sector_read_bytes(head, track, sector_id)
+    }
+
+    fn sector_write_bytes<S: Into<Head>>(
+        &mut self,
+        head: S,
+        track: u8,
+        sector_id: u8,
+        bytes: &[u8]
+    ) -> Result<(), String> {
+        self.deref_mut().sector_write_bytes(head, track, sector_id, bytes)
+    }
+} 
