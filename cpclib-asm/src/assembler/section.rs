@@ -67,3 +67,7 @@ pub fn section_length(section_name: &str, env: &Env) -> Result<ExprResult, crate
 pub fn section_used(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
     Ok(env.get_section_description(section_name)?.used().into())
 }
+
+pub fn section_mmr(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+    Ok(env.get_section_description(section_name)?.mmr.into())
+}

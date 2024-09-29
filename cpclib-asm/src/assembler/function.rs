@@ -203,13 +203,14 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "mode0_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode0ByteToPenAt),
         "mode1_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode1ByteToPenAt),
         "mode2_byte_to_pen_at": Function::HardCoded(HardCodedFunction::Mode2ByteToPenAt),
+
         "pen_at_mode0_byte": Function::HardCoded(HardCodedFunction::PenAtToMode0Byte),
         "pen_at_mode1_byte":Function::HardCoded(HardCodedFunction::PenAtToMode1Byte),
         "pen_at_mode2_byte": Function::HardCoded(HardCodedFunction::PenAtToMode2Byte),
         "pens_to_mode0_byte": Function::HardCoded(HardCodedFunction::PensToMode0Byte),
-        "pens_to_mode1_byte":
-        Function::HardCoded(HardCodedFunction::PensToMode1Byte),
+        "pens_to_mode1_byte": Function::HardCoded(HardCodedFunction::PensToMode1Byte),
         "pens_to_mode2_byte": Function::HardCoded(HardCodedFunction::PensToMode2Byte),
+        
         "list_new": Function::HardCoded(HardCodedFunction::ListNew),
         "list_get": Function::HardCoded(HardCodedFunction::ListGet),
         "list_set": Function::HardCoded(HardCodedFunction::ListSet),
@@ -219,11 +220,14 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_argsort": Function::HardCoded(HardCodedFunction::ListArgsort),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
         "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
+        
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
+        
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),
+        
         "matrix_new": Function::HardCoded(HardCodedFunction::MatrixNew),
         "matrix_set": Function::HardCoded(HardCodedFunction::MatrixSet),
         "matrix_get": Function::HardCoded(HardCodedFunction::MatrixGet),
@@ -233,11 +237,15 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
         "matrix_width": Function::HardCoded(HardCodedFunction::MatrixWidth),
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
+        
         "load": Function::HardCoded(HardCodedFunction::Load),
+        
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
         "section_used": Function::HardCoded(HardCodedFunction::SectionUsed),
+        "section_mmr": Function::HardCoded(HardCodedFunction::SectionUsed),
+
         "binary_transform": Function::HardCoded(HardCodedFunction::BinaryTransform)
     }
 });
@@ -280,6 +288,7 @@ pub enum HardCodedFunction {
     SectionStop,
     SectionLength,
     SectionUsed,
+    SectionMmr,
 
     StringNew,
     StringPush,
@@ -340,6 +349,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStop => Some(1),
             HardCodedFunction::SectionLength => Some(1),
             HardCodedFunction::SectionUsed => Some(1),
+            HardCodedFunction::SectionMmr => Some(1),
 
             HardCodedFunction::BinaryTransform => Some(2),
             HardCodedFunction::ListExtend => Some(2)
@@ -529,6 +539,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionStop => section_stop(params[0].string()?, env),
             HardCodedFunction::SectionLength => section_length(params[0].string()?, env),
             HardCodedFunction::SectionUsed => section_used(params[0].string()?, env),
+            HardCodedFunction::SectionMmr => section_mmr(params[0].string()?, env),
 
             HardCodedFunction::BinaryTransform => {
                 let crunch_type = params[1].string()?;
