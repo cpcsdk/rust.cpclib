@@ -172,7 +172,7 @@ where Self: Debug + Sized + Sync
     }
 }
 /// A listing is simply a list of things similar to token
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BaseListing<T: Clone + ListingElement> {
     /// Ordered list of the tokens
     pub(crate) listing: Vec<T>,

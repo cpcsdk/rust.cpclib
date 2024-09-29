@@ -7,7 +7,7 @@ use paste;
 use crate::tokens::expression::*;
 use crate::tokens::registers::*;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 /// Encode the way mnemonics access to data
 #[allow(missing_docs)]
 pub enum DataAccess {

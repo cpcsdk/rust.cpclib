@@ -11,7 +11,7 @@ use crate::tokens::Token;
 use crate::ListingElement;
 
 /// Expression nodes.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 #[allow(missing_docs)]
 pub enum Expr {
     /// Only used for disassembled code
@@ -137,7 +137,7 @@ pub trait ExprElement: Sized {
     fn to_expr(&self) -> Cow<Expr>;
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 /// Represents a prefix that provides information related to banks for a label
 pub enum LabelPrefix {
     /// We want the bank of the label
@@ -173,7 +173,7 @@ impl Display for LabelPrefix {
 /// set to 1 will be displayed as a 16 bits value.
 ///  fbin8g,fbin16g,fbin32g Force binary display with 8, 16 or 32 bits.
 ///  fintg Display value as integer.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum ExprFormat {
     Hex(Option<u8>),
     Bin(Option<u8>),
@@ -225,7 +225,7 @@ impl ExprFormat {
 }
 
 /// Expression for a print expression
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FormattedExpr {
     // A raw expression is represented as it is
     Raw(Expr),
@@ -257,7 +257,7 @@ impl From<Expr> for FormattedExpr {
 }
 
 /// Represent a function with one argument
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum UnaryFunction {
     /// High byte of a value
     High,
@@ -307,7 +307,7 @@ impl Display for UnaryFunction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy,  Hash)]
 pub enum UnaryOperation {
     Neg,
     Not,
@@ -336,7 +336,7 @@ impl Display for BinaryFunction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum UnaryTokenOperation {
     Duration,
     Opcode
@@ -352,7 +352,7 @@ impl Display for UnaryTokenOperation {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BinaryOperation {
     RightShift,
     LeftShift,
@@ -410,7 +410,7 @@ impl Display for BinaryOperation {
 }
 
 /// Function with two arguments
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BinaryFunction {
     Min,
     Max,

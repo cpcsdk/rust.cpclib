@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum Register16 {
     Af,
@@ -69,7 +69,7 @@ macro_rules! is_reg16 {
 }
 is_reg16! {Af Bc De Hl Sp}
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum IndexRegister16 {
     Ix,
@@ -187,7 +187,7 @@ impl fmt::Display for Register8 {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum IndexRegister8 {
     Ixh,
@@ -241,7 +241,7 @@ impl IndexRegister8 {
 // }
 
 // TODO add missing flags
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum FlagTest {
     NZ,

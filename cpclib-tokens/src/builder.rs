@@ -331,11 +331,11 @@ macro_rules! ld_r16_expr {
     ($($reg:ident)*) => {$(
         paste::paste! {
             /// Generate the opcode LD $reg, expr
-            #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>] (val: Expr) -> Token {
+            #[allow(missing_docs)] pub fn [<ld_ $reg:lower _expr>]<E:Into<Expr>> (val: E) -> Token {
                 token_for_opcode_two_args(
                     Mnemonic::Ld,
                     Register16::$reg.into(),
-                    val.into()
+                    val.into().into()
                 )
             }
         }
@@ -419,6 +419,12 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
         DataAccess::MemoryRegister16(Register16::Hl)
     )
 }
+
+#[allow(missing_docs)]
+pub fn ld_mem_hl_a() -> Token {
+    ld_mem_hl_register8(Register8::A)
+}
+
 
 #[allow(missing_docs)]
 pub fn ld_mem_hl_d() -> Token {
@@ -552,6 +558,11 @@ pub fn token_for_opcode_latest_arg(mne: Mnemonic, data2: DataAccess) -> Token {
 #[allow(missing_docs)]
 pub fn token_for_opcode_two_args(mne: Mnemonic, data1: DataAccess, data2: DataAccess) -> Token {
     Token::OpCode(mne, Some(data1), Some(data2), None)
+}
+
+#[allow(missing_docs)]
+pub fn section(section: &str) -> Token {
+    Token::Section(section.into())
 }
 
 /// Code function that generate Listing instead of Tokens

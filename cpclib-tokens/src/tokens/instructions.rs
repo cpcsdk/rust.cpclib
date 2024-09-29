@@ -10,7 +10,7 @@ use crate::tokens::expression::*;
 use crate::tokens::listing::ListingElement;
 use crate::{Listing, Register8};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 /// This structures encode the parameters of macros.
 /// The usual parameter is a string.
 /// However, it can be a list of parameters to allows nested structs
@@ -102,7 +102,7 @@ impl MacroParam {
 }
 
 #[remain::sorted]
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum Mnemonic {
     Adc,
@@ -347,7 +347,7 @@ is_mnemonic!(
 );
 
 /// Stable ticker serves to count nops with the assembler !
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(missing_docs)]
 pub enum StableTickerAction<S: AsRef<str>> {
     /// Start of the ticker with its name that will contains its duration
@@ -355,7 +355,7 @@ pub enum StableTickerAction<S: AsRef<str>> {
     Stop(Option<S>)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum CrunchType {
     LZ48,
@@ -373,7 +373,7 @@ pub enum CrunchType {
     Shrinkler
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum DiscType {
     Dsk,
@@ -381,7 +381,7 @@ pub enum DiscType {
     Auto
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum SaveType {
     AmsdosBin,
@@ -391,7 +391,7 @@ pub enum SaveType {
 }
 
 /// Encode the kind of test done in if/elif/else cases
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(missing_docs)]
 pub enum TestKind {
     // Test succeed if it is an expression that returns True
@@ -459,7 +459,7 @@ impl TestKindElement for TestKind {
 }
 
 /// List of transformations that can be applied to an imported binary file
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum BinaryTransformation {
     // Raw include of the data
@@ -477,7 +477,7 @@ impl BinaryTransformation {
 }
 
 /// Define characters encoding
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CharsetFormat {
     /// Reset the encoding knowledge
     Reset,
@@ -500,7 +500,7 @@ impl ToSimpleToken for Token {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum StandardAssemblerControlCommand {
     RestrictedAssemblingEnvironment { passes: Option<Expr>, lst: Listing },
     PrintAtParsingState(Vec<FormattedExpr>), // completely ignored during assembling
@@ -549,7 +549,7 @@ impl AssemblerControlCommand for StandardAssemblerControlCommand {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum AssemblerFlavor {
     Basm,
     // mathematical expressions use []
@@ -558,7 +558,7 @@ pub enum AssemblerFlavor {
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
 #[remain::sorted]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 #[allow(missing_docs)]
 pub enum Token {
     Align(Expr, Option<Expr>),
@@ -897,7 +897,7 @@ pub enum Token {
 // }
 // }
 // }
-
+/*/
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -913,7 +913,7 @@ impl PartialEq for Token {
         }
     }
 }
-
+*/
 impl Eq for Token {}
 
 impl fmt::Display for Token {
@@ -1139,6 +1139,10 @@ impl fmt::Display for Token {
                 }
                 write!(f, "\tENDREPEAT")
             },
+
+            Token::Section(sec) => {
+                write!(f, "SECTION {sec}")
+            }
 
             Token::StableTicker(ref ticker)
                 => {

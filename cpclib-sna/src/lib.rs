@@ -48,7 +48,7 @@ pub use memory::*;
 
 pub const HEADER_SIZE: usize = 256;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive, Hash)]
 #[repr(u8)]
 pub enum SnapshotVersion {
     /// Version 1 of Snapshsots

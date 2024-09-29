@@ -6,7 +6,7 @@ use cpclib_common::itertools::Itertools;
 use crate::error::*;
 
 /// Encode a flag of the snaphot
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
 pub enum SnapshotFlag {
@@ -476,7 +476,7 @@ impl FromStr for SnapshotFlag {
 }
 
 /// Encode the type of the flag values
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub enum FlagValue {
     /// The flag is a byte
     Byte(u8),
