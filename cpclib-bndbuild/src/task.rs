@@ -69,7 +69,7 @@ impl Display for Task {
             Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Fap(s) =>  (FAP_CMDS[0], s),
+            Task::Fap(s) => (FAP_CMDS[0], s)
         };
 
         write!(
@@ -110,8 +110,7 @@ impl<'de> Deserialize<'de> for Task {
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where E: serde::de::Error {
-                let (code, next) = v.split_once(" ")
-                                                    .unwrap_or((v, ""));
+                let (code, next) = v.split_once(" ").unwrap_or((v, ""));
                 let (code, ignore) = if code.starts_with("-") {
                     (&code[1..], true)
                 }
@@ -137,7 +136,8 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_basm_cmd(code) {
                     Ok(Task::Assembler(Assembler::Basm, std))
-                } else if is_fap_cmd(code) {
+                }
+                else if is_fap_cmd(code) {
                     Ok(Task::Fap(std))
                 }
                 else if is_orgams_cmd(code) {
@@ -238,8 +238,7 @@ impl Task {
             | Task::Rm(t)
             | Task::Xfer(t)
             | Task::Emulator(_, t)
-            | Task::Fap(t)
-             => t
+            | Task::Fap(t) => t
         }
     }
 
@@ -258,8 +257,7 @@ impl Task {
             | Task::Martine(t)
             | Task::Cp(t)
             | Task::Emulator(_, t)
-            | Task::Fap(t)
-             => t
+            | Task::Fap(t) => t
         }
     }
 

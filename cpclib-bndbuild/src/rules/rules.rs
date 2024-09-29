@@ -61,7 +61,8 @@ impl Rules {
         };
 
         // when the rule is present several times, we only get the one of the appropriate for the filtering
-        let mut rules = self.rules
+        let mut rules = self
+            .rules
             .iter()
             .filter(|r| r.targets().iter().any(|tgt2| tgt2 == &tgt))
             .collect_vec();
@@ -71,10 +72,9 @@ impl Rules {
         }
         if rules.len() == 1 {
             return rules.pop();
-        } else {
-            let indicies = rules.iter()
-                .positions(|r| r.is_enabled())
-                .collect_vec();
+        }
+        else {
+            let indicies = rules.iter().positions(|r| r.is_enabled()).collect_vec();
             if indicies.is_empty() || indicies.len() > 1 {
                 return rules.pop(); // return any one, we know it will fail or it is ambiguous
             }

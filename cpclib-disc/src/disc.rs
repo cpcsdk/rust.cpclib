@@ -105,13 +105,12 @@ pub trait Disc {
     }
 }
 
-
-
-impl<T:Disc> Disc for Box<T> {
+impl<T: Disc> Disc for Box<T> {
     fn open<P>(path: P) -> Result<Self, String>
     where
         Self: Sized,
-        P: AsRef<Utf8Path> {
+        P: AsRef<Utf8Path>
+    {
         Ok(Box::new(T::open(path)?))
     }
 
@@ -148,6 +147,7 @@ impl<T:Disc> Disc for Box<T> {
         sector_id: u8,
         bytes: &[u8]
     ) -> Result<(), String> {
-        self.deref_mut().sector_write_bytes(head, track, sector_id, bytes)
+        self.deref_mut()
+            .sector_write_bytes(head, track, sector_id, bytes)
     }
-} 
+}

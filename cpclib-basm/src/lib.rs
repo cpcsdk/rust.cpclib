@@ -473,7 +473,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             debug_assert!(matches.contains_id("OUTPUT"));
             let pc_filename = matches.get_one::<String>("OUTPUT").unwrap();
             if pc_filename.to_lowercase().ends_with(".sna") && !matches.get_flag("SNAPSHOT") {
-                env.observer().emit_stderr("[WARNING] You are saving a file with .sna extension without using --sna flag");
+                env.observer().emit_stderr(
+                    "[WARNING] You are saving a file with .sna extension without using --sna flag"
+                );
             }
             let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_str());
 

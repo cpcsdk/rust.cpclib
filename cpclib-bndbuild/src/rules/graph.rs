@@ -72,9 +72,9 @@ impl<'r> Graph<'r> {
         let dependences = self.get_layered_dependencies_for(&p);
         let dependencies = dependences.into_iter().flatten().collect_vec();
 
-        for p in dependencies.into_iter().rev()  {
+        for p in dependencies.into_iter().rev() {
             let res = match self.rule(p) {
-                Ok(r) =>  {
+                Ok(r) => {
                     if skip_rules_without_commands {
                         if r.is_phony() {
                             false
@@ -91,7 +91,8 @@ impl<'r> Graph<'r> {
                 Err(BndBuilderError::UnknownTarget(msg)) => {
                     if !p.exists() {
                         return Err(BndBuilderError::UnknownTarget(msg));
-                    } else {
+                    }
+                    else {
                         false
                     }
                 },
@@ -102,7 +103,7 @@ impl<'r> Graph<'r> {
             }
         }
         return Ok(false);
-              //  .unwrap_or(false) // ignore not existing rule. Should fail ?
+        //  .unwrap_or(false) // ignore not existing rule. Should fail ?
     }
 
     #[inline]

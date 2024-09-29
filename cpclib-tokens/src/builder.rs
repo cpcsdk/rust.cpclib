@@ -479,7 +479,6 @@ pub fn lddr() -> Token {
     token_for_opcode_no_arg(Mnemonic::Lddr)
 }
 
-
 macro_rules! set_res_reg8 {
     ($($reg:ident), *) => {$(
         paste::paste! {
@@ -494,29 +493,34 @@ macro_rules! set_res_reg8 {
             pub fn [<set_ $reg:lower>](bit: u8) -> Token {
                 set_reg_pos(Register8::$reg, bit)
             }
-            
+
         })*
     };
 }
 
-set_res_reg8!{A, B, C, D, E, H, L}
-
+set_res_reg8! {A, B, C, D, E, H, L}
 
 #[allow(missing_docs)]
 pub fn set_mem_hl(bit: u8) -> Token {
-    token_for_opcode_two_args(Mnemonic::Set, bit.into(), DataAccess::MemoryRegister16(Register16::Hl))
-
+    token_for_opcode_two_args(
+        Mnemonic::Set,
+        bit.into(),
+        DataAccess::MemoryRegister16(Register16::Hl)
+    )
 }
 
 #[allow(missing_docs)]
 pub fn res_mem_hl(bit: u8) -> Token {
-    token_for_opcode_two_args(Mnemonic::Res, bit.into(), DataAccess::MemoryRegister16(Register16::Hl))
-
+    token_for_opcode_two_args(
+        Mnemonic::Res,
+        bit.into(),
+        DataAccess::MemoryRegister16(Register16::Hl)
+    )
 }
 
 #[allow(missing_docs)]
-            #[inline]
-            pub fn res_reg_pos(reg: Register8, bit: u8) -> Token {
+#[inline]
+pub fn res_reg_pos(reg: Register8, bit: u8) -> Token {
     token_for_opcode_two_args(Mnemonic::Res, bit.into(), reg.into())
 }
 

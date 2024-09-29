@@ -59,7 +59,7 @@ impl<E: EventObserver> Default for ExternRunner<E> {
 }
 
 impl<E: EventObserver> ExternRunner<E> {}
-impl<E: EventObserver +'static> Runner for ExternRunner<E> {
+impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -88,7 +88,6 @@ impl<E: EventObserver +'static> Runner for ExternRunner<E> {
             .spawn()
             .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
-
         // the process is running in another thread. We'll collect its outputs in yet other threads
         let child_stdout = cmd
             .stdout
@@ -99,8 +98,7 @@ impl<E: EventObserver +'static> Runner for ExternRunner<E> {
             .take()
             .expect("Internal error, could not take stderr");
 
-
-        let o: &'static E = unsafe{std::mem::transmute(o)};
+        let o: &'static E = unsafe { std::mem::transmute(o) };
 
         let o = Arc::new(Mutex::new(o));
         let oerr = o.clone();
@@ -112,7 +110,8 @@ impl<E: EventObserver +'static> Runner for ExternRunner<E> {
                 let line = line.unwrap();
                 if let Ok(o) = oout.lock() {
                     o.emit_stdout(&line);
-                } else {
+                }
+                else {
                     unimplemented!()
                 }
             }
@@ -124,12 +123,12 @@ impl<E: EventObserver +'static> Runner for ExternRunner<E> {
                 let line = line.unwrap();
                 if let Ok(o) = oerr.lock() {
                     o.emit_stderr(&line);
-                } else {
+                }
+                else {
                     unimplemented!()
                 }
             }
         });
-
 
         let status = cmd
             .wait()

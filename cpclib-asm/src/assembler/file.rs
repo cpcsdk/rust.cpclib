@@ -30,7 +30,6 @@ pub fn get_filename<S: AsRef<str>>(
     let components = fname.split(DSK_SEPARATOR).collect_vec();
     let real_fname = components.first().unwrap();
 
-
     let res = options.get_path_for(real_fname, env).map_err(|e| {
         match e {
             either::Either::Left(asm) => asm,
@@ -47,7 +46,7 @@ pub fn get_filename<S: AsRef<str>>(
         s.push(DSK_SEPARATOR);
         s.push_str(components.last().unwrap());
         Utf8PathBuf::from(&s)
-    } 
+    }
     else {
         res
     };
@@ -62,14 +61,10 @@ pub fn load_binary(
     fname: Fname,
     options: &ParserOptions
 ) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
-
-
-
     let true_fname = match &fname {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,
         either::Either::Left(p) => p.into()
     };
-
 
     let mut parts = true_fname.as_str().split(DSK_SEPARATOR).rev().collect_vec();
     let (data, header) = if parts.len() == 1 {
@@ -97,7 +92,8 @@ pub fn load_binary(
         };
 
         (data, header)
-    } else {
+    }
+    else {
         // here we read from a dsk
         let pc_fname = parts.pop().unwrap();
         let amsdos_fname = parts.pop().unwrap();
@@ -106,18 +102,22 @@ pub fn load_binary(
             Box::new(ExtendedDsk::open(pc_fname).map_err(|e| AssemblerError::AssemblingError { msg: e })?)
 
         } else {
-            unimplemented!("Need to code loading of {pc_fname}. Disc trait needs to be simplifed by removing all generic paramteers :(");
+            unimplemented!("Need to code loading of {pc_fname}. Disc trait needs to be simplifed by removing all generic parameters :(");
         };
 
-        let manager = AmsdosManagerNonMut::new_from_disc(& disc, Head::A);
-        let file = manager.get_file(AmsdosFileName::try_from(amsdos_fname)?)
-                .ok_or_else(|| AssemblerError::AssemblingError { msg: format!("Unable to get {amsdos_fname}") })?;
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        let file = manager
+            .get_file(AmsdosFileName::try_from(amsdos_fname)?)
+            .ok_or_else(|| {
+                AssemblerError::AssemblingError {
+                    msg: format!("Unable to get {amsdos_fname}")
+                }
+            })?;
 
         let header = file.header();
         let data = VecDeque::from_iter(file.content().iter().cloned());
 
         (data, header)
-        
     };
 
     Ok((data, header))

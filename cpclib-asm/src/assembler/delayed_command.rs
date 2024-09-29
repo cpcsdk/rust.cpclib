@@ -146,12 +146,15 @@ impl PauseCommand {
     #[inline]
     pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
         let msg = "PAUSE - press enter to continue.";
-        writer.emit_stdout(&(if let Some(span) = &self.0 {
+        writer.emit_stdout(
+            &(if let Some(span) = &self.0 {
                 build_simple_error_message(msg, span, Severity::Note)
             }
             else {
                 msg.to_owned()
-            }).to_string());
+            })
+            .to_string()
+        );
 
         let mut buf = String::new();
         std::io::stdin().read_line(&mut buf).unwrap();

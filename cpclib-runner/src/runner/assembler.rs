@@ -1,4 +1,3 @@
-
 use cpclib_common::camino::Utf8Path;
 
 use super::{ExternRunner, Runner};
@@ -19,7 +18,7 @@ impl ExternAssembler {
         }
     }
 
-    pub fn configuration<E: EventObserver+'static>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         match self {
             ExternAssembler::Rasm(r) => r.configuration()
         }
