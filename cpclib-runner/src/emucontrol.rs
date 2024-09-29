@@ -34,10 +34,14 @@ pub enum AmstradRom {
 pub struct EmulatorConf {
     pub(crate) drive_a: Option<Utf8PathBuf>,
     pub(crate) drive_b: Option<Utf8PathBuf>,
+    pub(crate) snapshot: Option<Utf8PathBuf>,
+
     #[builder(default)]
     pub(crate) roms_configuration: HashSet<AmstradRom>,
+
     #[builder(default)]
     pub(crate) debug_files: Vec<Utf8PathBuf>,
+
     pub(crate) auto_run: Option<String>
 }
 
@@ -59,6 +63,14 @@ impl EmulatorConf {
                 Emulator::Ace(_) => todo!(),
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!()
+            }
+        }
+
+        if let Some(sna)  =&self.snapshot {
+            match emu {
+                Emulator::Ace(ace_version) => args.push(sna.to_string()),
+                Emulator::Cpcec(cpcec_version) => todo!(),
+                Emulator::Winape(winape_version) => todo!(),
             }
         }
 
@@ -659,6 +671,13 @@ pub struct EmuCli {
     )]
     albireo: Option<String>,
 
+    #[arg(
+        long="snapshot",
+        value_name = "SNAPSHOT",
+        help = "Specify the snapshot to launch"
+    )]
+    snapshot: Option<String>,
+
     #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "256", "576", "1088"]))]
     memory: Option<String>,
 
@@ -791,6 +810,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     let builder = EmulatorConf::builder()
         .maybe_drive_a(cli.drive_a.clone())
         .maybe_drive_b(cli.drive_b.clone())
+        .maybe_snapshot(cli.snapshot.clone())
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone());
     let conf = builder.build();
