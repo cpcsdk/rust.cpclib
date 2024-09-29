@@ -421,6 +421,14 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
 }
 
 #[allow(missing_docs)]
+pub fn ld_mem_expr_a<E: Into<Expr>>(e: E) -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld, 
+        DataAccess::Memory(e.into()), 
+        Register8::A.into())
+}
+
+#[allow(missing_docs)]
 pub fn ld_mem_hl_a() -> Token {
     ld_mem_hl_register8(Register8::A)
 }
