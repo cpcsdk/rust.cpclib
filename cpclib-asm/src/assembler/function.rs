@@ -239,12 +239,12 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
         
         "load": Function::HardCoded(HardCodedFunction::Load),
-        
+
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),
         "section_stop": Function::HardCoded(HardCodedFunction::SectionStop),
         "section_length": Function::HardCoded(HardCodedFunction::SectionLength),
         "section_used": Function::HardCoded(HardCodedFunction::SectionUsed),
-        "section_mmr": Function::HardCoded(HardCodedFunction::SectionUsed),
+        "section_mmr": Function::HardCoded(HardCodedFunction::SectionMmr),
 
         "binary_transform": Function::HardCoded(HardCodedFunction::BinaryTransform)
     }
