@@ -218,7 +218,8 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
             }
         }?;
 
-        ensure_orgams_type(res, env)
+        let res = ensure_orgams_type(res, env);
+        res
 
     }
 }
@@ -422,7 +423,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
         else if $self.is_binary_function() {
             let func = $self.binary_function();
             let arg1 = $self.arg1();
-            let arg2 = $self.arg1();
+            let arg2 = $self.arg2();
             BinaryFunctionWrapper::new(func, arg1, arg2).resolve($env)
         }
 
