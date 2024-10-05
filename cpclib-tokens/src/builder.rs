@@ -619,6 +619,6 @@ mod tests {
     fn test_ld_r16() {
         use super::*;
         // just check if it compiles
-        ld_af_expr(0.into());
+        ld_af_expr(0);
     }
 }
