@@ -230,6 +230,21 @@ pub fn jp_label(label: &str) -> Token {
 }
 
 #[allow(missing_docs)]
+pub fn jp_ix() -> Token {
+    token_for_opcode_latest_arg(Mnemonic::Jp, DataAccess::MemoryIndexRegister16(IndexRegister16::Ix))
+}
+
+#[allow(missing_docs)]
+pub fn jp_iy() -> Token {
+    token_for_opcode_latest_arg(Mnemonic::Jp, DataAccess::MemoryIndexRegister16(IndexRegister16::Iy))
+}
+
+#[allow(missing_docs)]
+pub fn jp_hl() -> Token {
+    token_for_opcode_latest_arg(Mnemonic::Jp, DataAccess::MemoryRegister16(Register16::Hl))
+}
+
+#[allow(missing_docs)]
 pub fn exx() -> Token {
     token_for_opcode_no_arg(Mnemonic::Exx)
 }
