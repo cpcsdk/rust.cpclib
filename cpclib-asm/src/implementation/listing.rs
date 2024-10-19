@@ -31,6 +31,8 @@ pub trait ListingExt {
     fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
         Ok(self.to_bytes()?.len())
     }
+    fn fallback_number_of_bytes(&self) -> Result<usize, String>;
+
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
@@ -146,6 +148,10 @@ impl ListingExt for Listing {
             self.listing_mut()
                 .insert(0, equ(next_label.borrow(), next_address));
         }
+    }
+    
+    fn fallback_number_of_bytes(&self) -> Result<usize, String> {
+        self.iter().map(|t| t.fallback_number_of_bytes()).sum()
     }
 }
 

@@ -1,4 +1,6 @@
-use cpclib_common::camino::Utf8PathBuf;
+use std::path::absolute;
+
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::BaseDirs;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
@@ -73,6 +75,17 @@ impl Emulator {
         match self {
             Emulator::Ace(v) => v.albireo_folder(),
             _ => unimplemented!()
+        }
+    }
+
+    /// Handle filename to make them work properly using wine
+    pub fn winape_compatible_fname(&self, p: &Utf8Path) -> Utf8PathBuf {
+        let abspath = absolute(p).unwrap();
+        let abspath = Utf8PathBuf::from_path_buf(abspath).unwrap();
+        if cfg!(target_os="win") {
+            abspath
+        } else {
+            ("Z:".to_owned() + abspath.as_str()).into()
         }
     }
 }

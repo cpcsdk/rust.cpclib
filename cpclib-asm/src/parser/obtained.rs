@@ -1550,6 +1550,9 @@ impl ListingElement for LocatedTokenInner {
                 expr: _
             } => todo!(),
 
+            Self::Assert(test, print) => {
+                Cow::Owned(Token::Assert(test.to_expr().into_owned(), print.clone()))
+            }
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
@@ -1899,6 +1902,10 @@ impl TokenExt for LocatedToken {
     }
 
     fn disassemble_data(&self) -> Result<cpclib_tokens::Listing, String> {
+        todo!()
+    }
+    
+    fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         todo!()
     }
 }
@@ -2362,6 +2369,10 @@ impl ListingExt for LocatedListing {
     }
 
     fn inject_labels<S: Borrow<str>>(&mut self, labels: HashMap<u16, S>) {
+        todo!()
+    }
+    
+    fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         todo!()
     }
 }

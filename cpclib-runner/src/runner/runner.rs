@@ -63,7 +63,7 @@ impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+        let itr = dbg!(itr.iter().map(|s| s.as_ref()).collect_vec());
 
         // WARNING
         // Deactivated because if makes fail normal progam on Linux

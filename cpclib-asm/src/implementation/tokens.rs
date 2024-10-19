@@ -38,6 +38,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
         Ok(env.produced_bytes())
     }
 
+    /// Returns the number of bytes of the instructions by assembling it
     fn number_of_bytes(&self) -> Result<usize, String> {
         let bytes = self.to_bytes();
         if bytes.is_ok() {
@@ -47,6 +48,9 @@ pub trait TokenExt: ListingElement + Debug + Visited {
             Err(format!("Unable to get the bytes of this token: {:?}", self))
         }
     }
+
+    /// returns the number of bytes without assembling it
+    fn fallback_number_of_bytes(&self) -> Result<usize, String>;
 
     /// Return the number of bytes of the token given the provided context
     fn number_of_bytes_with_context(
@@ -475,6 +479,19 @@ impl TokenExt for Token {
             },
         };
         Ok(duration)
+    }
+    
+    fn fallback_number_of_bytes(&self) -> Result<usize, String> {
+        match self {
+            Self::OpCode(mne, arg1, arg2, arg3) => {
+                let arg1 = arg1.as_ref().map(|arg| arg.replace_expressions_by_0());
+                let arg2 = arg2.as_ref().map(|arg| arg.replace_expressions_by_0());
+
+                Self::OpCode(mne.clone(), arg1, arg2, arg3.clone()).number_of_bytes()
+            }
+            Self::Comment(..) | Self::Label(..) | Self::Assert(..)=> Ok(0),
+            _ => Result::Err(format!("fallback_number_of_bytes not implemented for {self}"))
+        }
     }
 }
 

@@ -70,7 +70,10 @@ impl EmulatorConf {
             match emu {
                 Emulator::Ace(ace_version) => args.push(sna.to_string()),
                 Emulator::Cpcec(cpcec_version) => todo!(),
-                Emulator::Winape(winape_version) => todo!(),
+                Emulator::Winape(winape_version) => {
+                    let fname = emu.winape_compatible_fname(sna);
+                    args.push(format!("/SN:{fname}"));
+                },
             }
         }
 
@@ -703,7 +706,7 @@ pub struct EmuCli {
     command: Commands
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
 pub enum Emu {
     Ace,
     Winape,
@@ -830,74 +833,78 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     }
 
     // setup emulator
-    // copy the non standard roms and configure the emu (at least ace)
-    let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
-    let mut ace_conf = AceConfig::open(&ace_conf_path);
+    // todo standardize that to shorten code and avoid copy paste
+    if cli.emulator == Emu::Ace {
 
-    if let Some(mem) = &cli.memory {
-        ace_conf.set("RAM", mem);
-    }
-    else {
-        ace_conf.set("RAM", 128);
-    }
+        // copy the non standard roms and configure the emu (at least ace)
+        let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
+        let mut ace_conf = AceConfig::open(&ace_conf_path);
 
-    // Ensure system is French. TODO handle that properly for foreign partners !
-    ace_conf.set(
-        "OS",
-        emu.configuration::<E>()
-            .cache_folder()
-            .join("private/firmware/OS6128_FR.rom")
-    );
-    ace_conf.set("KTRANS", 1);
-    ace_conf.set("KGTRANS", 1);
-
-    let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
-        (
-            AmstradRom::Unidos,
-            &[
-                ("unidos.rom", 7),
-                ("nova.rom", 8),
-                ("albireo.rom", 9),
-                ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
-            ]
-        ),
-        (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15)])
-    ];
-    // for fname in EmbeddedRoms::iter() {
-    // println!("{fname}");
-    // }
-    for (kind, roms) in extra_roms {
-        let remove = cli.disable_rom.contains(kind);
-
-        // a minimum ammount of memory is required
-        if !remove && kind == &AmstradRom::Orgams && cli.memory.is_none() {
-            ace_conf.set("RAM", 576);
+        if let Some(mem) = &cli.memory {
+            ace_conf.set("RAM", mem);
+        }
+        else {
+            ace_conf.set("RAM", 128);
         }
 
-        for (rom, slot) in roms.iter() {
-            let dst = emu.roms_folder().join(rom);
-            let exists = dst.exists();
+        // Ensure system is French. TODO handle that properly for foreign partners !
+        ace_conf.set(
+            "OS",
+            emu.configuration::<E>()
+                .cache_folder()
+                .join("private/firmware/OS6128_FR.rom")
+        );
+        ace_conf.set("KTRANS", 1);
+        ace_conf.set("KGTRANS", 1);
 
-            if !exists && !remove {
-                let src = format!("roms://{rom}");
-                println!("Install {} in {}", src, dst);
-                let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
-                std::fs::write(&dst, data.data).unwrap();
-            }
-            else if exists && remove {
-                std::fs::remove_file(&dst).unwrap();
+        let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
+            (
+                AmstradRom::Unidos,
+                &[
+                    ("unidos.rom", 7),
+                    ("nova.rom", 8),
+                    ("albireo.rom", 9),
+                    ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
+                ]
+            ),
+            (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15)])
+        ];
+        // for fname in EmbeddedRoms::iter() {
+        // println!("{fname}");
+        // }
+        for (kind, roms) in extra_roms {
+            let remove = cli.disable_rom.contains(kind);
+
+            // a minimum ammount of memory is required
+            if !remove && kind == &AmstradRom::Orgams && cli.memory.is_none() {
+                ace_conf.set("RAM", 576);
             }
 
-            let key = format!("ROM{slot}");
-            if remove {
-                ace_conf.remove(&key);
-            }
-            else {
-                ace_conf.set(key, dst.to_string());
+            for (rom, slot) in roms.iter() {
+                let dst = emu.roms_folder().join(rom);
+                let exists = dst.exists();
+
+                if !exists && !remove {
+                    let src = format!("roms://{rom}");
+                    println!("Install {} in {}", src, dst);
+                    let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
+                    std::fs::write(&dst, data.data).unwrap();
+                }
+                else if exists && remove {
+                    std::fs::remove_file(&dst).unwrap();
+                }
+
+                let key = format!("ROM{slot}");
+                if remove {
+                    ace_conf.remove(&key);
+                }
+                else {
+                    ace_conf.set(key, dst.to_string());
+                }
             }
         }
+        ace_conf.save().unwrap();
     }
-    ace_conf.save().unwrap();
 
     let albireo_backup_and_original = {
         if emu.is_ace() {
