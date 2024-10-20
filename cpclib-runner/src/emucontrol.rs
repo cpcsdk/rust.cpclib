@@ -4,9 +4,11 @@ use std::path::absolute;
 use std::time::Duration;
 
 use bon::builder;
+use camino_tempfile::tempfile;
 use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+use cpclib_common::parse_value;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
@@ -27,6 +29,25 @@ type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub enum AmstradRom {
     Orgams,
     Unidos
+}
+
+/// Read a rasm debug file and convert it in winape sym string
+pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
+    let content = std::fs::read_to_string(src)?;
+    Ok(content.split(";")
+        .filter(|code| code.starts_with("label") | code.starts_with("alias"))
+        .map(|code|{
+            let mut spliter = code.split_ascii_whitespace();
+            spliter.next(); // consume alias or label
+
+            let label = spliter.next().unwrap().replace('.', "_");
+            let value = spliter.next().unwrap();
+            let value = &mut value.as_bytes();
+            let value = parse_value::<_, ()>(value).unwrap();
+
+            format!("{label} #{value:.X}")
+        })
+        .join("\n"))
 }
 
 #[derive(Debug)]
@@ -92,6 +113,29 @@ impl EmulatorConf {
                         args.push(fname.to_string());
                     }
                 },
+                Emulator::Winape(_) => {
+                    eprintln!("Breapoints are currently ignored. TODO convert them in the appropriate format");
+                    let mut sym_string = String::new();
+                    for rasm_fname in &self.debug_files {
+                        if !sym_string.is_empty() && sym_string.chars().last().unwrap() != '\n' {
+                            sym_string.push('\n');
+                        }
+                        sym_string.push_str(&rasm_debug_to_winape_sym(rasm_fname).unwrap());
+                    }
+
+                    if !sym_string.is_empty() {
+                        let tempfile = camino_tempfile::Builder::new()
+                            .suffix(".winape.sym")
+                            .tempfile().unwrap();
+                        let path = tempfile.into_temp_path();
+                        let path = path.keep().unwrap();
+                        std::fs::write(&path, sym_string).unwrap();
+                        let fname = emu.winape_compatible_fname(&path);
+                        args.push(format!("/SYM:{fname}"));
+                    }
+
+
+                }
                 _ => eprintln!("Debug files are currently ignored. TODO convert them in the appropriate format")
             }
         }
