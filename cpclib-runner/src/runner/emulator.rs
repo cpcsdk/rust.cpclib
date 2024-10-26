@@ -82,7 +82,7 @@ impl Emulator {
     pub fn winape_compatible_fname(&self, p: &Utf8Path) -> Utf8PathBuf {
         let abspath = absolute(p).unwrap();
         let abspath = Utf8PathBuf::from_path_buf(abspath).unwrap();
-        if cfg!(target_os="win") {
+        if cfg!(target_os="windows") {
             abspath
         } else {
             ("Z:".to_owned() + abspath.as_str()).into()
