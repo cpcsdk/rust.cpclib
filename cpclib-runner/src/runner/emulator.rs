@@ -93,6 +93,7 @@ impl Emulator {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AceVersion {
     #[default]
+    Bnd4, // 2024/10/26
     ZenSummer, // 2024/08/18
     WakePoint // 2024/06/21
 }
@@ -100,7 +101,7 @@ pub enum AceVersion {
 impl AceVersion {
     pub fn config_file(&self) -> Utf8PathBuf {
         let p = match self {
-            Self::ZenSummer => {
+            Self::ZenSummer | Self::Bnd4  => {
                 BaseDirs::new()
                     .unwrap()
                     .config_local_dir()
@@ -204,6 +205,7 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz", "AceWakePoint"),
+                    AceVersion::Bnd4 => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZENbnd4.tar.gz", "AceBnd4"),
                     AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz", "AceZenSummer")
                 }
             }
@@ -248,6 +250,10 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
+                    AceVersion::Bnd4 => windows_ace_desc(
+                        "http://www.roudoudou.com/ACE-DL/W64bnd4.zip",
+                        "AceBnd4"
+                    ),
                     AceVersion::WakePoint => windows_ace_desc(
                     "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
                     "AceWakePoint"),
