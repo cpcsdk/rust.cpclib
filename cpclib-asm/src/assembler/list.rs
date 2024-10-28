@@ -268,15 +268,25 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
 }
 
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
-    match (s1, s2) {
+    match (&s1, &s2) {
+        (ExprResult::Char(s1), ExprResult::Char(s2)) => {
+            let s1 = format!("{}{}", *s1  as char, *s2 as char);
+            Ok(ExprResult::String(s1.into()))
+        },
+
+        (ExprResult::String(s1), ExprResult::Char(s2)) => {
+            let s1 = format!("{}{}", s1, *s2 as char);
+            Ok(ExprResult::String(s1.into()))
+        },
+
         (ExprResult::String(s1), ExprResult::String(s2)) => {
-            let s1 = s1.to_string() + fix_string(s2).as_str();
+            let s1 = s1.to_string() + fix_string(s2.clone()).as_str();
             Ok(ExprResult::String(s1.into()))
         },
         (ExprResult::String(s1), ExprResult::List(l)) => {
             let mut s1 = s1.to_string() + "[";
 
-            for (i, e) in l.into_iter().enumerate() {
+            for (i, e) in l.into_iter().cloned().enumerate() {
                 if i != 0 {
                     s1 += ","
                 }
@@ -311,7 +321,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: "string_push called with wrong types".to_string()
+                    msg: format!("string_push called with wrong types {:?} {:?}", s1, s2)
                 })
             )))
         },

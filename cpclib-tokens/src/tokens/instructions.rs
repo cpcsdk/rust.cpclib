@@ -3,6 +3,9 @@ use std::fmt::Debug;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
+use cpclib_sna::RemuBreakPointAccessMode;
+use cpclib_sna::RemuBreakPointRunMode;
+use cpclib_sna::RemuBreakPointType;
 use cpclib_sna::SnapshotVersion;
 
 use crate::tokens::data_access::*;
@@ -577,7 +580,18 @@ pub enum Token {
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
     Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, String),
     Break,
-    Breakpoint(Option<Expr>),
+    Breakpoint{
+        address:Option<Expr>,
+        r#type: Option<RemuBreakPointType>,
+        access: Option<RemuBreakPointAccessMode>,
+        run: Option<RemuBreakPointRunMode>,
+        mask: Option<Expr>,
+        size: Option<Expr>,
+        value: Option<Expr>,
+        value_mask: Option<Expr>,
+        condition: Option<Expr>,
+        name: Option<Expr>,
+    },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
     Charset(CharsetFormat),
@@ -945,11 +959,14 @@ impl fmt::Display for Token {
             Token::Assert(ref expr, Some(ref text))
                 => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text.iter().map(|e|e.to_string()).join(",")),
 
-            Token::Breakpoint(None)
-                => write!(f, "BREAKPOINT"),
-            Token::Breakpoint(Some(ref expr))
-                 => write!(f, "BREAKPOINT {}", expr.to_simplified_string()),
-
+            Token::Breakpoint{address, ..} => {
+                write!(f, "BREAKPOINT")?;
+                if let Some(address) = address {
+                    write!(f, " {}", address.to_simplified_string())?;
+                }
+                unimplemented!();
+                Ok(())
+            }
             Token::Comment(ref string)
                  => write!(f, " ; {}", string.replace('\n',"\n;")),
  

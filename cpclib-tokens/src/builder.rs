@@ -221,7 +221,7 @@ pub fn breakpoint_winape() -> Token {
 
 #[allow(missing_docs)]
 pub fn breakpoint_snapshot() -> Token {
-    Token::Breakpoint(None)
+    todo!()
 }
 
 #[allow(missing_docs)]

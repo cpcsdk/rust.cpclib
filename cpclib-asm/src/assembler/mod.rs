@@ -1086,22 +1086,26 @@ impl Env {
             for brk in self.sna.pages_info[activepage].collect_breakpoints() {
                 let info = AssemblerError::RelocatedInfo {
                     info: Box::new(AssemblerError::AssemblingError {
-                        msg: format!("Add a breakpoint in 0x{:04x}", brk.address)
+                        msg: format!("Add a breakpoint: {} ", brk.info_repr())
                     }),
                     span: brk.span.as_ref().unwrap().clone()
                 };
                 eprint!("{}", info);
 
                 if let Some(chunk) = winape_chunk.as_mut() {
-                    chunk.add_breakpoint(brk.winape())
+                    if let Some(brk) = brk.winape() {
+                        chunk.add_breakpoint(brk);
+                    }
                 }
                 if let Some(chunk) = ace_chunk.as_mut() {
-                    chunk.add_breakpoint(brk.ace())
+                    if let Some(brk) = brk.ace() {
+                        chunk.add_breakpoint(brk);
+                    }
                 }
 
                 // TODO check it is not consummed at first loop
-                if let Some(chunk) = remu {
-                    chunk.add_entry(&brk.remu());
+                if let Some(chunk) = remu.as_mut() {
+                    chunk.add_entry(&brk.remu().into());
                 }
             }
         }
@@ -1900,44 +1904,132 @@ impl Env {
         Ok(())
     }
 
-    fn visit_breakpoint<E: ExprEvaluationExt>(
+    fn visit_breakpoint<E: ExprEvaluationExt + ExprElement + MayHaveSpan>(
         &mut self,
-        exp: Option<&E>,
+        address: Option<&E>,
+        r#type: Option<&RemuBreakPointType>,
+        access: Option<&RemuBreakPointAccessMode>,
+        run: Option<&RemuBreakPointRunMode>,
+        mask: Option<&E>,
+        size: Option<&E>,
+        value: Option<&E>,
+        value_mask: Option<&E>,
+        condition: Option<&E>,
+        name: Option<&E>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
-        if exp.is_some() {
-            return Err(AssemblerError::BugInAssembler {
-                file: file!(),
-                line: line!(),
-                msg: "Breakpoint with an expression is not yet implemented".to_string()
-            });
-        }
+        
+        let brk = if r#type.is_none() && access.is_none() && run.is_none() && mask.is_none() && size.is_none() && value.is_none() && value_mask.is_none() && condition.is_none() && name.is_none() {
+            // here we manipulate a very simple breakpoint            
+            let (current_address, page): (u16,u8) = if let Some(exp) = address {
+                if exp.is_label() {
+                    let label = exp.label();
+                    let symbols = self.symbols();
+                    let value: &Value = symbols.value(label)?.unwrap();
+                    match value {
+                        Value::Expr(expr_result) => {
+                            (expr_result.int()? as _ , 0)
+                        },
+                        Value::Address(physical_address) => todo!(),
+                        _ => return Err(AssemblerError::BugInAssembler {
+                            file: file!(),
+                            line: line!(),
+                            msg: "unhandled case".to_owned()
+                        })
+                    }
 
-        let current_address = self.logical_code_address();
-        // ATM the breakpoints only work in SNA
-        // To allow them in CPR there is a bit of work to do
-        let page = match self
-            .logical_to_physical_address(current_address)
-            .to_memory()
-            .page()
-        {
-            0 => 0,
-            1 => 1,
-            _ => {
-                return Err(AssemblerError::BugInAssembler {
-                    file: file!(),
-                    line: line!(),
-                    msg: format!(
-                        "Page selection not handled 0x{:x}",
-                        self.logical_to_physical_address(current_address)
-                            .to_memory()
-                            .page()
-                    )
-                })
-            },
+                } else {
+                    let current_address = self.resolve_expr_must_never_fail(exp)?.int()?;
+                    let page = 0; // BUG should be dynamic and not hard coded !
+                    (current_address as _, page)
+                }
+            } else {
+                let current_address = self.logical_code_address();
+                // ATM the breakpoints only work in SNA
+                // To allow them in CPR there is a bit of work to do
+                let page = match self
+                    .logical_to_physical_address(current_address)
+                    .to_memory()
+                    .page()
+                {
+                    0 => 0,
+                    1 => 1,
+                    _ => {
+                        return Err(AssemblerError::BugInAssembler {
+                            file: file!(),
+                            line: line!(),
+                            msg: format!(
+                                "Page selection not handled 0x{:x}",
+                                self.logical_to_physical_address(current_address)
+                                    .to_memory()
+                                    .page()
+                            )
+                        })
+                    },
+                };
+
+                (current_address, page)
+            };
+
+            BreakpointCommand::new_simple(current_address, page, span.cloned())
+        } else {
+            // here we manipulate an advanced breakpoint of Ace
+
+            let mut brk = AdvancedRemuBreakPoint::default();
+            brk.addr = if let Some(address) = address {
+                self.resolve_expr_must_never_fail(address)?.int()? as u16
+            } else {
+                self.logical_code_address()
+            };
+            if let Some(r#type) = r#type {
+                brk.brk_type = r#type.clone();
+            }
+            if let Some(access) = access {
+                brk.access_mode = access.clone();
+            }
+            if let Some(run) = run {
+                brk.run_mode = run.clone();
+            }
+            if let Some(mask) = mask {
+                brk.mask = self.resolve_expr_may_fail_in_first_pass(mask)?.int()? as u16;
+            }
+            if let Some(size) = size {
+                brk.size = self.resolve_expr_may_fail_in_first_pass(size)?.int()? as u16;
+            }
+            if let Some(value) = value {
+                brk.value = self.resolve_expr_may_fail_in_first_pass(value)?.int()? as u8;
+            }
+            if let Some(value_mask) = value_mask {
+                brk.val_mask = self.resolve_expr_may_fail_in_first_pass(value_mask)?.int()? as u8;
+            }
+            if let Some(condition) = condition {
+                let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
+                let cond = cond.string()?;
+                brk.condition.replace(String127::try_new(cond).map_err(|e| {
+                    let e = AssemblerError::AssemblingError { msg: "Condition is too long".to_owned() };
+                    if condition.has_span() {
+                        e.locate(condition.span().clone())
+                    } else {
+                        e
+                    }
+                })?);
+            }
+            if let Some(name) = name {
+                let n = self.resolve_expr_may_fail_in_first_pass(name)?;
+                let n = n.string()?;
+                brk.name.replace(String127::try_new(n).map_err(|e| {
+                    let e = AssemblerError::AssemblingError { msg: "Name is too long".to_owned() };
+                    if name.has_span() {
+                        e.locate(name.span().clone())
+                    } else {
+                        e
+                    }
+                })?);
+            }
+            
+            BreakpointCommand::from((brk, span.cloned()))
         };
-
-        let brk = BreakpointCommand::new(current_address, page, span.cloned());
+        
         self.active_page_info_mut().add_breakpoint_command(brk);
 
         Ok(())
@@ -3271,7 +3363,28 @@ macro_rules! visit_token_impl {
             }, // TODO move in the processed tokens stuff
             $cls::Bank(ref exp) => $env.visit_page_or_bank(exp.as_ref()),
             $cls::Bankset(ref v) => $env.visit_pageset(v),
-            $cls::Breakpoint(expr) => $env.visit_breakpoint(expr.as_ref(), $span),
+            $cls::Breakpoint{
+                address,
+                r#type,
+                access,
+                run,
+                mask,
+                size,
+                value,
+                value_mask,
+                condition,
+                name} => $env.visit_breakpoint(
+                    address.as_ref(),
+                    r#type.as_ref(),
+                    access.as_ref(),
+                    run.as_ref(),
+                    mask.as_ref(),
+                    size.as_ref(),
+                    value.as_ref(),
+                    value_mask.as_ref(),
+                    condition.as_ref(),
+                    name.as_ref(),
+                    $span),
             $cls::BuildCpr => $env.visit_buildcpr(),
             $cls::BuildSna(ref v) => $env.visit_buildsna(v.as_ref()),
 

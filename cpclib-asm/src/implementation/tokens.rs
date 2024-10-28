@@ -200,7 +200,7 @@ impl TokenExt for Token {
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
         let duration = match self {
             Token::Assert(..)
-            | Token::Breakpoint(_)
+            | Token::Breakpoint{..}
             | Token::Comment(_)
             | Token::Label(_)
             | Token::Equ { .. }

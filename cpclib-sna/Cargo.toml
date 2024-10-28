@@ -17,10 +17,12 @@ independent = true
 cpclib-common.workspace = true
 
 cfg-if.workspace = true
-delegate.workspace = true
-serde.workspace = true
-num_enum.workspace = true
 comfy-table = {version="7.1.1", optional = true}
+delegate.workspace = true
+num_enum.workspace = true
+nutype.workspace = true
+serde.workspace = true
+strum.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rustyline = { workspace = true, optional = true}

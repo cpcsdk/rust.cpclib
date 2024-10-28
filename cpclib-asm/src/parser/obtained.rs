@@ -13,7 +13,7 @@ use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
 use cpclib_common::winnow::{BStr, PResult, Parser};
-use cpclib_sna::{FlagValue, SnapshotFlag, SnapshotVersion};
+use cpclib_sna::{FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotFlag, SnapshotVersion};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     data_access_impl_most_methods, data_access_is_any_indexregister16,
@@ -28,8 +28,7 @@ use cpclib_tokens::{
 use ouroboros::self_referencing;
 
 use super::{
-    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete,
-    InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
+    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete, BreakPointArgument, InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -923,7 +922,20 @@ pub enum LocatedTokenInner {
     Bankset(LocatedExpr),
     Basic(Option<Vec<Z80Span>>, Option<Vec<LocatedExpr>>, Z80Span),
     Break,
-    Breakpoint(Option<LocatedExpr>),
+    /// Breakpoints are quite biased toward Ace-Dl representation
+    // for each field (span to the filed name, value with potential span)
+    Breakpoint{
+        address:Option<LocatedExpr>,
+        r#type: Option<RemuBreakPointType>,
+        access: Option<RemuBreakPointAccessMode>,
+        run: Option<RemuBreakPointRunMode>,
+        mask: Option<LocatedExpr>,
+        size: Option<LocatedExpr>,
+        value: Option<LocatedExpr>,
+        value_mask: Option<LocatedExpr>,
+        condition: Option<LocatedExpr>,
+        name: Option<LocatedExpr>,
+    },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
 

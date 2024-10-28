@@ -1,7 +1,11 @@
 #![allow(clippy::cast_lossless)]
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt::Debug;
+use std::ops::DerefMut;
+use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use choice_nocase::choice_nocase;
@@ -13,7 +17,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow;
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated, Context
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ErrorKind, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
@@ -22,7 +26,7 @@ use cpclib_common::winnow::stream::{
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
 use cpclib_common::winnow::{BStr, PResult, Parser};
 use cpclib_sna::parse::parse_flag;
-use cpclib_sna::{FlagValue, SnapshotVersion};
+use cpclib_sna::{FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion};
 use cpclib_tokens::ListingElement;
 // use crc::*;
 use either::Either;
@@ -2710,12 +2714,304 @@ fn parse_conditional_condition(
     }
 }
 
-/// Parse a breakpint instruction
+/// Parse a breakpoint instruction
 pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    opt(located_expr)
-        .map(LocatedTokenInner::Breakpoint)
+    let expr = opt(
+                terminated(located_expr,not('=')).with_taken()
+                .verify(|(e, s)| { 
+                    // disallow labels that are similar to some keywords
+                    !s.eq_ignore_ascii_case(b"READ")  &&
+                    !s.eq_ignore_ascii_case(b"R")  &&
+                    !s.eq_ignore_ascii_case(b"WRITE")  &&
+                    !s.eq_ignore_ascii_case(b"W")  &&
+                    !s.eq_ignore_ascii_case(b"READWRITE")  &&
+                    !s.eq_ignore_ascii_case(b"RW")  &&
+                    !s.eq_ignore_ascii_case(b"MEM")  &&
+                    !s.eq_ignore_ascii_case(b"MEMORY")  &&
+                    !s.eq_ignore_ascii_case(b"EXEC")  &&
+                    !s.eq_ignore_ascii_case(b"EXECUTE")  &&
+                    !s.eq_ignore_ascii_case(b"STOP")  &&
+                    !s.eq_ignore_ascii_case(b"STOPPER")  &&
+                    !s.eq_ignore_ascii_case(b"WATCH")  &&
+                    !s.eq_ignore_ascii_case(b"WATCHER") &&
+                    !s.contains(&b'=')
+                })
+                .map(|(e, s)| e)
+            )
+            .parse_next(input)?;
+    
+        let address = Rc::new(RefCell::new(expr.map(|expr| (None, expr))));
+        let r#type= Rc::new(RefCell::new(None));
+        let access= Rc::new(RefCell::new(None));
+        let run= Rc::new(RefCell::new(None));
+        let mut mask= Rc::new(RefCell::new(None));
+        let mut size= Rc::new(RefCell::new(None));
+        let mut value= Rc::new(RefCell::new(None));
+        let mut value_mask= Rc::new(RefCell::new(None));
+        let mut condition= Rc::new(RefCell::new(None));
+        let mut name= Rc::new(RefCell::new(None));
+
+
+        let first = std::rc::Rc::new(std::cell::RefCell::new(true));
+
+        loop {
+            let _arg = cut_err(opt(parse_breakpoint_argument)
+                .verify(|arg| { // at the same time verify if it is ok and update
+                    if let Some(arg) = arg {
+                        match arg {
+                            BreakPointArgument::Address { arg, value } => {
+                                let mut address = address.borrow_mut();
+                                let  address = address.deref_mut();
+                                if let Some(address) = address {
+                                    return false;
+                                } else {
+                                    address.replace((Some(arg.clone()), value.clone()));
+                                    return true;
+                                }
+                            },
+
+                            BreakPointArgument::Type { arg, value }=> {
+                                let mut r#type = r#type.borrow_mut();
+                                let r#type = r#type.deref_mut();
+                                if let Some(r#type) = r#type {
+                                    return false;
+                                } else {
+                                    r#type.replace((Some(arg.clone()), value.clone()));
+                                    return true
+                                }
+                            },
+
+                            BreakPointArgument::Access { arg, value } => {
+                                let mut access = access.borrow_mut();
+                                let access = access.deref_mut();
+                                if let Some(access) = access {
+                                    return false;
+                                } else {
+                                    access.replace((arg.clone(), value.clone()));
+                                    return true;
+                                }
+                            },
+
+                            BreakPointArgument::Run { arg, value } => {
+                                let mut run = run.borrow_mut();
+                                let run = run.deref_mut();
+                                if let Some(run) = run {
+                                    return false
+                                } else {
+                                    run.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::Mask { arg, value } => {
+                                let mut item = mask.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::Size { arg, value } => {
+                                let mut item = size.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::Value { arg, value: val } => {
+                                let mut item = value.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), val.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::ValueMask { arg, value } => {
+                                let mut item = value_mask.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::Name { arg, value } => {
+                                let mut item = name.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+
+                            BreakPointArgument::Condition { arg, value } => {
+                                let mut item = condition.borrow_mut();
+                                let item = item.deref_mut();
+                                if let Some(item) = item {
+                                    return false
+                                } else {
+                                    item.replace((arg.clone(), value.clone()));
+                                    return true
+                                }
+                            }
+                            _ => true // TODO implement the tests
+                        }
+                    } else {
+                        return *first.borrow(); // can be empty only at first loop
+                    }
+                })
+                .context("Breapoint parameter error")
+            ).parse_next(input)?;
+
+            *first.borrow_mut() = false;
+
+            if opt(parse_comma).parse_next(input)?.is_none() {
+                break;
+            }
+        }
+
+        let brk = LocatedTokenInner::Breakpoint { 
+            address: Rc::into_inner(address).unwrap().into_inner().map(|a| a.1),
+            r#type: Rc::into_inner(r#type).unwrap().into_inner().map(|r| r.1),
+            access: Rc::into_inner(access).unwrap().into_inner().map(|a| a.1),
+            run: Rc::into_inner(run).unwrap().into_inner().map(|a| a.1),
+            mask: Rc::into_inner(mask).unwrap().into_inner().map(|a| a.1),
+            size: Rc::into_inner(size).unwrap().into_inner().map(|a| a.1),
+            value: Rc::into_inner(value).unwrap().into_inner().map(|a| a.1),
+            value_mask: Rc::into_inner(value_mask).unwrap().into_inner().map(|a| a.1),
+            condition: Rc::into_inner(condition).unwrap().into_inner().map(|a| a.1),
+            name: Rc::into_inner(name).unwrap().into_inner().map(|a| a.1),
+        };
+        
+        Ok(brk)
+    
+
+}
+
+#[derive(Debug)]
+pub enum BreakPointArgument {
+    Type{arg: Option<InnerZ80Span>, value: RemuBreakPointType},
+    Access{arg: Option<InnerZ80Span>, value: RemuBreakPointAccessMode},
+    Run{arg: Option<InnerZ80Span>, value: RemuBreakPointRunMode},
+    Address{arg: InnerZ80Span, value: LocatedExpr},
+    Mask{arg: InnerZ80Span, value: LocatedExpr},
+    Size{arg: InnerZ80Span, value: LocatedExpr},
+    Value{arg: InnerZ80Span, value: LocatedExpr},
+    ValueMask{arg: InnerZ80Span, value: LocatedExpr},
+    Condition{arg: InnerZ80Span, value: LocatedExpr},
+    Name{arg: InnerZ80Span, value: LocatedExpr},
+
+}
+
+pub fn parse_breakpoint_argument(input: &mut InnerZ80Span) -> PResult<BreakPointArgument, Z80ParserError> {
+    alt((
+        parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value)
+            .map(|(k, v)| BreakPointArgument::Type { arg: k, value: v }),
+
+        parse_optional_argname_and_value("ACCESS", &parse_breakpoint_access_value)
+            .map(|(k, v)| BreakPointArgument::Access { arg: k, value: v }),
+
+        parse_optional_argname_and_value("RUNMODE", &parse_breakpoint_run_value)
+            .map(|(k, v)| BreakPointArgument::Run { arg: k, value: v }),
+
+
+        parse_argname_and_value("ADDR", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Address { arg: k, value: v }),
+
+
+        parse_argname_and_value("MASK", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Mask { arg: k, value: v }),
+
+        parse_argname_and_value("SIZE", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Size { arg: k, value: v }),
+
+        parse_argname_and_value("VALUE", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Value { arg: k, value: v }),
+
+        parse_argname_and_value("VALMASK", &located_expr)
+            .map(|(k, v)| BreakPointArgument::ValueMask { arg: k, value: v }),
+
+        parse_argname_and_value("CONDITION", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Condition { arg: k, value: v }),
+
+        parse_argname_and_value("NAME", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Name { arg: k, value: v }),
+
+    ))
         .parse_next(input)
 }
+
+pub fn parse_breakpoint_type_value(input: &mut InnerZ80Span) -> PResult<RemuBreakPointType, Z80ParserError> {
+    parse_convertible_word(input)
+}
+
+pub fn parse_breakpoint_access_value(input: &mut InnerZ80Span) -> PResult<RemuBreakPointAccessMode, Z80ParserError> {
+    parse_convertible_word(input)
+}
+
+pub fn parse_breakpoint_run_value(input: &mut InnerZ80Span) -> PResult<RemuBreakPointRunMode, Z80ParserError> {
+    parse_convertible_word(input)
+}
+
+#[inline(always)]
+pub fn parse_convertible_word<T:FromStr>(input: &mut InnerZ80Span) -> PResult<T, Z80ParserError> {
+    delimited(my_space0, alpha1, my_space0)
+        .verify_map(|word| T::from_str(unsafe{std::str::from_utf8_unchecked(word)}).ok())
+        .parse_next(input)    
+}
+
+pub fn parse_argname_to_assign(argname: &str) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError>  + use<'_>{
+    #[inline]
+    move |input: &mut InnerZ80Span| {
+        let val = Caseless(argname).parse_next(input)?;
+        let val = (*input).update_slice(val);
+
+        (
+            my_space0,
+            '=',
+            my_space0,
+        ).map(|(_,_,_)| val).parse_next(input)
+
+    }
+}
+
+pub fn parse_argname_and_value<'f,'s,O>(argname: &'s str, valparser: &'f dyn Fn(&mut InnerZ80Span) -> PResult<O, Z80ParserError>) -> impl Fn(&mut InnerZ80Span) -> PResult<(InnerZ80Span, O), Z80ParserError> + use<'f, 's, O>
+{
+    move |input: &mut InnerZ80Span| {
+        (
+            parse_argname_to_assign(argname),
+            valparser
+        ).parse_next(input)
+    }
+}
+
+pub fn parse_optional_argname_and_value<'f,'s,O>(argname: &'s str, valparser: &'f dyn Fn(&mut InnerZ80Span) -> PResult<O, Z80ParserError>) -> impl Fn(&mut InnerZ80Span) -> PResult<(Option<InnerZ80Span>, O), Z80ParserError> + use<'f, 's, O>
+{
+    move |input: &mut InnerZ80Span| {
+        
+        alt((
+                (parse_argname_to_assign(argname), cut_err(valparser.context("Wrong value for argument"))).map(|(a, r)| (Some(a), r)),
+                (valparser).map(|r| (None, r))
+        ))
+        .parse_next(input)
+    }
+}
+
+
 
 pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let count = located_expr.parse_next(input)?;
@@ -5674,6 +5970,7 @@ mod test {
         }
     }
 
+
     #[derive(Debug)]
     struct TestResultRest<O: std::fmt::Debug> {
         ctx: Box<ParserContext>,
@@ -5974,6 +6271,37 @@ endif"
             res,
             LocatedTokenInner::Print(vec![FormattedExpr::Raw(Expr::String("hello".into()))])
         );
+    }
+
+    #[test]
+    fn test_parse_advanced_breakpoints() {
+        assert!(dbg!(parse_test(parse_argname_to_assign("TYPE"), "TYPE=")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint_type_value, "mem")).is_ok());
+        assert!(dbg!(parse_test(parse_argname_and_value("TYPE", &parse_breakpoint_type_value), "TYPE=mem")).is_ok());
+        
+        assert!(dbg!(parse_test(parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value), "TYPE=mem")).is_ok());
+        assert!(dbg!(parse_test(parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value), "TYPE = mem")).is_ok());
+        
+        assert!(dbg!(parse_test(parse_breakpoint_argument, "mem")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint_argument, "read")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint_argument, "TYPE=mem")).is_ok());
+
+        // breakpoint keyword has alrady been consumed
+        assert!(dbg!(parse_test(parse_breakpoint, "")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "address")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "mem")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "TYPE=mem")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "ACCESS=READ")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "READ")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "RUNMODE=STOP")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "ADDR=here")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "MASK=12")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "SIZE=1")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "VALUE=1")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "VALMASK=1")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "condition=\"fdfdfd\"")).is_ok());
+        assert!(dbg!(parse_test(parse_breakpoint, "name=\"fdfdfd\"")).is_ok());
+
     }
 
     #[test]
@@ -6383,6 +6711,7 @@ endif"
 
         assert!(dbg!(parse_test(parse_label(false), "_JP")).is_ok());
     }
+
 
     #[test]
     fn test_parse_macro_call() {

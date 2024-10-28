@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, RemuEntry, WinapeBreakPoint};
+use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, RemuEntry, WinapeBreakPoint};
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -204,34 +204,96 @@ impl PrintOrPauseCommand {
 /// TODO: add condition
 #[derive(Debug, Clone)]
 pub struct BreakpointCommand {
-    pub(crate) address: u16,
-    pub(crate) page: u8,
+    pub(crate) brk: InnerBreakpointCommand,
     pub(crate) span: Option<Z80Span>
 }
 
+
 impl BreakpointCommand {
-    pub fn new(address: u16, page: u8, span: Option<Z80Span>) -> Self {
-        BreakpointCommand {
+    pub fn info_repr(&self) -> String {
+        match &self.brk {
+            InnerBreakpointCommand::Simple(brk) => {
+                format!{"PC=&{:X}@{}", brk.address, brk.page}
+            },
+            InnerBreakpointCommand::Advanced(brk) => {
+                format!{"{}", brk}
+            },
+        }
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub enum InnerBreakpointCommand {
+    Simple(BreakPointCommandSimple),
+    Advanced(AdvancedRemuBreakPoint)
+}
+
+
+
+impl From<AdvancedRemuBreakPoint> for InnerBreakpointCommand {
+    fn from(value: AdvancedRemuBreakPoint) -> Self {
+        Self::Advanced(value)
+    }
+}
+
+impl From<BreakPointCommandSimple> for InnerBreakpointCommand {
+    fn from(value: BreakPointCommandSimple) -> Self {
+        Self::Simple(value)
+    }
+}
+
+
+
+#[derive(Debug, Clone)]
+pub struct BreakPointCommandSimple {
+    pub(crate) address: u16,
+    pub(crate) page: u8,
+}
+
+impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointCommand {
+    fn from(value: (T, Option<Z80Span>)) -> Self {
+        Self {
+            brk: value.0.into(),
+            span: value.1
+        }
+    }
+}
+
+impl BreakpointCommand {
+    pub fn new_simple(address: u16, page: u8, span: Option<Z80Span>) -> Self {
+        (BreakPointCommandSimple {
             address,
             page,
-            span
+        }, span).into()
+    }
+
+    // Convert when possible
+    pub fn winape(&self) -> Option<WinapeBreakPoint> {
+        match &self.brk {
+            InnerBreakpointCommand::Simple(brk) => Some(WinapeBreakPoint::new(brk.address, brk.page)),
+           _ => None
         }
     }
 
-    pub fn winape(&self) -> WinapeBreakPoint {
-        WinapeBreakPoint::new(self.address, self.page)
+    // Convert when possible. ATTENTION, I have not implemented all the case
+    pub fn ace(&self) -> Option<AceBreakPoint> {
+        match &self.brk {
+            InnerBreakpointCommand::Simple(brk) => 
+                Some(AceBreakPoint::new_execution(
+                                    brk.address,
+                                    AceBrkRuntimeMode::Break,
+                                    cpclib_sna::AceMemMapType::Undefined
+                                )),
+           _ => None
+        }
     }
 
-    pub fn ace(&self) -> AceBreakPoint {
-        AceBreakPoint::new_execution(
-            self.address,
-            AceBrkRuntimeMode::Break,
-            cpclib_sna::AceMemMapType::Undefined
-        )
-    }
-
-    pub fn remu(&self) -> RemuEntry {
-        RemuEntry::BreakPoint(self.address, self.page)
+    pub fn remu(&self) -> RemuBreakPoint {
+        match &self.brk {
+            InnerBreakpointCommand::Simple(brk) => RemuBreakPoint::Memory(brk.address, brk.page),
+            InnerBreakpointCommand::Advanced(brk) => RemuBreakPoint::Advanced(brk.clone()),
+        }
     }
 }
 
