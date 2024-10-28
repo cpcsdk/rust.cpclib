@@ -60,7 +60,8 @@ pub enum AssemblingOptionFlags {
     // Set to include BRKC in sna chunks
     SnaBrkc,
     // Set to include REMU in sna chunks
-    SnaRemu
+    SnaRemu,
+    RemuInFile
 }
 
 impl AssemblingOptionFlags {

@@ -23,7 +23,7 @@ cfg_match! {
                 match self {
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip", // we assume a modern CPU
+                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip".to_owned(), // we assume a modern CPU
                             folder : "martine_0_39",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "martine.linux",

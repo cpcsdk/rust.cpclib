@@ -45,7 +45,7 @@ cfg_match! {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.9.zip", // we assume a modern CPU
+                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.9.zip".to_owned(), // we assume a modern CPU
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "rasm",

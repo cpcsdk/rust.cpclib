@@ -9,6 +9,20 @@ use ureq::Response;
 use crate::event::EventObserver;
 use crate::runner::runner::{ExternRunner, Runner};
 
+
+use ureq;
+
+pub fn cpclib_download(url: &str) -> Result<String, String> {
+	ureq::get(url)
+			.set("Cache-Control", "max-age=1")
+			.set("From", "krusty.benediction@gmail.com")
+			.set("User-Agent", "cpclib")
+			.call().map_err(|e| e.to_string())?
+			.into_string().map_err(|e| e.to_string())
+}
+
+
+
 pub enum ArchiveFormat {
     Raw,
     TarGz,
@@ -16,7 +30,7 @@ pub enum ArchiveFormat {
 }
 
 pub struct DelegateApplicationDescription<E: EventObserver> {
-    pub download_url: &'static str,
+    pub download_url: String,
     pub folder: &'static str,
     pub exec_fname: &'static str,
     pub archive_format: ArchiveFormat,
@@ -104,7 +118,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
     fn download(&self, o: &E) -> Result<Response, ureq::Error> {
         o.emit_stdout(&format!(">> Download file {}", self.download_url));
-        ureq::get(self.download_url).call()
+        ureq::get(&self.download_url).call()
     }
 }
 

@@ -23,7 +23,7 @@ cfg_match! {
                 match self {
                     ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-linux-amd64.zip", // we assume a modern CPU
+                            download_url: "https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-linux-amd64.zip".to_owned(), // we assume a modern CPU
                             folder : "ImpDsk_0_24",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "binaries/dsk-linux-amd64",

@@ -1,14 +1,41 @@
+use std::collections::BTreeMap;
 use std::path::absolute;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::BaseDirs;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
+
+use scraper::Selector;
+use scraper::Html;
+
 
 pub const ACE_CMD: &str = "ace";
 pub const WINAPE_CMD: &str = "winape";
 pub const CPCEC_CMD: &str = "cpcec";
+const ACE_URL: &'static str = "http://www.roudoudou.com/ACE-DL";
+
+
+
+
+fn ace_download_urls_lin_win() -> Result<(String, String), String> {
+
+	let html = cpclib_download(ACE_URL)?;
+	let document = Html::parse_document(&html);
+	let selector = Selector::parse("#dl td a").map_err(|e| e.to_string()).map_err(|e| e.to_string())?;
+
+	let mut map = BTreeMap::new();
+	for element in document.select(&selector) {
+		map.insert(element.inner_html(), element.attr("href").unwrap());
+	}
+
+	let windows_url = format!("{}/{}", ACE_URL, map.get("x64 (64 bits)").unwrap());
+	let linux_url = format!("{}/{}", ACE_URL, map.get("Ubuntu 22.04 LTS (AVX2)").unwrap());
+
+	Ok((linux_url, windows_url))
+}
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Emulator {
@@ -93,6 +120,7 @@ impl Emulator {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AceVersion {
     #[default]
+    UnknownLastVersion, // directly parse the webpage
     Bnd4, // 2024/10/26
     ZenSummer, // 2024/08/18
     WakePoint // 2024/06/21
@@ -171,7 +199,7 @@ impl WinapeVersion {
 
 #[cfg(target_os = "linux")]
 const fn linux_ace_desc<E: EventObserver>(
-    download_url: &'static str,
+    download_url: String,
     folder: &'static str
 ) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
@@ -204,9 +232,10 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
-                    AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz", "AceWakePoint"),
-                    AceVersion::Bnd4 => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZENbnd4.tar.gz", "AceBnd4"),
-                    AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz", "AceZenSummer")
+                    AceVersion::UnknownLastVersion => linux_ace_desc(ace_download_urls_lin_win().unwrap().0, "UnknwownLastAceVersion"),
+                    AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz".to_owned(), "AceWakePoint"),
+                    AceVersion::Bnd4 => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZENbnd4.tar.gz".to_owned(), "AceBnd4"),
+                    AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_owned(), "AceZenSummer")
                 }
             }
         }
@@ -216,7 +245,7 @@ cfg_match! {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
-                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
+                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip".to_owned(),
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "CPCEC.EXE", // XXX there is a case issue I do not want to solve. so wine is used ...
@@ -233,7 +262,7 @@ cfg_match! {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
-                            download_url: "http://www.winape.net/download/WinAPE20B2.zip",
+                            download_url: "http://www.winape.net/download/WinAPE20B2.zip".to_owned(),
                             folder: "winape_2_0b2",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "WinApe.exe",
@@ -250,6 +279,7 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
+                    AceVersion::UnknownLastVersion => windows_ace_desc(ace_download_urls_lin_win().unwrap().1, "UnknwownLastAceVersion"),
                     AceVersion::Bnd4 => windows_ace_desc(
                         "http://www.roudoudou.com/ACE-DL/W64bnd4.zip",
                         "AceBnd4"
@@ -312,5 +342,17 @@ cfg_match! {
         }
     }
     _ => {
+    }
+}
+
+
+
+#[cfg(test)]
+mod test {
+    use super::ace_download_urls_lin_win;
+
+    #[test]
+    fn retreive_ace_urls() {
+        ace_download_urls_lin_win().unwrap();
     }
 }

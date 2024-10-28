@@ -9,6 +9,7 @@ use clap::{parser, ArgMatches};
 use cpclib_basm::build_args_parser;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::delegated::base_cache_folder;
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
 use cpclib_runner::runner::RunnerWithClap;
@@ -28,7 +29,6 @@ use crate::task::{
     is_xfer_cmd, StandardTaskArguments, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
-use cpclib_runner::delegated::base_cache_folder;
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
@@ -134,7 +134,7 @@ impl BndBuilderCommand {
             BndBuilderCommandInner::Clear => {
                 Self::execute_clear(&observers)?;
                 Ok(None)
-            }
+            },
             BndBuilderCommandInner::Direct(args) => {
                 Self::execute_direct(args.as_str(), &observers)?;
                 Ok(None)
@@ -434,7 +434,7 @@ impl BndBuilderApp {
                 return Ok(BndBuilderCommandInner::Init);
             }
             else if matches.get_flag("clear") {
-                return Ok(BndBuilderCommandInner::Clear)
+                return Ok(BndBuilderCommandInner::Clear);
             }
             else if matches.get_flag("direct") {
                 let cmd: String = matches

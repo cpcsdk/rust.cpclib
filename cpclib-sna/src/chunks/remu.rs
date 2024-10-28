@@ -144,7 +144,7 @@ impl Display for RemuEntry {
                         write!(f, "rombrk {address} {bank};")
                     },
                     RemuBreakPoint::Advanced(brk) =>  {
-                        write!(f,"acebrk {brk};")
+                        write!(f,"acebreak {brk};")
                     }
                 }
             },

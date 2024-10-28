@@ -1012,10 +1012,11 @@ impl Env {
         self.handle_print()?;
         self.handle_assert()?;
 
-        let mut remu = if self
-            .options()
-            .assemble_options()
-            .get_flag(crate::AssemblingOptionFlags::SnaRemu)
+
+        let remu_in_sna = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaRemu);
+        let remu_in_file = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::RemuInFile);
+
+        let mut remu = if remu_in_file || remu_in_sna
         {
             Some(RemuChunk::empty())
         }
@@ -1026,7 +1027,7 @@ impl Env {
         self.handle_breakpoints(&mut remu.as_mut())?;
         self.handle_sna_symbols(&mut remu.as_mut())?;
 
-        if let Some(remu) = &remu {
+        if let Some(remu) = &remu && remu_in_sna{
             self.sna.add_chunk(remu.clone());
         }
 

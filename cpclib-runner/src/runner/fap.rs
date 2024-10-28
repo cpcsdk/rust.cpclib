@@ -24,7 +24,7 @@ cfg_match! {
                 match self {
                     FAPVersion::V1_0_0  =>
                         DelegateApplicationDescription {
-                            download_url: DOWNLOAD_URL_V1_1, // we assume a modern CPU
+                            download_url: DOWNLOAD_URL_V1_1.to_owned(), // we assume a modern CPU
                             folder : "Build",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "FapCrunchLin",

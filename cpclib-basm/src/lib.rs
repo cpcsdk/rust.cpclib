@@ -232,6 +232,12 @@ pub fn assemble(
         }
     }
 
+    if matches.get_one::<String>("REMU_OUTPUT").is_some() {
+        assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, true);
+    } else {
+        assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, false);
+    }
+
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
         for path in files {
@@ -326,6 +332,8 @@ pub fn assemble(
                 error: AssemblerError::AlreadyRenderedError(e.to_string())
             }
         })?;
+
+    
 
     let _ = env
         .handle_post_actions()
