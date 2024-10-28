@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::str::FromStr;
 
+use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{parser, ArgMatches};
 use cpclib_basm::build_args_parser;
@@ -27,6 +28,7 @@ use crate::task::{
     is_xfer_cmd, StandardTaskArguments, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
+use cpclib_runner::delegated::base_cache_folder;
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
@@ -41,6 +43,8 @@ pub enum BndBuilderCommandInner {
     Version,
     /// Init a new project
     Init,
+    /// Clear cache folder
+    Clear,
     /// Launch a direct command ans bypass bndbuild
     Direct(String),
     /// Add a task
@@ -127,6 +131,10 @@ impl BndBuilderCommand {
                 Self::execute_init(&observers)?;
                 Ok(None)
             },
+            BndBuilderCommandInner::Clear => {
+                Self::execute_clear(&observers)?;
+                Ok(None)
+            }
             BndBuilderCommandInner::Direct(args) => {
                 Self::execute_direct(args.as_str(), &observers)?;
                 Ok(None)
@@ -342,6 +350,14 @@ impl BndBuilderCommand {
         observers.emit_stdout("Empty project initialized");
         Ok(())
     }
+
+    fn execute_clear(observers: &dyn BndBuilderObserver) -> Result<(), BndBuilderError> {
+        std::fs::remove_dir_all(base_cache_folder())
+            .context("Error when removing cache folder")
+            .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+        observers.emit_stdout("Cache folder cleared");
+        Ok(())
+    }
 }
 
 impl BndBuilderApp {
@@ -416,6 +432,9 @@ impl BndBuilderApp {
             }
             else if matches.get_flag("init") {
                 return Ok(BndBuilderCommandInner::Init);
+            }
+            else if matches.get_flag("clear") {
+                return Ok(BndBuilderCommandInner::Clear)
             }
             else if matches.get_flag("direct") {
                 let cmd: String = matches

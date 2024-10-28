@@ -23,7 +23,7 @@ pub struct DelegateApplicationDescription<E: EventObserver> {
     pub compile: Option<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>>
 }
 
-pub fn base_cache_foder() -> Utf8PathBuf {
+pub fn base_cache_folder() -> Utf8PathBuf {
     let proj_dirs = ProjectDirs::from("net.cpcscene", "benediction", "bnd build").unwrap();
     Utf8Path::from_path(proj_dirs.cache_dir())
         .unwrap()
@@ -31,16 +31,16 @@ pub fn base_cache_foder() -> Utf8PathBuf {
 }
 
 pub fn clear_base_cache_folder() -> std::io::Result<()> {
-    std::fs::remove_dir_all(base_cache_foder())
+    std::fs::remove_dir_all(base_cache_folder())
 }
 
 impl<E: EventObserver> DelegateApplicationDescription<E> {
     pub fn is_cached(&self) -> bool {
-        dbg!(self.cache_folder()).exists()
+        self.cache_folder().exists()
     }
 
     pub fn cache_folder(&self) -> Utf8PathBuf {
-        let base_cache = base_cache_foder();
+        let base_cache = base_cache_folder();
 
         if !base_cache.exists() {
             std::fs::create_dir_all(&base_cache).unwrap();

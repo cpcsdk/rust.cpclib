@@ -140,6 +140,15 @@ pub fn build_args_parser() -> clap::Command {
                 .number_of_values(1)
         )
         .arg(
+            Arg::new("clear")
+                .long("clear-cache")
+                .alias("clear")
+                .short('c')
+                .action(ArgAction::SetTrue)
+                .help("Clear cache folder that contains all automatically downloaded executables")
+                .exclusive(true)
+        )
+        .arg(
             Arg::new("init")
                 .long("init")
                 .action(ArgAction::SetTrue)
