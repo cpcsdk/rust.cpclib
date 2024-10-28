@@ -1930,7 +1930,7 @@ impl Env {
                         Value::Expr(expr_result) => {
                             (expr_result.int()? as _ , 0)
                         },
-                        Value::Address(physical_address) =>  (physical_address.address(), physical_address.remu_bank() as _), // BUG we lost the differenciation between the different kind of addresses,
+                        Value::Address(physical_address) =>  (physical_address.address(), physical_address.remu_bank() as _), // BUG we lost the differentiation between the different kind of addresses,
                         _ => todo!()
                     }
 

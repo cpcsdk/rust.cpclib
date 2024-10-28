@@ -18,10 +18,12 @@ pub struct String127(String);
 pub enum RemuBreakPointType {
     #[strum(serialize="EXEC")]
     #[strum(serialize="EXECUTE")]
+    #[strum(to_string="EXEC")]
     Exec,
     IO,
     #[strum(serialize="MEM")]
     #[strum(serialize="MEMORY")]
+    #[strum(to_string="MEM")]
     Mem,
 }
 
@@ -47,9 +49,11 @@ pub enum RemuBreakPointAccessMode {
 pub enum RemuBreakPointRunMode {
     #[strum(serialize="STOP")]
     #[strum(serialize="STOPPER")]
+    #[strum(to_string="STOP")]
     Stop,
     #[strum(serialize="WATCH")]
     #[strum(serialize="WATCHER")]
+    #[strum(to_string="WATCH")]
     Watch
 }
 
@@ -96,8 +100,8 @@ impl Display for AdvancedRemuBreakPoint {
                             brk.size,
                             brk.value,
                             brk.val_mask,
-                            brk.name.as_ref().map(|s| s.as_ref()).unwrap_or(""),
-                            brk.condition.as_ref().map(|s| s.as_ref()).unwrap_or(""))
+                            brk.name.as_ref().map(|s| format!("\"{}\"", s.as_ref())).unwrap_or("imported".to_owned()),
+                            brk.condition.as_ref().map(|s| format!("\"{}\"", s.as_ref())).unwrap_or("".to_owned()))
     }
 }
 
