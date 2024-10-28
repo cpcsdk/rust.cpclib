@@ -2744,12 +2744,12 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
         let r#type= Rc::new(RefCell::new(None));
         let access= Rc::new(RefCell::new(None));
         let run= Rc::new(RefCell::new(None));
-        let mut mask= Rc::new(RefCell::new(None));
-        let mut size= Rc::new(RefCell::new(None));
-        let mut value= Rc::new(RefCell::new(None));
-        let mut value_mask= Rc::new(RefCell::new(None));
-        let mut condition= Rc::new(RefCell::new(None));
-        let mut name= Rc::new(RefCell::new(None));
+        let mask= Rc::new(RefCell::new(None));
+        let size= Rc::new(RefCell::new(None));
+        let value= Rc::new(RefCell::new(None));
+        let value_mask= Rc::new(RefCell::new(None));
+        let condition= Rc::new(RefCell::new(None));
+        let name= Rc::new(RefCell::new(None));
 
 
         let first = std::rc::Rc::new(std::cell::RefCell::new(true));
@@ -2929,7 +2929,10 @@ pub fn parse_breakpoint_argument(input: &mut InnerZ80Span) -> PResult<BreakPoint
             .map(|(k, v)| BreakPointArgument::Run { arg: k, value: v }),
 
 
-        parse_argname_and_value("ADDR", &located_expr)
+        alt((
+            parse_argname_and_value("ADDRESS", &located_expr),
+            parse_argname_and_value("ADDR", &located_expr)
+        ))
             .map(|(k, v)| BreakPointArgument::Address { arg: k, value: v }),
 
 

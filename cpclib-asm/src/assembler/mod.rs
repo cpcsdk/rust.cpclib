@@ -1930,12 +1930,8 @@ impl Env {
                         Value::Expr(expr_result) => {
                             (expr_result.int()? as _ , 0)
                         },
-                        Value::Address(physical_address) => todo!(),
-                        _ => return Err(AssemblerError::BugInAssembler {
-                            file: file!(),
-                            line: line!(),
-                            msg: "unhandled case".to_owned()
-                        })
+                        Value::Address(physical_address) =>  (physical_address.address(), physical_address.remu_bank() as _), // BUG we lost the differenciation between the different kind of addresses,
+                        _ => todo!()
                     }
 
                 } else {
