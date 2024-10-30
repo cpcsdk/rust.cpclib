@@ -1,4 +1,5 @@
 #![feature(cfg_match)]
+#![feature(os_str_display)]
 
 use std::env::current_dir;
 

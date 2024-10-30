@@ -90,7 +90,7 @@ impl EmulatorConf {
         if let Some(sna)  =&self.snapshot {
             match emu {
                 Emulator::Ace(ace_version) => args.push(sna.to_string()),
-                Emulator::Cpcec(cpcec_version) => todo!(),
+                Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
                 Emulator::Winape(winape_version) => {
                     let fname = emu.winape_compatible_fname(sna);
                     args.push(format!("/SN:{fname}"));

@@ -1,6 +1,6 @@
 - tgt: do_something
   cmd: echo do_something
-  constraint: Os(Linux)
+  constraint: Or(Os(Linux), Os(macosx))
 - tgt: do_something
   cmd: echo do_something
   constraint: Os(Windows)

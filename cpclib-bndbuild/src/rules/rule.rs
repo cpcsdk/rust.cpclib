@@ -5,7 +5,7 @@ use cpclib_common::itertools::Itertools;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 
-use crate::constraints::{deserialize_constraint, Constraint};
+use crate::constraints::{deserialize_constraint, Constraint, Corresponds};
 use crate::expand_glob;
 use crate::task::Task;
 
