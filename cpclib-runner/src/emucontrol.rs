@@ -63,7 +63,9 @@ pub struct EmulatorConf {
     #[builder(default)]
     pub(crate) debug_files: Vec<Utf8PathBuf>,
 
-    pub(crate) auto_run: Option<String>
+    pub(crate) auto_run: Option<String>,
+
+    pub(crate) memory: Option<u32>
 }
 
 impl EmulatorConf {
@@ -140,6 +142,25 @@ impl EmulatorConf {
             }
         }
 
+        if let Some(memory) = &self.memory {
+            match emu {
+                Emulator::Cpcec(_) => {
+                    let arg = match memory {
+                         64 => "-k0",
+                         128 => "-k1",
+                         192 => "-k2",
+                         320 => "-k3",
+                         576 => "-k4",
+                         1088 => "-k5",
+                         2112 => "-k6",
+                         _ => unimplemented!()
+                    };
+                    args.push(arg.to_owned());
+                },
+                _ => {} // ignored
+            }
+        }
+
         if let Some(run) = &self.auto_run {
             match emu {
                 Emulator::Ace(_) => {
@@ -148,6 +169,9 @@ impl EmulatorConf {
                 },
                 Emulator::Winape(_) => {
                     args.push(format!("/A:{run}"));
+                },
+                Emulator::Cpcec(_) => {
+                    // is it automatic ?
                 }
                 _ => unimplemented!()
             }
@@ -728,7 +752,7 @@ pub struct EmuCli {
     )]
     snapshot: Option<String>,
 
-    #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "256", "576", "1088"]))]
+    #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "192", "256", "320", "576", "1088", "2112"]))]
     memory: Option<String>,
 
     #[arg(short, long, default_value = "ace", alias = "emu")]
@@ -862,7 +886,9 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .maybe_drive_b(cli.drive_b.clone())
         .maybe_snapshot(cli.snapshot.clone())
         .debug_files(cli.debug.clone())
-        .maybe_auto_run(cli.auto_run_file.clone());
+        .maybe_auto_run(cli.auto_run_file.clone())
+        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
+        ;
     let conf = builder.build();
 
     let emu = match cli.emulator {
