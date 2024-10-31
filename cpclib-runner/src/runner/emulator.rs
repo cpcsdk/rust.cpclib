@@ -129,7 +129,7 @@ pub enum AceVersion {
 impl AceVersion {
     pub fn config_file(&self) -> Utf8PathBuf {
         let p = match self {
-            Self::ZenSummer | Self::Bnd4  => {
+            Self::ZenSummer | Self::Bnd4 | Self::UnknownLastVersion  => {
                 BaseDirs::new()
                     .unwrap()
                     .config_local_dir()

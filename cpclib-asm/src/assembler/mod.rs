@@ -1008,13 +1008,14 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    pub fn handle_post_actions(&mut self) -> Result<Option<RemuChunk>, AssemblerError> {
+    pub fn handle_post_actions(&mut self) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError> {
         self.handle_print()?;
         self.handle_assert()?;
 
 
         let remu_in_sna = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaRemu);
         let remu_in_file = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::RemuInFile);
+        let wabp_in_file = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::WabpInFile);
 
         let mut remu = if remu_in_file || remu_in_sna
         {
@@ -1024,7 +1025,13 @@ impl Env {
             None
         };
 
-        self.handle_breakpoints(&mut remu.as_mut())?;
+        let mut wabp = if wabp_in_file {
+            Some(WabpChunk::empty())
+        } else {
+            None
+        };
+
+        self.handle_breakpoints(&mut remu.as_mut(), &mut wabp.as_mut())?;
         self.handle_sna_symbols(&mut remu.as_mut())?;
 
         if let Some(remu) = &remu && remu_in_sna{
@@ -1032,7 +1039,7 @@ impl Env {
         }
 
         self.saved_files = Some(self.handle_file_save()?);
-        Ok(remu)
+        Ok((remu, wabp))
     }
 
     // Add the symbols in the snapshot
@@ -1059,7 +1066,8 @@ impl Env {
     /// If one day another export is coded, we could export the others too.
     fn handle_breakpoints(
         &mut self,
-        remu: &mut Option<&mut RemuChunk>
+        remu: &mut Option<&mut RemuChunk>,
+        wabp: &mut Option<&mut WabpChunk>
     ) -> Result<(), AssemblerError> {
         let mut winape_chunk = if self
             .options()
@@ -1104,9 +1112,12 @@ impl Env {
                     }
                 }
 
-                // TODO check it is not consummed at first loop
                 if let Some(chunk) = remu.as_mut() {
                     chunk.add_entry(&brk.remu().into());
+                }
+
+                if let Some(chunk) = wabp.as_mut() {
+                    chunk.add_breakpoint(brk.wabp().into());
                 }
             }
         }

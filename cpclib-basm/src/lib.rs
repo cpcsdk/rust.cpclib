@@ -238,6 +238,12 @@ pub fn assemble(
         assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, false);
     }
 
+    if matches.get_one::<String>("WABP_OUTPUT").is_some() {
+        assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, true);
+    } else {
+        assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, false);
+    }
+
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
         for path in files {
@@ -337,7 +343,7 @@ pub fn assemble(
 
     let _ = env
         .handle_post_actions()
-        .map(|remu| {
+        .map(|(remu, wabp)| -> Result<(), BasmError>{
             if let Some(remu) = remu {
                 if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {
                     let content = remu.data();
@@ -346,15 +352,23 @@ pub fn assemble(
                             io: e,
                             ctx: format!("Error while saving {fname}")
                         }
-                    })
-                }
-                else {
-                    Ok(())
+                    })?;
                 }
             }
-            else {
-                Ok(())
+
+            if let Some(wabp) = wabp {
+                if let Some(fname) = matches.get_one::<String>("WABP_OUTPUT") {
+                    let content = wabp.data();
+                    std::fs::write(fname, content).map_err(|e| {
+                        BasmError::Io {
+                            io: e,
+                            ctx: format!("Error while saving {fname}")
+                        }
+                    })?;
+                }
             }
+
+            Ok(())
         })
         .map_err(|e| {
             BasmError::AssemblerError {
@@ -659,6 +673,11 @@ pub fn build_args_parser() -> clap::Command {
                         .long("remu")
                         .alias("ace")
                         .value_hint(ValueHint::FilePath)
+                    )
+                    .arg(Arg::new("WABP_OUTPUT")
+                            .help("Filename to stare the WABP file use to provide Winape breakpoints")
+                            .long("wabp")
+                            .value_hint(ValueHint::FilePath)
                     )
                     .arg(Arg::new("SYMBOLS_OUTPUT")
                         .help("Filename of the output symbols file.")
