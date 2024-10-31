@@ -47,7 +47,7 @@ impl Rules {
     /// Get the rule for this target (of course None is returned for leaf files)
     /// We can have several versions depending on OS. In case of multiplicity returns only the appropriate one
     pub fn rule<P: AsRef<Utf8Path>>(&self, tgt: P) -> Option<&Rule> {
-        let tgt = dbg!(tgt.as_ref());
+        let tgt = tgt.as_ref();
 
         // remove current dir path if any
         let tgt = if tgt.starts_with(r"./") {
