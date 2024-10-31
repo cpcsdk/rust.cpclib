@@ -67,7 +67,40 @@ Here is a subset of the possibilities.
 
 ## Comments
 
+### One line comment
+
+```
+; This is a comment
+```
+
+### Multiline comment
+```
+/*
+ this is 
+ another
+ comment */
+
+
 ## Expressions
+
+### Types
+
+- int
+- char, string
+- list, matrix
+
+### Filenames
+
+A normal file is represented by a string.
+```
+"standard.filename"
+```
+
+A file insided a disk is represented in a string that contains the dsk name, followed by `#` then the file of interest within the dsk
+
+```
+"image.dsk#filename"
+```
 
 ## Special variables
 

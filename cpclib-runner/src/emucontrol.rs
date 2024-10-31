@@ -146,6 +146,9 @@ impl EmulatorConf {
                     args.push("-autoRunFile".to_owned());
                     args.push(run.clone())
                 },
+                Emulator::Winape(_) => {
+                    args.push(format!("/A:{run}"));
+                }
                 _ => unimplemented!()
             }
         }
