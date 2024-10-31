@@ -213,11 +213,11 @@ const fn linux_ace_desc<E: EventObserver>(
 
 #[cfg(windows)]
 const fn windows_ace_desc<E: EventObserver>(
-    download_url: &'static str,
+    download_url: String,
     folder: &'static str
 ) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
-        download_url,
+        download_url: download_url,
         folder,
         archive_format: ArchiveFormat::Zip,
         exec_fname: "AceDL.exe",
@@ -279,16 +279,16 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
-                    AceVersion::UnknownLastVersion => windows_ace_desc(ace_download_urls_lin_win().unwrap().1, "UnknwownLastAceVersion"),
+                    AceVersion::UnknownLastVersion => windows_ace_desc(ace_download_urls_lin_win().unwrap().1.clone(), "UnknwownLastAceVersion"),
                     AceVersion::Bnd4 => windows_ace_desc(
-                        "http://www.roudoudou.com/ACE-DL/W64bnd4.zip",
+                        "http://www.roudoudou.com/ACE-DL/W64bnd4.zip".to_owned(),
                         "AceBnd4"
                     ),
                     AceVersion::WakePoint => windows_ace_desc(
-                    "http://www.roudoudou.com/ACE-DL/BWIN64.zip", // we assume a 64bits machine
+                    "http://www.roudoudou.com/ACE-DL/BWIN64.zip".to_owned(), // we assume a 64bits machine
                     "AceWakePoint"),
                     AceVersion::ZenSummer => windows_ace_desc(
-                        "http://www.roudoudou.com/ACE-DL/Win64Summer.zip",
+                        "http://www.roudoudou.com/ACE-DL/Win64Summer.zip".to_owned(),
                         "AceZenSummer"
                     )
                 }
@@ -300,7 +300,7 @@ cfg_match! {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
-                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip",
+                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip".to_owned(),
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "CPCEC.EXE",
@@ -316,7 +316,7 @@ cfg_match! {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
-                            download_url: "http://www.winape.net/download/WinAPE20B2.zip",
+                            download_url: "http://www.winape.net/download/WinAPE20B2.zip".to_owned(),
                             folder: "winape_2_0b2",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "WinApe.exe",

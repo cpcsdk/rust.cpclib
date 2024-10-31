@@ -40,7 +40,7 @@ cfg_match! {
                 match self {
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip",
+                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip".to_owned(),
                             folder : "martine_0_39",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "martine.exe",
