@@ -18,7 +18,8 @@ use crate::progress::Progress;
 
 type Fname<'a, 'b> = either::Either<&'a Utf8Path, (&'a str, &'b Env)>;
 
-const DSK_SEPARATOR: char = '#';
+/// Separator to split am image disc to a file
+pub const DSK_SEPARATOR: char = '#';
 
 pub fn get_filename<S: AsRef<str>>(
     fname: S,

@@ -39,6 +39,7 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use file::DSK_SEPARATOR;
 use processed_token::build_processed_token;
 use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
@@ -2802,8 +2803,8 @@ impl Env {
         })
     }
 
-    // BUG the file is saved in any case EVEN if there is a crash in the assembler later
-    // TODO delay the save but retreive the data now
+
+    // TODO better design the token to simplify this code and remove all ambigous cases
     pub fn visit_save<E: ExprEvaluationExt + Debug>(
         &mut self,
         amsdos_fname: &E,
@@ -2819,12 +2820,6 @@ impl Env {
             });
         }
 
-        let amsdos_fname = self.get_fname(amsdos_fname)?;
-
-        let dsk_fname = match dsk_fname {
-            Some(fname) => Some(self.get_fname(fname)?),
-            None => None
-        };
 
         let from = match address {
             Some(address) => {
@@ -2840,6 +2835,7 @@ impl Env {
             },
             None => None
         };
+
         let size = match size {
             Some(size) => {
                 let size = self.resolve_expr_must_never_fail(size)?.int()?;
@@ -2865,12 +2861,26 @@ impl Env {
                 }
             }
         }
-        // TODO process the filename to interpret possible variables
+        
+        let amsdos_fname = self.get_fname(amsdos_fname)?;
+        let (amsdos_fname, dsk_fname) = match dsk_fname {
+            Some(fname) => (amsdos_fname, Some(self.get_fname(fname)?)),
+            None => {
+                let mut parts = amsdos_fname.as_str().split(DSK_SEPARATOR).collect_vec();
+                let amsdos_fname = parts.pop().unwrap().to_owned();
+                let dsk_fname = parts.pop().map(ToOwned::to_owned);
+                (amsdos_fname, dsk_fname)
+            }
+        };
+
+        let amsdos_fname = Utf8PathBuf::from(amsdos_fname);
+        let dsk_fname = dsk_fname.map(|d| Utf8PathBuf::from(d));
+
 
         // Check filename validity
         if let Some(&SaveType::Disc(disc)) = &save_type {
             let dsk_fname = dsk_fname.as_ref().unwrap();
-            let lower_fname = dsk_fname.to_ascii_lowercase();
+            let lower_fname = dsk_fname.as_str().to_ascii_lowercase();
             match disc {
                 DiscType::Dsk => {
                     if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk")) {
@@ -2911,18 +2921,61 @@ impl Env {
             }
         }
 
+        let file = match (save_type, dsk_fname, amsdos_fname)  {
+            (Some(save_type), Some(dsk_fname), amsdos_fname) => {
+                let support = match save_type {
+                    SaveType::Disc(_) => StorageSupport::Disc(dsk_fname),
+                    SaveType::Tape => StorageSupport::Tape(dsk_fname),
+                    _ => StorageSupport::Disc(dsk_fname)
+                };
+                let file_type = match save_type {
+                    SaveType::AmsdosBas => FileType::AmsdosBas,
+                    SaveType::AmsdosBin => FileType::AmsdosBin,
+                    SaveType::Disc(_) | SaveType::Tape => FileType::Auto, // TODO handle vases based on file names
+                };
+                SaveFile{support, file:(file_type, amsdos_fname)}
+
+            }
+            (None, Some(dsk_fname), amsdos_fname) => {
+                SaveFile {
+                    support: StorageSupport::Disc(dsk_fname),
+                    file: (FileType::Auto, amsdos_fname),
+                }
+            },
+            (Some(save_type), None, amsdos_fname) => {
+                let file_type = match save_type {
+                    SaveType::AmsdosBas => FileType::AmsdosBas,
+                    SaveType::AmsdosBin => FileType::AmsdosBin,
+                    SaveType::Disc(_) | SaveType::Tape => {
+                        unimplemented!("Handle the error message");
+                    }
+                };
+                SaveFile {
+                    support: StorageSupport::Host,
+                    file: (file_type, amsdos_fname)
+                }
+            },
+            (None, None, amsdos_fname) => {
+                SaveFile {
+                    support: StorageSupport::Host,
+                    file: (FileType::Ascii, amsdos_fname)
+                }
+            },
+            (a, b, c) => unimplemented!("{a:?} {b:?} {c:?}")
+
+        };
+
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
         let mmr = self.ga_mmr;
-
         let page_info = self.active_page_info_mut();
-        page_info.add_save_command(SaveCommand::new(
+        page_info.add_save_command(dbg!(SaveCommand::new(
             from,
             size,
-            amsdos_fname.as_str().to_owned(),
-            save_type.cloned(),
-            dsk_fname,
+            file,
             mmr
-        ));
+        )));
+
+
 
         Ok(())
     }

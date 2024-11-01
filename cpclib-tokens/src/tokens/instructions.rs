@@ -384,11 +384,13 @@ pub enum DiscType {
     Auto
 }
 
+
+
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum SaveType {
-    AmsdosBin,
     AmsdosBas,
+    AmsdosBin,
     Disc(DiscType),
     Tape
 }
