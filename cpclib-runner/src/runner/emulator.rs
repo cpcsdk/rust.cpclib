@@ -4,7 +4,7 @@ use std::path::absolute;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::BaseDirs;
 
-use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{box_fn_url, cpclib_download, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 use scraper::Selector;
@@ -19,7 +19,8 @@ const ACE_URL: &'static str = "http://www.roudoudou.com/ACE-DL";
 
 
 
-fn ace_download_urls_lin_win() -> Result<(String, String), String> {
+
+fn ace_download_fn_urls_lin_win() -> Result<(String, String), String> {
 
 	let html = cpclib_download(ACE_URL)?;
 	let document = Html::parse_document(&html);
@@ -199,11 +200,11 @@ impl WinapeVersion {
 
 #[cfg(target_os = "linux")]
 const fn linux_ace_desc<E: EventObserver>(
-    download_url: String,
+    download_fn_url: Box<dyn Fn() -> String>,
     folder: &'static str
 ) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
-        download_url,
+        download_fn_url,
         folder,
         archive_format: ArchiveFormat::TarGz,
         exec_fname: "AceDL",
@@ -213,11 +214,11 @@ const fn linux_ace_desc<E: EventObserver>(
 
 #[cfg(windows)]
 const fn windows_ace_desc<E: EventObserver>(
-    download_url: String,
+    download_fn_url: Box<dyn Fn() -> String>,
     folder: &'static str
 ) -> DelegateApplicationDescription<E> {
     DelegateApplicationDescription {
-        download_url: download_url,
+        download_fn_url: download_fn_url,
         folder,
         archive_format: ArchiveFormat::Zip,
         exec_fname: "AceDL.exe",
@@ -232,10 +233,10 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
-                    AceVersion::UnknownLastVersion => linux_ace_desc(ace_download_urls_lin_win().unwrap().0, "UnknwownLastAceVersion"),
-                    AceVersion::WakePoint => linux_ace_desc("http://www.roudoudou.com/ACE-DL/BZen.tar.gz".to_owned(), "AceWakePoint"),
-                    AceVersion::Bnd4 => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZENbnd4.tar.gz".to_owned(), "AceBnd4"),
-                    AceVersion::ZenSummer => linux_ace_desc("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_owned(), "AceZenSummer")
+                    AceVersion::UnknownLastVersion => linux_ace_desc(Box::new(|| ace_download_fn_urls_lin_win().unwrap().0), "UnknwownLastAceVersion"),
+                    AceVersion::WakePoint => linux_ace_desc(box_fn_url("http://www.roudoudou.com/ACE-DL/BZen.tar.gz"), "AceWakePoint"),
+                    AceVersion::Bnd4 => linux_ace_desc(box_fn_url("http://www.roudoudou.com/ACE-DL/LinuxZENbnd4.tar.gz"), "AceBnd4"),
+                    AceVersion::ZenSummer => linux_ace_desc(box_fn_url("http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz"), "AceZenSummer")
                 }
             }
         }
@@ -245,7 +246,7 @@ cfg_match! {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
-                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip".to_owned(),
+                            download_fn_url: box_fn_url("http://cngsoft.no-ip.org/cpcec-20240505.zip"),
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "CPCEC.EXE", // XXX there is a case issue I do not want to solve. so wine is used ...
@@ -262,7 +263,7 @@ cfg_match! {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
-                            download_url: "http://www.winape.net/download/WinAPE20B2.zip".to_owned(),
+                            download_fn_url: box_fn_url("http://www.winape.net/download/WinAPE20B2.zip"),
                             folder: "winape_2_0b2",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "WinApe.exe",
@@ -279,16 +280,16 @@ cfg_match! {
         impl AceVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
-                    AceVersion::UnknownLastVersion => windows_ace_desc(ace_download_urls_lin_win().unwrap().1.clone(), "UnknwownLastAceVersion"),
+                    AceVersion::UnknownLastVersion => windows_ace_desc(Box::new(|| ace_download_fn_urls_lin_win().unwrap().1.clone()), "UnknwownLastAceVersion"),
                     AceVersion::Bnd4 => windows_ace_desc(
-                        "http://www.roudoudou.com/ACE-DL/W64bnd4.zip".to_owned(),
+                        box_fn_url("http://www.roudoudou.com/ACE-DL/W64bnd4.zip"),
                         "AceBnd4"
                     ),
                     AceVersion::WakePoint => windows_ace_desc(
-                    "http://www.roudoudou.com/ACE-DL/BWIN64.zip".to_owned(), // we assume a 64bits machine
+                    box_fn_url("http://www.roudoudou.com/ACE-DL/BWIN64.zip"), // we assume a 64bits machine
                     "AceWakePoint"),
                     AceVersion::ZenSummer => windows_ace_desc(
-                        "http://www.roudoudou.com/ACE-DL/Win64Summer.zip".to_owned(),
+                        box_fn_url("http://www.roudoudou.com/ACE-DL/Win64Summer.zip"),
                         "AceZenSummer"
                     )
                 }
@@ -300,7 +301,7 @@ cfg_match! {
                 match self {
                     CpcecVersion::V20240505 => {
                         DelegateApplicationDescription {
-                            download_url: "http://cngsoft.no-ip.org/cpcec-20240505.zip".to_owned(),
+                            download_fn_url: box_fn_url("http://cngsoft.no-ip.org/cpcec-20240505.zip"),
                             folder: "cpcec20240505",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "CPCEC.EXE",
@@ -316,7 +317,7 @@ cfg_match! {
                 match self {
                     WinapeVersion::V2_0b2 => {
                         DelegateApplicationDescription {
-                            download_url: "http://www.winape.net/download/WinAPE20B2.zip".to_owned(),
+                            download_fn_url: box_fn_url("http://www.winape.net/download/WinAPE20B2.zip"),
                             folder: "winape_2_0b2",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "WinApe.exe",
@@ -333,7 +334,7 @@ cfg_match! {
             pub fn configuration(&self) -> DelegateApplicationDescription {
                 match self {
                     AceVersion::WakePoint => DelegateApplicationDescription{
-                    download_url: "http://www.roudoudou.com/ACE-DL/BMAC.zip",
+                    download_fn_url: "http://www.roudoudou.com/ACE-DL/BMAC.zip",
                     folder : "TODO",
                     archive_format: ArchiveFormat::Zip,
                     exec_fname: "TODO"
@@ -349,10 +350,10 @@ cfg_match! {
 
 #[cfg(test)]
 mod test {
-    use super::ace_download_urls_lin_win;
+    use super::ace_download_fn_urls_lin_win;
 
     #[test]
     fn retreive_ace_urls() {
-        ace_download_urls_lin_win().unwrap();
+        ace_download_fn_urls_lin_win().unwrap();
     }
 }

@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const FAP_CMD: &str = "fap";
@@ -41,7 +41,7 @@ cfg_match! {
                 match self {
                     FAPVersion::V1_0_0  =>
                         DelegateApplicationDescription {
-                            download_url: DOWNLOAD_URL_V1_1.to_owned(),
+                            download_fn_url: box_fn_url(DOWNLOAD_URL_V1_1),
                             folder : "Build",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "FapCrunchWin.exe",

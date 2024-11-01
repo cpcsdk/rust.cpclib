@@ -1,7 +1,7 @@
 use cpclib_common::camino::Utf8Path;
 
 use super::{ExternRunner, Runner};
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const RASM_CMD: &str = "rasm";
@@ -71,7 +71,7 @@ cfg_match! {
                 match self {
                     RasmVersion::Consolidation2024  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/releases/download/v2.2.9/rasm_w64.exe".to_owned(), // we assume a modern CPU
+                            download_fn_url: box_fn_url("https://github.com/EdouardBERGE/rasm/releases/download/v2.2.9/rasm_w64.exe"), // we assume a modern CPU
                             folder : "rasm_consolidation",
                             archive_format: ArchiveFormat::Raw,
                             exec_fname: "rasm_w64.exe",

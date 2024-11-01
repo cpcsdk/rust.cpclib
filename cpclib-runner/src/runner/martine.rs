@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const MARTINE_CMD: &str = "martine";
@@ -40,7 +40,7 @@ cfg_match! {
                 match self {
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip".to_owned(),
+                            download_fn_url: box_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip"),
                             folder : "martine_0_39",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "martine.exe",

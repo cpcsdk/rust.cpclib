@@ -1,4 +1,5 @@
 use std::io::{Cursor, Read};
+use std::ops::Deref;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::ProjectDirs;
@@ -22,6 +23,10 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
 }
 
 
+pub(crate) fn box_fn_url<S:Into<String>>(url: S) -> Box<dyn Fn()->String> {
+    let url =  url.into();
+    Box::new(move ||url.clone())
+}
 
 pub enum ArchiveFormat {
     Raw,
@@ -30,7 +35,7 @@ pub enum ArchiveFormat {
 }
 
 pub struct DelegateApplicationDescription<E: EventObserver> {
-    pub download_url: String,
+    pub download_fn_url: Box<dyn Fn() -> String>,
     pub folder: &'static str,
     pub exec_fname: &'static str,
     pub archive_format: ArchiveFormat,
@@ -117,8 +122,9 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     }
 
     fn download(&self, o: &E) -> Result<Response, ureq::Error> {
-        o.emit_stdout(&format!(">> Download file {}", self.download_url));
-        ureq::get(&self.download_url).call()
+        let url = self.download_fn_url.deref()();
+        o.emit_stdout(&format!(">> Download file {}", url));
+        ureq::get(&url).call()
     }
 }
 

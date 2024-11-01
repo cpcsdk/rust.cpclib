@@ -1,4 +1,4 @@
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const IMPDISC_CMD: &str = "impdsk";
@@ -40,7 +40,7 @@ cfg_match! {
                 match self {
                     ImpDskVersion::V0_24  =>
                         DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-windows-amd64.zip".to_owned(),
+                            download_fn_url: box_fn_url("https://github.com/jeromelesaux/dsk/releases/download/v0.24/dsk-0.24-windows-amd64.zip"),
                             folder : "ImpDsk_0_24",
                             archive_format: ArchiveFormat::Zip,
                             exec_fname: "binaries/dsk-windows-amd64.exe",
