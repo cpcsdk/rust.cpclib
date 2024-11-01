@@ -2931,6 +2931,7 @@ impl Env {
                 let file_type = match save_type {
                     SaveType::AmsdosBas => FileType::AmsdosBas,
                     SaveType::AmsdosBin => FileType::AmsdosBin,
+                    SaveType::Ascii => FileType::Ascii,
                     SaveType::Disc(_) | SaveType::Tape => FileType::Auto, // TODO handle vases based on file names
                 };
                 SaveFile{support, file:(file_type, amsdos_fname)}
@@ -2946,6 +2947,7 @@ impl Env {
                 let file_type = match save_type {
                     SaveType::AmsdosBas => FileType::AmsdosBas,
                     SaveType::AmsdosBin => FileType::AmsdosBin,
+                    SaveType::Ascii => FileType::Ascii,
                     SaveType::Disc(_) | SaveType::Tape => {
                         unimplemented!("Handle the error message");
                     }

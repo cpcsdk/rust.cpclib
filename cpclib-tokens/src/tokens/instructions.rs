@@ -391,6 +391,7 @@ pub enum DiscType {
 pub enum SaveType {
     AmsdosBas,
     AmsdosBin,
+    Ascii,
     Disc(DiscType),
     Tape
 }

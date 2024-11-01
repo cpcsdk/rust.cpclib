@@ -1250,6 +1250,8 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     ))
     .parse_next(input)?;
 
+    (my_space0, opt(line_ending)).parse_next(input)?;
+
     // TODO factorize with the the code of parse_macro
     let before_content = input.checkpoint();
     let (_, end) = cut_err(
@@ -2021,6 +2023,7 @@ pub fn parse_save(
                 alt((
                     parse_word(b"AMSDOS").value(SaveType::AmsdosBin),
                     parse_word(b"BASIC").value(SaveType::AmsdosBas),
+                    parse_word(b"ASCII").value(SaveType::Ascii),
                     parse_word(b"DSK").value(SaveType::Disc(DiscType::Dsk)),
                     parse_word(b"HFE").value(SaveType::Disc(DiscType::Hfe)),
                     parse_word(b"DISC").value(SaveType::Disc(DiscType::Auto)),
