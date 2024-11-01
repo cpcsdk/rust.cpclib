@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::ascii::{alphanumeric1, space0, Caseless};
-use cpclib_common::winnow::combinator::{alt, delimited, separated, terminated};
+use cpclib_common::winnow::combinator::{alt, delimited, repeat, separated, terminated};
 use cpclib_common::winnow::{PResult, Parser};
 use serde::{self, Deserialize, Deserializer};
 
@@ -213,10 +213,10 @@ fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
 fn parse_hostname_constraint(input: &mut &str) -> PResult<Constraint> {
     delimited(
         (Caseless("hostname("), space0),
-        alphanumeric1,
+        repeat(1.., alt((alphanumeric1, "_", "-"))),
         (space0, ")", space0)
     )
-    .map(|txt: &str| Constraint::Hostname(Hostname(txt.to_string())))
+    .map(|txt: String| Constraint::Hostname(Hostname(txt.to_string())))
     .parse_next(input)
 }
 

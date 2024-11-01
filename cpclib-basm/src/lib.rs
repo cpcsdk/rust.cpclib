@@ -22,6 +22,7 @@ use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHi
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::combinator::alt;
+use cpclib_common::winnow::stream::Accumulate;
 use cpclib_common::winnow::Parser;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 #[cfg(feature = "xferlib")]
@@ -232,17 +233,9 @@ pub fn assemble(
         }
     }
 
-    if matches.get_one::<String>("REMU_OUTPUT").is_some() {
-        assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, true);
-    } else {
-        assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, false);
-    }
-
-    if matches.get_one::<String>("WABP_OUTPUT").is_some() {
-        assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, true);
-    } else {
-        assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, false);
-    }
+    assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, matches.get_one::<String>("REMU_OUTPUT").is_some());
+    assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, matches.get_one::<String>("WABP_OUTPUT").is_some());
+    assemble_options.set_flag(AssemblingOptionFlags::BreakpointAsOpcode, matches.get_flag("BREAKPOINT_AS_OPCODES"));
 
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
@@ -678,6 +671,11 @@ pub fn build_args_parser() -> clap::Command {
                             .help("Filename to stare the WABP file use to provide Winape breakpoints")
                             .long("wabp")
                             .value_hint(ValueHint::FilePath)
+                    )
+                    .arg(Arg::new("BREAKPOINT_AS_OPCODES")
+                        .help("Breakpoints are stored as opcodes (mainly interesting for winape emulation)")
+                        .long("breakpoint-as-opcode")
+                        .action(ArgAction::SetTrue)
                     )
                     .arg(Arg::new("SYMBOLS_OUTPUT")
                         .help("Filename of the output symbols file.")

@@ -61,8 +61,12 @@ pub enum AssemblingOptionFlags {
     SnaBrkc,
     // Set to include REMU in sna chunks
     SnaRemu,
+    // Save remu chunk in a file
     RemuInFile,
-    WabpInFile
+    // Save wabp chunck in a file
+    WabpInFile,
+    // generate breakpoint as code
+    BreakpointAsOpcode
 }
 
 impl AssemblingOptionFlags {

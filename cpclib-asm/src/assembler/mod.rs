@@ -2037,8 +2037,17 @@ impl Env {
             
             BreakpointCommand::from((brk, span.cloned()))
         };
+
+
+        if self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::BreakpointAsOpcode) {
+            // XXX here we are dumb and add breakpoints unconditionnaly
+            // TODO do it only for exec ones
+            self.output_byte(0xed)?;
+            self.output_byte(0xff)?;
+        } else {
+            self.active_page_info_mut().add_breakpoint_command(brk);
+        }
         
-        self.active_page_info_mut().add_breakpoint_command(brk);
 
         Ok(())
     }
