@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use clap::{Arg, ArgAction};
 use cpclib_common::clap::{self, Command};

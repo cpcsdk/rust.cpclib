@@ -22,7 +22,6 @@ use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHi
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::combinator::alt;
-use cpclib_common::winnow::stream::Accumulate;
 use cpclib_common::winnow::Parser;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 #[cfg(feature = "xferlib")]
@@ -641,6 +640,7 @@ pub fn build_args_parser() -> clap::Command {
 						Arg::new("INPUT")
 							.help("Input file to read.")
                             .value_hint(ValueHint::FilePath)
+                            .action(ArgAction::Set)
                     )
 
 					.arg(

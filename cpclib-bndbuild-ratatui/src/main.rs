@@ -11,7 +11,6 @@ use ratatui::crossterm::terminal::{
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::{Backend, CrosstermBackend};
 use ratatui::style::Stylize;
-use ratatui::widgets::block::Title;
 use ratatui::widgets::{Paragraph, Widget};
 use ratatui::{Frame, Terminal};
 

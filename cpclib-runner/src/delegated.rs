@@ -6,9 +6,10 @@ use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use tar::Archive;
 use ureq::Response;
+use bon::Builder;
 
 use crate::event::EventObserver;
-use crate::runner::runner::{ExternRunner, Runner};
+use crate::runner::runner::{ExternRunner, RunInDir, Runner};
 
 
 use ureq;
@@ -23,23 +24,88 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
 }
 
 
-pub(crate) fn box_fn_url<S:Into<String>>(url: S) -> Box<dyn Fn()->String> {
-    let url =  url.into();
-    Box::new(move ||url.clone())
+pub struct UrlGenerator(Box<dyn Fn()->String>);
+impl From<Box<dyn Fn()->String>> for UrlGenerator {
+    fn from(value: Box<dyn Fn()->String>) -> Self {
+        Self(value)
+    }
 }
+
+impl From<String> for UrlGenerator {
+    fn from(value: String) -> Self {
+        Self(Box::new(move || value.clone()))
+    }
+}
+
+impl From<&str> for UrlGenerator {
+    fn from(value: &str) -> Self {
+        let value = value.to_owned();
+        value.into()
+    }
+}
+
+impl Deref for UrlGenerator {
+
+    type Target = Box<dyn Fn()->String> ;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub struct Compiler<E>(Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>);
+impl<E> From<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>> for Compiler<E> {
+    fn from(value: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>) -> Self {
+        Self(value)
+    }
+}
+
+impl<E> Deref for Compiler<E> {
+    type Target = Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+
+pub struct PostInstall<E: EventObserver>(Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> );
+
+
+impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>> for PostInstall<E> {
+fn from(value: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>) -> Self {
+    Self(value)
+}
+}
+
+impl<E: EventObserver> Deref for PostInstall<E> {
+    type Target = Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> ;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 
 pub enum ArchiveFormat {
     Raw,
     TarGz,
-    Zip
+    Zip,
+    SevenZ
 }
 
+#[derive(Builder)]
 pub struct DelegateApplicationDescription<E: EventObserver> {
-    pub download_fn_url: Box<dyn Fn() -> String>,
+    #[builder(into)]
+    pub download_fn_url: UrlGenerator,
     pub folder: &'static str,
     pub exec_fname: &'static str,
     pub archive_format: ArchiveFormat,
-    pub compile: Option<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>>
+    #[builder(into)]
+    pub compile: Option<Compiler<E>>,
+    #[builder(into)]
+    pub post_install: Option<PostInstall<E>>,
+    #[builder(default=RunInDir::CurrentDir)]
+    pub in_dir: RunInDir
 }
 
 pub fn base_cache_folder() -> Utf8PathBuf {
@@ -87,20 +153,26 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(&format!(">> Save to {}", self.exec_fname()));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                std::fs::create_dir_all(&dest);
+                std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
                 std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarGz => {
-                o.emit_stdout(">> Open archive");
+                o.emit_stdout(">> Open targz archive");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
-                archive.unpack(dest.clone()).unwrap();
+                archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::Zip => {
                 o.emit_stdout(">> Unzip archive");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).unwrap();
+                zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).map_err(|e| e.to_string())?;
+            },
+            ArchiveFormat::SevenZ => {
+                o.emit_stdout(">> Open 7z archive");
+                let mut buffer = Vec::new();
+                input.read_to_end(&mut buffer).unwrap();
+                sevenz_rust::decompress(Cursor::new(buffer), dest.as_std_path()).map_err(|e| e.to_string())?;
             }
         }
 
@@ -117,6 +189,13 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
             res
         }
         else {
+            Ok(())
+        }?;
+
+        if let Some(post_install) = &self.post_install {
+            o.emit_stdout(">> Does some post-installation stuffm");
+            post_install(self)
+        } else {
             Ok(())
         }
     }
@@ -164,12 +243,14 @@ impl<E: EventObserver + 'static> Runner for DelegatedRunner<E> {
         }
 
         command.push(fname.as_str());
+        
+
         for arg in itr.iter() {
             command.push(arg.as_ref());
         }
 
         // Delegate it to the appropriate luncher
-        ExternRunner::<E>::default().inner_run(&command, o)
+        ExternRunner::<E>::new(cfg.in_dir).inner_run(&command, o)
     }
 
     fn get_command(&self) -> &str {

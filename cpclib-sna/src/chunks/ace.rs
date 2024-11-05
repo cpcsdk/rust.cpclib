@@ -82,7 +82,7 @@ pub struct AceSymbol<'a> {
     buffer: Cow<'a, [u8]>
 }
 
-impl<'a> From<Vec<u8>> for AceSymbol<'a> {
+impl From<Vec<u8>> for AceSymbol<'_> {
     fn from(value: Vec<u8>) -> Self {
         let name_len = value[0];
         let buffer_len = Self::buffer_len(name_len as _);
@@ -106,7 +106,7 @@ impl<'a> From<&'a [u8]> for AceSymbol<'a> {
     }
 }
 
-impl<'a> AceSymbol<'a> {
+impl AceSymbol<'_> {
     pub fn buffer_len(name_len: u8) -> usize {
         1 + name_len as usize + 1 + 1 + 1 + 2 + 1 + 2
     }
@@ -250,7 +250,7 @@ pub enum AceBrkRuntimeMode {
     Watch = 1
 }
 
-impl<'a> From<[u8; 216]> for AceBreakPoint<'a> {
+impl From<[u8; 216]> for AceBreakPoint<'_> {
     fn from(value: [u8; 216]) -> Self {
         Self {
             buffer: Cow::Owned(value)
@@ -272,7 +272,7 @@ impl<'a> From<AceBreakPoint<'a>> for [u8; 216] {
     }
 }
 
-impl<'a> AceBreakPoint<'a> {
+impl AceBreakPoint<'_> {
     const BRK_TYPE_EXEC: u8 = 0;
     const BRK_TYPE_MEM: u8 = 1;
     const BRK_TYPE_PORT: u8 = 2;

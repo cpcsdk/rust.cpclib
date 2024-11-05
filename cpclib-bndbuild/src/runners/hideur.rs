@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use cpclib_disc::hideur::{hideur_build_arg_parser, hideur_handle};
 use cpclib_runner::event::EventObserver;

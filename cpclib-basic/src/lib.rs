@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokens::BasicToken;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-/// Basic line representation
+/// Basic line index represtation. Can be by line number of position in the list
 pub enum BasicProgramLineIdx {
     /// The basic line is indexed by its position in the listing
     Index(usize),
@@ -70,25 +70,29 @@ impl BasicLine {
     }
 
     pub fn add_length(&mut self, length: u16) {
-        let current = self.forced_length();
-        self.set_length(current + length);
+        let current = self.expected_length();
+        self.force_length(current + length);
     }
 
-    pub fn set_length(&mut self, length: u16) {
+    pub fn force_length(&mut self, length: u16) {
         self.forced_length = Some(length);
     }
 
     /// Return the forced line length or the real line length if not specified
-    pub fn forced_length(&self) -> u16 {
+    pub fn expected_length(&self) -> u16 {
         match self.forced_length {
             Some(val) => val,
-            None => self.real_length() + 2 + 2 + 1
+            None => self.real_complete_length()
         }
     }
 
     /// Return the byte size taken by the tokens
     pub fn real_length(&self) -> u16 {
         self.tokens_as_bytes().len() as _
+    }
+
+    pub fn real_complete_length(&self) -> u16 {
+        self.real_length() + 2 + 2 + 1
     }
 
     /// Returns the number of tokens
@@ -114,7 +118,7 @@ impl BasicLine {
     /// - n bytes for tokens
     /// - 1 bytes for end of line marker
     pub fn as_bytes(&self) -> Vec<u8> {
-        let size = self.forced_length();
+        let size = self.expected_length();
 
         let mut content = vec![
             (size % 256) as u8,
@@ -264,26 +268,29 @@ impl BasicProgram {
     }
 
     /// https://cpcrulez.fr/applications_protect-protection_logiciel_n42_ACPC.htm
-    pub fn hide_line(&mut self, idx: BasicProgramLineIdx) -> Result<(), BasicError> {
-        if !self.has_line(idx) {
-            Err(BasicError::UnknownLine { idx })
+    /// 64nops2
+    pub fn hide_line(&mut self, current_idx: BasicProgramLineIdx) -> Result<(), BasicError> {
+        if !self.has_line(current_idx) {
+            Err(BasicError::UnknownLine { idx: current_idx })
         }
-        else if self.is_first_line(idx) {
+        else if self.is_first_line(current_idx) {
             // Locomotive basic stat to list lines from 1
             self.lines[0].line_number = 0;
             Ok(())
         }
         else {
-            match self.previous_idx(idx) {
+            match self.previous_idx(current_idx) {
                 Some(previous_idx) => {
-                    let current_length = self.get_line(idx).unwrap().real_length();
+                    let current_length = self.get_line(current_idx).unwrap().real_complete_length(); //TODO handle the case where they are multiple hidden
                     self.get_line_mut(previous_idx)
                         .unwrap()
-                        .add_length(current_length + 1 + 2 + 2);
-                    self.get_line_mut(idx).unwrap().set_length(0);
+                        .add_length(current_length);
+                    self.get_line_mut(current_idx)
+                        .unwrap()
+                        .force_length(0);
                     Ok(())
                 },
-                None => Err(BasicError::UnknownLine { idx })
+                None => Err(BasicError::UnknownLine { idx: current_idx })
             }
         }
     }

@@ -13,16 +13,19 @@ description = "Dependency for various cpclib crates to help running external app
 [dependencies]
 cpclib-common.workspace=true
 cpclib-asm.workspace=true
+
 camino-tempfile.workspace = true
 clap = {workspace=true, features=["derive"]}
+delegate.workspace = true
 enigo.workspace = true
+sevenz-rust.workspace = true
 shlex.workspace = true
 ureq.workspace = true
 xcap.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
 
-bon = "1.2.1"
+bon = "2.3"
 directories = "5.0.1"
 flate2 = "1.0.34"
 glob.workspace = true

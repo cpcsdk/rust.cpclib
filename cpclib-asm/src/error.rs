@@ -1076,7 +1076,7 @@ fn config() -> codespan_reporting::term::Config {
 
 pub struct SimplerAssemblerError<'e>(pub(crate) &'e AssemblerError);
 
-impl<'e> Display for SimplerAssemblerError<'e> {
+impl Display for SimplerAssemblerError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.format(f, false)
     }

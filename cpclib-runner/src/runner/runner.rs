@@ -1,6 +1,6 @@
-use std::borrow::Borrow;
 use std::io::{BufRead, BufReader};
 use std::marker::PhantomData;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -10,6 +10,13 @@ use cpclib_common::itertools::Itertools;
 
 use crate::event::EventObserver;
 use crate::runner::arguments::get_all_args;
+
+#[derive(Default, Clone, Copy, Debug)]
+pub enum RunInDir {
+    #[default]
+    CurrentDir,
+    AppDir
+}
 
 pub trait Runner {
     type EventObserver: EventObserver;
@@ -47,23 +54,32 @@ pub trait RunnerWithClap: Runner + Default {
 }
 
 pub struct ExternRunner<E: EventObserver> {
+    in_dir: RunInDir,
     _phantom: PhantomData<E>
 }
 
 impl<E: EventObserver> Default for ExternRunner<E> {
     fn default() -> Self {
+        Self::new(RunInDir::CurrentDir)
+    }
+}
+
+
+
+impl<E: EventObserver> ExternRunner<E> {
+    pub fn new(in_dir: RunInDir) -> Self {
         Self {
+            in_dir,
             _phantom: Default::default()
         }
     }
 }
 
-impl<E: EventObserver> ExternRunner<E> {}
 impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let itr = dbg!(itr.iter().map(|s| s.as_ref()).collect_vec());
+        let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
 
         // WARNING
         // Deactivated because if makes fail normal progam on Linux
@@ -78,10 +94,23 @@ impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
             .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
 
         let mut cmd = std::process::Command::new(app);
-        cmd.current_dir(cwd);
+
+        let in_dir = match self.in_dir {
+            RunInDir::CurrentDir => cwd,
+            RunInDir::AppDir => {
+                let base = if app == &"wine" {
+                    itr[1]
+                } else {
+                    app
+                };
+                PathBuf::from(std::path::Path::new(base).parent().unwrap()) // this path is because of AMSpiriT
+            }
+        };
+        cmd.current_dir(in_dir);
         for arg in &itr[1..] {
             cmd.arg(arg);
         }
+
         let mut cmd = cmd
             .stderr(Stdio::piped())
             .stdout(Stdio::piped())

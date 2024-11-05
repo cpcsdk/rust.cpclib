@@ -148,7 +148,7 @@ impl CodeBreakpoint {
     pub fn new(address: u16) -> Self {
         Self {
             origin: BreakpointOrigin::Assembler,
-            address: address,
+            address,
             counts_condition: CountsAndCondition::none()
         }
     }
@@ -292,6 +292,12 @@ pub struct Wabp {
     code: CodeBreakpoints,
     memory: MemoryBreakpoints,
     io:  IOBreakpoints
+}
+
+impl Default for Wabp {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Wabp {

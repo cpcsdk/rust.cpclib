@@ -633,7 +633,7 @@ pub struct Inks<'a> {
     height: u32
 }
 
-impl<'a> Iterator for Inks<'a> {
+impl Iterator for Inks<'_> {
     type Item = (u32, u32, Ink);
 
     fn next(&mut self) -> Option<(u32, u32, Ink)> {

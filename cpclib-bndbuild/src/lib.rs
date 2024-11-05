@@ -10,7 +10,7 @@ use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::RASM_CMD;
-use cpclib_runner::runner::emulator::{CPCEC_CMD, WINAPE_CMD};
+use cpclib_runner::runner::emulator::{AMSPIRIT_CMD, CPCEC_CMD, WINAPE_CMD};
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use lazy_regex::regex_captures;
@@ -58,6 +58,7 @@ pub fn build_args_parser() -> clap::Command {
                     EMUCTRL_CMD,
                     WINAPE_CMD,
                     CPCEC_CMD,
+                    AMSPIRIT_CMD,
                     "basm",
                     "bndbuild",
                     "cp",

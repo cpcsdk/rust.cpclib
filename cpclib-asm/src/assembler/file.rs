@@ -1,11 +1,10 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
-use std::str::FromStr;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName, AmsdosHeader, AmsdosManagerNonMut};
+use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader, AmsdosManagerNonMut};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use either::Either;

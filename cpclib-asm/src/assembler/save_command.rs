@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::fs::File;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
@@ -8,7 +7,6 @@ use cpclib_disc::edsk::Head;
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
 use cpclib_disc::open_disc;
-use cpclib_tokens::SaveType;
 
 use super::report::SavedFile;
 use super::Env;
@@ -121,6 +119,8 @@ impl SaveCommand {
     /// Really make the save - Prerequisit : the page is properly selected
     /// Do not yet handle the ascii format
     pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
+        dbg!(&self);
+
         assert_eq!(env.ga_mmr, self.ga_mmr);
         if env.options().show_progress() {
             Progress::progress().add_save(progress::normalize(&self.file.filename()));
@@ -139,9 +139,10 @@ impl SaveCommand {
             }
         };
 
+        // get the data from the CPC memory
         let data = env.get_memory(from as _, size as _);
 
-        // ensure we have no more AUTO file type
+        // ensure we have no more AUTO file type by converting them in the more appropriate one
         let file_type = match self.file_type() {
             FileType::Auto => {
                 let lower = self.amsdos_filename().as_str().to_lowercase();
@@ -153,17 +154,13 @@ impl SaveCommand {
                     FileType::AmsdosBin
                 }
             },
-            other => other.clone()
+            other => *other
         };
 
-        // Add the header if any
-        enum AmsdosOrRaw {
-            Raw(Vec<u8>),
-            Amsdos(AmsdosFile)
-        }
+        dbg!(&file_type);
 
         // Generate the file
-        let file_content : AmsdosOrRaw = match &file_type {
+        let amsdos_file = match &file_type {
             FileType::AmsdosBin => {
                 let loading_address = from as u16;
                 let execution_address = match env.run_options {
@@ -172,22 +169,30 @@ impl SaveCommand {
                     },
                     _ => loading_address
                 };
-                let f = AmsdosFile::binary_file_from_buffer(
+                AmsdosFile::binary_file_from_buffer(
                     &AmsdosFileName::try_from(self.amsdos_filename().as_str())?,
                     loading_address,
                     execution_address,
                     &data
-                )?;
-                AmsdosOrRaw::Amsdos(f)
+                )?
             },
             FileType::AmsdosBas => {
-                let f = AmsdosFile::basic_file_from_buffer(
+                AmsdosFile::basic_file_from_buffer(
                     &AmsdosFileName::try_from(self.amsdos_filename().as_str())?,
                     &data
-                )?;
-                AmsdosOrRaw::Amsdos(f)
+                )?
             },
-            FileType::Ascii => AmsdosOrRaw::Raw(data.clone()),
+            FileType::Ascii => {
+                match AmsdosFileName::try_from(self.amsdos_filename().as_str()) {
+                    Ok(amsfname) => AmsdosFile::ascii_file_from_buffer_with_name(&amsfname, &data),
+                    Err(e) => {
+                        if self.file.in_disc() {
+                            Err(e)?;
+                        }
+                        AmsdosFile::from_buffer(&data)
+                    },
+                }
+            },
             FileType::Auto => unreachable!(),
         };
 
@@ -201,19 +206,14 @@ impl SaveCommand {
                 let head = Head::A;
                 let system = false;
                 let read_only = false;
-
-                match file_content {
-                    AmsdosOrRaw::Raw(vec) => unimplemented!(),
-                    AmsdosOrRaw::Amsdos(amsdos_file) => {
-                        disc.add_amsdos_file(
-                            &amsdos_file,
-                            head,
-                            read_only,
-                            system,
-                            env.options().assemble_options().save_behavior()
-                        )?;
-                    },
-                };
+           
+                disc.add_amsdos_file(
+                    &amsdos_file,
+                    head,
+                    read_only,
+                    system,
+                    env.options().assemble_options().save_behavior()
+                )?;
                 
                 disc.save(disc_filename).map_err(|e| {
                     AssemblerError::AssemblingError {
@@ -223,11 +223,7 @@ impl SaveCommand {
             },
             StorageSupport::Tape(utf8_path_buf) => unimplemented!(),
             StorageSupport::Host => {
-                let content = match &file_content {
-                    AmsdosOrRaw::Raw(content) => &content,
-                    AmsdosOrRaw::Amsdos(amsdos_file) => amsdos_file.header_and_content(),
-                };
-                std::fs::write(self.amsdos_filename(), &data).map_err(|e| {
+                std::fs::write(self.amsdos_filename(), amsdos_file.header_and_content()).map_err(|e| {
                     AssemblerError::AssemblingError {
                         msg: format!("Error while saving \"{}\". {}", &self.amsdos_filename(), e)
                     }
@@ -235,10 +231,8 @@ impl SaveCommand {
             },
         }
 
- 
-
         if env.options().show_progress() {
-            Progress::progress().remove_save(progress::normalize(&self.amsdos_filename()));
+            Progress::progress().remove_save(progress::normalize(self.amsdos_filename()));
         }
 
         Ok(SavedFile {

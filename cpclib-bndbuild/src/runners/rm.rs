@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};

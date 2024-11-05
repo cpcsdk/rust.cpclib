@@ -66,7 +66,7 @@ pub struct Hostname(String);
 impl Corresponds for Hostname {
     fn corresponds(&self) -> bool {
         hostname::get()
-            .map(|h| &h.display().to_string().to_ascii_lowercase() == &self.0.to_ascii_lowercase())
+            .map(|h| h.display().to_string().eq_ignore_ascii_case(&self.0))
             .unwrap_or(false)
     }
 }
@@ -157,9 +157,10 @@ fn parse_negated_constraint(input: &mut &str) -> PResult<LogicalExpression> {
 
 fn parse_positive_constraint(input: &mut &str) -> PResult<Constraint> {
     alt((
-        parse_and_or_constraint.map(|c| Constraint::from(c)), 
+        parse_and_or_constraint.map(Constraint::from),
         parse_leaf_constraint
-    )).parse_next(input)
+    ))
+    .parse_next(input)
 }
 
 fn parse_and_or_constraint(input: &mut &str) -> PResult<LogicalExpression> {
@@ -191,7 +192,7 @@ fn parse_and_or_constraint(input: &mut &str) -> PResult<LogicalExpression> {
 
 fn parse_logical_constraint(input: &mut &str) -> PResult<Constraint> {
     alt((parse_negated_constraint, parse_and_or_constraint))
-        .map(|c| Constraint::from(c))
+        .map(Constraint::from)
         .parse_next(input)
 }
 
@@ -206,7 +207,7 @@ fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
         )),
         (space0, ')', space0)
     )
-    .map(|os| Constraint::Os(os))
+    .map(Constraint::Os)
     .parse_next(input)
 }
 
@@ -250,7 +251,7 @@ mod test {
 
         let s = format!(
             "hostname({})",
-            hostname::get().unwrap().display().to_string()
+            hostname::get().unwrap().display()
         );
         let c = parse_hostname_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
@@ -288,11 +289,9 @@ mod test {
         let c = parse_positive_constraint.parse(&s).unwrap();
         assert!(!c.corresponds());
 
-
         let s = "NOT(OR(HOSTNAME(ELIOT1), HOSTNAME(ELIOT2)))".to_owned();
         let c = parse_negated_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
-
 
         let s = "NOT(OR(HOSTNAME(ELIOT1), HOSTNAME(ELIOT2)))".to_owned();
         let c = parse_logical_constraint.parse(&s).unwrap();

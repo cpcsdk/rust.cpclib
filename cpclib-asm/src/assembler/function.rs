@@ -595,7 +595,7 @@ impl Function {
 
         let inner = std::mem::transmute(inner);
 
-        return Ok(Function::Located(AnyFunction::new(name, args, inner)));
+        Ok(Function::Located(AnyFunction::new(name, args, inner)))
     }
 
     pub unsafe fn new_standard<S1: AsRef<str>, S2: Borrow<str>>(
@@ -611,7 +611,7 @@ impl Function {
 
         let inner = std::mem::transmute(inner);
 
-        return Ok(Function::Standard(AnyFunction::new(name, args, inner)));
+        Ok(Function::Standard(AnyFunction::new(name, args, inner)))
     }
 
     /// Be sure the function lives shorter than inner
@@ -635,7 +635,7 @@ pub trait FunctionBuilder {
         Self: Sized;
 }
 
-impl<'token> FunctionBuilder for ProcessedToken<'token, LocatedToken> {
+impl FunctionBuilder for ProcessedToken<'_, LocatedToken> {
     unsafe fn new<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],
@@ -648,7 +648,7 @@ impl<'token> FunctionBuilder for ProcessedToken<'token, LocatedToken> {
     }
 }
 
-impl<'token> FunctionBuilder for ProcessedToken<'token, Token> {
+impl FunctionBuilder for ProcessedToken<'_, Token> {
     unsafe fn new<S1: AsRef<str>, S2: Borrow<str>>(
         name: &S1,
         args: &[S2],

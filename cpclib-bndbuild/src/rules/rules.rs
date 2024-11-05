@@ -71,7 +71,7 @@ impl Rules {
             return None;
         }
         if rules.len() == 1 {
-            return rules.pop();
+            rules.pop()
         }
         else {
             let indicies = rules.iter().positions(|r| r.is_enabled()).collect_vec();
@@ -79,7 +79,7 @@ impl Rules {
                 return rules.pop(); // return any one, we know it will fail or it is ambiguous
             }
             assert_eq!(1, indicies.len());
-            return Some(&rules[indicies[0]]); // return the first that match
+            Some(rules[indicies[0]])// return the first that match
         }
     }
 

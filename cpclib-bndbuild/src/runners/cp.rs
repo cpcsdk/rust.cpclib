@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
@@ -59,7 +58,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
             std::fs::copy(from, to).map_err(|e| {
                 error.push_str(&format!("Error when copying {} to {}. {}.\n", from, to, e))
-            });
+            })
         };
 
         match files.len() {
@@ -80,7 +79,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
                 else {
                     dest.to_path_buf()
                 };
-                copy(src, &dest, &mut errors);
+                let _ = copy(src, &dest, &mut errors);
             },
 
             _ => {
@@ -92,7 +91,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
                     let files = &files[..files.len() - 1];
                     for src in files.iter() {
                         let dst = dest.join(src.file_name().unwrap());
-                        copy(src, &dst, &mut errors);
+                        let _ = copy(src, &dst, &mut errors);
                     }
                 }
             }
@@ -114,7 +113,6 @@ impl<E: EventObserver> Runner for CpRunner<E> {
 #[cfg(test)]
 mod test {
     use std::io::Write;
-    use std::rc::Rc;
 
     use crate::runners::cp::CpRunner;
     use crate::runners::Runner;

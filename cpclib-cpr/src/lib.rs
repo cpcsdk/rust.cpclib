@@ -242,7 +242,7 @@ pub struct CartridgeBankInfo<'c> {
     bank: &'c CartridgeBank
 }
 
-impl<'c> Display for CartridgeBankInfo<'c> {
+impl Display for CartridgeBankInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
@@ -270,7 +270,7 @@ impl<'c> From<&'c CartridgeBank> for CartridgeBankInfo<'c> {
     }
 }
 
-impl<'c> Deref for CartridgeBankInfo<'c> {
+impl Deref for CartridgeBankInfo<'_> {
     type Target = CartridgeBank;
 
     fn deref(&self) -> &Self::Target {
@@ -283,7 +283,7 @@ pub struct CprInfo<'c> {
     cpr: &'c Cpr
 }
 
-impl<'c> Display for CprInfo<'c> {
+impl Display for CprInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Cartridge with {} banks", self.cpr.banks().len())?;
         for (idx, bank) in self.banks.iter().enumerate() {
@@ -300,7 +300,7 @@ impl<'c> From<&'c Cpr> for CprInfo<'c> {
     }
 }
 
-impl<'c> Deref for CprInfo<'c> {
+impl Deref for CprInfo<'_> {
     type Target = Cpr;
 
     fn deref(&self) -> &Self::Target {

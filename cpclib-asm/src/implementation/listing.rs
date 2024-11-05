@@ -162,7 +162,7 @@ impl<'a> From<&'a Listing> for PrintableListing<'a> {
         PrintableListing(src)
     }
 }
-impl<'a> fmt::Display for PrintableListing<'a> {
+impl fmt::Display for PrintableListing<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for token in self.0.listing().iter() {
             match token {

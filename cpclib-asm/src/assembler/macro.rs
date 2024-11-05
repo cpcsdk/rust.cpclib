@@ -186,7 +186,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     }
 }
 
-impl<'m, 'a, P: MacroParamElement> Expandable for MacroWithArgs<'m, 'a, P> {
+impl<P: MacroParamElement> Expandable for MacroWithArgs<'_, '_, P> {
     /// Develop the macro with the given arguments
     #[inline]
     fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
@@ -265,7 +265,7 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
     }
 }
 
-impl<'s, 'a, P: MacroParamElement> Expandable for StructWithArgs<'s, 'a, P> {
+impl<P: MacroParamElement> Expandable for StructWithArgs<'_, '_, P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix

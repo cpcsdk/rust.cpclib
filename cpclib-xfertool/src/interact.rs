@@ -22,7 +22,7 @@ struct XferInteractorHelper<'a> {
     xfer: &'a CpcXfer /* TODO find a way to not share xfer there in order to not lost time to do too much calls to M4 */
 }
 
-impl<'a> Completer for XferInteractorHelper<'a> {
+impl Completer for XferInteractorHelper<'_> {
     type Candidate = Pair;
 
     /// TODO add M4 completion
@@ -175,7 +175,7 @@ impl<'a> XferInteractorHelper<'a> {
     }
 }
 
-impl<'a> Hinter for XferInteractorHelper<'a> {
+impl Hinter for XferInteractorHelper<'_> {
     type Hint = String;
 
     fn hint(&self, line: &str, pos: usize, ctx: &Context<'_>) -> Option<String> {

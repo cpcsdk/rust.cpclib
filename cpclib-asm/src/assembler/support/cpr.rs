@@ -106,7 +106,7 @@ impl CprAssembler {
     // TODO reduce String building if it is too slow
     fn code_to_index(&self, bank_number: u8) -> Option<usize> {
         let code = Self::number_to_code(bank_number);
-        self.codes.iter().position(|c| &c.1 == &code)
+        self.codes.iter().position(|c| c.1 == code)
     }
 
     pub fn selected_bloc(&self) -> Option<u8> {

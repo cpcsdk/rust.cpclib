@@ -1118,7 +1118,7 @@ impl Env {
                 }
 
                 if let Some(chunk) = wabp.as_mut() {
-                    chunk.add_breakpoint(brk.wabp().into());
+                    chunk.add_breakpoint(brk.wabp());
                 }
             }
         }
@@ -2874,7 +2874,7 @@ impl Env {
         };
 
         let amsdos_fname = Utf8PathBuf::from(amsdos_fname);
-        let dsk_fname = dsk_fname.map(|d| Utf8PathBuf::from(d));
+        let dsk_fname = dsk_fname.map(Utf8PathBuf::from);
 
 
         // Check filename validity
@@ -4722,10 +4722,10 @@ impl Env {
                 .map(|e| self.resolve_expr_must_never_fail(e))
                 .collect::<Result<Vec<_>, AssemblerError>>()
         });
-
         if let Some(Err(e)) = hidden_lines {
             return Err(e);
         }
+
         let hidden_lines = hidden_lines.map(|r| {
             r.unwrap()
                 .into_iter()
@@ -4735,6 +4735,7 @@ impl Env {
         if let Some(Err(e)) = hidden_lines {
             return Err(e.into());
         }
+
         let hidden_lines =
             hidden_lines.map(|r| r.unwrap().into_iter().map(|e| e as u16).collect_vec());
 
@@ -4762,8 +4763,8 @@ impl Env {
 
         // build the basic tokens
         let mut basic = BasicProgram::parse(basic_src)?;
-        if hidden_lines.is_some() {
-            basic.hide_lines(&hidden_lines.unwrap())?;
+        if let Some(hidden_lines) = hidden_lines {
+            basic.hide_lines(&hidden_lines)?;
         }
         Ok(basic.as_bytes())
     }

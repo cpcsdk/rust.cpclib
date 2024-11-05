@@ -102,7 +102,7 @@ impl<'r> Graph<'r> {
                 return Ok(true);
             }
         }
-        return Ok(false);
+        Ok(false)
         //  .unwrap_or(false) // ignore not existing rule. Should fail ?
     }
 

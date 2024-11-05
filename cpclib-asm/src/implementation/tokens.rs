@@ -487,7 +487,7 @@ impl TokenExt for Token {
                 let arg1 = arg1.as_ref().map(|arg| arg.replace_expressions_by_0());
                 let arg2 = arg2.as_ref().map(|arg| arg.replace_expressions_by_0());
 
-                Self::OpCode(mne.clone(), arg1, arg2, arg3.clone()).number_of_bytes()
+                Self::OpCode(*mne, arg1, arg2, *arg3).number_of_bytes()
             }
             Self::Comment(..) | Self::Label(..) | Self::Assert(..)=> Ok(0),
             _ => Result::Err(format!("fallback_number_of_bytes not implemented for {self}"))

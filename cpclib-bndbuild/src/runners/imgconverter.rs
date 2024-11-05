@@ -1,9 +1,6 @@
-use std::fmt::Display;
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use cpclib_common::clap::{Arg, ArgAction, Command};
-use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
 
 use super::{Runner, RunnerWithClap};
@@ -64,7 +61,7 @@ impl<E: EventObserver> Runner for ImgConverterRunner<E> {
 
         // let itr = Some(self.get_command()).into_iter().chain(itr.iter().map(|s| s.as_ref())).collect_vec(); XXX done
 
-        let matches = self.get_matches(&itr)?;
+        let matches = self.get_matches(itr)?;
         if matches.get_flag("version") {
             o.emit_stdout(&self.get_clap_command().clone().render_version());
             return Ok(());

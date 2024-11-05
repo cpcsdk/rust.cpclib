@@ -34,6 +34,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_amspirit_default() -> Self {
+        Self::DirectAccess(cpclib_runner::runner::emulator::Emulator::Amspirit(
+            Default::default()
+        ))
+    }
+
     pub fn new_controlled_access() -> Self {
         Self::ControlledAccess
     }

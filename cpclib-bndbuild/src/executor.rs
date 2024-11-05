@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-use std::rc::Rc;
 
 use cpclib_runner::delegated::DelegatedRunner;
 use cpclib_runner::emucontrol::EmuControlledRunner;
@@ -9,7 +7,7 @@ use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
-use crate::event::{BndBuilderObserved, ListOfBndBuilderObserverRc};
+use crate::event::BndBuilderObserved;
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;

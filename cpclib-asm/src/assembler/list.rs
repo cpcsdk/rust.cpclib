@@ -286,7 +286,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         (ExprResult::String(s1), ExprResult::List(l)) => {
             let mut s1 = s1.to_string() + "[";
 
-            for (i, e) in l.into_iter().cloned().enumerate() {
+            for (i, e) in l.iter().cloned().enumerate() {
                 if i != 0 {
                     s1 += ","
                 }

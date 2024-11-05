@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;

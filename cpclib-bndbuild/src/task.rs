@@ -3,7 +3,7 @@ use std::fmt::Display;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
-use cpclib_runner::runner::emulator::{ACE_CMD, CPCEC_CMD, WINAPE_CMD};
+use cpclib_runner::runner::emulator::{ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, WINAPE_CMD};
 use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -36,6 +36,7 @@ pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"]
 pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
+pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
@@ -97,15 +98,15 @@ macro_rules! is_some_cmd {
 }
 
 is_some_cmd!(
-    ace, cpcec, winape, emuctrl, basm, rasm, orgams, bndbuild, cp, rm, echo, disc, impdisc, hideur,
-    img2cpc, martine, r#extern, xfer, fap
+    ace, amspirit, cpcec, winape, emuctrl, basm, rasm, orgams, bndbuild, cp, rm, echo, disc,
+    impdisc, hideur, img2cpc, martine, r#extern, xfer, fap
 );
 
 impl<'de> Deserialize<'de> for Task {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where D: Deserializer<'de> {
         struct Line;
-        impl<'de> Visitor<'de> for Line {
+        impl Visitor<'_> for Line {
             type Value = Task;
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -127,6 +128,9 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_cpcec_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_cpcec_default(), std))
+                }
+                else if is_amspirit_cmd(code) {
+                    Ok(Task::Emulator(Emulator::new_amspirit_default(), std))
                 }
                 else if is_winape_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_winape_default(), std))

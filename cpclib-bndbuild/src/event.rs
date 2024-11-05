@@ -1,8 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -143,7 +142,7 @@ pub struct ListOfBndBuilderObserverRcIter<'l> {
     idx: usize
 }
 
-impl<'l> Iterator for ListOfBndBuilderObserverRcIter<'l> {
+impl Iterator for ListOfBndBuilderObserverRcIter<'_> {
     type Item = BndBuilderObserverRc;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -250,7 +249,7 @@ where E: BndBuilderObserved
 // }
 // }
 
-impl<'observed, 'rule, 'task, E> Drop for RuleTaskEventDispatcher<'observed, 'rule, 'task, E>
+impl<E> Drop for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved
 {
     fn drop(&mut self) {
@@ -285,7 +284,7 @@ where E: BndBuilderObserved
     }
 }
 
-impl<'builder, 'rule, 'task, E> EventObserver for RuleTaskEventDispatcher<'builder, 'rule, 'task, E>
+impl<E> EventObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved + Sync
 {
     #[inline]
@@ -305,8 +304,8 @@ where E: BndBuilderObserved + Sync
     }
 }
 
-impl<'builder, 'rule, 'task, E> BndBuilderObserver
-    for RuleTaskEventDispatcher<'builder, 'rule, 'task, E>
+impl<E> BndBuilderObserver
+    for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved + Sync
 {
     fn update(&mut self, event: BndBuilderEvent) {

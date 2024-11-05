@@ -85,7 +85,7 @@ struct SimpleListingState<'token, T: Visited + ListingElement + Debug + Sync> {
     span: Option<Z80Span>
 }
 
-impl<'token, T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'token, T> {
+impl<T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'_, T> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "SimpleListingState")
     }
@@ -442,8 +442,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-impl<'token, T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
-    for ProcessedToken<'token, T>
+impl<T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
+    for ProcessedToken<'_, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     fn as_simple_token(&self) -> Cow<Token> {
@@ -719,8 +719,8 @@ where
     Ok(())
 }
 
-impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
-    for ProcessedToken<'token, T>
+impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
+    for ProcessedToken<'_, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     fn possible_span(&self) -> Option<&Z80Span> {
@@ -736,7 +736,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
     }
 }
 
-impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
+impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'_, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     /// Generate the tokens needed for the macro or the struct

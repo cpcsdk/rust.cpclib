@@ -1,8 +1,15 @@
-use cpclib_common::camino::Utf8Path;
 
-use super::{ExternRunner, Runner};
-use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
+
+#[cfg(target_os = "linux")]
+use crate::runner::ExternRunner;
+#[cfg(target_os = "linux")]
+use crate::runner::runner::Runner;
+#[cfg(target_os = "linux")]
+use cpclib_common::camino::Utf8Path;
+#[cfg(target_os = "linux")]
+use crate::delegated::Compiler;
 
 pub const RASM_CMD: &str = "rasm";
 
@@ -43,21 +50,24 @@ cfg_match! {
         impl RasmVersion {
             pub fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
                 match self {
-                    RasmVersion::Consolidation2024  =>
-                        DelegateApplicationDescription {
-                            download_url: "https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.9.zip".to_owned(), // we assume a modern CPU
-                            folder : "rasm_consolidation",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "rasm",
-                            compile: Some(Box::new(|path: &Utf8Path, o: &E| -> Result<(), String>{
-                                let command = vec!["make"];
-                                ExternRunner::default().inner_run(&command, o)?;
+                    RasmVersion::Consolidation2024  => {
+                        let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
+                            let command = vec!["make"];
+                            ExternRunner::default().inner_run(&command, o)?;
 
-                                let command = vec!["mv", "rasm.exe", "rasm"];
-                                ExternRunner::default().inner_run(&command, o)?;
+                            let command = vec!["mv", "rasm.exe", "rasm"];
+                            ExternRunner::default().inner_run(&command, o)?;
 
-                                Ok(())
-                            }))
+                            Ok(())
+                        });
+                        let install = Compiler::from(install);
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url("https://github.com/EdouardBERGE/rasm/archive/refs/tags/v2.2.9.zip") // we assume a modern CPU
+                            .folder("rasm_consolidation")
+                            .archive_format(ArchiveFormat::Zip)
+                            .exec_fname("rasm")
+                            .compile(install)
+                            .build()
                         }
                     }
             }
@@ -70,13 +80,13 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     RasmVersion::Consolidation2024  =>
-                        DelegateApplicationDescription {
-                            download_fn_url: box_fn_url("https://github.com/EdouardBERGE/rasm/releases/download/v2.2.9/rasm_w64.exe"), // we assume a modern CPU
-                            folder : "rasm_consolidation",
-                            archive_format: ArchiveFormat::Raw,
-                            exec_fname: "rasm_w64.exe",
-                            compile: None
-                        }
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url("https://github.com/EdouardBERGE/rasm/releases/download/v2.2.9/rasm_w64.exe") // we assume a modern CPU
+                            .folder("rasm_consolidation")
+                            .archive_format(ArchiveFormat::Raw)
+                            .exec_fname("rasm_w64.exe")
+                            .build()
+                        
                     }
             }
         }

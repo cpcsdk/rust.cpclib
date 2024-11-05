@@ -1,6 +1,4 @@
-use std::borrow::Borrow;
 use std::ops::Deref;
-use std::rc::Rc;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -11,7 +9,7 @@ use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::delegated::base_cache_folder;
 use cpclib_runner::emucontrol::EmuControlledRunner;
-use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
+use cpclib_runner::runner::assembler::RasmVersion;
 use cpclib_runner::runner::RunnerWithClap;
 
 use crate::event::{

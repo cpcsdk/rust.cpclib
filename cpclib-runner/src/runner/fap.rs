@@ -1,4 +1,4 @@
-use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const FAP_CMD: &str = "fap";
@@ -23,13 +23,12 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     FAPVersion::V1_0_0  =>
-                        DelegateApplicationDescription {
-                            download_url: DOWNLOAD_URL_V1_1.to_owned(), // we assume a modern CPU
-                            folder : "Build",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "FapCrunchLin",
-                            compile: None
-                        }
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url(DOWNLOAD_URL_V1_1) // we assume a modern CPU
+                            .folder("Build")
+                            .archive_format(ArchiveFormat::Zip)
+                            .exec_fname("FapCrunchLin")
+                            .build()
                     }
             }
         }
@@ -40,13 +39,12 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     FAPVersion::V1_0_0  =>
-                        DelegateApplicationDescription {
-                            download_fn_url: box_fn_url(DOWNLOAD_URL_V1_1),
-                            folder : "Build",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "FapCrunchWin.exe",
-                            compile: None
-                        }
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url(DOWNLOAD_URL_V1_1)
+                            .folder("Build")
+                            .archive_format(ArchiveFormat::Zip)
+                            .exec_fname("FapCrunchWin.exe")
+                            .build()
                     }
             }
         }

@@ -677,7 +677,7 @@ where i32: From<T>
 }
 
 // Constructor of Pen reference from an integer
-impl<'a, T: Integer> From<T> for &'a Pen
+impl<T: Integer> From<T> for &Pen
 where i32: From<T>
 {
     fn from(item: T) -> Self {

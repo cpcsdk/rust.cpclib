@@ -1,10 +1,8 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::path::absolute;
 use std::time::Duration;
 
 use bon::builder;
-use camino_tempfile::tempfile;
 use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
@@ -14,12 +12,13 @@ use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use fs_extra;
 use xcap::image::{open, ImageBuffer, Rgba};
 use xcap::Window;
+use delegate;
 
 use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
-use crate::runner::emulator::Emulator;
+use crate::runner::emulator::{Emulator};
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -51,7 +50,7 @@ pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
 }
 
 #[derive(Debug)]
-#[builder]
+#[derive(bon::Builder)]
 pub struct EmulatorConf {
     pub(crate) drive_a: Option<Utf8PathBuf>,
     pub(crate) drive_b: Option<Utf8PathBuf>,
@@ -70,22 +69,24 @@ pub struct EmulatorConf {
 
 impl EmulatorConf {
     /// Generate the args for the corresponding emulator
-    pub fn args_for_emu(&self, emu: &Emulator) -> Vec<String> {
+    pub fn args_for_emu(&self, emu: &Emulator) -> Result<Vec<String>, String> {
         let mut args = Vec::default();
 
         if let Some(drive_a) = &self.drive_a {
             match emu {
                 Emulator::Ace(_) => args.push(drive_a.to_string()),
                 Emulator::Cpcec(_) => args.push(drive_a.to_string()),
-                Emulator::Winape(_) => args.push(absolute(drive_a).unwrap().display().to_string())
+                Emulator::Winape(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
+                Emulator::Amspirit(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string())
             }
         }
 
         if let Some(drive_b) = &self.drive_b {
             match emu {
-                Emulator::Ace(_) => todo!(),
-                Emulator::Cpcec(_) => todo!(),
-                Emulator::Winape(_) => todo!()
+                Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
             }
         }
 
@@ -94,17 +95,23 @@ impl EmulatorConf {
                 Emulator::Ace(ace_version) => args.push(sna.to_string()),
                 Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
                 Emulator::Winape(winape_version) => {
-                    let fname = emu.winape_compatible_fname(sna);
+                    let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("/SN:{fname}"));
                 },
+                Emulator::Amspirit(v) => {
+                    let fname = emu.wine_compatible_fname(sna)?;
+                    args.push(format!("--file={}", fname));
+                }
             }
         }
 
+        // is it really usefull ? seems it is really done by playing with the conf files
         if !self.roms_configuration.is_empty() {
             match emu {
                 Emulator::Ace(_) => todo!(),
                 Emulator::Cpcec(_) => todo!(),
-                Emulator::Winape(_) => todo!()
+                Emulator::Winape(_) => todo!(),
+                Emulator::Amspirit(_) => todo!()
             }
         }
 
@@ -119,7 +126,7 @@ impl EmulatorConf {
                     eprintln!("Breapoints are currently ignored. TODO convert them in the appropriate format");
                     let mut sym_string = String::new();
                     for rasm_fname in &self.debug_files {
-                        if !sym_string.is_empty() && sym_string.chars().last().unwrap() != '\n' {
+                        if !sym_string.is_empty() && !sym_string.ends_with('\n') {
                             sym_string.push('\n');
                         }
                         sym_string.push_str(&rasm_debug_to_winape_sym(rasm_fname).unwrap());
@@ -132,7 +139,7 @@ impl EmulatorConf {
                         let path = tempfile.into_temp_path();
                         let path = path.keep().unwrap();
                         std::fs::write(&path, sym_string).unwrap();
-                        let fname = emu.winape_compatible_fname(&path);
+                        let fname = emu.wine_compatible_fname(&path)?;
                         args.push(format!("/SYM:{fname}"));
                     }
 
@@ -143,21 +150,18 @@ impl EmulatorConf {
         }
 
         if let Some(memory) = &self.memory {
-            match emu {
-                Emulator::Cpcec(_) => {
-                    let arg = match memory {
-                         64 => "-k0",
-                         128 => "-k1",
-                         192 => "-k2",
-                         320 => "-k3",
-                         576 => "-k4",
-                         1088 => "-k5",
-                         2112 => "-k6",
-                         _ => unimplemented!()
-                    };
-                    args.push(arg.to_owned());
-                },
-                _ => {} // ignored
+            if let Emulator::Cpcec(_) = emu {
+                let arg = match memory {
+                     64 => "-k0",
+                     128 => "-k1",
+                     192 => "-k2",
+                     320 => "-k3",
+                     576 => "-k4",
+                     1088 => "-k5",
+                     2112 => "-k6",
+                     _ => unimplemented!()
+                };
+                args.push(arg.to_owned());
             }
         }
 
@@ -172,17 +176,19 @@ impl EmulatorConf {
                 },
                 Emulator::Cpcec(_) => {
                     // is it automatic ?
+                },
+                Emulator::Amspirit(_) => {
+                    args.push(format!("--run={run}"));
                 }
-                _ => unimplemented!()
             }
         }
 
-        args
+        Ok(args)
     }
 }
 
 pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String> {
-    let args = conf.args_for_emu(emu);
+    let args = conf.args_for_emu(emu)?;
     let app = emu.configuration();
 
     let runner = DelegatedRunner::new(app, emu.get_command().into());
@@ -206,14 +212,17 @@ pub fn get_emulator_window(emu: &Emulator) -> Window {
     }
 }
 
-trait UsedEmulator {
+trait UsedEmulator: Sized {
     fn screenshot(robot: &mut RobotImpl<Self>) -> ImageBuffer<Rgba<u8>, Vec<u8>>
-    where Self: Sized;
+    where Self: Sized {
+        robot.window.capture_image().unwrap()
+    }
 }
 
 struct AceUsedEmulator {}
 struct CpcecUsedEmulator {}
 struct WinapeUsedEmulator {}
+struct AmspiritUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -255,14 +264,14 @@ impl UsedEmulator for AceUsedEmulator {
     }
 }
 impl UsedEmulator for CpcecUsedEmulator {
-    fn screenshot(robot: &mut RobotImpl<Self>) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-        robot.window.capture_image().unwrap()
-    }
+
 }
 impl UsedEmulator for WinapeUsedEmulator {
-    fn screenshot(robot: &mut RobotImpl<Self>) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-        robot.window.capture_image().unwrap()
-    }
+
+}
+
+impl UsedEmulator for AmspiritUsedEmulator {
+
 }
 
 struct RobotImpl<E: UsedEmulator> {
@@ -275,7 +284,8 @@ struct RobotImpl<E: UsedEmulator> {
 pub enum Robot {
     Ace(RobotImpl<AceUsedEmulator>),
     Cpcec(RobotImpl<CpcecUsedEmulator>),
-    Winape(RobotImpl<WinapeUsedEmulator>)
+    Winape(RobotImpl<WinapeUsedEmulator>),
+    Amspirit(RobotImpl<AmspiritUsedEmulator>)
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -296,6 +306,12 @@ impl From<RobotImpl<WinapeUsedEmulator>> for Robot {
     }
 }
 
+impl From<RobotImpl<AmspiritUsedEmulator>> for Robot {
+    fn from(value: RobotImpl<AmspiritUsedEmulator>) -> Self {
+        Self::Amspirit(value)
+    }
+}
+
 impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
     fn from(value: (Window, Enigo, &Emulator)) -> Self {
         Self {
@@ -310,12 +326,41 @@ impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
 impl Robot {
     pub fn new(emu: &Emulator, window: Window, enigo: Enigo) -> Self {
         match emu {
-            Emulator::Ace(_) => RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into(),
-            Emulator::Cpcec(_) => RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Ace(_) => {
+                RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into()
+            },
+            Emulator::Cpcec(_) => {
+                RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into()
+            },
             Emulator::Winape(_) => {
                 RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
             },
+            Emulator::Amspirit(_) => {
+                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
+            }
         }
+    }
+
+    delegate::delegate! {
+        to match self {
+            Robot::Ace(r) => r,
+            Robot::Cpcec(r) => r,
+            Robot::Winape(r) => r,
+            Robot::Amspirit(r) => r,
+        } {
+            fn handle_orgams(
+                &mut self,
+                drivea: Option<&str>,
+                albireo: Option<&str>,
+                src: &str,
+                dst: Option<&str>,
+                jump: bool,
+                edit: bool
+            ) -> Result<(), String>;
+            fn type_text(&mut self, s: &str);
+            fn close(&mut self);
+        }
+
     }
 
     pub fn handle_raw_text<S: AsRef<str>>(&mut self, text: S) {
@@ -323,36 +368,9 @@ impl Robot {
         let text = text.replace(r"\n", "\n");
         let text = &text;
 
-        match self {
-            Robot::Ace(r) => r.type_text(text),
-            Robot::Cpcec(r) => r.type_text(text),
-            Robot::Winape(r) => r.type_text(text)
-        }
+        self.type_text(text);
     }
 
-    pub fn handle_orgams(
-        &mut self,
-        drivea: Option<&str>,
-        albireo: Option<&str>,
-        src: &str,
-        dst: Option<&str>,
-        jump: bool,
-        edit: bool
-    ) -> Result<(), String> {
-        match self {
-            Robot::Ace(r) => r.handle_orgams(drivea, albireo, src, dst, jump, edit),
-            Robot::Cpcec(r) => r.handle_orgams(drivea, albireo, src, dst, jump, edit),
-            Robot::Winape(r) => r.handle_orgams(drivea, albireo, src, dst, jump, edit)
-        }
-    }
-
-    pub fn close(&mut self) {
-        match self {
-            Robot::Ace(r) => r.close(),
-            Robot::Cpcec(r) => r.close(),
-            Robot::Winape(r) => r.close()
-        }
-    }
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
@@ -423,11 +441,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         dbg!(&key);
 
         #[cfg(windows)]
-        let key = match key {
+        match key {
             // https://boostrobotics.eu/windows-key-codes/
-            Key::Unicode(v) if v >= '0' && v <= '9' => {
+            Key::Unicode(v) if v.is_ascii_digit() => {
                 if false {
-                    let nb = (v as u32 - '0' as u32);
+                    let nb = v as u32 - '0' as u32;
 
                     self.enigo
                         .key(Key::RShift, enigo::Direction::Press)
@@ -781,7 +799,8 @@ pub struct EmuCli {
 pub enum Emu {
     Ace,
     Winape,
-    Cpcec
+    Cpcec,
+    Amspirit
 }
 
 use clap::Args;
@@ -882,9 +901,9 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     }
 
     let builder = EmulatorConf::builder()
-        .maybe_drive_a(cli.drive_a.clone())
-        .maybe_drive_b(cli.drive_b.clone())
-        .maybe_snapshot(cli.snapshot.clone())
+        .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
+        .maybe_drive_b(cli.drive_b.clone().map(|a| a.into()))
+        .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
         .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
@@ -894,7 +913,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     let emu = match cli.emulator {
         Emu::Ace => Emulator::Ace(Default::default()),
         Emu::Winape => Emulator::Winape(Default::default()),
-        Emu::Cpcec => Emulator::Cpcec(Default::default())
+        Emu::Cpcec => Emulator::Cpcec(Default::default()),
+        Emu::Amspirit => Emulator::Amspirit(Default::default())
     };
 
     {

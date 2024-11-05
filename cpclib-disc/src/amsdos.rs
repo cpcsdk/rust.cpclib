@@ -272,13 +272,13 @@ impl AmsdosFileName {
             });
         }
 
-        if filename.to_ascii_uppercase() != filename.to_ascii_uppercase() {
+        if !filename.eq_ignore_ascii_case(filename) {
             return Err(AmsdosError::WrongFileName {
                 msg: format!("{} contains non ascii characters", filename)
             });
         }
 
-        if extension.to_ascii_uppercase() != extension.to_ascii_uppercase() {
+        if !extension.eq_ignore_ascii_case(extension) {
             return Err(AmsdosError::WrongFileName {
                 msg: format!("{} contains non ascii characters", extension)
             });
@@ -1031,7 +1031,7 @@ pub enum AmsdosAddBehavior {
     BackupIfPresent
 }
 
-impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
+impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     pub fn new_from_disc<S: Into<Head>>(disc: &'dsk mut D, head: S) -> Self {
         Self {
             disc,
@@ -1741,6 +1741,8 @@ impl AmsdosHeader {
 #[derive(Clone, PartialEq, Debug)]
 #[allow(missing_docs)]
 pub struct AmsdosFile {
+    // header + content for Amsdos files
+    // content for Ascii files
     all_data: Vec<u8>,
     binary_filename: Option<AmsdosFileName>
 }
@@ -1793,6 +1795,15 @@ impl AmsdosFile {
         );
 
         Self::from_header_and_buffer(header, data)
+    }
+
+    pub fn ascii_file_from_buffer_with_name(
+        filename: &AmsdosFileName,
+        data: &[u8]) -> Self {
+            Self {
+                all_data: data.to_vec(),
+                binary_filename: Some(*filename)
+            }
     }
 
     /// Create a file from its potential header and content

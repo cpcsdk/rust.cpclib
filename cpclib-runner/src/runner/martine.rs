@@ -1,4 +1,4 @@
-use crate::delegated::{box_fn_url, ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 
 pub const MARTINE_CMD: &str = "martine";
@@ -22,14 +22,13 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     MartineVersion::V0_39  =>
-                        DelegateApplicationDescription {
-                            download_url: "https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip".to_owned(), // we assume a modern CPU
-                            folder : "martine_0_39",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "martine.linux",
-                            compile: None
-                        }
-                    }
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip") // we assume a modern CPU
+                            .folder("martine_0_39")
+                            .archive_format(ArchiveFormat::Zip)
+                            .exec_fname("martine.linux")
+                            .build()
+                }
             }
         }
     }
@@ -39,13 +38,12 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     MartineVersion::V0_39  =>
-                        DelegateApplicationDescription {
-                            download_fn_url: box_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip"),
-                            folder : "martine_0_39",
-                            archive_format: ArchiveFormat::Zip,
-                            exec_fname: "martine.exe",
-                            compile: None
-                        }
+                        DelegateApplicationDescription::builder()
+                            .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-windows-amd64.zip")
+                            .folder("martine_0_39")
+                            .archive_format(ArchiveFormat::Zip)
+                            .exec_fname("martine.exe")
+                            .build()
                     }
             }
         }

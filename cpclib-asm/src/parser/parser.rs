@@ -17,7 +17,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow;
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated, Context
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ErrorKind, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
@@ -2766,10 +2766,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut address = address.borrow_mut();
                                 let  address = address.deref_mut();
                                 if let Some(address) = address {
-                                    return false;
+                                    false
                                 } else {
-                                    address.replace((Some(arg.clone()), value.clone()));
-                                    return true;
+                                    address.replace((Some(*arg), value.clone()));
+                                    true
                                 }
                             },
 
@@ -2777,10 +2777,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut r#type = r#type.borrow_mut();
                                 let r#type = r#type.deref_mut();
                                 if let Some(r#type) = r#type {
-                                    return false;
+                                    false
                                 } else {
-                                    r#type.replace((Some(arg.clone()), value.clone()));
-                                    return true
+                                    r#type.replace((Some(*arg), value.clone()));
+                                    true
                                 }
                             },
 
@@ -2788,10 +2788,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut access = access.borrow_mut();
                                 let access = access.deref_mut();
                                 if let Some(access) = access {
-                                    return false;
+                                    false
                                 } else {
-                                    access.replace((arg.clone(), value.clone()));
-                                    return true;
+                                    access.replace((*arg, value.clone()));
+                                    true
                                 }
                             },
 
@@ -2799,10 +2799,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut run = run.borrow_mut();
                                 let run = run.deref_mut();
                                 if let Some(run) = run {
-                                    return false
+                                    false
                                 } else {
-                                    run.replace((arg.clone(), value.clone()));
-                                    return true
+                                    run.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
 
@@ -2810,10 +2810,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = mask.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), value.clone()));
-                                    return true
+                                    item.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
 
@@ -2821,10 +2821,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = size.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), value.clone()));
-                                    return true
+                                    item.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
 
@@ -2832,10 +2832,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = value.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), val.clone()));
-                                    return true
+                                    item.replace((*arg, val.clone()));
+                                    true
                                 }
                             }
 
@@ -2843,10 +2843,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = value_mask.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), value.clone()));
-                                    return true
+                                    item.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
 
@@ -2854,10 +2854,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = name.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), value.clone()));
-                                    return true
+                                    item.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
 
@@ -2865,10 +2865,10 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = condition.borrow_mut();
                                 let item = item.deref_mut();
                                 if let Some(item) = item {
-                                    return false
+                                    false
                                 } else {
-                                    item.replace((arg.clone(), value.clone()));
-                                    return true
+                                    item.replace((*arg, value.clone()));
+                                    true
                                 }
                             }
                             _ => true // TODO implement the tests

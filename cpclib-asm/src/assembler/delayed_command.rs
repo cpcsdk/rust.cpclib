@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, RemuEntry, WabpAnyBreakpoint, WinapeBreakPoint};
+use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, WabpAnyBreakpoint, WinapeBreakPoint};
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
