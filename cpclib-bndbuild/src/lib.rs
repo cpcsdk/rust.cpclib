@@ -42,6 +42,29 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 }
 
 pub fn build_args_parser() -> clap::Command {
+
+    static COMMANDS_LIST : &[&str] = &[
+        EMUCTRL_CMD,
+        WINAPE_CMD,
+        CPCEC_CMD,
+        AMSPIRIT_CMD,
+        "basm",
+        "bndbuild",
+        "cp",
+        "dsk",
+        "disc",
+        "echo",
+        "extern",
+        "img2cpc",
+        HIDEUR_CMD,
+        IMPDISC_CMD,
+        MARTINE_CMD,
+        "orgams",
+        RASM_CMD,
+        "rm",
+        "xfer",
+    ];
+
     Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
         .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any Benediction crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
@@ -54,27 +77,7 @@ pub fn build_args_parser() -> clap::Command {
                 .long("help")
                 .short('h')
                 .value_name("CMD")
-                .value_parser([
-                    EMUCTRL_CMD,
-                    WINAPE_CMD,
-                    CPCEC_CMD,
-                    AMSPIRIT_CMD,
-                    "basm",
-                    "bndbuild",
-                    "cp",
-                    "dsk",
-                    "disc",
-                    "echo",
-                    "extern",
-                    "img2cpc",
-                    HIDEUR_CMD,
-                    IMPDISC_CMD,
-                    MARTINE_CMD,
-                    "orgams",
-                    RASM_CMD,
-                    "rm",
-                    "xfer",
-                ])
+                .value_parser(COMMANDS_LIST.iter().collect_vec())
                 .default_missing_value_os("bndbuild")
                 .default_value("bndbuild")
                 .num_args(0..=1)
@@ -146,8 +149,8 @@ pub fn build_args_parser() -> clap::Command {
                 .long("clear-cache")
                 .alias("clear")
                 .short('c')
-                .action(ArgAction::SetTrue)
-                .help("Clear cache folder that contains all automatically downloaded executables")
+                .num_args(0..=1)
+                .help("Clear cache folder that contains all automatically downloaded executables. Can optionally take one argument to clear the cache of the corresponding executable.")
                 .exclusive(true)
         )
         .arg(

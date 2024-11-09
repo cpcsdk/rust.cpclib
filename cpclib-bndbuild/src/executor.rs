@@ -1,4 +1,4 @@
-use cpclib_runner::delegated::DelegatedRunner;
+use cpclib_runner::delegated::{DelegateApplicationDescription, DelegatedRunner};
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::fap::FAPVersion;
@@ -18,6 +18,50 @@ use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::Task;
 
+
+impl Task {
+
+    #[inline]
+    pub fn configuration<E: EventObserver + 'static>(&self) -> Option<DelegateApplicationDescription<E>> {
+        match self {
+            Task::Emulator(e, _) => {
+                match e {
+                    crate::runners::emulator::Emulator::DirectAccess(e) => {
+                        Some(e.configuration::<E>())
+                    },
+                    crate::runners::emulator::Emulator::ControlledAccess => {
+                        None
+                    }
+                }
+            },
+
+            Task::Assembler(a, _) => {
+                match a {
+                    Assembler::Extern(extern_assembler) => {
+                        Some(extern_assembler.configuration::<E>())
+                    },
+                    _ => None
+                }
+            },
+
+            Task::ImpDsk(_) => {
+                Some(ImpDskVersion::default().configuration())
+            },
+
+            Task::Martine(_) => {
+                Some(MartineVersion::default().configuration())
+            },
+
+            Task::Fap(_) => {
+                Some(FAPVersion::default().configuration())
+            }
+
+            _ => None
+        }
+    }
+}
+
+
 #[inline]
 pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String> {
     let observer: &'static _ = unsafe { std::mem::transmute(observer) };
@@ -26,7 +70,7 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
             match e {
                 crate::runners::emulator::Emulator::DirectAccess(e) => {
                     DelegatedRunner {
-                        app: e.configuration::<()>(),
+                        app: task.configuration::<()>().unwrap(),
                         cmd: e.get_command().to_owned()
                     }
                     .run(task.args(), observer)
@@ -58,23 +102,23 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
         Task::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),
         Task::ImpDsk(_) => {
             DelegatedRunner {
-                app: ImpDskVersion::default().configuration(),
+                app: task.configuration().unwrap(),
                 cmd: ImpDskVersion::default().get_command().to_owned()
             }
             .run(task.args(), observer)
         },
         Task::Martine(_) => {
             DelegatedRunner {
-                app: MartineVersion::default().configuration(),
+                app: task.configuration().unwrap(),
                 cmd: MartineVersion::default().get_command().to_owned()
             }
             .run(task.args(), observer)
         },
         Task::Rm(_) => RmRunner::default().run(task.args(), observer),
         Task::Xfer(_) => XferRunner::default().run(task.args(), observer),
-        Task::Fap(standard_task_arguments) => {
+        Task::Fap(_) => {
             DelegatedRunner {
-                app: FAPVersion::default().configuration(),
+                app: task.configuration().unwrap(),
                 cmd: FAPVersion::default().get_command().to_owned()
             }
             .run(task.args(), observer)

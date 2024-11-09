@@ -1,5 +1,6 @@
 use std::io::{Cursor, Read};
 use std::ops::Deref;
+use std::rc::Rc;
 
 use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -23,24 +24,25 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
-pub struct UrlGenerator(Box<dyn Fn() -> Result<String, String>>);
+#[derive(Clone)]
+pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);
 
 impl From<Box<dyn Fn() -> String>> for UrlGenerator {
     fn from(value: Box<dyn Fn() -> String>) -> Self {
         let wrap = Box::new(move || Ok(value()));
-        Self(wrap)
+        Self(Rc::new(wrap))
     }
 }
 
 impl From<Box<dyn Fn() -> Result<String, String>>> for UrlGenerator {
     fn from(value: Box<dyn Fn() -> Result<String, String>>) -> Self {
-        Self(value)
+        Self(Rc::new(value))
     }
 }
 
 impl From<String> for UrlGenerator {
     fn from(value: String) -> Self {
-        Self(Box::new(move || Ok(value.clone())))
+        Self(Rc::new(Box::new(move || Ok(value.clone()))))
     }
 }
 
@@ -59,10 +61,11 @@ impl Deref for UrlGenerator {
     }
 }
 
-pub struct Compiler<E>(Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>);
+#[derive(Clone)]
+pub struct Compiler<E>(Rc<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>>);
 impl<E> From<Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>> for Compiler<E> {
     fn from(value: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>>) -> Self {
-        Self(value)
+        Self(Rc::new(value))
     }
 }
 
@@ -74,15 +77,16 @@ impl<E> Deref for Compiler<E> {
     }
 }
 
+#[derive(Clone)]
 pub struct PostInstall<E: EventObserver>(
-    Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>
+    Rc<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
 );
 
 impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
     for PostInstall<E>
 {
     fn from(value: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>) -> Self {
-        Self(value)
+        Self(Rc::new(value))
     }
 }
 
@@ -94,6 +98,7 @@ impl<E: EventObserver> Deref for PostInstall<E> {
     }
 }
 
+#[derive(Clone)]
 pub enum ArchiveFormat {
     Raw,
     TarGz,
@@ -101,7 +106,7 @@ pub enum ArchiveFormat {
     SevenZ
 }
 
-#[derive(Builder)]
+#[derive(Builder, Clone)]
 pub struct DelegateApplicationDescription<E: EventObserver> {
     #[builder(into)]
     pub download_fn_url: UrlGenerator,

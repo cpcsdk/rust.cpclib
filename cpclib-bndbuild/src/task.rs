@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
@@ -202,7 +203,18 @@ impl<'de> Deserialize<'de> for Task {
     }
 }
 
+
+impl FromStr for Task {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_yaml::from_str(s)
+            .map_err(|e| e.to_string())
+    }
+}
+
 impl Task {
+
     pub fn new_basm(args: &str) -> Self {
         Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }

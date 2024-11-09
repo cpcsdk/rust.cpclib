@@ -42,7 +42,7 @@ pub enum BndBuilderCommandInner {
     /// Init a new project
     Init,
     /// Clear cache folder
-    Clear,
+    Clear(Option<String>),
     /// Launch a direct command ans bypass bndbuild
     Direct(String),
     /// Add a task
@@ -129,8 +129,8 @@ impl BndBuilderCommand {
                 Self::execute_init(&observers)?;
                 Ok(None)
             },
-            BndBuilderCommandInner::Clear => {
-                Self::execute_clear(&observers)?;
+            BndBuilderCommandInner::Clear(command) => {
+                Self::execute_clear(&observers, command)?;
                 Ok(None)
             },
             BndBuilderCommandInner::Direct(args) => {
@@ -349,8 +349,24 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_clear(observers: &dyn BndBuilderObserver) -> Result<(), BndBuilderError> {
-        std::fs::remove_dir_all(base_cache_folder())
+    fn execute_clear(observers: &dyn BndBuilderObserver, command: Option<String>) -> Result<(), BndBuilderError> {
+        let folder = if let Some(command) = command {
+            match Task::from_str(&format!("{command}"))
+                    .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
+                    .configuration::<()>() {
+                Some(conf) => {
+                    conf.cache_folder()
+                }
+                None => {
+                    return Err(BndBuilderError::AnyError(format!("{command} is not an embedded command.")));
+                }
+            }
+        } else {
+            base_cache_folder().to_owned()
+        };
+
+
+        std::fs::remove_dir_all(folder)
             .context("Error when removing cache folder")
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
         observers.emit_stdout("Cache folder cleared");
@@ -431,8 +447,12 @@ impl BndBuilderApp {
             else if matches.get_flag("init") {
                 return Ok(BndBuilderCommandInner::Init);
             }
-            else if matches.get_flag("clear") {
-                return Ok(BndBuilderCommandInner::Clear);
+            else if matches.contains_id("clear") {
+                if let Some(clear) = matches.get_one::<String>("clear") {
+                    return Ok(BndBuilderCommandInner::Clear(Some(clear.to_owned())));
+                } else {
+                    return Ok(BndBuilderCommandInner::Clear(None));
+                }
             }
             else if matches.get_flag("direct") {
                 let cmd: String = matches

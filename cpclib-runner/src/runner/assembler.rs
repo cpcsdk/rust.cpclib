@@ -82,7 +82,7 @@ impl ExternAssembler {
         }
     }
 
-    pub fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
         match self {
             ExternAssembler::Rasm(r) => r.configuration()
         }
@@ -119,7 +119,7 @@ cfg_match! {
     cfg(target_os = "linux") =>
     {
         impl RasmVersion {
-            pub fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
+            pub fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
  {
                 let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
                     let command = vec!["make"];
