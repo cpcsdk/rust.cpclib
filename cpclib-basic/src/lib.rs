@@ -281,13 +281,11 @@ impl BasicProgram {
         else {
             match self.previous_idx(current_idx) {
                 Some(previous_idx) => {
-                    let current_length = self.get_line(current_idx).unwrap().real_complete_length(); //TODO handle the case where they are multiple hidden
+                    let current_length = self.get_line(current_idx).unwrap().real_complete_length(); // TODO handle the case where they are multiple hidden
                     self.get_line_mut(previous_idx)
                         .unwrap()
                         .add_length(current_length);
-                    self.get_line_mut(current_idx)
-                        .unwrap()
-                        .force_length(0);
+                    self.get_line_mut(current_idx).unwrap().force_length(0);
                     Ok(())
                 },
                 None => Err(BasicError::UnknownLine { idx: current_idx })

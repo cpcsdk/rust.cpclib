@@ -210,7 +210,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "pens_to_mode0_byte": Function::HardCoded(HardCodedFunction::PensToMode0Byte),
         "pens_to_mode1_byte": Function::HardCoded(HardCodedFunction::PensToMode1Byte),
         "pens_to_mode2_byte": Function::HardCoded(HardCodedFunction::PensToMode2Byte),
-        
+
         "list_new": Function::HardCoded(HardCodedFunction::ListNew),
         "list_get": Function::HardCoded(HardCodedFunction::ListGet),
         "list_set": Function::HardCoded(HardCodedFunction::ListSet),
@@ -220,16 +220,16 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_argsort": Function::HardCoded(HardCodedFunction::ListArgsort),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
         "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
-        
+
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
         "string_len": Function::HardCoded(HardCodedFunction::ListLen),
-        
+
 
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),
-        
+
         "matrix_new": Function::HardCoded(HardCodedFunction::MatrixNew),
         "matrix_set": Function::HardCoded(HardCodedFunction::MatrixSet),
         "matrix_get": Function::HardCoded(HardCodedFunction::MatrixGet),
@@ -239,7 +239,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "matrix_set_col": Function::HardCoded(HardCodedFunction::MatrixSetCol),
         "matrix_width": Function::HardCoded(HardCodedFunction::MatrixWidth),
         "matrix_height": Function::HardCoded(HardCodedFunction::MatrixHeight),
-        
+
         "load": Function::HardCoded(HardCodedFunction::Load),
 
         "section_start": Function::HardCoded(HardCodedFunction::SectionStart),

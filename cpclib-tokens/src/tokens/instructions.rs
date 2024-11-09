@@ -3,10 +3,9 @@ use std::fmt::Debug;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_sna::RemuBreakPointAccessMode;
-use cpclib_sna::RemuBreakPointRunMode;
-use cpclib_sna::RemuBreakPointType;
-use cpclib_sna::SnapshotVersion;
+use cpclib_sna::{
+    RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
+};
 
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
@@ -384,8 +383,6 @@ pub enum DiscType {
     Auto
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum SaveType {
@@ -583,8 +580,8 @@ pub enum Token {
     /// Basic code which tokens will be included in the code (imported variables, lines to hide,  code)
     Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, String),
     Break,
-    Breakpoint{
-        address:Option<Expr>,
+    Breakpoint {
+        address: Option<Expr>,
         r#type: Option<RemuBreakPointType>,
         access: Option<RemuBreakPointAccessMode>,
         run: Option<RemuBreakPointRunMode>,
@@ -593,7 +590,7 @@ pub enum Token {
         value: Option<Expr>,
         value_mask: Option<Expr>,
         condition: Option<Expr>,
-        name: Option<Expr>,
+        name: Option<Expr>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
@@ -914,23 +911,22 @@ pub enum Token {
 // }
 // }
 // }
-/*/
-impl PartialEq for Token {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Token::OpCode(a1, b1, c1, d1), Token::OpCode(a2, b2, c2, d2)) => {
-                a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2
-            },
-
-            (Token::Print(a1), Token::Print(a2)) => a1 == a2,
-
-            (Token::Defb(a), Token::Defb(b)) => a == b,
-
-            _ => unimplemented!("{:?}, {:?}", self, other)
-        }
-    }
-}
-*/
+// /
+// impl PartialEq for Token {
+// fn eq(&self, other: &Self) -> bool {
+// match (self, other) {
+// (Token::OpCode(a1, b1, c1, d1), Token::OpCode(a2, b2, c2, d2)) => {
+// a1 == a2 && b1 == b2 && c1 == c2 && d1 == d2
+// },
+//
+// (Token::Print(a1), Token::Print(a2)) => a1 == a2,
+//
+// (Token::Defb(a), Token::Defb(b)) => a == b,
+//
+// _ => unimplemented!("{:?}, {:?}", self, other)
+// }
+// }
+// }
 impl Eq for Token {}
 
 impl fmt::Display for Token {

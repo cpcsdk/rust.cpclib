@@ -7,83 +7,80 @@ use strum::{EnumString, IntoStaticStr};
 
 #[nutype::nutype(
     validate(len_char_max = 127),
-    default="",
-    derive(AsRef, Default, Debug, Clone, PartialEq))
-]
+    default = "",
+    derive(AsRef, Default, Debug, Clone, PartialEq)
+)]
 pub struct String127(String);
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
-#[derive(IntoStaticStr, EnumString)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, IntoStaticStr, EnumString)]
 #[strum(serialize_all = "UPPERCASE", ascii_case_insensitive)]
 pub enum RemuBreakPointType {
-    #[strum(serialize="EXEC")]
-    #[strum(serialize="EXECUTE")]
-    #[strum(to_string="EXEC")]
+    #[strum(serialize = "EXEC")]
+    #[strum(serialize = "EXECUTE")]
+    #[strum(to_string = "EXEC")]
     Exec,
     IO,
-    #[strum(serialize="MEM")]
-    #[strum(serialize="MEMORY")]
-    #[strum(to_string="MEM")]
-    Mem,
+    #[strum(serialize = "MEM")]
+    #[strum(serialize = "MEMORY")]
+    #[strum(to_string = "MEM")]
+    Mem
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
-#[derive(IntoStaticStr, EnumString)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, IntoStaticStr, EnumString)]
 #[strum(serialize_all = "UPPERCASE", ascii_case_insensitive)]
 pub enum RemuBreakPointAccessMode {
-    #[strum(serialize="R")]
-    #[strum(serialize="READ")]
+    #[strum(serialize = "R")]
+    #[strum(serialize = "READ")]
     Read,
-    #[strum(serialize="READWRITE")]
-    #[strum(serialize="RW")]
-    #[strum(to_string="RW")]
+    #[strum(serialize = "READWRITE")]
+    #[strum(serialize = "RW")]
+    #[strum(to_string = "RW")]
     ReadWrite,
-    #[strum(serialize="W")]
-    #[strum(serialize="WRITE")]
+    #[strum(serialize = "W")]
+    #[strum(serialize = "WRITE")]
     Write
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord)]
-#[derive(IntoStaticStr, EnumString)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, PartialOrd, Ord, IntoStaticStr, EnumString)]
 #[strum(serialize_all = "UPPERCASE", ascii_case_insensitive)]
 pub enum RemuBreakPointRunMode {
-    #[strum(serialize="STOP")]
-    #[strum(serialize="STOPPER")]
-    #[strum(to_string="STOP")]
+    #[strum(serialize = "STOP")]
+    #[strum(serialize = "STOPPER")]
+    #[strum(to_string = "STOP")]
     Stop,
-    #[strum(serialize="WATCH")]
-    #[strum(serialize="WATCHER")]
-    #[strum(to_string="WATCH")]
+    #[strum(serialize = "WATCH")]
+    #[strum(serialize = "WATCHER")]
+    #[strum(to_string = "WATCH")]
     Watch
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AdvancedRemuBreakPoint {
-	pub brk_type: RemuBreakPointType,
-	pub access_mode: RemuBreakPointAccessMode,
-	pub run_mode: RemuBreakPointRunMode,
-	pub addr: u16, 
-	pub mask: u16, 
-	pub size: u16, 
-	pub value: u8, 
-	pub val_mask: u8,
-	pub condition: Option<String127>,
-	pub name: Option<String127>
+    pub brk_type: RemuBreakPointType,
+    pub access_mode: RemuBreakPointAccessMode,
+    pub run_mode: RemuBreakPointRunMode,
+    pub addr: u16,
+    pub mask: u16,
+    pub size: u16,
+    pub value: u8,
+    pub val_mask: u8,
+    pub condition: Option<String127>,
+    pub name: Option<String127>
 }
 
 impl Default for AdvancedRemuBreakPoint {
     fn default() -> Self {
-        Self { 
+        Self {
             brk_type: RemuBreakPointType::Mem,
             access_mode: RemuBreakPointAccessMode::ReadWrite,
             run_mode: RemuBreakPointRunMode::Stop,
             addr: 0,
-            mask: 0xffff,
-            size: 1, 
+            mask: 0xFFFF,
+            size: 1,
             value: 0,
             val_mask: 0,
             condition: None,
-            name: None 
+            name: None
         }
     }
 }
@@ -91,17 +88,26 @@ impl Default for AdvancedRemuBreakPoint {
 impl Display for AdvancedRemuBreakPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let brk = self;
-        write!(f, "{},{},{},addr={},mask={},size={},value={},valmask={},name={},condition={}",
-                            <&RemuBreakPointType as Into<&'static str>>::into(&brk.brk_type),
-                            <&RemuBreakPointAccessMode as Into<&'static str>>::into(&brk.access_mode),
-                            <&RemuBreakPointRunMode as Into<&'static str>>::into(&brk.run_mode),
-                            brk.addr,
-                            brk.mask,
-                            brk.size,
-                            brk.value,
-                            brk.val_mask,
-                            brk.name.as_ref().map(|s| format!("\"{}\"", s.as_ref())).unwrap_or("imported".to_owned()),
-                            brk.condition.as_ref().map(|s| format!("\"{}\"", s.as_ref())).unwrap_or("".to_owned()))
+        write!(
+            f,
+            "{},{},{},addr={},mask={},size={},value={},valmask={},name={},condition={}",
+            <&RemuBreakPointType as Into<&'static str>>::into(&brk.brk_type),
+            <&RemuBreakPointAccessMode as Into<&'static str>>::into(&brk.access_mode),
+            <&RemuBreakPointRunMode as Into<&'static str>>::into(&brk.run_mode),
+            brk.addr,
+            brk.mask,
+            brk.size,
+            brk.value,
+            brk.val_mask,
+            brk.name
+                .as_ref()
+                .map(|s| format!("\"{}\"", s.as_ref()))
+                .unwrap_or("imported".to_owned()),
+            brk.condition
+                .as_ref()
+                .map(|s| format!("\"{}\"", s.as_ref()))
+                .unwrap_or("".to_owned())
+        )
     }
 }
 
@@ -143,8 +149,8 @@ impl Display for RemuEntry {
                     RemuBreakPoint::Rom(address, bank) => {
                         write!(f, "rombrk {address} {bank};")
                     },
-                    RemuBreakPoint::Advanced(brk) =>  {
-                        write!(f,"acebreak {brk};")
+                    RemuBreakPoint::Advanced(brk) => {
+                        write!(f, "acebreak {brk};")
                     }
                 }
             },
@@ -219,50 +225,37 @@ impl RemuChunk {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod test {
-    use crate::RemuBreakPointAccessMode;
     use std::str::FromStr;
 
-    #[test]
-    fn test_string_enum(){
-        let repr: &'static str = RemuBreakPointAccessMode::ReadWrite.into();
-        assert_eq!(
-            "RW",
-            repr
-        );
+    use crate::RemuBreakPointAccessMode;
 
+    #[test]
+    fn test_string_enum() {
+        let repr: &'static str = RemuBreakPointAccessMode::ReadWrite.into();
+        assert_eq!("RW", repr);
 
         let repr: &'static str = RemuBreakPointAccessMode::Write.into();
-        assert_eq!(
-            "WRITE",
-            repr
-        );
-
-
+        assert_eq!("WRITE", repr);
 
         assert_eq!(
-            RemuBreakPointAccessMode::from_str("R").unwrap(), 
+            RemuBreakPointAccessMode::from_str("R").unwrap(),
             RemuBreakPointAccessMode::Read
         );
 
-
         assert_eq!(
-            RemuBreakPointAccessMode::from_str("r").unwrap(), 
+            RemuBreakPointAccessMode::from_str("r").unwrap(),
             RemuBreakPointAccessMode::Read
         );
 
-
         assert_eq!(
-            RemuBreakPointAccessMode::from_str("WRITE").unwrap(), 
+            RemuBreakPointAccessMode::from_str("WRITE").unwrap(),
             RemuBreakPointAccessMode::Write
         );
 
         assert_eq!(
-            RemuBreakPointAccessMode::from_str("WRite").unwrap(), 
+            RemuBreakPointAccessMode::from_str("WRite").unwrap(),
             RemuBreakPointAccessMode::Write
         );
     }

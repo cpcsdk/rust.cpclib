@@ -6,11 +6,9 @@ use std::ops::Deref;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 
-
-
 fn push_u32(vec: &mut Vec<u8>, mut nb: u32) {
     for _ in 0..4 {
-        vec.push( (nb%256) as _);
+        vec.push((nb % 256) as _);
         nb >>= 8;
     }
     assert_eq!(nb, 0);
@@ -23,13 +21,12 @@ pub enum BreakpointOrigin {
     Assembler = 4
 }
 
-
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum BreakPointAccess {
-    Read = 1<<6,
-    Write = 1<<7,
-    ReadWrite = (1<<7) + (1<<6)
+    Read = 1 << 6,
+    Write = 1 << 7,
+    ReadWrite = (1 << 7) + (1 << 6)
 }
 
 // TODO finish to get the other ones
@@ -37,8 +34,7 @@ pub enum BreakPointAccess {
 #[derive(Clone, Copy)]
 pub enum BreakpointIoType {
     User = 0,
-    GateArray = 1,
-
+    GateArray = 1
 }
 
 #[derive(Clone, Copy)]
@@ -76,11 +72,11 @@ impl Condition {
 
 pub struct CountsAndCondition(Option<Counts>, Option<Condition>);
 
-
 impl CountsAndCondition {
     pub fn none() -> Self {
         CountsAndCondition(None, None)
     }
+
     pub fn has_counts(&self) -> bool {
         self.0.is_some()
     }
@@ -105,7 +101,7 @@ impl CountsAndCondition {
 
 pub struct WinapeAddress(u32);
 impl Deref for WinapeAddress {
-    type Target= u32;
+    type Target = u32;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -116,25 +112,25 @@ impl WinapeAddress {
     pub fn new(address: u16, has_count: bool, has_condition: bool) -> WinapeAddress {
         let mut addr = address as u32;
         if has_count {
-            addr += 1<<31;
-        } 
+            addr += 1 << 31;
+        }
         if has_condition {
-            addr += 1<<30;
+            addr += 1 << 30;
         }
 
         Self(addr)
     }
 
     pub fn address(&self) -> u16 {
-        (self.0 & 0xffff) as u16
+        (self.0 & 0xFFFF) as u16
     }
 
     pub fn has_count(&self) -> bool {
-        (self.0 & 1<<31) != 0
+        (self.0 & 1 << 31) != 0
     }
 
     pub fn has_condition(&self) -> bool {
-        (self.0 & 1<<30) != 0
+        (self.0 & 1 << 30) != 0
     }
 }
 
@@ -153,12 +149,12 @@ impl CodeBreakpoint {
         }
     }
 
-
     pub fn winape_address(&self) -> WinapeAddress {
         WinapeAddress::new(
-            self.address, 
-            self.counts_condition.has_counts(), 
-            self.counts_condition.has_counts())
+            self.address,
+            self.counts_condition.has_counts(),
+            self.counts_condition.has_counts()
+        )
     }
 }
 
@@ -180,7 +176,6 @@ pub struct MemoryBreakpoint {
     counts_condition: CountsAndCondition
 }
 
-
 impl MemoryBreakpoint {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vec = Vec::new();
@@ -195,9 +190,10 @@ impl MemoryBreakpoint {
 
     pub fn winape_address(&self) -> WinapeAddress {
         WinapeAddress::new(
-            self.address, 
-            self.counts_condition.has_counts(), 
-            self.counts_condition.has_counts())
+            self.address,
+            self.counts_condition.has_counts(),
+            self.counts_condition.has_counts()
+        )
     }
 }
 pub struct IOBreakpoint {
@@ -208,13 +204,13 @@ pub struct IOBreakpoint {
     counts_condition: CountsAndCondition
 }
 
-
 impl IOBreakpoint {
     pub fn winape_address(&self) -> WinapeAddress {
         WinapeAddress::new(
-            self.address, 
-            self.counts_condition.has_counts(), 
-            self.counts_condition.has_counts())
+            self.address,
+            self.counts_condition.has_counts(),
+            self.counts_condition.has_counts()
+        )
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -222,7 +218,7 @@ impl IOBreakpoint {
     }
 }
 
-pub struct  CodeBreakpoints(Vec<CodeBreakpoint>);
+pub struct CodeBreakpoints(Vec<CodeBreakpoint>);
 pub struct MemoryBreakpoints(Vec<MemoryBreakpoint>);
 pub struct IOBreakpoints(Vec<IOBreakpoint>);
 
@@ -237,7 +233,6 @@ impl WabpAnyBreakpoint {
         WabpAnyBreakpoint::Code(CodeBreakpoint::new(address))
     }
 }
-
 
 impl CodeBreakpoints {
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -254,7 +249,6 @@ impl CodeBreakpoints {
         vec
     }
 }
-
 
 impl MemoryBreakpoints {
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -291,7 +285,7 @@ impl IOBreakpoints {
 pub struct Wabp {
     code: CodeBreakpoints,
     memory: MemoryBreakpoints,
-    io:  IOBreakpoints
+    io: IOBreakpoints
 }
 
 impl Default for Wabp {
@@ -302,12 +296,13 @@ impl Default for Wabp {
 
 impl Wabp {
     pub fn new() -> Self {
-        Wabp { 
-            code: CodeBreakpoints(Default::default()), 
-            memory: MemoryBreakpoints(Default::default()), 
-            io: IOBreakpoints(Default::default()) 
+        Wabp {
+            code: CodeBreakpoints(Default::default()),
+            memory: MemoryBreakpoints(Default::default()),
+            io: IOBreakpoints(Default::default())
         }
     }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut vec = Vec::new();
         vec.extend_from_slice(&self.code.to_bytes());
@@ -326,12 +321,9 @@ impl Wabp {
             WabpAnyBreakpoint::Memory(brk) => {
                 self.memory.0.push(brk);
             },
-            WabpAnyBreakpoint::IO(brk) => {
-                self.io.0.push(brk)
-            }
+            WabpAnyBreakpoint::IO(brk) => self.io.0.push(brk)
         }
     }
-
 }
 
 pub struct WabpChunk {
@@ -342,9 +334,17 @@ pub struct WabpChunk {
 impl WabpChunk {
     const CODE: RiffCode = RiffCode::new([b'W', b'A', b'B', b'P']);
 
+    delegate! {
+        to self.riff {
+            pub fn code(&self) -> &RiffCode;
+            pub fn len(&self) -> &RiffLen;
+            pub fn data(&self) -> &[u8];
+            fn add_bytes(&mut self, data: &[u8]);
+        }
+    }
 
     pub fn empty() -> Self {
-        Self{
+        Self {
             riff: RiffChunk::new(Self::CODE, Default::default()),
             wabp: Wabp::new()
         }
@@ -354,14 +354,5 @@ impl WabpChunk {
         self.wabp.add_breakpoint(brk);
         let mut data = self.wabp.to_bytes();
         self.riff = RiffChunk::from_buffer(&mut data);
-    }
-
-    delegate! {
-        to self.riff {
-            pub fn code(&self) -> &RiffCode;
-            pub fn len(&self) -> &RiffLen;
-            pub fn data(&self) -> &[u8];
-            fn add_bytes(&mut self, data: &[u8]);
-        }
     }
 }

@@ -232,9 +232,18 @@ pub fn assemble(
         }
     }
 
-    assemble_options.set_flag(AssemblingOptionFlags::RemuInFile, matches.get_one::<String>("REMU_OUTPUT").is_some());
-    assemble_options.set_flag(AssemblingOptionFlags::WabpInFile, matches.get_one::<String>("WABP_OUTPUT").is_some());
-    assemble_options.set_flag(AssemblingOptionFlags::BreakpointAsOpcode, matches.get_flag("BREAKPOINT_AS_OPCODES"));
+    assemble_options.set_flag(
+        AssemblingOptionFlags::RemuInFile,
+        matches.get_one::<String>("REMU_OUTPUT").is_some()
+    );
+    assemble_options.set_flag(
+        AssemblingOptionFlags::WabpInFile,
+        matches.get_one::<String>("WABP_OUTPUT").is_some()
+    );
+    assemble_options.set_flag(
+        AssemblingOptionFlags::BreakpointAsOpcode,
+        matches.get_flag("BREAKPOINT_AS_OPCODES")
+    );
 
     // TODO add symbols if any
     if let Some(files) = matches.get_many::<String>("LOAD_SYMBOLS") {
@@ -331,11 +340,9 @@ pub fn assemble(
             }
         })?;
 
-    
-
     let _ = env
         .handle_post_actions()
-        .map(|(remu, wabp)| -> Result<(), BasmError>{
+        .map(|(remu, wabp)| -> Result<(), BasmError> {
             if let Some(remu) = remu {
                 if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {
                     let content = remu.data();

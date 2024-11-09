@@ -719,8 +719,7 @@ where
     Ok(())
 }
 
-impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan
-    for ProcessedToken<'_, T>
+impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan for ProcessedToken<'_, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     fn possible_span(&self) -> Option<&Z80Span> {

@@ -17,11 +17,15 @@ impl EventObserver for () {
 
 impl<E: EventObserver> EventObserver for Option<E> {
     fn emit_stdout(&self, s: &str) {
-        if let Some(e) = self { e.emit_stdout(s) }
+        if let Some(e) = self {
+            e.emit_stdout(s)
+        }
     }
 
     fn emit_stderr(&self, s: &str) {
-        if let Some(e) = self { e.emit_stderr(s) }
+        if let Some(e) = self {
+            e.emit_stderr(s)
+        }
     }
 }
 

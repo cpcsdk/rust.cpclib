@@ -1009,17 +1009,26 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    pub fn handle_post_actions(&mut self) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError> {
+    pub fn handle_post_actions(
+        &mut self
+    ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError> {
         self.handle_print()?;
         self.handle_assert()?;
 
+        let remu_in_sna = self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::SnaRemu);
+        let remu_in_file = self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::RemuInFile);
+        let wabp_in_file = self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::WabpInFile);
 
-        let remu_in_sna = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::SnaRemu);
-        let remu_in_file = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::RemuInFile);
-        let wabp_in_file = self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::WabpInFile);
-
-        let mut remu = if remu_in_file || remu_in_sna
-        {
+        let mut remu = if remu_in_file || remu_in_sna {
             Some(RemuChunk::empty())
         }
         else {
@@ -1028,14 +1037,17 @@ impl Env {
 
         let mut wabp = if wabp_in_file {
             Some(WabpChunk::empty())
-        } else {
+        }
+        else {
             None
         };
 
         self.handle_breakpoints(&mut remu.as_mut(), &mut wabp.as_mut())?;
         self.handle_sna_symbols(&mut remu.as_mut())?;
 
-        if let Some(remu) = &remu && remu_in_sna{
+        if let Some(remu) = &remu
+            && remu_in_sna
+        {
             self.sna.add_chunk(remu.clone());
         }
 
@@ -1931,28 +1943,40 @@ impl Env {
         name: Option<&E>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
-        
-        let brk = if r#type.is_none() && access.is_none() && run.is_none() && mask.is_none() && size.is_none() && value.is_none() && value_mask.is_none() && condition.is_none() && name.is_none() {
-            // here we manipulate a very simple breakpoint            
-            let (current_address, page): (u16,u8) = if let Some(exp) = address {
+        let brk = if r#type.is_none()
+            && access.is_none()
+            && run.is_none()
+            && mask.is_none()
+            && size.is_none()
+            && value.is_none()
+            && value_mask.is_none()
+            && condition.is_none()
+            && name.is_none()
+        {
+            // here we manipulate a very simple breakpoint
+            let (current_address, page): (u16, u8) = if let Some(exp) = address {
                 if exp.is_label() {
                     let label = exp.label();
                     let symbols = self.symbols();
                     let value: &Value = symbols.value(label)?.unwrap();
                     match value {
-                        Value::Expr(expr_result) => {
-                            (expr_result.int()? as _ , 0)
-                        },
-                        Value::Address(physical_address) =>  (physical_address.address(), physical_address.remu_bank() as _), // BUG we lost the differentiation between the different kind of addresses,
+                        Value::Expr(expr_result) => (expr_result.int()? as _, 0),
+                        Value::Address(physical_address) => {
+                            (
+                                physical_address.address(),
+                                physical_address.remu_bank() as _
+                            )
+                        }, /* BUG we lost the differentiation between the different kind of addresses, */
                         _ => todo!()
                     }
-
-                } else {
+                }
+                else {
                     let current_address = self.resolve_expr_must_never_fail(exp)?.int()?;
                     let page = 0; // BUG should be dynamic and not hard coded !
                     (current_address as _, page)
                 }
-            } else {
+            }
+            else {
                 let current_address = self.logical_code_address();
                 // ATM the breakpoints only work in SNA
                 // To allow them in CPR there is a bit of work to do
@@ -1981,13 +2005,15 @@ impl Env {
             };
 
             BreakpointCommand::new_simple(current_address, page, span.cloned())
-        } else {
+        }
+        else {
             // here we manipulate an advanced breakpoint of Ace
 
             let mut brk = AdvancedRemuBreakPoint::default();
             brk.addr = if let Some(address) = address {
                 self.resolve_expr_must_never_fail(address)?.int()? as u16
-            } else {
+            }
+            else {
                 self.logical_code_address()
             };
             if let Some(r#type) = r#type {
@@ -2009,16 +2035,21 @@ impl Env {
                 brk.value = self.resolve_expr_may_fail_in_first_pass(value)?.int()? as u8;
             }
             if let Some(value_mask) = value_mask {
-                brk.val_mask = self.resolve_expr_may_fail_in_first_pass(value_mask)?.int()? as u8;
+                brk.val_mask = self
+                    .resolve_expr_may_fail_in_first_pass(value_mask)?
+                    .int()? as u8;
             }
             if let Some(condition) = condition {
                 let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
                 let cond = cond.string()?;
                 brk.condition.replace(String127::try_new(cond).map_err(|e| {
-                    let e = AssemblerError::AssemblingError { msg: "Condition is too long".to_owned() };
+                    let e = AssemblerError::AssemblingError {
+                        msg: "Condition is too long".to_owned()
+                    };
                     if condition.has_span() {
                         e.locate(condition.span().clone())
-                    } else {
+                    }
+                    else {
                         e
                     }
                 })?);
@@ -2027,28 +2058,34 @@ impl Env {
                 let n = self.resolve_expr_may_fail_in_first_pass(name)?;
                 let n = n.string()?;
                 brk.name.replace(String127::try_new(n).map_err(|e| {
-                    let e = AssemblerError::AssemblingError { msg: "Name is too long".to_owned() };
+                    let e = AssemblerError::AssemblingError {
+                        msg: "Name is too long".to_owned()
+                    };
                     if name.has_span() {
                         e.locate(name.span().clone())
-                    } else {
+                    }
+                    else {
                         e
                     }
                 })?);
             }
-            
+
             BreakpointCommand::from((brk, span.cloned()))
         };
 
-
-        if self.options().assemble_options().get_flag(crate::AssemblingOptionFlags::BreakpointAsOpcode) {
+        if self
+            .options()
+            .assemble_options()
+            .get_flag(crate::AssemblingOptionFlags::BreakpointAsOpcode)
+        {
             // XXX here we are dumb and add breakpoints unconditionnaly
             // TODO do it only for exec ones
-            self.output_byte(0xed)?;
-            self.output_byte(0xff)?;
-        } else {
+            self.output_byte(0xED)?;
+            self.output_byte(0xFF)?;
+        }
+        else {
             self.active_page_info_mut().add_breakpoint_command(brk);
         }
-        
 
         Ok(())
     }
@@ -2803,7 +2840,6 @@ impl Env {
         })
     }
 
-
     // TODO better design the token to simplify this code and remove all ambigous cases
     pub fn visit_save<E: ExprEvaluationExt + Debug>(
         &mut self,
@@ -2819,7 +2855,6 @@ impl Env {
                 msg: "SAVE directive is not allowed in a web-based assembling.".to_owned()
             });
         }
-
 
         let from = match address {
             Some(address) => {
@@ -2861,7 +2896,7 @@ impl Env {
                 }
             }
         }
-        
+
         let amsdos_fname = self.get_fname(amsdos_fname)?;
         let (amsdos_fname, dsk_fname) = match dsk_fname {
             Some(fname) => (amsdos_fname, Some(self.get_fname(fname)?)),
@@ -2875,7 +2910,6 @@ impl Env {
 
         let amsdos_fname = Utf8PathBuf::from(amsdos_fname);
         let dsk_fname = dsk_fname.map(Utf8PathBuf::from);
-
 
         // Check filename validity
         if let Some(&SaveType::Disc(disc)) = &save_type {
@@ -2921,7 +2955,7 @@ impl Env {
             }
         }
 
-        let file = match (save_type, dsk_fname, amsdos_fname)  {
+        let file = match (save_type, dsk_fname, amsdos_fname) {
             (Some(save_type), Some(dsk_fname), amsdos_fname) => {
                 let support = match save_type {
                     SaveType::Disc(_) => StorageSupport::Disc(dsk_fname),
@@ -2932,15 +2966,17 @@ impl Env {
                     SaveType::AmsdosBas => FileType::AmsdosBas,
                     SaveType::AmsdosBin => FileType::AmsdosBin,
                     SaveType::Ascii => FileType::Ascii,
-                    SaveType::Disc(_) | SaveType::Tape => FileType::Auto, // TODO handle vases based on file names
+                    SaveType::Disc(_) | SaveType::Tape => FileType::Auto /* TODO handle vases based on file names */
                 };
-                SaveFile{support, file:(file_type, amsdos_fname)}
-
-            }
+                SaveFile {
+                    support,
+                    file: (file_type, amsdos_fname)
+                }
+            },
             (None, Some(dsk_fname), amsdos_fname) => {
                 SaveFile {
                     support: StorageSupport::Disc(dsk_fname),
-                    file: (FileType::Auto, amsdos_fname),
+                    file: (FileType::Auto, amsdos_fname)
                 }
             },
             (Some(save_type), None, amsdos_fname) => {
@@ -2964,20 +3000,12 @@ impl Env {
                 }
             },
             (a, b, c) => unimplemented!("{a:?} {b:?} {c:?}")
-
         };
 
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
         let mmr = self.ga_mmr;
         let page_info = self.active_page_info_mut();
-        page_info.add_save_command(dbg!(SaveCommand::new(
-            from,
-            size,
-            file,
-            mmr
-        )));
-
-
+        page_info.add_save_command(dbg!(SaveCommand::new(from, size, file, mmr)));
 
         Ok(())
     }
@@ -3435,7 +3463,7 @@ macro_rules! visit_token_impl {
             }, // TODO move in the processed tokens stuff
             $cls::Bank(ref exp) => $env.visit_page_or_bank(exp.as_ref()),
             $cls::Bankset(ref v) => $env.visit_pageset(v),
-            $cls::Breakpoint{
+            $cls::Breakpoint {
                 address,
                 r#type,
                 access,
@@ -3445,7 +3473,9 @@ macro_rules! visit_token_impl {
                 value,
                 value_mask,
                 condition,
-                name} => $env.visit_breakpoint(
+                name
+            } => {
+                $env.visit_breakpoint(
                     address.as_ref(),
                     r#type.as_ref(),
                     access.as_ref(),
@@ -3456,7 +3486,9 @@ macro_rules! visit_token_impl {
                     value_mask.as_ref(),
                     condition.as_ref(),
                     name.as_ref(),
-                    $span),
+                    $span
+                )
+            },
             $cls::BuildCpr => $env.visit_buildcpr(),
             $cls::BuildSna(ref v) => $env.visit_buildsna(v.as_ref()),
 

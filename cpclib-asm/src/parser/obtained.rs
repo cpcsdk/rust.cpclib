@@ -13,7 +13,10 @@ use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
 use cpclib_common::winnow::{BStr, PResult, Parser};
-use cpclib_sna::{FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotFlag, SnapshotVersion};
+use cpclib_sna::{
+    FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotFlag,
+    SnapshotVersion
+};
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     data_access_impl_most_methods, data_access_is_any_indexregister16,
@@ -28,7 +31,8 @@ use cpclib_tokens::{
 use ouroboros::self_referencing;
 
 use super::{
-    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete, InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
+    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete,
+    InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -924,8 +928,8 @@ pub enum LocatedTokenInner {
     Break,
     /// Breakpoints are quite biased toward Ace-Dl representation
     // for each field (span to the filed name, value with potential span)
-    Breakpoint{
-        address:Option<LocatedExpr>,
+    Breakpoint {
+        address: Option<LocatedExpr>,
         r#type: Option<RemuBreakPointType>,
         access: Option<RemuBreakPointAccessMode>,
         run: Option<RemuBreakPointRunMode>,
@@ -934,7 +938,7 @@ pub enum LocatedTokenInner {
         value: Option<LocatedExpr>,
         value_mask: Option<LocatedExpr>,
         condition: Option<LocatedExpr>,
-        name: Option<LocatedExpr>,
+        name: Option<LocatedExpr>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
@@ -1564,7 +1568,7 @@ impl ListingElement for LocatedTokenInner {
 
             Self::Assert(test, print) => {
                 Cow::Owned(Token::Assert(test.to_expr().into_owned(), print.clone()))
-            }
+            },
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
@@ -1916,7 +1920,7 @@ impl TokenExt for LocatedToken {
     fn disassemble_data(&self) -> Result<cpclib_tokens::Listing, String> {
         todo!()
     }
-    
+
     fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         todo!()
     }
@@ -2383,7 +2387,7 @@ impl ListingExt for LocatedListing {
     fn inject_labels<S: Borrow<str>>(&mut self, labels: HashMap<u16, S>) {
         todo!()
     }
-    
+
     fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         todo!()
     }

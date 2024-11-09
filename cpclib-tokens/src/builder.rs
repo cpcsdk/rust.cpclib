@@ -231,12 +231,18 @@ pub fn jp_label(label: &str) -> Token {
 
 #[allow(missing_docs)]
 pub fn jp_ix() -> Token {
-    token_for_opcode_latest_arg(Mnemonic::Jp, DataAccess::MemoryIndexRegister16(IndexRegister16::Ix))
+    token_for_opcode_latest_arg(
+        Mnemonic::Jp,
+        DataAccess::MemoryIndexRegister16(IndexRegister16::Ix)
+    )
 }
 
 #[allow(missing_docs)]
 pub fn jp_iy() -> Token {
-    token_for_opcode_latest_arg(Mnemonic::Jp, DataAccess::MemoryIndexRegister16(IndexRegister16::Iy))
+    token_for_opcode_latest_arg(
+        Mnemonic::Jp,
+        DataAccess::MemoryIndexRegister16(IndexRegister16::Iy)
+    )
 }
 
 #[allow(missing_docs)]
@@ -438,16 +444,16 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
 #[allow(missing_docs)]
 pub fn ld_mem_expr_a<E: Into<Expr>>(e: E) -> Token {
     token_for_opcode_two_args(
-        Mnemonic::Ld, 
-        DataAccess::Memory(e.into()), 
-        Register8::A.into())
+        Mnemonic::Ld,
+        DataAccess::Memory(e.into()),
+        Register8::A.into()
+    )
 }
 
 #[allow(missing_docs)]
 pub fn ld_mem_hl_a() -> Token {
     ld_mem_hl_register8(Register8::A)
 }
-
 
 #[allow(missing_docs)]
 pub fn ld_mem_hl_d() -> Token {

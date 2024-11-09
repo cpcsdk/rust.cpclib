@@ -4,45 +4,48 @@ use std::path::absolute;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::Parser;
 use directories::BaseDirs;
+use scraper::{Html, Selector};
 
-use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription, UrlGenerator};
+use crate::delegated::{
+    cpclib_download, ArchiveFormat, DelegateApplicationDescription, UrlGenerator
+};
 use crate::event::EventObserver;
-
-use scraper::Selector;
-use scraper::Html;
 
 pub const ACE_CMD: &str = "ace";
 pub const WINAPE_CMD: &str = "winape";
 pub const CPCEC_CMD: &str = "cpcec";
 pub const AMSPIRIT_CMD: &str = "amspirit";
 
-
 const ACE_URL: &str = "http://www.roudoudou.com/ACE-DL";
 
 fn ace_download_fn_urls_lin_win() -> Result<(String, String), String> {
+    let html = cpclib_download(ACE_URL)?;
+    let document = Html::parse_document(&html);
+    let selector = Selector::parse("#dl td a")
+        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
 
-	let html = cpclib_download(ACE_URL)?;
-	let document = Html::parse_document(&html);
-	let selector = Selector::parse("#dl td a").map_err(|e| e.to_string()).map_err(|e| e.to_string())?;
+    let mut map = BTreeMap::new();
+    for element in document.select(&selector) {
+        map.insert(element.inner_html(), element.attr("href").unwrap());
+    }
 
-	let mut map = BTreeMap::new();
-	for element in document.select(&selector) {
-		map.insert(element.inner_html(), element.attr("href").unwrap());
-	}
+    let windows_url = format!("{}/{}", ACE_URL, map.get("x64 (64 bits)").unwrap());
+    let linux_url = format!(
+        "{}/{}",
+        ACE_URL,
+        map.get("Ubuntu 22.04 LTS (AVX2)").unwrap()
+    );
 
-	let windows_url = format!("{}/{}", ACE_URL, map.get("x64 (64 bits)").unwrap());
-	let linux_url = format!("{}/{}", ACE_URL, map.get("Ubuntu 22.04 LTS (AVX2)").unwrap());
-
-	Ok((linux_url, windows_url))
+    Ok((linux_url, windows_url))
 }
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
     Cpcec(CpcecVersion),
-    Winape(WinapeVersion),
+    Winape(WinapeVersion)
 }
 
 impl Default for Emulator {
@@ -119,11 +122,12 @@ impl Emulator {
 
     /// Handle filename to make them work properly using wine
     pub fn wine_compatible_fname(&self, p: &Utf8Path) -> Result<Utf8PathBuf, String> {
-        let abspath = absolute(p).map_err(|e|e.to_string())?;
+        let abspath = absolute(p).map_err(|e| e.to_string())?;
         let abspath = Utf8PathBuf::from_path_buf(abspath).map_err(|e| "File error".to_owned())?;
-        if cfg!(target_os="windows") {
+        if cfg!(target_os = "windows") {
             Ok(abspath)
-        } else {
+        }
+        else {
             Ok(("Z:".to_owned() + abspath.as_str()).into())
         }
     }
@@ -133,15 +137,15 @@ impl Emulator {
 pub enum AceVersion {
     #[default]
     UnknownLastVersion, // directly parse the webpage
-    Bnd4, // 2024/10/26
+    Bnd4,      // 2024/10/26
     ZenSummer, // 2024/08/18
-    WakePoint // 2024/06/21
+    WakePoint  // 2024/06/21
 }
 
 impl AceVersion {
     pub fn config_file(&self) -> Utf8PathBuf {
         let p = match self {
-            Self::ZenSummer | Self::Bnd4 | Self::UnknownLastVersion  => {
+            Self::ZenSummer | Self::Bnd4 | Self::UnknownLastVersion => {
                 BaseDirs::new()
                     .unwrap()
                     .config_local_dir()
@@ -165,8 +169,6 @@ pub enum WinapeVersion {
     V2_0b2
 }
 
-
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AmspiritVersion {
     #[default]
@@ -179,7 +181,7 @@ impl Emulator {
             Emulator::Ace(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),
             Emulator::Winape(v) => v.configuration(),
-            Emulator::Amspirit(v) => v.configuration(),
+            Emulator::Amspirit(v) => v.configuration()
         }
     }
 }
@@ -236,15 +238,12 @@ fn windows_ace_desc<E: EventObserver, F: Into<UrlGenerator>>(
     download_fn_url: F,
     folder: &'static str
 ) -> DelegateApplicationDescription<E> {
-    
-
     DelegateApplicationDescription::builder()
         .download_fn_url(download_fn_url.into())
         .folder(folder)
         .archive_format(ArchiveFormat::Zip)
         .exec_fname("AceDL.exe")
         .build()
-    
 }
 
 impl WinapeVersion {
@@ -257,7 +256,7 @@ impl WinapeVersion {
                     .archive_format(ArchiveFormat::Zip)
                     .exec_fname("WinApe.exe")
                     .build()
-                }
+            },
         }
     }
 }
@@ -267,11 +266,14 @@ impl AmspiritVersion {
         match self {
             Self::Rc1_01 => {
                 let original_fname = "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe";
-                static MODIFIED_FNAME: &'static str  = "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit_v1.01_RC_x64.exe";
+                static MODIFIED_FNAME: &'static str =
+                    "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit_v1.01_RC_x64.exe";
                 assert!(!MODIFIED_FNAME.contains(" "));
-                
+
                 let owned_original = original_fname.to_owned();
-                let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> = Box::new(move |d: &DelegateApplicationDescription<E>| {
+                let post_install: Box<
+                    dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+                > = Box::new(move |d: &DelegateApplicationDescription<E>| {
                     std::fs::rename(
                         d.cache_folder().join(&owned_original),
                         d.cache_folder().join(MODIFIED_FNAME.to_owned())
@@ -287,9 +289,9 @@ impl AmspiritVersion {
                     .in_dir(super::runner::RunInDir::AppDir)
                     .post_install(post_install)
                     .build()
-            },
+            }
         }
-    }   
+    }
 }
 
 cfg_match! {
@@ -348,7 +350,7 @@ cfg_match! {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
                     CpcecVersion::V20240505 => {
-                        DelegateApplicationDescription::builder() 
+                        DelegateApplicationDescription::builder()
                             .download_fn_url("http://cngsoft.no-ip.org/cpcec-20240505.zip")
                             .folder("cpcec20240505")
                             .archive_format(ArchiveFormat::Zip)
@@ -380,13 +382,10 @@ cfg_match! {
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use crate::delegated::cpclib_download;
-
     use super::ace_download_fn_urls_lin_win;
+    use crate::delegated::cpclib_download;
 
     #[test]
     fn retreive_ace_urls() {

@@ -7,18 +7,18 @@ use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
+use delegate;
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
 use xcap::image::{open, ImageBuffer, Rgba};
 use xcap::Window;
-use delegate;
 
 use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
-use crate::runner::emulator::{Emulator};
+use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -33,9 +33,10 @@ pub enum AmstradRom {
 /// Read a rasm debug file and convert it in winape sym string
 pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
     let content = std::fs::read_to_string(src)?;
-    Ok(content.split(";")
+    Ok(content
+        .split(";")
         .filter(|code| code.starts_with("label") | code.starts_with("alias"))
-        .map(|code|{
+        .map(|code| {
             let mut spliter = code.split_ascii_whitespace();
             spliter.next(); // consume alias or label
 
@@ -49,8 +50,7 @@ pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
         .join("\n"))
 }
 
-#[derive(Debug)]
-#[derive(bon::Builder)]
+#[derive(Debug, bon::Builder)]
 pub struct EmulatorConf {
     pub(crate) drive_a: Option<Utf8PathBuf>,
     pub(crate) drive_b: Option<Utf8PathBuf>,
@@ -86,11 +86,11 @@ impl EmulatorConf {
                 Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned())
             }
         }
 
-        if let Some(sna)  =&self.snapshot {
+        if let Some(sna) = &self.snapshot {
             match emu {
                 Emulator::Ace(ace_version) => args.push(sna.to_string()),
                 Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
@@ -152,14 +152,14 @@ impl EmulatorConf {
         if let Some(memory) = &self.memory {
             if let Emulator::Cpcec(_) = emu {
                 let arg = match memory {
-                     64 => "-k0",
-                     128 => "-k1",
-                     192 => "-k2",
-                     320 => "-k3",
-                     576 => "-k4",
-                     1088 => "-k5",
-                     2112 => "-k6",
-                     _ => unimplemented!()
+                    64 => "-k0",
+                    128 => "-k1",
+                    192 => "-k2",
+                    320 => "-k3",
+                    576 => "-k4",
+                    1088 => "-k5",
+                    2112 => "-k6",
+                    _ => unimplemented!()
                 };
                 args.push(arg.to_owned());
             }
@@ -263,16 +263,10 @@ impl UsedEmulator for AceUsedEmulator {
         im
     }
 }
-impl UsedEmulator for CpcecUsedEmulator {
+impl UsedEmulator for CpcecUsedEmulator {}
+impl UsedEmulator for WinapeUsedEmulator {}
 
-}
-impl UsedEmulator for WinapeUsedEmulator {
-
-}
-
-impl UsedEmulator for AmspiritUsedEmulator {
-
-}
+impl UsedEmulator for AmspiritUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Window,
@@ -324,23 +318,6 @@ impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
 }
 
 impl Robot {
-    pub fn new(emu: &Emulator, window: Window, enigo: Enigo) -> Self {
-        match emu {
-            Emulator::Ace(_) => {
-                RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into()
-            },
-            Emulator::Cpcec(_) => {
-                RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into()
-            },
-            Emulator::Winape(_) => {
-                RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
-            },
-            Emulator::Amspirit(_) => {
-                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
-            }
-        }
-    }
-
     delegate::delegate! {
         to match self {
             Robot::Ace(r) => r,
@@ -363,6 +340,19 @@ impl Robot {
 
     }
 
+    pub fn new(emu: &Emulator, window: Window, enigo: Enigo) -> Self {
+        match emu {
+            Emulator::Ace(_) => RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Cpcec(_) => RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Winape(_) => {
+                RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
+            },
+            Emulator::Amspirit(_) => {
+                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
+            },
+        }
+    }
+
     pub fn handle_raw_text<S: AsRef<str>>(&mut self, text: S) {
         let text = text.as_ref();
         let text = text.replace(r"\n", "\n");
@@ -370,7 +360,6 @@ impl Robot {
 
         self.type_text(text);
     }
-
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
@@ -764,7 +753,7 @@ pub struct EmuCli {
     albireo: Option<String>,
 
     #[arg(
-        long="snapshot",
+        long = "snapshot",
         value_name = "SNAPSHOT",
         help = "Specify the snapshot to launch"
     )]
@@ -906,8 +895,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
-        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
-        ;
+        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()));
     let conf = builder.build();
 
     let emu = match cli.emulator {
@@ -928,7 +916,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     // setup emulator
     // todo standardize that to shorten code and avoid copy paste
     if cli.emulator == Emu::Ace {
-
         // copy the non standard roms and configure the emu (at least ace)
         let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
         let mut ace_conf = AceConfig::open(&ace_conf_path);
@@ -980,7 +967,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 if !exists && !remove {
                     let src = format!("roms://{rom}");
                     println!("Install {} in {}", src, dst);
-                    let data = EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
+                    let data =
+                        EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
                     std::fs::write(&dst, data.data).unwrap();
                 }
                 else if exists && remove {

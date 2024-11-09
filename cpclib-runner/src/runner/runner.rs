@@ -64,8 +64,6 @@ impl<E: EventObserver> Default for ExternRunner<E> {
     }
 }
 
-
-
 impl<E: EventObserver> ExternRunner<E> {
     pub fn new(in_dir: RunInDir) -> Self {
         Self {
@@ -98,11 +96,7 @@ impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
         let in_dir = match self.in_dir {
             RunInDir::CurrentDir => cwd,
             RunInDir::AppDir => {
-                let base = if app == &"wine" {
-                    itr[1]
-                } else {
-                    app
-                };
+                let base = if app == &"wine" { itr[1] } else { app };
                 PathBuf::from(std::path::Path::new(base).parent().unwrap()) // this path is because of AMSpiriT
             }
         };

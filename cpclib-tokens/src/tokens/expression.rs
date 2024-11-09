@@ -307,7 +307,7 @@ impl Display for UnaryFunction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy,  Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum UnaryOperation {
     Neg,
     Not,

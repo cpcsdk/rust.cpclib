@@ -13,7 +13,6 @@ use super::Env;
 use crate::error::AssemblerError;
 use crate::progress::{self, Progress};
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub enum FileType {
     AmsdosBin,
@@ -49,20 +48,20 @@ pub struct SaveFile {
     pub(crate) file: (FileType, Utf8PathBuf)
 }
 
-
 impl SaveFile {
-    pub fn filename(&self) -> Utf8PathBuf {
-        match &self.support {
-            StorageSupport::Disc(p) => Utf8PathBuf::from(format!("{}#{}", p, self.file.1)),
-            StorageSupport::Tape(utf8_path_buf) => todo!(),
-            StorageSupport::Host => Utf8PathBuf::from(format!("{}", &self.file.1)),
-        }
-    }
     delegate::delegate! {
         to self.support {
             pub fn in_disc(&self) -> bool;
             pub fn in_tape(&self) -> bool;
             pub fn in_host(&self) -> bool;
+        }
+    }
+
+    pub fn filename(&self) -> Utf8PathBuf {
+        match &self.support {
+            StorageSupport::Disc(p) => Utf8PathBuf::from(format!("{}#{}", p, self.file.1)),
+            StorageSupport::Tape(utf8_path_buf) => todo!(),
+            StorageSupport::Host => Utf8PathBuf::from(format!("{}", &self.file.1))
         }
     }
 }
@@ -78,12 +77,7 @@ pub struct SaveCommand {
 }
 
 impl SaveCommand {
-    pub fn new(
-        from: Option<i32>,
-        size: Option<i32>,
-        file:SaveFile,
-        ga_mmr: u8
-    ) -> Self {
+    pub fn new(from: Option<i32>, size: Option<i32>, file: SaveFile, ga_mmr: u8) -> Self {
         SaveCommand {
             from,
             size,
@@ -112,7 +106,7 @@ impl SaveCommand {
         match &self.file.support {
             StorageSupport::Disc(d) => Some(d.as_path()),
             StorageSupport::Tape(t) => Some(t.as_path()),
-            StorageSupport::Host => None,
+            StorageSupport::Host => None
         }
     }
 
@@ -148,9 +142,11 @@ impl SaveCommand {
                 let lower = self.amsdos_filename().as_str().to_lowercase();
                 if lower.ends_with(".bas") {
                     FileType::AmsdosBas
-                } else if lower.ends_with(".asc") {
+                }
+                else if lower.ends_with(".asc") {
                     FileType::Ascii
-                } else {
+                }
+                else {
                     FileType::AmsdosBin
                 }
             },
@@ -190,10 +186,10 @@ impl SaveCommand {
                             Err(e)?;
                         }
                         AmsdosFile::from_buffer(&data)
-                    },
+                    }
                 }
             },
-            FileType::Auto => unreachable!(),
+            FileType::Auto => unreachable!()
         };
 
         // save the file
@@ -206,7 +202,7 @@ impl SaveCommand {
                 let head = Head::A;
                 let system = false;
                 let read_only = false;
-           
+
                 disc.add_amsdos_file(
                     &amsdos_file,
                     head,
@@ -214,7 +210,7 @@ impl SaveCommand {
                     system,
                     env.options().assemble_options().save_behavior()
                 )?;
-                
+
                 disc.save(disc_filename).map_err(|e| {
                     AssemblerError::AssemblingError {
                         msg: format!("Error while saving {e}")
@@ -223,12 +219,18 @@ impl SaveCommand {
             },
             StorageSupport::Tape(utf8_path_buf) => unimplemented!(),
             StorageSupport::Host => {
-                std::fs::write(self.amsdos_filename(), amsdos_file.header_and_content()).map_err(|e| {
-                    AssemblerError::AssemblingError {
-                        msg: format!("Error while saving \"{}\". {}", &self.amsdos_filename(), e)
+                std::fs::write(self.amsdos_filename(), amsdos_file.header_and_content()).map_err(
+                    |e| {
+                        AssemblerError::AssemblingError {
+                            msg: format!(
+                                "Error while saving \"{}\". {}",
+                                &self.amsdos_filename(),
+                                e
+                            )
+                        }
                     }
-                })?;
-            },
+                )?;
+            }
         }
 
         if env.options().show_progress() {

@@ -1,25 +1,22 @@
-
 use std::collections::BTreeMap;
 
-use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription};
-use crate::event::EventObserver;
-
-#[cfg(target_os = "linux")]
-use crate::runner::ExternRunner;
-#[cfg(target_os = "linux")]
-use crate::runner::runner::Runner;
 #[cfg(target_os = "linux")]
 use cpclib_common::camino::Utf8Path;
 use scraper::{Html, Selector};
+
 #[cfg(target_os = "linux")]
 use crate::delegated::Compiler;
+use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription};
+use crate::event::EventObserver;
+#[cfg(target_os = "linux")]
+use crate::runner::runner::Runner;
+#[cfg(target_os = "linux")]
+use crate::runner::ExternRunner;
 
 pub const RASM_CMD: &str = "rasm";
 
-
 static GITHUB_URL: &str = "https://github.com/";
-static RASM_DOWNLOAD_URL: &str ="https://github.com/EdouardBERGE/rasm/releases/";
-
+static RASM_DOWNLOAD_URL: &str = "https://github.com/EdouardBERGE/rasm/releases/";
 
 // Get the asset link that contains the dowload links for a given rasm version.
 // the probelm is that this link is dynamic depending on the update (for a given name of rasm, you have several version, and only the latest one is publicly visible with a dynamic link)
@@ -27,10 +24,12 @@ fn rasm_get_version_url(version: RasmVersion) -> Result<String, String> {
     let version = version.name();
 
     // obtain the base dowload page
-	let html = cpclib_download(RASM_DOWNLOAD_URL)?;
-	let document = Html::parse_document(&html);
+    let html = cpclib_download(RASM_DOWNLOAD_URL)?;
+    let document = Html::parse_document(&html);
 
-	let selector = Selector::parse("a").map_err(|e| e.to_string()).map_err(|e| e.to_string())?;
+    let selector = Selector::parse("a")
+        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
 
     for link in document.select(&selector) {
         let content = link.inner_html();
@@ -48,29 +47,28 @@ fn rasm_get_assets_version_url(version: RasmVersion) -> Result<String, String> {
 }
 
 fn rasm_download_fn_urls_lin_win(version: RasmVersion) -> Result<(String, String), String> {
+    let html = cpclib_download(&rasm_get_assets_version_url(version)?)?;
+    let document = Html::parse_document(&html);
+    let selector = Selector::parse("a")
+        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
 
-	let html = cpclib_download(&rasm_get_assets_version_url(version)?)?;
-	let document = Html::parse_document(&html);
-	let selector = Selector::parse("a").map_err(|e| e.to_string()).map_err(|e| e.to_string())?;
-
-	let mut map = BTreeMap::new();
-	for element in document.select(&selector) {
+    let mut map = BTreeMap::new();
+    for element in document.select(&selector) {
         let name = element.text().collect::<String>();
         let name = name
-            .replace("\n","")
+            .replace("\n", "")
             .replace("\t", " ")
             .replace("    ", " ");
         let name = name.trim();
-		map.insert(name.to_owned(), element.attr("href").unwrap().trim());
-	}
+        map.insert(name.to_owned(), element.attr("href").unwrap().trim());
+    }
 
-	let windows_url = format!("{}/{}", GITHUB_URL, map.get("rasm_x64.exe").unwrap());
-	let linux_url = format!("{}/{}", GITHUB_URL, map.get("Source code (zip)").unwrap());
+    let windows_url = format!("{}/{}", GITHUB_URL, map.get("rasm_x64.exe").unwrap());
+    let linux_url = format!("{}/{}", GITHUB_URL, map.get("Source code (zip)").unwrap());
 
-	Ok((linux_url, windows_url))
+    Ok((linux_url, windows_url))
 }
-
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExternAssembler {
@@ -133,7 +131,7 @@ cfg_match! {
                     Ok(())
                 });
                 let install = Compiler::from(install);
-                
+
                 let version_cloned = self.clone();
                 let mut get_url = move || -> Result<String, String> {
                     rasm_download_fn_urls_lin_win(version_cloned.clone())
@@ -149,7 +147,7 @@ cfg_match! {
                     .compile(install)
                     .build()
                 }
-                    
+
             }
         }
 
@@ -184,13 +182,11 @@ cfg_match! {
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
-    use crate::{delegated::cpclib_download, runner::assembler::{rasm_get_assets_version_url, rasm_get_version_url}};
-
     use super::{rasm_download_fn_urls_lin_win, RasmVersion};
+    use crate::delegated::cpclib_download;
+    use crate::runner::assembler::{rasm_get_assets_version_url, rasm_get_version_url};
 
     #[test]
     fn test_rasm_get_version_url() {

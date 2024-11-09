@@ -1797,13 +1797,11 @@ impl AmsdosFile {
         Self::from_header_and_buffer(header, data)
     }
 
-    pub fn ascii_file_from_buffer_with_name(
-        filename: &AmsdosFileName,
-        data: &[u8]) -> Self {
-            Self {
-                all_data: data.to_vec(),
-                binary_filename: Some(*filename)
-            }
+    pub fn ascii_file_from_buffer_with_name(filename: &AmsdosFileName, data: &[u8]) -> Self {
+        Self {
+            all_data: data.to_vec(),
+            binary_filename: Some(*filename)
+        }
     }
 
     /// Create a file from its potential header and content

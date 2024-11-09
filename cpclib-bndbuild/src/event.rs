@@ -304,8 +304,7 @@ where E: BndBuilderObserved + Sync
     }
 }
 
-impl<E> BndBuilderObserver
-    for RuleTaskEventDispatcher<'_, '_, '_, E>
+impl<E> BndBuilderObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved + Sync
 {
     fn update(&mut self, event: BndBuilderEvent) {

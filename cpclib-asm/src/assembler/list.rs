@@ -270,7 +270,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match (&s1, &s2) {
         (ExprResult::Char(s1), ExprResult::Char(s2)) => {
-            let s1 = format!("{}{}", *s1  as char, *s2 as char);
+            let s1 = format!("{}{}", *s1 as char, *s2 as char);
             Ok(ExprResult::String(s1.into()))
         },
 

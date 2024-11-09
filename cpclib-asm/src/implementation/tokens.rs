@@ -200,7 +200,7 @@ impl TokenExt for Token {
     fn estimated_duration(&self) -> Result<usize, AssemblerError> {
         let duration = match self {
             Token::Assert(..)
-            | Token::Breakpoint{..}
+            | Token::Breakpoint { .. }
             | Token::Comment(_)
             | Token::Label(_)
             | Token::Equ { .. }
@@ -480,7 +480,7 @@ impl TokenExt for Token {
         };
         Ok(duration)
     }
-    
+
     fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         match self {
             Self::OpCode(mne, arg1, arg2, arg3) => {
@@ -488,9 +488,13 @@ impl TokenExt for Token {
                 let arg2 = arg2.as_ref().map(|arg| arg.replace_expressions_by_0());
 
                 Self::OpCode(*mne, arg1, arg2, *arg3).number_of_bytes()
-            }
-            Self::Comment(..) | Self::Label(..) | Self::Assert(..)=> Ok(0),
-            _ => Result::Err(format!("fallback_number_of_bytes not implemented for {self}"))
+            },
+            Self::Comment(..) | Self::Label(..) | Self::Assert(..) => Ok(0),
+            _ => {
+                Result::Err(format!(
+                    "fallback_number_of_bytes not implemented for {self}"
+                ))
+            },
         }
     }
 }

@@ -249,10 +249,7 @@ mod test {
         let c = parse_logical_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
 
-        let s = format!(
-            "hostname({})",
-            hostname::get().unwrap().display()
-        );
+        let s = format!("hostname({})", hostname::get().unwrap().display());
         let c = parse_hostname_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
     }

@@ -1,7 +1,7 @@
 mod ace;
 mod remu;
-mod winape;
 mod wabp;
+mod winape;
 
 use std::ops::Deref;
 
@@ -9,8 +9,8 @@ pub use ace::*;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
 use delegate::delegate;
 pub use remu::*;
-pub use winape::*;
 pub use wabp::*;
+pub use winape::*;
 
 #[derive(Clone, Debug)]
 /// Memory chunk that superseeds the snapshot memory if any.

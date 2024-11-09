@@ -149,7 +149,7 @@ impl ListingExt for Listing {
                 .insert(0, equ(next_label.borrow(), next_address));
         }
     }
-    
+
     fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         self.iter().map(|t| t.fallback_number_of_bytes()).sum()
     }

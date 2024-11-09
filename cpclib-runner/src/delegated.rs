@@ -1,41 +1,39 @@
 use std::io::{Cursor, Read};
 use std::ops::Deref;
 
+use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use tar::Archive;
+use ureq;
 use ureq::Response;
-use bon::Builder;
 
 use crate::event::EventObserver;
 use crate::runner::runner::{ExternRunner, RunInDir, Runner};
 
-
-use ureq;
-
 pub fn cpclib_download(url: &str) -> Result<String, String> {
-	ureq::get(url)
-			.set("Cache-Control", "max-age=1")
-			.set("From", "krusty.benediction@gmail.com")
-			.set("User-Agent", "cpclib")
-			.call().map_err(|e| e.to_string())?
-			.into_string().map_err(|e| e.to_string())
+    ureq::get(url)
+        .set("Cache-Control", "max-age=1")
+        .set("From", "krusty.benediction@gmail.com")
+        .set("User-Agent", "cpclib")
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_string()
+        .map_err(|e| e.to_string())
 }
 
+pub struct UrlGenerator(Box<dyn Fn() -> Result<String, String>>);
 
-pub struct UrlGenerator(Box<dyn Fn()-> Result<String, String>>);
-
-impl From<Box<dyn Fn()->String>> for UrlGenerator {
-    fn from(value: Box<dyn Fn()->String>) -> Self {
+impl From<Box<dyn Fn() -> String>> for UrlGenerator {
+    fn from(value: Box<dyn Fn() -> String>) -> Self {
         let wrap = Box::new(move || Ok(value()));
         Self(wrap)
     }
 }
 
-
-impl From<Box<dyn Fn()->Result<String, String>>> for UrlGenerator {
-    fn from(value: Box<dyn Fn()->Result<String, String>>) -> Self {
+impl From<Box<dyn Fn() -> Result<String, String>>> for UrlGenerator {
+    fn from(value: Box<dyn Fn() -> Result<String, String>>) -> Self {
         Self(value)
     }
 }
@@ -54,8 +52,8 @@ impl From<&str> for UrlGenerator {
 }
 
 impl Deref for UrlGenerator {
+    type Target = Box<dyn Fn() -> Result<String, String>>;
 
-    type Target = Box<dyn Fn()->Result<String, String>> ;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -76,24 +74,25 @@ impl<E> Deref for Compiler<E> {
     }
 }
 
+pub struct PostInstall<E: EventObserver>(
+    Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>
+);
 
-pub struct PostInstall<E: EventObserver>(Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> );
-
-
-impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>> for PostInstall<E> {
-fn from(value: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>) -> Self {
-    Self(value)
-}
+impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
+    for PostInstall<E>
+{
+    fn from(value: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>) -> Self {
+        Self(value)
+    }
 }
 
 impl<E: EventObserver> Deref for PostInstall<E> {
-    type Target = Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> ;
+    type Target = Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-
 
 pub enum ArchiveFormat {
     Raw,
@@ -175,13 +174,15 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(">> Unzip archive");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true).map_err(|e| e.to_string())?;
+                zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true)
+                    .map_err(|e| e.to_string())?;
             },
             ArchiveFormat::SevenZ => {
                 o.emit_stdout(">> Open 7z archive");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                sevenz_rust::decompress(Cursor::new(buffer), dest.as_std_path()).map_err(|e| e.to_string())?;
+                sevenz_rust::decompress(Cursor::new(buffer), dest.as_std_path())
+                    .map_err(|e| e.to_string())?;
             }
         }
 
@@ -204,7 +205,8 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         if let Some(post_install) = &self.post_install {
             o.emit_stdout(">> Does some post-installation stuffm");
             post_install(self)
-        } else {
+        }
+        else {
             Ok(())
         }
     }
@@ -212,8 +214,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     fn download(&self, o: &E) -> Result<Response, String> {
         let url = self.download_fn_url.deref()()?;
         o.emit_stdout(&format!(">> Download file {}", url));
-        ureq::get(&url).call()
-            .map_err(|e| e.to_string())
+        ureq::get(&url).call().map_err(|e| e.to_string())
     }
 }
 
@@ -253,7 +254,6 @@ impl<E: EventObserver + 'static> Runner for DelegatedRunner<E> {
         }
 
         command.push(fname.as_str());
-        
 
         for arg in itr.iter() {
             command.push(arg.as_ref());

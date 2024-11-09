@@ -428,10 +428,11 @@ impl DataAccess {
         }
     }
 
-
-    pub fn replace_expressions_by_0(&self) -> Self{
+    pub fn replace_expressions_by_0(&self) -> Self {
         match self {
-            DataAccess::IndexRegister16WithIndex(index_register16, binary_operation, expr) => Self::IndexRegister16WithIndex(*index_register16, *binary_operation, 0.into()),
+            DataAccess::IndexRegister16WithIndex(index_register16, binary_operation, expr) => {
+                Self::IndexRegister16WithIndex(*index_register16, *binary_operation, 0.into())
+            },
             DataAccess::IndexRegister16(r) => self.clone(),
             DataAccess::IndexRegister8(r) => self.clone(),
             DataAccess::Register16(register16) => self.clone(),
@@ -444,7 +445,7 @@ impl DataAccess {
             DataAccess::SpecialRegisterI => self.clone(),
             DataAccess::SpecialRegisterR => self.clone(),
             DataAccess::PortC => self.clone(),
-            DataAccess::PortN(expr) => DataAccess::PortN(0.into()),
+            DataAccess::PortN(expr) => DataAccess::PortN(0.into())
         }
     }
 }

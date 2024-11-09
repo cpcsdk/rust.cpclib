@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, WabpAnyBreakpoint, WinapeBreakPoint};
+use cpclib_sna::{
+    AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, WabpAnyBreakpoint,
+    WinapeBreakPoint
+};
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
@@ -208,28 +211,24 @@ pub struct BreakpointCommand {
     pub(crate) span: Option<Z80Span>
 }
 
-
 impl BreakpointCommand {
     pub fn info_repr(&self) -> String {
         match &self.brk {
             InnerBreakpointCommand::Simple(brk) => {
-                format!{"PC=&{:X}@{}", brk.address, brk.page}
+                format! {"PC=&{:X}@{}", brk.address, brk.page}
             },
             InnerBreakpointCommand::Advanced(brk) => {
-                format!{"{}", brk}
-            },
+                format! {"{}", brk}
+            }
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub enum InnerBreakpointCommand {
     Simple(BreakPointCommandSimple),
     Advanced(AdvancedRemuBreakPoint)
 }
-
-
 
 impl From<AdvancedRemuBreakPoint> for InnerBreakpointCommand {
     fn from(value: AdvancedRemuBreakPoint) -> Self {
@@ -243,12 +242,10 @@ impl From<BreakPointCommandSimple> for InnerBreakpointCommand {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct BreakPointCommandSimple {
     pub(crate) address: u16,
-    pub(crate) page: u8,
+    pub(crate) page: u8
 }
 
 impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointCommand {
@@ -262,48 +259,46 @@ impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointC
 
 impl BreakpointCommand {
     pub fn new_simple(address: u16, page: u8, span: Option<Z80Span>) -> Self {
-        (BreakPointCommandSimple {
-            address,
-            page,
-        }, span).into()
+        (BreakPointCommandSimple { address, page }, span).into()
     }
 
     // Convert when possible
     pub fn winape(&self) -> Option<WinapeBreakPoint> {
         match &self.brk {
-            InnerBreakpointCommand::Simple(brk) => Some(WinapeBreakPoint::new(brk.address, brk.page)),
-           _ => None
+            InnerBreakpointCommand::Simple(brk) => {
+                Some(WinapeBreakPoint::new(brk.address, brk.page))
+            },
+            _ => None
         }
     }
 
     // Convert when possible. ATTENTION, I have not implemented all the case
     pub fn ace(&self) -> Option<AceBreakPoint> {
         match &self.brk {
-            InnerBreakpointCommand::Simple(brk) => 
+            InnerBreakpointCommand::Simple(brk) => {
                 Some(AceBreakPoint::new_execution(
-                                    brk.address,
-                                    AceBrkRuntimeMode::Break,
-                                    cpclib_sna::AceMemMapType::Undefined
-                                )),
-           _ => None
+                    brk.address,
+                    AceBrkRuntimeMode::Break,
+                    cpclib_sna::AceMemMapType::Undefined
+                ))
+            },
+            _ => None
         }
     }
 
     pub fn remu(&self) -> RemuBreakPoint {
         match &self.brk {
             InnerBreakpointCommand::Simple(brk) => RemuBreakPoint::Memory(brk.address, brk.page),
-            InnerBreakpointCommand::Advanced(brk) => RemuBreakPoint::Advanced(brk.clone()),
+            InnerBreakpointCommand::Advanced(brk) => RemuBreakPoint::Advanced(brk.clone())
         }
     }
 
     pub fn wabp(&self) -> WabpAnyBreakpoint {
         match &self.brk {
-            InnerBreakpointCommand::Simple(brk) => {
-                WabpAnyBreakpoint::new(brk.address)
-            },
+            InnerBreakpointCommand::Simple(brk) => WabpAnyBreakpoint::new(brk.address),
             InnerBreakpointCommand::Advanced(advanced_remu_break_point) => {
                 unimplemented!("{advanced_remu_break_point} not converted in wabp")
-            },
+            }
         }
     }
 }
