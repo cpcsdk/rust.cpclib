@@ -24,16 +24,25 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
 }
 
 
-pub struct UrlGenerator(Box<dyn Fn()->String>);
+pub struct UrlGenerator(Box<dyn Fn()-> Result<String, String>>);
+
 impl From<Box<dyn Fn()->String>> for UrlGenerator {
     fn from(value: Box<dyn Fn()->String>) -> Self {
+        let wrap = Box::new(move || Ok(value()));
+        Self(wrap)
+    }
+}
+
+
+impl From<Box<dyn Fn()->Result<String, String>>> for UrlGenerator {
+    fn from(value: Box<dyn Fn()->Result<String, String>>) -> Self {
         Self(value)
     }
 }
 
 impl From<String> for UrlGenerator {
     fn from(value: String) -> Self {
-        Self(Box::new(move || value.clone()))
+        Self(Box::new(move || Ok(value.clone())))
     }
 }
 
@@ -46,7 +55,7 @@ impl From<&str> for UrlGenerator {
 
 impl Deref for UrlGenerator {
 
-    type Target = Box<dyn Fn()->String> ;
+    type Target = Box<dyn Fn()->Result<String, String>> ;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -200,10 +209,11 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }
     }
 
-    fn download(&self, o: &E) -> Result<Response, ureq::Error> {
-        let url = self.download_fn_url.deref()();
+    fn download(&self, o: &E) -> Result<Response, String> {
+        let url = self.download_fn_url.deref()()?;
         o.emit_stdout(&format!(">> Download file {}", url));
         ureq::get(&url).call()
+            .map_err(|e| e.to_string())
     }
 }
 

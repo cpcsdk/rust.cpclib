@@ -384,10 +384,20 @@ cfg_match! {
 
 #[cfg(test)]
 mod test {
+    use crate::delegated::cpclib_download;
+
     use super::ace_download_fn_urls_lin_win;
 
     #[test]
     fn retreive_ace_urls() {
         ace_download_fn_urls_lin_win().unwrap();
+    }
+
+    #[test]
+    fn test_download_ace() {
+        let (lin, win) = ace_download_fn_urls_lin_win().unwrap();
+
+        assert!(cpclib_download(dbg!(&lin)).is_ok());
+        assert!(cpclib_download(dbg!(&win)).is_ok());
     }
 }
