@@ -63,7 +63,7 @@ pub fn build_args_parser() -> clap::Command {
         RASM_CMD,
         SJASMPLUS_CMD,
         SUGARBOX_V2_CMD,
-        WINAPE_CMD,
+        WINAPE_CMD
     ];
 
     Command::new("bndbuilder")

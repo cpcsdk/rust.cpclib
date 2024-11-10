@@ -47,7 +47,6 @@ pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
 
-
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
@@ -167,9 +166,11 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_sjasmplus_cmd(code) {
                     Ok(Task::Assembler(
-                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
-                            Default::default()
-                        )),
+                        Assembler::Extern(
+                            cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
+                                Default::default()
+                            )
+                        ),
                         std
                     ))
                 }

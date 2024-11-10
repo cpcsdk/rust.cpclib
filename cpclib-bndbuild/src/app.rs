@@ -25,7 +25,9 @@ use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcec_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rasm_cmd, is_rm_cmd, is_winape_cmd, is_xfer_cmd, StandardTaskArguments, Task
+    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcec_cmd, is_disc_cmd, is_echo_cmd,
+    is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rasm_cmd,
+    is_rm_cmd, is_winape_cmd, is_xfer_cmd, StandardTaskArguments, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
 
@@ -320,7 +322,8 @@ Arguments:
   <program>
           The program to execute
   [arguments]...
-          The arguments of the program".to_owned()
+          The arguments of the program"
+                .to_owned()
         }
         else if is_echo_cmd(runner) {
             "Print the arguments.
@@ -329,7 +332,8 @@ Usage: echo [arguments]...
 
 Arguments:
   [arguments]...
-          Words to print".to_owned()
+          Words to print"
+                .to_owned()
         }
         else if is_amspirit_cmd(runner) {
             r"AMSpiriT peut être exécuté par une ligne de commande, en mode console par exemple, permettant
@@ -353,7 +357,7 @@ A noter que les ROMs chargées ne seront pas mémorisées par AmspiriT
 --config-file=rep Fixe le répertoire de AmspiriT où se situe le fichier de configuration".to_owned()
         }
         else if is_winape_cmd(runner) {
-            //http://www.winape.net/help/parameters.html
+            // http://www.winape.net/help/parameters.html
             r" When starting WinAPE a disc image filename can be specified as a parameter (without the slash option). The following parameters can be specified on the command line:
 
 Parameter	Function
@@ -378,7 +382,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         }
         else {
             let task = Task::from_str(&format!("{runner} --help")).unwrap();
-            let _  = execute(&task, observers); // we ignore potential error
+            let _ = execute(&task, observers); // we ignore potential error
             "TODO / handle string collect instead of stdout output".into()
         };
 
