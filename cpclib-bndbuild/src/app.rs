@@ -9,25 +9,23 @@ use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::delegated::base_cache_folder;
 use cpclib_runner::emucontrol::EmuControlledRunner;
-use cpclib_runner::runner::assembler::RasmVersion;
 use cpclib_runner::runner::RunnerWithClap;
 
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
-use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
+use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
-use crate::runners::emulator::Emulator;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcec_cmd, is_disc_cmd, is_echo_cmd,
-    is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rasm_cmd,
-    is_rm_cmd, is_winape_cmd, is_xfer_cmd, StandardTaskArguments, Task
+    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd,
+    is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd,
+    is_rm_cmd, is_winape_cmd, is_xfer_cmd, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
 
@@ -416,7 +414,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         command: Option<String>
     ) -> Result<(), BndBuilderError> {
         let folder = if let Some(command) = command {
-            match Task::from_str(&format!("{command}"))
+            match Task::from_str(&command.to_string())
                 .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
                 .configuration::<()>()
             {
