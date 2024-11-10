@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::path::absolute;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -7,7 +8,7 @@ use directories::BaseDirs;
 use scraper::{Html, Selector};
 
 use crate::delegated::{
-    cpclib_download, github_download_urls, ArchiveFormat, DelegateApplicationDescription, GithubUrls, UrlGenerator
+    cpclib_download, github_download_urls, ArchiveFormat, DelegateApplicationDescription, GithubInformation, MutiplatformUrls, UrlGenerator
 };
 use crate::event::EventObserver;
 
@@ -22,14 +23,31 @@ pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 const ACE_URL: &str = "http://www.roudoudou.com/ACE-DL";
 
 
-fn sugarbox_download_urls(version: SugarBoxV2Version) -> Result<GithubUrls, String> {
-    github_download_urls(
-        "https://github.com/Tom1975/SugarboxV2",
-        version.name(),
-        Some("Sugarbox-2.0.2-Linux.tar.gz"),
-        Some("Sugarbox-2.0.2-win64.7z"),
-        Some("Sugarbox-2.0.2-Darwin.tar.gz")
-    )
+fn sugarbox_download_urls(version: SugarBoxV2Version) -> Result<MutiplatformUrls, String> {
+    github_download_urls(&version)
+}
+
+
+impl Display for SugarBoxV2Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "sugarbox {}", self.version_name())
+    }
+}
+
+impl GithubInformation for SugarBoxV2Version {
+    fn project(&self) -> &'static str {
+        "SugarboxV2"
+    }
+
+    fn owner(&self) -> &'static str {
+        "Tom1975"
+    }
+
+    fn version_name(&self) -> &'static str {
+        match self {
+            SugarBoxV2Version::V2_0_2 => "v2.0.2",
+        }
+    }
 }
 
 
@@ -307,11 +325,7 @@ fn windows_ace_desc<E: EventObserver, F: Into<UrlGenerator>>(
 }
 
 impl SugarBoxV2Version {
-    pub fn name(&self) -> &str {
-        match self {
-            SugarBoxV2Version::V2_0_2 => "v2.0.2",
-        }
-    }
+
 
 
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {

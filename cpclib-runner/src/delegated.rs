@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -11,6 +12,7 @@ use scraper::{Html, Selector};
 use tar::Archive;
 use ureq;
 use ureq::Response;
+use xz2::read::XzDecoder;
 
 use crate::event::EventObserver;
 use crate::runner::runner::{ExternRunner, RunInDir, Runner};
@@ -31,9 +33,9 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
 }
 
 /// From the full release url page, get the url for the given release
-pub fn github_get_assets_for_version_url(github_project: &str, version: &str) -> Result<String, String> {
+pub fn github_get_assets_for_version_url<GI: GithubInformation>(info: &GI) -> Result<String, String> {
 
-    let url = dbg!(format!("{github_project}/releases"));
+    let url = dbg!(format!("https://github.com/{}/{}/releases", info.owner(), info.project()));
 
     // obtain the base dowload page
     let html = cpclib_download(&url)?;
@@ -46,7 +48,7 @@ pub fn github_get_assets_for_version_url(github_project: &str, version: &str) ->
     for link in document.select(&selector) {
         let content = link.inner_html();
         let href = link.attr("href").unwrap();
-        if content.contains(version) && !href.contains("/tree/") {
+        if content.contains(info.version_name()) && !href.contains("/tree/") {
             dbg!(&link, &href);
             return dbg!(Ok(
                 format!("https://github.com{}", href)
@@ -55,17 +57,17 @@ pub fn github_get_assets_for_version_url(github_project: &str, version: &str) ->
         }
     }
 
-    Err(format!("No download link found for {version}"))
+    Err(format!("No download link found for {info}"))
 }
 
 #[derive(Default)]
-pub struct GithubUrls {
+pub struct MutiplatformUrls {
     pub linux: Option<String>,
     pub windows: Option<String>,
-    pub macosx: Option<String>
+    pub macos: Option<String>
 }
 
-impl GithubUrls {
+impl MutiplatformUrls {
     pub fn target_os_url(&self) -> Option<&String> {
         #[cfg(target_os = "windows")]
         return self.windows.as_ref();
@@ -74,15 +76,77 @@ impl GithubUrls {
         #[cfg(target_os = "linux")]
         return self.linux.as_ref();
     }
+
+
 }
 
-pub fn github_download_urls(github_project: &str, version: &str,
-    linux_key: Option<&str>,
-    windows_key: Option<&str>,
-    macosx_key: Option<&str>
+pub trait CompilableInformation {
+    /// Returns the list of commands to execute for the target os
+    fn target_os_commands(&self) -> Option<&'static[&'static[&'static str]]>;
 
-) -> Result<GithubUrls, String> {
-    let html = cpclib_download(&github_get_assets_for_version_url(github_project, version)?)?;
+    /// Produces the function that executes the list of commands
+    fn target_os_compiler<E:EventObserver + 'static>(&self) -> Option<Compiler<E>> {
+        if let Some(commands) = self.target_os_commands() {
+            let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
+                for command in commands.iter() {
+                    ExternRunner::default().inner_run(&command, o)?;
+                }
+                Ok(())
+            });
+            let install = Compiler::from(install);
+            Some(install)
+        } else {
+            None
+        }
+    }
+}
+
+pub trait DownloadableInformation {
+    fn archive_format(&self) -> ArchiveFormat;
+}
+
+pub trait ExecutableInformation {
+    fn folder(&self) -> &'static str;
+    fn target_os_exec_fname(&self) -> &'static str;
+}
+
+pub trait GithubInformation : Display + Clone +'static {
+    fn project(&self) -> &'static str;
+    fn owner(&self) -> &'static str;
+    /// The name to search to obtain the assets link
+    fn version_name(&self) -> &'static str;
+    fn linux_key(&self) -> Option<&'static str> {
+        None
+    }
+    fn windows_key(&self) -> Option<&'static str> {
+        None
+    }
+    fn macos_key(&self) -> Option<&'static str> {
+        None
+    }
+
+    fn target_os_url_generator(&self) -> UrlGenerator {
+
+        let cloned = self.clone();
+        let deferred: Box<dyn Fn() -> Result<String, String>>  = Box::new(move || -> Result<String, String> {
+            let inside = cloned.clone();
+            let urls = github_download_urls(&inside)?;
+            urls.target_os_url()
+                .cloned()
+                .ok_or(format!("No url for this os"))
+        });
+        deferred.into()
+    }
+}
+
+impl<G> From<&G> for UrlGenerator where G: GithubInformation{
+    fn from(g: &G) -> Self {
+        g.target_os_url_generator()
+    }
+}
+
+pub fn github_download_urls<GI: GithubInformation>(info: &GI) -> Result<MutiplatformUrls, String> {
+    let html = cpclib_download(&github_get_assets_for_version_url(info)?)?;
     let document = Html::parse_document(&html);
     let selector = Selector::parse("a")
         .map_err(|e| e.to_string())
@@ -100,22 +164,41 @@ pub fn github_download_urls(github_project: &str, version: &str,
         map.insert(name.to_owned(), element.attr("href").unwrap().trim());
     }
 
-    let mut urls = GithubUrls::default();
+    let mut urls = MutiplatformUrls::default();
 
-    if let Some(key) = linux_key {
+    if let Some(key) = info.linux_key() {
         urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
     }
-    if let Some(key) = windows_key {
+    if let Some(key) = info.windows_key() {
         urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
     }
-    if let Some(key) = macosx_key {
-        urls.macosx = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+    if let Some(key) = info.macos_key() {
+        urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
     }
 
     Ok(urls)
 }
 
 
+
+pub trait HasConfiguration {
+    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E>;
+    
+}
+
+
+impl<Tool> HasConfiguration for Tool 
+where Tool: CompilableInformation + DownloadableInformation + ExecutableInformation + GithubInformation {
+    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+        DelegateApplicationDescription::builder()
+        .download_fn_url(self) // we assume a modern CPU
+        .folder(self.folder())
+        .archive_format(self.archive_format())
+        .exec_fname(self.target_os_exec_fname())
+        .maybe_compile(self.target_os_compiler())
+        .build()
+    }
+}
 
 #[derive(Clone)]
 pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);
@@ -195,6 +278,7 @@ impl<E: EventObserver> Deref for PostInstall<E> {
 pub enum ArchiveFormat {
     Raw,
     TarGz,
+    TarXz,
     Zip,
     SevenZ
 }
@@ -268,6 +352,12 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 let mut archive = Archive::new(gz);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
+            ArchiveFormat::TarXz => {
+                o.emit_stdout(">> Open tarxz archive");
+                let xz = XzDecoder::new(input);
+                let mut archive = Archive::new(xz);
+                archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
+            }
             ArchiveFormat::Zip => {
                 o.emit_stdout(">> Unzip archive");
                 let mut buffer = Vec::new();

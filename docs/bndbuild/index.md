@@ -102,6 +102,10 @@ Each rule can have the following keys:
 The `--direct -- COMMAND [ARG...]` allows to directly launch a command without managing a build file. `COMMAND` can be any command accepted in `cmd` key (they are listed in the documentation of `--help`).
 The commands are either included by the application (so limited to cpclib commands and os agnostic), or accessible externally (no limitation, but os dependent). Some command may have an alias.
 
+
+Several commands need to be downloaded (so internet is required), assembled (so their prerequisites need to be installed).
+There is no (yet) cleanup if download/compilation fail. So think to do `bndbuild --clear <cmd>` to cleanup manually.
+
 ### Display management: echo (echo)
 ```
 Print the arguments.
@@ -896,6 +900,50 @@ Options:
   -j, --jump
           Jump on the program instead of saving it
 
+```
+
+### Assembler: Sjasmplus (sjamsplus)
+
+```
+SjASMPlus Z80 Cross-Assembler v1.20.3 (https://github.com/z00m128/sjasmplus)
+Based on code of SjASM by Sjoerd Mastijn (http://www.xl2s.tk)
+Copyright 2004-2023 by Aprisobal and all other participants
+
+Usage:
+sjasmplus [options] sourcefile(s)
+
+Option flags as follows:
+  -h or --help[=warnings]  Help information (you see it)
+  --zxnext[=cspect]        Enable ZX Spectrum Next Z80 extensions (Z80N)
+  --i8080                  Limit valid instructions to i8080 only (+ no fakes)
+  --lr35902                Sharp LR35902 CPU instructions mode (+ no fakes)
+  --outprefix=<path>       Prefix for save/output/.. filenames in directives
+  -i<path> or -I<path> or --inc=<path> ( --inc without "=" to empty the list)
+                           Include path (later defined have higher priority)
+  --lst[=<filename>]       Save listing to <filename> (<source>.lst is default)
+  --lstlab[=sort]          Append [sorted] symbol table to listing
+  --sym=<filename>         Save symbol table to <filename>
+  --exp=<filename>         Save exports to <filename> (see EXPORT pseudo-op)
+  --raw=<filename>         Machine code saved also to <filename> (- is STDOUT)
+  --sld[=<filename>]       Save Source Level Debugging data to <filename>
+ Note: use OUTPUT, LUA/ENDLUA and other pseudo-ops to control output
+ Logging:
+  --nologo                 Do not show startup message
+  --msg=[all|war|err|none|lst|lstlab]
+                           Stderr messages verbosity ("all" is default)
+  --fullpath               Show full path to file in errors
+  --color=[on|off|auto]    Enable or disable ANSI coloring of warnings/errors
+ Other:
+  -D<NAME>[=<value>] or --define <NAME>[=<value>]
+                           Define <NAME> as <value>
+  -                        Reads STDIN as source (even in between regular files)
+  --longptr                No device: program counter $ can go beyond 0x10000
+  --reversepop             Enable reverse POP order (as in base SjASM version)
+  --dirbol                 Enable directives from the beginning of line
+  --dos866                 Encode from Windows codepage to DOS 866 (Cyrillic)
+  --syntax=<...>           Adjust parsing syntax, check docs for details.
+Failure
+Error while launching the command.
 ```
 
 ### Emulator-agnostic emulation (cpc,emu)

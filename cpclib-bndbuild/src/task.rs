@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
-use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
+use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD};
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
@@ -43,6 +43,11 @@ pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
+pub const ORGAMS_CMDS: &[&str] = &["orgams"];
+pub const RASM_CMDS: &[&str] = &[RASM_CMD];
+pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
+
+
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
@@ -53,8 +58,6 @@ pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
-pub const ORGAMS_CMDS: &[&str] = &["orgams"];
-pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
@@ -103,7 +106,7 @@ macro_rules! is_some_cmd {
 
 is_some_cmd!(
     ace, amspirit, basm, bndbuild, cp, cpcec, disc, echo, emuctrl, r#extern, fap, hideur, img2cpc,
-    impdisc, martine, orgams, winape, rasm, rm, sugarbox, xfer
+    impdisc, martine, orgams, winape, rasm, rm, sjasmplus, sugarbox, xfer
 );
 
 impl<'de> Deserialize<'de> for Task {
@@ -158,6 +161,14 @@ impl<'de> Deserialize<'de> for Task {
                     Ok(Task::Assembler(
                         Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
                             RasmVersion::default()
+                        )),
+                        std
+                    ))
+                }
+                else if is_sjasmplus_cmd(code) {
+                    Ok(Task::Assembler(
+                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
+                            Default::default()
                         )),
                         std
                     ))

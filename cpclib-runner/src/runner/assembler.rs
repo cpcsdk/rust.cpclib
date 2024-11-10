@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
+use std::default;
+use std::fmt::Display;
 
 #[cfg(target_os = "linux")]
 use cpclib_common::camino::Utf8Path;
-use scraper::{Html, Selector};
 
 #[cfg(target_os = "linux")]
 use crate::delegated::Compiler;
-use crate::delegated::{github_download_urls, github_get_assets_for_version_url, ArchiveFormat, DelegateApplicationDescription, GithubUrls};
+use crate::delegated::{github_download_urls, ArchiveFormat, CompilableInformation, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, GithubInformation, HasConfiguration, MutiplatformUrls};
 use crate::event::EventObserver;
 #[cfg(target_os = "linux")]
 use crate::runner::runner::Runner;
@@ -14,40 +14,113 @@ use crate::runner::runner::Runner;
 use crate::runner::ExternRunner;
 
 pub const RASM_CMD: &str = "rasm";
+pub const SJASMPLUS_CMD: &str = "sjasmplus";
 
-static RASM_REPO_URL: &str = "https://github.com/EdouardBERGE/rasm";
-
-
-fn rasm_get_assets_url(version: RasmVersion) -> Result<String, String> {
-    github_get_assets_for_version_url(RASM_REPO_URL, version.name())
+fn rasm_download_urls(version: RasmVersion) -> Result<MutiplatformUrls, String> {
+    github_download_urls(&version)
 }
 
-fn rasm_download_urls(version: RasmVersion) -> Result<GithubUrls, String> {
-    github_download_urls(
-        RASM_REPO_URL,
-        version.name(),
-        Some("Source code (zip)"),
-        Some("rasm_x64.exe"),
-        None
-    )
+fn sjasm_download_urls(version: SjasmplusVersion) -> Result<MutiplatformUrls, String> {
+    github_download_urls(&version)
 }
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExternAssembler {
-    Rasm(RasmVersion)
+    Rasm(RasmVersion),
+    Sjasmplus(SjasmplusVersion),
 }
 
 impl ExternAssembler {
     pub fn get_command(&self) -> &str {
         match self {
-            ExternAssembler::Rasm(_) => RASM_CMD
+            ExternAssembler::Rasm(_) => RASM_CMD,
+            ExternAssembler::Sjasmplus(_) => SJASMPLUS_CMD,
         }
     }
 
     pub fn configuration<E: EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
         match self {
-            ExternAssembler::Rasm(r) => r.configuration()
+            ExternAssembler::Rasm(r) => r.configuration(),
+            ExternAssembler::Sjasmplus(r) => r.configuration(),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub enum SjasmplusVersion {
+    #[default]
+    V1_20_3
+}
+
+
+impl Display for SjasmplusVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "sjasmplus {}", self.version_name())
+    }
+}
+
+
+
+impl GithubInformation for SjasmplusVersion {
+    fn version_name(&self) -> &'static str {
+        match self {
+            SjasmplusVersion::V1_20_3 => "v1.20.3",
+        }
+    }
+    
+    fn project(&self) -> &'static str {
+        "sjasmplus"
+    }
+    
+    fn owner(&self) -> &'static str {
+        "z00m128"
+    }
+
+    fn linux_key(&self) -> Option<&'static str> {
+        Some("sjasmplus-1.20.3-src.tar.xz")
+    }
+
+    fn windows_key(&self) -> Option<&'static str> {
+        Some("sjasmplus-1.20.3.win.zip")
+    }
+}
+
+impl ExecutableInformation for SjasmplusVersion {
+    fn folder(&self) -> &'static str {
+        "sjasmplus-1.20.3"
+
+    }
+
+    fn target_os_exec_fname(&self) -> &'static str {
+        #[cfg(target_os = "linux")]
+        return "sjasmplus";
+        #[cfg(target_os = "windows")]
+        return "sjasmplus.exe"
+    }
+}
+
+
+impl CompilableInformation for SjasmplusVersion {
+    fn target_os_commands(&self) -> Option<&'static[&'static[&'static str]]> {
+        if cfg!(target_os = "linux") {
+            Some(&[
+                &["cmake", "sjasmplus-1.20.3"],
+                &["make"]
+            ])
+            } else {
+                None
+            }
+    }
+}
+
+
+impl DownloadableInformation for SjasmplusVersion {
+    fn archive_format(&self) -> ArchiveFormat {
+        #[cfg(target_os = "linux")]
+        return ArchiveFormat::TarXz;
+        #[cfg(target_os = "windows")]
+        return ArchiveFormat::Zip;
     }
 }
 
@@ -62,20 +135,48 @@ impl Default for RasmVersion {
     }
 }
 
-impl RasmVersion {
-    pub fn name(&self) -> &'static str {
+
+impl Display for RasmVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "rasm {}", self.version_name())
+    }
+}
+
+
+impl GithubInformation for RasmVersion {
+    fn version_name(&self) -> &'static str {
         match self {
             Self::Consolidation2024 => "Consolidation"
         }
     }
+    
+    fn project(&self) -> &'static str {
+        "rasm"
+    }
+    
+    fn owner(&self) -> &'static str {
+        "EdouardBERGE"
+    }
+    
+    fn linux_key(&self) -> Option<&'static str> {
+        Some("Source code (zip)")
+    }
+    
+    fn windows_key(&self) -> Option<&'static str> {
+        Some("rasm_x64.exe")
+    }
+    
+}
 
-    pub fn folder(&self) -> &'static str {
+impl ExecutableInformation for RasmVersion {
+ 
+    fn folder(&self) -> &'static str {
         match self {
             Self::Consolidation2024 => "rasm_consolidation"
         }
     }
 
-    pub fn target_os_exec_fname(&self) -> &'static str {
+    fn target_os_exec_fname(&self) -> &'static str {
         #[cfg(target_os="windows")]
         return "rasm_w64.exe";
         #[cfg(target_os="macos")]
@@ -86,74 +187,22 @@ impl RasmVersion {
     }
 }
 
-
-
-
-// Here we need to regularly look at rasm release file. because files often disapppear
-cfg_match! {
-    cfg(target_os = "linux") =>
-    {
-        impl RasmVersion {
-            pub fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
- {
-                let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
-                    let command = vec!["make"];
-                    ExternRunner::default().inner_run(&command, o)?;
-
-                    let command = vec!["mv", "rasm.exe", "rasm"];
-                    ExternRunner::default().inner_run(&command, o)?;
-
-                    Ok(())
-                });
-                let install = Compiler::from(install);
-
-                let version_cloned = self.clone();
-                let get_url = move || -> Result<String, String> {
-                    rasm_download_urls(version_cloned.clone())
-                        .map(|urls| urls.linux.unwrap())
-                };
-                let get_url: Box<dyn Fn() -> Result<String,String>>  = Box::new(get_url);
-
-                DelegateApplicationDescription::builder()
-                    .download_fn_url(get_url) // we assume a modern CPU
-                    .folder(self.folder())
-                    .archive_format(ArchiveFormat::Zip)
-                    .exec_fname(self.target_os_exec_fname())
-                    .compile(install)
-                    .build()
-                }
-
+impl CompilableInformation for RasmVersion {
+    fn target_os_commands(&self) -> Option<&'static[&'static[&'static str]]> {
+        if cfg!(target_os = "linux") {
+            Some(&[
+                &["make"],
+                &["mv", "rasm.exe", "rasm"]
+            ])
+            } else {
+                None
             }
-        }
-
     }
+}
 
-    cfg(target_os = "windows") => {
-        impl RasmVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        
-                let version_cloned = self.clone();
-                let get_url = move || -> Result<String, String> {
-                    rasm_download_urls(version_cloned.clone())
-                        .map(|urls| urls.target_os_url().unwrap().clone())
-                };
-                let get_url: Box<dyn Fn() -> Result<String,String>>  = Box::new(get_url);
-        
-                DelegateApplicationDescription::builder()
-                    .download_fn_url(get_url) // we assume a modern CPU
-                    .folder(self.folder())
-                    .archive_format(ArchiveFormat::Raw)
-                    .exec_fname(self.target_os_exec_fname())
-                    .build()
-            }
-        }
-    }
-
-    cfg(target_os = "macos") =>
-    {
-
-    }
-    _ => {
+impl DownloadableInformation for RasmVersion {
+    fn archive_format(&self) -> ArchiveFormat {
+        ArchiveFormat::Zip
     }
 }
 

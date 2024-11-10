@@ -9,7 +9,7 @@ use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
-use cpclib_runner::runner::assembler::RASM_CMD;
+use cpclib_runner::runner::assembler::{RASM_CMD, SJASMPLUS_CMD};
 use cpclib_runner::runner::emulator::{AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD};
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -61,6 +61,7 @@ pub fn build_args_parser() -> clap::Command {
         IMPDISC_CMD,
         MARTINE_CMD,
         RASM_CMD,
+        SJASMPLUS_CMD,
         SUGARBOX_V2_CMD,
         WINAPE_CMD,
     ];
