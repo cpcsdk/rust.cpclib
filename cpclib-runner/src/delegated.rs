@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -6,6 +7,7 @@ use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
+use scraper::{Html, Selector};
 use tar::Archive;
 use ureq;
 use ureq::Response;
@@ -13,6 +15,10 @@ use ureq::Response;
 use crate::event::EventObserver;
 use crate::runner::runner::{ExternRunner, RunInDir, Runner};
 
+static GITHUB_URL: &str = "https://github.com/";
+
+
+/// Download a HTTP ressource
 pub fn cpclib_download(url: &str) -> Result<String, String> {
     ureq::get(url)
         .set("Cache-Control", "max-age=1")
@@ -23,6 +29,93 @@ pub fn cpclib_download(url: &str) -> Result<String, String> {
         .into_string()
         .map_err(|e| e.to_string())
 }
+
+/// From the full release url page, get the url for the given release
+pub fn github_get_assets_for_version_url(github_project: &str, version: &str) -> Result<String, String> {
+
+    let url = dbg!(format!("{github_project}/releases"));
+
+    // obtain the base dowload page
+    let html = cpclib_download(&url)?;
+    let document = Html::parse_document(&html);
+
+    let selector = Selector::parse("a")
+        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    for link in document.select(&selector) {
+        let content = link.inner_html();
+        let href = link.attr("href").unwrap();
+        if content.contains(version) && !href.contains("/tree/") {
+            dbg!(&link, &href);
+            return dbg!(Ok(
+                format!("https://github.com{}", href)
+                    .replace("/tag/", "/expanded_assets/"))
+            );
+        }
+    }
+
+    Err(format!("No download link found for {version}"))
+}
+
+#[derive(Default)]
+pub struct GithubUrls {
+    pub linux: Option<String>,
+    pub windows: Option<String>,
+    pub macosx: Option<String>
+}
+
+impl GithubUrls {
+    pub fn target_os_url(&self) -> Option<&String> {
+        #[cfg(target_os = "windows")]
+        return self.windows.as_ref();
+        #[cfg(target_os = "macos")]
+        return self.macosx.as_ref();
+        #[cfg(target_os = "linux")]
+        return self.linux.as_ref();
+    }
+}
+
+pub fn github_download_urls(github_project: &str, version: &str,
+    linux_key: Option<&str>,
+    windows_key: Option<&str>,
+    macosx_key: Option<&str>
+
+) -> Result<GithubUrls, String> {
+    let html = cpclib_download(&github_get_assets_for_version_url(github_project, version)?)?;
+    let document = Html::parse_document(&html);
+    let selector = Selector::parse("a")
+        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    
+    let mut map = BTreeMap::new();
+    for element in document.select(&selector) {
+        let name = element.text().collect::<String>();
+        let name = name
+            .replace("\n", "")
+            .replace("\t", " ")
+            .replace("    ", " ");
+        let name = name.trim();
+        map.insert(name.to_owned(), element.attr("href").unwrap().trim());
+    }
+
+    let mut urls = GithubUrls::default();
+
+    if let Some(key) = linux_key {
+        urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+    }
+    if let Some(key) = windows_key {
+        urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+    }
+    if let Some(key) = macosx_key {
+        urls.macosx = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+    }
+
+    Ok(urls)
+}
+
+
 
 #[derive(Clone)]
 pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);

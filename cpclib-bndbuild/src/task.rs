@@ -4,7 +4,7 @@ use std::str::FromStr;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
-use cpclib_runner::runner::emulator::{ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, WINAPE_CMD};
+use cpclib_runner::runner::emulator::{ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD};
 use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -38,6 +38,7 @@ pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
+pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
@@ -98,9 +99,22 @@ macro_rules! is_some_cmd {
     };
 }
 
+
 is_some_cmd!(
-    ace, amspirit, cpcec, winape, emuctrl, basm, rasm, orgams, bndbuild, cp, rm, echo, disc,
-    impdisc, hideur, img2cpc, martine, r#extern, xfer, fap
+    ace, amspirit,
+    basm, bndbuild,
+    cp, cpcec,
+    disc, 
+    echo,emuctrl, r#extern,
+    fap,
+    hideur,
+    img2cpc, impdisc,
+    martine, 
+    orgams,
+    winape, 
+    rasm, rm,
+    sugarbox,
+    xfer
 );
 
 impl<'de> Deserialize<'de> for Task {
@@ -132,6 +146,9 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_amspirit_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_amspirit_default(), std))
+                }
+                else if is_sugarbox_cmd(code) {
+                    Ok(Task::Emulator(Emulator::new_sugarbox_default(), std))
                 }
                 else if is_winape_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_winape_default(), std))

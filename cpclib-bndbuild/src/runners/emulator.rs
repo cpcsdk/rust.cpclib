@@ -40,6 +40,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_sugarbox_default() -> Self {
+        Self::DirectAccess(cpclib_runner::runner::emulator::Emulator::SugarBoxV2(
+            Default::default()
+        ))
+    }
+
     pub fn new_controlled_access() -> Self {
         Self::ControlledAccess
     }

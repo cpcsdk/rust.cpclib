@@ -7,16 +7,31 @@ use directories::BaseDirs;
 use scraper::{Html, Selector};
 
 use crate::delegated::{
-    cpclib_download, ArchiveFormat, DelegateApplicationDescription, UrlGenerator
+    cpclib_download, github_download_urls, ArchiveFormat, DelegateApplicationDescription, GithubUrls, UrlGenerator
 };
 use crate::event::EventObserver;
+
+use super::runner::RunInDir;
 
 pub const ACE_CMD: &str = "ace";
 pub const WINAPE_CMD: &str = "winape";
 pub const CPCEC_CMD: &str = "cpcec";
 pub const AMSPIRIT_CMD: &str = "amspirit";
+pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 
 const ACE_URL: &str = "http://www.roudoudou.com/ACE-DL";
+
+
+fn sugarbox_download_urls(version: SugarBoxV2Version) -> Result<GithubUrls, String> {
+    github_download_urls(
+        "https://github.com/Tom1975/SugarboxV2",
+        version.name(),
+        Some("Sugarbox-2.0.2-Linux.tar.gz"),
+        Some("Sugarbox-2.0.2-win64.7z"),
+        Some("Sugarbox-2.0.2-Darwin.tar.gz")
+    )
+}
+
 
 fn ace_download_fn_urls_lin_win() -> Result<(String, String), String> {
     let html = cpclib_download(ACE_URL)?;
@@ -45,7 +60,8 @@ pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
     Cpcec(CpcecVersion),
-    Winape(WinapeVersion)
+    Winape(WinapeVersion),
+    SugarBoxV2(SugarBoxV2Version)
 }
 
 impl Default for Emulator {
@@ -83,7 +99,8 @@ impl Emulator {
             Emulator::Ace(_) => ACE_CMD,
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
             Emulator::Cpcec(_) => CPCEC_CMD,
-            Emulator::Winape(_) => WINAPE_CMD
+            Emulator::Winape(_) => WINAPE_CMD,
+            Emulator::SugarBoxV2(_)=> SUGARBOX_V2_CMD
         }
     }
 
@@ -93,7 +110,8 @@ impl Emulator {
             Emulator::Ace(_) => window_name.starts_with("ACE-DL -"),
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
-            Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT")
+            Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
+            Emulator::SugarBoxV2(_) => unimplemented!()
         }
     }
 
@@ -175,13 +193,55 @@ pub enum AmspiritVersion {
     Rc1_01
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub enum SugarBoxV2Version {
+    #[default]
+    V2_0_2
+}
+
+
+impl SugarBoxV2Version {
+
+    pub fn target_os_archive_format(&self) -> ArchiveFormat {
+        #[cfg(target_os = "windows")]
+        return ArchiveFormat::SevenZ;
+        #[cfg(target_os = "macos")]
+        return ArchiveFormat::TarGz;
+        #[cfg(target_os = "linux")]
+        return ArchiveFormat::TarGz;
+    }
+
+    pub fn target_os_exec_fname(&self) -> &'static str {
+        #[cfg(target_os = "windows")]
+        return "Sugarbox.exe";
+        #[cfg(target_os = "macos")]
+        return "Sugarbox";
+        #[cfg(target_os = "linux")]
+        return "Sugarbox";
+    }
+
+    pub fn target_os_folder(&self) -> &'static str {
+        match self {
+            SugarBoxV2Version::V2_0_2 => {
+                #[cfg(target_os = "windows")]
+                return "Sugarbox-2.0.2-win64/Sugarbox-2.0.2-win64";
+                #[cfg(target_os = "macos")]
+                return "Sugarbox-2.0.2-Darwin";
+                #[cfg(target_os = "linux")]
+                return "Sugarbox-2.0.2-Linux/Sugarbox-2.0.2-Linux";
+            },
+        }
+    }
+}
+
 impl Emulator {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),
             Emulator::Winape(v) => v.configuration(),
-            Emulator::Amspirit(v) => v.configuration()
+            Emulator::Amspirit(v) => v.configuration(),
+            Emulator::SugarBoxV2(v) => v.configuration()
         }
     }
 }
@@ -244,6 +304,32 @@ fn windows_ace_desc<E: EventObserver, F: Into<UrlGenerator>>(
         .archive_format(ArchiveFormat::Zip)
         .exec_fname("AceDL.exe")
         .build()
+}
+
+impl SugarBoxV2Version {
+    pub fn name(&self) -> &str {
+        match self {
+            SugarBoxV2Version::V2_0_2 => "v2.0.2",
+        }
+    }
+
+
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        let version_cloned = self.clone();
+        let get_url = move || -> Result<String, String> {
+            sugarbox_download_urls(version_cloned.clone())
+                .map(|urls| urls.target_os_url().unwrap().clone())
+        };
+        let get_url: Box<dyn Fn() -> Result<String,String>>  = Box::new(get_url);
+
+        DelegateApplicationDescription::builder()
+            .download_fn_url(get_url) // we assume a modern CPU
+            .folder(self.target_os_folder())
+            .archive_format(self.target_os_archive_format())
+            .exec_fname(self.target_os_exec_fname())
+            .in_dir(RunInDir::AppDir)
+            .build()
+    }
 }
 
 impl WinapeVersion {

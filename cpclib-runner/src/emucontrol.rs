@@ -18,7 +18,7 @@ use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
-use crate::runner::emulator::Emulator;
+use crate::runner::emulator::{Emulator};
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -76,6 +76,7 @@ impl EmulatorConf {
             match emu {
                 Emulator::Ace(_) => args.push(drive_a.to_string()),
                 Emulator::Cpcec(_) => args.push(drive_a.to_string()),
+                Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
                 Emulator::Amspirit(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string())
             }
@@ -86,7 +87,8 @@ impl EmulatorConf {
                 Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned())
+                Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
             }
         }
 
@@ -94,6 +96,7 @@ impl EmulatorConf {
             match emu {
                 Emulator::Ace(ace_version) => args.push(sna.to_string()),
                 Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
+                Emulator::SugarBoxV2(_) => args.push(sna.to_string()),
                 Emulator::Winape(winape_version) => {
                     let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("/SN:{fname}"));
@@ -111,7 +114,8 @@ impl EmulatorConf {
                 Emulator::Ace(_) => todo!(),
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
-                Emulator::Amspirit(_) => todo!()
+                Emulator::Amspirit(_) => todo!(),
+                Emulator::SugarBoxV2(_) => todo!(),
             }
         }
 
@@ -179,7 +183,8 @@ impl EmulatorConf {
                 },
                 Emulator::Amspirit(_) => {
                     args.push(format!("--run={run}"));
-                }
+                },
+                Emulator::SugarBoxV2(_) => unimplemented!()
             }
         }
 
@@ -223,6 +228,7 @@ struct AceUsedEmulator {}
 struct CpcecUsedEmulator {}
 struct WinapeUsedEmulator {}
 struct AmspiritUsedEmulator {}
+struct SugarBoxV2UsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -265,7 +271,7 @@ impl UsedEmulator for AceUsedEmulator {
 }
 impl UsedEmulator for CpcecUsedEmulator {}
 impl UsedEmulator for WinapeUsedEmulator {}
-
+impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
@@ -279,7 +285,8 @@ pub enum Robot {
     Ace(RobotImpl<AceUsedEmulator>),
     Cpcec(RobotImpl<CpcecUsedEmulator>),
     Winape(RobotImpl<WinapeUsedEmulator>),
-    Amspirit(RobotImpl<AmspiritUsedEmulator>)
+    Amspirit(RobotImpl<AmspiritUsedEmulator>),
+    SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -306,6 +313,13 @@ impl From<RobotImpl<AmspiritUsedEmulator>> for Robot {
     }
 }
 
+impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
+    fn from(value: RobotImpl<SugarBoxV2UsedEmulator>) -> Self {
+        Self::SugarboxV2(value)
+    }
+}
+
+
 impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
     fn from(value: (Window, Enigo, &Emulator)) -> Self {
         Self {
@@ -324,6 +338,7 @@ impl Robot {
             Robot::Cpcec(r) => r,
             Robot::Winape(r) => r,
             Robot::Amspirit(r) => r,
+            Robot::SugarboxV2(r) => r,
         } {
             fn handle_orgams(
                 &mut self,
@@ -344,12 +359,9 @@ impl Robot {
         match emu {
             Emulator::Ace(_) => RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into(),
             Emulator::Cpcec(_) => RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into(),
-            Emulator::Winape(_) => {
-                RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
-            },
-            Emulator::Amspirit(_) => {
-                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
-            },
+            Emulator::Winape(_) => RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Amspirit(_) => RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::SugarBoxV2(_) => RobotImpl::<SugarBoxV2UsedEmulator>::from((window, enigo, emu)).into(),
         }
     }
 
@@ -789,7 +801,8 @@ pub enum Emu {
     Ace,
     Winape,
     Cpcec,
-    Amspirit
+    Amspirit,
+    Sugarbox
 }
 
 use clap::Args;
@@ -902,7 +915,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         Emu::Ace => Emulator::Ace(Default::default()),
         Emu::Winape => Emulator::Winape(Default::default()),
         Emu::Cpcec => Emulator::Cpcec(Default::default()),
-        Emu::Amspirit => Emulator::Amspirit(Default::default())
+        Emu::Amspirit => Emulator::Amspirit(Default::default()),
+        Emu::Sugarbox => Emulator::SugarBoxV2(Default::default())
     };
 
     {
