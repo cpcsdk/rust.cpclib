@@ -42,8 +42,7 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 }
 
 pub fn build_args_parser() -> clap::Command {
-
-    static COMMANDS_LIST : &[&str] = &[
+    static COMMANDS_LIST: &[&str] = &[
         EMUCTRL_CMD,
         WINAPE_CMD,
         CPCEC_CMD,
@@ -63,7 +62,7 @@ pub fn build_args_parser() -> clap::Command {
         RASM_CMD,
         "rm",
         SUGARBOX_V2_CMD,
-        "xfer",
+        "xfer"
     ];
 
     Command::new("bndbuilder")

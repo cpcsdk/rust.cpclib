@@ -349,22 +349,26 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_clear(observers: &dyn BndBuilderObserver, command: Option<String>) -> Result<(), BndBuilderError> {
+    fn execute_clear(
+        observers: &dyn BndBuilderObserver,
+        command: Option<String>
+    ) -> Result<(), BndBuilderError> {
         let folder = if let Some(command) = command {
             match Task::from_str(&format!("{command}"))
-                    .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
-                    .configuration::<()>() {
-                Some(conf) => {
-                    conf.cache_folder()
-                }
+                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
+                .configuration::<()>()
+            {
+                Some(conf) => conf.cache_folder(),
                 None => {
-                    return Err(BndBuilderError::AnyError(format!("{command} is not an embedded command.")));
+                    return Err(BndBuilderError::AnyError(format!(
+                        "{command} is not an embedded command."
+                    )));
                 }
             }
-        } else {
+        }
+        else {
             base_cache_folder().to_owned()
         };
-
 
         std::fs::remove_dir_all(folder)
             .context("Error when removing cache folder")
@@ -450,7 +454,8 @@ impl BndBuilderApp {
             else if matches.contains_id("clear") {
                 if let Some(clear) = matches.get_one::<String>("clear") {
                     return Ok(BndBuilderCommandInner::Clear(Some(clear.to_owned())));
-                } else {
+                }
+                else {
                     return Ok(BndBuilderCommandInner::Clear(None));
                 }
             }

@@ -4,7 +4,9 @@ use std::str::FromStr;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD};
-use cpclib_runner::runner::emulator::{ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD};
+use cpclib_runner::runner::emulator::{
+    ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
+};
 use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -99,22 +101,9 @@ macro_rules! is_some_cmd {
     };
 }
 
-
 is_some_cmd!(
-    ace, amspirit,
-    basm, bndbuild,
-    cp, cpcec,
-    disc, 
-    echo,emuctrl, r#extern,
-    fap,
-    hideur,
-    img2cpc, impdisc,
-    martine, 
-    orgams,
-    winape, 
-    rasm, rm,
-    sugarbox,
-    xfer
+    ace, amspirit, basm, bndbuild, cp, cpcec, disc, echo, emuctrl, r#extern, fap, hideur, img2cpc,
+    impdisc, martine, orgams, winape, rasm, rm, sugarbox, xfer
 );
 
 impl<'de> Deserialize<'de> for Task {
@@ -220,18 +209,15 @@ impl<'de> Deserialize<'de> for Task {
     }
 }
 
-
 impl FromStr for Task {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_yaml::from_str(s)
-            .map_err(|e| e.to_string())
+        serde_yaml::from_str(s).map_err(|e| e.to_string())
     }
 }
 
 impl Task {
-
     pub fn new_basm(args: &str) -> Self {
         Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }

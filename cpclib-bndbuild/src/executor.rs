@@ -18,20 +18,18 @@ use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::Task;
 
-
 impl Task {
-
     #[inline]
-    pub fn configuration<E: EventObserver + 'static>(&self) -> Option<DelegateApplicationDescription<E>> {
+    pub fn configuration<E: EventObserver + 'static>(
+        &self
+    ) -> Option<DelegateApplicationDescription<E>> {
         match self {
             Task::Emulator(e, _) => {
                 match e {
                     crate::runners::emulator::Emulator::DirectAccess(e) => {
                         Some(e.configuration::<E>())
                     },
-                    crate::runners::emulator::Emulator::ControlledAccess => {
-                        None
-                    }
+                    crate::runners::emulator::Emulator::ControlledAccess => None
                 }
             },
 
@@ -44,23 +42,16 @@ impl Task {
                 }
             },
 
-            Task::ImpDsk(_) => {
-                Some(ImpDskVersion::default().configuration())
-            },
+            Task::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
 
-            Task::Martine(_) => {
-                Some(MartineVersion::default().configuration())
-            },
+            Task::Martine(_) => Some(MartineVersion::default().configuration()),
 
-            Task::Fap(_) => {
-                Some(FAPVersion::default().configuration())
-            }
+            Task::Fap(_) => Some(FAPVersion::default().configuration()),
 
             _ => None
         }
     }
 }
-
 
 #[inline]
 pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String> {
