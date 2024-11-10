@@ -43,26 +43,26 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 
 pub fn build_args_parser() -> clap::Command {
     static COMMANDS_LIST: &[&str] = &[
-        EMUCTRL_CMD,
-        WINAPE_CMD,
-        CPCEC_CMD,
-        AMSPIRIT_CMD,
         "basm",
         "bndbuild",
         "cp",
-        "dsk",
         "disc",
+        "dsk",
         "echo",
         "extern",
         "img2cpc",
+        "orgams",
+        "rm",
+        "xfer",
+        AMSPIRIT_CMD,
+        CPCEC_CMD,
+        EMUCTRL_CMD,
         HIDEUR_CMD,
         IMPDISC_CMD,
         MARTINE_CMD,
-        "orgams",
         RASM_CMD,
-        "rm",
         SUGARBOX_V2_CMD,
-        "xfer"
+        WINAPE_CMD,
     ];
 
     Command::new("bndbuilder")

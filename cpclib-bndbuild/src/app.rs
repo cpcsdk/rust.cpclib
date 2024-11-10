@@ -15,16 +15,17 @@ use cpclib_runner::runner::RunnerWithClap;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
-use crate::runners::assembler::{Assembler, BasmRunner};
+use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
 use crate::runners::disc::DiscManagerRunner;
+use crate::runners::emulator::Emulator;
+use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_basm_cmd, is_cp_cmd, is_disc_cmd, is_emuctrl_cmd, is_img2cpc_cmd, is_rasm_cmd, is_rm_cmd,
-    is_xfer_cmd, StandardTaskArguments, Task
+    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_cpcec_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rasm_cmd, is_rm_cmd, is_winape_cmd, is_xfer_cmd, StandardTaskArguments, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
 
@@ -304,15 +305,70 @@ impl BndBuilderCommand {
         else if is_img2cpc_cmd(runner) {
             ImgConverterRunner::<()>::render_help()
         }
-        else if is_rasm_cmd(runner) {
-            let task = Task::Assembler(
-                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
-                    RasmVersion::default()
-                )),
-                StandardTaskArguments::new("--help")
-            );
-            execute(&task, observers).unwrap();
-            "TODO".into()
+        else if is_hideur_cmd(runner) {
+            HideurRunner::<()>::render_help()
+        }
+        else if is_orgams_cmd(runner) {
+            OrgamsRunner::<()>::render_help()
+        }
+        else if is_extern_cmd(runner) {
+            "Launch an external command.
+
+Usage: extern <program> [arguments]...
+
+Arguments:
+  <program>
+          The program to execute
+  [arguments]...
+          The arguments of the program".to_owned()
+        }
+        else if is_echo_cmd(runner) {
+            "Print the arguments.
+
+Usage: echo [arguments]...
+
+Arguments:
+  [arguments]...
+          Words to print".to_owned()
+        }
+        else if is_amspirit_cmd(runner) {
+            r"AMSpiriT peut être exécuté par une ligne de commande, en mode console par exemple, permettant
+d’automatiser certaines séquences de démarrage.
+De nouvelles commandes seront progressivement ajoutées selon les besoins.
+Commandes disponibles :
+Les commandes en ligne sont standardisées.
+--autorun Exécute automatiquement un enregistrement Cassette
+--crtc=X Fixe le type de CRTC au démarrage (X = 0, 1, 1b, 2 ou 4)
+--file=file Charge un fichier dsk, ipf, hfe, cdt, wav, sna (le chemin doit être complet)
+--csl=file Charge un fichier script « Cpc Scripting Language » (le chemin doit être complet)
+--fullscreen Exécute AmspiriT en mode plein écran
+--joystick Active le joystick (Mapping clavier)
+--keybPC Clavier en mode mapping PC => CPC
+--keybCPC Clavier en mode CPC (pas de mapping) – Disponible sur quelques claviers
+--nojoystick Désactive le josystick
+--mute Désactive le son
+--romX=file_rom Charge un fichier ROM dans un emplacement X (X varie entre 1 et 15)
+A noter que les ROMs chargées ne seront pas mémorisées par AmspiriT
+--run=Filename Lance un programme présent sur une disquette ou une Rom.
+--config-file=rep Fixe le répertoire de AmspiriT où se situe le fichier de configuration".to_owned()
+        }
+        else if is_winape_cmd(runner) {
+            //http://www.winape.net/help/parameters.html
+            r" When starting WinAPE a disc image filename can be specified as a parameter (without the slash option). The following parameters can be specified on the command line:
+
+Parameter	Function
+filename	Specify the filename for the disc image to be used in Drive A:
+/A	Automatically run the program in Drive A:. To specify the name of the program to run use /A:filename. To start a disc using a CP/M boot sector use /A:|CPM
+/T:filename	Automatically start typing from the given Auto-type file.
+/SN:filename	Specify a Snapshot file to be loaded and automatically started.
+/SYM:filename	Load a file containing assembler/debugger symbols.
+/SHUTDOWN	Shut down Windows when WinAPE is closed. Use /SHUTDOWN:FORCE to force shutdown if required.
+
+For example, to start WinAPE using the disc image frogger.dsk contained within a Zip file frogger.zip and run the program named frogger use:
+
+WinAPE frogger.zip\:frogger.dsk /a:frogger            
+            
+            ".to_owned()
         }
         else if is_rm_cmd(runner) {
             RmRunner::<()>::render_help()
@@ -321,7 +377,9 @@ impl BndBuilderCommand {
             XferRunner::<()>::render_help()
         }
         else {
-            unimplemented!("{runner}")
+            let task = Task::from_str(&format!("{runner} --help")).unwrap();
+            let _  = execute(&task, observers); // we ignore potential error
+            "TODO / handle string collect instead of stdout output".into()
         };
 
         observers.emit_stdout(&format!("{help}\n"));

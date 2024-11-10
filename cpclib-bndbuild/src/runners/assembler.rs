@@ -53,7 +53,7 @@ pub struct OrgamsRunner<E: EventObserver> {
 
 impl<E: EventObserver> Default for OrgamsRunner<E> {
     fn default() -> Self {
-        let command = <Orgams as CommandFactory>::command();
+        let command = <Orgams as CommandFactory>::command().name("orgams");
         Self {
             command,
             _phantom: Default::default()
