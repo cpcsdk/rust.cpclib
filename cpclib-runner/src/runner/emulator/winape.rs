@@ -1,6 +1,8 @@
+use std::sync::OnceLock;
+
 use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
 
 pub const WINAPE_CMD: &str = "winape";
 
@@ -17,17 +19,29 @@ impl WinapeVersion {
     }
 }
 
-impl WinapeVersion {
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        match self {
-            WinapeVersion::V2_0b2 => {
-                DelegateApplicationDescription::builder()
-                    .download_fn_url("http://www.winape.net/download/WinAPE20B2.zip")
-                    .folder("winape_2_0b2")
-                    .archive_format(ArchiveFormat::Zip)
-                    .exec_fname("WinApe.exe")
-                    .build()
-            },
-        }
+impl InternetStaticCompiledApplication for WinapeVersion {
+
+}
+
+impl ExecutableInformation for WinapeVersion {
+    fn target_os_folder(&self) -> &'static str {
+        "winape_2_0b2"
+    }
+
+    fn target_os_exec_fname(&self) -> &'static str {
+        "WinApe.exe"
     }
 }
+
+impl DownloadableInformation for WinapeVersion {
+    fn target_os_archive_format(&self) -> ArchiveFormat {
+        ArchiveFormat::Zip
+    }
+}
+impl StaticInformation for WinapeVersion {
+    fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
+        static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+        URL.get_or_init(||  MutiplatformUrls::unique_url("http://www.winape.net/download/WinAPE20B2.zip"))
+    }
+}
+

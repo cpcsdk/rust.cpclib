@@ -62,6 +62,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(info: &GI) -> Re
 }
 
 #[derive(Default)]
+#[derive(bon::Builder)]
 pub struct MutiplatformUrls {
     pub linux: Option<String>,
     pub windows: Option<String>,
@@ -69,6 +70,15 @@ pub struct MutiplatformUrls {
 }
 
 impl MutiplatformUrls {
+    pub fn unique_url(url: &str) -> Self {
+        MutiplatformUrls::builder()
+            .linux(url.into())
+            .windows(url.into())
+            .macos(url.into())
+            .build()
+
+    }
+
     pub fn target_os_url(&self) -> Option<&String> {
         #[cfg(target_os = "windows")]
         return self.windows.as_ref();
