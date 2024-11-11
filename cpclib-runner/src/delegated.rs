@@ -21,15 +21,14 @@ static GITHUB_URL: &str = "https://github.com/";
 
 
 /// Download a HTTP ressource
-pub fn cpclib_download(url: &str) -> Result<String, String> {
-    ureq::get(url)
-        .set("Cache-Control", "max-age=1")
-        .set("From", "krusty.benediction@gmail.com")
-        .set("User-Agent", "cpclib")
-        .call()
-        .map_err(|e| e.to_string())?
-        .into_string()
-        .map_err(|e| e.to_string())
+pub fn cpclib_download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
+    Ok(ureq::get(url)
+            .set("Cache-Control", "max-age=1")
+            .set("From", "krusty.benediction@gmail.com")
+            .set("User-Agent", "cpclib")
+            .call()
+            .map_err(|e| e.to_string())?
+            .into_reader())
 }
 
 /// From the full release url page, get the url for the given release
@@ -38,7 +37,9 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(info: &GI) -> Re
     let url = dbg!(format!("https://github.com/{}/{}/releases", info.owner(), info.project()));
 
     // obtain the base dowload page
-    let html = cpclib_download(&url)?;
+    let mut content = cpclib_download(&url)?;
+    let mut html =  String::new();
+    content.read_to_string(&mut html).map_err(|e| e.to_string())?;;
     let document = Html::parse_document(&html);
 
     let selector = Selector::parse("a")
@@ -102,15 +103,35 @@ pub trait CompilableInformation {
 }
 
 pub trait DownloadableInformation {
-    fn archive_format(&self) -> ArchiveFormat;
+    fn target_os_archive_format(&self) -> ArchiveFormat;
+}
+
+pub trait StaticInformation: DownloadableInformation {
+    fn static_download_urls(&self) -> &'static MutiplatformUrls;
+
+    fn target_os_url(&self) -> Option<&'static str> {
+        self.static_download_urls().target_os_url().map(|s| s.as_str())
+    }
+    
+    fn target_os_url_generator(&self) -> UrlGenerator {
+        let url = self.target_os_url();
+        let deferred: Box<dyn Fn() -> Result<String, String>> = Box::new(move || {
+            url
+            .ok_or_else(|| format!("No download url for current OS"))
+            .map(|s| s.to_owned())
+
+        });
+        deferred.into()
+    }
+
 }
 
 pub trait ExecutableInformation {
-    fn folder(&self) -> &'static str;
+    fn target_os_folder(&self) -> &'static str;
     fn target_os_exec_fname(&self) -> &'static str;
 }
 
-pub trait GithubInformation : Display + Clone +'static {
+pub trait GithubInformation : DownloadableInformation + Display + Clone +'static {
     fn project(&self) -> &'static str;
     fn owner(&self) -> &'static str;
     /// The name to search to obtain the assets link
@@ -125,58 +146,64 @@ pub trait GithubInformation : Display + Clone +'static {
         None
     }
 
+    // specific implementation of github
     fn target_os_url_generator(&self) -> UrlGenerator {
 
         let cloned = self.clone();
         let deferred: Box<dyn Fn() -> Result<String, String>>  = Box::new(move || -> Result<String, String> {
             let inside = cloned.clone();
-            let urls = github_download_urls(&inside)?;
+            let urls = inside.github_download_urls()?;
             urls.target_os_url()
                 .cloned()
                 .ok_or(format!("No url for this os"))
         });
         deferred.into()
     }
+
+
+    fn github_download_urls(&self) -> Result<MutiplatformUrls, String> {
+        let mut content = cpclib_download(&github_get_assets_for_version_url(self)?)?;
+        let mut html = String::default();
+        content.read_to_string(&mut html).map_err(|e| e.to_string())?;
+        let document = Html::parse_document(&html);
+        let selector = Selector::parse("a")
+            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+    
+        
+        let mut map = BTreeMap::new();
+        for element in document.select(&selector) {
+            let name = element.text().collect::<String>();
+            let name = name
+                .replace("\n", "")
+                .replace("\t", " ")
+                .replace("    ", " ");
+            let name = name.trim();
+            map.insert(name.to_owned(), element.attr("href").unwrap().trim());
+        }
+    
+        let mut urls = MutiplatformUrls::default();
+    
+        if let Some(key) = self.linux_key() {
+            urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+        }
+        if let Some(key) = self.windows_key() {
+            urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+        }
+        if let Some(key) = self.macos_key() {
+            urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+        }
+    
+        Ok(urls)
+    }
+    
+    
 }
 
 impl<G> From<&G> for UrlGenerator where G: GithubInformation{
     fn from(g: &G) -> Self {
         g.target_os_url_generator()
     }
-}
-
-pub fn github_download_urls<GI: GithubInformation>(info: &GI) -> Result<MutiplatformUrls, String> {
-    let html = cpclib_download(&github_get_assets_for_version_url(info)?)?;
-    let document = Html::parse_document(&html);
-    let selector = Selector::parse("a")
-        .map_err(|e| e.to_string())
-        .map_err(|e| e.to_string())?;
-
-    
-    let mut map = BTreeMap::new();
-    for element in document.select(&selector) {
-        let name = element.text().collect::<String>();
-        let name = name
-            .replace("\n", "")
-            .replace("\t", " ")
-            .replace("    ", " ");
-        let name = name.trim();
-        map.insert(name.to_owned(), element.attr("href").unwrap().trim());
-    }
-
-    let mut urls = MutiplatformUrls::default();
-
-    if let Some(key) = info.linux_key() {
-        urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
-    }
-    if let Some(key) = info.windows_key() {
-        urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
-    }
-    if let Some(key) = info.macos_key() {
-        urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
-    }
-
-    Ok(urls)
 }
 
 
@@ -187,19 +214,31 @@ pub trait HasConfiguration {
 }
 
 
-impl<Tool> HasConfiguration for Tool 
-where Tool: CompilableInformation + DownloadableInformation + ExecutableInformation + GithubInformation {
+
+
+pub trait GithubCompilableApplication: CompilableInformation + ExecutableInformation + GithubInformation + Default {
     fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
         .download_fn_url(self) // we assume a modern CPU
-        .folder(self.folder())
-        .archive_format(self.archive_format())
+        .folder(self.target_os_folder())
+        .archive_format(self.target_os_archive_format())
         .exec_fname(self.target_os_exec_fname())
         .maybe_compile(self.target_os_compiler())
         .build()
     }
 }
 
+
+pub trait InternetCompiledApplication: StaticInformation + ExecutableInformation + Default {
+    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+        DelegateApplicationDescription::builder()
+            .download_fn_url(self.target_os_url_generator())
+            .folder(self.target_os_folder())
+            .archive_format(self.target_os_archive_format())
+            .exec_fname(self.target_os_exec_fname())
+            .build()
+    }
+}
 #[derive(Clone)]
 pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);
 

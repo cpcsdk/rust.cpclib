@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
-use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD};
+use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
@@ -35,6 +35,8 @@ pub enum Task {
     Xfer(StandardTaskArguments)
 }
 
+
+// list of keywords; do not forget to add them to bndbuild/lib.rs
 pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
 pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
@@ -46,6 +48,7 @@ pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
+pub const VASM_CMDS: &[&str] = &[VASM_CMD];
 
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
@@ -103,9 +106,23 @@ macro_rules! is_some_cmd {
     };
 }
 
+#[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, basm, bndbuild, cp, cpcec, disc, echo, emuctrl, r#extern, fap, hideur, img2cpc,
-    impdisc, martine, orgams, winape, rasm, rm, sjasmplus, sugarbox, xfer
+    ace, amspirit, 
+    basm, bndbuild, 
+    cp, cpcec, 
+    disc, 
+    echo, emuctrl, r#extern, 
+    fap, 
+    hideur, 
+    img2cpc, impdisc, 
+    martine, 
+    orgams, 
+    rasm, rm, 
+    sjasmplus, sugarbox, 
+    vasm,
+    winape, 
+    xfer
 );
 
 impl<'de> Deserialize<'de> for Task {
@@ -168,6 +185,16 @@ impl<'de> Deserialize<'de> for Task {
                     Ok(Task::Assembler(
                         Assembler::Extern(
                             cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
+                                Default::default()
+                            )
+                        ),
+                        std
+                    ))
+                }
+                else if is_vasm_cmd(code) {
+                    Ok(Task::Assembler(
+                        Assembler::Extern(
+                            cpclib_runner::runner::assembler::ExternAssembler::Vasm(
                                 Default::default()
                             )
                         ),
