@@ -35,7 +35,6 @@ pub enum Task {
     Xfer(StandardTaskArguments)
 }
 
-
 // list of keywords; do not forget to add them to bndbuild/lib.rs
 pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
 pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
@@ -193,11 +192,9 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_vasm_cmd(code) {
                     Ok(Task::Assembler(
-                        Assembler::Extern(
-                            cpclib_runner::runner::assembler::ExternAssembler::Vasm(
-                                Default::default()
-                            )
-                        ),
+                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Vasm(
+                            Default::default()
+                        )),
                         std
                     ))
                 }

@@ -23,9 +23,9 @@ use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd,
-    is_emuctrl_cmd, is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd,
-    is_rm_cmd, is_winape_cmd, is_xfer_cmd, Task
+    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
+    is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_winape_cmd,
+    is_xfer_cmd, Task
 };
 use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
 

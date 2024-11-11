@@ -10,7 +10,12 @@ use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
-use task::{ACE_CMDS, AMSPIRIT_CMDS, BASM_CMDS, BNDBUILD_CMDS, CPCEC_CMDS, CP_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS};
+use task::{
+    ACE_CMDS, AMSPIRIT_CMDS, BASM_CMDS, BNDBUILD_CMDS, CPCEC_CMDS, CP_CMDS, DISC_CMDS, ECHO_CMDS,
+    EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS,
+    ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS,
+    XFER_CMDS
+};
 use thiserror::Error;
 
 use crate::executor::*;
@@ -39,15 +44,33 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 
 pub fn build_args_parser() -> clap::Command {
     static COMMANDS_LIST: OnceLock<Vec<&str>> = OnceLock::new();
-    let commands_list = COMMANDS_LIST.get_or_init(||{
+    let commands_list = COMMANDS_LIST.get_or_init(|| {
         let sources = [
-            EMUCTRL_CMDS, ACE_CMDS, WINAPE_CMDS, CPCEC_CMDS, AMSPIRIT_CMDS, SUGARBOX_CMDS,
-            BASM_CMDS, ORGAMS_CMDS, RASM_CMDS, SJASMPLUS_CMDS, VASM_CMDS,
-            BNDBUILD_CMDS, CP_CMDS, DISC_CMDS, ECHO_CMDS, EXTERN_CMDS, FAP_CMDS, IMG2CPC_CMDS, HIDEUR_CMDS,
-            IMPDISC_CMDS, MARTINE_CMDS, RM_CMDS, XFER_CMDS
+            EMUCTRL_CMDS,
+            ACE_CMDS,
+            WINAPE_CMDS,
+            CPCEC_CMDS,
+            AMSPIRIT_CMDS,
+            SUGARBOX_CMDS,
+            BASM_CMDS,
+            ORGAMS_CMDS,
+            RASM_CMDS,
+            SJASMPLUS_CMDS,
+            VASM_CMDS,
+            BNDBUILD_CMDS,
+            CP_CMDS,
+            DISC_CMDS,
+            ECHO_CMDS,
+            EXTERN_CMDS,
+            FAP_CMDS,
+            IMG2CPC_CMDS,
+            HIDEUR_CMDS,
+            IMPDISC_CMDS,
+            MARTINE_CMDS,
+            RM_CMDS,
+            XFER_CMDS
         ];
-        
-        
+
         let mut list = Vec::with_capacity(sources.iter().map(|l| l.len()).sum());
         for l in sources.into_iter() {
             list.extend_from_slice(l);

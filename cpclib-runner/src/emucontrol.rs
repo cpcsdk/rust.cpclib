@@ -18,7 +18,7 @@ use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
-use crate::runner::emulator::{Emulator};
+use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -88,7 +88,7 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned())
             }
         }
 
@@ -115,7 +115,7 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
-                Emulator::SugarBoxV2(_) => todo!(),
+                Emulator::SugarBoxV2(_) => todo!()
             }
         }
 
@@ -286,7 +286,7 @@ pub enum Robot {
     Cpcec(RobotImpl<CpcecUsedEmulator>),
     Winape(RobotImpl<WinapeUsedEmulator>),
     Amspirit(RobotImpl<AmspiritUsedEmulator>),
-    SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
+    SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>)
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -318,7 +318,6 @@ impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
         Self::SugarboxV2(value)
     }
 }
-
 
 impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
     fn from(value: (Window, Enigo, &Emulator)) -> Self {
@@ -359,9 +358,15 @@ impl Robot {
         match emu {
             Emulator::Ace(_) => RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into(),
             Emulator::Cpcec(_) => RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into(),
-            Emulator::Winape(_) => RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into(),
-            Emulator::Amspirit(_) => RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into(),
-            Emulator::SugarBoxV2(_) => RobotImpl::<SugarBoxV2UsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Winape(_) => {
+                RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
+            },
+            Emulator::Amspirit(_) => {
+                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
+            },
+            Emulator::SugarBoxV2(_) => {
+                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, enigo, emu)).into()
+            },
         }
     }
 
@@ -874,7 +879,7 @@ impl<E: EventObserver> Default for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver+'static> Runner for EmuControlledRunner<E> {
+impl<E: EventObserver + 'static> Runner for EmuControlledRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -890,13 +895,13 @@ impl<E: EventObserver+'static> Runner for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver+'static> RunnerWithClap for EmuControlledRunner<E> {
+impl<E: EventObserver + 'static> RunnerWithClap for EmuControlledRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-pub fn handle_arguments<E: EventObserver+'static>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+pub fn handle_arguments<E: EventObserver + 'static>(mut cli: EmuCli, o: &E) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;

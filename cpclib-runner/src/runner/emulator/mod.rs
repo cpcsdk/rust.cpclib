@@ -6,22 +6,18 @@ pub mod winape;
 
 use std::path::absolute;
 
-use cpclib_common::{camino::{Utf8Path, Utf8PathBuf}, event::EventObserver};
-
-
-
-
 pub use ace::*;
 pub use amspirit::*;
 pub use cpcec::*;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::event::EventObserver;
 pub use sugarbox::*;
 pub use winape::*;
 
-use crate::delegated::{DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication, InternetDynamicCompiledApplication, InternetStaticCompiledApplication};
-
-
-
-
+use crate::delegated::{
+    DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication,
+    InternetDynamicCompiledApplication, InternetStaticCompiledApplication
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Emulator {
@@ -68,7 +64,7 @@ impl Emulator {
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
-            Emulator::SugarBoxV2(_)=> SUGARBOX_V2_CMD
+            Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD
         }
     }
 
@@ -119,13 +115,8 @@ impl Emulator {
     }
 }
 
-
-
-
-
-
 impl Emulator {
-    pub fn configuration<E: EventObserver +'static >(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),
@@ -136,21 +127,17 @@ impl Emulator {
     }
 }
 
-
-
-
-
-
-
 #[cfg(test)]
 mod test {
-    use crate::{delegated::{cpclib_download, DynamicUrlInformation, GithubInformation, StaticInformation}, runner::emulator::{AceVersion, AmspiritVersion}};
-
     use super::{SugarBoxV2Version, WinapeVersion};
+    use crate::delegated::{
+        cpclib_download, DynamicUrlInformation, GithubInformation, StaticInformation
+    };
+    use crate::runner::emulator::{AceVersion, AmspiritVersion};
 
     #[test]
     fn test_download_ace() {
-        let urls= AceVersion::default().dynamic_download_urls().unwrap();
+        let urls = AceVersion::default().dynamic_download_urls().unwrap();
         assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
@@ -160,7 +147,6 @@ mod test {
         let urls = SugarBoxV2Version::default().github_download_urls().unwrap();
         assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
-
     }
 
     #[test]
@@ -176,5 +162,4 @@ mod test {
         assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
-
 }

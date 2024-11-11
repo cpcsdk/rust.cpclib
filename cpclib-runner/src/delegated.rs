@@ -19,27 +19,33 @@ use crate::runner::runner::{ExternRunner, RunInDir, Runner};
 
 static GITHUB_URL: &str = "https://github.com/";
 
-
 /// Download a HTTP ressource
 pub fn cpclib_download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
     Ok(ureq::get(url)
-            .set("Cache-Control", "max-age=1")
-            .set("From", "krusty.benediction@gmail.com")
-            .set("User-Agent", "cpclib")
-            .call()
-            .map_err(|e| e.to_string())?
-            .into_reader())
+        .set("Cache-Control", "max-age=1")
+        .set("From", "krusty.benediction@gmail.com")
+        .set("User-Agent", "cpclib")
+        .call()
+        .map_err(|e| e.to_string())?
+        .into_reader())
 }
 
 /// From the full release url page, get the url for the given release
-pub fn github_get_assets_for_version_url<GI: GithubInformation>(info: &GI) -> Result<String, String> {
-
-    let url = dbg!(format!("https://github.com/{}/{}/releases", info.owner(), info.project()));
+pub fn github_get_assets_for_version_url<GI: GithubInformation>(
+    info: &GI
+) -> Result<String, String> {
+    let url = dbg!(format!(
+        "https://github.com/{}/{}/releases",
+        info.owner(),
+        info.project()
+    ));
 
     // obtain the base dowload page
     let mut content = cpclib_download(&url)?;
-    let mut html =  String::new();
-    content.read_to_string(&mut html).map_err(|e| e.to_string())?;;
+    let mut html = String::new();
+    content
+        .read_to_string(&mut html)
+        .map_err(|e| e.to_string())?;
     let document = Html::parse_document(&html);
 
     let selector = Selector::parse("a")
@@ -52,17 +58,15 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(info: &GI) -> Re
         if content.contains(info.version_name()) && !href.contains("/tree/") {
             dbg!(&link, &href);
             return dbg!(Ok(
-                format!("https://github.com{}", href)
-                    .replace("/tag/", "/expanded_assets/"))
-            );
+                format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/")
+            ));
         }
     }
 
     Err(format!("No download link found for {info}"))
 }
 
-#[derive(Default)]
-#[derive(bon::Builder)]
+#[derive(Default, bon::Builder)]
 pub struct MutiplatformUrls {
     pub linux: Option<String>,
     pub windows: Option<String>,
@@ -76,7 +80,6 @@ impl MutiplatformUrls {
             .windows(url.into())
             .macos(url.into())
             .build()
-
     }
 
     pub fn target_os_url(&self) -> Option<&String> {
@@ -87,26 +90,26 @@ impl MutiplatformUrls {
         #[cfg(target_os = "linux")]
         return self.linux.as_ref();
     }
-
-
 }
 
 pub trait CompilableInformation {
     /// Returns the list of commands to execute for the target os
-    fn target_os_commands(&self) -> Option<&'static[&'static[&'static str]]>;
+    fn target_os_commands(&self) -> Option<&'static [&'static [&'static str]]>;
 
     /// Produces the function that executes the list of commands
-    fn target_os_compiler<E:EventObserver + 'static>(&self) -> Option<Compiler<E>> {
+    fn target_os_compiler<E: EventObserver + 'static>(&self) -> Option<Compiler<E>> {
         if let Some(commands) = self.target_os_commands() {
-            let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
-                for command in commands.iter() {
-                    ExternRunner::default().inner_run(command, o)?;
-                }
-                Ok(())
-            });
+            let install: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> =
+                Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String> {
+                    for command in commands.iter() {
+                        ExternRunner::default().inner_run(command, o)?;
+                    }
+                    Ok(())
+                });
             let install = Compiler::from(install);
             Some(install)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -114,30 +117,28 @@ pub trait CompilableInformation {
 
 pub trait DownloadableInformation {
     fn target_os_archive_format(&self) -> ArchiveFormat;
-    fn target_os_postinstall<E:EventObserver + 'static>(&self) -> Option<PostInstall<E>> {
+    fn target_os_postinstall<E: EventObserver + 'static>(&self) -> Option<PostInstall<E>> {
         None
     }
-    
 }
 
 pub trait StaticInformation: DownloadableInformation {
     fn static_download_urls(&self) -> &'static MutiplatformUrls;
 
     fn target_os_url(&self) -> Option<&'static str> {
-        self.static_download_urls().target_os_url().map(|s| s.as_str())
+        self.static_download_urls()
+            .target_os_url()
+            .map(|s| s.as_str())
     }
-    
+
     fn target_os_url_generator(&self) -> UrlGenerator {
         let url = self.target_os_url();
         let deferred: Box<dyn Fn() -> Result<String, String>> = Box::new(move || {
-            url
-            .ok_or_else(|| "No download url for current OS".to_string())
-            .map(|s| s.to_owned())
-
+            url.ok_or_else(|| "No download url for current OS".to_string())
+                .map(|s| s.to_owned())
         });
         deferred.into()
     }
-
 }
 
 pub trait ExecutableInformation {
@@ -148,25 +149,24 @@ pub trait ExecutableInformation {
     }
 }
 
-
-pub trait DynamicUrlInformation : DownloadableInformation + Clone + 'static{
+pub trait DynamicUrlInformation: DownloadableInformation + Clone + 'static {
     fn dynamic_download_urls(&self) -> Result<MutiplatformUrls, String>;
 
     fn target_os_url_generator(&self) -> UrlGenerator {
-
-        let cloned : Self = self.clone();
-        let deferred: Box<dyn Fn() -> Result<String, String>>  = Box::new(move || -> Result<String, String> {
-            let inside: Self = cloned.clone();
-            let urls = inside.dynamic_download_urls()?;
-            urls.target_os_url()
-                .cloned()
-                .ok_or("No url for this os".to_string())
-        });
+        let cloned: Self = self.clone();
+        let deferred: Box<dyn Fn() -> Result<String, String>> =
+            Box::new(move || -> Result<String, String> {
+                let inside: Self = cloned.clone();
+                let urls = inside.dynamic_download_urls()?;
+                urls.target_os_url()
+                    .cloned()
+                    .ok_or("No url for this os".to_string())
+            });
         deferred.into()
     }
 }
 
-pub trait GithubInformation : DownloadableInformation + Display + Clone +'static {
+pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static {
     fn project(&self) -> &'static str;
     fn owner(&self) -> &'static str;
     /// The name to search to obtain the assets link
@@ -183,29 +183,29 @@ pub trait GithubInformation : DownloadableInformation + Display + Clone +'static
 
     // specific implementation of github
     fn target_os_url_generator(&self) -> UrlGenerator {
-
         let cloned = self.clone();
-        let deferred: Box<dyn Fn() -> Result<String, String>>  = Box::new(move || -> Result<String, String> {
-            let inside = cloned.clone();
-            let urls = inside.github_download_urls()?;
-            urls.target_os_url()
-                .cloned()
-                .ok_or("No url for this os".to_string())
-        });
+        let deferred: Box<dyn Fn() -> Result<String, String>> =
+            Box::new(move || -> Result<String, String> {
+                let inside = cloned.clone();
+                let urls = inside.github_download_urls()?;
+                urls.target_os_url()
+                    .cloned()
+                    .ok_or("No url for this os".to_string())
+            });
         deferred.into()
     }
-
 
     fn github_download_urls(&self) -> Result<MutiplatformUrls, String> {
         let mut content = cpclib_download(&github_get_assets_for_version_url(self)?)?;
         let mut html = String::default();
-        content.read_to_string(&mut html).map_err(|e| e.to_string())?;
+        content
+            .read_to_string(&mut html)
+            .map_err(|e| e.to_string())?;
         let document = Html::parse_document(&html);
         let selector = Selector::parse("a")
             .map_err(|e| e.to_string())
             .map_err(|e| e.to_string())?;
-    
-        
+
         let mut map = BTreeMap::new();
         for element in document.select(&selector) {
             let name = element.text().collect::<String>();
@@ -216,9 +216,9 @@ pub trait GithubInformation : DownloadableInformation + Display + Clone +'static
             let name = name.trim();
             map.insert(name.to_owned(), element.attr("href").unwrap().trim());
         }
-    
+
         let mut urls = MutiplatformUrls::default();
-    
+
         if let Some(key) = self.linux_key() {
             urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
         }
@@ -228,60 +228,56 @@ pub trait GithubInformation : DownloadableInformation + Display + Clone +'static
         if let Some(key) = self.macos_key() {
             urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
         }
-    
+
         Ok(urls)
     }
-    
-    
 }
 
-impl<G> From<&G> for UrlGenerator where G: GithubInformation{
+impl<G> From<&G> for UrlGenerator
+where G: GithubInformation
+{
     fn from(g: &G) -> Self {
         g.target_os_url_generator()
     }
 }
 
-
-
 pub trait HasConfiguration {
-    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E>;
-    
+    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E>;
 }
 
-
-
-
-pub trait GithubCompilableApplication: CompilableInformation + ExecutableInformation + GithubInformation + Default {
-    fn configuration<E:EventObserver+'static>(&self) -> DelegateApplicationDescription<E> {
+pub trait GithubCompilableApplication:
+    CompilableInformation + ExecutableInformation + GithubInformation + Default
+{
+    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
-        .download_fn_url(self) // we assume a modern CPU
-        .folder(self.target_os_folder())
-        .archive_format(self.target_os_archive_format())
-        .exec_fname(self.target_os_exec_fname())
-        .maybe_compile(self.target_os_compiler())
-        .in_dir(self.target_os_run_in_dir())
-        .maybe_post_install(self.target_os_postinstall())
-        .build()
+            .download_fn_url(self) // we assume a modern CPU
+            .folder(self.target_os_folder())
+            .archive_format(self.target_os_archive_format())
+            .exec_fname(self.target_os_exec_fname())
+            .maybe_compile(self.target_os_compiler())
+            .in_dir(self.target_os_run_in_dir())
+            .maybe_post_install(self.target_os_postinstall())
+            .build()
     }
 }
 
 pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation + Default {
-    fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
-        .download_fn_url(self) // we assume a modern CPU
-        .folder(self.target_os_folder())
-        .archive_format(self.target_os_archive_format())
-        .exec_fname(self.target_os_exec_fname())
-        .in_dir(self.target_os_run_in_dir())
-        .maybe_post_install(self.target_os_postinstall())
-        .build()
+            .download_fn_url(self) // we assume a modern CPU
+            .folder(self.target_os_folder())
+            .archive_format(self.target_os_archive_format())
+            .exec_fname(self.target_os_exec_fname())
+            .in_dir(self.target_os_run_in_dir())
+            .maybe_post_install(self.target_os_postinstall())
+            .build()
     }
 }
 
-
-
-pub trait InternetStaticCompiledApplication: StaticInformation + ExecutableInformation + Default {
-    fn configuration<E:EventObserver +'static >(&self) -> DelegateApplicationDescription<E> {
+pub trait InternetStaticCompiledApplication:
+    StaticInformation + ExecutableInformation + Default
+{
+    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
@@ -293,8 +289,10 @@ pub trait InternetStaticCompiledApplication: StaticInformation + ExecutableInfor
     }
 }
 
-pub trait InternetDynamicCompiledApplication: DynamicUrlInformation + ExecutableInformation + Default {
-    fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
+pub trait InternetDynamicCompiledApplication:
+    DynamicUrlInformation + ExecutableInformation + Default
+{
+    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
@@ -305,8 +303,6 @@ pub trait InternetDynamicCompiledApplication: DynamicUrlInformation + Executable
             .build()
     }
 }
-
-
 
 #[derive(Clone)]
 pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);
@@ -438,12 +434,10 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     }
 
     pub fn install(&self, o: &E) -> Result<(), String> {
-        self.inner_install(o)
-            .inspect_err(|e| {
-                let dest = self.cache_folder();
-                let _ = std::fs::remove_dir_all(dest); // ignore error
-            })
-            
+        self.inner_install(o).inspect_err(|e| {
+            let dest = self.cache_folder();
+            let _ = std::fs::remove_dir_all(dest); // ignore error
+        })
     }
 
     fn inner_install(&self, o: &E) -> Result<(), String> {
@@ -468,7 +462,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(">> Open tar archive");
                 let mut archive = Archive::new(input);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
-            }
+            },
             ArchiveFormat::TarGz => {
                 o.emit_stdout(">> Open targz archive");
                 let gz = GzDecoder::new(input);
@@ -480,7 +474,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 let xz = XzDecoder::new(input);
                 let mut archive = Archive::new(xz);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
-            }
+            },
             ArchiveFormat::Zip => {
                 o.emit_stdout(">> Unzip archive");
                 let mut buffer = Vec::new();

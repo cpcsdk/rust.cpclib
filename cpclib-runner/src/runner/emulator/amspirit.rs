@@ -2,10 +2,13 @@ use std::sync::OnceLock;
 
 use cpclib_common::event::EventObserver;
 
-use crate::{delegated::{ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation}, runner::runner::RunInDir};
+use crate::delegated::{
+    ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation,
+    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
+};
+use crate::runner::runner::RunInDir;
 
 pub const AMSPIRIT_CMD: &str = "amspirit";
-
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AmspiritVersion {
@@ -13,15 +16,12 @@ pub enum AmspiritVersion {
     Rc1_01
 }
 
-impl InternetStaticCompiledApplication for AmspiritVersion {
-    
-}
+impl InternetStaticCompiledApplication for AmspiritVersion {}
 
 impl ExecutableInformation for AmspiritVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
             Self::Rc1_01 => "CPC_AMSpiriT_RC_v1.01_Win_x64"
-
         }
     }
 
@@ -42,7 +42,7 @@ impl StaticInformation for AmspiritVersion {
             AmspiritVersion::Rc1_01 => {
                 static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URLS.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2024/04/CPC_AMSpiriT_RC_v1.01_Win_x64.7z"))
-            },
+            }
         }
     }
 }
@@ -52,21 +52,24 @@ impl DownloadableInformation for AmspiritVersion {
         ArchiveFormat::SevenZ
     }
 
-    fn target_os_postinstall<E:EventObserver + 'static>(&self) -> Option<crate::delegated::PostInstall<E>> {
+    fn target_os_postinstall<E: EventObserver + 'static>(
+        &self
+    ) -> Option<crate::delegated::PostInstall<E>> {
         let owned_original = match self {
-            AmspiritVersion::Rc1_01 => "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned(),
+            AmspiritVersion::Rc1_01 => {
+                "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()
+            },
         };
         let owned_result = self.target_os_exec_fname().to_owned();
 
-        let post_install: Box<
-            dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-        > = Box::new(move |d: &DelegateApplicationDescription<E>| {
-            std::fs::rename(
-                d.cache_folder().join(&owned_original),
-                d.cache_folder().join(&owned_result)
-            )
-            .map_err(|e| e.to_string())
-        });
+        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+            Box::new(move |d: &DelegateApplicationDescription<E>| {
+                std::fs::rename(
+                    d.cache_folder().join(&owned_original),
+                    d.cache_folder().join(&owned_result)
+                )
+                .map_err(|e| e.to_string())
+            });
 
         Some(post_install.into())
     }

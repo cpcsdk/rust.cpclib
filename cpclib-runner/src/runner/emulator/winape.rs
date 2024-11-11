@@ -2,7 +2,10 @@ use std::sync::OnceLock;
 
 use cpclib_common::camino::Utf8PathBuf;
 
-use crate::delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
+use crate::delegated::{
+    ArchiveFormat, DownloadableInformation, ExecutableInformation,
+    InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
+};
 
 pub const WINAPE_CMD: &str = "winape";
 
@@ -19,9 +22,7 @@ impl WinapeVersion {
     }
 }
 
-impl InternetStaticCompiledApplication for WinapeVersion {
-
-}
+impl InternetStaticCompiledApplication for WinapeVersion {}
 
 impl ExecutableInformation for WinapeVersion {
     fn target_os_folder(&self) -> &'static str {
@@ -41,7 +42,8 @@ impl DownloadableInformation for WinapeVersion {
 impl StaticInformation for WinapeVersion {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
         static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
-        URL.get_or_init(||  MutiplatformUrls::unique_url("http://www.winape.net/download/WinAPE20B2.zip"))
+        URL.get_or_init(|| {
+            MutiplatformUrls::unique_url("http://www.winape.net/download/WinAPE20B2.zip")
+        })
     }
 }
-

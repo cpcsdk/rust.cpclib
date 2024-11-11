@@ -1,8 +1,10 @@
 use std::fmt::Display;
 
-
-use crate::{delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication, GithubInformation}, runner::runner::RunInDir};
-
+use crate::delegated::{
+    ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
+    GithubInformation
+};
+use crate::runner::runner::RunInDir;
 
 pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 
@@ -29,8 +31,6 @@ impl DownloadableInformation for SugarBoxV2Version {
     }
 }
 
-
-
 impl ExecutableInformation for SugarBoxV2Version {
     fn target_os_folder(&self) -> &'static str {
         match self {
@@ -41,7 +41,7 @@ impl ExecutableInformation for SugarBoxV2Version {
                 return "Sugarbox-2.0.2-Darwin";
                 #[cfg(target_os = "linux")]
                 return "Sugarbox-2.0.2-Linux";
-            },
+            }
         }
     }
 
@@ -70,14 +70,14 @@ impl GithubInformation for SugarBoxV2Version {
 
     fn version_name(&self) -> &'static str {
         match self {
-            SugarBoxV2Version::V2_0_2 => "v2.0.2",
+            SugarBoxV2Version::V2_0_2 => "v2.0.2"
         }
     }
 
     fn linux_key(&self) -> Option<&'static str> {
         Some("Sugarbox-2.0.2-Linux.tar.gz")
     }
-    
+
     fn windows_key(&self) -> Option<&'static str> {
         Some("Sugarbox-2.0.2-win64.7z")
     }
@@ -87,6 +87,4 @@ impl GithubInformation for SugarBoxV2Version {
     }
 }
 
-impl GithubCompiledApplication for SugarBoxV2Version {
-
-}
+impl GithubCompiledApplication for SugarBoxV2Version {}
