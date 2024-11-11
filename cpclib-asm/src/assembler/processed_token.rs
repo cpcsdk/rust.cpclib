@@ -18,7 +18,7 @@ use either::Either;
 use ouroboros::*;
 
 use super::control::ControlOutputStore;
-use super::file::{get_filename, load_binary, read_source};
+use super::file::{get_filename, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use super::AssemblerWarning;
@@ -987,7 +987,7 @@ where
                             // need to load the file
 
                             let (data, header) =
-                                load_binary(Either::Left(fname.as_ref()), options.parse_options())?;
+                                load_file(fname.as_path(), options.parse_options())?;
 
                             if let Some(header) = header {
                                 let ams_fname = header
