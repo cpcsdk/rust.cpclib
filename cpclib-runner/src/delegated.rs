@@ -368,6 +368,16 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     }
 
     pub fn install(&self, o: &E) -> Result<(), String> {
+        self.inner_install(o)
+            .map_err(|e| {
+                let dest = self.cache_folder();
+                let _ = std::fs::remove_dir_all(dest); // ignore error
+                e
+            })
+            
+    }
+
+    fn inner_install(&self, o: &E) -> Result<(), String> {
         // get the file
         let dest = self.cache_folder();
 
