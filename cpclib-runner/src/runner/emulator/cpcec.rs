@@ -1,6 +1,8 @@
+use std::sync::OnceLock;
+
 use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
 
 pub const CPCEC_CMD: &str = "cpcec";
 
@@ -12,49 +14,44 @@ pub enum CpcecVersion {
     V20240505
 }
 
+
+impl InternetStaticCompiledApplication for CpcecVersion {
+
+}
+
+impl ExecutableInformation for CpcecVersion {
+    fn target_os_folder(&self) -> &'static str {
+        match self {
+            CpcecVersion::V20240505 => "cpcec20240505",
+        }
+    }
+
+    fn target_os_exec_fname(&self) -> &'static str {
+        "CPCEC.EXE"
+    }
+}
+
+impl StaticInformation for CpcecVersion {
+    fn static_download_urls(&self) -> &'static MutiplatformUrls {
+        static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+
+        URL.get_or_init(|| MutiplatformUrls::unique_url(
+            match self {
+            CpcecVersion::V20240505 => "http://cngsoft.no-ip.org/cpcec-20240505.zip"
+            })
+        )
+    }
+}
+
+impl DownloadableInformation for CpcecVersion {
+    fn target_os_archive_format(&self) -> ArchiveFormat {
+        ArchiveFormat::Zip
+    }
+}
+
 impl CpcecVersion {
     pub fn roms_folder(&self) -> Utf8PathBuf {
         let conf = self.configuration::<()>();
         conf.cache_folder()
-    }
-}
-
-cfg_match! {
-    cfg(target_os = "linux") =>
-    {
-        impl CpcecVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
-                    CpcecVersion::V20240505 => {
-                        DelegateApplicationDescription::builder()
-                            .download_fn_url("http://cngsoft.no-ip.org/cpcec-20240505.zip")
-                            .folder("cpcec20240505")
-                            .archive_format( ArchiveFormat::Zip)
-                            .exec_fname("CPCEC.EXE") // XXX there is a case issue I do not want to solve. so wine is used ...
-                            .build()
-                    },
-                }
-            }
-        }
-	}
-	cfg(target_os = "windows") =>
-    {
-		impl CpcecVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
-                    CpcecVersion::V20240505 => {
-                        DelegateApplicationDescription::builder()
-                            .download_fn_url("http://cngsoft.no-ip.org/cpcec-20240505.zip")
-                            .folder("cpcec20240505")
-                            .archive_format(ArchiveFormat::Zip)
-                            .exec_fname("CPCEC.EXE")
-                            .build()
-                    },
-                }
-            }
-        }
-	}
-
-    _ => {
     }
 }
