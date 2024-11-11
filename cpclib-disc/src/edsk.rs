@@ -85,6 +85,10 @@ impl From<&Head> for u8 {
 /// Disc image files consist of a 0x100-byte disc info block and for each track a 0x100-byte track info block, followed by the data for every sector in that track. The new extended disk format is intended for some copy protected disks. Parts which are new in the extended format are marked with "*E*" (from our "Extended DISK Format Proposal, Rev.5").
 ///
 ///
+///
+///
+///
+///
 /// The Disc Information block
 /// Byte (Hex): 	Meaning:
 /// 00 - 21 	"MV - CPCEMU Disk-File\r\nDisk-Info\r\n"

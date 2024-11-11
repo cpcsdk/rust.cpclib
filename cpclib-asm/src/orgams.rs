@@ -521,6 +521,7 @@ pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
 }
 
 /// COnvert a basm txt source file as a orgams text source file.
+///
 /// There are tons of current limitations. I have only implemented what I need
 /// TODO - convert expressions to be orgams compatible. REwrite them ? Write parenthesis ?
 /// TODO - rewrite macros

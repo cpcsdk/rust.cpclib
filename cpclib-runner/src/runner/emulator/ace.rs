@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
+use cpclib_common::camino::Utf8PathBuf;
 use directories::BaseDirs;
 use scraper::{Html, Selector};
 
-use crate::delegated::{cpclib_download, ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, DynamicUrlInformation, ExecutableInformation, InternetDynamicCompiledApplication, MutiplatformUrls, UrlGenerator};
+use crate::delegated::{cpclib_download, ArchiveFormat, DownloadableInformation, DynamicUrlInformation, ExecutableInformation, InternetDynamicCompiledApplication, MutiplatformUrls};
 
 pub const ACE_CMD: &str = "ace";
 

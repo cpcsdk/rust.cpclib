@@ -35,6 +35,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
 
 /// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
 
+///
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
 /// Evaluate an expression

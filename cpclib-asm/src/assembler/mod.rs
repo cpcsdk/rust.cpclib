@@ -199,6 +199,7 @@ pub trait MyDefault {
 }
 
 /// Several passes are needed to properly assemble a source file.
+///
 /// This structure allows to code which pass is going to be analysed.
 /// First pass consists in collecting the various labels to manipulate and so on. Some labels stay unknown at this moment.
 /// Second pass serves to get the final values

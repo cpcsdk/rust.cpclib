@@ -1,8 +1,7 @@
 use std::fmt::Display;
 
-use cpclib_common::event::EventObserver;
 
-use crate::{delegated::{ArchiveFormat, CompilableInformation, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, GithubCompilableApplication, GithubCompiledApplication, GithubInformation, MutiplatformUrls}, runner::runner::RunInDir};
+use crate::{delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication, GithubInformation}, runner::runner::RunInDir};
 
 
 pub const SUGARBOX_V2_CMD: &str = "sugarbox";

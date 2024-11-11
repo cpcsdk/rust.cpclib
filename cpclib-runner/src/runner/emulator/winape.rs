@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
-use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
+use cpclib_common::camino::Utf8PathBuf;
 
-use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
+use crate::delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
 
 pub const WINAPE_CMD: &str = "winape";
 

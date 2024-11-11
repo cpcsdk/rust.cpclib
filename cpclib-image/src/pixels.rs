@@ -533,7 +533,8 @@ pub mod mode0 {
     }
 
     /// Generate the needed table to write a masked sprite on screen when mask_pen corresponds to the pen of the background.
-    /// Code for the display
+    ///
+/// Code for the display
     /// ld e, sprite byte to display
     /// ld d, mask_table / 256
     /// ld a, (de) ; get the mask

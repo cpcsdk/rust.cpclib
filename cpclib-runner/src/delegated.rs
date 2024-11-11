@@ -100,7 +100,7 @@ pub trait CompilableInformation {
         if let Some(commands) = self.target_os_commands() {
             let install : Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> = Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String>{
                 for command in commands.iter() {
-                    ExternRunner::default().inner_run(&command, o)?;
+                    ExternRunner::default().inner_run(command, o)?;
                 }
                 Ok(())
             });
@@ -131,7 +131,7 @@ pub trait StaticInformation: DownloadableInformation {
         let url = self.target_os_url();
         let deferred: Box<dyn Fn() -> Result<String, String>> = Box::new(move || {
             url
-            .ok_or_else(|| format!("No download url for current OS"))
+            .ok_or_else(|| "No download url for current OS".to_string())
             .map(|s| s.to_owned())
 
         });
@@ -160,7 +160,7 @@ pub trait DynamicUrlInformation : DownloadableInformation + Clone + 'static{
             let urls = inside.dynamic_download_urls()?;
             urls.target_os_url()
                 .cloned()
-                .ok_or(format!("No url for this os"))
+                .ok_or("No url for this os".to_string())
         });
         deferred.into()
     }
@@ -190,7 +190,7 @@ pub trait GithubInformation : DownloadableInformation + Display + Clone +'static
             let urls = inside.github_download_urls()?;
             urls.target_os_url()
                 .cloned()
-                .ok_or(format!("No url for this os"))
+                .ok_or("No url for this os".to_string())
         });
         deferred.into()
     }
@@ -439,10 +439,9 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
     pub fn install(&self, o: &E) -> Result<(), String> {
         self.inner_install(o)
-            .map_err(|e| {
+            .inspect_err(|e| {
                 let dest = self.cache_folder();
                 let _ = std::fs::remove_dir_all(dest); // ignore error
-                e
             })
             
     }

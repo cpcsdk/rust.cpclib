@@ -9,13 +9,7 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
-use cpclib_runner::emucontrol::EMUCTRL_CMD;
-use cpclib_runner::runner::assembler::{RASM_CMD, SJASMPLUS_CMD};
-use cpclib_runner::runner::emulator::{AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD};
-use cpclib_runner::runner::impdisc::IMPDISC_CMD;
-use cpclib_runner::runner::martine::MARTINE_CMD;
 use lazy_regex::regex_captures;
-use runners::hideur::HIDEUR_CMD;
 use task::{ACE_CMDS, AMSPIRIT_CMDS, BASM_CMDS, BNDBUILD_CMDS, CPCEC_CMDS, CP_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS};
 use thiserror::Error;
 
