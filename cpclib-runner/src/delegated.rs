@@ -114,6 +114,10 @@ pub trait CompilableInformation {
 
 pub trait DownloadableInformation {
     fn target_os_archive_format(&self) -> ArchiveFormat;
+    fn target_os_postinstall<E:EventObserver + 'static>(&self) -> Option<PostInstall<E>> {
+        None
+    }
+    
 }
 
 pub trait StaticInformation: DownloadableInformation {
@@ -256,18 +260,20 @@ pub trait GithubCompilableApplication: CompilableInformation + ExecutableInforma
         .exec_fname(self.target_os_exec_fname())
         .maybe_compile(self.target_os_compiler())
         .in_dir(self.target_os_run_in_dir())
+        .maybe_post_install(self.target_os_postinstall())
         .build()
     }
 }
 
 pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation + Default {
-    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
         .download_fn_url(self) // we assume a modern CPU
         .folder(self.target_os_folder())
         .archive_format(self.target_os_archive_format())
         .exec_fname(self.target_os_exec_fname())
         .in_dir(self.target_os_run_in_dir())
+        .maybe_post_install(self.target_os_postinstall())
         .build()
     }
 }
@@ -275,25 +281,27 @@ pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation +
 
 
 pub trait InternetStaticCompiledApplication: StaticInformation + ExecutableInformation + Default {
-    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E:EventObserver +'static >(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
             .archive_format(self.target_os_archive_format())
             .exec_fname(self.target_os_exec_fname())
             .in_dir(self.target_os_run_in_dir())
+            .maybe_post_install(self.target_os_postinstall())
             .build()
     }
 }
 
 pub trait InternetDynamicCompiledApplication: DynamicUrlInformation + ExecutableInformation + Default {
-    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E:EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
             .archive_format(self.target_os_archive_format())
             .exec_fname(self.target_os_exec_fname())
             .in_dir(self.target_os_run_in_dir())
+            .maybe_post_install(self.target_os_postinstall())
             .build()
     }
 }
@@ -507,7 +515,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }?;
 
         if let Some(post_install) = &self.post_install {
-            o.emit_stdout(">> Does some post-installation stuffm");
+            o.emit_stdout(">> Apply post-installation");
             post_install(self)
         }
         else {

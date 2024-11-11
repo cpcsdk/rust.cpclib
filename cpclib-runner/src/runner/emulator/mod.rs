@@ -125,7 +125,7 @@ impl Emulator {
 
 
 impl Emulator {
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver +'static >(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),
@@ -144,7 +144,7 @@ impl Emulator {
 
 #[cfg(test)]
 mod test {
-    use crate::{delegated::{cpclib_download, DynamicUrlInformation, GithubInformation}, runner::emulator::AceVersion};
+    use crate::{delegated::{cpclib_download, DynamicUrlInformation, GithubInformation, StaticInformation}, runner::emulator::{AceVersion, AmspiritVersion}};
 
     use super::{SugarBoxV2Version, WinapeVersion};
 
@@ -165,6 +165,16 @@ mod test {
 
     #[test]
     fn test_download_winape() {
+        let urls = WinapeVersion::default().static_download_urls();
+        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn test_download_amspirit() {
+        let urls = AmspiritVersion::default().static_download_urls();
+        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
 }

@@ -874,7 +874,7 @@ impl<E: EventObserver> Default for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver> Runner for EmuControlledRunner<E> {
+impl<E: EventObserver+'static> Runner for EmuControlledRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -890,13 +890,13 @@ impl<E: EventObserver> Runner for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for EmuControlledRunner<E> {
+impl<E: EventObserver+'static> RunnerWithClap for EmuControlledRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+pub fn handle_arguments<E: EventObserver+'static>(mut cli: EmuCli, o: &E) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;

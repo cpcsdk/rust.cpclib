@@ -61,13 +61,13 @@ impl<E: EventObserver> Default for OrgamsRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for OrgamsRunner<E> {
+impl<E: EventObserver +'static> RunnerWithClap for OrgamsRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver> Runner for OrgamsRunner<E> {
+impl<E: EventObserver +'static> Runner for OrgamsRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
