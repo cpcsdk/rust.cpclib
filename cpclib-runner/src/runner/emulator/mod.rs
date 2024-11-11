@@ -17,7 +17,7 @@ pub use cpcec::*;
 pub use sugarbox::*;
 pub use winape::*;
 
-use crate::delegated::{DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication};
+use crate::delegated::{DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication, InternetDynamicCompiledApplication};
 
 
 
@@ -144,19 +144,27 @@ impl Emulator {
 
 #[cfg(test)]
 mod test {
-    use super::ace_download_fn_urls_lin_win;
-    use crate::delegated::cpclib_download;
+    use crate::{delegated::{cpclib_download, DynamicUrlInformation, GithubInformation}, runner::emulator::AceVersion};
 
-    #[test]
-    fn retreive_ace_urls() {
-        ace_download_fn_urls_lin_win().unwrap();
-    }
+    use super::{SugarBoxV2Version, WinapeVersion};
 
     #[test]
     fn test_download_ace() {
-        let (lin, win) = ace_download_fn_urls_lin_win().unwrap();
-
-        assert!(cpclib_download(dbg!(&lin)).is_ok());
-        assert!(cpclib_download(dbg!(&win)).is_ok());
+        let urls= AceVersion::default().dynamic_download_urls().unwrap();
+        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
+
+    #[test]
+    fn test_download_sugarbox() {
+        let urls = SugarBoxV2Version::default().github_download_urls().unwrap();
+        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+
+    }
+
+    #[test]
+    fn test_download_winape() {
+    }
+
 }

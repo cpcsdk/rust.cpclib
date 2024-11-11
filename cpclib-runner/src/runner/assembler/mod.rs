@@ -12,7 +12,7 @@ pub use sjasmplus::SjasmplusVersion;
 pub use vasm::VASM_CMD;
 
 use crate::delegated::GithubCompilableApplication;
-use crate::delegated::InternetCompiledApplication;
+use crate::delegated::InternetStaticCompiledApplication;
 use crate::delegated::DelegateApplicationDescription;
 
 

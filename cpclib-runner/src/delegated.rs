@@ -134,6 +134,24 @@ pub trait ExecutableInformation {
     }
 }
 
+
+pub trait DynamicUrlInformation : DownloadableInformation + Clone + 'static{
+    fn dynamic_download_urls(&self) -> Result<MutiplatformUrls, String>;
+
+    fn target_os_url_generator(&self) -> UrlGenerator {
+
+        let cloned : Self = self.clone();
+        let deferred: Box<dyn Fn() -> Result<String, String>>  = Box::new(move || -> Result<String, String> {
+            let inside: Self = cloned.clone();
+            let urls = inside.dynamic_download_urls()?;
+            urls.target_os_url()
+                .cloned()
+                .ok_or(format!("No url for this os"))
+        });
+        deferred.into()
+    }
+}
+
 pub trait GithubInformation : DownloadableInformation + Display + Clone +'static {
     fn project(&self) -> &'static str;
     fn owner(&self) -> &'static str;
@@ -246,7 +264,7 @@ pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation +
 
 
 
-pub trait InternetCompiledApplication: StaticInformation + ExecutableInformation + Default {
+pub trait InternetStaticCompiledApplication: StaticInformation + ExecutableInformation + Default {
     fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
@@ -257,6 +275,21 @@ pub trait InternetCompiledApplication: StaticInformation + ExecutableInformation
             .build()
     }
 }
+
+pub trait InternetDynamicCompiledApplication: DynamicUrlInformation + ExecutableInformation + Default {
+    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        DelegateApplicationDescription::builder()
+            .download_fn_url(self.target_os_url_generator())
+            .folder(self.target_os_folder())
+            .archive_format(self.target_os_archive_format())
+            .exec_fname(self.target_os_exec_fname())
+            .in_dir(self.target_os_run_in_dir())
+            .build()
+    }
+}
+
+
+
 #[derive(Clone)]
 pub struct UrlGenerator(Rc<Box<dyn Fn() -> Result<String, String>>>);
 

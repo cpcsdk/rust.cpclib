@@ -1,7 +1,7 @@
 
 use std::sync::OnceLock;
 
-use crate::delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, InternetCompiledApplication, MutiplatformUrls, StaticInformation};
+use crate::delegated::{ArchiveFormat, DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
 
 pub const VASM_CMD: &str = "vasm";
 
@@ -12,7 +12,7 @@ pub enum VasmVersion {
 }
 
 
-impl InternetCompiledApplication for VasmVersion {
+impl InternetStaticCompiledApplication for VasmVersion {
 	
 }
 
