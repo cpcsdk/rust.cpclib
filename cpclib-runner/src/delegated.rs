@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_common::itertools::Itertools;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use scraper::{Html, Selector};
@@ -130,6 +129,9 @@ pub trait StaticInformation: DownloadableInformation {
 pub trait ExecutableInformation {
     fn target_os_folder(&self) -> &'static str;
     fn target_os_exec_fname(&self) -> &'static str;
+    fn target_os_run_in_dir(&self) -> RunInDir {
+        RunInDir::default()
+    }
 }
 
 pub trait GithubInformation : DownloadableInformation + Display + Clone +'static {
@@ -218,25 +220,40 @@ pub trait HasConfiguration {
 
 
 pub trait GithubCompilableApplication: CompilableInformation + ExecutableInformation + GithubInformation + Default {
-    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E:EventObserver+'static>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
         .download_fn_url(self) // we assume a modern CPU
         .folder(self.target_os_folder())
         .archive_format(self.target_os_archive_format())
         .exec_fname(self.target_os_exec_fname())
         .maybe_compile(self.target_os_compiler())
+        .in_dir(self.target_os_run_in_dir())
+        .build()
+    }
+}
+
+pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation + Default {
+    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        DelegateApplicationDescription::builder()
+        .download_fn_url(self) // we assume a modern CPU
+        .folder(self.target_os_folder())
+        .archive_format(self.target_os_archive_format())
+        .exec_fname(self.target_os_exec_fname())
+        .in_dir(self.target_os_run_in_dir())
         .build()
     }
 }
 
 
+
 pub trait InternetCompiledApplication: StaticInformation + ExecutableInformation + Default {
-    fn configuration<E:EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E:EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
             .archive_format(self.target_os_archive_format())
             .exec_fname(self.target_os_exec_fname())
+            .in_dir(self.target_os_run_in_dir())
             .build()
     }
 }
@@ -406,7 +423,6 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(">> Open targz archive");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
-                archive.entries().unwrap().into_iter().for_each(|f| eprintln!("{:?}", f.unwrap().header()));
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarXz => {

@@ -17,7 +17,7 @@ pub use cpcec::*;
 pub use sugarbox::*;
 pub use winape::*;
 
-use crate::delegated::DelegateApplicationDescription;
+use crate::delegated::{DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication};
 
 
 

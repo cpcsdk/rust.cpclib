@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use cpclib_common::event::EventObserver;
 
-use crate::{delegated::{ArchiveFormat, CompilableInformation, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, GithubCompilableApplication, GithubInformation, MutiplatformUrls}, runner::runner::RunInDir};
+use crate::{delegated::{ArchiveFormat, CompilableInformation, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation, GithubCompilableApplication, GithubCompiledApplication, GithubInformation, MutiplatformUrls}, runner::runner::RunInDir};
 
 
 pub const SUGARBOX_V2_CMD: &str = "sugarbox";
@@ -11,16 +11,6 @@ pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 pub enum SugarBoxV2Version {
     #[default]
     V2_0_2
-}
-
-
-fn sugarbox_download_urls(version: SugarBoxV2Version) -> Result<MutiplatformUrls, String> {
-    version.github_download_urls()
-}
-
-
-impl GithubCompilableApplication for SugarBoxV2Version {
-
 }
 
 impl Display for SugarBoxV2Version {
@@ -40,13 +30,7 @@ impl DownloadableInformation for SugarBoxV2Version {
     }
 }
 
-// currently we dumbly use the compiled version of linux instead of compiling it ourselves.
-// TODO really compile for Linux
-impl CompilableInformation for SugarBoxV2Version {
-    fn target_os_commands(&self) -> Option<&'static[&'static[&'static str]]> {
-        None
-    }
-}
+
 
 impl ExecutableInformation for SugarBoxV2Version {
     fn target_os_folder(&self) -> &'static str {
@@ -57,7 +41,7 @@ impl ExecutableInformation for SugarBoxV2Version {
                 #[cfg(target_os = "macos")]
                 return "Sugarbox-2.0.2-Darwin";
                 #[cfg(target_os = "linux")]
-                return "Sugarbox-2.0.2-Linux/Sugarbox-2.0.2-Linux";
+                return "Sugarbox-2.0.2-Linux";
             },
         }
     }
@@ -68,7 +52,11 @@ impl ExecutableInformation for SugarBoxV2Version {
         #[cfg(target_os = "macos")]
         return "Sugarbox";
         #[cfg(target_os = "linux")]
-        return "Sugarbox";
+        return "Sugarbox-2.0.2-Linux/Sugarbox";
+    }
+
+    fn target_os_run_in_dir(&self) -> RunInDir {
+        RunInDir::AppDir
     }
 }
 
@@ -86,27 +74,20 @@ impl GithubInformation for SugarBoxV2Version {
             SugarBoxV2Version::V2_0_2 => "v2.0.2",
         }
     }
+
+    fn linux_key(&self) -> Option<&'static str> {
+        Some("Sugarbox-2.0.2-Linux.tar.gz")
+    }
+    
+    fn windows_key(&self) -> Option<&'static str> {
+        Some("Sugarbox-2.0.2-win64.7z")
+    }
+
+    fn macos_key(&self) -> Option<&'static str> {
+        Some("Sugarbox-2.0.2-Darwin.tar.gz")
+    }
 }
 
+impl GithubCompiledApplication for SugarBoxV2Version {
 
-impl SugarBoxV2Version {
-
-
-
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        let version_cloned = self.clone();
-        let get_url = move || -> Result<String, String> {
-            sugarbox_download_urls(version_cloned.clone())
-                .map(|urls| urls.target_os_url().unwrap().clone())
-        };
-        let get_url: Box<dyn Fn() -> Result<String,String>>  = Box::new(get_url);
-
-        DelegateApplicationDescription::builder()
-            .download_fn_url(get_url) // we assume a modern CPU
-            .folder(self.target_os_folder())
-            .archive_format(self.target_os_archive_format())
-            .exec_fname(self.target_os_exec_fname())
-            .in_dir(RunInDir::AppDir)
-            .build()
-    }
 }
