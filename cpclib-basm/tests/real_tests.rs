@@ -35,7 +35,8 @@ fn manual_cleanup() {
         "hello1.bin",
         "hello2.bin",
         "hello3.bin",
-        "lst.tmp"
+        "lst.tmp",
+        "TESTASCII.DSK"
     ] {
         let p = std::path::Path::new(fname);
         if p.exists() {
