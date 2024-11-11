@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
+use std::ops::Deref;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
@@ -15,7 +16,34 @@ use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
 use crate::progress::Progress;
 
-type Fname<'a, 'b> = either::Either<&'a Utf8Path, (&'a str, &'b Env)>;
+struct  Fname<'a, 'b>(Either<&'a Utf8Path, (&'a str, &'b Env)>);
+
+impl<'a, 'b> Deref for Fname<'a, 'b> {
+    type Target = Either<&'a Utf8Path, (&'a str, &'b Env)>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a, 'b> From<&'a Utf8Path> for Fname<'a, 'b> {
+    fn from(value: &'a Utf8Path) -> Self {
+        Self(Either::Left(value))
+    }
+}
+
+impl<'a, 'b> From<&'a str> for Fname<'a, 'b> {
+    fn from(value: &'a str) -> Self {
+        let p: &Utf8Path = value.into();
+        p.into()
+    }
+}
+
+impl<'a, 'b> From<(&'a str, &'b Env)> for Fname<'a, 'b> {
+    fn from(value: (&'a str, &'b Env)) -> Self {
+        Self(Either::Right(value))
+    }
+}
 
 /// Separator to split am image disc to a file
 pub const DSK_SEPARATOR: char = '#';
@@ -57,11 +85,13 @@ pub fn get_filename<S: AsRef<str>>(
 /// Load a file and remove header if any
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename
-pub fn load_binary(
-    fname: Fname,
+pub fn load_file<'a, 'b, F: Into<Fname<'a,'b>>>(
+    fname: F,
     options: &ParserOptions
 ) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
-    let true_fname = match &fname {
+
+    let fname = fname.into();
+    let true_fname = match &fname.deref() {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,
         either::Either::Left(p) => p.into()
     };
@@ -71,7 +101,7 @@ pub fn load_binary(
         // here we handle a standard file
 
         // Get the file content
-        let data = load_binary_raw(fname, options)?;
+        let data = load_file_raw(fname, options)?;
         let mut data = VecDeque::from(data);
 
         // get a slice on the data to ease its cut
@@ -124,9 +154,11 @@ pub fn load_binary(
 }
 
 /// Load a file and keep the header if any
-pub fn load_binary_raw(fname: Fname, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
+pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(fname: F, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
+    let fname = fname.into();
+
     // Retreive fname
-    let fname = match &fname {
+    let fname = match &fname.deref() {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,
         either::Either::Left(p) => p.into()
     };
@@ -183,7 +215,7 @@ pub fn read_source<P: AsRef<Utf8Path>>(
 ) -> Result<String, AssemblerError> {
     let fname = fname.as_ref();
 
-    let (mut content, header_removed) = load_binary(Either::Left(fname), options)?;
+    let (mut content, header_removed) = load_file(fname, options)?;
     assert!(header_removed.is_none());
 
     let content = content.make_contiguous();
