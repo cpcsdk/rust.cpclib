@@ -949,6 +949,12 @@ Failure
 Error while launching the command.
 ```
 
+
+### Assembler: Vasm z80 oldstyle (vasm)
+
+<http://sun.hasenbraten.de/vasm/release/vasm_6.html>
+
+
 ### Emulator-agnostic emulation (cpc,emu)
 
 ```

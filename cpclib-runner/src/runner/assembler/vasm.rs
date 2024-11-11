@@ -25,7 +25,7 @@ impl DownloadableInformation for VasmVersion {
 				#[cfg(target_os = "macos")]
 				unimplemented!();
 				#[cfg(target_os = "linux")]
-				return ArchiveFormat::TarGz;
+				return ArchiveFormat::Tar; // XXX yep extension is wrong
 			}
 		}
 	}

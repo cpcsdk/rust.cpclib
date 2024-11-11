@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::itertools::Itertools;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use scraper::{Html, Selector};
@@ -316,6 +317,7 @@ impl<E: EventObserver> Deref for PostInstall<E> {
 #[derive(Clone)]
 pub enum ArchiveFormat {
     Raw,
+    Tar,
     TarGz,
     TarXz,
     Zip,
@@ -395,10 +397,16 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
                 std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
             },
+            ArchiveFormat::Tar => {
+                o.emit_stdout(">> Open tar archive");
+                let mut archive = Archive::new(input);
+                archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
+            }
             ArchiveFormat::TarGz => {
                 o.emit_stdout(">> Open targz archive");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
+                archive.entries().unwrap().into_iter().for_each(|f| eprintln!("{:?}", f.unwrap().header()));
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarXz => {
