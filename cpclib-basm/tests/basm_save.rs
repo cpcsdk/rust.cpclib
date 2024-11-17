@@ -1,44 +1,43 @@
 use std::rc::Rc;
 
-use cpclib_asm::{file::{load_file, load_file_raw}, ParserOptions};
+use cpclib_asm::file::{load_file, load_file_raw};
+use cpclib_asm::ParserOptions;
 use cpclib_basm::*;
 use cpclib_common::clap::Parser;
 
 /// ! This test file has been created to track some wrong memory handling when saving data with banksets
-/// 
-/// 
-
+///
 
 #[test]
 fn test_save_ascii() {
-
     let args_parser = build_args_parser();
-    let args = args_parser.get_matches_from(["basm", "-I", ".", "-I", "tests/asm/", "good_save_ascii.asm", "--override"]);
+    let args = args_parser.get_matches_from([
+        "basm",
+        "-I",
+        ".",
+        "-I",
+        "tests/asm/",
+        "good_save_ascii.asm",
+        "--override"
+    ]);
     let (env, _) = process(&args, Rc::new(())).expect("Unable to assemble the file");
 
     let expected = b"HELLO WORLD";
 
-    let (content, header) = load_file("TESTASCII.DSK#HELLO.TXT", &ParserOptions::default()).unwrap();
+    let (content, header) =
+        load_file("TESTASCII.DSK#HELLO.TXT", &ParserOptions::default()).unwrap();
     assert!(header.is_none(), "ASCII files have no header");
     let content: Vec<u8> = content.into();
-    assert_eq!(
-        &content[..expected.len()],
-        expected
-    );
+    assert_eq!(&content[..expected.len()], expected);
     assert_eq!(content.len(), 1024); // XXX sadly ASCII mode does not allow to properly know the size
                                      // XXX no idea if 1024 is the real size used in real cpc
 
-
-    let (content, header) = load_file("TESTASCII.DSK#HELLO.BIN", &ParserOptions::default()).unwrap();
+    let (content, header) =
+        load_file("TESTASCII.DSK#HELLO.BIN", &ParserOptions::default()).unwrap();
     assert!(header.is_some());
     let content: Vec<u8> = content.into();
-    assert_eq!(
-        &content[..expected.len()],
-        expected
-    );
+    assert_eq!(&content[..expected.len()], expected);
     assert_eq!(content.len(), expected.len());
-
-
 }
 
 #[test]

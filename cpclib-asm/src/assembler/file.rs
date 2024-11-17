@@ -16,7 +16,7 @@ use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
 use crate::progress::Progress;
 
-struct  Fname<'a, 'b>(Either<&'a Utf8Path, (&'a str, &'b Env)>);
+struct Fname<'a, 'b>(Either<&'a Utf8Path, (&'a str, &'b Env)>);
 
 impl<'a, 'b> Deref for Fname<'a, 'b> {
     type Target = Either<&'a Utf8Path, (&'a str, &'b Env)>;
@@ -85,11 +85,10 @@ pub fn get_filename<S: AsRef<str>>(
 /// Load a file and remove header if any
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename
-pub fn load_file<'a, 'b, F: Into<Fname<'a,'b>>>(
+pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
     fname: F,
     options: &ParserOptions
 ) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
-
     let fname = fname.into();
     let true_fname = match &fname.deref() {
         either::Either::Right((p, env)) => get_filename(p, options, Some(env))?,
@@ -154,7 +153,10 @@ pub fn load_file<'a, 'b, F: Into<Fname<'a,'b>>>(
 }
 
 /// Load a file and keep the header if any
-pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(fname: F, options: &ParserOptions) -> Result<Vec<u8>, AssemblerError> {
+pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
+    fname: F,
+    options: &ParserOptions
+) -> Result<Vec<u8>, AssemblerError> {
     let fname = fname.into();
 
     // Retreive fname

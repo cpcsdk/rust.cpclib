@@ -128,11 +128,12 @@ impl SaveCommand {
             None => {
                 if env.start_address().is_some() {
                     let stop = env.maximum_address();
-                    (stop - from as u16) as i32 + 1 
-                } else {
+                    (stop - from as u16) as i32 + 1
+                }
+                else {
                     0
                 }
-            }
+            },
         };
 
         // get the data from the CPC memory

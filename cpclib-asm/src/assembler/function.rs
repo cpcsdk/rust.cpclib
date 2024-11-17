@@ -531,8 +531,7 @@ impl HardCodedFunction {
 
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
-                let (data, _) =
-                    file::load_file((fname, env), env.options().parse_options())?;
+                let (data, _) = file::load_file((fname, env), env.options().parse_options())?;
                 let data = Vec::from(data);
                 Ok(ExprResult::from(data.as_slice()))
             },
