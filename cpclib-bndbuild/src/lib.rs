@@ -71,9 +71,20 @@ pub fn build_args_parser() -> clap::Command {
             (XFER_CMDS, false)
         ];
 
-        
         let mut all = Vec::with_capacity(all_applications.iter().map(|l| l.0.len()).sum());
-        let mut clearable = Vec::with_capacity(all_applications.iter().map(|l| if l.1 {l.0.len()} else {0}).sum());
+        let mut clearable = Vec::with_capacity(
+            all_applications
+                .iter()
+                .map(|l| {
+                    if l.1 {
+                        l.0.len()
+                    }
+                    else {
+                        0
+                    }
+                })
+                .sum()
+        );
         for l in all_applications.into_iter() {
             all.extend_from_slice(l.0);
             if l.1 {
