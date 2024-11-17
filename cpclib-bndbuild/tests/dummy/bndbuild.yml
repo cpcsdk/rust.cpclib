@@ -35,13 +35,16 @@
   cmd: xfer 192.168.1.26 -y dummy.sna
   help: Send the generated snapshot to the M4 card corresponding to the given IP address
 
-- tgt: wincpcec
+- tgt: cpcec
   dep: build
-  cmd: extern .\tools\cpcec\CPCEC.EXE ..\..\dummy_logo.sna
-  help: Launch CPCEC.EXE as an external process (all other commands are embedded in bndbuild). Sadly it does not work :(
+  cmd: emu --emulator cpcec --snapshot dummy.sna run
 
 - tgt: winape
   dep: build
   phony: true
-  cmd: extern .\tools\winape\WinApe.exe /SYM:dummy.sym /SN:../../dummy.sna 
-  help: Launch Winape as an external process (all other commands are embedded in bndbuild). Hopefully it works !!
+  cmd: emu --emulator winape --snapshot dummy.sna run
+
+- tgt: ace
+  dep: build
+  phony: true
+  cmd: emu --emulator ace --snapshot dummy.sna run
