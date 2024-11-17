@@ -43,40 +43,45 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 }
 
 pub fn build_args_parser() -> clap::Command {
-    static COMMANDS_LIST: OnceLock<Vec<&str>> = OnceLock::new();
-    let commands_list = COMMANDS_LIST.get_or_init(|| {
-        let sources = [
-            EMUCTRL_CMDS,
-            ACE_CMDS,
-            WINAPE_CMDS,
-            CPCEC_CMDS,
-            AMSPIRIT_CMDS,
-            SUGARBOX_CMDS,
-            BASM_CMDS,
-            ORGAMS_CMDS,
-            RASM_CMDS,
-            SJASMPLUS_CMDS,
-            VASM_CMDS,
-            BNDBUILD_CMDS,
-            CP_CMDS,
-            DISC_CMDS,
-            ECHO_CMDS,
-            EXTERN_CMDS,
-            FAP_CMDS,
-            IMG2CPC_CMDS,
-            HIDEUR_CMDS,
-            IMPDISC_CMDS,
-            MARTINE_CMDS,
-            RM_CMDS,
-            XFER_CMDS
+    static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
+    let (commands_list, clearable_list) = COMMANDS_LIST.get_or_init(|| {
+        let all_applications = [
+            (EMUCTRL_CMDS, false),
+            (ACE_CMDS, true),
+            (WINAPE_CMDS, true),
+            (CPCEC_CMDS, true),
+            (AMSPIRIT_CMDS, true),
+            (SUGARBOX_CMDS, true),
+            (BASM_CMDS, false),
+            (ORGAMS_CMDS, false),
+            (RASM_CMDS, true),
+            (SJASMPLUS_CMDS, true),
+            (VASM_CMDS, true),
+            (BNDBUILD_CMDS, false),
+            (CP_CMDS, false),
+            (DISC_CMDS, false),
+            (ECHO_CMDS, false),
+            (EXTERN_CMDS, false),
+            (FAP_CMDS, true),
+            (IMG2CPC_CMDS, false),
+            (HIDEUR_CMDS, false),
+            (IMPDISC_CMDS, true),
+            (MARTINE_CMDS, true),
+            (RM_CMDS, false),
+            (XFER_CMDS, false)
         ];
 
-        let mut list = Vec::with_capacity(sources.iter().map(|l| l.len()).sum());
-        for l in sources.into_iter() {
-            list.extend_from_slice(l);
+        
+        let mut all = Vec::with_capacity(all_applications.iter().map(|l| l.0.len()).sum());
+        let mut clearable = Vec::with_capacity(all_applications.iter().map(|l| if l.1 {l.0.len()} else {0}).sum());
+        for l in all_applications.into_iter() {
+            all.extend_from_slice(l.0);
+            if l.1 {
+                clearable.extend_from_slice(l.0);
+            }
         }
 
-        list
+        (all, clearable)
     });
 
     Command::new("bndbuilder")
@@ -101,7 +106,7 @@ pub fn build_args_parser() -> clap::Command {
             Arg::new("direct")
             .action(ArgAction::SetTrue)
             .long("direct")
-            .help("Directly execute a command without trying to read a task file")
+            .help(&format!("Bypass the task file and directly execute a command along: [{}].", commands_list.iter().join(", ")))
             .conflicts_with_all(["list", "init", "add"])
         )
         .arg(
@@ -164,6 +169,7 @@ pub fn build_args_parser() -> clap::Command {
                 .alias("clear")
                 .short('c')
                 .num_args(0..=1)
+                .value_parser(clearable_list.clone())
                 .help("Clear cache folder that contains all automatically downloaded executables. Can optionally take one argument to clear the cache of the corresponding executable.")
                 .exclusive(true)
         )
@@ -194,7 +200,7 @@ pub fn build_args_parser() -> clap::Command {
                 .help("The kind of command to be added in the yaml file")
                 .long("kind")
                 .short('k')
-                .value_parser(["basm", "img2cpc", "xfer"])
+                .value_parser(commands_list.clone())
                 .requires("add")
                 .default_missing_value("basm")
         )

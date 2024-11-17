@@ -31,10 +31,10 @@ Options:
           Show the help of the given subcommand CMD.
           
           [default: bndbuild]
-          [possible values: cpc, winape, cpcec, amspirit, basm, bndbuild, cp, dsk, disc, echo, extern, img2cpc, hideur, impdsk, martine, orgams, rasm, rm, sugarbox, xfer]
+          [possible values: cpc, emu, emuctrl, emucontrol, ace, acedl, winape, cpcec, amspirit, sugarbox, basm, assemble, orgams, rasm, sjasmplus, vasm, bndbuild, build, cp, copy, dsk, disc, echo, print, extern, fap, img2cpc, imgconverter, hideur, impdsk, impdisc, martine, rm, del, xfer, cpcwifi, m4]
 
       --direct
-          Directly execute a command without trying to read a task file
+          Bypass the task file and directly execute a command along: [cpc, emu, emuctrl, emucontrol, ace, acedl, winape, cpcec, amspirit, sugarbox, basm, assemble, orgams, rasm, sjasmplus, vasm, bndbuild, build, cp, copy, dsk, disc, echo, print, extern, fap, img2cpc, imgconverter, hideur, impdsk, impdisc, martine, rm, del, xfer, cpcwifi, m4].
 
   -V, --version
           Print version
@@ -59,6 +59,8 @@ Options:
 
   -c, --clear-cache [<clear>]
           Clear cache folder that contains all automatically downloaded executables. Can optionally take one argument to clear the cache of the corresponding executable.
+          
+          [possible values: ace, acedl, winape, cpcec, amspirit, sugarbox, rasm, sjasmplus, vasm, fap, impdsk, impdisc, martine]
 
       --init
           Init a new project by creating it
@@ -72,7 +74,7 @@ Options:
   -k, --kind <kind>
           The kind of command to be added in the yaml file
           
-          [possible values: basm, img2cpc, xfer]
+          [possible values: cpc, emu, emuctrl, emucontrol, ace, acedl, winape, cpcec, amspirit, sugarbox, basm, assemble, orgams, rasm, sjasmplus, vasm, bndbuild, build, cp, copy, dsk, disc, echo, print, extern, fap, img2cpc, imgconverter, hideur, impdsk, impdisc, martine, rm, del, xfer, cpcwifi, m4]
 
 cpclib-bndbuild 0.6.0 embedded by cpclib-bndbuild 0.6.0
 ```
