@@ -38,26 +38,26 @@ homepage = "https://github.com/cpcsdk/rust.cpclib"
 
 [workspace.dependencies]
 
-cpclib = { version = "0.9.0", path = "cpclib", default-features = false }
-cpclib-asm = { version = "0.8.0", path = "cpclib-asm", default-features = false }
-cpclib-basic = { version = "0.8.0", path = "cpclib-basic", default-features = false }
-cpclib-basm = { version = "0.8.0", path = "cpclib-basm", default-features = false }
-cpclib-bdasm = { version = "0.8.0", path = "cpclib-bdasm", default-features = false }
-cpclib-bndbuild = { version = "0.6.0", path = "cpclib-bndbuild", default-features = false }
-cpclib-common = { version = "0.8.0", path = "cpclib-common", default-features = false }
-cpclib-cpr = { version = "0.6.0", path = "cpclib-cpr", default-features = false }
-cpclib-crunchers = { version = "0.8.0", path = "cpclib-crunchers", default-features = false }
-cpclib-disc = { version = "0.8.0", path = "cpclib-disc", default-features = false }
-cpclib-image = { version = "0.8.0", path = "cpclib-image", default-features = false }
-cpclib-imgconverter = { version = "0.8.0", path = "cpclib-imgconverter", default-features = false }
-cpclib-macros = { version = "0.8.0", path = "cpclib-macros", default-features = false }
-cpclib-runner = { version = "0.1.0", path = "cpclib-runner", default-features = false }
-cpclib-sna = { version = "0.8.0", path = "cpclib-sna", default-features = false }
-cpclib-tokens = { version = "0.8.0", path = "cpclib-tokens", default-features = false }
-cpclib-visual-bndbuild = { version = "0.4.0", path = "cpclib-visual-bndbuild", default-features = false }
-cpclib-xfer = { version = "0.8.0", path = "cpclib-xfer", default-features = false }
-cpclib-xfertool = { version = "0.8.0", path = "cpclib-xfertool", default-features = false }
-cpclib-z80emu = { version = "0.8.0", path = "cpclib-z80emu", default-features = false }
+cpclib = { version = "0.10.0", path = "cpclib", default-features = false }
+cpclib-asm = { version = "0.9.0", path = "cpclib-asm", default-features = false }
+cpclib-basic = { version = "0.9.0", path = "cpclib-basic", default-features = false }
+cpclib-basm = { version = "0.9.0", path = "cpclib-basm", default-features = false }
+cpclib-bdasm = { version = "0.9.0", path = "cpclib-bdasm", default-features = false }
+cpclib-bndbuild = { version = "0.7.0", path = "cpclib-bndbuild", default-features = false }
+cpclib-common = { version = "0.9.0", path = "cpclib-common", default-features = false }
+cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false }
+cpclib-crunchers = { version = "0.9.0", path = "cpclib-crunchers", default-features = false }
+cpclib-disc = { version = "0.9.0", path = "cpclib-disc", default-features = false }
+cpclib-image = { version = "0.9.0", path = "cpclib-image", default-features = false }
+cpclib-imgconverter = { version = "0.9.0", path = "cpclib-imgconverter", default-features = false }
+cpclib-macros = { version = "0.9.0", path = "cpclib-macros", default-features = false }
+cpclib-runner = { version = "0.7.0", path = "cpclib-runner", default-features = false }
+cpclib-sna = { version = "0.9.0", path = "cpclib-sna", default-features = false }
+cpclib-tokens = { version = "0.9.0", path = "cpclib-tokens", default-features = false }
+cpclib-visual-bndbuild = { version = "0.5.0", path = "cpclib-visual-bndbuild", default-features = false }
+cpclib-xfer = { version = "0.9.0", path = "cpclib-xfer", default-features = false }
+cpclib-xfertool = { version = "0.9.0", path = "cpclib-xfertool", default-features = false }
+cpclib-z80emu = { version = "0.9.0", path = "cpclib-z80emu", default-features = false }
 
 # cpclib = {version="0.7.0", default-features=false}
 # cpclib-asm = {version="0.7.0", default-features=false}
