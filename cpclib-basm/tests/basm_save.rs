@@ -1,9 +1,8 @@
 use std::rc::Rc;
 
-use cpclib_asm::file::{load_file, load_file_raw};
+use cpclib_asm::file::load_file;
 use cpclib_asm::ParserOptions;
 use cpclib_basm::*;
-use cpclib_common::clap::Parser;
 
 /// ! This test file has been created to track some wrong memory handling when saving data with banksets
 

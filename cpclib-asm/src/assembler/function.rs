@@ -8,7 +8,6 @@ use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token
 };
-use either::Either;
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,

@@ -14,7 +14,6 @@ use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ExprElement, ListingElement,
     MacroParamElement, TestKindElement, ToSimpleToken, Token
 };
-use either::Either;
 use ouroboros::*;
 
 use super::control::ControlOutputStore;
