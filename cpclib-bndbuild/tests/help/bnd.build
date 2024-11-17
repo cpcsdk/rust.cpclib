@@ -1,0 +1,29 @@
+- tgt: all
+  dep: rasm basm bndbuild martine ace img2cpc xfer disc
+
+- tgt: basm
+  cmd: basm --help
+
+- tgt: rasm
+  cmd: -rasm --help
+
+- tgt: bndbuild
+  cmd: bndbuild --help
+
+- tgt: martine
+  cmd: -martine --help
+
+
+- tgt: ace
+  cmd: -ace --help
+
+- tgt: img2cpc
+  cmd: img2cpc --help
+
+
+- tgt: xfer
+  cmd: xfer --help
+
+
+- tgt: disc
+  cmd: disc --help
