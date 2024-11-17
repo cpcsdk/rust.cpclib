@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use cpclib_common::camino::Utf8Path;
+#[cfg(feature = "cmdline")]
 use cpclib_common::clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib_common::parse_value;
 use cpclib_common::winnow::error::ContextError;
@@ -29,6 +30,7 @@ impl Display for HideurError {
     }
 }
 
+#[cfg(feature = "cmdline")]
 pub fn hideur_build_arg_parser() -> Command {
     Command::new("hideur")
         .arg(
@@ -97,6 +99,7 @@ pub fn hideur_build_arg_parser() -> Command {
         )
 }
 
+#[cfg(feature = "cmdline")]
 pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
     // Read the input file
     let complete_filename = Utf8Path::new(matches.get_one::<String>("OUTPUT").unwrap());
