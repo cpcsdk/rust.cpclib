@@ -176,7 +176,7 @@ xcap = "0.0.11"
 # gui based dependencies
 eframe = "0.29"
 egui = "0.29"
-claui = { git = "https://github.com/rgiot/claui.git" }
+claui = "0.4"
 egui_code_editor = "0.2.10"
 egui_file = "0.19"
 open = "5.3.1"
