@@ -1,7 +1,7 @@
 [package]
 
 name = "cpclib-disc"
-version = "0.9.0"
+version = "0.9.1"
 description = "cpclib libraries related to snapshots"
 
 authors.workspace = true
@@ -55,16 +55,17 @@ cmdline = ["cpclib-common/cmdline"]
 
 [[bin]]
 name = "dskmanager"
-path = "src/bin/dsk_manager.rs"
+path = "exec/dsk_manager.rs"
 required-features = ["dskmanager"]
 
 [[bin]]
 name = "hideur"
-path = "src/bin/hideur.rs"
+path = "exec/hideur.rs"
 required-features = ["hideur"]
 
 
 [[bin]]
 name = "catalog"
-path = "src/bin/catalog.rs"
+path = "exec/catalog.rs"
 required-features = ["catalog"]
+
