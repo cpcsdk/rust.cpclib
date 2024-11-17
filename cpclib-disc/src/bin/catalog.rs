@@ -189,8 +189,7 @@ fn main() -> std::io::Result<()> {
             let contains_control_chars = !fname
                 .as_str()
                 .chars()
-                .map(|c| c.is_ascii_graphic())
-                .all(|t| t);
+                .all(|c| c.is_ascii_graphic());
 
             if contains_id && !contains_control_chars {
                 print!("{idx}. {fname}");

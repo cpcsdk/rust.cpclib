@@ -117,7 +117,7 @@ pub fn build_args_parser() -> clap::Command {
             Arg::new("direct")
             .action(ArgAction::SetTrue)
             .long("direct")
-            .help(&format!("Bypass the task file and directly execute a command along: [{}].", commands_list.iter().join(", ")))
+            .help(format!("Bypass the task file and directly execute a command along: [{}].", commands_list.iter().join(", ")))
             .conflicts_with_all(["list", "init", "add"])
         )
         .arg(

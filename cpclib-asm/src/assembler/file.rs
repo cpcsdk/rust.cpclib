@@ -26,13 +26,13 @@ impl<'a, 'b> Deref for Fname<'a, 'b> {
     }
 }
 
-impl<'a, 'b> From<&'a Utf8Path> for Fname<'a, 'b> {
+impl<'a> From<&'a Utf8Path> for Fname<'a, '_> {
     fn from(value: &'a Utf8Path) -> Self {
         Self(Either::Left(value))
     }
 }
 
-impl<'a, 'b> From<&'a str> for Fname<'a, 'b> {
+impl<'a> From<&'a str> for Fname<'a, '_> {
     fn from(value: &'a str) -> Self {
         let p: &Utf8Path = value.into();
         p.into()

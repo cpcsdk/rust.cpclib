@@ -2397,11 +2397,11 @@ match &word.to_ascii_uppercase()[..] {
     b"STARTINGINDEX" => parse_startingindex.parse_next(input),
 
     _ => {
-        input.reset(&input_start);
-        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+        input.reset(input_start);
+        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
             input,
             ErrorKind::Alt
-        )));
+        )))
     }
 
 }
@@ -2415,11 +2415,11 @@ fn parse_directive_of_size_10(input: &mut InnerZ80Span,  input_start: &Checkpoin
     choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input),
     
         _ => {
-            input.reset(&input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     
     }
@@ -2437,11 +2437,11 @@ fn parse_directive_of_size_8(input: &mut InnerZ80Span,  input_start: &Checkpoint
         choice_nocase!(b"SNAPINIT") => parse_snainit.parse_next(input),
     
         _ => {
-            input.reset(&input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     
     }
@@ -2457,11 +2457,11 @@ match word {
     choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
 
     _ => {
-        input.reset(&input_start);
-        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+        input.reset(input_start);
+        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
             input,
             ErrorKind::Alt
-        )));
+        )))
     }
 
 }
@@ -2521,11 +2521,11 @@ fn parse_directive_of_size_6(input: &mut InnerZ80Span,  input_start: &Checkpoint
     choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
 
     _ => {
-        input.reset(&input_start);
-        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+        input.reset(input_start);
+        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
             input,
             ErrorKind::Alt
-        )));
+        )))
     }
 }
 }
@@ -2545,11 +2545,11 @@ fn parse_directive_of_size_5(input: &mut InnerZ80Span,  input_start: &Checkpoint
         },
 
         _ => {
-            input.reset(&input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     }
 }
@@ -2580,11 +2580,11 @@ fn parse_directive_of_size_4(input: &mut InnerZ80Span,  input_start: &Checkpoint
             parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
         },
         _ => {
-            input.reset(&input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     }
 }
@@ -2604,11 +2604,11 @@ fn parse_directive_of_size3(input: &mut InnerZ80Span,  input_start: &Checkpoint<
         choice_nocase!(b"ORG") => parse_org.parse_next(input),
         choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input),
         _ => {
-            input.reset(&input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     }
 }
@@ -2631,10 +2631,10 @@ fn parse_directive_of_size_2(input: &mut InnerZ80Span,  input_start: &Checkpoint
 
         _ => {
             input.reset(input_start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
                 input,
                 ErrorKind::Alt
-            )));
+            )))
         }
     }
 }
