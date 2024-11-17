@@ -1,0 +1,11 @@
+- tgt:
+  - a
+  - b d "e f"
+- dep: a b "e f"
+  tgt: c
+- dep: e f "e f"
+  tgt: g
+- dep: "\"e f\""
+  tgt: 
+    - h
+    - i j
