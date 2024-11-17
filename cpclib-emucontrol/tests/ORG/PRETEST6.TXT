@@ -1,0 +1,227 @@
+inRom = 0               ; 1 to auto-install in rom
+rom   = &1B             ; <- ROM pour ce module
+
+main_rom = &0A          ; ORGAMS.ROM 
+ext_rom = &1A           ; ORGEXT.ROM
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+nrt_buf = &0F00
+
+      ORG &1000
+      IF inRom:ENT burn
+      ELSE:ENT start
+      END
+
+; ---- In ORGAMS.ROM aka main_rom (use regular call) ---------------
+
+setup_custom = &E839    ; Trust me on this
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+; --- For nrt ---
+org_init = org
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+org_delete_line = org+15
+org_load = org+18
+org_save = org+21
+
+org_assemble = org+27
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout
+      IF rom - ext_rom
+          push hl:ld hl,rout:jp _call_org
+      ELSE
+; Ext rom already connected.
+          call rout
+      END
+      ENDM
+
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+
+_call_org
+; Swith to ext rom, call ORG_* routine, switch back.
+
+          ld (_call_+1),hl
+          pop hl
+
+          push af:push bc
+          ld c,ext_rom:call kl_rom_select
+          pop bc:pop af
+
+_call_    call 0
+
+          push af:push bc
+          ld c,rom:call kl_rom_select
+          pop bc:pop af
+          ret
+
+; -------------------------------------------------------------------
+
+;====
+start
+;====
+          ld a,bk_dev
+          call nrt_setup
+          jp tests
+
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+
+; -- Cold start
+          CALL_ORG(org_init)
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          call test_insert_line
+          call test_source_assemble
+; Your tests here
+          ret
+
+test_insert_line
+;---------------
+
+; Reset. So tests don't impact each other.
+          CALL_ORG(org_init)
+
+; Code under test.
+          INSERT_LINE(1,dummy_line)
+
+; Checks.
+          CHECK_NB_LINES(1)
+          CHECK_LINE(1,dummy_line) ; check we get the line back 
+   ;  CHECK_LINE(2,dummy_line) ; uncomment me to trigger failure
+          ret
+
+dummy_line BYTE "Sid",0
+
+
+test_source_assemble
+;-------------------
+          CALL_ORG(org_init)
+
+          ld hl,source_nrt
+          call nrt_set_source
+
+          ld de,nrt_buf ; dest
+          ld bc,&1234   ; pc
+          CALL_ORG(org_assemble)
+
+          ld hl,(nrt_buf)
+          CHECK_HL_EQ(&3412)
+          ret
+
+source_nrt
+      BYTE "macro rword n:byte n/&100,n and &ff:endm",0
+      BYTE "rword $",0
+      BYTE 0
+
+ª

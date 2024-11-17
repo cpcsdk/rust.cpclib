@@ -1,0 +1,7 @@
+vt_rom_firmflag = &9D0A
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+      IF vt_rom_firmflag - &9D0A
+ !! shared with farcall, visu, asseto
+      END

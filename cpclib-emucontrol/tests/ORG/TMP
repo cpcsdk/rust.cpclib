@@ -1,0 +1,6 @@
+          ld a,&C0
+          ld bc,&7FC3
+          out (c),c
+          ld (&4000),a
+          out (c),a
+          ld a,(&C000)

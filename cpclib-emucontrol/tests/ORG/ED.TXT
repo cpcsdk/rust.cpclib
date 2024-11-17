@@ -1,0 +1,4448 @@
+; -> Installer au pr{alable les QUATRE ROMs.
+
+romEd = 10
+inRom = 1
+rast  = 0               ; Timing display in border
+doNRT = 0 AND [1-inRom] ; 1= NRT  0= launch ED in dev mode
+todo  = 1
+need_room = 1
+dev_checks = 1
+
+; [space optim] call quitline for every shortcut??
+              ; !!! WELL, DEL and RETURN shouldn't !!!
+
+; Table of content (CONTROL-ENTER for direct access)
+; - SHORT_KB  ;  table shortcuts
+; - MAINLOOP
+
+; --- \/ In 2024 ----
+brbi  = 1
+show_brbi = 0
+; ------------ GG beta 6 ----------
+; Jul 31 BRBV Display 'selected' info with machine-time
+
+; ------------ GG beta 5 ----------
+; Jun
+   ; 10 BRBU Add halt to prevent status bar flickering
+; May
+   ; 30 BRBT Remove check int rout installed? (unneeded and unflexible)
+   ; 30 BRBS show_bri: show tm for oGetPcFromLine (instead of display)
+; Apr        
+   ; 13 BRBR Dump: filter chr > 128
+                 ; grise if source modified since ass
+
+; ------------ GG beta 3 ----------
+; Mar    
+   ;  7 BRBQ CONTROL-O: ESC Cancels
+           ; |O 
+   ;  6 BRBP Move stuff around so that code fits when brbi=1
+   ;  5 BRBO Bookmarks
+           ; AdjustHist: Handle Bookmarks
+   ;  4 BRBN Expose /ask_when_modified/
+      ; BRBM AdjustHist: fix copy-past error introduced in BRBL
+           ; _ask_when_modified: Propose to save (for orgreset)
+           ; harmonization |o |orgload
+                 ; Only setup crtc/screen if needed (tab to save)
+; Feb                   
+   ; 26 BRBL Make room for /bookmarks/
+   ; 24 BRBK Fix DEL at pos 0 with brbi=1: we were calling INFOS_LN
+           ; in the middle of the concatenation procedure, trashing
+           ; BUF_TMP with dump.    
+   ; 19 BRBJ Refactor  load_from_rsx_o
+           ; Introduce load_from_rsx_orgload (for |ORGLOAD)
+   ;  4 BRBI Dump PC in status bar
+; ------------ FF Release ----------
+; Dec     
+   ; 30 BRBH Don't insert empty line at init (now done by org)
+           ; Don't call ed_source_init (idem)
+      ; BRBG Expose ed_source_init to fix bugs 
+              ; when import file not found / ed[n]  
+      ; BRBF Don't display current tab among listed tabs
+              ; - Would be redundant
+              ; - Would need to update "modified" to remain consistent
+              ; - More room for the others
+              ; - Simpler routine
+   ; 24 BRBE Display occupied tabs
+   ; 22 BRBD Display "First:  Last:" when assembled.
+           ; Remove more dead code.   
+      ; BRBC Remove dead code.   
+           ; Use disp_infos_com for messages not in ROM.
+           ; Remove disp_infos
+   ; 17 BRBB Mustn't reset offset after CAT or |RSX
+           ; Otherwise, firmware scrolling is lost. 
+           ; Oh, that was actually a regression from BRBA:
+                ; crtc_status_set_editor did reset offset.
+   ; 15 BRBA /status_on/ Must setup editor bandeau.
+   ; 13 BRAZ Allow completion even without prefix 
+           ; Fix clipped bold selection with CTRL-L
+   ; 13 BRAY PUT_Q_TXT/PUT_Q_BIN: Must save B=length field
+   ; 12 BRAX Explicit search for CTRL-L + ->  (requires find-y)
+             ; Faster and clipping-bug-free.
+
+      ; BRAW Remove regression from BRAV: 
+           ; inc b / dec b in oFieldEditor trashed Z (flag modified)
+           ; QUESTION: no more buf ovf for LABEL_NM / FIND_STRING
+
+   ;  9 BRAV QUESTION: Suggestion for CONTROL-L as well
+
+; Apr
+   ; 28 BRAU Fix goto line.
+
+; ------------ Beta I ------    
+   ; 18 BRAT Cleanup ClearINFOS_LN
+
+   ; 17 BRAS CONTROL | shortcut for rsx. See /C_RSX/
+           ; Fix bug introduced privately:
+                 ; LABEL_NM must be &100-confined 
+           ; Introduce codedest3
+   ; 15 BRAR Remove flickering with |o
+   ; 12 BRAQ Let ORG codec track modified status.
+           ; - less code
+           ; - fix bug #158
+      ; BRAP Extend room for filepath (LEN_SRC) to 79 chars.
+           ; Oups forgot to call oSelect.
+      ; BRAO |o,"file" use a free tab. Requires import vAC
+
+   ; 10 BRAN Done #f3 Only refresh filename/path in status_on.
+           ; CONTRLOL-fx: no-op if selecting current source.
+           ; Save some bytes by re-arranging routines.
+           ; Minor: After CAT /C_CAT/, don't display status twice.
+           ; Minor: Don't print 'OrgamS' anymore in status bar
+
+   ; 10 BRAM Fix bug#156 [completion] vielle liste quand pas de candidat
+
+; ------- beta D -------
+
+; --- \/ In 2022 ----
+; Jun
+   ; 17  BRAL Remove /_check_mod/ in /C_LOAD/ (fix bug #153).
+         ; -> The check itself wasn't valid when no file were loaded.
+
+; Apr
+   ; 20  BRAK Add check around is_selected_uptodate
+
+; --- \/ In 2021 ----    
+
+     ; 29 BRAJ Fix /bug#12d/ 
+     ; 22 BRAI Expose ed_load (for import).
+     ; 20 BRAH Fix C_SAVE: must copy inconditionaly.
+     ; 20 BRAG Use NAME_LOAD/NAME_SAVE rather than org.filename @ 7E00
+             ; Fix bug #12f, #130 
+             ; Use bric.deci_to_int
+
+ ; Oct 22 BRAE Plug cue for auto-completion.
+             ; Export /search_in_line/ (to make room)
+
+     ; 19 BRAD 
+        ; Factorisation. See: /get_buffer_pos_hl/
+                            ; /get_buffer_pos_a/
+                            ; /set_cursor_x/
+                            ; /search_init/
+
+ ; Oct 17 BRAC Remove tests. But leave hooks!
+
+     ; 11 BRAB Compute /SRC_NAME_SZ/ (done in two places)
+             ; Optimize /fill_space_string/
+
+     ; 10 BRAA Move SRC_NAME @ 7e01. See label for rationale
+
+nrtscr = &1000          ; for screen simulation
+nrtbuf = &1800
+
+      IF inRom
+      ORG &2000
+      ENT burn
+      ELSE
+      IF doNRT
+; doNRT: ORG controlled by ed.nrt 
+      BRK
+      BRK               ; for visu
+      ELSE
+      ORG &2000
+      ENT ram_start
+      END
+      END
+
+
+;-- In this ROM ------------
+chef  = &C100
+;bric_far_call = chef+18
+ext_far_call = chef+60
+mon_far_call = chef+63
+
+; New version.
+far_call_bric = &E81E
+far_call_ext = &E810
+;far_call_mon = &E817
+
+codedest = &D02D        ; after mulf
+limit = &E13D           ; brk
+codedest2 = &E240       ; after brk
+limit2 = &E270          ; upd-scr
+codedest3 = &E3ED       ; after ch'
+limit3 = &E471          ; mulf 
+codedest4 = &FF36       ; after jp upd-scr
+limit4 = &FFA0          ; jp brk
+
+setup_custom = &E839    ; For dev mode.
+impexp = &FC00
+
+txt_get_ch = &CA08      ;In. A=num message. Out: HL=string (@ 7100)
+decrunch_msg_ed = &CA20
+decrunch_msg_gen = &CA0E
+
+us    = &FF00           ; Update screen (upd-scr.o)
+;us    = void
+us_init = us
+us_upd_scr = us+3
+scr_ins = us+6          ; In: HL=POS_LINE  C=0 (under pos) 1 (at pos)
+scr_del = us+9          ; In: rien
+us_allfrom = us+12      ; Display full page from top. In: HL=POS_LINE
+NUM_LINE = us+15
+      IF doNRT
+display_source_line = nrt_display_source_line
+_display_source_line = us+18
+      ELSE
+display_source_line = us+18
+      END
+get_bot = us+27
+; in: HL= cur line. out HL= bottom line
+set_cursor = us+30      ; in: H=X, L=Y
+inv_cursor = us+33
+cur_on = us+36
+cur_off = us+39
+cur2pos = us+42         ; For NRT
+us_DrawBloc = us+45
+offset_firm_to_rupt = us+48
+
+oLoad = chef
+oSave = chef+3
+oImport = impexp
+oExport = impexp+3
+oMsgErr = impexp+12     ; io fail (already called after oImport/Export)
+oAssembl = chef+12      ;Ca if ok
+oAssemblReset = chef+6  ;"
+oAssJump = chef+15      ;"
+oAssJumpReset = chef+9  ;"
+oAssJob = chef+27       ;cf nokey
+oTogView = chef+30
+oExitEd = chef+33
+oHelp = chef+39
+oSaveBin = chef+48
+oCls  = chef+51
+oDispFail = chef+54     ;in: A=num message failure
+
+synhigh = &FEF7
+comment_pos = synhigh
+
+mirror = &E7F2
+oCopyMirror = mirror+24
+
+;-- in Ext ROM --------------
+codec = &C008-3
+org   = &C008
+org_init = org          ; For dev/nrt
+org_set_saved = org+&66
+org_connect_filename = &C100
+org_is_modified = &C103 ; In: A=source ID
+connect_bk_base = &C106 ; All registers preserved
+; Continued in oSourceInit...
+
+first_free_tab = &FFBA  ; In import.o
+
+visu  = &FF60
+oGetPcFromLine = visu
+
+filename = &FF66
+set_filename = filename+6
+is_filename_empty = filename+15
+copy_filename = filename+18
+
+
+find  = &FE5D
+oLabLine = find+12      ;ctrl-enter (de=line, l=pos. 0=start of line)
+oLabFetch = find+3      ;ctrl-*     (de=line, l=pos. 0=start of line)
+oLabNextFromId = find+6 ;ctrl-*     (de=line-1, hl=id)
+oLabNext = find+9       ;ctrl-l     (de=line-1, hl=buf label)
+oLabDef = find          ;ctrl-l explicit version (hl=id)
+oFlip = find+15         ;ctrl-%
+
+ass   = &FE20           ; for get_err
+
+asseto = &FFAE
+asseto_init = asseto    ; for dev
+
+count_tm = &FF90        ; in count.o
+
+cache = &FE6F
+is_selected_uptodate = cache ; Since last ass != modified (since save)
+
+; -- in BRIC rom -------------
+chunk = &FE00
+chunk_init_custom = chunk + 33 ; for dev
+
+conv  = &FD67
+deci_to_int = conv
+
+parse = &FEF1
+is_labelchar = parse+9
+
+token = &FDA0
+get_start_of_label = token ;in hl:pos in buf. out:de=start label
+
+aap2  = &FE30
+get_label = aap2+9      ;in: de=id hl=buffer
+
+search = &FD94
+normalize_string = search
+search_in_line = search+3
+
+string = &FD82
+get_len = string        ; unused for now
+; bric_copy_nt = string+3  !! cannot use that !
+get_len_clip = string+6 ; see LEN_STR
+
+field_editor = &FFA0
+
+histrion = &FDA9
+hist_init = histrion
+field_editor_with_hist = histrion+3
+hist_append = histrion+6
+
+crtc  = &FE4E           ; screen.o
+clear_status = crtc+18
+;crtc_status_set_editor = crtc+21 ; Reinstall whole routine. Nevermind
+crtc_status_set_editor = &FD34 ; this version doesn't touch offset
+crtc_status_on = crtc+30
+crtc_status_off = crtc+33
+crtc_offset = &9CFE
+crtc_firm2shift = crtc+24
+crtc_shift2firm = crtc+27
+
+disp  = &FF14
+;strPadEi = disp+&33 
+;strPadAtEi = disp+&87
+;strPadShadedEi = disp+&45
+putDeciA = disp+&6C     ; in (de)
+putDeciHL = disp+&6F
+
+ds    = &FE78
+status_str_at = ds+6    ; Note: preserve DE
+status_str_shaded_at = ds+51 ; Note: preserve DE
+
+dispInit = chef+&42
+  ; dispCharAt*
+    ; in: DE=screen pos.
+    ; Out:DE=next screen pos.
+         ;hl, ix, iy trashed
+dispChrAt = chef+&4E
+dispChrAtGrey = chef+&5A
+dispStrAt = chef+&56
+dispStrInvAt = chef+&5E
+
+putHexaA = chef+&7E     ;!!also put 00 (wasn't a good design choice)
+putHexaHL = chef+&81    ;!!idem
+
+
+status = &FDC4
+st_clear_suggestions = status-12
+;st_disp_suggestions = status-9
+st_disp_selection = status-6
+st_disp_tot_lines = status-3
+st_disp_filename = status ; also display tab#
+st_disp_infos = status+3
+st_disp_infos_com = status+6 ;hl=str, de=cursor (updated) AF,HL saved
+INFO_CUR_LINE = status+9
+st_ClearQuestion = status+12
+st_disp_modified = status+15
+st_field_refresh = status+18
+;copy_nt = status+21
+DEC2STR = status+24     ;In: HL=num, DE=dest buffer
+
+cue   = &FFA3
+refresh_suggestions = cue
+next_selection = cue+3
+reset_selection = cue+6
+get_selected_id = cue+9
+
+;-- In ROM Monogams ---------
+monogams = &E003
+command_rsx_from_ed = &E00F
+
+monui = &F900
+keyCheckDi = monui+32
+is_control_pressed = monui+77
+is_shift_pressed = monui+83
+get_pressed_keycode = monui+&95
+
+;-- In bank ----
+RSX_HIST = &6800
+; &6900 ... &6bFF  Reserved
+NAME_LOAD = &6C00       ; Memorisation CONTROL-O
+NAME_SAVE = &6D00       ; Memorisation CONTROL-S
+
+BUF_LINE = &7700        ; Stockage de la ligne courante
+edVar = &7800
+
+vo_romMon = &7CFB
+
+;Filename put at dedicated place. Rationale:
+; - Must be stored first to help localize sources for import/CONTROL-O
+; - Leave more room for long filenames (with path)
+; - Shared with org:org_store (and org.o or filename.o ???)
+;Size. Rationale:
+; - Needed by AMSDOS
+; - Speed up search (filename comparison)
+; - Populated here because filename is changed by ed as well.
+      IF todo
+; move to string.o or filename.o
+    ; or: Store it here instead?
+; in anyway: put in in one single place!!
+      END
+SRC_NAME_SZ = &7E00     ; Filename size
+SRC_NAME = &7E01        ; Stockage du nom de fichier. Shared with org.o
+
+;-- In Work zone ----
+
+BUF_IO = &8000          ;2ko
+BUF_TMP = &9100         ; Buffer de r{serve (reuse ass' compute params)
+TMP_NAME = BUF_TMP
+PATTERN = BUF_TMP+&0100-20
+
+      IF PATTERN-&91EC
+ !! shared with search.o
+  ; If moved -> must review API. See TODO in search.search_in_line
+      END
+
+COMPLETION_SUGGESTIONS = &9200
+BUF_TABS = &9200        ; Reuse buffer
+COMPLETION_PATTERN = &9300
+
+      IF BUF_TABS AND &8000:ELSE
+ !! must be out of bank (since org_connect_filename)
+      END
+
+ink0  = &FBFD
+ink1  = &FBFE
+ink10 = &FBFF
+
+startDef = &9000        ;org par defaut
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+      IF 1-doNRT
+km_reset = &BB03
+km_wait_key = &BB18
+km_read_key = &BB1B
+km_test_key = &BB1E
+      END
+
+ksetkey = &BB27         ; aka km_set_translate
+kgetkey = &BB2A         ; aka km_get_translate
+ksetshift = &BB2D
+ksetctrl = &BB33
+km_disarm_break = &BB48
+
+txt_set_cursor = &BB75
+txt_get_cursor = &BB78
+scr_set_offset = &BC05  ;only af / hl corrupt
+scr_get_position = &BC0B
+scr_set_mode = &BC0E
+scr_get_mode = &BC11
+scr_fill_box = &BC44    ; H<->D   L top E bottom   A = fill
+scr_hw_roll = &BC4D
+
+; -------------------------------------
+      MACRO CALL_ORG rout
+;!!! Don't use anymore
+          call ext_far_call:WORD rout ; Works like RST &18
+      ENDM
+
+      MACRO CALL_ORG' rout
+;Used for incremental migration.
+;TODO instead: switch CALL_ORG
+          call far_call_ext:WORD rout ; Works like RST &18
+      ENDM
+
+      MACRO CALL_MON rout
+          call mon_far_call:WORD rout
+      ENDM
+
+      MACRO CALL_BRIC rout
+          call far_call_bric:WORD rout
+      ENDM
+; -------------------------------------
+
+      IF inRom
+burn
+          ld ix,burnpara:call burn_
+          ld ix,burnpara2:call burn_
+          ld ix,burnpara3:call burn_
+          ld ix,burnpara4:call burn_
+          call &BB06
+
+;Retour impossible : adresses ont boug{ en ROM !
+;Recuperer le source est hasardeux : adresses ont boug{ en RAM !
+;On repart de 0...
+
+          ld hl,norg
+          call &BCD4
+          call nc,&BE00 ;probleme
+          xor a
+          jp &1B
+
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          jp &1B
+
+
+nburn BYTE "BURN"+&80
+norg  BYTE "ORG"+&80
+
+burnpara WORD romEd,codesize,codedest,code
+burnpara2 WORD romEd,codesize2,codedest2,code2
+burnpara3 WORD romEd,codesize3,codedest3,code3
+burnpara4 WORD romEd,codesize4,codedest4,code4
+      END
+
+      IF doNRT
+
+nrt_display_source_line
+;In: BUF_LINE set       
+; Mimic real routine.
+          ld bc,(CURSOR)
+          ld b,DEB_LINE
+          call cur2pos
+
+          ld hl,BUF_LINE
+          ld b,LEN_LINE
+          call log_str_pad_at
+
+;Also call real routine.
+          call _display_source_line
+          ret
+
+log_str_pad ld de,0
+log_str_pad_at
+          push af
+          ld a,d:and 7:or nrtscr/&0100:ld d,a
+          pop af
+lsp_lp    ld a,(hl):or a:jr nz,lsp_ok:ld a," ":dec hl
+lsp_ok    inc hl
+          ld (de),a
+          inc de:res 3,d
+          djnz lsp_lp
+          ld (log_str_pad+1),de
+          ret
+
+km_wait_key
+km_read_key
+          push hl
+          ld hl,(key_pnt)
+; Check the pointer is in NRT area. 
+          ld a,h:cp edInit/&0100 + 1:call nc,&BE00
+
+          ld a,(hl):inc hl
+          ld (key_pnt),hl
+          pop hl
+          scf
+          ret
+
+km_test_key
+;For now, only used to test copy,
+;so we return NZ = Yes if last key was copy
+          ld hl,(key_pnt)
+          ld a,(hl)
+          cp kcopy:jr z,km_mock_copy
+          xor a         ; Z
+          ret
+
+km_mock_copy
+; !!! normally km_test_key doesn't consume buffer,
+; but for testing purpose we want to provide next key.
+          inc hl
+          ld (key_pnt),hl
+          or a          ;nz
+          ret
+
+start_from_nrt
+;in hl= sequence touches simulues
+          ld (key_pnt),hl
+          jp start0
+
+key_pnt WORD            ; flux clavier pour NRT
+
+      END
+
+
+ram_start
+;We init an instance elsewhere, to keep this source alive !
+          call setup_dev
+          jp start0
+
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+;====
+setup_dev
+;====    
+; Setup Orgams infra. 
+; To do before org init
+
+bk_dev = &C7            ;bank #c7 pour eviter conflit
+nb_chunks = &38
+
+          ld c,romEd:call kl_rom_select
+
+          call check_rom
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom:call nc,&BE00
+
+chunk = &FE00
+chunk_init_custom = chunk + 33
+
+          ld a,bk_dev
+          ld hl,nb_chunks
+          CALL_BRIC(chunk_init_custom)
+          CALL_ORG(org_init)
+          CALL_ORG(asseto_init)
+          call edInit
+; Fix for exit.
+          ld hl,2:add hl,sp:ld (savesp),hl
+          ret
+
+check_rom
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+          ld a,(hl):add a:call nc,&BE00 ; Expect bit 7 (end of string)
+          ret
+
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;---
+
+      MACRO RASTER col
+      IF rast
+          push bc
+          ld bc,&7F10:out (c),c
+          ld c,col:out (c),c
+          pop bc
+      END
+      ENDM
+
+code
+      IF inRom
+      ORG codedest,$$
+      END
+
+edInit
+; Cette routine est appelee a la premiere invocation d'Orgams.
+; (Init generale).
+
+;Saving SP eases exit and re-enter.
+;Must *also* be done here to support the
+;following scenario: ed invoque par monogams via CTRL-f1! 
+;C'est aussi utilise pour dev (cf EXIT).
+;A revoir anyway.
+          ld hl,2:add hl,sp:ld (savesp),hl
+
+; Clear remaining buffers from garbage.
+          ld hl,zeros2
+          ld de,zeros2+1
+          ld bc,zerosize2-1
+          ld (hl),b
+          ldir
+
+; To be done after RAZ, since it lives in zeros2 for some reason.
+          ld hl,rsx_hist_struct
+          ld a,RSX_HIST/&0100
+          CALL_BRIC(hist_init)
+          jr cold_init
+
+oSelect
+; Switch source! In: A=id source
+          CALL_ORG(codec+&42)
+          ret nc        ; Fail. TODO: display error message (mem full)
+          ret nz        ; existing source
+; New source (already init from org point of view:
+; no need to call oSourceInit (ed_cold_init would be enough)
+; mais il est plus simple d'enchainer.
+cold_init
+          jp oSourceInit ; Calls ed_source_init
+
+ed_source_init
+          ld hl,def
+          ld de,edVar
+          ld bc,defsize
+          ldir          ;non-zero vars
+
+          ld l,e:ld h,d
+          inc de
+          ld (hl),c
+          ld bc,zerosize-1
+          ldir          ;clear vars and buffers
+
+; clean up (there is garbage at first invocation)
+      IF todo
+; [minor]  Seperate init source (first time) from reset (clean source)
+; so we don't loose info when CTRL-N
+      END
+          xor a
+          ld (BUF_LINE),a
+          ld (NAME_LOAD),a
+          ld (NAME_SAVE),a
+
+          jp us_init
+
+
+C_NEW
+;Efface source
+
+          call quitLine
+          ld a,5        ;num msg 'are you sure'
+          call decrunch_msg_gen
+          call disp_line_question
+
+          call km_wait_key
+          call ClearQuestion
+          res 5,a
+          cp "Y"
+          jp nz,INFOS_LN
+
+          ld sp,(savesp)
+start0                  ; From NRT/Dev
+          call cold_init
+          call SCR_INIT
+          ld hl,1:call NUM_LINE ;mustdraw should work as well
+
+;        +------------+
+;        !    MAIN    !
+;        +------------+
+
+START
+          call status_on
+START_AFTER_LOAD        ; post_io already did status_on
+          call cur_on
+MAINLOOP
+          call ldlines:call oAssJob ; background job             
+
+; Test CONTROL+SHIFT first as combination not handled by firmware
+          CALL_MON(keyCheckDi)
+          CALL_MON(is_control_pressed):jr nz,.nobm
+          CALL_MON(is_shift_pressed):jr nz,.nobm
+
+          call get_bookmark
+;If control-shift + random key (non bookmark), 
+;we don't want to interpret that as a shortcut.
+          jr nc,MAINLOOP
+
+;goto_bookmark
+; IN: HL: matching entry in bookmarks_lines
+; Shortcut wasn't handled/consumed by firmware, so we must reset buffer 
+          ld e,(hl):inc hl
+          ld d,(hl)
+          call saveAndGotoLine
+; needed here too, otherwise for some reason
+; CONTROL-SHIFT-2 might leak to CONTROL-2
+; CONTROL-SHIFT-1 might leak to CONTROL-0 (!?! what the heck)
+          call km_reset
+          jr force_refresh
+
+.nobm
+; Test COPY key before km_read_key to act as a dead key.
+          call COPY_KEY:jr nz,force_refresh ; Copy handled, just refresh
+; Other key?
+          call km_read_key:jr nc,MAINLOOP ; No key -> background job
+
+; Completion special case: 
+;  if cursor right AND completion active, must copy selection.
+          cp kright:call z,PutSelection
+
+; Field editor: regular key, clr, del, cursor lft/rgt.
+          ld h,a        ; save key code
+          push hl
+          call get_buffer_pos_a
+          ld c,a        ; C: pos in field
+          ld a,h
+          ld b,LEN_LINE
+          ld hl,BUF_LINE
+          ld e,0        ; No selection
+          call oFieldEditor
+          pop hl
+          jr nc,fe_unhandled
+
+          push hl
+          call nz,line_modified
+          ld a,c:call set_cursor_x ; update for next time and inv_cursor
+
+; Refresh line even if not modified, to update cursor.
+          RASTER(&56)
+          call display_source_line
+          RASTER(&54)
+          call inv_cursor
+
+          pop af        ; a=key (was h)
+          call IsCompletion
+          call nz,UpdateCompletion
+          jr MAINLOOP
+
+fe_unhandled
+; Touche non geree par field_editor 
+; E.g. up/down, return, esc, shortcuts...
+          call GERE_KEY
+force_refresh
+          call upd_scr
+          jr MAINLOOP
+
+ok_edit_loop
+          call nz,line_modified
+          ld a,c
+          call set_cursor_x
+no_edit
+          call ldlines
+          call oAssJob
+          jr MAINLOOP
+
+EXIT
+          call quitLine
+
+      IF inRom
+ ;Goto moniteur
+          ld a,(vo_romMon)
+          ld c,a
+          ld hl,monogams
+          jp &1B
+      ELSE
+          ld sp,(savesp)
+          ld a,&02
+          call scr_set_mode
+          ret
+      END
+
+
+
+SPECIALK
+          cp kesc       ; Si ESC on quitte le programme
+          jr z,EXIT
+          ld hl,SHORT_KB
+          ld c,a
+          call SCAN_KEY
+          ret nc
+          ld b,1        ; Pour l'appel @ C_LOAD sans la RSX
+          jp hl         ; Appel la bonne routine
+
+GERE_KEY
+; First check if CTRL-Fx: shorter than add 9 entries in the table
+          cp kcf1:jr c,SPECIALK
+          cp kcf9+1:jr nc,SPECIALK
+
+; ---- Multi file: switch to another source ---
+; NB: org_select will call ED_STORE and ED_RESTORE so the proper
+    ; variables are used.  
+          sub kcf1      ; CTRL-f1 = id 0, CTRL-f2 = id 1 ...
+          call oIsSelfSelected
+          ret z         ; Same source: do nothing
+
+          push af
+          call quitLine
+          call status_off
+          pop af
+          call oSelect  ; Nb: No-op if invalid  
+          ld sp,(savesp)
+          jr hotstart   ; complete refresh
+
+; Rempli le tableau avec la liste des erreurs d'assemblage
+;  IN : Rien
+; OUT : Rien
+      MACRO FillAssError
+          ld b,MAX_LEVEL
+          ld hl,IDX_ERR_TAB
+          ld (PNT_ERR),hl
+LoopFill
+          push bc
+          push hl
+          ld a,MAX_LEVEL:sub b ; Idx erreur
+          call oGetErr:jr c,FillErr
+          ld de,0       ; Plus d'erreur: nettoie entree a la place.
+FillErr
+          pop hl
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          pop bc
+          djnz LoopFill
+      ENDM
+
+C_ASS_RESET
+; CTRL-5: Reset cache for load/import.
+          ld hl,oAssemblReset
+          jr _c_ass_com
+
+C_ASS_JP_RESET
+; CTRL-6: Reset cache for load/import and jump at the end!
+          ld hl,oAssJumpReset
+          jr _c_ass_com
+
+C_ASS
+          call cur_off  ; Compensate cur_off in SAVE_BINARY
+          ld hl,oAssembl
+      BYTE &DD          ;hack: skip next instruction
+C_ASS_JP  ld hl,oAssJump
+
+_c_ass_com
+          call status_off
+; After ass, we will jump to hotstart. This is needed when
+; coming from mon. That means we must discard ret / far_call ret.
+          ld sp,(savesp)
+
+          call quitLine
+          ld de,startDef
+          ld bc,startDef
+          call jp_hl
+
+;After CTRL-1 or CTRL-2 with errors.
+;A = code commande post-assemblage
+          push af
+          FillAssError()
+          pop af
+          or a
+          jp z,EXIT
+          cp 3
+          call z,SAVE_BINARY ; No jp! On doit reprendre avec hotstart
+hotstart
+;From |o, mon or post_ass
+          call restart_com
+          ld (savesp),sp
+          jp START
+
+COPY_KEY
+;Out:  Z: no copy key
+    ; NZ: copy action handled.
+          ld a,9        ;copy still pressed ?
+          call km_test_key
+          ret z
+
+          call km_read_key
+          jr nc,COPY_KEY
+
+          ld hl,COPY_MAP
+;crude lowercase (beware, uppercase would set space to 0 -> crash)
+          set 5,a
+          ld c,a
+          call SCAN_KEY
+          jr nc,COPY_KEY
+
+          call jp_hl
+          scf:sbc a     ; NZ
+          ret
+
+put_hexas
+          ld a,(hl):inc hl
+          call putHexaA
+          inc de        ; Assume buffer pre-filled with spaces
+          djnz put_hexas
+          ret
+
+ho
+      IF inRom
+; Jumps are expected at &d200.
+      FILL &D200 - $,&F7
+jps
+          jp edInit     ; cold start
+          jp hotstart
+          jp edInit     ; to be removed.
+          jp common_cat
+          jp sysconf
+          jp set_line   ; monui
+          jp get_line
+          jp load_from_rsx_o
+          jp edInsertLine
+          jp C_ASS
+          jp C_ASS_JP
+          jp ed_store   ; org_select
+          jp ed_restore
+          jp ed_load    ; import
+          jp ed_source_init ; org_source_init
+          jp load_from_rsx_orgload
+m         jp ask_when_modified
+      END
+
+
+
+
+SCAN_KEY
+;In:  C=code cherch{, HL=table
+;Out: Si trouv{, Carry, HL=routine
+;     sinon, NC
+
+SK_LP
+          ld a,(hl)
+          inc hl
+          cp c
+          jr z,FOUNDKEY
+          inc hl        ; Saute la routine associ{e
+          inc hl
+          or a          ; Fin de table
+          jr nz,SK_LP
+          ret           ; Combinaison non g{r{e
+FOUNDKEY
+          ld e,(hl)
+          inc hl
+          ld d,(hl)
+          ex de,hl
+          scf
+          ret
+
+
+set_line
+; used by trace to jump back to specific line
+          call checkLine:ret nc
+          ld (POS_LINE),de
+          ret
+get_line
+; used by monitor to know where to inject disa/dump
+          ld de,(POS_LINE)
+          ret
+
+restart_com
+; Setup quand on vient de l'exterieur (basic, monogams, assemblage).
+; Cette routine est isolee pour pouvoir retablir l'editeur
+; puis reprendre la main (voir load_from_rsx).
+          call sysconf
+restart_com_
+          call SCR_INIT
+mustdraw                ; A renommer ?
+          ld hl,(POS_LINE)
+          ld (SCR_LINE),hl
+          jp us_allfrom
+
+
+
+;        +--------------------+
+;        !  FIN DE PROGRAMME  !
+;        +--------------------+
+
+B_START
+          ld hl,(BL_END)
+          ld de,(POS_LINE)
+; Si BL_START supp{rieur @ BL_END on met BL_END @ zero
+          or a:sbc hl,de:jr nc,cont_bl
+          jr z,cont_bl
+; Met BL_END @ zero
+          ld hl,0:ld (BL_END),hl
+cont_bl
+          ld (BL_START),de
+; Enchaine
+DrawBloc
+          call refresh_bloc_info
+          ld hl,(POS_LINE)
+          jp us_DrawBloc
+
+B_END
+          ld hl,(BL_START)
+          ld de,(POS_LINE)
+; si BL_END inf{rieur @ BL_START on met BL_START @ zero
+          or a:sbc hl,de:jr c,cont_B_END
+          jr z,cont_B_END
+          ld hl,0:ld (BL_START),hl
+cont_B_END
+          ld (BL_END),de
+          jp DrawBloc
+
+;  Test si les bornes des blocs sont @ 0 ou si la borne de fin est plus
+;  petite que la borne de d{but
+;
+;  OUT : NZ si BL_END sup @ BL_START. Z dans tous les autres cas
+IsBlocs
+; Out: Z if no block definied
+     ; Otherwise: NZ, HL=BL_START
+          ld hl,(BL_END)
+; Si START = 0 on ne fait rien
+          ld a,h:or l:ret z
+; Si END = 0 on ne fait rien 
+          ld hl,(BL_START)
+          ld a,h:or l
+          ret
+
+;
+;  Ajuste les bloques de s{lection
+;
+;  IN : A = 0 Incr{mente les bornes A = 1 D{cr{mente les bornes
+AdjustBlock
+      IF need_room
+; factorize with AdjustHist
+      END
+          ld hl,(BL_START)
+          ld de,(POS_LINE)
+          or a          ; Incr{mente ?
+          jr nz,BlockMoveUp
+
+BlockMoveDown
+;hl=start, de=pos
+          inc de        ; POS_LINE inf{rieur @ BL_START
+          or a:sbc hl,de
+          dec de        ; Remet POS_LINE @ la bonne position
+          jr nc,MoveBlStartEndDown
+
+          ld hl,(BL_END)
+          or a:sbc hl,de
+          ret c
+          jr MoveBlEndDown
+
+MoveBlStartEndDown
+          ld hl,(BL_START):inc hl:ld (BL_START),hl
+MoveBlEndDown
+          ld hl,(BL_END):inc hl:ld (BL_END),hl
+          ret
+
+BlockMoveUp
+;hl=start, de=pos                
+          ld a,h:or l   ; BL_START = 0 ?
+          jr z,MoveUpCont ; On n'incr{mente pas
+          dec hl
+          or a:sbc hl,de
+          jr nc,MoveBlStartEndUp
+MoveUpCont
+          ld hl,(BL_END)
+          ld a,h:or l   ; BL_END = 0 ?
+          ret z         ; Alors on n'incr{mente pas
+          or a:sbc hl,de
+          ret c
+          jr MoveBlEndUp
+
+MoveBlStartEndUp
+          ld hl,(BL_START):dec hl:ld (BL_START),hl
+MoveBlEndUp
+          ld hl,(BL_END):dec hl:ld (BL_END),hl
+;corner case: bloc disappears since it was only 1 line long
+          ld de,(BL_START)
+          or a:sbc hl,de
+          ret nc        ; ok BL_START<=BL_END
+          jr B_RAZ_BK
+
+B_COPY
+; s'il y a quelque chose @ copier
+          call IsBlocs:ret z
+; Si le bloque @ copier se trouve dans le bloque lui meme
+          ld de,(POS_LINE)
+          or a:sbc hl,de
+          jr nc,ContCopy
+          ld hl,(BL_END)
+          or a:sbc hl,de
+          ret nc
+          ld (LastEditedLine),de
+ContCopy
+          call oNbLines
+          push de
+          call quitLine
+          call ldlines
+          call oCopyBlk
+          call oNbLines
+          ex de,hl
+          pop de
+          or a:sbc hl,de ; Nombre de lignes copi{es
+
+          call AdjustDownLoop
+          call INFOS_LN ; for tot_lines and modified
+          jp mustdraw
+
+B_RAZ_BK
+          ld hl,0
+          ld (BL_START),hl
+          ld (BL_END),hl
+          jp DrawBloc
+;
+; Affihe l'aide
+;
+C_Help
+          call quitLine
+          call status_off ; Avoid flickering.
+
+          call oHelp
+
+          call cur_off
+
+          call mustdraw
+          jp status_on
+
+      IF 0
+B_MOVE
+; s'il y a quelque chose @ d{placer
+          call IsBlocs:ret z
+          call quitLine
+          call ldlines
+          call oMoveBlk
+          call ModifiedON
+;TODO: refresh
+          ret
+      END
+
+ldlines
+          ld hl,(BL_START)
+          ld bc,(BL_END)
+          ld de,(POS_LINE)
+          ret
+;
+; Supprime le bloque de s{lection
+;
+B_DEL
+; s'il y a quelque chose @ supprimer
+          call IsBlocs:ret z
+          call quitLine
+          ld a,are_you_sure
+          call PutQuestion
+          cp ABORT
+          ret z
+          cp NO
+          ret z
+          call cur_off
+DelLP
+          ld de,(BL_END)
+          ld a,1
+          call AdjustHist
+          push de
+          call oDelLine
+
+; M.A.J de POS_LINE
+          ld hl,(BL_START)
+          ld de,(POS_LINE)
+          or a:sbc hl,de
+          jr nc,DelNext
+; Decr{mente POS_LINE si plus grand que BL_START
+          dec de
+          ld (POS_LINE),de
+DelNext
+          pop de
+          dec de
+          ld (BL_END),de
+          ld hl,(BL_START)
+          ex de,hl
+          or a:sbc hl,de
+          jr nc,DelLP
+
+; R.A.Z du block
+          call B_RAZ_BK
+
+          call oNbLines
+          ld a,d:or e:jr nz,TotNotNull
+          inc de
+TotNotNull
+; Si POS_LINe plus grand que TOT_LINE on adapte
+          ld hl,(POS_LINE)
+          or a:sbc hl,de
+          jr c,ContExitDel
+          ld (POS_LINE),de
+ContExitDel
+          call oCls     ; ND Madram: why??
+          call INFOS_LN
+          jp mustdraw
+
+B_GotoBloc
+; Goto start of bloc.
+; If already at start: goto end.
+
+          ld hl,(POS_LINE)
+          ld de,(BL_START)
+          or a:sbc hl,de
+          ld hl,(BL_END):jr nz,$+3:ex de,hl
+          jp quitAndGotoLine
+
+; Verfie si la ligne est vide
+; OUT : Z si vide
+;     : NZ sinon
+IsEmptyLine
+          ld hl,BUF_LINE
+          ld a,(hl)
+          or a:ret
+
+; Supprime une ligne (CTRL-DEL)
+C_DEL
+          call AdjustUp
+; Si ligne vide ou remplie de blancs on ne copie pas
+          call IsEmptyLine
+          jr z,DelLine
+          ld hl,BUF_LINE
+          ld de,DELETED
+          ld bc,LEN_LINE
+          ldir          ;!!no copy_nt, to ensure clipping
+DelLine
+          call DrawBloc
+          call cur_off
+          call oNbLines
+          ld a,e
+          dec a
+          or d
+          jr z,RM_UNIQ  ;ligne unique
+
+          dec de:push de ; nb lines after del
+          call scr_del
+          ld de,(POS_LINE)
+          push de
+          call oDelLine
+; Redessine la derni}re ligne
+          pop hl
+          call get_bot
+          ex de,hl
+          pop hl
+          push hl
+          or a:sbc hl,de
+          jr nc,dokbot
+
+;rien a afficher en bot, mais doit nettoyer TOT_LINE+1
+
+          add hl,de     ; TOT_LINE
+          ld de,(POS_LINE)
+          or a:sbc hl,de
+          ld a,(CURSOR)
+          add l
+          call clr_line
+          jr dlastchk
+
+dokbot
+          ld hl,(POS_LINE)
+          ld a,(CURSOR)
+          push hl
+          push af
+          ld (POS_LINE),de
+          ld a,NB_LINES
+          ld (CURSOR),a
+
+          call VALID_LN_1 ; explicit refresh since same line #
+
+          pop af
+          pop hl
+          ld (CURSOR),a
+          ld (POS_LINE),hl
+
+dlastchk
+;Si last line del : on remonte
+          pop hl        ; nb lines
+          ld de,(POS_LINE)
+          or a:sbc hl,de
+          jr nc,dlastchkok
+          dec de
+dlastchkok
+          call INFOS_LN
+; Even if same line number, must refresh buffer.
+; We mustn't call quitLine though: 
+; corner case when line is modifed then deleted. 
+          jp gotoLine
+
+
+RM_UNIQ
+          ld de,1
+          ld hl,EMPTY_STR
+          call oSetLine
+          call nc,oDispFail
+          jp VALID_LN_1
+
+C_PASTE
+; Insert deleted line
+          call quitLine
+          ld hl,DELETED
+          ld de,BUF_LINE
+          push de
+          call copy_nt
+          pop hl
+          ld de,(POS_LINE)
+; Enchaine
+edInsertLine_refresh
+; Insert ligne, scroll, refresh block, current line and infos.
+;  IN : HL 
+; OUT : Rien
+          call edInsertLine_com
+          call DrawBloc
+          ld hl,(POS_LINE)
+          ld c,1:call scr_ins
+          call VALID_LN_1
+          jp INFOS_LN
+
+; Insert une ligne et fait descendre le curseur.
+; Fonction @ destination d'etre export{e pour monogams
+;  IN : HL 
+; OUT : Rien
+edInsertLine
+;TODO: set flag modified? But mustn't display it!
+          call edInsertLine_com
+; Ligne suivante
+          ld hl,(POS_LINE):inc hl:ld (POS_LINE),hl
+          ret
+
+edInsertLine_com
+          push hl
+          call AdjustDown
+          pop hl
+          ld de,(POS_LINE)
+          jp oInsLine
+
+;   Valide la ligne avec le codec
+;   IN  : Rien
+;   OUT : Rien
+RETURN
+          call SuggestionsOff ; (since cannot call quitLine)
+          call AdjustDown
+          call cur_off
+          call save_from_cursor
+          xor a         ; Also pour VALID_LN
+          ld (hl),a     ; New end for this line
+          call VALID_LN
+
+; Do not validate other part of line.
+          ld hl,(POS_LINE)
+          push hl
+          inc hl
+          ld (POS_LINE),hl
+          ex de,hl
+          ld hl,EMPTY_STR
+; Insertion must done before scr_ins, for correct # of lines.
+          call oInsLine
+; Focus is still on initial POS_LINE, though.
+          pop hl        ; Needed for RENUM called by scr_ins
+          ld c,0:call scr_ins
+
+; We refresh screen before refreshing second part of line:
+   ; - since we may need to scroll (when cursor at bottom)
+   ; - to setup new Y cursor position
+          call upd_scr
+
+          ld hl,BUF_TMP
+          ld de,BUF_LINE
+          push de
+          call copy_nt
+          pop hl
+          ld a,DEB_LINE
+          ld (CURSOR_X),a ;CR
+          ld a,1
+          ld (EDIT_LN),a
+
+          call cur_off
+          call display_source_line
+          call cur_on
+; line # & total to update
+          call INFOS_LN
+          jp DrawBloc
+
+
+; Met @ jour le tableau des lignes modifi{es pour CTRL+M
+upd_modified_last_line
+          ld bc,(POS_LINE)
+; Si 0 dans le tableau il est vide alors on stock
+          ld hl,(LastEditedLine)
+          ld a,h:or l:jr nz,cont_updLL
+          ld (LastEditedLine),bc
+          ret
+; Si derni}re ligne modifi{e, ne rien faire
+cont_updLL
+          or a:sbc hl,bc
+          ret z
+; Si deni}re ligne+1 modifi{e
+          ld hl,(LastEditedLine):inc hl
+          or a:sbc hl,bc:jr nz,add_line_modified
+; Met @ jour que la 1}re entr{e
+          ld (LastEditedLine),bc
+          ret
+; D{place le contenu du tableau et ajoute la derni}re ligne modifi{e
+add_line_modified
+          push bc
+          ld hl,LastEditedLine + MAX_LEVEL*2 -3
+          ld de,LastEditedLine + MAX_LEVEL*2 -1
+          ld bc,MAX_LEVEL*2 -2
+          lddr
+          pop bc
+          ld (LastEditedLine),bc
+          ret
+
+
+clr_line
+;in: A= physical Y
+          ld l,a
+          ld e,a
+          xor a
+          ld h,a
+          ld d,79
+          jp scr_fill_box
+
+quitLine
+;Must preserve DE for quitAndGotoLine, saveload_common
+;Note: it isn't called for /RETURN/ or /DEL_CHAR/, 
+     ; since the line is split or joined (respectively), hence
+     ; not validated as is.
+          call cur_off
+          call SuggestionsOff
+          ld a,(EDIT_LN)
+          or a          ; Ligne en cours d'{dition ? 
+          ret z
+; Si en cours d'{dition alors on valide la ligne afin de changer de ligne 4282
+          xor a
+          call VALID_LN
+; Must recompute machine time in bloc
+          push hl
+          push de
+          call refresh_bloc_info
+          pop de
+; Todo fred: a revoir 
+          ld hl,(POS_LINE):ld (LastEditedLine),hl
+          pop hl
+          ret
+
+; Print listing
+C_D
+          call quitLine
+          ld a,whole_file_or_block
+          call PutQuestion
+          cp ABORT
+          jp z,exit_c_d
+
+          push af
+          ld a,6:call disp_question_msg ;"Printing"
+          call &BD28    ; Reset printer
+          pop af
+
+          ld de,1
+          cp ENTIRE
+          jr z,print_loop
+          ld de,(BL_START)
+print_loop
+;A = flag ENTIRE/BLOCK
+;DE = line to print
+          push af
+          push de
+          ld hl,BUF_LINE
+          xor a
+          ld (hl),a
+          ld b,LEN_LINE
+          call oGetLine ; R{cup}re la ligne par le codec
+          jr nc,break_print
+
+          ld b,LEN_LINE
+          ld hl,BUF_LINE
+line_lp
+          ld a,(hl)
+          or a
+          jr z,cont_print
+          call &BD2B
+          inc hl
+          djnz line_lp
+cont_print
+          ld a,&0D
+          call &BD2B
+          ld a,&0A
+          call &BD2B
+          pop de
+          inc de
+          pop af
+          cp ENTIRE
+          jr z,print_loop
+
+          ld hl,(BL_END)
+          inc hl
+          or a:sbc hl,de
+          jr nz,print_loop
+          jr exit_c_d
+
+break_print
+          pop de
+          pop af
+exit_c_d
+          jp INFOS_LN
+
+
+;    Valide une ligne par le biais du codec
+
+;    IN  : A = 0 SetLine et GetLine. 1 GetLine, 2 SetLine
+;        : A = 3 GetLine sans r{affichage, 4 SetLine sans r{affichage 
+;    OUT : Rien
+
+VALID_LN_1
+          ld a,1
+VALID_LN
+          push af
+          push hl
+          push bc
+          push de
+          push ix
+          cp 1:jr z,GET_LN
+          cp 3:jr z,GET_LN
+          push af
+          ld hl,BUF_LINE ; Charge le buffer de la ligne courante
+          ld de,(POS_LINE) ; Ligne courante
+          call oSetLine ; Ajoute la ligne par le codec
+          call nc,oDispFail
+;set modified in any case (if memory full, we have other issues)
+          call upd_modified_last_line
+          pop af
+          cp 2:jr z,CONT_LN
+          cp 4:jr z,RET_VAL
+GET_LN
+          ld hl,BUF_LINE ; Charge le buffer de la ligne courante
+          ld de,(POS_LINE) ; Ligne courante
+          push af
+          xor a
+          ld (hl),a
+          call oGetLine ; R{cup}re la ligne par le codec
+
+;Next ligne deactivated  (we don't want to trigger it on EOF)
+;          CALL NC,oDispFail
+
+          pop af:cp 3:jr z,RET_VAL
+CONT_LN
+          call display_line
+          xor a
+          ld (EDIT_LN),a
+RET_VAL
+          pop ix
+          pop de
+          pop bc
+          pop hl
+          pop af
+          ret
+
+display_line
+; A factoriser
+          ld de,(POS_LINE)
+          ld hl,BUF_LINE
+          call oGetLine
+          ret nc
+          jp display_source_line
+
+disp_searching
+          ld a,7        ; code for "searching"
+;enchaine
+disp_question_msg
+          ld de,&0200 + status_line_question
+
+; Affiche une string pre-determinee dans la ligne d'infos
+; IN  : A  = numero message
+; IN  : D, E  = position X, Y du curseur
+; OUT : D = new position curseur
+disp_infos_msg
+
+          push af:push hl:push ix
+          call decrunch_msg_ed
+          call disp_infos_com
+          inc d         ; put cursor after
+          pop ix:pop hl:pop af
+          ret
+
+      IF 0
+; Affiche une string dans la ligne d'infos
+; IN  : HL = chaine @ afficher
+; IN  : D, E = positions X, Y du curseur
+; OUT : D = new position X (last char)
+      ; E inchanged
+
+;!!! Use disp_infos_com or disp_infos_com instead
+disp_infos
+          CALL_BRIC(st_disp_infos)
+          ret
+      END
+
+; Supprime la ligne courante dans la table et ajuste celle-ci
+; IN  : IX l'index courant sur les 3 tables
+;     : B l'index dans la table courante
+; OUT : Rien
+RemoveLineHist
+          push af
+          push de
+          push bc
+
+          push ix:pop de ; de=ix
+          ld l,e
+          ld h,d
+          2 ** inc hl   ;   hl=ix+2
+
+          dec b
+          ld a,b
+          add a         ; X2 car word
+          jr z,.EndRemoveHL ; 0? pas de ldir
+          ld c,a
+          ld b,0
+          ldir
+.EndRemoveHL
+; rempli de vide la derni}re occurence
+          xor a
+      2 ** [dec hl:ld (hl),a]
+          pop bc
+          pop de
+          pop af
+          ret
+
+AdjustDownLoop
+; Adjust Down for HL lines
+          ld a,l:or h:ret z ;Test first (sanity, e.g failed import)
+      IF dev_checks
+; AdjustDownLoop is called after import or copy.
+; Is both cases source musn't be flagged as "uptodate".
+; Done at each iteration: nevermind.
+          call _check_mod
+      END
+
+          push hl
+; We reuse same line (POS_LINE) at each iteration.
+; That's ok because it's equivalent to inserting from last line.
+          call AdjustDown
+          pop hl
+          dec hl
+          jr AdjustDownLoop
+
+AdjustUp
+; Block and History go up (when deleting)
+      BYTE &3E          ; Hack !! Do ld a,&af (<>0)    Do not touch!
+AdjustDown
+; Block and History go down (when inserting)
+          xor a
+          push af       ; Save direction  Do not touch! (hack above)
+          call AdjustBlock
+          pop af
+          ld de,(POS_LINE)
+;enchaine
+AdjustHist
+; Ajuste les diff{rents historiques 
+; IN  : A = 0 ajout et > 0 suppression
+      ; DE = ligne courante
+; OUT : DE preserved        
+          ld ix,LastEditedLine
+          ld iy,RemoveLineHist
+          call .adjusttable
+          call .adjusttable ; pos_save (a la suite)
+
+          ld b,MAX_BOOKMARKS
+; TODO: skip key, and check tab is self
+; !!!  problem if        call z,RemoveLineHist 
+;          call LoopAdjust ; bookmarks (a la suite)
+; For bookmarks: don't remove anything
+          ld iy,noop
+          call LoopAdjust
+
+          ld ix,IDX_ERR_TAB
+          ld iy,RemoveLineHist
+;enchaine
+.adjusttable
+          ld b,MAX_LEVEL
+LoopAdjust
+          ld c,a        ; sauvegarde A
+          ld h,(ix+1):ld l,(ix)
+          ld a,l:or h
+          ld a,c        ; restore A
+          jr z,AdjustCont ; 0 alors on ne fait rien
+          or a:jr nz,AdjustDel ; On supprime
+; Sinon on ajoute
+; POS_LINE < IX
+          sbc hl,de     ;'or a' above
+          jr c,AdjustCont
+          add hl,de
+          inc hl
+          ld (ix+1),h:ld (ix),l
+          jr AdjustCont
+AdjustDel
+          sbc hl,de     ;'or a' above
+; bug if removeline? 
+; next entry is shifted -> would be changed inconditionnaly. 
+          call z,jp_iy  ; Typically RemoveLineHist
+          jr c,AdjustCont
+          ld h,(ix+1):ld l,(ix)
+          dec hl
+          ld (ix+1),h:ld (ix),l
+AdjustCont
+          2 ** inc ix
+          djnz LoopAdjust ; Element suivant
+noop      ret
+
+save_from_cursor
+;Put part of line from cursor to end in BUF_TMP.
+;Useful for split (RETURN) and insertion (completion)
+;Out: HL=position in buffer.
+          call fill_space_string ; facilite split
+          call get_buffer_pos_hl
+          push hl
+          ld de,BUF_TMP
+          call copy_nt  ;met au chaud seconde partie
+          pop hl
+          ret
+
+; Rempli d'espaces de la fin de la chaine au position du curseur
+; IN  : BUF_LINE
+; IN  : CURSOR
+;    OUT : Carry si posX inf. C = MAX LINE
+fill_space_string
+          call IN_LINE
+          ret c         ; ret si curseur inf. @ la longeur de la ligne
+
+; Nombre d'espaces @ ajouter
+          call get_buffer_pos_a
+          sub c
+          ret z         ; Si fin de ligne on sort
+
+      IF BUF_LINE AND &FF
+ !! error BUF_LINE must be XX00
+      END
+          ld h,BUF_LINE/&0100
+          ld l,c        ; va @ la fin de la ligne
+; Rempli d'espaces
+          ld b,a
+ins_space
+          ld (hl)," "
+          inc hl
+          djnz ins_space
+          ld (hl),0
+          ret
+
+
+C_GOBACK
+          ld de,(pos_save)
+          ld a,e
+          or d
+          ret z         ;nothing saved
+
+          call quitLine
+;remonte autres positions
+          push de
+          ld hl,pos_save+2
+          ld de,pos_save
+          ld bc,MAX_LEVEL-1 *2
+          ldir
+          pop de
+
+;replace celle l@ dans 1}re position libre (pour cycling)
+          ld hl,pos_save
+          ld b,MAX_LEVEL
+cg_find
+          ld a,(hl):inc hl:or (hl):inc hl:jr z,cg_found
+          djnz cg_find
+cg_found
+          dec hl:ld (hl),d
+          dec hl:ld (hl),e
+          jp gotoLine
+
+
+C_BOOKMARK
+; CTRL-B  Register new bookmark
+MAX_BOOKMARKS = 16
+
+          call quitLine
+; Ask which shortcut
+ ;         call ClearQuestion ;  (is it necessary?)
+          ld a,txt_bookmark
+          call disp_question_msg
+; Just use firmware to wait, keycode is scanned in get_bookmark
+          call km_wait_key
+          call get_bookmark
+          ld de,(POS_LINE)
+          jr c,.okentry
+; new entry
+          ld hl,bookmark_index
+          ld b,(hl)
+          ld c,b
+          inc b
+      IF MAX_BOOKMARKS - 16
+  !!! review that
+      END
+          res 4,b
+          ld (hl),b
+          ld b,0
+          ld hl,bookmarks_codes
+          2 ** add hl,bc
+          ld (hl),a
+          ld bc,bookmarks_lines - bookmarks_codes
+          add hl,bc
+.okentry
+          ld (hl),e:inc hl
+          ld (hl),d
+          jp ClearQuestion
+
+
+C_ENTER
+          call search_init
+          CALL_ORG(oLabLine)
+          ret nc        ;error : no-op
+          ld a,e
+          or d
+          ret z         ;not found
+; Definition: goto to left
+          ld hl,(CURSOR):ld h,DEB_LINE:call set_cursor
+;enchaine
+saveAndGotoLine
+; Like quitAndGotoLine, but:
+    ; - noop if already same line
+    ; - store line for CTRL-RETURN
+;In: de = dest line
+          ld hl,(POS_LINE)
+          or a:sbc hl,de:add hl,de
+          ret z         ;Same line : don't save
+
+;Sauve pos courante
+          push hl:push de
+          ld hl,pos_save_end-3
+          ld de,pos_save_end-1
+          ld bc,MAX_LEVEL-1 *2
+          lddr
+          pop de:pop hl
+          ld (pos_save),hl
+          jp quitAndGotoLine
+
+C_FLIP                  ;CTRL-%
+          call search_init
+          CALL_ORG(oFlip)
+;Nb: Doesn't update action, on purpose.
+          jp quitAndGotoLine
+
+C_NEXTLAB               ;CTRL-*
+; Phase 1: fetch label under cursor.
+          call search_init
+          CALL_ORG(oLabFetch)
+          ret nc        ;No label: no-op
+
+; Phase 2: next occurrence.
+          ld a,ACTION_FIND_ASTERIX
+          ld (FIND_ACTION),a
+          ld (FIND_LABEL_ID),hl
+nxtlab_com
+          inc de
+          CALL_ORG(oLabNextFromId)
+          ld a,e
+          or d
+          ret z         ;not found
+          ld (POS_LINE_FOUND),de
+          jp quitAndGotoLine
+
+
+; CTRL 4: Cycle sur erreur suivante.
+C_NEXTERR
+          ld hl,(PNT_ERR) ; Pointeur vsur erreur actuelle
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld a,e:or d:jr nz,ok_errorline
+          ld hl,IDX_ERR_TAB ; Reset
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl ; Nevermind if DE=0, handled by gotoline
+ok_errorline
+          ld (PNT_ERR),hl
+          jp quitAndGotoLine
+
+C_RSX
+;----
+; Invoke an RSX |toto (with historic)
+          call quitLine
+
+;todo? factorize with /QUESTION/?
+          call ClearQuestion
+;todo? factorize with PUT_Q?
+;-> maybe not, as we use history
+          ld a,txt_rsx  ; "RSX |" 
+          call disp_question_msg
+
+          ld hl,BUF_QUESTION+1 ; +1: Room for "|"           
+          ld b,LEN_SRC-1 ; make up for "|"
+          ld (hl),0
+; -- Pull last entered RSX by sending UP key.
+          ld a,kup
+          call field_editor_with_rsx_hist
+
+          call saisie_champ_hist
+; append even if canceled.
+          push af
+          ex de,hl
+          CALL_BRIC(hist_append)
+          pop af
+          jp nc,ClearQuestion ; CANCEL
+
+; Was trying not to clear the screen for all rsx, 
+; since it's overkill for |a |b ...
+; But for some reason "display" detection below doesn't work:
+; trying to find out if offset have changed after scroll 
+; didn't work out.
+; TODO: OH!!!! crtc_offset read after rsx is 7000 instead of 3000
+      ; find why.
+try_smart = 0
+      IF try_smart
+; Sync firmware offset with current offset.
+; (status_off is done by command_rsx_from_ed)
+          ld hl,(crtc_offset)
+          add hl,hl
+          ld a,h:and &07:or &C0:ld h,a
+          call scr_set_offset
+; Locate past bottom, to scroll for any text output (|DIR or else) 
+          ld hl,&011A   ; col 1, line 26
+          call txt_set_cursor
+      ELSE
+          call oCls
+          ld hl,&0101
+          call txt_set_cursor
+      END
+
+; ---- RSX invocation -----
+          ld hl,BUF_QUESTION
+          ld (hl),"|"   ;  ensure parsing won't be ambiguous
+          CALL_MON(command_rsx_from_ed) ; do status_off for us
+
+; Put back status bar
+          push af:push hl
+      IF try_smart
+          ld hl,(crtc_offset) ; for comparison later
+          push hl
+          call offset_firm_to_rupt
+          call status_refresh
+          pop de
+      ELSE
+          call status_refresh
+      END
+          pop hl:pop af
+          jr nc,.notfound
+
+; Now if there were some display, we wait for key and display
+; Crude display detection: if offset or locate have changed.
+      IF try_smart
+          call scr_get_position
+          ld a,h:srl a:rr l
+          or &30:ld h,a
+          or a:sbc hl,de:jr nz,.had_display
+
+          call txt_get_cursor
+          ld de,&011A
+          or a:sbc hl,de
+          ret z
+.had_display
+          call _wait_before_refresh
+          jp restart_com
+
+      ELSE
+; Since we erased the screen, we can do a simpler hack
+          ld hl,&E000
+.check_for_text
+          rst &20:or a:jr nz,.had_display
+          inc hl
+          bit 3,h
+          jr z,.check_for_text
+          cp a          ; force Z to skip wait
+.had_display
+          call nz,_wait_before_refresh
+;reinit 
+          jp restart_com
+
+; This methods fails. Return garbage instead of cursor.
+    ;      call txt_get_cursor
+    ;      ld de,&0101
+    ;      or a:sbc hl,de
+    ;      call nz,_wait_before_refresh
+    ;      jp mustdraw
+
+.notfound
+          call disp_line_question
+          jp restart_com_
+
+      ELSE
+.notfound
+; enchaine
+      END
+
+disp_line_question
+          ld de,&0100 + status_line_question
+disp_infos_com
+          CALL_BRIC(st_disp_infos_com)
+          ret
+
+      IF 0
+locate_orgams
+; inverse of locate_firmware
+; don't set X actually: will be done by subsequent /comCrNl/
+          push hl
+          call txt_get_cursor
+          ld a,l
+          dec a
+          ld (cursY),a
+; sync from firmware
+          call scr_get_position
+          call set_offset
+          pop hl
+          ret
+      END
+
+; Recherche un texte
+C_FIND_TEXT
+;todo : factorize
+          call quitLine
+          ld a,txt_find
+          call QUESTION
+          jp nc,ClearQuestion ; Refresh and EXIT  
+
+; Continue la recherche de texte
+          ld a,ACTION_FIND_STRING
+          ld (FIND_ACTION),a
+FindNextString
+          call disp_searching ;"Searching"
+
+          ld hl,FIND_STRING
+          call disp_infos_com
+          call do_find
+          call FoundResult
+; quitLine is not needed (already done)
+; Worse! since BUF_LINE is reused for search,
+; it would display found line at actual place.
+          jp c,gotoLine
+          jp VALID_LN_1 ;refresh buffer with proper line 
+
+do_find
+;In: HL=Text to find
+;Out: C and DE=line if found
+    ; NC otherwise  
+
+;copie a part pour isolation flag (must be applied once)
+
+          ld de,PATTERN
+          CALL_BRIC(normalize_string)
+
+          ld a,e:cp PATTERN AND &FF:ret z ;chaine vide
+
+;isole flag separateur final
+;20 00 -> 00 20
+;xx 00 -> xx 00 00
+
+          ex de,hl
+          dec hl:ld a," ":cp (hl):jr z,df_space
+          xor a
+          inc hl
+df_space
+          ld (hl),0:inc hl:ld (hl),a
+          ld hl,(POS_LINE)
+          ex de,hl
+
+find_lp_line
+          inc de
+
+;on teste ESC toutes les 32 lignes
+          ld a,e:and &1F:jr nz,.noesc
+          call km_read_key
+          jr nc,.noesc
+          cp kesc
+          ret z         ;NC
+.noesc
+          push de
+          ld hl,BUF_LINE:call oGetLine:jr c,.noend
+;end of source -> continue search from start
+          pop de:ld de,1:push de
+          ld hl,BUF_LINE:call oGetLine
+.noend
+          ld hl,BUF_LINE
+          CALL_BRIC(search_in_line)
+          pop de
+          ret c         ; Found
+;Try next line
+          ld hl,(POS_LINE)
+          or a:sbc hl,de:jr nz,find_lp_line
+;Echec, on a fait un tour complet
+          ret           ;NC
+
+
+C_VIEW
+          jp oTogView
+
+C_BEGIN
+;    Debut source
+
+          ld de,1
+          jp quitAndGotoLine
+
+C_END
+;    Fin source
+
+          call oNbLines
+          jp quitAndGotoLine
+
+
+;    D{place le curseur d'un pas vers le haut
+
+MOVE_U
+          ld de,(POS_LINE)
+          dec de
+          jr quitAndGotoLine
+
+;    D{place le curseur d'un pas vers le bas
+
+MOVE_D
+; Teste si position courante = derni}re ligne
+          ld de,(POS_LINE)
+          inc de
+          jr quitAndGotoLine
+
+
+C_DOWN
+;    D{place l'{cran d'une page vers le bas
+
+; [optim] Try to go down without check oNbLines first.
+          ld hl,(POS_LINE)
+          ld de,NB_LINES-1
+          add hl,de
+          ex de,hl
+          call quitAndGotoLine
+          ret c
+
+          call oNbLines
+          jr gotoLine
+
+rollback
+; rollback previous line
+          ld (POS_LINE),de
+          ld hl,BUF_LINE
+          ld b,LEN_LINE
+          ld (hl),0
+          call oGetLine
+          or a
+          ret
+
+C_UP
+;    D{place l'{cran d'une page vers le haut
+          ld hl,(POS_LINE)
+          ld bc,NB_LINES-1
+          or a:sbc hl,bc
+          ex de,hl
+          jr z,CONT_Z
+          jr nc,quitAndGotoLine
+CONT_Z
+          ld de,1
+quitAndGotoLine
+; Pointe sur nouvelle ligne (resynchronise buffer)
+; IN: DE = nouveau numero ligne
+; Si DE = 0 or >TOT_LINE return
+
+          call quitLine
+
+gotoLine
+; Just set POS_LINE and refresh BUF_LINE.
+; Le rafraichissement ecran est gere dans upd_scr
+
+; In: DE= line to go to.
+; OUT: Carry iif ok (used by C_DOWN)
+
+; NB: We don't checkLine before changing it: 
+    ; it requires oNbLines which is too slow.
+    ; We rollback instead (better ask forgiveness than permission).
+          ld hl,(POS_LINE)
+          push hl
+
+          ld (POS_LINE),de
+          ld hl,BUF_LINE
+          ld b,LEN_LINE
+          ld (hl),0
+          call oGetLine
+          pop de
+          call nc,rollback
+          push af
+          call disp_pos_line
+          pop af        ; For C_DOWN
+          ret
+
+get_bookmark
+;-----------
+; Scan key and 
+;In: keyCheckDi has been called
+;Out: If key pressed:
+         ; A=keycode
+         ; Then, if bookmark found:
+                ; Carry. HL= pnt to line,
+                       ; DE= pnt to entry (code+flags)
+               ;bookmark not found:
+                ; NC
+    ; If no key pressed (only when comming from MAINLOOP)
+         ; NC  (we don't need to discrimate further)   
+
+; flush buffer anyway, as we must consume combination unhandled by firm
+          push af
+          call km_reset
+          pop af
+          CALL_MON(keyCheckDi) ; Needed comming from C_BOOKMARK 
+          CALL_MON(get_pressed_keycode)
+          ret nc
+
+          ld hl,bookmarks_codes
+          ld b,MAX_BOOKMARKS
+.lpbm
+          cp (hl):jr z,.found
+          inc hl
+          inc hl
+          djnz .lpbm
+          or a
+          ret
+.found
+          ex de,hl
+          ld hl,bookmarks_lines - bookmarks_codes
+          add hl,de
+          scf
+          ret
+
+disp_pos_line
+;In: N/A
+; Out: Carry if dump displayed
+          ld hl,(POS_LINE)
+          push hl
+          CALL_BRIC(INFO_CUR_LINE) ; Ok! Update cur line in status bar
+;---dump
+          pop de
+      IF brbi
+      IF show_brbi
+          ld bc,&7F10:out (c),c:ld c,&45:out (c),c
+      END
+; Since oGetPcFromLine set DI, we make sure status bar was displayed
+          halt
+          CALL_ORG(oGetPcFromLine)
+;disp_status_bump            
+      IF show_brbi
+          ld bc,&7F10:out (c),c:ld c,&54:out (c),c
+      END
+          jp nc,clear_suggestions
+
+      IF todo
+;!!!! apparently display takes half a frame
+      END
+
+anteDump = 4
+postDump = 16
+; Do everything here since less room in bricbrac rom
+reg_rmr = &7D86
+reg_mmr = &7D87
+
+      IF reg_mmr-reg_rmr-1
+   !! change that
+      END
+          ld hl,reg_rmr
+          ld c,(hl):ld (hl),&8E ; ram
+          inc hl
+      IF todo
+;Visu must actually give bank
+;Otherwise bugged if going to switch to trace, or even assemble.
+      END
+          ld a,(va_destbk)
+          or &C0
+          ld b,(hl):ld (hl),a
+          push bc
+          push de
+          push af
+          ld hl,-anteDump
+          add hl,de
+          ld de,bufCtxr
+          ld bc,anteDump+postDump
+          push de
+          call oCopyMirror
+
+          pop hl
+          push hl
+          ld de,BUF_TMP
+;Clear buffer (so we don't have to poke space each time)
+          ld a,&20
+.clr      ld (de),a:inc e:jr nz,.clr
+;Ante: Ascii
+          ld bc,anteDump
+          ldir
+          inc de
+;Ante: Hexa
+          ld b,anteDump
+          pop hl
+          call put_hexas
+          inc de
+;PC bank
+          pop af
+          call putHexaA
+          ld a,":":ld (de),a
+          inc de
+;PC
+          pop hl
+          call putHexaHL
+          inc de
+          inc de
+;Post: Hexa
+          ld hl,bufCtxr+anteDump
+          push hl
+          ld b,postDump
+          call put_hexas
+;Post: Ascii
+          pop hl
+          ld c,postDump
+          ldir
+
+      IF reg_mmr-reg_rmr-1
+   !! change that
+      END
+          pop hl:ld (reg_rmr),hl
+
+          xor a:ld (de),a
+; Replace <20 by space:
+;  - putHexaA and putHexaHL put /00
+;  - For ascii mode:00 would stop display! 
+                   ;01..1f cannot be used anymore (no fonte)
+          ld b,e:ld c,&20
+.spc      dec e
+          ld a,(de)
+          and &7F       ; also remove bit 7
+          cp c:jr nc,$+3:ld a,c
+          ld (de),a
+          djnz .spc
+
+          ex de,hl
+          ld de,&0200 + status_line_dump
+; If uptodate sine last ass: bold 
+          CALL_ORG(is_selected_uptodate)
+          jp nz,disp_infos_com
+; Otherwise: grise   
+          jp str_shaded_at
+
+
+.pc   BYTE "PC:"
+      ELSE
+          ret
+      END
+
+checkLine
+; Return Carry if valid line
+          ld a,d:or e:ret z
+; Si DE > TOT_LINE on ne fait rien
+          push de
+          call oNbLines
+          ex de,hl
+          pop de
+          or a:sbc hl,de
+          ccf
+          ret
+
+;    Efface la ligne d'infos
+
+; To be removed: was used for refresh.
+; We must instead either:
+  ; - Refresh individually (if only line # changes, don't display all!)
+  ; - Use status_refresh  
+          ret
+
+;    Demande le nom de fichier pour la sauvegarde ou le chargement
+
+;    IN  : A = one of the following code
+;    OUT : Carry si ok
+         ; NC si annulation (ESC) 
+
+file_imp = 8
+file_exp = 9
+file_open = 10
+file_save = 11
+file_save_binary = 12
+label = 13
+txt_find = 14
+txt_rsx = 15
+txt_bookmark = 16
+
+QUESTION
+          ld (KIND_QUESTION),a
+          push hl
+          push bc
+          call ClearQuestion
+
+          ld hl,BUF_QUESTION ;Used as temp buf
+          ld (hl),0
+          ex de,hl
+          ld b,LEN_SRC
+
+          ld l,a        ;save
+          sub file_imp:jr z,PUT_Q ;clean field  8
+          dec a:jr z,PUT_Q_TXT ;9
+
+          ld de,NAME_LOAD ; Fichier saisi
+          dec a:jr z,PUT_Q ;10 
+          ld de,NAME_SAVE
+          dec a:jr z,PUT_Q ;11 
+
+          ld de,BUF_QUESTION
+          dec a:jr z,PUT_Q_BIN ;12
+
+LABEL_NM_SIZE = 20
+FIND_SIZE = 20
+
+          ld b,LABEL_NM_SIZE
+          ld de,LABEL_NM ; Label saisie
+          dec a:jr z,PUT_Q ;13
+
+      IF FIND_SIZE - LABEL_NM_SIZE
+          ld b,FIND_SIZE
+      END
+          ld de,FIND_STRING ; Chaine saisie  ;14
+          jr PUT_Q
+
+PUT_Q_TXT
+          push bc
+          ld bc,extension_txt
+          jr PUT_Q_PREFILL
+
+PUT_Q_BIN
+          push bc
+          ld bc,extension_bin
+
+PUT_Q_PREFILL
+;prefill with adapted extension ".txt" or ".bin"
+
+          push hl:push de
+          ld hl,SRC_NAME
+.copy_until_dot
+          ld a,(hl):or a:jr z,cud_ok
+          cp ".":jr z,.cud_ok
+          ld (de),a:inc de
+          inc hl
+          jr .copy_until_dot
+.cud_ok
+          ld l,c:ld h,b
+          call copy_nt
+          pop de:pop hl
+          pop bc
+PUT_Q
+; Here: DE= buffer to fill  (SRC_NALE, FIND_STRING, ...)
+      ;  B= max length
+      ;  L= num message
+          push de
+          push bc
+          ld a,l        ;num message
+          call disp_question_msg
+          pop bc
+          pop hl
+          call saisie_champ
+
+          pop bc
+          pop hl
+; Enchaine
+ClearQuestion
+; Efface ligne question.             
+; Out: de trashed, all other registers saved (including AF)
+          CALL_BRIC(st_ClearQuestion)
+          ret
+
+
+saisie_champ
+
+; Edition champ avec texte pre-rempli
+
+;   in: D position curseur X
+      ; HL adresse champ a remplir
+      ; B: Length max champ (used by all routines for clipping!)
+;  out: Carry si ok
+      ; NC si annulation (ESC)
+
+;Place cursor at end of string.
+;Cannot use c=-1 here since it's not handled by inv_cursor.
+          call LEN_STR:ld c,a
+
+          ld e,&80      ; Flag selected
+; For CONTROL-L, suggests labels (even for empty field)
+          ld a,(KIND_QUESTION):cp label
+          jr z,.edit_loop_with_completion
+.edit_loop
+; Regs like oFieldEditor  + D = pos X field
+          call field_refresh_wait_key
+          ret z         ; Exit
+          call oFieldEditor
+          jr .edit_loop
+
+.edit_loop_with_completion
+;same thing but, with completion
+          call .newCompletion
+;shorter field, as we display "Label (TAB and -> ..."
+;sinon, cela deborde et efface le texte 
+          ld b,50
+.lp
+          call field_refresh_wait_key
+          jr z,scc_exit
+          cp kright:jr z,.pickSelection
+          cp ktab:call z,.nextSelection
+
+          call oFieldEditor
+;Only refresh if buffer modified
+      IF need_room
+; FieldEditor should return Z when NC, to mean "buffer not modified"
+      END
+          jr nc,.lp
+          call nz,.newCompletion
+          jr .lp
+
+.newCompletion
+          push bc:push de:push hl
+          ld hl,LABEL_NM
+          ld b,LABEL_NM_SIZE
+          call LEN_STR
+          call refresh_completion_com
+          pop hl:pop de:pop bc
+          ret
+
+.nextSelection
+          push af:push bc:push de:push hl
+          call refresh_selection
+          pop hl:pop de:pop bc:pop af
+          ret
+
+.pickSelection
+; Here we don't use /FindNextLabel/:
+   ; - it would be a partial match
+   ; - it might not be a good one for labels longer than 
+; Instead, we do an explicit "goto" label based on id
+
+          call scc_exit
+          ld a,ACTION_DEF_LABEL
+          ld (FIND_ACTION),a
+          CALL_BRIC(get_selected_id)
+          ld (DEF_LABEL_ID),hl
+DefLabel
+          ld hl,(DEF_LABEL_ID)
+          ld de,1       ; Scan from start
+          CALL_ORG(oLabDef)
+          ret nc
+          call LabelCommon
+          or a          ; NC to cancel regular label search
+          ret
+
+scc_exit
+; Must reset flag not to interfere with edition.
+; E.g. 'tab' used as search continuation.
+; And clear line   
+          push af       ; exit flags
+          call SuggestionsOff
+          pop af
+          ret
+
+saisie_champ_hist
+; Like saisie_champ, but with historic
+
+;   in: D position curseur X for display
+;     : HL adresse champ a remplir
+;     ; IX history structure
+      ; B: Length max champ (used by all routines for clipping!)
+;  out: Carry si ok
+      ; NC si annulation (ESC)
+
+;Place cursor at end of string.
+;Cannot use c=-1 here since it's not handled by inv_cursor.
+          call LEN_STR:ld c,a
+
+          ld e,&80      ; Flag selected
+edit_loop_hist
+; Regs like oFieldEditor  + D = pos X field
+
+;display    
+          call field_refresh_wait_key
+          ret z         ; Exit
+
+          call field_editor_with_rsx_hist
+          jr edit_loop_hist
+
+field_refresh_wait_key
+; Field refresh and test key.
+; In: HL: Field (preserved)
+    ; D : pos X field
+    ;  E: flags (selected)
+    ; B : length field
+    ; Out:  A: key code.
+           ;  Z if exit (Carry: return, NC: ESC)
+           ; NZ: all other keys
+         ; All other regs preserved
+
+          push de
+          ld a,e
+          ld e,status_line_question
+          CALL_BRIC(st_field_refresh)
+          pop de
+
+          call km_wait_key
+          cp kesc:ret z ; ESC: NC
+          cp kreturn:ccf ; C & Z: Return
+          ret           ; NZ if otherkeys
+
+field_editor_with_rsx_hist
+          ld ix,rsx_hist_struct
+          CALL_BRIC(field_editor_with_hist)
+          ret
+
+
+;    Va au prochain label indique par prefix (CTRL+L)
+;  
+;    IN  : Rien
+;    OUT : Rien
+
+C_LABEL
+          call quitLine
+          ld a,label
+          call QUESTION
+          jp nc,INFOS_LN ; RET
+          ld a,ACTION_FIND_LABEL
+          ld (FIND_ACTION),a
+FindNextLabel
+          call disp_searching ; "Searching"
+
+          ld hl,LABEL_NM
+          call disp_infos_com
+
+          ld de,(POS_LINE)
+          CALL_ORG(oLabNext)
+LabelCommon
+          call FoundResult
+          ret nc        ; Carry from oLabNext
+          ld a,DEB_LINE:ld (CURSOR_X),a
+          jp gotoLine   ; quitline already done.
+
+FoundResult = ClearQuestion ; Todo: actual display (saving af)
+
+; Affiche le catalogue
+C_CAT
+; CLS                
+          call quitLine
+          call cur_off
+          call status_off
+          call oCls
+          call common_cat
+          call cur_on
+          jp mustdraw
+
+common_cat
+;aussi appele du moniteur
+
+          ld hl,&0104
+          call txt_set_cursor
+          ld de,BUF_IO
+          call &BC9B    ;!! pb si mode changed by cat art?
+          call offset_firm_to_rupt ; sync if cat has scrolled.
+          call status_on
+_wait_before_refresh
+          ld de,&2200 + status_line_question
+          ld a,5:call disp_infos_msg ; "Press a key" 
+          call km_wait_key
+          call ClearQuestion ; efface "press a key"
+          jp SCR_INIT   ; needed if mode has been change
+
+_io_esc
+; bug #12f. Store name only if it was empty.
+      IF todo
+; [space optim]. Use IS_FILENAME_EMPTY macro from filename.i
+               ; Requires FF beta X! 
+      END
+          CALL_ORG(is_filename_empty)
+          ret nz
+
+          ld hl,NAME_SAVE
+          CALL_ORG(set_filename)
+          jp status_refresh ; !!To refresh filename
+
+ask_when_modified
+; ---- Source modified?
+
+; Like ask_when_modified_no_refresh, but refresh! 
+; Used by |orgload, |orgreset
+
+          call oIsModified
+          scf
+          ret z
+
+; Setup scr and show source 
+          CALL_BRIC(crtc_firm2shift)
+          call restart_com
+          call cur_off
+; needed to ask "Modified, Are you sure?"
+          call status_on
+
+          call _ask_when_modified
+
+          push af
+; For return to basic
+          call status_off
+          CALL_BRIC(crtc_shift2firm)
+          call oCls
+          pop af
+          ret
+
+
+ask_when_modified_no_refresh
+; If source modified, propose to save (Y/N/ESC)
+; 'no_refresh': ui is already setup (compared to |o)
+; In: N/A
+; Out: Carry. Ok (whenever saved or not)
+     ; NC. Ko (ESC or issue while saving)
+     ; BC preserved
+          call oIsModified
+          scf
+          ret z
+;enchaine
+_ask_when_modified
+          ld a,source_modified
+          call PutQuestion
+          call ClearQuestion
+          cp NO:scf:ret z ; Carry  
+fail_abort = 250
+; To discrimate real failure (display message)
+; from cancel (no display), use dummy code.
+          cp ABORT:ld a,fail_abort:ret z ; NC
+;enchaine
+C_SAVE
+;    Sauve le source sur disque
+
+; If existing, use filename to prefil question.
+; If we didn't check that, after having saved on other tab,
+                         ; the last saved file would pop-up.
+          ld de,NAME_SAVE
+          CALL_ORG(is_filename_empty)
+          jr z,.ok
+          push de
+          CALL_ORG(copy_filename)
+          pop de
+.ok
+          ld a,file_save
+          call saveload_question
+          jr nc,_io_esc
+
+          ld ix,oSave
+; Enchaine
+saveload_common
+; In: DE = buffer
+    ; IX = routine to call
+;Out: If ok: Carry
+           ; HL = buffer with name (was de)
+           ; DE = meta
+           ; BC = meta_
+    ; If io failure: NC
+          push de
+          call CheckExt ; V{rifie l'extension
+          call status_off ; Buffer is in status v-ram! Also, faster.
+          pop hl
+
+          call ed_io
+post_io
+          push af
+          call oCls
+          call mustdraw
+          call status_refresh
+          pop af
+          ret
+
+status_refresh
+; Active la barre de status.      
+status_on
+; Todo if needed: lightweight activation (e.g. when we want to 
+; temporarily switch off to gain speed)
+
+; Need to clear when coming for mon, cat, etc...
+; Need to switch to editor rasters
+          CALL_BRIC(clear_status)
+          CALL_BRIC(crtc_status_set_editor)
+          CALL_BRIC(crtc_status_on)
+disp_all_infos
+; -- current_path (unidos)
+          call oGetCurrentSelection ; For tab# display
+          ld hl,SRC_NAME
+          CALL_BRIC(st_disp_filename)
+
+; -- first / last  (only if assembled)
+
+va    = &7C00
+va_first_pc = va+2      ;lowest adr reached
+va_last_pc = va+6       ;highest adr reached
+
+va_destbk = &980B
+
+          CALL_ORG(is_selected_uptodate)
+          call nz,disp_first_last
+
+; -- opened tabs      
+; 
+      IF todo
+; Test when buffer wraps. 
+; display uses INC HL
+      END
+
+          ld de,BUF_TABS ; Note: wrap at 0, ok.
+          call oGetCurrentSelection
+          xor a         ; id
+          ld b,a        ; marker X current source
+          ld c,1        ; nb sources opened (at least current)
+.tablp
+          call oIsSelfSelected
+          jr nz,.notself
+; Skip it, but keep pos for centering
+          ld b,e
+          jr .next_
+.notself
+          push af
+;"*" for modified (must be done before connect) 
+;Note: oIsModified is only for current source.
+          CALL_ORG'(org_is_modified)
+          ld ixl,":":jr z,$+5:ld ixl,"*"
+          CALL_ORG'(org_connect_filename)
+          jr nc,.next
+
+          inc c
+          inc a:CALL_BRIC(putDeciA)
+          ld a,ixl
+          ld (de),a:inc e
+;copy without extension ".o"
+.cpname   ld a,(hl):inc l
+          ld (de),a:inc e
+          cp ".":jr z,.cpend
+          or a
+          jr nz,.cpname
+.cpend
+          dec e:ld a," ":ld (de),a
+          inc e
+.next
+          pop af
+.next_
+          inc a
+MAX_SOURCES = 64        ; Defined in org!
+          cp MAX_SOURCES
+          jr c,.tablp
+
+          CALL_ORG'(connect_bk_base)
+          xor a
+          ld (de),a
+;just one source? Already displayed!
+          dec c
+          jr z,.notabs
+
+; Since all names might take more than screen width,
+; we try to put current tab at the middle, except if all fits.
+; We start from whichever is smaller (both clipped to 0):
+  ; . B - r1 (ensure selected source is on middle)
+  ; . Rgt - 2*r1  
+          ld a,b:sub r1_status:jr nc,$+3:xor a
+          ld l,a
+          ld a,e:sub 2*r1_status:jr nc,$+3:xor a
+          cp l:jr c,$+3:ld a,l
+          ld h,d
+; Display full length shaded
+; Hack since doesn't have pad+shaded version
+          ld e,a
+          add r1_status*2:ld l,a:ld (hl),0
+          ld l,e
+status_line_tabs = 1
+          ld de,status_line_tabs
+          ld c,l
+          call str_shaded_at
+.notabs
+;Enchaine
+; Filename and current path (for unidos) 
+;    Affiche **quelques*** info en haut de l'{cran 
+;      -> mais pas le filename/path (done above instead)
+INFOS_LN
+          push af
+          push hl
+          push de
+          push bc
+
+          call disp_modified
+          call disp_pos_line
+; Total line #
+          call oNbLines
+          CALL_BRIC(st_disp_tot_lines)
+
+          pop bc
+          pop de
+          pop hl
+          pop af
+          ret
+
+          ld hl,SRC_NAME
+          CALL_BRIC(st_disp_filename)
+          ret
+
+
+
+
+
+SAVE_BINARY
+          call status_on ; Necessary to see field!
+
+          ld a,file_save_binary
+          call QUESTION
+          ret nc
+
+          call status_off
+          ld hl,BUF_QUESTION
+          call oSaveBin
+          jp status_on
+
+;
+; Ajoute l'extension '.o' si inexistante
+;
+CheckExt
+; In: DE: buffer
+          ld b,LEN_SRC
+check_lp
+          ld a,(de):cp ".":ret z ;Don't change existing one
+          or a:jr z,check_cont
+          inc de
+          djnz check_lp
+check_cont
+; Ajoute l'extension 
+
+          ld hl,extension_o
+          jp copy_nt
+
+
+
+
+status_off
+; Desactive la barre de status.
+; Necessaire pour acces disc ou pour gagner en vitesse.
+          push af       ; needed for select_and_prepare_load
+          push hl       ; needed for _c_ass_com        
+          push de:push bc ; needed for C_EXP, select_and_prepare_load
+          CALL_BRIC(crtc_status_off)
+          pop bc:pop de
+          pop hl
+          pop af
+          ret
+
+ed_store
+; For org_select
+; in: DE= dest
+          ld hl,meta0
+          ld bc,meta0_
+          ldir
+          ld hl,meta2
+          ld a,e
+          jr _store_com
+
+ed_restore
+; For org_select
+; in: HL= source
+          ld de,meta0
+          ld bc,meta0_
+          ldir
+          ld de,meta2
+          ld a,l
+
+_store_com
+          ld c,meta2_
+          ldir
+          ret
+prog_error
+      BRK               ; <<<<---- Laisser ce BRK. Sert comme assert.
+
+
+C_LOAD
+          call quitLine
+
+          call ask_when_modified_no_refresh
+          ret nc        ; For ESC=abort
+
+          ld de,NAME_LOAD
+          ld a,file_open
+          call saveload_question
+          ret nc
+ContLoad2
+          ld ix,oLoad
+          jp saveload_common
+
+
+saveload_question
+;IN: de = buffer
+   ;  a = num question
+;Out: If ok: Carry
+    ; If esc: NC
+           ; HL = buffer with name (was de)
+           ; DE = meta
+           ; BC = meta_
+
+          push de
+          push af
+          call quitLine
+
+;Set name if empty.
+          ld a,(de):or a:jr nz,.notempty
+          CALL_ORG(copy_filename)
+.notempty
+          pop af
+          call QUESTION
+          pop de
+          ret
+
+
+;    Import ASCII / Dams
+
+C_IMPORT
+          call quitLine
+          ld a,file_imp
+          call QUESTION:ret nc
+
+          call status_off ; Buffer is in status v-ram! Also, faster.
+
+          ld hl,BUF_QUESTION
+          ld de,(POS_LINE)
+          call oImport  ;out, hl= nb imported lines.
+
+;!!MAJ meme si erreur (import partiel)
+          call AdjustDownLoop
+          jp post_io
+
+;    Export ASCII
+
+C_EXPORT
+          call quitLine
+
+          ld a,whole_file_or_block
+          call PutQuestion
+          cp ABORT
+          jp z,ClearQuestion ; Cancel
+
+          ld de,(BL_START)
+          ld bc,(BL_END)
+          cp BLOCK
+          jr z,contExp
+
+          call oNbLines
+          ld c,l:ld b,h
+          ld de,1
+contExp
+          push de
+          ld a,file_exp
+          call QUESTION
+          pop de
+          ret nc
+
+          call status_off ; Buffer is in status v-ram! Also, faster.
+
+          ld hl,BUF_QUESTION
+          call oExport
+          jp post_io
+
+load_from_rsx_o
+;  Charge le source |o,"titi"
+
+;    IN  ; B = 0 raccourci clavier
+         ; HL le nom du fichier
+         ; A = tab
+;    OUT : N/A   
+
+; Not: to harmonize code with |orgload, we only set crtc/screen
+     ; if we must save current tab. But then we switch back to 
+     ; standard basic screen -> a bit of flicker for |o, nevermind.
+      IF todo
+; Instead: don't switch back in select_and_load
+     ; make crtc2shift which would be idempotent
+     ; idem for crtc2firm (|orgload would call it inconditionnaly)
+      END
+          call select_and_load
+          jr c,.ok
+          cp fail_abort ; Not real failure: don't print message
+          call nz,oMsgErr
+.ok
+; Note: we didn't do it before, since select_and_load expect
+      ; basic state (for |orgload)
+          CALL_BRIC(crtc_firm2shift)
+          jp hotstart
+
+TAB
+;"Smart TAB". Function depends on context.
+
+bug#12d
+;Check if we have started typing.
+;Otherwise, when cursor is in the middle of a label,
+;it would wrongly trigger completion.
+          ld a,(EDIT_LN):or a:jr z,FindNext
+;Have we already started completion?
+          call IsCompletion:jr z,_notyet
+
+; Already in completion mode -> go to next selection
+          call refresh_selection
+          ret c
+; no selection -> remove completion mode and return. (clean-up)
+; Enchaine    
+SuggestionsOff
+          ld a,(IN_COMPLETION)
+;if already off: don't clean nothing, to avoid flickering with bump
+          or a
+          ret z
+          xor a:ld (IN_COMPLETION),a
+clear_suggestions
+          push de       ; for quitline
+          CALL_BRIC(st_clear_suggestions)
+          pop de
+          ret
+
+_notyet
+; First TAB pressed       
+
+          call refresh_completion
+          ret c
+; TAB pressed without any label entered.
+; For now, fallback to FindNext
+; TODO: display recent labels instead
+
+; Enchaine
+FindNext
+; Cherche la prochaine occurence de chaine ou de label
+          call quitLine
+          ld a,(FIND_ACTION)
+          cp ACTION_FIND_LABEL:jp z,FindNextLabel
+          cp ACTION_FIND_STRING:jp z,FindNextString
+          cp ACTION_FIND_ASTERIX:jr z,nextAsterix
+          cp ACTION_DEF_LABEL:jp z,DefLabel
+          ret nz        ; Action inconnue
+
+nextAsterix
+          ld hl,(FIND_LABEL_ID)
+          ld de,(POS_LINE_FOUND) ; repart de precedente occurence
+          jp nxtlab_com
+
+refresh_selection
+; Go to next completion selection
+; Out: Carry if there is a selection.
+          CALL_BRIC(next_selection):jp c,disp_selection
+; Past end -> reset and re-pick first (cycle)
+          CALL_BRIC(reset_selection)
+          CALL_BRIC(next_selection):jp c,disp_selection
+          ret
+
+
+UpdateCompletion
+; Must update?
+; Yes if TAB has previously triggered completion (checked by caller)
+; and we add a regular caracter.
+; E.g,  'a' + TAB showed labels starting by 'a' 
+; then  't' would show labels starting by 'at'
+; Also, if we enter a separator, we must clean previous suggestions.
+
+; In: A = key pressed.
+
+          cp kdel:jr z,refresh_completion
+          CALL_BRIC(is_labelchar):jr nc,SuggestionsOff ; Switch off
+;Enchaine
+refresh_completion
+;Out: NC if label empty
+          call get_buffer_pos_hl
+          CALL_BRIC(get_start_of_label)
+; Size of prefix found (0 is fine)
+          ld a,l:sub e
+          ld l,e
+;enchaine
+refresh_completion_com
+; Must copy start of label to buffer aligned to XX00 (todo: check why)
+; Also, must add 0 (cue lib expect NT string)
+          ld de,COMPLETION_PATTERN
+      IF COMPLETION_PATTERN AND &FF
+  !!! Fix "ld b,e" to "ld b,0"
+      END
+          ld b,e
+          ld c,a
+          inc bc        ; Handle empty string
+          ldir
+          ex de,hl
+          dec hl        ; compensate inc bc 
+          ld (hl),c     ; NT string
+          ld l,c        ; HL = COMPLETION_PATTERN
+          CALL_BRIC(refresh_suggestions)
+          jr c,.ok
+ ;bug #156: si pas de suggestion, ne pas deterer vielle liste
+          call clear_suggestions
+ ;yet, flag Carry so we don't launch search.
+          scf
+          ret
+.ok
+;since TAB used, pre-select first suggestion.
+          CALL_BRIC(next_selection)
+;Flag completion, so we don't have to press TAB again for next char
+          ld a,1:ld (IN_COMPLETION),a
+disp_selection
+; Here: D=start, E=end (given by next_selection)
+          ld hl,COMPLETION_SUGGESTIONS
+          CALL_BRIC(st_disp_selection)
+          scf
+          ret
+
+search_init
+; Common setup.
+; Out:  DE= line #,
+     ;   L= pos in buffer.
+          call quitLine
+          ld de,(POS_LINE)
+;Enchaine!! For l only. H: nevermind
+get_buffer_pos_hl
+;In: Nothing
+;Out: HL = Pos courante dans BUFFER  
+    ; AF trashed      
+          call get_buffer_pos_a
+      IF BUF_LINE AND &FF
+  !! Expect aligned
+      END
+          ld h,BUF_LINE/&0100
+          ld l,a
+          ret
+
+get_buffer_pos_a
+;In: Nothing
+;Out: A = LSB courant dans BUFFER  
+          ld a,(CURSOR_X)
+          sub DEB_LINE  ; Pos X abs - d{but de ligne
+          ret
+
+
+set_cursor_x
+;In: A = Position courante dans BUFFER  
+;Out: A = Position X a l'ecran.
+    ; CURSOR_X updated.
+          add DEB_LINE
+          ld (CURSOR_X),a
+          ret
+
+;
+; goto LastEdit
+;
+C_LastEdit
+          xor a         ; Flag loop
+RestartLE
+          push af
+          ld hl,(LastEditedLine) ; 1er {l{ment @ placer @ la fin
+          push hl
+          ld hl,LastEditedLine+2
+          ld de,LastEditedLine
+          ld bc,MAX_LEVEL*2
+          ldir
+; Parcourt le tab et place HL dans le 1er {l{ment libre
+          ld d,MAX_LEVEL
+          ld hl,LastEditedLine
+StartLE
+          ld a,(hl):inc hl:ld c,(hl)
+          or c:jr z,StoreLE
+          dec d:inc hl
+          xor a:or d:jr nz,StartLE
+; Si on est ici il n'y a pas de 0 donc on stock @ la fin du tab
+          ld hl,LastEditedLine + MAX_LEVEL*2 -1
+StoreLE
+          pop de
+          dec hl        ; Pour retrouver la bonne place dans le tab
+          ld (hl),e:inc hl:ld (hl),d
+          ld hl,(POS_LINE)
+; Si POS_LINE=meme position dans le tab on reboucle 1 fois
+          pop af
+          or a:jr nz,ExitLE
+          inc a
+; Si 1er {l{ment = Ligne courant alors on bloucle encore une fois
+          or a:sbc hl,de:jr z,RestartLE
+ExitLE
+          jp quitAndGotoLine
+;
+; Goto Line
+;
+C_GotoLine
+          call quitLine
+          call WhereLine
+          call c,gotoLine ; Carry si ESC ou foirage de conversion
+          ret
+;
+; Ajoute un break point @ POS_LINE
+; 
+C_SPACE
+          call quitLine
+; Si ligne = BRK alors on la supprime
+          ld hl,BUF_LINE-1
+SpaceLP
+          inc hl:ld a,(hl)
+          or a:jr z,AddBRK
+          cp " "
+          jr z,SpaceLP
+          ld de,BRK_STR
+compareBRK
+          ld a,(de):cp (hl):jr nz,AddBRK
+          inc de:inc hl
+          or a:jr nz,compareBRK
+RemoveBRK
+          ld de,(POS_LINE)
+          call oDelLine
+          call mustdraw
+          call AdjustUp ; Ajuste l'historique en suppresion
+          jp INFOS_LN
+
+AddBRK
+          ld hl,BRK_STR
+          jp edInsertLine_refresh
+
+
+;
+; Demande num{ro de ligne
+; Out : DE = Num{ro de ligne
+;     : Carry si foirage
+WhereLine
+          ld a,4:call disp_question_msg ;"Goto Line"
+
+          ld hl,GotoLineStr
+;Place cursor at end of string.
+;Cannot use c=-1 here since it's not handled by inv_cursor.
+          ld b,5+1      ; rab for cursor
+          call LEN_STR:ld c,a
+          ld e,&80      ; preselected
+.WhereLP
+; Similar to /saisie_champ/, but:
+; - we want to filter some keys (e.g. no alpha).
+; - different field size (since 5 digits max)
+
+          call field_refresh_wait_key
+          jr z,WhereExit
+;Allow special keys <&20 (e.g. &10 CLR)   >= &7f del
+          cp &20:jr c,.WhereOk
+          cp &7F:jr nc,.WhereOk
+;Forbid all others but digits.
+          cp "0":jr c,.WhereLP
+          cp "9"+1:jr nc,.WhereLP
+
+.WhereOk
+          call oFieldEditor
+          jr .WhereLP
+
+WhereExit
+; Here NC=esc.  C=return,  HL= tampon
+          call ClearQuestion
+          ret nc
+; Enchaine
+;
+; Converti une chaine en d{cimal
+;
+; IN  : HL = buffer de la chaine
+; OUT : If ok, Carry, DE = d{cimal 16 bit
+;  
+          CALL_BRIC(deci_to_int)
+          ret
+
+
+;    Join lines
+
+;    IN  : Rien
+;    OUT : Rien
+
+DEL_CHAR
+; Only called at col 0 (for concatenation)
+
+; 1ere ligne ? alors on ne fait rien
+          ld hl,(POS_LINE)
+          dec hl
+          ld a,h
+          or l
+          ret z
+
+          call SuggestionsOff ; (since cannot call quitLine)
+
+          call AdjustUp
+
+; Concataine deux lignes entre elles
+
+          ld hl,BUF_LINE
+          ld de,BUF_TMP
+          call copy_nt  ; met au chaud la 2eme partie
+          ld de,(POS_LINE)
+          call oDelLine
+          ld hl,(POS_LINE)
+          dec hl
+          ld (POS_LINE),hl
+          ld a,3
+          call VALID_LN
+; On concataine
+          ld hl,BUF_LINE
+          push hl
+          call IN_LINE  ; Longueur de la ligne
+; Place le curseur au bon endroit
+          ld a,(CURSOR_Y)
+          dec a
+          ld l,a
+          ld a,c
+          add DEB_LINE
+          cp MAX_CUR_X  ; Ligne trop longue ?
+          jr c,ContDelChar
+; Si ligne trop longue alors cursor X=80
+          ld a,MAX_CUR_X+1 ; +1 = Colonne 80
+ContDelChar
+          ld h,a
+          call set_cursor
+          call mustdraw
+          pop hl        ; BUF_LINE
+          ld bc,LEN_LINE
+          xor a
+          cpir          ; HL = 0 normalement...
+; Concataine BUF_TMP dans BUF_LINE
+          ex de,hl
+          dec de
+          ld hl,BUF_TMP
+          call copy_nt
+; R{affiche avec la parite concat{n{e
+          call display_source_line
+          call line_modified
+          call INFOS_LN
+          jp inv_cursor ; DON'T REMOVE !
+; Fin de DEL_CHAR
+
+;    Calcul la longueur de la ligne rapport a pos X
+
+;    IN  : Rien
+;    OUT : Carry si posX inf. C = MAX LINE
+
+IN_LINE
+          push hl
+          push bc
+          ld hl,BUF_LINE
+          ld b,LEN_LINE ;B= MAX ligne
+          call LEN_STR
+          ld c,a
+          call get_buffer_pos_a
+          cp c          ; Return carry si posX inf. a len ligne
+          ld a,c
+          pop bc
+          ld c,a
+          pop hl
+          ret
+
+upd_scr
+; Rafraichissage ecran permettant d'atteindre POS_LINE :
+;   - simple deplacement curseur si POS_LINE sur la page
+;   - scrolling si POS_LINE @ la frontiere
+;   - redraw sinon       
+; NB : presume BUF_LINE est synchro en regard de POS_LINE
+          ld hl,(SCR_LINE)
+          ld de,(POS_LINE)
+; Since routine uses HL, we can update SCR_LINE immediatly.
+          ld (SCR_LINE),de
+          jp us_upd_scr
+
+;
+;  Affiche une question dans la barre d'infos
+;
+;  IN  : A = code below
+;  OUT : A = YES, NO, ENTIRE, BLOCK, ABORT
+;           
+are_you_sure = 1
+whole_file_or_block = 2
+source_modified = 3
+
+PutQuestion
+          call disp_question_msg
+
+; attente de la r{ponse
+          ld b,a
+ReAsk
+          call km_wait_key
+          cp &FC        ; ESC
+          jr z,AbortQuestion
+          res 5,a       ; to uppercase
+
+          ld c,a
+          ld a,b:cp whole_file_or_block
+          ld a,c
+          jr z,EntireOrBlock
+
+;Yes/No question
+          cp "Y":ld c,YES:jr z,ExitQuestion
+          cp "N":ld c,NO:jr z,ExitQuestion
+          jr ReAsk
+
+EntireOrBlock
+          cp "W":ld c,ENTIRE:jr z,ExitQuestion
+          cp "B":ld c,BLOCK:jr z,ExitQuestion
+          jr ReAsk
+
+AbortQuestion
+          ld c,ABORT
+ExitQuestion
+          ld a,c
+          jp ClearQuestion
+
+
+line_modified
+          ld a,1
+          ld (EDIT_LN),a ; Flag l'{dition de la ligne
+; Enchaine
+disp_modified
+; Affiche le status du source modifi{ ou non
+          ld a,(EDIT_LN) ; line modified but not yet validated?
+          or a
+          call z,oIsModified
+          CALL_BRIC(st_disp_modified)
+          ret
+
+
+IsCompletion
+; Return NZ iff completion was triggered.
+; preserve all registers but flags
+          push bc:ld b,a
+          ld a,(IN_COMPLETION)
+          or a
+          ld a,b:pop bc
+          ret
+
+C_Bookmark
+
+
+;        +------------------+
+;        !  INITIALISATION  !
+;        +------------------+
+SCR_INIT
+; We don't activate bandeau here, since also used by load_from_rsx
+
+          ld a,2:call scr_set_mode ; Mode 2 and reset offset
+          ld hl,&3000:ld (crtc_offset),hl ; Must be in sync.
+
+          call &BB4E    ; Initialisation du mode texte
+      IF inRom
+          ld a,(ink1)
+          ld c,a:ld b,a
+      ELSE
+          ld bc,&1717
+      END
+          ld a,1
+          call &BC32    ; Application des couleurs
+          ld a,(ink0)
+          ld c,a:ld b,a
+          xor a
+          call &BC32    ; Fond noir
+          ld a,(ink10)
+          ld c,a:ld b,a
+          call &BC38    ; Border noir
+r1    = 40
+r1_status = 48
+          ld a,r1
+          jp dispInit
+
+sysconf
+          call km_disarm_break
+
+; --- function keys --------------
+
+          ld hl,keyfunc
+          ld de,"0"*&0100 + 150
+setfun_lp
+          ld a,(hl):inc hl
+          push hl
+          ld c,a
+          ld b,d
+          call ksetkey  ; fx == x so fun keys work to enter digits.
+; Sanity: we remap all ctrl-fx, even if firmware default.
+; We don't know if they have been remapped. 
+; Also, we don't want to use km_itialize (bb00) since it would
+; remove existing expansions.
+          ld a,c
+          ld b,e
+          call ksetctrl
+          pop hl
+          inc d:inc e
+          bit 5,e       ; stop at 160 = &a0
+          jr z,setfun_lp
+
+; --- key -> code ---------
+
+      IF 0:ld hl,keymap:END ; already placed
+          ld ix,ksetkey
+          call setkeymap
+
+; --- shift+key -> code  ---------
+
+      IF 0:ld hl,keymap_shift:END ; already placed
+          ld ix,ksetshift
+          call setkeymap
+
+; --- ctrl+key -> code  ---------
+
+      IF 0:ld hl,keymap_ctrl:END ; already placed
+          ld ix,ksetctrl
+          call setkeymap
+
+; --- ctrl for FR/EN/ES ---------
+
+          ld a,29
+          call kgetkey
+          ld hl,keymap_ctrl_fr:cp "m":jr z,setkeymap
+          ld hl,keymap_ctrl_en:cp ":":jr z,setkeymap
+          ld hl,keymap_ctrl_es
+setkeymap
+setkey_lp
+          ld a,(hl):inc hl:or a:ret z
+          ld b,(hl):inc hl
+          push hl
+          call jp_ix
+          pop hl
+          jr setkey_lp
+
+; Regroup all key codes.
+; k: normal key
+; kc: with ctrl
+; ks: with shift
+
+; --- Default ones ---
+kc1   = &1B             ;defaut on AZERTY, set to QWERTY as well
+kcpipe = &1E            ;defaut on AZERTY, set to QWERTY as well
+kc2   = &7E
+kc6   = &A6             ;defaut on AZERTY, set to QWERTY as zell
+kcenter = 140
+kcf0  = 150
+; CTRL-function key handled in /GERE_KEY/
+kcf1  = 151
+kcf2  = 152
+;kcf3  = 153
+;kcf4  = 154
+;kcf5  = 155
+;kcf6  = 156
+;kcf7  = 157
+;kcf8  = 158
+kcf9  = 159
+
+kreturn = &0D
+kdel  = &7F
+kcopy = &E0
+
+kup   = &F0
+kdown = &F1
+kright = &F3            ; Handled in fieldEditor, but also for completion
+
+kcup  = &F8
+kcdown = &F9
+kcleft = &FA
+kcright = &FB
+
+kesc  = &FC
+
+; --- Custom ---
+
+kcreturn = 141
+kcdel = 142
+kcspc = 143
+kc4   = 144
+kcpercent = 145
+kcstar = 146
+kcm   = 147             ; remap from 13 (RETURN)
+kcp   = 148             ; remap from 10 (CLR)
+ktab  = 149             ; remap from  9 (CTRL-I)
+; 150-159 used for kcf0 kcf9
+ksdel = 160             ; Mapping done here. Plugged in field.o
+ksclr = 161
+kc5   = 162
+
+keyfunc
+      BYTE 15,13,14,5,20
+      BYTE 12,4,10,11,3
+
+keymap
+      BYTE 68,ktab      ; remapped
+      BYTE 7,".",6,&0D
+      BYTE 0
+
+keymap_shift
+      BYTE 79,ksdel
+      BYTE 16,ksclr
+      BYTE 0
+
+keymap_ctrl
+      BYTE 64,kc1
+      BYTE 65,kc2
+      BYTE 56,kc4
+      BYTE 49,kc5
+      BYTE 48,kc6
+      BYTE 27,kcp
+      BYTE 47,kcspc
+      BYTE 18,kcreturn
+      BYTE 79,kcdel
+      BYTE 28,kcpercent ; ";" on en/es
+      BYTE 26,kcpipe
+      BYTE 0
+
+keymap_ctrl_fr
+      BYTE 29,kcm
+      BYTE 17,kcstar
+      BYTE 0
+
+keymap_ctrl_en
+      BYTE 38,kcm
+      BYTE 29,kcstar
+      BYTE 0
+
+keymap_ctrl_es
+      BYTE 38,kcm
+      BYTE 17,kcstar
+      BYTE 0
+
+LEN_STR
+;IN: HL= NT chaine
+   ;  B= max longueur
+;OUT: A= longueur
+          CALL_BRIC(get_len_clip)
+          ret
+
+put_deci_hl
+          CALL_BRIC(putDeciHL)
+          ret
+
+PutSelection
+; Select the completion selection: 
+;  if cursor right (checked by caller),
+;     AND completion active. -> must inject selection.
+; In: a = kright 
+; OUt: a preserved.
+
+          call IsCompletion:ret z
+          push af
+          call .rout
+          pop af
+          ret
+
+.rout
+          call get_suggestion
+          ret nc
+
+;Insertion of label:
+; 1. Save from cursor position
+; 2. Inject at beginning of pattern (so that already entered char aren't
+                                    ;duplicated)
+          call save_from_cursor
+; 2. Inject at beginning of pattern (so that already entered char aren't
+                                    ;duplicated)
+          CALL_BRIC(get_start_of_label)
+          ld hl,COMPLETION_SUGGESTIONS
+          call copy_nt
+          ld a,e:dec a  ; compensate kright still interpreted
+          call set_cursor_x
+          ld hl,BUF_TMP
+;Enchaine
+copy_nt
+;in: HL=source, DE=dest
+; !!! Cannot use bric.copy_nt since some sources are in ROM
+; (e.g. extension_txt)
+          ld a,(hl):ld (de),a:or a:ret z
+          inc hl:inc de
+          jr copy_nt
+
+      IF 0
+copy_clip
+; Not needed as transformation done as "post process"
+;Copy while replacing chr<32 by chr(32)
+;in: HL=source, DE=dest, b=len
+.lp
+          ld a,(hl):inc hl
+          cp 32:jr nc,$+4:ld a,32
+          ld (de),a:inc de
+          djnz .lp
+          ret
+      END
+
+      IF 0
+; Not needed now
+copy_nt_clip
+; same, but max B char (00 included)
+          ld a,(hl):ld (de),a:or a:ret z
+          inc hl:inc de
+          djnz copy_nt_clip
+          ret
+      END
+
+get_suggestion
+; Put selected suggestion in COMPLETION_SUGGESTIONS buffer.
+;out: NC if problem in get_label
+          call SuggestionsOff
+          CALL_BRIC(get_selected_id)
+          ex de,hl
+          ld hl,COMPLETION_SUGGESTIONS ; reuse buffer
+          CALL_BRIC(get_label)
+          ret
+
+disp_first_last
+;--------------
+          ld a,2
+          ld hl,(va_first_pc)
+          ld de,&4402
+          call disp_msg_hexa
+          ld a,6
+          ld hl,(va_last_pc)
+          ld d,&50
+; Enchaine
+disp_msg_hexa
+; In: A=Num message
+   ;  D=X  E=Y
+   ; HL=hexa value
+          push de
+          push hl
+          call txt_get_ch
+          ld d,h
+          ld e,8        ; Hack: "First:" / "Last:" already rgt-justified
+          ex (sp),hl
+          call putHexaHL
+          pop hl
+          pop de
+;enchaine
+str_shaded_at
+          CALL_BRIC(status_str_shaded_at)
+          ret
+
+
+
+select_and_load
+;--------------
+load_from_rsx_orgload = select_and_load
+;  Charge le source |orgload,"name",tab
+
+;Used by |o and |orgload 
+
+; IN a:tab
+   ; b:len  hl:filename
+;Out If ok: Carry
+          ; de:buffer filename 
+   ; NC if error (mem_full) or canceled.
+          push bc:push hl
+          call oSelect
+          pop hl:pop bc
+          ret nc        ; Early exit if oSelect failed
+
+;---- Get filename (so we can free bc and hl)
+;ici b=longueur nom fichier > 0
+          ld c,b
+          xor a         ; used belowe
+          ld b,a
+          dec c:inc bc  ; Sanitize 
+          ld de,NAME_LOAD
+          push de
+          ldir          ; Copie nom du fichier de la RSX dans NAME_LOAD
+          ld (de),a
+
+          pop de
+          push de
+          call CheckExt ; add .o if needed
+
+; ---- We load from basic. Must switch to mode 2 if not already
+; (since fonte mode 2)
+          call scr_get_mode
+          cp 2
+          ld a,2
+          call nz,scr_set_mode
+
+          call ask_when_modified
+          pop hl
+          ret nc        ; When ESC was pressed while proposing to save
+
+; Compared to saveload_common: mustn't do post_io (display source etc),
+; as we will go back to basic.
+; Enchaine
+ed_load
+; For IMPORT"source.o" directive.
+; HL: filename
+ ; direct org.load, without CH ui:
+    ; - no "loading ...."
+    ; - no handling of error message
+          ld ix,oLoad0
+ed_io
+; IX = oload or osave.
+          ld de,meta
+          ld bc,meta_
+; Enchaine
+jp_ix BYTE &DD
+jp_hl     jp hl
+jp_iy     jp iy
+
+      IF 0
+; Set marker blocs
+; IN  : DE=bloc start et HL = bloc end
+SetMarkersBloc
+          ld (BL_START),de
+          ld (BL_END),hl
+          ret
+      END
+
+      IF 1-inRom
+; TESTS FL en attendant les includes et asserts :)
+C_TestNRT
+      BRK
+;          ld   hl,BUFFER_TEST
+;          call edInsertLine
+;          call DrawBlock
+;          call mustdraw
+          ret
+BUFFER_TEST BYTE "; test NRT",0
+; Fin de test NRT
+      END
+
+ROUTINES
+oIsModified
+; Return NZ if modified
+          CALL_ORG'(org+&54)
+          ret
+
+oIsSelfSelected
+          CALL_ORG'(org+&60)
+          ret
+
+oGetCurrentSelection
+; Get which source is selected! Out: A=id source
+          CALL_ORG(org+&30)
+          ret
+
+oSourceInit
+          CALL_ORG(codec+&87)
+          ret
+oNbLines
+          push af
+          CALL_ORG(codec+6)
+          pop af
+          ret
+oGetLine
+          CALL_ORG(codec+9)
+          ret
+oSetLine
+          CALL_ORG(codec+12)
+          jr _check_mod
+oInsLine
+          CALL_ORG(codec+15)
+          jr _check_mod
+oDelLine
+          CALL_ORG(codec+18)
+          jr _check_mod
+
+oCopyBlk
+          CALL_ORG(codec+81)
+      IF dev_checks
+_check_mod
+; Verify that org did its job (bug#147)
+          push af
+          CALL_ORG(is_selected_uptodate)
+          call nz,fail  ; NZ=uptodate -> fail
+          pop af
+      END
+          ret
+
+oMoveBlk
+          CALL_ORG(codec+84)
+          ret
+
+oGetErr
+          CALL_ORG(ass+&12)
+          ret
+oErrTxt
+          CALL_ORG(codec+&1C)
+          ret
+oLoad0
+          CALL_ORG(org+18)
+          ret
+oFieldEditor
+; Handle passed key (insertion, deletion, etc..) in field buffer.
+; NB: display is done separately:
+;   - field_refresh for questions (open, find, ...)
+;   - force_refresh for source line (deal with grisage comment).
+
+;  A: key
+; HL: adr field (NT field)
+;  E: Bit 7: Selection if 1 (I.e all field erased when pressing key)
+;  B: max length (memory-wise. We are not concerned with display here.
+    ; includes final 0.
+;  C: initial cur pos in string (&ff = last)
+; Warning!! Cannot use IY since modified by RST &18.
+
+; out: C= new pos. (&ff converted to valid pos) 
+     ; E bit 7: cleared if selected deactivated (e.g. after fe_DEL_CHAR)
+     ; Carry, NZ if handled, buffer modified. A trashed.
+     ; Carry, Z if handled, buffer not modified (e.g. 
+     ; NC if not handled, A unchanged. 
+
+          CALL_BRIC(field_editor)
+          ret
+
+selected_msg BYTE "Selected: ",0
+
+; --------------------------------------
+realsize = $$-code
+      IF inRom
+hi
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+code3 = $$
+      IF inRom
+      ORG codedest3,$$
+      END
+; --------------------------------------
+
+;        +-------------+
+;        !  ALL DATAS  !
+;        +-------------+
+DATAS
+
+USE_NUM = 1             ; Affiche(1) ou non(0) les num{ros
+SCREEN = &C000          ; Adresse {cran
+SHIFT_LN = 2048         ; Longueur d'une ligne {cran
+NB_LINES = 25           ; Nombre lignes affich{es
+LEN_LINE = 73           ; Longueur d'une ligne de texte
+LEN_BUF_LINE = 255      ; Longeur du buffer; en 256 0 pour fin de str
+DEB_LINE = 8            ; D{but de l'{criture des mn{moniques
+LEN_SRC = 79            ; Longueur max nom de fichier (avec chemin, /00)
+; Note: this is an arbitrary UI limitation, so we don't overwrite
+; number lines at pos 95-10 = 85.
+; !!! Right now it could be overwritten, since sitting in the middle
+; !!! of screen
+; There is another limitation (126) as SRC_NAME buffer is &80 byte long
+; (minus 2 bytes for size and final 0).
+
+MAX_LEVEL = 8           ; Niveaux CTRL-RETURN & edited
+MAX_CUR_X = 79          ; Maximum en X pour le curseur
+
+YES   = 0
+NO    = 1
+ENTIRE = 2
+BLOCK = 3
+ABORT = &FF
+
+ACTION_FIND_STRING = 0
+ACTION_FIND_LABEL = 1
+ACTION_FIND_ASTERIX = 2 ; je ne m'en lasserai pas
+ACTION_DEF_LABEL = 3
+
+; Positions dans status.o
+; X_FILENAME = 13 ;in status
+; X_CUR_LINE = 33 ;in status
+; X_TOT_LINES = 42 ;in status
+; LEN_QUESTION = 52       ; Max len question (for clean)
+
+; Position Y in big status bar
+;status_line_main = 0
+;status_line_info = 2    
+; Keep here for CTRL-L, so we can display suggestion on line 4
+status_line_question = 3
+;status_line_debug = 4
+status_line_dump = 4
+
+extension_o BYTE ".o",0
+extension_txt BYTE ".txt",0
+extension_bin BYTE ".bin",0
+
+      IF 0              ; Not used
+; Table d'erreurs
+ERR_TBL
+      BYTE 1,"I"        ; Erreur 1 - Info
+      BYTE 2,"W"        ; Erreur 2 - Warning
+      BYTE 3,"E"        ; Erreur 3 - Error
+      BYTE 4,"F"        ; Erreur 4 - Fatal
+      BYTE 5,"A"        ; Erreur 5 - Assertion Failure
+      BYTE 0,&20        ; Fin de la table des messages d'erreur / OK
+      END
+
+
+; Table des raccourcis clavier
+SHORT_KB
+      BYTE &0D:WORD RETURN
+      BYTE kup:WORD MOVE_U ; Fleche HAUT
+      BYTE kdown:WORD MOVE_D ; Fleche BAS
+      BYTE kdel:WORD DEL_CHAR ; DEL
+      BYTE kcf0:WORD C_BEGIN ; CTRL + f0 : debut source
+      BYTE &8A:WORD C_END ; CTRL + . (pave num) : fin source
+      BYTE kcup:WORD C_UP ; CTRL + fleche haut
+      BYTE kcdown:WORD C_DOWN ; CTRL + fleche bas
+      BYTE "S"-&40:WORD C_SAVE ; CTRL + S (SAVE)
+      BYTE "N"-&40:WORD C_NEW ; CTRL + N (NEW)
+      BYTE "O"-&40:WORD C_LOAD ; CTRL + O (LOAD)
+      BYTE kcdel:WORD C_DEL ; CTRL + DEL (DELETE LINE)
+      BYTE kcp:WORD C_PASTE ; CTRL + P (Paste deleted line)
+      BYTE "I"-&40:WORD C_IMPORT ; CTRL + I (IMPORT ASCII/DAMS SOURCE)
+      BYTE "E"-&40:WORD C_EXPORT ; CTRL + E (EXPORT ASCII SOURCE)
+      BYTE "D"-&40:WORD C_D ; CTRL + D (PRINT)
+      BYTE kcenter:WORD C_ENTER ; CTRL + ENTER (GOTO LABEL FROM LINE)
+      BYTE kcreturn:WORD C_GOBACK ; CTRL + RETURN (GO BACK)
+      BYTE "L"-&40:WORD C_LABEL ; CTRL + L (go to label)
+      BYTE "C"-&40:WORD C_CAT ; CTRL + C (affiche catalogue)
+      BYTE kcpercent:WORD C_FLIP ; CTRL %
+      BYTE kcstar:WORD C_NEXTLAB ; CTRL *
+      BYTE kcpipe:WORD C_RSX ; CTRL |
+      BYTE "F"-&40:WORD C_FIND_TEXT ; CTRL F
+      BYTE "H"-&40:WORD C_Help ; CTRL H (affiche l'aide)
+      BYTE "B"-&40:WORD C_BOOKMARK
+
+      BYTE kc1:WORD C_ASS ; CTRL + 1 
+      BYTE kc2:WORD C_ASS_JP ; CTRL + 2
+      BYTE kc4:WORD C_NEXTERR ; CTRL + 4    
+      BYTE kc5:WORD C_ASS_RESET ; CTRL + 5
+      BYTE kc6:WORD C_ASS_JP_RESET ; CTRL + 6
+      BYTE "V"-&40:WORD C_VIEW ; CTRL + V
+      BYTE kcm:WORD C_LastEdit ; CTRL + M
+      BYTE "G"-&40:WORD C_GotoLine ; CTRL + G
+      BYTE kcspc:WORD C_SPACE ; CTRL + SPACE
+      BYTE ktab:WORD TAB
+
+      IF 1-inRom
+; CTRL+T @ supprimer quand include et assert
+      BYTE "T"-&40:WORD C_TestNRT ; CTRL + T
+      END
+
+      IF doNRT
+; copy keep is harder to mock, so we leave this entry
+; for NRTs to be able to write: BYTE kcopy,"e"
+      BYTE kcopy:WORD COPY_KEY
+      END
+
+      BYTE 0            ; Fin de la table
+
+; --------------------------------------
+realsize3 = $$-code3
+      IF inRom
+hi3
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+code4 = $$
+      IF inRom
+      ORG codedest4,$$
+      END
+
+refresh_bloc_info
+; If valid bloc, refresh "Selected: start-end XX nops" in status bar
+          ld de,(BL_START)
+          ld a,e:or d
+          jr z,.nobloc
+          ld hl,(BL_END)
+          ld a,l:or h
+          jr z,.nobloc
+          sbc hl,de
+          jr c,.nobloc  ; if end<start
+
+          push de       ; start
+          ld hl,selected_msg
+          ld de,BUF_TMP
+          call copy_nt
+
+          pop hl
+          call put_deci_hl
+          ld a,"-":ld (de),a:inc de
+          ld hl,(BL_END)
+          call put_deci_hl
+          ld a," ":ld (de),a:inc de
+
+          push de
+          ld de,(BL_START)
+          ld hl,(BL_END)
+          CALL_ORG'(count_tm)
+          pop de
+          bit 7,b
+          ld hl,.unknown
+          jr nz,.txtnops
+
+          ld l,c:ld h,b
+          call put_deci_hl
+
+          ld hl,.nops
+.txtnops
+          call copy_nt
+
+          ld hl,BUF_TMP
+          ld de,&0200 + status_line_question
+          jp str_shaded_at
+
+.nobloc
+          jp ClearQuestion
+
+.unknown BYTE "?"       ; no 0, enchaine with .nops
+.nops BYTE " nops     ",0 ; extra spaces to clear when shorter decimals
+
+
+realsize4 = $$-code4
+      IF inRom
+hi4
+      FILL limit4-$,&F7
+      END
+codesize4 = $$-code4
+
+
+code2 = $$
+      IF inRom
+      ORG codedest2,$$
+      END
+; --------------------------------------
+
+COPY_MAP
+      BYTE "s":WORD B_START ;S{lection bloque d{but
+      BYTE "e":WORD B_END ; S{lection bloque fin
+      BYTE "c":WORD B_COPY
+      BYTE "z":WORD B_RAZ_BK ; RAZ de la s{lection
+      BYTE &7F:WORD B_DEL
+      BYTE "g":WORD B_GotoBloc ; Aller au d{but du bloque
+; DEFB "M":DEFW B_MOVE
+      BYTE 0
+
+def
+      ORG edVar,$$
+; ---------
+; Constants 
+; ---------
+
+      IF $ - edVar
+ !! Pour autodetection !! NE RIEN METTRE AVANT
+      END
+sign  BYTE "OrgEdit"
+
+BRK_STR BYTE "BRK"
+EMPTY_STR BYTE 0
+      IF EMPTY_STR - BRK_STR - 3
+  !! EMPTY_STR must follow BRK_STR
+      END
+      IF EMPTY_STR - &780A
+  !! Shared with org
+      END
+
+; ------------------------------------
+meta0
+; Data to store with non-zero default.
+; (not saved yet switched back when changing source)
+; ------------------------------------
+
+PNT_ERR WORD IDX_ERR_TAB ; Index erreur apr}s assemblage
+SCR_LINE WORD 1         ; Ligne pointee a l'ecran
+
+; ------------
+meta
+; Data to SAVE
+; ------------
+
+POS_LINE WORD 1         ; Position globale courante
+CURSOR                  ; Position du curseur en X et Y
+CURSOR_Y BYTE 1
+CURSOR_X BYTE DEB_LINE
+
+      IF CURSOR-&7811
+ !! CURSOR must be at address &7811, shared with upd-scr.o upd-lo.o
+      END
+
+defsize = $-edVar
+
+; --------------------------------------
+realsize2 = $$-code2
+      IF inRom
+pctmp = $
+      ORG def+defsize,$$
+hi2
+      FILL limit2-$,&F7
+      ORG pctmp,$$
+      END
+codesize2 = $$-code2
+; --------------------------------------
+
+
+zeros
+;!! Ne mettre a partir d'ici que les variables dont la valeur par defaut
+;   est 0 ou n'importe pas.
+; --------------------------------------
+FIND_ACTION BYTE ACTION_FIND_STRING ; Derni}re action de recherche
+FIND_LABEL_ID WORD      ; Id pour CTRL-*
+DEF_LABEL_ID WORD       ; Id for CTRL-L + -> 
+POS_LINE_FOUND WORD 
+
+BL_START WORD           ; D{but de la s{lection
+BL_END WORD             ; Fin de la s{lection
+
+      IF [BL_START-&781A] OR [BL_END-&781C]
+ !! BL_START must be at address &781A, since shared with upd-scr.o
+      END
+
+; Place pour tableau des lignes modifi{es
+LastEditedLine SKIP MAX_LEVEL*2
+pos_save SKIP MAX_LEVEL*2 ;Positions pour CTRL-RETURN
+pos_save_end
+
+      IF pos_save - MAX_LEVEL*2 - LastEditedLine
+  !! must be contiguous
+      END
+
+; lines (contiguous for AdjustHist)
+bookmarks_lines SKIP MAX_BOOKMARKS * 2
+; key, tab (-1 for self)
+bookmarks_codes SKIP MAX_BOOKMARKS * 2
+bookmark_index BYTE 
+
+meta_ = $-meta
+
+; --------------------------------------
+; Other data to store (zeroed at init)
+; --------------------------------------
+IDX_ERR_TAB SKIP MAX_LEVEL*2 ; Liste des erreurs apr}s assemblage
+      WORD              ; Sentinelle fin.
+
+GotoLineStr SKIP 6
+
+meta0_ = $ - meta0
+
+; ---------------------------------------
+; Work vars and buffers
+; ---------------------------------------
+
+EDIT_LN BYTE            ; Flag d'{dition de ligne
+
+DBG1  WORD 
+DBG2  WORD 
+KIND_QUESTION BYTE 
+
+BUF_QUESTION SKIP LEN_SRC
+          4 ** BYTE     ; rab for ".o" ".txt" ".bin"
+IN_COMPLETION BYTE      ; 1 -> auto-completion triggered
+
+zerosize = $-zeros
+
+      SKIP &795C - $    ; Reserved by ??? 79e0: Vars in upd-scr.o
+
+      ORG &6A60         ; After symb
+
+; ---------------------------------------
+zeros2
+
+; Ici, les buffers qu'on ne veut pas effacer avec CONTROL-N (todo #d0)
+; Global across sources.
+; Why zeroed?
+; ---------------------------------------
+DELETED SKIP LEN_LINE
+rsx_hist_struct SKIP 4
+
+; ---------------------------------------
+meta2
+; Again data to store:
+;  We want to remember search strings for each source.
+; ---------------------------------------
+
+LABEL_NM SKIP LABEL_NM_SIZE ; Stockage du label
+      IF $-1 /&0100 - LABEL_NM/&0100
+ !! error alignment
+      END
+
+FIND_STRING SKIP FIND_SIZE ; Stockage de la chaine recherch{e
+      IF $-1 /&0100 - FIND_STRING/&0100
+ !! error alignment
+      END
+
+meta2_ = $-meta2
+zerosize2 = $-zeros2
+
+      IF zerosize2-1 / &0100
+ !! must review edInit which uses  ld (hl),b
+      END
+
+meta_ed_len = meta0_ + meta2_
+
+savesp WORD             ; Pour EXIT facile
+
+      SKIP &6B00 - $    ; filename
+
+bufCtxr = &9040         ; Reuse mon's buffer
+
+; Fin du source
+
