@@ -14,14 +14,14 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow;
+use cpclib_common::winnow::{self, Located, Stateful};
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ErrorKind, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Offset, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
 use cpclib_common::winnow::{BStr, PResult, Parser};
@@ -451,7 +451,8 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub(crate) fn build_span(
     start_eof_offset: usize,
     start: &<InnerZ80Span as Stream>::Checkpoint,
@@ -469,18 +470,21 @@ pub(crate) fn build_span(
 //    parse_z80_with_options(span.as_str(), ctx)
 //}
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_z80<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
     parse_z80_str(code)
 }
 
 /// Parse a string and return the corresponding listing
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, AssemblerError> {
     parse_z80_with_context_builder(code, ParserContextBuilder::default())
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 /// nom many0 does not seem to fit our parser requirements
 /// TODO check if winnow is better on this side
 pub fn my_many0<O, E, F, C>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> PResult<C, E>
@@ -489,7 +493,8 @@ where
     E: ParserError<InnerZ80Span>,
     C: Accumulate<O>
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |i: &mut InnerZ80Span| {
         let mut acc = C::initial(Some(0));
         let start = i.checkpoint();
@@ -531,7 +536,8 @@ where
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn my_separated0_in<'vec, O, O2, E, F, G, C>(
     mut sep: G,
     mut f: F,
@@ -546,7 +552,8 @@ where
     E: Debug,
     O2: Debug
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |i: &mut InnerZ80Span| {
         let start = i.checkpoint();
         let _len = i.eof_offset();
@@ -614,13 +621,15 @@ where
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), E>
 where
     F: Parser<InnerZ80Span, O, E>,
     E: ParserError<InnerZ80Span>
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |i: &mut InnerZ80Span| {
         loop {
             let start = i.checkpoint();
@@ -642,7 +651,8 @@ where
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_many_till_nocollect<O, P, E, F, G>(
     mut f: F,
     mut g: G
@@ -652,7 +662,8 @@ where
     G: Parser<InnerZ80Span, P, E>,
     E: ParserError<InnerZ80Span>
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |i: &mut InnerZ80Span| {
         loop {
             let start_i = i.checkpoint();
@@ -683,11 +694,13 @@ where
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
     inner_code_with_state(input.state.state, false).parse_next(input)
 }
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn one_instruction_inner_code(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedListing, Z80ParserError> {
@@ -696,12 +709,14 @@ pub fn one_instruction_inner_code(
 
 /// Workaround because many0 is not used in the main root function
 /// TODO add an argument to handle context change
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn inner_code_with_state(
     new_state: ParsingState,
     only_one_instruction: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         // dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state, only_one_instruction)
@@ -1070,7 +1085,8 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
     Ok(token)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     // let _ = my_space0(input)?;
     let confined_start = input.checkpoint();
@@ -1314,7 +1330,8 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
         })
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line_component(
     input: &mut InnerZ80Span
 ) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
@@ -1552,7 +1569,8 @@ pub fn parse_line_component_standard(
 }
 
 /// TODO - currently consume several lines. Should do it only one time
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line_or_with_comment(
     input: &mut InnerZ80Span
 ) -> PResult<Option<LocatedToken>, Z80ParserError> {
@@ -1571,7 +1589,8 @@ pub fn parse_line_or_with_comment(
     Ok(comment)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_single_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     // Get the token
     alt((parse_token, parse_directive)).parse_next(input)
@@ -1600,7 +1619,8 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_z80_directive_with_block(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
@@ -1636,7 +1656,8 @@ pub fn parse_z80_directive_with_block(
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_lines(input: &mut InnerZ80Span) -> PResult<Vec<LocatedToken>, Z80ParserError> {
     let mut tokens = Vec::with_capacity(100);
 
@@ -1653,7 +1674,8 @@ pub fn parse_lines(input: &mut InnerZ80Span) -> PResult<Vec<LocatedToken>, Z80Pa
 
 /// Parse a line (ie a set of components separated by :) until the end of the line or a stop directive
 /// XXX: In opposite to the other functions, the result is stored in the parameter (to avoid unnecessary memory allocations and copies)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line(
     r#in: &mut Vec<LocatedToken>
 ) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
@@ -1721,7 +1743,8 @@ pub fn parse_z80_line_complete(
     parse_line(r#in)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assign_operator(
     input: &mut InnerZ80Span
 ) -> PResult<Option<BinaryOperation>, Z80ParserError> {
@@ -1774,7 +1797,8 @@ pub fn parse_assign_operator(
 }
 
 /// Parser for file names in appropriate directives
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
     let first = alt(('"', '\'')).parse_next(input)? as char;
     let last = first;
@@ -1814,7 +1838,8 @@ pub fn parse_stringlike_without_quote(
     Ok(UnescapedString(string, slice.into()))
 }
 
-#[inline(always)]
+#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_escaped<'a, I: 'a, Error, F, G, O1, O2>(
     mut normal: F,
     control_char: char,
@@ -1936,7 +1961,8 @@ pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 }
 
 /// Parse for the various binary include directives
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_incbin(
     transformation: BinaryTransformation
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -2079,7 +2105,8 @@ pub fn parse_section(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
     Ok(LocatedTokenInner::Section(name.into()))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let start = cut_err(
         delimited(my_space0, located_expr, my_space0).context("RANGE: wrong start address")
@@ -2111,7 +2138,8 @@ pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 // Ok((TokenInner::Assign{label, value, op}))
 // }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let parsing_state = input.state.state;
 
@@ -2120,12 +2148,14 @@ pub fn parse_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
         .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_token1(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     parse_opcode_no_arg(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
@@ -2201,7 +2231,8 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 }
 
 /// Parse ex af, af' instruction
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ex_af(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     ((
         //        parse_word(b"EX"),
@@ -2214,7 +2245,8 @@ pub fn parse_ex_af(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 }
 
 /// Parse ex hl, de instruction
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     alt((
         ((
@@ -2239,7 +2271,8 @@ pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 }
 
 /// Parse ex (sp), hl
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let destination = ((
         //     Caseless("EX"),
@@ -2261,7 +2294,8 @@ pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z
     ))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_struct_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     alt((
         parse_struct_directive_inner,
@@ -2270,7 +2304,8 @@ pub fn parse_struct_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken,
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     // XXX Sadly the state is stored within the context that cannot
     //     by changed. So we can cannot really use parsing state sutf
@@ -2302,14 +2337,16 @@ pub fn parse_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Par
         .parse_next(input)
 }
 
-#[inline]
 /// Here local_parsing_state only serves to adapt DB/DW/STR behavior in struct.
 /// Maybe it should be used to control the directives of interest BEFORE there parsing instead of after.
 /// No filtering is done
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_directive_new(
     local_parsing_state: &ParsingState
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> + '_ {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
         let is_orgams = input.state.options().is_orgams();
 
@@ -2331,230 +2368,274 @@ pub fn parse_directive_new(
         //   dbg!("Directive:", unsafe{std::str::from_utf8_unchecked(word)});
 
         let token: LocatedTokenInner = match word.len() {
-            2 => {
-                match word {
-                    choice_nocase!(b"BY") if is_orgams => {
-                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
-                    },
-
-                    choice_nocase!(b"DB") | choice_nocase!(b"DM") => {
-                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
-                    },
-
-                    choice_nocase!(b"DS") => parse_defs.parse_next(input)?,
-
-                    choice_nocase!(b"DW") => {
-                        parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
-                    },
-
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-
-            3 => {
-                match word {
-                    choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input)?,
-
-                    choice_nocase!(b"STR") => {
-                        parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)?
-                    },
-                    choice_nocase!(b"END") if !is_orgams => Ok(LocatedTokenInner::End)?,
-                    choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input)?,
-                    choice_nocase!(b"MAP") => parse_map.parse_next(input)?,
-                    choice_nocase!(b"NOP") => parse_nop.parse_next(input)?,
-                    choice_nocase!(b"ORG") => parse_org.parse_next(input)?,
-                    choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input)?,
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-
-            4 => {
-                match word {
-                    choice_nocase!(b"DEFB")
-                    | choice_nocase!(b"DEFM")
-                    | choice_nocase!(b"BYTE")
-                    | choice_nocase!(b"TEXT") => {
-                        parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)?
-                    },
-
-                    choice_nocase!(b"FILL") | choice_nocase!(b"DEFS") | choice_nocase!(b"RMEM") => {
-                        parse_defs.parse_next(input)?
-                    },
-
-                    choice_nocase!(b"BANK") => parse_bank.parse_next(input)?,
-                    choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input)?,
-                    choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List)?,
-                    choice_nocase!(b"READ") => parse_include.parse_next(input)?,
-
-                    choice_nocase!(b"SAVE") => parse_save(SaveKind::Save).parse_next(input)?,
-
-                    choice_nocase!(b"SKIP") if is_orgams => parse_skip.parse_next(input)?,
-
-                    choice_nocase!(b"WORD") | choice_nocase!(b"DEFW") => {
-                        parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)?
-                    },
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-
-            5 => {
-                match word {
-                    choice_nocase!(b"ALIGN") => parse_align.parse_next(input)?,
-                    choice_nocase!(b"LIMIT") => parse_limit.parse_next(input)?,
-                    choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause)?,
-                    choice_nocase!(b"PRINT") => parse_print(true).parse_next(input)?,
-                    choice_nocase!(b"RANGE") => parse_range.parse_next(input)?,
-                    choice_nocase!(b"UNDEF") => parse_undef.parse_next(input)?,
-
-                    choice_nocase!(b"WRITE") => {
-                        alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))
-                            .parse_next(input)?
-                    },
-
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-
-            6 => {
-                match word {
-                    choice_nocase!(b"ASSERT") => parse_assert.parse_next(input)?,
-
-                    choice_nocase!(b"EXPORT") => {
-                        parse_export(ExportKind::Export).parse_next(input)?
-                    },
-                    choice_nocase!(b"INCBIN") => {
-                        parse_incbin(BinaryTransformation::None).parse_next(input)?
-                    },
-                    #[cfg(not(target_arch = "wasm32"))]
-                    choice_nocase!(b"INCEXO") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO))
-                            .parse_next(input)?
-                    },
-                    #[cfg(not(target_arch = "wasm32"))]
-                    choice_nocase!(b"INCLZ4") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4))
-                            .parse_next(input)?
-                    },
-
-                    choice_nocase!(b"INCL48") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48))
-                            .parse_next(input)?
-                    },
-
-                    choice_nocase!(b"INCL49") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49))
-                            .parse_next(input)?
-                    },
-
-                    #[cfg(not(target_arch = "wasm32"))]
-                    choice_nocase!(b"INCAPU") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU))
-                            .parse_next(input)?
-                    },
-
-                    #[cfg(not(target_arch = "wasm32"))]
-                    choice_nocase!(b"INCZX0") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0))
-                            .parse_next(input)?
-                    },
-
-                    choice_nocase!(b"RETURN") => parse_return.parse_next(input)?,
-                    choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input)?,
-
-                    choice_nocase!(b"STRUCT") => parse_struct.parse_next(input)?,
-                    choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input)?,
-
-                    choice_nocase!(b"NOLIST") => LocatedTokenInner::NoList,
-
-                    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input)?, /* TODO filter to remove the orgams specificies */
-
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-            _ => {
-                match word {
-                    choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input)?,
-
-                    choice_nocase!(b"BINCLUDE") => {
-                        parse_incbin(BinaryTransformation::None).parse_next(input)?
-                    },
-
-                    choice_nocase!(b"INCLUDE") => parse_include.parse_next(input)?,
-
-                    choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input)?,
-                    choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input)?,
-                    choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input)?,
-                    choice_nocase!(b"BUILDCPR") => LocatedTokenInner::BuildCpr,
-
-                    choice_nocase!(b"CHARSET") => parse_charset.parse_next(input)?,
-
-                    choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input)?,
-
-                    choice_nocase!(b"NOEXPORT") => {
-                        parse_export(ExportKind::NoExport).parse_next(input)?
-                    },
-
-                    choice_nocase!(b"PROTECT") => parse_protect.parse_next(input)?,
-
-                    choice_nocase!(b"SECTION") => parse_section.parse_next(input)?,
-
-                    choice_nocase!(b"SNAPINIT") | choice_nocase!(b"SNAINIT") => {
-                        parse_snainit.parse_next(input)?
-                    },
-
-                    choice_nocase!(b"STARTINGINDEX") => parse_startingindex.parse_next(input)?,
-
-                    choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input)?,
-
-                    #[cfg(not(target_arch = "wasm32"))]
-                    choice_nocase!(b"INCSHRINKLER") => {
-                        parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler))
-                            .parse_next(input)?
-                    },
-
-                    _ => {
-                        input.reset(&input_start);
-                        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                            input,
-                            ErrorKind::Alt
-                        )));
-                    }
-                }
-            },
-        };
+            2 => parse_directive_of_size_2(input, &input_start, is_orgams, within_struct, word),
+            3 => parse_directive_of_size3(input, &input_start, is_orgams, within_struct, word),
+            4 =>  parse_directive_of_size_4(input, &input_start, is_orgams, within_struct, word),
+            5 =>  parse_directive_of_size_5(input, &input_start, is_orgams, within_struct, word),
+            6 =>  parse_directive_of_size_6(input, &input_start, is_orgams, within_struct, word),
+            7 =>  parse_directive_of_size_7(input, &input_start, is_orgams, within_struct, word),
+            8 =>  parse_directive_of_size_8(input, &input_start, is_orgams, within_struct, word),
+            10 =>  parse_directive_of_size_10(input, &input_start, is_orgams, within_struct, word),
+            _ =>  parse_directive_of_size_others(input, &input_start, is_orgams, within_struct, word)
+        }?;
 
         let token = token.into_located_token_between(&input_start, *input);
         Ok(token)
+    }
+}
+
+fn parse_directive_of_size_others(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+match &word.to_ascii_uppercase()[..] {
+    //12
+    #[cfg(not(target_arch = "wasm32"))]
+    b"INCSHRINKLER" => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler))
+            .parse_next(input)
+    },
+
+    // 13
+    b"STARTINGINDEX" => parse_startingindex.parse_next(input),
+
+    _ => {
+        input.reset(&input_start);
+        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input,
+            ErrorKind::Alt
+        )));
+    }
+
+}
+}
+
+
+fn parse_directive_of_size_10(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input),
+    choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input),
+    choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input),
+    
+        _ => {
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
+    
+    }
+}
+
+fn parse_directive_of_size_8(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"BINCLUDE") => {
+            parse_incbin(BinaryTransformation::None).parse_next(input)
+        },
+        choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input),
+        choice_nocase!(b"BUILDCPR") => Ok(LocatedTokenInner::BuildCpr),
+        choice_nocase!(b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input),
+        choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input),
+        choice_nocase!(b"SNAPINIT") => parse_snainit.parse_next(input),
+    
+        _ => {
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
+    
+    }
+}
+
+fn parse_directive_of_size_7(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+match word {
+    choice_nocase!(b"INCLUDE") => parse_include.parse_next(input),
+    choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input),
+    choice_nocase!(b"CHARSET") => parse_charset.parse_next(input),
+    choice_nocase!(b"PROTECT") => parse_protect.parse_next(input),
+    choice_nocase!(b"SECTION") => parse_section.parse_next(input),
+    choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
+
+    _ => {
+        input.reset(&input_start);
+        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input,
+            ErrorKind::Alt
+        )));
+    }
+
+}
+}
+
+fn parse_directive_of_size_6(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+                match word {
+    choice_nocase!(b"ASSERT") => parse_assert.parse_next(input),
+
+    choice_nocase!(b"EXPORT") => {
+        parse_export(ExportKind::Export).parse_next(input)
+    },
+    choice_nocase!(b"INCBIN") => {
+        parse_incbin(BinaryTransformation::None).parse_next(input)
+    },
+    #[cfg(not(target_arch = "wasm32"))]
+    choice_nocase!(b"INCEXO") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO))
+            .parse_next(input)
+    },
+    #[cfg(not(target_arch = "wasm32"))]
+    choice_nocase!(b"INCLZ4") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4))
+            .parse_next(input)
+    },
+
+    choice_nocase!(b"INCL48") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48))
+            .parse_next(input)
+    },
+
+    choice_nocase!(b"INCL49") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49))
+            .parse_next(input)
+    },
+
+    #[cfg(not(target_arch = "wasm32"))]
+    choice_nocase!(b"INCAPU") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU))
+            .parse_next(input)
+    },
+
+    #[cfg(not(target_arch = "wasm32"))]
+    choice_nocase!(b"INCZX0") => {
+        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0))
+            .parse_next(input)
+    },
+
+    choice_nocase!(b"RETURN") => parse_return.parse_next(input),
+    choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),
+
+    choice_nocase!(b"STRUCT") => parse_struct.parse_next(input),
+    choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input),
+
+    choice_nocase!(b"NOLIST") => Ok(LocatedTokenInner::NoList),
+
+    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
+
+    _ => {
+        input.reset(&input_start);
+        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+            input,
+            ErrorKind::Alt
+        )));
+    }
+}
+}
+
+fn parse_directive_of_size_5(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
+        choice_nocase!(b"LIMIT") => parse_limit.parse_next(input),
+        choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause),
+        choice_nocase!(b"PRINT") => parse_print(true).parse_next(input),
+        choice_nocase!(b"RANGE") => parse_range.parse_next(input),
+        choice_nocase!(b"UNDEF") => parse_undef.parse_next(input),
+
+        choice_nocase!(b"WRITE") => {
+            alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))
+                .parse_next(input)
+        },
+
+        _ => {
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
+    }
+}
+
+fn parse_directive_of_size_4(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"DEFB")
+        | choice_nocase!(b"DEFM")
+        | choice_nocase!(b"BYTE")
+        | choice_nocase!(b"TEXT") => {
+            parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
+        },
+
+        choice_nocase!(b"FILL") | choice_nocase!(b"DEFS") | choice_nocase!(b"RMEM") => {
+            parse_defs.parse_next(input)
+        },
+
+        choice_nocase!(b"BANK") => parse_bank.parse_next(input),
+        choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input),
+        choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List),
+        choice_nocase!(b"READ") => parse_include.parse_next(input),
+
+        choice_nocase!(b"SAVE") => parse_save(SaveKind::Save).parse_next(input),
+
+        choice_nocase!(b"SKIP") if is_orgams => parse_skip.parse_next(input),
+
+        choice_nocase!(b"WORD") | choice_nocase!(b"DEFW") => {
+            parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
+        },
+        _ => {
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
+    }
+}
+
+
+fn parse_directive_of_size3(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input),
+
+        choice_nocase!(b"STR") => {
+            parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)
+        },
+        choice_nocase!(b"END") if !is_orgams => Ok(LocatedTokenInner::End),
+        choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input),
+        choice_nocase!(b"MAP") => parse_map.parse_next(input),
+        choice_nocase!(b"NOP") => parse_nop.parse_next(input),
+        choice_nocase!(b"ORG") => parse_org.parse_next(input),
+        choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input),
+        _ => {
+            input.reset(&input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
+    }
+}
+
+fn parse_directive_of_size_2(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"BY") if is_orgams => {
+            parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
+        },
+
+        choice_nocase!(b"DB") | choice_nocase!(b"DM") => {
+            parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
+        },
+
+        choice_nocase!(b"DS") => parse_defs.parse_next(input),
+
+        choice_nocase!(b"DW") => {
+            parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
+        },
+
+        _ => {
+            input.reset(input_start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )));
+        }
     }
 }
 
@@ -2570,7 +2651,8 @@ enum KindOfConditional {
 
 /// Parse if expression.TODO finish the implementation in order to have ELSEIF and ELSE branches"
 /// TODO shorten the string code source
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
@@ -2680,7 +2762,8 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
 }
 
 /// Read the condition part in the parse_conditional macro
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_conditional_condition(
     code: KindOfConditional
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTestKind, Z80ParserError> {
@@ -3013,7 +3096,8 @@ pub fn parse_breakpoint_run_value(
     parse_convertible_word(input)
 }
 
-#[inline(always)]
+#[cfg_attr(not(target_arch = "wasm32"), inline(always))]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> PResult<T, Z80ParserError> {
     delimited(my_space0, alpha1, my_space0)
         .verify_map(|word| T::from_str(unsafe { std::str::from_utf8_unchecked(word) }).ok())
@@ -3023,7 +3107,8 @@ pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> PResult<T
 pub fn parse_argname_to_assign(
     argname: &str
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> + use<'_> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let val = Caseless(argname).parse_next(input)?;
         let val = (*input).update_slice(val);
@@ -3091,7 +3176,8 @@ pub enum RunEnt {
     Ent
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let exp = cut_err(located_expr.context(match &kind {
@@ -3113,7 +3199,8 @@ pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z
 
 macro_rules! directive_with_expr {
     ($name:ident, $enum:tt) => {
-        #[inline]
+        #[cfg_attr(not(target_arch = "wasm32"), inline)]
+        #[cfg_attr(target_arch = "wasm32", inline(never))]
         pub fn $name(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
             let exp = located_expr.parse_next(input)?;
 
@@ -3147,7 +3234,8 @@ pub fn parse_assembler_control(
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_max_passes_number(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedToken, Z80ParserError> {
@@ -3193,7 +3281,8 @@ pub fn parse_assembler_control_max_passes_number(
     .into_located_token_between(&asmctrl_start, *input))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_print_any_pass(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3209,7 +3298,8 @@ pub fn parse_assembler_control_print_any_pass(
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_print_parse(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3248,7 +3338,8 @@ pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
 }
 
 /// Parse begining of ticker
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3261,7 +3352,8 @@ pub fn parse_stable_ticker_start(
 }
 
 /// Parse end of ticker
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_stable_ticker_stop(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3278,14 +3370,16 @@ pub fn parse_stable_ticker_stop(
     ))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_bank(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let count = opt(located_expr).parse_next(input)?;
 
     Ok(LocatedTokenInner::Bank(count))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let count = cut_err(located_expr.context("SKIP: wrong expression")).parse_next(input)?;
 
@@ -3293,11 +3387,13 @@ pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 }
 
 /// Parse fake and real LD instructions
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld(
     mnemonic_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         alt((
             parse_ld_fake(mnemonic_name_parsed),
@@ -3307,11 +3403,13 @@ pub fn parse_ld(
     }
 }
 /// Parse artifical LD instruction (would be replaced by several real instructions)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld_fake(
     mnemonic_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !mnemonic_name_parsed {
             terminated(parse_word(b"LD"), my_space1).parse_next(input)?;
@@ -3362,7 +3460,8 @@ pub fn parse_ld_fake(
     }
 }
 /// Parse the valids LD versions
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld_normal(
     mnemonic_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3407,7 +3506,8 @@ pub fn parse_ld_normal(
     }
 }
 /// Parse the source of LD depending on its destination
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_ld_normal_src(
     dst: &LocatedDataAccess
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> + '_ {
@@ -3508,7 +3608,8 @@ fn parse_ld_normal_src(
 }
 
 /// Parse RES, SET and BIT instructions
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_res_set_bit(
     res_or_set: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -3546,7 +3647,8 @@ pub fn parse_res_set_bit(
 }
 
 /// Parse CP tokens
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_cp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //   preceded(
     //    parse_word(b"CP"),
@@ -3577,11 +3679,13 @@ pub enum ExportKind {
     NoExport
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_export(
     code: ExportKind
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let labels: Vec<InnerZ80Span> =
             cut_err(separated(0.., parse_label(false), parse_comma).context("Wrong parameters"))
@@ -3604,7 +3708,8 @@ pub enum DbDwStr {
     Str
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 /// Parse DB DW directives
 pub fn parse_db_or_dw_or_str(
     code: DbDwStr,
@@ -3634,7 +3739,8 @@ pub fn parse_db_or_dw_or_str(
 }
 
 // Fail if we do not read a forbidden keyword
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let start = input.checkpoint();
     let _ = my_space0(input)?;
@@ -3701,7 +3807,8 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
 }
 
 /// Manage the call of a macro.
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_macro_or_struct_call_inner(
     for_struct: bool,
     name: InnerZ80Span
@@ -3835,7 +3942,8 @@ pub fn parse_macro_or_struct_call_inner(
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 /// TODO remove by restore the way to parse the macro name
 pub fn parse_macro_or_struct_call(
     allowed_to_return_a_label: bool,
@@ -3883,7 +3991,8 @@ pub fn parse_macro_or_struct_call(
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_directive_word(
     name: &'static [u8]
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> + 'static {
@@ -3897,12 +4006,14 @@ fn parse_directive_word(
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 /// Consume the word and the empty space after
 fn parse_word(
     name: &'static [u8]
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<InnerZ80Span, Z80ParserError> {
         let word = terminated(
             Caseless(name),
@@ -3923,7 +4034,8 @@ fn parse_word(
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     preceded(opt(parse_comma), parse_expr)
         .map(|expr| LocatedTokenInner::new_opcode(Mnemonic::Djnz, Some(expr), None))
@@ -3931,7 +4043,8 @@ pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
     let mut exprs = Vec::new();
     loop {
@@ -3989,11 +4102,13 @@ pub fn parse_print_inner(input: &mut InnerZ80Span) -> PResult<Vec<FormattedExpr>
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_print(
     directive_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
             parse_word(b"PRINT").parse_next(input)?;
@@ -4021,7 +4136,8 @@ pub fn parse_fail(
 
 /// Parse formatted expression for print like directives
 /// WARNING: only formated case is taken into account
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserError> {
     let _ = ('{').parse_next(input)?;
     let format = alt((
@@ -4046,7 +4162,8 @@ fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserE
 }
 
 /// Handle \ in end of line
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     opt(my_space1)
@@ -4065,7 +4182,8 @@ where
     move |i: &mut I| my_repeat1_(&mut f, i)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn my_repeat1_<I, O, C, E, F>(f: &mut F, i: &mut I) -> PResult<C, E>
 where
     I: Stream,
@@ -4104,7 +4222,8 @@ where
 }
 
 /// Handle \ in end of line
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
 
@@ -4131,7 +4250,8 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
         .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     alt((line_ending.recognize(), ':'.recognize()))
@@ -4139,7 +4259,8 @@ fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserEr
         .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     delimited(my_space0, ','.recognize(), my_space0)
@@ -4156,7 +4277,8 @@ pub fn parse_protect(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
     Ok(LocatedTokenInner::Protect(start, end))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 /// ...
 pub fn parse_logical_operator(
     operator: Mnemonic
@@ -4177,7 +4299,8 @@ pub fn parse_logical_operator(
 }
 
 /// Substraction with A register
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =Caseless("SUB").parse_next(input)?;
     //  let _ =space1(input)?;
@@ -4201,7 +4324,8 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Par se the SBC instruction
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =Caseless("SBC").parse_next(input)?;
     //   let _ =space1(input)?;
@@ -4234,7 +4358,8 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Parse ADC and ADD instructions
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_add_or_adc(
     add_or_adc: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -4285,7 +4410,8 @@ pub fn parse_add_or_adc(
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_push_n_pop(
     push_or_pop: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -4316,7 +4442,8 @@ pub fn parse_push_n_pop(
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ret(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let (cond, cond_bytes) = opt(parse_flag_test).with_taken().parse_next(input)?;
 
@@ -4332,7 +4459,8 @@ pub fn parse_ret(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_inc_dec(
     inc_or_dec: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -4357,7 +4485,8 @@ pub fn parse_inc_dec(
 }
 
 /// TODO manage other out formats
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =parse_word(b"OUT").parse_next(input)?;
 
@@ -4403,7 +4532,8 @@ pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Parse all the in flavors
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"IN").parse_next(input)?;
     let cloned = *input;
@@ -4448,7 +4578,8 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 }
 
 /// Parse the rst instruction
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"RST").parse_next(input)?;
     let val = parse_expr(input)?;
@@ -4461,7 +4592,8 @@ pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Parse the IM instruction
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_im(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"IM").parse_next(input)?;
     let val = parse_expr(input)?;
@@ -4480,11 +4612,13 @@ pub fn parse_im(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 /// RLC (HL)
 /// RLC (IX+n)
 /// RLC (IY+n)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_shifts_and_rotations(
     oper: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
         let arg = alt((
@@ -4502,11 +4636,13 @@ pub fn parse_shifts_and_rotations(
 }
 
 /// TODO reduce the flag space for jr"],
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_call_jp_or_jr(
     call_jp_or_jr: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
@@ -4559,7 +4695,8 @@ pub fn parse_call_jp_or_jr(
 }
 
 /// ...
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_flag_test(input: &mut InnerZ80Span) -> PResult<FlagTest, Z80ParserError> {
     alt((
         parse_word(b"NZ").value(FlagTest::NZ),
@@ -4584,7 +4721,8 @@ pub fn parse_flag_test(input: &mut InnerZ80Span) -> PResult<FlagTest, Z80ParserE
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register16(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let _start = input.checkpoint();
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
@@ -4610,7 +4748,8 @@ pub fn parse_register16(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 
 /// Parse any standard 16bits register
 /// TODO rename to emphasize it is standard reigsters
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     #[derive(PartialEq)]
     enum Reg16Modifier {
@@ -4648,7 +4787,8 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z
 }
 
 /// Parse register i
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("I"), not(alphanumeric1)))
         .recognize()
@@ -4658,7 +4798,8 @@ pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 }
 
 /// Parse register r
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_r(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("R"), not(alphanumeric1)))
         .recognize()
@@ -4670,7 +4811,8 @@ pub fn parse_register_r(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 macro_rules! parse_any_register8 {
     ($name:ident, $char:expr, $reg:expr) => {
         /// Parse register $char
-        #[inline]
+        #[cfg_attr(not(target_arch = "wasm32"), inline)]
+        #[cfg_attr(target_arch = "wasm32", inline(never))]
         pub fn $name(i: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
             let span = parse_word($char)(i)?;
 
@@ -4688,12 +4830,14 @@ parse_any_register8!(parse_register_h, b"h", Register8::H);
 parse_any_register8!(parse_register_l, b"l", Register8::L);
 
 /// Produce the function that parse a given register
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn register16_parser(
     representation: &'static str,
     register: Register16
 ) -> impl for<'src, 'ctx> Fn(&mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let span = ((
             Caseless(representation),
@@ -4711,7 +4855,8 @@ fn register16_parser(
 macro_rules! parse_any_register16 {
     ($name:ident, $char:expr, $reg:expr) => {
         /// Parse the $char register and return it as a DataAccess
-        #[inline]
+        #[cfg_attr(not(target_arch = "wasm32"), inline)]
+        #[cfg_attr(target_arch = "wasm32", inline(never))]
         pub fn $name(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
             register16_parser($char, $reg).parse_next(input)
         }
@@ -4725,7 +4870,8 @@ parse_any_register16!(parse_register_de, "DE", Register16::De);
 parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 
 /// Parse the IX register
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_ix(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_ix())
@@ -4733,7 +4879,8 @@ pub fn parse_register_ix(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
 }
 
 /// Parse the IY register
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_iy(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_iy())
@@ -4745,7 +4892,8 @@ macro_rules! parse_any_indexregister8 {
     ($($reg:ident, $alias1:ident, $alias2:ident)*) => {$(
         paste::paste! {
             /// Parse register $reg
-            #[inline]
+            #[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
             pub fn [<parse_register_ $reg:lower>] (input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
                 let _start = input.clone();
                 let span = ((
@@ -4775,7 +4923,8 @@ parse_any_indexregister8!(
 );
 
 /// Parse and indexed register in 8bits
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister8(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
@@ -4789,7 +4938,8 @@ pub fn parse_indexregister8(
 }
 
 /// Parse a 16 bits indexed register
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister16(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
@@ -4815,7 +4965,8 @@ pub fn parse_indexregister16(
 }
 
 /// Parse the use of an indexed register as (IX + 5)"
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister_with_index(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
@@ -4854,7 +5005,8 @@ pub fn parse_indexregister_with_index(
 }
 
 /// Parse (C) used in in/out
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         ((b'(', my_space0, parse_register_c, my_space0, b')')),
@@ -4868,7 +5020,8 @@ pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80Pa
 }
 
 /// Parse (nn) used in in/out
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let (address, span) = alt((
         delimited("(", located_expr, preceded(my_space0, ")")),
@@ -4882,7 +5035,8 @@ pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80P
 }
 
 /// Parse an address access `(expression)`
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     // let filter = |c: u8| {
     // c == b'/'
@@ -4924,7 +5078,8 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
 }
 
 /// Parse (R16)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let (reg, span) = alt((
         delimited(
@@ -4949,7 +5104,8 @@ pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
 }
 
 /// Parse (HL)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         delimited(
@@ -4973,7 +5129,8 @@ pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 }
 
 /// Parse (ix) and (iy)
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister_address(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
@@ -4993,7 +5150,8 @@ pub fn parse_indexregister_address(
 }
 
 /// Parse an expression and returns it inside a DataAccession::Expression
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_expr(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let expr = located_expr.parse_next(input)?;
     Ok(LocatedDataAccess::Expression(expr))
@@ -5146,7 +5304,8 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
     Ok(LocatedTokenInner::Struct(name.into(), fields))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_snaset(
     directive_name_parsed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
@@ -5187,7 +5346,8 @@ fn parse_snaset(
 }
 
 /// Parse a comment that start by `;` and ends at the end of the line.
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     preceded(alt((b";", b"//")), take_till(0.., |ch| ch == b'\n'))
@@ -5199,7 +5359,8 @@ pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
         .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     delimited(b"/*", take_until(0.., "*/"), b"*/")
@@ -5211,18 +5372,21 @@ pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken
 }
 
 /// TODO
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     parse_string.map(LocatedExpr::String).parse_next(input)
 }
 
 /// Parse a label(label: S)
 /// TODO reimplement to never build a string
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_label(
     doubledots: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let start = input.checkpoint();
 
@@ -5327,7 +5491,8 @@ pub fn parse_label(
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn impossible_names(dotted_directive: bool, flavor: AssemblerFlavor) -> &'static [&'static [u8]] {
     if flavor == AssemblerFlavor::Basm {
         if dotted_directive {
@@ -5343,7 +5508,8 @@ fn impossible_names(dotted_directive: bool, flavor: AssemblerFlavor) -> &'static
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn ignore_ascii_case_allowed_label(
     name: &[u8],
     dotted_directive: bool,
@@ -5358,7 +5524,8 @@ fn ignore_ascii_case_allowed_label(
     !iter.any(|&content| content.eq_ignore_ascii_case(name))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     if input.state.options().dotted_directive {
         b'.'.parse_next(input)?;
@@ -5388,7 +5555,8 @@ pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z8
     }
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_macro_name(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let dotted_directive = input.state.options().dotted_directive;
     let flavor = input.state.options().assembler_flavor;
@@ -5407,7 +5575,8 @@ pub fn parse_macro_name(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Pa
     Ok((*input).update_slice(name))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let _ = my_space0(input)?;
     let input_start = input.checkpoint();
@@ -5445,7 +5614,8 @@ pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80
 // XXX Code greatly inspired from https://github.com/Geal/nom/blob/master/tests/arithmetic_ast.rs
 
 /// Read a value
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_value(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let (val, span) = cpclib_common::parse_value.with_taken().parse_next(input)?;
 
@@ -5454,7 +5624,8 @@ pub fn parse_value(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
 }
 
 /// Parse a repetition counter
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_counter(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let cloned = *input;
     delimited(
@@ -5468,7 +5639,8 @@ pub fn parse_counter(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parser
 }
 
 /// Read a parenthesed expression
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5491,7 +5663,8 @@ pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     Ok(LocatedExpr::Paren(Box::new(exp), span.into()))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5507,7 +5680,8 @@ pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> PResult<LocatedExp
     Ok(LocatedExpr::List(list, span.into()))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5521,7 +5695,8 @@ pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 }
 
 /// Get a factor
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
@@ -5628,7 +5803,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
     Ok(factor)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5646,7 +5822,8 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
     Ok(LocatedExpr::Value(v, span.into()))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let _input_start = input.checkpoint();
     let _input_offset = input.eof_offset();
@@ -5665,12 +5842,14 @@ pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     preceded(opt('+'), number).parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix, Z80ParserError> {
     alt((
         Caseless("{pageset}").value(LabelPrefix::Pageset),
@@ -5680,7 +5859,8 @@ pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix, Z80Pa
     .parse_next(input)
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn fold_exprs(
     initial: LocatedExpr,
     remainder: Vec<(BinaryOperation, LocatedExpr)>,
@@ -5693,7 +5873,8 @@ fn fold_exprs(
 }
 
 /// Compute operations related to * % /
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn term(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5715,7 +5896,8 @@ pub fn term(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
 /// inner: the function the parse the right operand of the symbol
 /// pattern: the pattern to match in the source code
 /// symbol: the symbol corresponding to the operation
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_oper<F>(
     inner: F,
     pattern: &'static str,
@@ -5724,7 +5906,8 @@ fn parse_oper<F>(
 where
     F: Fn(&mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError>
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let _ = my_space0(input)?;
         let _ = Caseless(pattern).parse_next(input)?;
@@ -5740,7 +5923,8 @@ where
         Ok((symbol, operation))
     }
 }
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_bool<F>(
     inner: F,
     pattern: &'static str,
@@ -5749,7 +5933,8 @@ fn parse_bool<F>(
 where
     F: Fn(&mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError>
 {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let _ = my_space0(input)?;
         let _ = Caseless(pattern).parse_next(input)?;
@@ -5761,7 +5946,8 @@ where
 }
 
 /// Parse an expression
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn expr2(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5789,7 +5975,8 @@ fn expr(input: &mut InnerZ80Span) -> PResult<Expr, Z80ParserError> {
 }
 
 /// TODO replace ALL expr parse by a located version
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     if input.state.options().is_orgams() {
         return parse_orgams_expression.parse_next(input);
@@ -5809,7 +5996,8 @@ pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
 }
 
 /// parse functions with one argument
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5854,7 +6042,8 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
 }
 
 /// parse functions with two arguments
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_binary_function_call(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedExpr, Z80ParserError> {
@@ -5886,7 +6075,8 @@ pub fn parse_binary_function_call(
     ))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_any_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5908,11 +6098,13 @@ pub fn parse_any_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
 }
 
 /// Parser for functions taking into argument a token
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn token_function<'a>(
     function_name: &'static str
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    #[inline]
+    #[cfg_attr(not(target_arch = "wasm32"), inline)]
+    #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
         let _ = ((Caseless(function_name), my_space0, ('('), my_space0)).parse_next(input)?;
 
@@ -5948,7 +6140,8 @@ pub fn parse_assemble(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parse
     ))
 }
 
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn shift(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let start = input.checkpoint();
     let start_eof_offset = input.eof_offset();
@@ -5968,7 +6161,8 @@ pub fn shift(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
 }
 
 /// Parse operation related to + - & |
-#[inline]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn comp(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     let start = input.checkpoint();
     let start_eof_offset = input.eof_offset();

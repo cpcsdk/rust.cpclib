@@ -27,7 +27,7 @@ rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
 bon = "2.3"
 directories = "5.0.1"
-flate2 = "1.0.34"
+flate2 = "1.0.35"
 glob.workspace = true
 tar = "0.4.43"
 zip-extract = "=0.1.3"

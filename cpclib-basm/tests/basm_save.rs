@@ -6,7 +6,6 @@ use cpclib_basm::*;
 use cpclib_common::clap::Parser;
 
 /// ! This test file has been created to track some wrong memory handling when saving data with banksets
-///
 
 #[test]
 fn test_save_ascii() {
