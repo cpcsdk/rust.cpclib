@@ -1,5 +1,5 @@
 {
-  "name": "cpclib-asm test",
+  "name": "cpclib-asm-test",
   "version": "0.1.0",
   "description": "Test cpclib-asm in a browser",
   "main": "index.js",
@@ -10,27 +10,11 @@
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/rustwasm/create-wasm-app.git"
-  },
-  "keywords": [
-    "webassembly",
-    "wasm",
-    "rust",
-    "webpack"
-  ],
-  "author": "Ashley Williams <ashley666ashley@gmail.com>",
-  "license": "(MIT OR Apache-2.0)",
-  "bugs": {
-    "url": "https://github.com/rustwasm/create-wasm-app/issues"
-  },
-  "homepage": "https://github.com/rustwasm/create-wasm-app#readme",
   "devDependencies": {
-    "@wasm-tool/wasm-pack-plugin": "^1.6.0",
-    "copy-webpack-plugin": "^10.2.4",
-    "webpack": "^5.30.0",
-    "webpack-cli": "^4.9.2",
-    "webpack-dev-server": "^4.8.1"
+    "@wasm-tool/wasm-pack-plugin": "^1.7.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "webpack": "^5.96.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0"
   }
 }

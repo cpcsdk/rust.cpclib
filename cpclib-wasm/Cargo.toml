@@ -51,12 +51,3 @@ features = [
 wasm-bindgen-test = "0.3.45"
 
 
-
-[profile.dev]
-opt-level = "s"
-incremental = true
-
-[profile.test]
-opt-level = "s"
-
-

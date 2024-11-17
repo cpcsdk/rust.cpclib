@@ -48,8 +48,8 @@ impl JsSnapshot {
         let bytes = self.bytes();
         let container = Array::new();
         container.set(0, bytes.into());
-        let mut property = BlobPropertyBag::new();
-        property.type_("application/octet-stream");
+        let property = BlobPropertyBag::new();
+        property.set_type("application/octet-stream");
 
         // let blob = Array::new_with_length(1);
         // blob.set(0, bytes.into());

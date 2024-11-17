@@ -1,7 +1,8 @@
 RUSTFLAGS=
 
+# Build the versio nthat runs within firefox
 build:
-	wasm-pack  build --target web  --out-dir www/pkg
+	wasm-pack  build --target bundler  --out-dir www/pkg
 	cd www; npm install
 
 run:
@@ -9,3 +10,6 @@ run:
 	
 test:
 	wasm-pack test --firefox
+
+clean:
+	-rm -rf www/pkg
