@@ -1,5 +1,13 @@
 use std::fmt::Display;
 
+// To compile:
+// git clone https://github.com/Tom1975/SugarboxV2.git
+// cd SugarboxV2
+// cmake .
+// make -j20
+
+
+
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
     GithubInformation
@@ -108,4 +116,5 @@ impl GithubInformation for SugarBoxV2Version {
     }
 }
 
+ 
 impl GithubCompiledApplication for SugarBoxV2Version {}

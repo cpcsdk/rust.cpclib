@@ -71,7 +71,7 @@ pub struct AdvancedRemuBreakPoint {
 impl Default for AdvancedRemuBreakPoint {
     fn default() -> Self {
         Self {
-            brk_type: RemuBreakPointType::Mem,
+            brk_type: RemuBreakPointType::Exec,
             access_mode: RemuBreakPointAccessMode::ReadWrite,
             run_mode: RemuBreakPointRunMode::Stop,
             addr: 0,
