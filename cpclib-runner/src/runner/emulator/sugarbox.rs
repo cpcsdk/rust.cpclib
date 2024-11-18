@@ -11,6 +11,7 @@ pub const SUGARBOX_V2_CMD: &str = "sugarbox";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum SugarBoxV2Version {
     #[default]
+    V2_0_3,
     V2_0_2
 }
 
@@ -24,9 +25,7 @@ impl DownloadableInformation for SugarBoxV2Version {
     fn target_os_archive_format(&self) -> ArchiveFormat {
         #[cfg(target_os = "windows")]
         return ArchiveFormat::SevenZ;
-        #[cfg(target_os = "macos")]
-        return ArchiveFormat::TarGz;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         return ArchiveFormat::TarGz;
     }
 }
@@ -34,6 +33,14 @@ impl DownloadableInformation for SugarBoxV2Version {
 impl ExecutableInformation for SugarBoxV2Version {
     fn target_os_folder(&self) -> &'static str {
         match self {
+            SugarBoxV2Version::V2_0_3 => {
+                #[cfg(target_os = "windows")]
+                return "Sugarbox-2.0.3-win64/Sugarbox-2.0.3-win64";
+                #[cfg(target_os = "macos")]
+                return "Sugarbox-2.0.3-Darwin";
+                #[cfg(target_os = "linux")]
+                return "Sugarbox-2.0.3-Linux";
+            },
             SugarBoxV2Version::V2_0_2 => {
                 #[cfg(target_os = "windows")]
                 return "Sugarbox-2.0.2-win64/Sugarbox-2.0.2-win64";
@@ -51,7 +58,10 @@ impl ExecutableInformation for SugarBoxV2Version {
         #[cfg(target_os = "macos")]
         return "Sugarbox";
         #[cfg(target_os = "linux")]
-        return "Sugarbox-2.0.2-Linux/Sugarbox";
+        return match self {
+            Self::V2_0_3 => "Sugarbox-2.0.3-Linux/Sugarbox",
+            Self::V2_0_2 => "Sugarbox-2.0.2-Linux/Sugarbox",
+        }
     }
 
     fn target_os_run_in_dir(&self) -> RunInDir {
@@ -70,20 +80,31 @@ impl GithubInformation for SugarBoxV2Version {
 
     fn version_name(&self) -> &'static str {
         match self {
+            SugarBoxV2Version::V2_0_3 => "v2.0.3",
             SugarBoxV2Version::V2_0_2 => "v2.0.2"
         }
     }
 
     fn linux_key(&self) -> Option<&'static str> {
-        Some("Sugarbox-2.0.2-Linux.tar.gz")
+        match self {
+            Self::V2_0_3 => Some("Sugarbox-2.0.3-Linux.tar.gz"),
+            Self::V2_0_2 => Some("Sugarbox-2.0.2-Linux.tar.gz"),
+        }
+        
     }
 
     fn windows_key(&self) -> Option<&'static str> {
-        Some("Sugarbox-2.0.2-win64.7z")
+        match self {
+            Self::V2_0_3 => Some("Sugarbox-2.0.3-win64.7z"),
+            Self::V2_0_2 => Some("Sugarbox-2.0.2-win64.7z")
+        }
     }
 
     fn macos_key(&self) -> Option<&'static str> {
-        Some("Sugarbox-2.0.2-Darwin.tar.gz")
+        match self {
+            Self::V2_0_3 =>Some("Sugarbox-2.0.3-Darwin.tar.gz"),
+            Self::V2_0_2 =>Some("Sugarbox-2.0.2-Darwin.tar.gz"),
+        }
     }
 }
 
