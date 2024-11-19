@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/schema.json",
+  "$defs": {
+    "ListOfFiles": {
+      "type": ["object", "array", "string"]
+    },
+
+    "Constraint": {
+      "type": "string"
+    },
+
+    "Task": {
+      "type": "string"
+    },
+
+    "ListOfTasks": {
+      "type": "array",
+      "item": "#/$defs/Task"
+    },
+
+    "OneOrSeveralTasks": {
+      "anyOf": [{ "$ref": "#/$defs/ListOfTasks" }, { "$ref": "#/$defs/Task" }]
+    },
+
+    "Rule": {
+      "type": "object",
+      "description": "The description of a rule",
+
+      "patternProperties": {
+        "^(tgt)|(target)|(build)$": {
+          "$ref": "#/$defs/ListOfFiles",
+          "description": "The list of targets"
+        },
+
+        "^(dep)|(dependency)|(requires)$": {
+          "$ref": "#/$defs/ListOfFiles",
+          "description": "The list of targets"
+        },
+
+        "^(cmd)|(command)|(launch)|(run)$": {
+          "$ref": "#/$defs/OneOrSeveralTasks",
+          "description": "The list of tasks to handle"
+        },
+
+        "^help$": {
+          "type": "string",
+          "description": "Help about the current rule."
+        },
+
+        "^phony$": {
+          "type": "string"
+        },
+
+        "^constraint$": {
+          "$ref": "#/$defs/Constraint"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "title": "Bndbuild validation schema",
+  "description": "Bndbuild configuration file",
+  "type": "array",
+  "items": { "$ref": "#/$defs/Rule" },
+  "minItems": 0
+}
