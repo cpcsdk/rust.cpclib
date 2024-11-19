@@ -2837,6 +2837,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
     let value_mask = Rc::new(RefCell::new(None));
     let condition = Rc::new(RefCell::new(None));
     let name = Rc::new(RefCell::new(None));
+    let step = Rc::new(RefCell::new(None));
 
     let first = std::rc::Rc::new(std::cell::RefCell::new(true));
 
@@ -2850,7 +2851,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Address { arg, value } => {
                                 let mut address = address.borrow_mut();
                                 let address = address.deref_mut();
-                                if let Some(address) = address {
+                                if address.is_some()  {
                                     false
                                 }
                                 else {
@@ -2862,7 +2863,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Type { arg, value } => {
                                 let mut r#type = r#type.borrow_mut();
                                 let r#type = r#type.deref_mut();
-                                if let Some(r#type) = r#type {
+                                if r#type.is_some() {
                                     false
                                 }
                                 else {
@@ -2874,7 +2875,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Access { arg, value } => {
                                 let mut access = access.borrow_mut();
                                 let access = access.deref_mut();
-                                if let Some(access) = access {
+                                if access.is_some() {
                                     false
                                 }
                                 else {
@@ -2886,7 +2887,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Run { arg, value } => {
                                 let mut run = run.borrow_mut();
                                 let run = run.deref_mut();
-                                if let Some(run) = run {
+                                if run.is_some() {
                                     false
                                 }
                                 else {
@@ -2898,7 +2899,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Mask { arg, value } => {
                                 let mut item = mask.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2910,7 +2911,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Size { arg, value } => {
                                 let mut item = size.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2922,7 +2923,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Value { arg, value: val } => {
                                 let mut item = value.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2934,7 +2935,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::ValueMask { arg, value } => {
                                 let mut item = value_mask.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2946,7 +2947,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Name { arg, value } => {
                                 let mut item = name.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2958,7 +2959,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Condition { arg, value } => {
                                 let mut item = condition.borrow_mut();
                                 let item = item.deref_mut();
-                                if let Some(item) = item {
+                                if item.is_some() {
                                     false
                                 }
                                 else {
@@ -2966,6 +2967,18 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                     true
                                 }
                             },
+
+                            BreakPointArgument::Step { arg, value } => {
+                                let mut item = step.borrow_mut();
+                                let item = item.deref_mut();
+                                if item.is_some() {
+                                    false
+                                } else {
+                                    item.replace((*arg, value.clone()));
+                                    true
+                                }
+                            },
+
                             _ => true // TODO implement the tests
                         }
                     }
@@ -2997,7 +3010,8 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
             .into_inner()
             .map(|a| a.1),
         condition: Rc::into_inner(condition).unwrap().into_inner().map(|a| a.1),
-        name: Rc::into_inner(name).unwrap().into_inner().map(|a| a.1)
+        name: Rc::into_inner(name).unwrap().into_inner().map(|a| a.1),
+        step: Rc::into_inner(step).unwrap().into_inner().map(|a| a.1)
     };
 
     Ok(brk)
@@ -3044,6 +3058,10 @@ pub enum BreakPointArgument {
     Name {
         arg: InnerZ80Span,
         value: LocatedExpr
+    },
+    Step {
+        arg: InnerZ80Span,
+        value: LocatedExpr
     }
 }
 
@@ -3070,6 +3088,8 @@ pub fn parse_breakpoint_argument(
             .map(|(k, v)| BreakPointArgument::Value { arg: k, value: v }),
         parse_argname_and_value("VALMASK", &located_expr)
             .map(|(k, v)| BreakPointArgument::ValueMask { arg: k, value: v }),
+        parse_argname_and_value("STEP", &located_expr)
+            .map(|(k, v)| BreakPointArgument::Step { arg: k, value: v }),
         parse_argname_and_value("CONDITION", &located_expr)
             .map(|(k, v)| BreakPointArgument::Condition { arg: k, value: v }),
         parse_argname_and_value("NAME", &located_expr)
@@ -6552,6 +6572,9 @@ endif"
         assert!(dbg!(parse_test(parse_breakpoint, "VALMASK=1")).is_ok());
         assert!(dbg!(parse_test(parse_breakpoint, "condition=\"fdfdfd\"")).is_ok());
         assert!(dbg!(parse_test(parse_breakpoint, "name=\"fdfdfd\"")).is_ok());
+
+        assert!(dbg!(parse_test(parse_breakpoint, "step=10,name=\"fdfdfd\"")).is_ok());
+
     }
 
     #[test]

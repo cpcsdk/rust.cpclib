@@ -7,3 +7,4 @@ org 0
 BREAKPOINT EXEC,ADDR=100
 BREAKPOINT name="breakpoint1",condition="C3H<>22",addr=$
 BREAKPOINT addr=2,mask=0x00ff
+BREAKPOINT addr=20,step=5

@@ -65,7 +65,8 @@ pub struct AdvancedRemuBreakPoint {
     pub value: u8,
     pub val_mask: u8,
     pub condition: Option<String127>,
-    pub name: Option<String127>
+    pub name: Option<String127>,
+    pub step: Option<u16>
 }
 
 impl Default for AdvancedRemuBreakPoint {
@@ -80,7 +81,8 @@ impl Default for AdvancedRemuBreakPoint {
             value: 0,
             val_mask: 0,
             condition: None,
-            name: None
+            name: None,
+            step: None
         }
     }
 }
@@ -90,7 +92,7 @@ impl Display for AdvancedRemuBreakPoint {
         let brk = self;
         write!(
             f,
-            "{},{},{},addr={},mask={},size={},value={},valmask={},name={},condition={}",
+            "{},{},{},addr={},mask={},size={},value={},valmask={},name={},condition={},step={}",
             <&RemuBreakPointType as Into<&'static str>>::into(&brk.brk_type),
             <&RemuBreakPointAccessMode as Into<&'static str>>::into(&brk.access_mode),
             <&RemuBreakPointRunMode as Into<&'static str>>::into(&brk.run_mode),
@@ -106,7 +108,11 @@ impl Display for AdvancedRemuBreakPoint {
             brk.condition
                 .as_ref()
                 .map(|s| format!("\"{}\"", s.as_ref()))
-                .unwrap_or("".to_owned())
+                .unwrap_or("".to_owned()),
+            brk.step
+                .as_ref()
+                .map(|s| format!("{s}"))
+                .unwrap_or("".to_owned()),
         )
     }
 }

@@ -1942,6 +1942,7 @@ impl Env {
         value_mask: Option<&E>,
         condition: Option<&E>,
         name: Option<&E>,
+        step: Option<&E>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         let brk = if r#type.is_none()
@@ -1953,6 +1954,7 @@ impl Env {
             && value_mask.is_none()
             && condition.is_none()
             && name.is_none()
+            && step.is_none()
         {
             // here we manipulate a very simple breakpoint
             let (current_address, page): (u16, u8) = if let Some(exp) = address {
@@ -2039,6 +2041,11 @@ impl Env {
                 brk.val_mask = self
                     .resolve_expr_may_fail_in_first_pass(value_mask)?
                     .int()? as u8;
+            }
+            if let Some(step) = step {
+                brk.step = Some(self
+                    .resolve_expr_may_fail_in_first_pass(step)?
+                    .int()? as _);
             }
             if let Some(condition) = condition {
                 let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
@@ -3474,7 +3481,8 @@ macro_rules! visit_token_impl {
                 value,
                 value_mask,
                 condition,
-                name
+                name,
+                step
             } => {
                 $env.visit_breakpoint(
                     address.as_ref(),
@@ -3487,6 +3495,7 @@ macro_rules! visit_token_impl {
                     value_mask.as_ref(),
                     condition.as_ref(),
                     name.as_ref(),
+                    step.as_ref(),
                     $span
                 )
             },

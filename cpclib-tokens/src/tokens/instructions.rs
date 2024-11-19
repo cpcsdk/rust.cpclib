@@ -590,7 +590,8 @@ pub enum Token {
         value: Option<Expr>,
         value_mask: Option<Expr>,
         condition: Option<Expr>,
-        name: Option<Expr>
+        name: Option<Expr>,
+        step: Option<Expr>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),

@@ -19,3 +19,4 @@ label
 	breakpoint type=mem, access=write, runmode=stop, mask=&ff00, size=10, value=5, valmask=5
 	breakpoint type=mem, access=write, runmode=stop, mask=&ff00, size=10, value=5, valmask=5, condition="HL=5"
 	breakpoint type=mem, access=write, runmode=stop, mask=&ff00, size=10, value=5, valmask=5, condition="HL=5", name="hello"
+	breakpoint type=mem, access=write, runmode=stop, mask=&ff00, size=10, value=5, valmask=5, condition="HL=5", name="hello", step=30

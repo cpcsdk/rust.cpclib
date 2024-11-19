@@ -938,7 +938,8 @@ pub enum LocatedTokenInner {
         value: Option<LocatedExpr>,
         value_mask: Option<LocatedExpr>,
         condition: Option<LocatedExpr>,
-        name: Option<LocatedExpr>
+        name: Option<LocatedExpr>,
+        step: Option<LocatedExpr>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
