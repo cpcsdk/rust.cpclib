@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/schema.json",
+  "$id": "https://raw.githubusercontent.com/cpcsdk/rust.cpclib/refs/heads/master/cpclib-bndbuild/schema.json",
   "$defs": {
     "ListOfFiles": {
       "type": ["object", "array", "string"]
