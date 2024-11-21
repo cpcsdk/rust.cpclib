@@ -17,7 +17,7 @@ use cpclib_tokens::{
 use ouroboros::*;
 
 use super::control::ControlOutputStore;
-use super::file::{get_filename, load_file, read_source};
+use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use super::AssemblerWarning;
@@ -184,7 +184,7 @@ impl IncludeState {
         namespace: Option<&str>,
         once: bool
     ) -> Result<(), AssemblerError> {
-        let fname = get_filename(fname, env.options().parse_options(), Some(env))?;
+        let fname = get_filename_to_read(fname, env.options().parse_options(), Some(env))?;
 
         let need_to_include = !once || !env.included_marks_includes(&fname);
 
@@ -473,9 +473,9 @@ where
     else if token.is_include() {
         // we cannot use the real method onf IncludeState because it modifies env and here wa cannot
         let fname = token.include_fname();
-        let fname = env.get_fname(fname)?;
+        let fname = env.build_fname(fname)?;
         let options = env.options().parse_options();
-        match get_filename(fname, options, Some(env)) {
+        match get_filename_to_read(fname, options, Some(env)) {
             Ok(fname) => {
                 match read_source(fname.clone(), options) {
                     Ok(content) => {
@@ -655,8 +655,8 @@ where
             .filter(|t| t.include_is_standard_include())
             .flat_map(|t| {
                 let fname = t.include_fname();
-                let fname = env.get_fname(fname)?;
-                get_filename(fname, options, Some(env))
+                let fname = env.build_fname(fname)?;
+                get_filename_to_read(fname, options, Some(env))
             })
             .collect::<Vec<_>>();
         let include_fnames = include_fnames.iter().map(|t| progress::normalize(t));
@@ -978,8 +978,8 @@ where
 
                         // Handle file loading
                         let fname = self.token.incbin_fname();
-                        let fname = env.get_fname(fname)?;
-                        let fname = get_filename(fname, options.parse_options(), Some(env))?;
+                        let fname = env.build_fname(fname)?;
+                        let fname = get_filename_to_read(fname, options.parse_options(), Some(env))?;
 
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {
@@ -1078,7 +1078,7 @@ where
                     },
 
                     Some(ProcessedTokenState::Include(ref mut state)) => {
-                        let fname = env.get_fname(self.token.include_fname())?;
+                        let fname = env.build_fname(self.token.include_fname())?;
 
                         state.handle(
                             env,

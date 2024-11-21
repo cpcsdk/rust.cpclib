@@ -39,7 +39,7 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
-use file::DSK_SEPARATOR;
+use file::{AnyFileName, AnyFileNameOwned};
 use processed_token::build_processed_token;
 use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
@@ -576,7 +576,7 @@ impl Env {
         &mut self.symbols
     }
 
-    pub fn get_fname<E: ExprEvaluationExt + Debug>(
+    pub fn build_fname<E: ExprEvaluationExt + Debug>(
         &self,
         exp: &E
     ) -> Result<String, AssemblerError> {
@@ -2905,16 +2905,19 @@ impl Env {
             }
         }
 
-        let amsdos_fname = self.get_fname(amsdos_fname)?;
-        let (amsdos_fname, dsk_fname) = match dsk_fname {
-            Some(fname) => (amsdos_fname, Some(self.get_fname(fname)?)),
+        let amsdos_fname = self.build_fname(amsdos_fname)?;
+        let any_fname: AnyFileNameOwned = match dsk_fname {
+            Some(dsk_fname) => AnyFileNameOwned::new_in_image(
+                self.build_fname(dsk_fname)?, amsdos_fname
+            ),
             None => {
-                let mut parts = amsdos_fname.as_str().split(DSK_SEPARATOR).collect_vec();
-                let amsdos_fname = parts.pop().unwrap().to_owned();
-                let dsk_fname = parts.pop().map(ToOwned::to_owned);
-                (amsdos_fname, dsk_fname)
+                AnyFileNameOwned::from(amsdos_fname.as_str())
             }
         };
+        let any_fname = any_fname.as_any_filename();
+
+
+        let (amsdos_fname, dsk_fname) = (any_fname.content_filename(), any_fname.image_filename());
 
         let amsdos_fname = Utf8PathBuf::from(amsdos_fname);
         let dsk_fname = dsk_fname.map(Utf8PathBuf::from);
@@ -3030,7 +3033,7 @@ impl Env {
         &mut self,
         fname: &E
     ) -> Result<(), AssemblerError> {
-        let fname = self.get_fname(fname)?;
+        let fname = self.build_fname(fname)?;
 
         if !self.pass.is_first_pass() {
             return Ok(());

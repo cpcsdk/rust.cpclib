@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-use cpclib_asm::assembler::file::get_filename;
+use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
@@ -157,7 +157,7 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
     // get the source code if any
     let (builder, code) = if matches.contains_id("INPUT") {
         builder = builder.set_current_filename(filename);
-        let fname = get_filename(filename, &options, None)?;
+        let fname = get_filename_to_read(filename, &options, None)?;
 
         let src = read_source(fname, &options)?;
         (builder, src)
