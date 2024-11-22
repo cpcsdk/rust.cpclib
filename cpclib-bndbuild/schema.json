@@ -49,7 +49,7 @@
         },
 
         "^phony$": {
-          "type": "string"
+          "type": "boolean"
         },
 
         "^constraint$": {
