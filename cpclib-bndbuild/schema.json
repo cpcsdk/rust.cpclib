@@ -30,17 +30,17 @@
       "patternProperties": {
         "^(tgt)|(target)|(build)$": {
           "$ref": "#/$defs/ListOfFiles",
-          "description": "The list of targets"
+          "description": "The list of targets in a string or one per line. You can use glob-patterns."
         },
 
         "^(dep)|(dependency)|(requires)$": {
           "$ref": "#/$defs/ListOfFiles",
-          "description": "The list of targets"
+          "description": "The list of dependencies in a string or one per line. You can use glob-patterns."
         },
 
         "^(cmd)|(command)|(launch)|(run)$": {
           "$ref": "#/$defs/OneOrSeveralTasks",
-          "description": "The list of tasks to handle"
+          "description": "The list of tasks to handle in a string for a single one, or one per line for several. You prefix them by `-` to ignore errors."
         },
 
         "^help$": {
@@ -49,18 +49,20 @@
         },
 
         "^phony$": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Set to true to activate. When activated bndbuild always build it."
         },
 
         "^constraint$": {
-          "$ref": "#/$defs/Constraint"
+          "$ref": "#/$defs/Constraint",
+          "description": "Some contraints to activate or not the rule on the current host."
         }
       },
       "additionalProperties": false
     }
   },
   "title": "Bndbuild validation schema",
-  "description": "Bndbuild configuration file",
+  "description": "Bndbuild configuration file. Describe rules to build some crossdev projects.",
   "type": "array",
   "items": { "$ref": "#/$defs/Rule" },
   "minItems": 0
