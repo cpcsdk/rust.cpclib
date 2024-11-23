@@ -186,10 +186,7 @@ fn main() -> std::io::Result<()> {
             let is_read_only = entry.is_read_only();
 
             let fname = entry.format();
-            let contains_control_chars = !fname
-                .as_str()
-                .chars()
-                .all(|c| c.is_ascii_graphic());
+            let contains_control_chars = !fname.as_str().chars().all(|c| c.is_ascii_graphic());
 
             if contains_id && !contains_control_chars {
                 print!("{idx}. {fname}");

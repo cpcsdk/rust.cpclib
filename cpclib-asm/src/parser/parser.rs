@@ -14,7 +14,6 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::{self, Located, Stateful};
 use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
@@ -24,7 +23,7 @@ use cpclib_common::winnow::stream::{
     Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
-use cpclib_common::winnow::{BStr, PResult, Parser};
+use cpclib_common::winnow::{self, BStr, Located, PResult, Parser, Stateful};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
@@ -2370,13 +2369,13 @@ pub fn parse_directive_new(
         let token: LocatedTokenInner = match word.len() {
             2 => parse_directive_of_size_2(input, &input_start, is_orgams, within_struct, word),
             3 => parse_directive_of_size3(input, &input_start, is_orgams, within_struct, word),
-            4 =>  parse_directive_of_size_4(input, &input_start, is_orgams, within_struct, word),
-            5 =>  parse_directive_of_size_5(input, &input_start, is_orgams, within_struct, word),
-            6 =>  parse_directive_of_size_6(input, &input_start, is_orgams, within_struct, word),
-            7 =>  parse_directive_of_size_7(input, &input_start, is_orgams, within_struct, word),
-            8 =>  parse_directive_of_size_8(input, &input_start, is_orgams, within_struct, word),
-            10 =>  parse_directive_of_size_10(input, &input_start, is_orgams, within_struct, word),
-            _ =>  parse_directive_of_size_others(input, &input_start, is_orgams, within_struct, word)
+            4 => parse_directive_of_size_4(input, &input_start, is_orgams, within_struct, word),
+            5 => parse_directive_of_size_5(input, &input_start, is_orgams, within_struct, word),
+            6 => parse_directive_of_size_6(input, &input_start, is_orgams, within_struct, word),
+            7 => parse_directive_of_size_7(input, &input_start, is_orgams, within_struct, word),
+            8 => parse_directive_of_size_8(input, &input_start, is_orgams, within_struct, word),
+            10 => parse_directive_of_size_10(input, &input_start, is_orgams, within_struct, word),
+            _ => parse_directive_of_size_others(input, &input_start, is_orgams, within_struct, word)
         }?;
 
         let token = token.into_located_token_between(&input_start, *input);
@@ -2384,36 +2383,26 @@ pub fn parse_directive_new(
     }
 }
 
-fn parse_directive_of_size_others(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
-match &word.to_ascii_uppercase()[..] {
-    //12
-    #[cfg(not(target_arch = "wasm32"))]
-    b"INCSHRINKLER" => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler))
-            .parse_next(input)
-    },
+fn parse_directive_of_size_others(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match &word.to_ascii_uppercase()[..] {
+        // 12
+        #[cfg(not(target_arch = "wasm32"))]
+        b"INCSHRINKLER" => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler)).parse_next(input)
+        },
 
-    // 13
-    b"STARTINGINDEX" => parse_startingindex.parse_next(input),
+        // 13
+        b"STARTINGINDEX" => parse_startingindex.parse_next(input),
 
-    _ => {
-        input.reset(input_start);
-        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-            input,
-            ErrorKind::Alt
-        )))
-    }
-
-}
-}
-
-
-fn parse_directive_of_size_10(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input),
-    choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input),
-    choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input),
-    
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
@@ -2421,21 +2410,52 @@ fn parse_directive_of_size_10(input: &mut InnerZ80Span,  input_start: &Checkpoin
                 ErrorKind::Alt
             )))
         }
-    
     }
 }
 
-fn parse_directive_of_size_8(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_directive_of_size_10(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
-        choice_nocase!(b"BINCLUDE") => {
-            parse_incbin(BinaryTransformation::None).parse_next(input)
-        },
+        choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input),
+        choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input),
+        choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input),
+
+        _ => {
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )))
+        }
+    }
+}
+
+fn parse_directive_of_size_8(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"BINCLUDE") => parse_incbin(BinaryTransformation::None).parse_next(input),
         choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input),
         choice_nocase!(b"BUILDCPR") => Ok(LocatedTokenInner::BuildCpr),
         choice_nocase!(b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input),
         choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input),
         choice_nocase!(b"SNAPINIT") => parse_snainit.parse_next(input),
-    
+
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
@@ -2443,94 +2463,109 @@ fn parse_directive_of_size_8(input: &mut InnerZ80Span,  input_start: &Checkpoint
                 ErrorKind::Alt
             )))
         }
-    
     }
 }
 
-fn parse_directive_of_size_7(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
-match word {
-    choice_nocase!(b"INCLUDE") => parse_include.parse_next(input),
-    choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input),
-    choice_nocase!(b"CHARSET") => parse_charset.parse_next(input),
-    choice_nocase!(b"PROTECT") => parse_protect.parse_next(input),
-    choice_nocase!(b"SECTION") => parse_section.parse_next(input),
-    choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
+fn parse_directive_of_size_7(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"INCLUDE") => parse_include.parse_next(input),
+        choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input),
+        choice_nocase!(b"CHARSET") => parse_charset.parse_next(input),
+        choice_nocase!(b"PROTECT") => parse_protect.parse_next(input),
+        choice_nocase!(b"SECTION") => parse_section.parse_next(input),
+        choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
 
-    _ => {
-        input.reset(input_start);
-        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-            input,
-            ErrorKind::Alt
-        )))
-    }
-
-}
-}
-
-fn parse_directive_of_size_6(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
-                match word {
-    choice_nocase!(b"ASSERT") => parse_assert.parse_next(input),
-
-    choice_nocase!(b"EXPORT") => {
-        parse_export(ExportKind::Export).parse_next(input)
-    },
-    choice_nocase!(b"INCBIN") => {
-        parse_incbin(BinaryTransformation::None).parse_next(input)
-    },
-    #[cfg(not(target_arch = "wasm32"))]
-    choice_nocase!(b"INCEXO") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO))
-            .parse_next(input)
-    },
-    #[cfg(not(target_arch = "wasm32"))]
-    choice_nocase!(b"INCLZ4") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4))
-            .parse_next(input)
-    },
-
-    choice_nocase!(b"INCL48") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48))
-            .parse_next(input)
-    },
-
-    choice_nocase!(b"INCL49") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49))
-            .parse_next(input)
-    },
-
-    #[cfg(not(target_arch = "wasm32"))]
-    choice_nocase!(b"INCAPU") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU))
-            .parse_next(input)
-    },
-
-    #[cfg(not(target_arch = "wasm32"))]
-    choice_nocase!(b"INCZX0") => {
-        parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0))
-            .parse_next(input)
-    },
-
-    choice_nocase!(b"RETURN") => parse_return.parse_next(input),
-    choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),
-
-    choice_nocase!(b"STRUCT") => parse_struct.parse_next(input),
-    choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input),
-
-    choice_nocase!(b"NOLIST") => Ok(LocatedTokenInner::NoList),
-
-    choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
-
-    _ => {
-        input.reset(input_start);
-        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-            input,
-            ErrorKind::Alt
-        )))
+        _ => {
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )))
+        }
     }
 }
+
+fn parse_directive_of_size_6(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
+    match word {
+        choice_nocase!(b"ASSERT") => parse_assert.parse_next(input),
+
+        choice_nocase!(b"EXPORT") => parse_export(ExportKind::Export).parse_next(input),
+        choice_nocase!(b"INCBIN") => parse_incbin(BinaryTransformation::None).parse_next(input),
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCEXO") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO)).parse_next(input)
+        },
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCLZ4") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4)).parse_next(input)
+        },
+
+        choice_nocase!(b"INCL48") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48)).parse_next(input)
+        },
+
+        choice_nocase!(b"INCL49") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49)).parse_next(input)
+        },
+
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCAPU") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU)).parse_next(input)
+        },
+
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCZX0") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0)).parse_next(input)
+        },
+
+        choice_nocase!(b"RETURN") => parse_return.parse_next(input),
+        choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),
+
+        choice_nocase!(b"STRUCT") => parse_struct.parse_next(input),
+        choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input),
+
+        choice_nocase!(b"NOLIST") => Ok(LocatedTokenInner::NoList),
+
+        choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
+
+        _ => {
+            input.reset(input_start);
+            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
+                input,
+                ErrorKind::Alt
+            )))
+        }
+    }
 }
 
-fn parse_directive_of_size_5(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_directive_of_size_5(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
         choice_nocase!(b"LIMIT") => parse_limit.parse_next(input),
@@ -2540,8 +2575,7 @@ fn parse_directive_of_size_5(input: &mut InnerZ80Span,  input_start: &Checkpoint
         choice_nocase!(b"UNDEF") => parse_undef.parse_next(input),
 
         choice_nocase!(b"WRITE") => {
-            alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory))
-                .parse_next(input)
+            alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory)).parse_next(input)
         },
 
         _ => {
@@ -2554,7 +2588,16 @@ fn parse_directive_of_size_5(input: &mut InnerZ80Span,  input_start: &Checkpoint
     }
 }
 
-fn parse_directive_of_size_4(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_directive_of_size_4(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"DEFB")
         | choice_nocase!(b"DEFM")
@@ -2589,8 +2632,16 @@ fn parse_directive_of_size_4(input: &mut InnerZ80Span,  input_start: &Checkpoint
     }
 }
 
-
-fn parse_directive_of_size3(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_directive_of_size3(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input),
 
@@ -2613,7 +2664,16 @@ fn parse_directive_of_size3(input: &mut InnerZ80Span,  input_start: &Checkpoint<
     }
 }
 
-fn parse_directive_of_size_2(input: &mut InnerZ80Span,  input_start: &Checkpoint<Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>, Stateful<Located<&'static BStr>, &'static context::ParserContext>>, is_orgams: bool, within_struct: bool, word: &[u8]) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_directive_of_size_2(
+    input: &mut InnerZ80Span,
+    input_start: &Checkpoint<
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
+        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+    >,
+    is_orgams: bool,
+    within_struct: bool,
+    word: &[u8]
+) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"BY") if is_orgams => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
@@ -2851,7 +2911,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             BreakPointArgument::Address { arg, value } => {
                                 let mut address = address.borrow_mut();
                                 let address = address.deref_mut();
-                                if address.is_some()  {
+                                if address.is_some() {
                                     false
                                 }
                                 else {
@@ -2973,7 +3033,8 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let item = item.deref_mut();
                                 if item.is_some() {
                                     false
-                                } else {
+                                }
+                                else {
                                     item.replace((*arg, value.clone()));
                                     true
                                 }
@@ -6574,7 +6635,6 @@ endif"
         assert!(dbg!(parse_test(parse_breakpoint, "name=\"fdfdfd\"")).is_ok());
 
         assert!(dbg!(parse_test(parse_breakpoint, "step=10,name=\"fdfdfd\"")).is_ok());
-
     }
 
     #[test]

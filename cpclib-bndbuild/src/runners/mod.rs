@@ -9,4 +9,5 @@ pub mod emulator;
 pub mod hideur;
 pub mod imgconverter;
 pub mod rm;
+pub mod snapshot;
 pub mod xfer;

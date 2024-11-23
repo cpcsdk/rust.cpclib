@@ -18,7 +18,7 @@
   cmd: martine  -in  martine-logo.png -mode 1 -noheader -out martine.scr
 
 - tgt: clean
-  pnony: true
+  phony: true
   cmd: -rm martine.scr
 
 - tgt: distclean

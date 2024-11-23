@@ -2043,9 +2043,7 @@ impl Env {
                     .int()? as u8;
             }
             if let Some(step) = step {
-                brk.step = Some(self
-                    .resolve_expr_may_fail_in_first_pass(step)?
-                    .int()? as _);
+                brk.step = Some(self.resolve_expr_may_fail_in_first_pass(step)?.int()? as _);
             }
             if let Some(condition) = condition {
                 let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
@@ -2907,15 +2905,12 @@ impl Env {
 
         let amsdos_fname = self.build_fname(amsdos_fname)?;
         let any_fname: AnyFileNameOwned = match dsk_fname {
-            Some(dsk_fname) => AnyFileNameOwned::new_in_image(
-                self.build_fname(dsk_fname)?, amsdos_fname
-            ),
-            None => {
-                AnyFileNameOwned::from(amsdos_fname.as_str())
-            }
+            Some(dsk_fname) => {
+                AnyFileNameOwned::new_in_image(self.build_fname(dsk_fname)?, amsdos_fname)
+            },
+            None => AnyFileNameOwned::from(amsdos_fname.as_str())
         };
         let any_fname = any_fname.as_any_filename();
-
 
         let (amsdos_fname, dsk_fname) = (any_fname.content_filename(), any_fname.image_filename());
 

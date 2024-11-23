@@ -1,9 +1,12 @@
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+use std::path::Display;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum SnapshotError {
     FileError,
     NotEnougSpaceAvailable,
     InvalidValue,
     FlagDoesNotExists,
-    InvalidIndex
+    InvalidIndex,
+    AnyError(String)
 }

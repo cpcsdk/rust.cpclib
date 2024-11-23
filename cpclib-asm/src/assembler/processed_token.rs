@@ -979,7 +979,8 @@ where
                         // Handle file loading
                         let fname = self.token.incbin_fname();
                         let fname = env.build_fname(fname)?;
-                        let fname = get_filename_to_read(fname, options.parse_options(), Some(env))?;
+                        let fname =
+                            get_filename_to_read(fname, options.parse_options(), Some(env))?;
 
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {

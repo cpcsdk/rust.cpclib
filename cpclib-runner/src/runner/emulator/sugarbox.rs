@@ -5,9 +5,6 @@ use std::fmt::Display;
 // cd SugarboxV2
 // cmake .
 // make -j20
-
-
-
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation, GithubCompiledApplication,
     GithubInformation
@@ -68,8 +65,8 @@ impl ExecutableInformation for SugarBoxV2Version {
         #[cfg(target_os = "linux")]
         return match self {
             Self::V2_0_3 => "Sugarbox-2.0.3-Linux/Sugarbox",
-            Self::V2_0_2 => "Sugarbox-2.0.2-Linux/Sugarbox",
-        }
+            Self::V2_0_2 => "Sugarbox-2.0.2-Linux/Sugarbox"
+        };
     }
 
     fn target_os_run_in_dir(&self) -> RunInDir {
@@ -96,9 +93,8 @@ impl GithubInformation for SugarBoxV2Version {
     fn linux_key(&self) -> Option<&'static str> {
         match self {
             Self::V2_0_3 => Some("Sugarbox-2.0.3-Linux.tar.gz"),
-            Self::V2_0_2 => Some("Sugarbox-2.0.2-Linux.tar.gz"),
+            Self::V2_0_2 => Some("Sugarbox-2.0.2-Linux.tar.gz")
         }
-        
     }
 
     fn windows_key(&self) -> Option<&'static str> {
@@ -110,11 +106,10 @@ impl GithubInformation for SugarBoxV2Version {
 
     fn macos_key(&self) -> Option<&'static str> {
         match self {
-            Self::V2_0_3 =>Some("Sugarbox-2.0.3-Darwin.tar.gz"),
-            Self::V2_0_2 =>Some("Sugarbox-2.0.2-Darwin.tar.gz"),
+            Self::V2_0_3 => Some("Sugarbox-2.0.3-Darwin.tar.gz"),
+            Self::V2_0_2 => Some("Sugarbox-2.0.2-Darwin.tar.gz")
         }
     }
 }
 
- 
 impl GithubCompiledApplication for SugarBoxV2Version {}

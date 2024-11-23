@@ -17,16 +17,17 @@ independent = true
 cpclib-common.workspace = true
 
 cfg-if.workspace = true
-comfy-table = {version="7.1.3", optional = true}
+comfy-table = { version = "7.1.3", optional = true }
 delegate.workspace = true
+line-span = { version = "0.1.5", optional = true }
 num_enum.workspace = true
 nutype.workspace = true
 serde.workspace = true
 strum.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rustyline = { workspace = true, optional = true}
-minus = {workspace=true, optional = true}
+rustyline = { workspace = true, optional = true }
+minus = { workspace = true, optional = true }
 
 [dev-dependencies]
 camino-tempfile.workspace = true
@@ -37,10 +38,10 @@ built.workspace = true
 
 [features]
 default = []
-snapshot = ["cpclib-common/cmdline", "rustyline", "minus", "comfy-table"]
-
+cmdline = ["cpclib-common/cmdline", "comfy-table"]
+interactive = ["rustyline", "minus", "line-span"]
 
 [[bin]]
 name = "snapshot"
 path = "src/bin/snapshot.rs"
-required-features = ["snapshot"]
+required-features = ["cmdline"]

@@ -18,21 +18,24 @@ exclude = ["examples", "tests/dummy", "*.gif"]
 [dependencies]
 
 cpclib-runner.workspace = true
-cpclib-common = {workspace=true, features=["cmdline"]}
-cpclib-basm = { workspace=true, default-features=false, features=["xferlib"] }
+cpclib-common = { workspace = true, features = ["cmdline"] }
+cpclib-basm = { workspace = true, default-features = false, features = [
+    "xferlib",
+] }
 cpclib-asm.workspace = true
-cpclib-disc  = {workspace = true, features = ["cmdline"]}
-cpclib-imgconverter = { workspace=true, features=["xferlib"]}
+cpclib-sna = { workspace = true, features = ["cmdline"] }
+cpclib-disc = { workspace = true, features = ["cmdline"] }
+cpclib-imgconverter = { workspace = true, features = ["xferlib"] }
 cpclib-xfertool.workspace = true
 
 anyhow = "1.0.93"
-camino = {workspace=true, features=["serde1"]}
-clap = {workspace=true, features=["derive"]}
+camino = { workspace = true, features = ["serde1"] }
+clap = { workspace = true, features = ["derive"] }
 dot-writer = "0.1.4"
 fancy-duration = "0.9.2"
 globmatch = "0.3"
 lazy-regex = "3.3.0"
-minijinja = {version="2.5.0", features=["loader"]}
+minijinja = { version = "2.5.0", features = ["loader"] }
 paste.workspace = true
 self_cell = "1.0.4"
 serde_yaml = "0.9.34"
@@ -50,7 +53,7 @@ build-deps = "0.1.4"
 [dev-dependencies]
 test-generator = "0.3.1"
 serial_test = "3.2.0"
-camino-tempfile = {workspace = true}
+camino-tempfile = { workspace = true }
 assert_cmd = "2.0.16"
 
 [[bin]]
@@ -58,10 +61,11 @@ name = "bndbuild"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["sna-interactive"]
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe"]
+sna-interactive = ["cpclib-sna/interactive"]
 
 [profile.release]
 debug = 1

@@ -90,11 +90,12 @@ impl Command {
         match self {
             Command::Load2(fname) => {
                 use cpclib_common::resolve_path::*;
-                let path = &fname.resolve();
+                let path = fname.resolve();
+                let path = Utf8Path::from_path(path.as_ref()).unwrap();
                 Snapshot::load(&path)
                     .map(|s| sna2.replace((fname.clone(), s)))
                     .map_err(|e| {
-                        eprintln!("Error while loading {}. {}", path.display(), e);
+                        eprintln!("Error while loading {}. {}", path, e);
                     });
             },
             Command::Memory(from, amount) => {

@@ -46,17 +46,16 @@ impl<'a, 'b> From<(&'a str, &'b Env)> for Fname<'a, 'b> {
     }
 }
 
-
 pub enum AnyFileNameOwned {
     InImage { image: String, content: String },
     Standard(String)
 }
 
-impl<'fname> From<&AnyFileName<'fname>> for  AnyFileNameOwned  {
+impl<'fname> From<&AnyFileName<'fname>> for AnyFileNameOwned {
     fn from(value: &AnyFileName) -> Self {
         match value {
             AnyFileName::InImage { image, content } => Self::new_in_image(*image, *content),
-            AnyFileName::Standard(content) => Self::new_standard(*content),
+            AnyFileName::Standard(content) => Self::new_standard(*content)
         }
     }
 }
@@ -64,7 +63,10 @@ impl<'fname> From<&AnyFileName<'fname>> for  AnyFileNameOwned  {
 impl<'fname> From<&'fname AnyFileNameOwned> for AnyFileName<'fname> {
     fn from(value: &'fname AnyFileNameOwned) -> Self {
         match value {
-            AnyFileNameOwned::InImage { image, content: amsdos } => {
+            AnyFileNameOwned::InImage {
+                image,
+                content: amsdos
+            } => {
                 AnyFileName::InImage {
                     image: image.as_str(),
                     content: amsdos.as_str()
@@ -81,7 +83,6 @@ impl From<&str> for AnyFileNameOwned {
         AnyFileNameOwned::from(&any)
     }
 }
-
 
 impl AnyFileNameOwned {
     pub fn new_standard<S: Into<String>>(fname: S) -> Self {
@@ -100,7 +101,6 @@ impl AnyFileNameOwned {
     }
 }
 
-
 /// Helper to handler filenames that contains both a dsk name and a file
 pub enum AnyFileName<'fname> {
     InImage {
@@ -118,7 +118,10 @@ impl<'fname> AnyFileName<'fname> {
     }
 
     pub fn new_in_image(image: &'fname str, amsdos: &'fname str) -> Self {
-        Self::InImage { image, content: amsdos }
+        Self::InImage {
+            image,
+            content: amsdos
+        }
     }
 
     pub fn use_image(&self) -> bool {
@@ -128,32 +131,38 @@ impl<'fname> AnyFileName<'fname> {
         }
     }
 
-
     pub fn image_filename(&self) -> Option<&str> {
         match self {
-            AnyFileName::InImage { image, ..} => Some(image),
-            AnyFileName::Standard(_) => None,
+            AnyFileName::InImage { image, .. } => Some(image),
+            AnyFileName::Standard(_) => None
         }
     }
 
     pub fn content_filename(&self) -> &str {
         match self {
-            AnyFileName::InImage { image, content: amsdos } => amsdos,
-            AnyFileName::Standard(content) => content,
+            AnyFileName::InImage {
+                image,
+                content: amsdos
+            } => amsdos,
+            AnyFileName::Standard(content) => content
         }
     }
 
     pub fn basm_fname(&self) -> Cow<str> {
         match self {
-            AnyFileName::InImage { image, content } => Cow::Owned(format!("{}{}{}", image, Self::DSK_SEPARATOR, content)),
-            AnyFileName::Standard(content) => Cow::Borrowed(content),
+            AnyFileName::InImage { image, content } => {
+                Cow::Owned(format!("{}{}{}", image, Self::DSK_SEPARATOR, content))
+            },
+            AnyFileName::Standard(content) => Cow::Borrowed(content)
         }
     }
 
-
     fn base_filename(&self) -> &str {
         match self {
-            AnyFileName::InImage { image, content: amsdos } => image,
+            AnyFileName::InImage {
+                image,
+                content: amsdos
+            } => image,
             AnyFileName::Standard(f) => f
         }
     }
@@ -216,7 +225,7 @@ impl<'fname> From<&'fname str> for AnyFileName<'fname> {
                     "Need to handle case where fname as several {}",
                     Self::DSK_SEPARATOR
                 )
-            },
+            }
         }
     }
 }
@@ -228,9 +237,7 @@ pub fn get_filename_to_read<S: AsRef<str>>(
 ) -> Result<Utf8PathBuf, AssemblerError> {
     let fname = fname.as_ref();
 
-    AnyFileName::from(fname)
-        .path_for_base_filename(options, env)
-    
+    AnyFileName::from(fname).path_for_base_filename(options, env)
 }
 
 /// Load a file and remove header if any

@@ -6,7 +6,13 @@ use std::ops::Deref;
 
 use cpclib_common::bitvec::vec::BitVec;
 use cpclib_common::camino::Utf8Path;
+#[cfg(feature = "cmdline")]
+use cpclib_common::parse_value;
 use cpclib_common::riff::{RiffChunk, RiffCode};
+#[cfg(feature = "cmdline")]
+use cpclib_common::winnow::error::ContextError;
+#[cfg(feature = "cmdline")]
+use cpclib_common::winnow::stream::AsBStr;
 use num_enum::TryFromPrimitive;
 
 mod chunks;
@@ -15,13 +21,31 @@ pub mod flags;
 mod memory;
 pub mod parse;
 
-#[cfg(feature = "snapshot")]
+#[cfg(feature = "cmdline")]
+use cpclib_common::clap::{Arg, ArgAction, ArgMatches, Command};
+
+#[cfg(feature = "interactive")]
 pub mod cli;
+#[cfg(feature = "cmdline")]
+use std::str::FromStr;
 
 pub use chunks::*;
+#[cfg(feature = "cmdline")]
+use comfy_table::{Table, *};
+#[cfg(feature = "cmdline")]
+use cpclib_common::itertools::Itertools;
 pub use error::*;
 pub use flags::*;
 pub use memory::*;
+
+#[cfg(feature = "cmdline")]
+fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
+    let s = s.as_ref();
+    let mut bytes = s.as_bstr();
+    parse_value::<_, ContextError>(&mut bytes)
+        .map_err(|e| format!("Unable to parse {}. {}", s, e.to_string()))
+        .map_err(|s| SnapshotError::AnyError(s))
+}
 
 /// ! Re-implementation of createsnapshot by Ramlaid/Arkos
 /// ! in rust by Krusty/Benediction
@@ -823,6 +847,265 @@ impl Snapshot {
         let code = code.into();
         self.chunks().iter().find(|chunk| chunk.code() == &code)
     }
+}
+
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+#[cfg(feature = "cmdline")]
+pub fn print_info(sna: &Snapshot) {
+    let mut table = Table::new();
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec!["Flag", "Value"]);
+    table.add_rows(
+        SnapshotFlag::enumerate()
+            .iter()
+            .map(|flag| {
+                (
+                    flag.comment().lines().map(|l| l.trim()).join("\n"),
+                    sna.get_value(flag)
+                )
+            })
+            .map(|(f, v)| vec![f.to_owned(), v.to_string()])
+    );
+    println!("{table}");
+
+    println!("# Chunks");
+    for chunk in sna.chunks() {
+        chunk.print_info();
+    }
+}
+
+#[cfg(feature = "cmdline")]
+use cpclib_common::event::EventObserver;
+
+// TODO: use observers instead of printing on terminal !
+#[cfg(feature = "cmdline")]
+pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), SnapshotError> {
+    // Display all tokens
+
+    if matches.get_flag("flags") {
+        for flag in SnapshotFlag::enumerate().iter() {
+            o.emit_stdout(&format!(
+                "{:?} / {:?} bytes.{}",
+                flag,
+                flag.elem_size(),
+                flag.comment()
+            ));
+        }
+        return Ok(());
+    }
+
+    // Load a snapshot or generate an empty one
+    let mut sna = if matches.contains_id("inSnapshot") {
+        let fname = matches.get_one::<String>("inSnapshot").unwrap();
+        let path = Utf8Path::new(&fname);
+        Snapshot::load(path)
+            .map_err(|e| SnapshotError::AnyError(format!("Unable to load file {fname}. {e}")))?
+    }
+    else {
+        Snapshot::default()
+    };
+
+    // Activate the debug mode
+    sna.debug = matches.contains_id("debug");
+
+    if matches.get_flag("info") {
+        print_info(&sna);
+        return Ok(());
+    }
+
+    #[cfg(feature = "interactive")]
+    if matches.get_flag("cli") {
+        let fname = matches.get_one::<String>("inSnapshot").unwrap();
+        cli::cli(fname, sna);
+        return Ok(());
+    }
+
+    // Manage the files insertion
+    if matches.contains_id("load") {
+        let loads = matches
+            .get_many::<String>("load")
+            .unwrap()
+            .collect::<Vec<_>>();
+        for i in 0..(loads.len() / 2) {
+            let fname = loads[i * 2 + 0];
+            let place = loads[i * 2 + 1];
+
+            let address = {
+                if place.starts_with("0x") {
+                    u32::from_str_radix(&place[2..], 16).unwrap()
+                }
+                else if place.starts_with('0') {
+                    u32::from_str_radix(&place[1..], 8).unwrap()
+                }
+                else {
+                    place.parse::<u32>().unwrap()
+                }
+            };
+            sna.add_file(fname, address as usize)
+                .expect("Unable to add file");
+        }
+    }
+
+    // Patch memory
+    if matches.contains_id("putData") {
+        let data = matches
+            .get_many::<String>("putData")
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        for i in 0..(data.len() / 2) {
+            let address = string_to_nb(data[i * 2 + 0])?;
+            let value = string_to_nb(data[i * 2 + 1])?;
+            assert!(value < 0x100);
+
+            sna.set_byte(address, value as u8);
+        }
+    }
+
+    // Read the tokens
+    if matches.contains_id("getToken") {
+        for token in matches.get_many::<String>("getToken").unwrap() {
+            let token = SnapshotFlag::from_str(token).unwrap();
+            println!("{:?} => {}", &token, sna.get_value(&token));
+        }
+        return Ok(());
+    }
+
+    // Set the tokens
+    if matches.contains_id("setToken") {
+        let loads = matches
+            .get_many::<String>("setToken")
+            .unwrap()
+            .collect::<Vec<_>>();
+        for i in 0..(loads.len() / 2) {
+            // Read the parameters from the command line
+            let token = dbg!(loads[i * 2 + 0]);
+            let token = SnapshotFlag::from_str(token).unwrap();
+
+            let value = {
+                let source = loads[i * 2 + 1];
+                string_to_nb(source)?
+            };
+
+            // Get the token
+            sna.set_value(token, value as u16).unwrap();
+
+            sna.log(format!(
+                "Token {token:?} set at value {value} (0x{value:x})"
+            ));
+        }
+    }
+
+    let fname = matches.get_one::<String>("OUTPUT").unwrap();
+    let version = matches
+        .get_one::<String>("version")
+        .unwrap()
+        .parse::<u8>()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    sna.save(fname, version)
+        .expect("Unable to save the snapshot");
+
+    Ok(())
+}
+
+#[cfg(feature = "cmdline")]
+pub fn build_arg_parser() -> Command {
+    let desc_before = format!(
+        "Profile {} compiled: {}",
+        built_info::PROFILE,
+        built_info::BUILT_TIME_UTC
+    );
+
+    let cmd = Command::new("createSnapshot")
+                          .version(built_info::PKG_VERSION)
+                          .disable_version_flag(true)
+                          .author("Krusty/Benediction")
+                          .about("Amstrad CPC snapshot manipulation")
+                          .before_help(desc_before)
+                          .after_help("This tool tries to be similar than Ramlaid's one")
+                          .arg(Arg::new("info")
+                               .help("Display informations on the loaded snapshot")
+                               .long("info")
+                               .requires("inSnapshot")
+                               .action(ArgAction::SetTrue)
+                           )
+                          .arg(Arg::new("debug")
+                            .help("Display debugging information while manipulating the snapshot")
+                            .long("debug")
+                            .action(ArgAction::SetTrue)
+                          )
+                          .arg(Arg::new("OUTPUT")
+                               .help("Sets the output file to generate")
+                               .conflicts_with("flags")
+                               .conflicts_with("info")
+                               .conflicts_with("getToken")
+                               .last(true)
+                               .required(true))
+                          .arg(Arg::new("inSnapshot")
+                               .short('i')
+                               .long("inSnapshot")
+                               .value_name("INFILE")
+                               .number_of_values(1)
+                               .help("Load <INFILE> snapshot file")
+                               )
+                          .arg(Arg::new("load")
+                               .short('l')
+                               .long("load")
+                               .action(ArgAction::Append)
+                               .number_of_values(2)
+                               .help("Specify a file to include. -l fname address"))
+                          .arg(Arg::new("getToken")
+                               .short('g')
+                               .long("getToken")
+                               .action(ArgAction::Append)
+                               .number_of_values(1)
+                               .help("Display the value of a snapshot token")
+                               .requires("inSnapshot")
+                           )
+                          .arg(Arg::new("setToken")
+                               .short('s')
+                               .long("setToken")
+                               .action(ArgAction::Append)
+                               .number_of_values(2)
+                               .help("Set snapshot token <$1> to value <$2>\nUse <$1>:<val> to set array value\n\t\tex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"))
+                          .arg(Arg::new("putData")
+                               .short('p')
+                               .long("putData")
+                               .action(ArgAction::Append)
+                               .number_of_values(2)
+                               .help("Put <$2> byte at <$1> address in snapshot memory")
+
+                            )
+                          .arg(Arg::new("version")
+                                .short('v')
+                                .long("version")
+                                .number_of_values(1)
+                                .value_parser(["1", "2", "3"])
+                                .help("Version of the saved snapshot.")
+                                .default_value("3")
+                           )
+                          .arg(Arg::new("flags")
+                                .help("List the flags and exit")
+                               .long("flags")
+                               .action(ArgAction::SetTrue)
+                        );
+
+    #[cfg(feature = "interactive")]
+    let cmd = cmd.arg(
+        Arg::new("cli")
+            .help("Run the CLI interface for an interactive manipulation of snapshot")
+            .long("cli")
+            .requires("inSnapshot")
+            .conflicts_with("OUTPUT")
+            .action(ArgAction::SetTrue)
+    );
+
+    cmd
 }
 
 #[cfg(test)]

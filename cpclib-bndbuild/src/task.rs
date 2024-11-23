@@ -32,6 +32,7 @@ pub enum Task {
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
     Rm(StandardTaskArguments),
+    Snapshot(StandardTaskArguments),
     Xfer(StandardTaskArguments)
 }
 
@@ -60,6 +61,7 @@ pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
+pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 impl Display for Task {
@@ -78,7 +80,8 @@ impl Display for Task {
             Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Fap(s) => (FAP_CMDS[0], s)
+            Task::Fap(s) => (FAP_CMDS[0], s),
+            Task::Snapshot(s) => (SNA_CMDS[0], s)
         };
 
         write!(
@@ -107,20 +110,20 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, 
-    basm, bndbuild, 
-    cp, cpcec, 
-    disc, 
-    echo, emuctrl, r#extern, 
-    fap, 
-    hideur, 
-    img2cpc, impdisc, 
-    martine, 
-    orgams, 
-    rasm, rm, 
-    sjasmplus, sugarbox, 
+    ace, amspirit,
+    basm, bndbuild,
+    cp, cpcec,
+    disc,
+    echo, emuctrl, r#extern,
+    fap,
+    hideur,
+    img2cpc, impdisc,
+    martine,
+    orgams,
+    rasm, rm,
+    sjasmplus, sna, sugarbox,
     vasm,
-    winape, 
+    winape,
     xfer
 );
 
@@ -197,6 +200,9 @@ impl<'de> Deserialize<'de> for Task {
                         )),
                         std
                     ))
+                }
+                else if is_sna_cmd(code) {
+                    Ok(Task::Snapshot(std))
                 }
                 else if is_bndbuild_cmd(code) {
                     Ok(Task::BndBuild(std))
@@ -293,6 +299,7 @@ impl Task {
             | Task::Rm(t)
             | Task::Xfer(t)
             | Task::Emulator(_, t)
+            | Task::Snapshot(t)
             | Task::Fap(t) => t
         }
     }
@@ -311,6 +318,7 @@ impl Task {
             | Task::BndBuild(t)
             | Task::Martine(t)
             | Task::Cp(t)
+            | Task::Snapshot(t)
             | Task::Emulator(_, t)
             | Task::Fap(t) => t
         }
@@ -345,6 +353,7 @@ impl Task {
             Task::BndBuild(_) => false,
             Task::Disc(_) => false,
             Task::ImpDsk(_) => false,
+            Task::Snapshot(_) => false,
             Task::Cp(_) => false
         }
     }

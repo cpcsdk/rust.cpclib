@@ -61,8 +61,6 @@ impl<E: EventObserver> Runner for DiscManagerRunner<E> {
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let matches = self.get_matches(itr)?;
-
-        let matches = self.get_matches(itr)?;
         if matches.get_flag("version") {
             o.emit_stdout(&self.get_clap_command().clone().render_version());
             return Ok(());

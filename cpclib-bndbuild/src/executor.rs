@@ -15,6 +15,7 @@ use crate::runners::echo::EchoRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
+use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::Task;
 
@@ -90,6 +91,7 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
         Task::Echo(_) => EchoRunner::default().run(task.args(), observer),
         Task::Extern(_) => ExternRunner::default().run(task.args(), observer),
         Task::Hideur(_) => HideurRunner::default().run(task.args(), observer),
+        Task::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
         Task::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),
         Task::ImpDsk(_) => {
             DelegatedRunner {
