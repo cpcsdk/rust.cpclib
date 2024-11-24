@@ -1,14 +1,21 @@
 use std::fmt::Display;
+#[cfg(feature = "cmdline")]
 use std::fs::File;
+#[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
 
+#[cfg(feature = "cmdline")]
 use cpclib_common::camino::Utf8Path;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+#[cfg(feature = "cmdline")]
 use cpclib_common::parse_value;
+#[cfg(feature = "cmdline")]
 use cpclib_common::winnow::error::ContextError;
+#[cfg(feature = "cmdline")]
 use cpclib_common::winnow::Parser;
 
+#[cfg(feature = "cmdline")]
 use crate::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosHeader};
 
 #[derive(Debug)]
@@ -102,7 +109,7 @@ pub fn hideur_build_arg_parser() -> Command {
 #[cfg(feature = "cmdline")]
 pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
     // Read the input file
-    let complete_filename = Utf8Path::new(matches.get_one::<String>("OUTPUT").unwrap());
+    let complete_filename = Utf8Path::new(matches.get_one::<String>("INPUT").unwrap());
 
     let content = {
         let input = Utf8Path::new(matches.get_one::<String>("INPUT").unwrap());

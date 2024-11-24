@@ -267,7 +267,9 @@ pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
             // by construction there is only one slice
             let header = AmsdosHeader::from_buffer(data.as_slices().0);
 
-            if header.represent_a_valid_file() {
+            // XXX previously, I was checking the file name validity, but it is a
+            //     bad heursitic as orgams does not respect that
+            if (header.file_length() + 128) as usize == data.len() {
                 data.drain(..128);
                 Some(header)
             }

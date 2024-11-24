@@ -979,8 +979,9 @@ where
                         // Handle file loading
                         let fname = self.token.incbin_fname();
                         let fname = env.build_fname(fname)?;
+                        let to_print_fname = &fname;
                         let fname =
-                            get_filename_to_read(fname, options.parse_options(), Some(env))?;
+                            get_filename_to_read(&fname, options.parse_options(), Some(env))?;
 
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {
@@ -996,10 +997,10 @@ where
                                     .unwrap_or_else(|_| "<WRONG FILENAME>".to_owned());
                                 let txt = match header.file_type() {
                                     Ok(AmsdosFileType::Binary) => {
-                                        format! {"{ams_fname} BINARY  L:{} X:{}", header.loading_address(), header.execution_address()}
+                                        format! {"{to_print_fname}|{ams_fname} BINARY  L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
                                     },
                                     Ok(AmsdosFileType::Protected) => {
-                                        format! {"{ams_fname} PROTECTED L:{} X:{}", header.loading_address(), header.execution_address()}
+                                        format! {"{to_print_fname}|{ams_fname} PROTECTED L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
                                     },
                                     Ok(AmsdosFileType::Basic) => format!("{ams_fname} BASIC"),
                                     Err(_) => format!("{ams_fname} <WRONG FILETYPE>")
