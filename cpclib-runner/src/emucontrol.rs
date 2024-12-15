@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::default;
 use std::marker::PhantomData;
 use std::time::Duration;
 
@@ -18,7 +19,7 @@ use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
-use crate::runner::emulator::Emulator;
+use crate::runner::emulator::{ace, Emulator};
 use crate::runner::runner::RunnerWithClap;
 use crate::runner::Runner;
 
@@ -939,6 +940,23 @@ pub fn handle_arguments<E: EventObserver + 'static>(mut cli: EmuCli, o: &E) -> R
         let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
         let mut ace_conf = AceConfig::open(&ace_conf_path);
 
+        let default = "
+SCREEN=0
+CRTFILTER=0
+OVERSCAN=0
+VIDEOEXTRA=0
+COVER=0
+CRTC=0
+DOUBLESIZE=0
+        ";
+        for (key, value) in default.lines()
+            .map(|l| l.trim())
+            .filter(|l| ! l.is_empty())
+            .map(|l| l.split("=").collect_tuple().unwrap()) {
+                ace_conf.set(key, value);
+            }
+
+            
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);
         }
