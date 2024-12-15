@@ -8,7 +8,8 @@ It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but
 The build rules are described in a `yaml` file. Check for example a simple test project at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy> folder, or a more complicated one that use various commands and templating at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/ucpm>.
 
 Commands can be launched also without using the build rules.
-You can also see bndbuild as a universal proxy to plenty of crossdev tools without manually installing them.
+You can also see `bndbuild` as a universal proxy to plenty of crossdev tools without manually installing them.
+A graphical version is available in `bndbuild-gui`.
 
 The documentation is quite minimal at the moment, but included examples code should be still valid and assembled properly. The user base being quite small, lots of bugs can remain. Do note hesitate to fill issues <https://github.com/cpcsdk/rust.cpclib/issues> or propose fixes.
 

@@ -1,8 +1,6 @@
 #![feature(let_chains)]
 #![feature(const_trait_impl)]
 
-mod syntax;
-
 use std::collections::HashSet;
 use std::io::Read;
 use std::ops::Deref;
@@ -14,10 +12,8 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use eframe::egui::{self, RichText};
 use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
-use egui_code_editor::{CodeEditor, ColorTheme};
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
-use syntax::syntax;
 
 use crate::egui::{Button, Key, KeyboardShortcut, Modifiers};
 
@@ -53,10 +49,6 @@ pub struct BndBuildApp {
     #[serde(skip)]
     watch_logs: String,
 
-    /// The content of the file loaded
-    #[serde(skip)]
-    file_content: Option<String>,
-
     /// Set to true if the rules has been modified but not saved
     #[serde(skip)]
     is_dirty: bool,
@@ -81,9 +73,6 @@ pub struct BndBuildApp {
     #[serde(skip)]
     open_file_dialog: Option<FileDialog>,
 
-    #[serde(skip)]
-    save_file_dialog: Option<FileDialog>,
-
     /// Target to build requested by button
     #[serde(skip)]
     requested_target: Option<Utf8PathBuf>,
@@ -98,16 +87,8 @@ pub struct BndBuildApp {
     request_reload: bool,
 
     #[serde(skip)]
-    request_save: bool,
-
-    #[serde(skip)]
-    request_save_as: bool,
-
-    #[serde(skip)]
     request_open: bool,
 
-    #[serde(skip)]
-    request_new: bool,
 
     /// No need to update the output too often
     #[serde(skip)]
@@ -121,21 +102,16 @@ impl Default for BndBuildApp {
     fn default() -> Self {
         BndBuildApp {
             filename: None,
-            file_content: Some("\n".to_owned()),
             is_dirty: false,
             builder_and_layers: None,
             file_error: None,
             build_error: None,
             open_file_dialog: None,
-            save_file_dialog: None,
             requested_target: None,
             hovered_target: None,
             logs: String::default(),
             request_reload: false,
-            request_save: false,
             request_open: false,
-            request_new: false,
-            request_save_as: false,
             job: None,
             watched: None,
             last_tick: SystemTime::now(),
@@ -298,10 +274,6 @@ impl BndBuildApp {
         match cpclib_bndbuild::BndBuilder::from_path(path) {
             Ok((ref path, builder)) => {
                 self.filename = Some(path.into());
-                self.file_content = std::fs::read_to_string(path)
-                    .ok()
-                    .map(|s| s.replace('\r', "")); // read a second time, but the file exists
-
                 self.builder_and_layers = BuilderAndCache::from(builder).into();
 
                 if let Some(position) = self.recent_files.iter().position(|elem| elem == path) {
@@ -331,9 +303,7 @@ impl BndBuildApp {
 
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.add(Button::new("New")).clicked() {
-                        self.request_new = true;
-                    }
+
                     if ui
                         .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
                         .clicked()
@@ -360,19 +330,7 @@ impl BndBuildApp {
                         });
                     }
 
-                    if ui.add(Button::new("Save as")).clicked() {
-                        self.request_save_as = true;
-                        ui.close_menu();
-                    }
-
                     if self.filename.is_some() {
-                        if ui
-                            .add(Button::new("Save").shortcut_text(ctx.format_shortcut(&CTRL_S)))
-                            .clicked()
-                        {
-                            self.request_save = true;
-                            ui.close_menu();
-                        }
                         if ui
                             .add(Button::new("Reload").shortcut_text(ctx.format_shortcut(&CTRL_R)))
                             .clicked()
@@ -409,9 +367,6 @@ impl BndBuildApp {
             if ui.input_mut(|i| i.consume_shortcut(&CTRL_R)) {
                 self.request_reload = true;
             }
-            if ui.input_mut(|i| i.consume_shortcut(&CTRL_S)) {
-                self.request_save = true;
-            }
             if ui.input_mut(|i| i.consume_shortcut(&CTRL_O)) {
                 self.request_open = true;
             }
@@ -438,41 +393,6 @@ impl BndBuildApp {
             });
     }
 
-    fn update_code(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
-        ui.vertical_centered(|ui| {
-            if self.is_dirty {
-                ui.heading("Definition *")
-                    .on_hover_text("Save to take into account the modification.");
-            }
-            else {
-                ui.heading("Definition")
-                    .on_hover_text("Edit the building rules here.");
-            }
-            if let Some(code) = self.file_content.as_mut() {
-                //               let editor = TextEdit::multiline(code)
-                //                  .code_editor()
-                //                 .hint_text("Expect the yaml rules to build the project.")
-                //                .desired_width(f32::INFINITY);
-
-                egui::ScrollArea::new([true, true])
-                    .max_height(f32::INFINITY)
-                    .max_width(f32::INFINITY)
-                    .show(ui, |ui| {
-                        let editor = CodeEditor::default()
-                            .id_source("code editor")
-                            .with_fontsize(14.0)
-                            .with_theme(ColorTheme::GITHUB_LIGHT)
-                            .with_syntax(syntax())
-                            .with_numlines(true)
-                            .show(ui, code);
-
-                        if editor.response.changed() {
-                            self.is_dirty = true;
-                        }
-                    });
-            }
-        });
-    }
 
     fn update_targets(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
         if let Some(bnl) = &self.builder_and_layers {
@@ -603,7 +523,6 @@ impl BndBuildApp {
             ui.columns(2, |columns| {
                 columns[0].vertical(|ui| {
                     self.update_targets(ctx, ui);
-                    self.update_code(ctx, ui);
                 });
                 self.update_log(ctx, &mut columns[1]);
             });
@@ -629,18 +548,6 @@ impl eframe::App for BndBuildApp {
         self.update_menu(ctx, frame);
         self.update_inner(ctx, frame);
         self.update_status_and_shortcuts(ctx, frame);
-
-        // Handle new
-        if self.request_new {
-            if self.is_dirty {
-            }
-            else {
-                self.file_content = Some("".to_owned());
-                self.filename.take();
-                self.builder_and_layers.take();
-            }
-            self.request_new = false;
-        }
 
         // Handle file opening
         if self.request_open {
@@ -689,42 +596,6 @@ impl eframe::App for BndBuildApp {
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
 
-        if self.request_save_as {
-            self.request_save_as = false;
-
-            let mut dialog = egui_file::FileDialog::save_file(
-                self.filename.clone().map(|p| p.into_std_path_buf())
-            );
-            dialog.open();
-            self.save_file_dialog = dialog.into();
-            self.file_error = None;
-        }
-
-        if let Some(dialog) = self.save_file_dialog.as_mut() {
-            if dialog.show(ctx).selected() {
-                if let Some(path) = dialog.path() {
-                    self.request_save = true;
-                    self.filename = Some(path.to_path_buf().try_into().unwrap());
-                }
-            }
-        }
-        if self.request_save {
-            self.request_save = false;
-            let r = std::fs::write(
-                self.filename.as_ref().unwrap(),
-                self.file_content.as_ref().unwrap()
-            );
-
-            if let Some(e) = r.err() {
-                self.file_error = e.to_string().into();
-            }
-            else {
-                self.file_error = None;
-                self.is_dirty = false;
-                self.load(self.filename.clone().unwrap()); // reload is forced to parse the file
-            }
-            ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
-        }
 
         // Handle target
         if let Some(tgt) = self.requested_target.take() {

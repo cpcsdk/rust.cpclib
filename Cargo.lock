@@ -2009,7 +2009,6 @@ dependencies = [
  "cpclib-bndbuild",
  "cpclib-common",
  "eframe 0.29.0",
- "egui_code_editor",
  "egui_file",
  "env_logger",
  "gag",
@@ -2822,15 +2821,6 @@ dependencies = [
  "web-time 1.1.0",
  "webbrowser",
  "winit 0.30.5",
-]
-
-[[package]]
-name = "egui_code_editor"
-version = "0.2.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbad502a81d759be13141299e53bd7abf27b250c465f7ae9623e587bbe5b58a2"
-dependencies = [
- "egui 0.29.0",
 ]
 
 [[package]]

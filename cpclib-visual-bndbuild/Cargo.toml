@@ -28,7 +28,6 @@ itertools.workspace = true
 open.workspace = true
 self_cell.workspace = true
 serde.workspace = true
-egui_code_editor.workspace = true
 
 [build-dependencies]
 built = { version = "0.7.5", features = ["chrono"] }
@@ -38,3 +37,8 @@ static_vcruntime = "2.0"
 default = []
 rayon = ["cpclib-bndbuild/rayon"]
 hfe = ["cpclib-bndbuild/hfe"]
+
+[[bin]]
+name = "bndbuild-gui"
+path = "src/main.rs"
+

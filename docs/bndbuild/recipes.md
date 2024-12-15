@@ -1,6 +1,18 @@
 # Some recipes
 
 
+## IDE Configuration for the bnd.build files
+
+The description of the build language is provided in the file `https://raw.githubusercontent.com/cpcsdk/rust.cpclib/refs/heads/master/cpclib-bndbuild/schema.json`. Provide it to your editor to validate the files.
+
+For examples the `yaml` settings of Visual Studio Code are:
+
+```json
+    "yaml.schemas": {
+        "https://raw.githubusercontent.com/cpcsdk/rust.cpclib/refs/heads/master/cpclib-bndbuild/schema.json": ["bnd.build", "build.bnd", "bndbuild.yaml"]
+    },
+```
+
 ## Launch of embedded commands
 
 These commands are not included in `bndbuild` source code and are downloaded,
