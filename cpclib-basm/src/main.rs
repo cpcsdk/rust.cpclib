@@ -15,40 +15,61 @@
 
 use std::rc::Rc;
 
-use cpclib_basm::{build_args_parser, built_info, process};
+use cpclib_basm::{build_args_parser, process};
+
 
 static DESC_BEFORE: &str = const_format::formatc!(
     "Profile {} compiled: {}",
-    built_info::PROFILE,
-    built_info::BUILT_TIME_UTC
+    cpclib_basm::built_info::PROFILE,
+    cpclib_basm::built_info::BUILT_TIME_UTC
 );
 
+
+fn basm() -> i32 {
+    let matches = build_args_parser().before_help(DESC_BEFORE).get_matches()
+    ;
+
+    let start = std::time::Instant::now();
+    let o = Rc::new(());
+    match process(&matches, o) {
+        Ok((env, warnings)) => {
+            for warning in warnings {
+                eprintln!("{warning}");
+            }
+
+            let report = env.report(&start);
+            println!("{report}");
+
+            0
+        },
+        Err(e) => {
+            eprintln!("Error while assembling.\n{e}");
+            -1
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() -> Result<(), i32>{
+    let code = basm();
+    if code != 0 {
+        Err(code)
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    std::thread::Builder::new()
+    use std::process::exit;
+
+    let code = std::thread::Builder::new()
         .stack_size(1024 * 1024 * 1024)
         .spawn(|| {
-            let matches = build_args_parser().before_help(DESC_BEFORE).get_matches();
-
-            let start = std::time::Instant::now();
-            let o = Rc::new(());
-            match process(&matches, o) {
-                Ok((env, warnings)) => {
-                    for warning in warnings {
-                        eprintln!("{warning}");
-                    }
-
-                    let report = env.report(&start);
-                    println!("{report}");
-
-                    std::process::exit(0);
-                },
-                Err(e) => {
-                    eprintln!("Error while assembling.\n{e}");
-                    std::process::exit(-1);
-                }
-            }
+            basm()
         })
         .unwrap()
         .join()
         .unwrap();
+    exit(code);
 }

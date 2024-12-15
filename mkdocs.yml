@@ -7,6 +7,7 @@ nav:
     - Directives: 'basm/directives.md'
   - BNDBUILD:
     - BNDBUILD: 'bndbuild/index.md'
+    - Recipes: 'bndbuild/recipes.md'
 site_name: "Amstrad RUST cpcdemotools"
 markdown_extensions:
   - pymdownx.highlight:

@@ -94,6 +94,7 @@ pub fn build_args_parser() -> clap::Command {
 
         (all, clearable)
     });
+    let updatable_list = clearable_list;
 
     Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
@@ -113,6 +114,17 @@ pub fn build_args_parser() -> clap::Command {
                 .num_args(0..=1)
                 .help("Show the help of the given subcommand CMD.")
         )
+        .arg(
+            Arg::new("update")
+                .help("Update bndbuild executable for the last version available on github")
+                .long("update")
+                .short('u')
+                .num_args(0..=1)
+                .value_parser(updatable_list.clone())
+                .help("Update bndbuild or a given embedded application if provided.")
+                .exclusive(true)
+        )
+        
         .arg(
             Arg::new("direct")
             .action(ArgAction::SetTrue)
@@ -353,5 +365,13 @@ pub enum BndBuilderError {
     #[error("Target {0} is not buildable.")]
     UnknownTarget(String),
     #[error("{0}")]
-    AnyError(String)
+    AnyError(String),
+    #[error("Update error: {0}")]
+    UpdateError(self_update::errors::Error)
+}
+
+impl From<self_update::errors::Error> for BndBuilderError {
+    fn from(value: self_update::errors::Error) -> Self {
+        Self::UpdateError(value)
+    }
 }

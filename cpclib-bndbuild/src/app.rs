@@ -66,7 +66,9 @@ pub enum BndBuilderCommandInner {
         builder: BndBuilder
     },
     /// Generate the graphviz file on stdout
-    Dot(BndBuilder)
+    Dot(BndBuilder),
+    /// Update the executable from github artifact or the command if specified
+    Update(Option<String>)
 }
 
 #[derive(Debug)]
@@ -126,12 +128,16 @@ impl BndBuilderCommand {
                 Self::execute_version(&observers);
                 Ok(None)
             },
+            BndBuilderCommandInner::Update(cmd) => {
+                Self::execute_update(&observers, cmd.as_deref())?;
+                Ok(None)
+            },
             BndBuilderCommandInner::Init => {
                 Self::execute_init(&observers)?;
                 Ok(None)
             },
             BndBuilderCommandInner::Clear(command) => {
-                Self::execute_clear(&observers, command)?;
+                Self::execute_clear(&observers, command.as_deref())?;
                 Ok(None)
             },
             BndBuilderCommandInner::Direct(args) => {
@@ -403,6 +409,52 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         ));
     }
 
+    fn execute_update(
+        observers: &dyn BndBuilderObserver,
+        cmd: Option<&str>
+    ) -> Result<(), BndBuilderError> {
+        if let Some(command) = cmd {
+            Self::execute_clear(observers, Some(command))?;
+
+            match Task::from_str(command)
+                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
+                .configuration::<()>()
+            {
+                Some(conf) => {
+                    conf.install(&());
+                },
+                None => {
+                    return Err(BndBuilderError::AnyError(format!(
+                        "{command} is not an embedded command."
+                    )));
+                }
+            }
+        }
+        else {
+            let (asset_url, asset_name) = if cfg!(target_os = "windows") {
+                (
+                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe",
+                    "bndbuild.exe"
+                )
+            }
+            else {
+                unimplemented!()
+            };
+            let tmp_dir = camino_tempfile::Builder::new()
+                .prefix("self_update")
+                .tempdir_in("self_update")
+                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+            let tmp_exec_path = tmp_dir.path().join(asset_name);
+            let tmp_exec = ::std::fs::File::open(&tmp_exec_path).unwrap();
+
+            self_update::Download::from_url(asset_url).download_to(&tmp_exec)?;
+
+            self_update::self_replace::self_replace(tmp_exec_path).unwrap();
+        }
+
+        Ok(())
+    }
+
     fn execute_init(observers: &dyn BndBuilderObserver) -> Result<(), BndBuilderError> {
         init_project(None)?;
         observers.emit_stdout("Empty project initialized");
@@ -411,10 +463,10 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
 
     fn execute_clear(
         observers: &dyn BndBuilderObserver,
-        command: Option<String>
+        command: Option<&str>
     ) -> Result<(), BndBuilderError> {
         let folder = if let Some(command) = command {
-            match Task::from_str(&command.to_string())
+            match Task::from_str(command)
                 .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
                 .configuration::<()>()
             {
@@ -510,6 +562,14 @@ impl BndBuilderApp {
             }
             else if matches.get_flag("init") {
                 return Ok(BndBuilderCommandInner::Init);
+            }
+            else if matches.contains_id("update") {
+                if let Some(update) = matches.get_one::<String>("update") {
+                    return Ok(BndBuilderCommandInner::Update(Some(update.to_owned())));
+                }
+                else {
+                    return Ok(BndBuilderCommandInner::Update(None));
+                }
             }
             else if matches.contains_id("clear") {
                 if let Some(clear) = matches.get_one::<String>("clear") {

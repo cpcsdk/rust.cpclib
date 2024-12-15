@@ -149,6 +149,7 @@ rust-embed = { version = "8.5.0", features = ["compression"] }
 rustyline = { version = "14.0.0" }
 rustyline-derive = { version = "0.10.0" }
 self_cell = "1.0.4"
+self_update = "0.41.0"
 semver = "1.0.23"
 serde = { version = "1.0.215", features = ["derive"] }
 serial_test = "3.2.0"
