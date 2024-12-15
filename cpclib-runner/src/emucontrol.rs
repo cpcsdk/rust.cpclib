@@ -1090,7 +1090,7 @@ DOUBLESIZE=0
     }
 
     let t_emu = emu.clone();
-    let emu_thread = std::thread::spawn(move || start_emulator(&t_emu, &conf).unwrap());
+    let emu_thread = std::thread::spawn(move || start_emulator(&t_emu, &conf).expect("Error detected while closing the emulator"));
 
     if cli.albireo.is_some() {
         std::thread::sleep(Duration::from_secs(5));

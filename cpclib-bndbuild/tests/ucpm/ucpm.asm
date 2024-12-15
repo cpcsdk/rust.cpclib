@@ -12,9 +12,8 @@ loop
 	jp loop
 
 txt incbin "data1.o" : incbin 'data2.o' 
-	incbin "orgams/DATA3.BIN", 128 ; no automatic header removal :(
-	                               ; because orgams is not pedentic
-								   ; on amsdos header
+	incbin "orgams/DATA3.BIN" 	; In opposite to what is written in UCPM 
+								; fanzine, we are now able to remove the header
 LAST_ADDRESS
 
 	save UCPM_EXEC, \ ; Amsdos fname provided in command line
