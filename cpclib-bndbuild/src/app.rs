@@ -437,18 +437,22 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                     "bndbuild.exe"
                 )
             }
+            else if cfg!(target_os = "windows") {
+                (
+                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild",
+                    "bndbuild"
+                )
+            }
             else {
                 unimplemented!()
             };
-            let tmp_dir = camino_tempfile::Builder::new()
+            let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
-                .tempdir_in("self_update")
-                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
-            let tmp_exec_path = tmp_dir.path().join(asset_name);
-            let tmp_exec = ::std::fs::File::open(&tmp_exec_path).unwrap();
+                .tempfile()
+                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e.to_string())))?;
+            let tmp_exec = tmp_exec_path.as_file_mut();
 
-            self_update::Download::from_url(asset_url).download_to(&tmp_exec)?;
-
+            self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
             self_update::self_replace::self_replace(tmp_exec_path).unwrap();
         }
 
