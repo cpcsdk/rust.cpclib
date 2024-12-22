@@ -143,8 +143,9 @@ pub fn build_args_parser() -> clap::Command {
             Arg::new("dot")
                 .long("dot")
                 .alias("grapĥviz")
-                .help("Generate the .dot representation of the selected bndbuild.yml file")
-                .action(ArgAction::SetTrue)
+                .num_args(0..=1)
+                .value_hint(ValueHint::FilePath)
+                .help("Generate the graphviz representation of the selected bndbuild.yml file. If no file is provided, it prints the .dot representation. Otherwise it saves it on disc (only .dot, .png and .svg are possible. dot command MUST be installed and available in PATH)")
         )
         .arg(
             Arg::new("show")

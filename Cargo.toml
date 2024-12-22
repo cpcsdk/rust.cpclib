@@ -42,7 +42,6 @@ cpclib = { version = "0.10.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.9.0", path = "cpclib-asm", default-features = false }
 cpclib-basic = { version = "0.9.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.9.0", path = "cpclib-basm", default-features = false }
-cpclib-bdasm = { version = "0.9.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.7.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-common = { version = "0.9.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false }
@@ -54,35 +53,12 @@ cpclib-macros = { version = "0.9.0", path = "cpclib-macros", default-features = 
 cpclib-runner = { version = "0.7.0", path = "cpclib-runner", default-features = false }
 cpclib-sna = { version = "0.9.0", path = "cpclib-sna", default-features = false }
 cpclib-tokens = { version = "0.9.0", path = "cpclib-tokens", default-features = false }
-cpclib-visual-bndbuild = { version = "0.5.0", path = "cpclib-visual-bndbuild", default-features = false }
 cpclib-xfer = { version = "0.9.0", path = "cpclib-xfer", default-features = false }
 cpclib-xfertool = { version = "0.9.0", path = "cpclib-xfertool", default-features = false }
 cpclib-z80emu = { version = "0.9.0", path = "cpclib-z80emu", default-features = false }
-
-# cpclib = {version="0.7.0", default-features=false}
-# cpclib-asm = {version="0.7.0", default-features=false}
-# cpclib-basic = {version="0.7.0", default-features=false}
-# cpclib-basm = {version="0.7.0", default-features=false}
-# cpclib-bndbuild = {version="0.2.0", default-features=false}
-# cpclib-visual-bndbuild = {version="0.2.0", default-features=false}
-# cpclib-common = {version="0.7.0", default-features=false}
-# cpclib-crunchers = {version="0.7.0", default-features=false}
-# cpclib-disc = {version="0.7.0", default-features=false}
-# cpclib-image = {version="0.7.0", default-features=false}
-# cpclib-imgconverter = {version="0.7.0", default-features=false}
-# cpclib-macros = {version="0.7.0", default-features=false}
-# cpclib-sna = {version="0.7.0", default-features=false}
-# cpclib-tokens = {version="0.7.0", default-features=false}
-# cpclib-xfer = {version="0.7.0", default-features=false}
-# cpclib-xfertool = {version="0.7.0", default-features=false}
-# cpclib-z80emu = {version="0.7.0", default-features=false}
-
-# standard dependencies
-ambassador = "0.3.7"
 anyhow = "1.0.93"
 arrayref = "0.3.9"
 as-slice = "0.2.1"
-assert_matches = "1.5.0"
 bitfield = "0.14.0"
 bitflags = "2.6.0"
 bitvec = "1.0.1"
@@ -97,8 +73,6 @@ clap = { version="4.5.21", features=["color"]}
 codespan-reporting = "0.11.1"
 #contracts = "0.6.3"
 const_format = {version="0.2.33", features = ["fmt"]}
-#crc = "3.2.1"
-criterion = "0.5.1"
 crossbeam-channel = "0.5.13"
 curl = "0.4.47"
 custom_error = "1.9.2"
@@ -158,7 +132,6 @@ shlex = "1.3.0"
 similar-asserts = "1.6.0"
 simple_logger = { version = "4.3.3" }
 smallvec = "1.13.2"
-smartstring = "1.0.1"
 smol_str = "0.2.2"
 strsim = "0.11.1"
 strum = { version = "0.26", features = ["derive"] }
@@ -176,9 +149,7 @@ xcap = "0.0.11"
 
 # gui based dependencies
 eframe = "0.29"
-egui = "0.29"
 claui = "0.4"
-egui_code_editor = "0.2.10"
 egui_file = "0.19"
 open = "5.3.1"
 

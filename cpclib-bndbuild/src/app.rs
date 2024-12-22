@@ -1,4 +1,6 @@
+use std::io::{BufReader, Cursor, Write};
 use std::ops::Deref;
+use std::process::{Command, Stdio};
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -66,7 +68,7 @@ pub enum BndBuilderCommandInner {
         builder: BndBuilder
     },
     /// Generate the graphviz file on stdout
-    Dot(BndBuilder),
+    Dot(BndBuilder, Option<String>),
     /// Update the executable from github artifact or the command if specified
     Update(Option<String>)
 }
@@ -168,8 +170,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder) => {
-                Self::execute_dot(builder, observers);
+            BndBuilderCommandInner::Dot(builder, g, ) => {
+                Self::execute_dot(builder, g.as_ref().map(|g| g.as_str()), observers)?;
                 Ok(None)
             }
         }
@@ -242,10 +244,39 @@ impl BndBuilderCommand {
         }
     }
 
-    fn execute_dot(builder: BndBuilder, _observers: ListOfBndBuilderObserverRc) {
+    fn execute_dot(builder: BndBuilder, g: Option<&str>,_observers: ListOfBndBuilderObserverRc) -> Result<(), BndBuilderError> {
         let dot = builder.to_dot();
-        builder.emit_stdout(dot);
-        builder.emit_stdout("\n");
+
+        if let Some(g) = g {
+            let path: &Utf8Path = Utf8Path::new(g);
+            match path.extension() {
+                Some(ext) if  (ext=="svg") | (ext == "png") => {
+                    let mut child = Command::new("dot")
+                        .arg(format!("-T{ext}"))
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn()
+                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to spawn dot. {e}")))?;
+                    child.stdin.take().unwrap().write_all(dot.as_bytes())
+                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to send the dot content. {e}")))?;
+                    let output = child.wait_with_output()
+                        .map_err(|e| BndBuilderError::AnyError(format!("Error when executing  dot. {e}")))?;
+                    std::fs::write(path, output.stdout)
+                        .map_err(|e| BndBuilderError::AnyError(format!("Error while saving {path}. {e}")))
+                },
+                Some("dot") => {
+                    std::fs::write(path, dot)
+                        .map_err(|e| BndBuilderError::AnyError(e.to_string()))
+                },
+                Some(ext) => Err(BndBuilderError::AnyError(format!("Invalid extension {ext} for {path}"))),
+                None => Err(BndBuilderError::AnyError(format!("Missing extension for {path}")))
+            }
+        }
+        else  {
+            builder.emit_stdout(dot);
+            builder.emit_stdout("\n");
+            Ok(())
+        }
     }
 
     fn execute_list(builder: BndBuilder, observers: ListOfBndBuilderObserverRc) {
@@ -667,8 +698,13 @@ impl BndBuilderApp {
                 return Ok(BndBuilderCommandInner::List(builder));
             }
 
-            if matches.get_flag("dot") {
-                Ok(BndBuilderCommandInner::Dot(builder))
+            if matches.contains_id("dot") {
+                if let Some(g) = matches.get_one::<String>("dot") {
+                    return Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())));
+                }
+                else {
+                    return Ok(BndBuilderCommandInner::Dot(builder, None));
+                }
             }
             else {
                 // Get the targets

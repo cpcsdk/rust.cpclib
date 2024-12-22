@@ -48,3 +48,7 @@ It can be usefull also in case of a former failed installation.
 ### Update ACE
 
 `bndbuild --update ace`
+
+## I want to generate a graphical representation of the of the commands
+
+`bndbuild --dot debug.png`

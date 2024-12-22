@@ -140,6 +140,7 @@ impl Rules {
                 .set_rank_direction(dot_writer::RankDirection::BottomTop)
                 .node_attributes()
                 .set_style(Style::Filled)
+                .set_font_size(12.0)
                 .set_shape(dot_writer::Shape::Rectangle);
 
             let mut all_deps = HashSet::<String>::default();
@@ -156,7 +157,12 @@ impl Rules {
                         .replace("\\", "\\\\")
                         .replace("\"", "\\\"") //.replace("\n", "<br/>")
                     )
-                    .join("\\l");
+                    .join(" \\l");
+                let cmd = if cmd.contains("\\l") {
+                    cmd + " \\l"
+                } else {
+                    cmd
+                };
 
                 let mut rule_id = if deps.is_empty() {
                     None
@@ -168,6 +174,8 @@ impl Rules {
                     }
                     else {
                         rule_node.set_label(&cmd);
+                        rule_node.set_font("Courier New");
+                        rule_node.set_font_size(12.);
                     }
                     Some(rule_node.id())
                 };
@@ -194,6 +202,7 @@ impl Rules {
             for tgt in all_tgts.iter() {
                 digraph
                     .node_named(tgt)
+                    .set("URL", &format!("bndbuild://{}", tgt.replace("\"", "")), true)
                     .set_font_color(dot_writer::Color::Blue)
                     .set("style", "rounded", false);
             }
