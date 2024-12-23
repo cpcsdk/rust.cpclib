@@ -155,7 +155,10 @@ impl Rules {
                     .map(
                         |cmd| cmd.to_string()
                         .replace("\\", "\\\\")
-                        .replace("\"", "\\\"") //.replace("\n", "<br/>")
+                        .replace("\"", "\\\"")
+                        .lines()
+                        .map(|l| l.trim())
+                        .join(" \\\\\\l  ")
                     )
                     .join(" \\l");
                 let cmd = if cmd.contains("\\l") {
@@ -176,6 +179,9 @@ impl Rules {
                         rule_node.set_label(&cmd);
                         rule_node.set_font("Courier New");
                         rule_node.set_font_size(12.);
+                    }
+                    if let Some(help) = rule.help() {
+                        rule_node.set("tooltip", help, true);
                     }
                     Some(rule_node.id())
                 };
