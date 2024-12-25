@@ -1,6 +1,9 @@
-use cpclib_runner::delegated::{DelegateApplicationDescription, DelegatedRunner};
+use cpclib_runner::delegated::{
+    DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication
+};
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::fap::FAPVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
@@ -45,9 +48,8 @@ impl Task {
             },
 
             Task::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
-
+            Task::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             Task::Martine(_) => Some(MartineVersion::default().configuration()),
-
             Task::Fap(_) => Some(FAPVersion::default().configuration()),
 
             _ => None
@@ -128,6 +130,13 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
             DelegatedRunner {
                 app: task.configuration().unwrap(),
                 cmd: FAPVersion::default().get_command().to_owned()
+            }
+            .run(task.args(), observer)
+        },
+        Task::Convgeneric(standard_task_arguments) => {
+            DelegatedRunner {
+                app: task.configuration().unwrap(),
+                cmd: ConvGenericVersion::default().get_command().to_owned()
             }
             .run(task.args(), observer)
         },

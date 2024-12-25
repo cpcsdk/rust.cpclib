@@ -7,5 +7,6 @@ pub mod emulator;
 pub mod fap;
 pub mod impdisc;
 pub mod martine;
+pub mod convgeneric;
 
 pub use runner::{ExternRunner, Runner, RunnerWithClap};

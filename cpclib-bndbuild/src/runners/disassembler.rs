@@ -79,7 +79,6 @@ impl<E: EventObserver + Debug + 'static> Runner for BdasmRunner<E> {
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         let matches = self.get_matches(&itr)?;
 
-
         if matches.get_flag("version") {
             o.emit_stdout(&self.get_clap_command().clone().render_version());
             return Ok(());
@@ -95,7 +94,6 @@ impl<E: EventObserver + Debug + 'static> Runner for BdasmRunner<E> {
             );
             return Ok(());
         }
-
 
         process(&matches);
         Ok(())

@@ -4,6 +4,7 @@ use std::str::FromStr;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
+use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::disark::{DisarkVersion, DISARK_CMD};
 use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::emulator::{
@@ -24,6 +25,7 @@ use crate::runners::hideur::HIDEUR_CMD;
 pub enum Task {
     Assembler(Assembler, StandardTaskArguments),
     BndBuild(StandardTaskArguments),
+    Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
@@ -58,6 +60,7 @@ pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
 pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
+pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
@@ -76,6 +79,7 @@ impl Display for Task {
         let (cmd, s) = match self {
             Task::Assembler(a, s) => (a.get_command(), s),
             Task::BndBuild(s) => (BNDBUILD_CMDS[0], s),
+            Task::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Task::Cp(s) => (CP_CMDS[0], s),
             Task::Disassembler(d, s) => (d.get_command(), s),
             Task::Disc(s) => (DISC_CMDS[0], s),
@@ -120,7 +124,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit,
     basm, bdasm, bndbuild,
-    cp, cpcec,
+    convgeneric, cp, cpcec,
     disark, disc,
     echo, emuctrl, r#extern,
     fap,
@@ -158,6 +162,9 @@ impl<'de> Deserialize<'de> for Task {
 
                 if is_ace_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_ace_default(), std))
+                }
+                else if is_convgeneric_cmd(code) {
+                    Ok(Task::Convgeneric(std))
                 }
                 else if is_cpcec_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_cpcec_default(), std))
@@ -305,6 +312,7 @@ impl Task {
         match self {
             Task::Assembler(_, t)
             | Task::BndBuild(t)
+            | Task::Convgeneric(t)
             | Task::Cp(t)
             | Task::Disassembler(_, t)
             | Task::Disc(t)
@@ -326,6 +334,7 @@ impl Task {
         match self {
             Task::Assembler(_, t)
             | Task::BndBuild(t)
+            | Task::Convgeneric(t)
             | Task::Cp(t)
             | Task::Disassembler(_, t)
             | Task::Disc(t)
@@ -361,6 +370,7 @@ impl Task {
         match self {
             Task::Assembler(..) => false, // wrong when displaying stuff
             Task::BndBuild(_) => false,
+            Task::Convgeneric(_) => false,
             Task::Cp(_) => false,
             Task::Disassembler(..) => false,
             Task::Disc(_) => false,

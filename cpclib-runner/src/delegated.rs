@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::itertools::Itertools;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use scraper::{Html, Selector};
@@ -222,13 +223,13 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
         let mut urls = MutiplatformUrls::default();
 
         if let Some(key) = self.linux_key() {
-            urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+            urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
         if let Some(key) = self.windows_key() {
-            urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+            urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
         if let Some(key) = self.macos_key() {
-            urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).unwrap()));
+            urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
 
         Ok(urls)
