@@ -17,6 +17,7 @@ exclude = ["examples", "tests/dummy", "*.gif"]
 
 [dependencies]
 
+cpclib-bdasm.workspace = true
 cpclib-runner.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-basm = { workspace = true, default-features = false, features = [
@@ -66,7 +67,7 @@ path = "src/main.rs"
 default = ["sna-interactive"]
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
-hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe"]
+hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
 sna-interactive = ["cpclib-sna/interactive"]
 
 [profile.release]

@@ -10,6 +10,7 @@ use crate::event::BndBuilderObserved;
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
+use crate::runners::disassembler::BdasmRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::hideur::HideurRunner;
@@ -80,6 +81,20 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
                     DelegatedRunner {
                         app: e.configuration(),
                         cmd: a.get_command().to_owned()
+                    }
+                    .run(task.args(), observer)
+                },
+            }
+        },
+        Task::Disassembler(d, _) => {
+            match d {
+                crate::runners::disassembler::Disassembler::Bdasm => {
+                    BdasmRunner::default().run(task.args(), observer)
+                },
+                crate::runners::disassembler::Disassembler::Extern(d) => {
+                    DelegatedRunner {
+                        app: d.configuration(),
+                        cmd: d.get_command().to_owned()
                     }
                     .run(task.args(), observer)
                 },

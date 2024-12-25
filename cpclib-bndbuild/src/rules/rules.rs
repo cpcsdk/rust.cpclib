@@ -152,18 +152,19 @@ impl Rules {
                 let cmd = rule
                     .commands()
                     .iter()
-                    .map(
-                        |cmd| cmd.to_string()
-                        .replace("\\", "\\\\")
-                        .replace("\"", "\\\"")
-                        .lines()
-                        .map(|l| l.trim())
-                        .join(" \\\\\\l  ")
-                    )
+                    .map(|cmd| {
+                        cmd.to_string()
+                            .replace("\\", "\\\\")
+                            .replace("\"", "\\\"")
+                            .lines()
+                            .map(|l| l.trim())
+                            .join(" \\\\\\l  ")
+                    })
                     .join(" \\l");
                 let cmd = if cmd.contains("\\l") {
                     cmd + " \\l"
-                } else {
+                }
+                else {
                     cmd
                 };
 
@@ -208,7 +209,11 @@ impl Rules {
             for tgt in all_tgts.iter() {
                 digraph
                     .node_named(tgt)
-                    .set("URL", &format!("bndbuild://{}", tgt.replace("\"", "")), true)
+                    .set(
+                        "URL",
+                        &format!("bndbuild://{}", tgt.replace("\"", "")),
+                        true
+                    )
                     .set_font_color(dot_writer::Color::Blue)
                     .set("style", "rounded", false);
             }

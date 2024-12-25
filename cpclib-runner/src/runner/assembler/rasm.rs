@@ -7,18 +7,14 @@ use crate::delegated::{
 
 pub const RASM_CMD: &str = "rasm";
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RasmVersion {
+    #[default]
     Consolidation2024 // V2_2_5
 }
 
 impl GithubCompilableApplication for RasmVersion {}
 
-impl Default for RasmVersion {
-    fn default() -> Self {
-        Self::Consolidation2024
-    }
-}
 
 impl Display for RasmVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

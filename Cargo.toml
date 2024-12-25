@@ -42,6 +42,7 @@ cpclib = { version = "0.10.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.9.0", path = "cpclib-asm", default-features = false }
 cpclib-basic = { version = "0.9.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.9.0", path = "cpclib-basm", default-features = false }
+cpclib-bdasm = { version = "0.9.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.7.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-common = { version = "0.9.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false }

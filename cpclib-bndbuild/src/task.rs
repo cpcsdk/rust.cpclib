@@ -4,6 +4,8 @@ use std::str::FromStr;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
+use cpclib_runner::runner::disassembler::disark::{DisarkVersion, DISARK_CMD};
+use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
@@ -14,6 +16,7 @@ use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::runners::assembler::Assembler;
+use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::hideur::HIDEUR_CMD;
 
@@ -22,6 +25,7 @@ pub enum Task {
     Assembler(Assembler, StandardTaskArguments),
     BndBuild(StandardTaskArguments),
     Cp(StandardTaskArguments),
+    Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
@@ -50,6 +54,9 @@ pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
 pub const VASM_CMDS: &[&str] = &[VASM_CMD];
 
+pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
+pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
+
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
@@ -70,6 +77,7 @@ impl Display for Task {
             Task::Assembler(a, s) => (a.get_command(), s),
             Task::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Task::Cp(s) => (CP_CMDS[0], s),
+            Task::Disassembler(d, s) => (d.get_command(), s),
             Task::Disc(s) => (DISC_CMDS[0], s),
             Task::Echo(s) => (ECHO_CMDS[0], s),
             Task::Emulator(e, s) => (e.get_command(), s),
@@ -111,9 +119,9 @@ macro_rules! is_some_cmd {
 #[rustfmt::skip]
 is_some_cmd!(
     ace, amspirit,
-    basm, bndbuild,
+    basm, bdasm, bndbuild,
     cp, cpcec,
-    disc,
+    disark, disc,
     echo, emuctrl, r#extern,
     fap,
     hideur,
@@ -168,6 +176,15 @@ impl<'de> Deserialize<'de> for Task {
                 }
                 else if is_basm_cmd(code) {
                     Ok(Task::Assembler(Assembler::Basm, std))
+                }
+                else if is_bdasm_cmd(code) {
+                    Ok(Task::Disassembler(Disassembler::Bdasm, std))
+                }
+                else if is_disark_cmd(code) {
+                    Ok(Task::Disassembler(
+                        Disassembler::Extern(ExternDisassembler::Disark(DisarkVersion::default())),
+                        std
+                    ))
                 }
                 else if is_fap_cmd(code) {
                     Ok(Task::Fap(std))
@@ -289,6 +306,7 @@ impl Task {
             Task::Assembler(_, t)
             | Task::BndBuild(t)
             | Task::Cp(t)
+            | Task::Disassembler(_, t)
             | Task::Disc(t)
             | Task::ImpDsk(t)
             | Task::Echo(t)
@@ -307,20 +325,21 @@ impl Task {
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             Task::Assembler(_, t)
-            | Task::Rm(t)
-            | Task::Echo(t)
-            | Task::ImgConverter(t)
-            | Task::Xfer(t)
-            | Task::Extern(t)
-            | Task::Disc(t)
-            | Task::Hideur(t)
-            | Task::ImpDsk(t)
             | Task::BndBuild(t)
-            | Task::Martine(t)
             | Task::Cp(t)
-            | Task::Snapshot(t)
+            | Task::Disassembler(_, t)
+            | Task::Disc(t)
+            | Task::Echo(t)
             | Task::Emulator(_, t)
-            | Task::Fap(t) => t
+            | Task::Extern(t)
+            | Task::Fap(t)
+            | Task::Hideur(t)
+            | Task::ImgConverter(t)
+            | Task::ImpDsk(t)
+            | Task::Martine(t)
+            | Task::Rm(t)
+            | Task::Snapshot(t)
+            | Task::Xfer(t) => t
         }
     }
 
@@ -341,20 +360,21 @@ impl Task {
     pub fn is_phony(&self) -> bool {
         match self {
             Task::Assembler(..) => false, // wrong when displaying stuff
-            Task::Rm(_) => false,
+            Task::BndBuild(_) => false,
+            Task::Cp(_) => false,
+            Task::Disassembler(..) => false,
+            Task::Disc(_) => false,
             Task::Echo(_) => true,
             Task::Emulator(..) => true,
+            Task::Extern(_) => false,
             Task::Fap(..) => true,
-            Task::Xfer(_) => true, // wrong when downloading files
-            Task::Martine(t) => false,
             Task::Hideur(_) => false,
             Task::ImgConverter(_) => false,
-            Task::Extern(_) => false,
-            Task::BndBuild(_) => false,
-            Task::Disc(_) => false,
             Task::ImpDsk(_) => false,
+            Task::Martine(t) => false,
+            Task::Rm(_) => false,
             Task::Snapshot(_) => false,
-            Task::Cp(_) => false
+            Task::Xfer(_) => true // wrong when downloading files
         }
     }
 }

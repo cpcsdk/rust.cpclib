@@ -1,4 +1,4 @@
-use std::io::{BufReader, Cursor, Write};
+use std::io::Write;
 use std::ops::Deref;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
@@ -170,8 +170,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g, ) => {
-                Self::execute_dot(builder, g.as_ref().map(|g| g.as_str()), observers)?;
+            BndBuilderCommandInner::Dot(builder, g) => {
+                Self::execute_dot(builder, g.as_deref(), observers)?;
                 Ok(None)
             }
         }
@@ -244,35 +244,58 @@ impl BndBuilderCommand {
         }
     }
 
-    fn execute_dot(builder: BndBuilder, g: Option<&str>,_observers: ListOfBndBuilderObserverRc) -> Result<(), BndBuilderError> {
+    fn execute_dot(
+        builder: BndBuilder,
+        g: Option<&str>,
+        _observers: ListOfBndBuilderObserverRc
+    ) -> Result<(), BndBuilderError> {
         let dot = builder.to_dot();
 
         if let Some(g) = g {
             let path: &Utf8Path = Utf8Path::new(g);
             match path.extension() {
-                Some(ext) if  (ext=="svg") | (ext == "png") => {
+                Some(ext) if (ext == "svg") | (ext == "png") => {
                     let mut child = Command::new("dot")
                         .arg(format!("-T{ext}"))
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .spawn()
-                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to spawn dot. {e}")))?;
-                    child.stdin.take().unwrap().write_all(dot.as_bytes())
-                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to send the dot content. {e}")))?;
-                    let output = child.wait_with_output()
-                        .map_err(|e| BndBuilderError::AnyError(format!("Error when executing  dot. {e}")))?;
-                    std::fs::write(path, output.stdout)
-                        .map_err(|e| BndBuilderError::AnyError(format!("Error while saving {path}. {e}")))
+                        .map_err(|e| {
+                            BndBuilderError::AnyError(format!("Unable to spawn dot. {e}"))
+                        })?;
+                    child
+                        .stdin
+                        .take()
+                        .unwrap()
+                        .write_all(dot.as_bytes())
+                        .map_err(|e| {
+                            BndBuilderError::AnyError(format!(
+                                "Unable to send the dot content. {e}"
+                            ))
+                        })?;
+                    let output = child.wait_with_output().map_err(|e| {
+                        BndBuilderError::AnyError(format!("Error when executing  dot. {e}"))
+                    })?;
+                    std::fs::write(path, output.stdout).map_err(|e| {
+                        BndBuilderError::AnyError(format!("Error while saving {path}. {e}"))
+                    })
                 },
                 Some("dot") => {
-                    std::fs::write(path, dot)
-                        .map_err(|e| BndBuilderError::AnyError(e.to_string()))
+                    std::fs::write(path, dot).map_err(|e| BndBuilderError::AnyError(e.to_string()))
                 },
-                Some(ext) => Err(BndBuilderError::AnyError(format!("Invalid extension {ext} for {path}"))),
-                None => Err(BndBuilderError::AnyError(format!("Missing extension for {path}")))
+                Some(ext) => {
+                    Err(BndBuilderError::AnyError(format!(
+                        "Invalid extension {ext} for {path}"
+                    )))
+                },
+                None => {
+                    Err(BndBuilderError::AnyError(format!(
+                        "Missing extension for {path}"
+                    )))
+                },
             }
         }
-        else  {
+        else {
             builder.emit_stdout(dot);
             builder.emit_stdout("\n");
             Ok(())
@@ -480,7 +503,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
                 .tempfile()
-                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e.to_string())))?;
+                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e)))?;
             let tmp_exec = tmp_exec_path.as_file_mut();
 
             self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
@@ -700,10 +723,10 @@ impl BndBuilderApp {
 
             if matches.contains_id("dot") {
                 if let Some(g) = matches.get_one::<String>("dot") {
-                    return Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())));
+                    Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())))
                 }
                 else {
-                    return Ok(BndBuilderCommandInner::Dot(builder, None));
+                    Ok(BndBuilderCommandInner::Dot(builder, None))
                 }
             }
             else {
