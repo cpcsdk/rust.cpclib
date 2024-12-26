@@ -13,6 +13,7 @@ use cpclib_runner::runner::emulator::{
 use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
+use cpclib_runner::runner::tracker::at3::AT_CMD;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -20,6 +21,7 @@ use crate::runners::assembler::Assembler;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::hideur::HIDEUR_CMD;
+use crate::runners::tracker::Tracker;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Task {
@@ -39,6 +41,7 @@ pub enum Task {
     Martine(StandardTaskArguments),
     Rm(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
+    Tracker(Tracker, StandardTaskArguments),
     Xfer(StandardTaskArguments)
 }
 
@@ -58,6 +61,8 @@ pub const VASM_CMDS: &[&str] = &[VASM_CMD];
 
 pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
 pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
+
+pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
 
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
@@ -86,14 +91,15 @@ impl Display for Task {
             Task::Echo(s) => (ECHO_CMDS[0], s),
             Task::Emulator(e, s) => (e.get_command(), s),
             Task::Extern(s) => (EXTERN_CMDS[0], s),
+            Task::Fap(s) => (FAP_CMDS[0], s),
             Task::Hideur(s) => (HIDEUR_CMDS[0], s),
             Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
             Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Task::Martine(s) => (MARTINE_CMDS[0], s),
             Task::Rm(s) => (RM_CMDS[0], s),
+            Task::Snapshot(s) => (SNA_CMDS[0], s),
+            Task::Tracker(t, s) => (t.get_command(), s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Fap(s) => (FAP_CMDS[0], s),
-            Task::Snapshot(s) => (SNA_CMDS[0], s)
         };
 
         write!(
@@ -122,7 +128,7 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit,
+    ace, amspirit, at,
     basm, bdasm, bndbuild,
     convgeneric, cp, cpcec,
     disark, disc,
@@ -162,6 +168,9 @@ impl<'de> Deserialize<'de> for Task {
 
                 if is_ace_cmd(code) {
                     Ok(Task::Emulator(Emulator::new_ace_default(), std))
+                }
+                else if is_at_cmd(code) {
+                    Ok(Task::Tracker(Tracker::new_at3_default(), std))
                 }
                 else if is_convgeneric_cmd(code) {
                     Ok(Task::Convgeneric(std))
@@ -326,6 +335,7 @@ impl Task {
             | Task::Xfer(t)
             | Task::Emulator(_, t)
             | Task::Snapshot(t)
+            | Task::Tracker(_, t)
             | Task::Fap(t) => t
         }
     }
@@ -348,6 +358,7 @@ impl Task {
             | Task::Martine(t)
             | Task::Rm(t)
             | Task::Snapshot(t)
+            | Task::Tracker(_, t)
             | Task::Xfer(t) => t
         }
     }
@@ -384,6 +395,7 @@ impl Task {
             Task::Martine(t) => false,
             Task::Rm(_) => false,
             Task::Snapshot(_) => false,
+            Task::Tracker(_, t) => true, // XXX think if false is better
             Task::Xfer(_) => true // wrong when downloading files
         }
     }

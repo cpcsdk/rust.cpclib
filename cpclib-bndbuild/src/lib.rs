@@ -11,7 +11,7 @@ use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
 use task::{
-    ACE_CMDS, AMSPIRIT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CONVGENERIC_CMDS, CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
+    ACE_CMDS, AMSPIRIT_CMDS, AT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CONVGENERIC_CMDS, CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
 };
 use thiserror::Error;
 
@@ -43,8 +43,9 @@ pub fn build_args_parser() -> clap::Command {
     static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
     let (commands_list, clearable_list) = COMMANDS_LIST.get_or_init(|| {
         let all_applications = [
-            (ACE_CMDS, true),
+            (ACE_CMDS, true),  // true for clearable, false for others
             (AMSPIRIT_CMDS, true),
+            (AT_CMDS, true),
             (BASM_CMDS, false),
             (BDASM_CMDS, false),
             (BNDBUILD_CMDS, false),

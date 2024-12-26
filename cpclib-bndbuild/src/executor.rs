@@ -102,6 +102,13 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
                 },
             }
         },
+        Task::Tracker(d, _) => {
+            DelegatedRunner {
+                app: d.configuration(),
+                cmd: d.get_command().to_owned()
+            }
+            .run(task.args(), observer)
+        },
         Task::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
         Task::Cp(_) => CpRunner::default().run(task.args(), observer),
         Task::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),

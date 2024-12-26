@@ -33,9 +33,11 @@ anyhow = "1.0.93"
 camino = { workspace = true, features = ["serde1"] }
 camino-tempfile.workspace = true
 clap = { workspace = true, features = ["derive"] }
+delegate.workspace = true
 dot-writer = "0.1.4"
 fancy-duration = "0.9.2"
 globmatch = "0.3"
+hostname = "0.4.0"
 lazy-regex = "3.3.0"
 minijinja = { version = "2.5.0", features = ["loader"] }
 paste.workspace = true
@@ -46,7 +48,6 @@ serde.workspace = true
 shlex.workspace = true
 thiserror = "1.0"
 topologic = "1.1.0"
-hostname = "0.4.0"
 
 [build-dependencies]
 built.workspace = true

@@ -1875,6 +1875,7 @@ dependencies = [
  "cpclib-runner",
  "cpclib-sna",
  "cpclib-xfertool",
+ "delegate",
  "dot-writer",
  "fancy-duration",
  "globmatch",

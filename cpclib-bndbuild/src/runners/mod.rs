@@ -11,4 +11,5 @@ pub mod hideur;
 pub mod imgconverter;
 pub mod rm;
 pub mod snapshot;
+pub mod tracker;
 pub mod xfer;
