@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use cpclib_asm::file::load_file;
 use cpclib_asm::ParserOptions;
@@ -18,7 +18,7 @@ fn test_save_ascii() {
         "good_save_ascii.asm",
         "--override"
     ]);
-    let (env, _) = process(&args, Rc::new(())).expect("Unable to assemble the file");
+    let (env, _) = process(&args, Arc::new(())).expect("Unable to assemble the file");
 
     let expected = b"HELLO WORLD";
 
@@ -42,7 +42,7 @@ fn test_save_ascii() {
 fn bankset_check_save() {
     let args_parser = build_args_parser();
     let args = args_parser.get_matches_from(["basm", "-I", "tests/asm/", "good_bankset.asm"]);
-    let (env, _) = process(&args, Rc::new(())).expect("Unable to assemble the file");
+    let (env, _) = process(&args, Arc::new(())).expect("Unable to assemble the file");
 
     let sna = env.sna();
     dbg!(sna.memory_size_header(), sna.memory_dump().len());

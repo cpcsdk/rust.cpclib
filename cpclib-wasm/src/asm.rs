@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use cpclib_asm::error::AssemblerError;
 use cpclib_asm::preamble::*;
@@ -61,7 +61,7 @@ impl From<&AsmParserConfig> for EnvOptions {
 
         let parse_options: ParserOptions = val.into();
 
-        EnvOptions::new(parse_options, assemble_options, Rc::new(()))
+        EnvOptions::new(parse_options, assemble_options, Arc::new(()))
     }
 }
 

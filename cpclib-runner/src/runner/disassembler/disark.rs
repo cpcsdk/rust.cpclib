@@ -1,6 +1,6 @@
 use std::{sync::OnceLock};
 
-use crate::delegated::{DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, MutiplatformUrlsBuilder, StaticInformation};
+use crate::delegated::{DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation};
 
 
 pub const DISARK_CMD: &str = "disark";

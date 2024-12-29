@@ -5,9 +5,8 @@ use std::fs::File;
 use std::io;
 use std::io::Write;
 use std::ops::Deref;
-use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::preamble::file::read_source;
@@ -200,7 +199,7 @@ pub fn assemble(
     matches: &ArgMatches,
     listing: &LocatedListing,
     parse_options: ParserOptions,
-    o: Rc<dyn EnvEventObserver>
+    o: Arc<dyn EnvEventObserver>
 ) -> Result<Env, BasmError> {
     let _show_progress = matches.get_flag("PROGRESS");
 
@@ -559,7 +558,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 /// Launch the assembling of everythin
 pub fn process(
     matches: &ArgMatches,
-    o: Rc<dyn EnvEventObserver>
+    o: Arc<dyn EnvEventObserver>
 ) -> Result<(Env, Vec<AssemblerError>), BasmError> {
     // Handle the display of embedded files list
     if matches.get_flag("LIST_EMBEDDED") {

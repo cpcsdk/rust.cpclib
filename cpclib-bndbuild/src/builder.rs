@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
@@ -36,7 +37,7 @@ self_cell::self_cell! {
 
 pub struct BndBuilder {
     inner: BndBuilderInner,
-    observers: ListOfBndBuilderObserverRc
+    observers: Arc<ListOfBndBuilderObserverRc>
 }
 
 impl Debug for BndBuilder {
@@ -58,8 +59,8 @@ impl BndBuilder {
         &'b self,
         rule: &'r Utf8Path,
         task: &'t Task
-    ) -> Rc<RuleTaskEventDispatcher<'b, 'r, 't, Self>> {
-        Rc::new(RuleTaskEventDispatcher::new(self, rule, task))
+    ) -> Arc<Box<RuleTaskEventDispatcher<'b, 'r, 't, Self>>>{
+        Arc::new(Box::new(RuleTaskEventDispatcher::new(self, rule, task)))
     }
 
     pub fn add_default_rule<S1, S2>(self, targets: &[S1], dependencies: &[S2], kind: &str) -> Self
@@ -260,17 +261,22 @@ impl BndBuilder {
         Ok(())
     }
 
-    fn execute_rule<P: AsRef<Utf8Path>>(
-        &self,
+    fn execute_rule<'s, P: AsRef<Utf8Path> + 's>(
+        &'s self,
         p: P,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
+
+        let p : &'static Utf8Path = unsafe{std::mem::transmute(p)};
+        let this: &'static Self = unsafe{std::mem::transmute(self)};
+        
+
         state.task_count += 1;
 
-        self.start_rule(p, state.task_count, state.nb_deps);
+        self.start_rule(&p, state.task_count, state.nb_deps);
 
-        if let Some(rule) = self.rule(p) {
+        if let Some(rule) = this.rule(p) {
             if !rule.is_enabled() {
                 return Err(BndBuilderError::DisabledTarget(p.to_string()));
             }
@@ -281,9 +287,8 @@ impl BndBuilder {
             }
             else {
                 for task in rule.commands() {
-                    let task_observer = self.task_observer(p, task);
-                    let task_observer = task_observer.deref();
-                    crate::execute(task, task_observer).map_err(|e| {
+                    let task_observer = this.task_observer(p, task);
+                    crate::execute(task, &task_observer).map_err(|e| {
                         BndBuilderError::ExecuteError {
                             fname: p.to_string(),
                             msg: e
@@ -299,10 +304,10 @@ impl BndBuilder {
             });
         }
         else {
-            println!("\t{} is already up to date", p)
+            self.emit_stdout(format!("\t{} is already up to date", &p));
         }
 
-        self.stop_rule(p);
+        self.stop_rule(&p);
 
         Ok(())
     }
@@ -354,12 +359,13 @@ impl BndBuilder {
 }
 
 impl BndBuilderObserved for BndBuilder {
-    fn observers(&self) -> ListOfBndBuilderObserverRc {
-        self.observers.clone()
+    fn observers(&self) -> Arc<ListOfBndBuilderObserverRc> {
+        Arc::clone(&self.observers)
     }
 
     fn add_observer(&mut self, observer: BndBuilderObserverRc) {
-        self.observers.add_observer(observer);
+        Arc::get_mut(&mut self.observers).unwrap().add_observer(observer);
+        dbg!(self.observers.len(), "observers available");
     }
 
     fn emit_stdout<S: AsRef<str>>(&self, s: S) {

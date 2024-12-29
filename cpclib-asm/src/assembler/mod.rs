@@ -24,7 +24,6 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::io::Write;
 use std::ops::{Deref, Neg};
-use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -39,7 +38,7 @@ use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
-use file::{AnyFileName, AnyFileNameOwned};
+use file::AnyFileNameOwned;
 use processed_token::build_processed_token;
 use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
@@ -94,7 +93,7 @@ pub type Bytes = SmallVec<[u8; MAX_SIZE]>;
 pub struct EnvOptions {
     parse: ParserOptions,
     assemble: AssemblingOptions,
-    observer: Rc<dyn EnvEventObserver>
+    observer: Arc<dyn EnvEventObserver>
 }
 
 impl Default for EnvOptions {
@@ -102,7 +101,7 @@ impl Default for EnvOptions {
         Self {
             parse: Default::default(),
             assemble: Default::default(),
-            observer: Rc::new(())
+            observer: Arc::new(())
         }
     }
 }
@@ -138,7 +137,7 @@ impl EnvOptions {
     pub fn new(
         parse: ParserOptions,
         assemble: AssemblingOptions,
-        observer: Rc<dyn EnvEventObserver>
+        observer: Arc<dyn EnvEventObserver>
     ) -> Self {
         Self {
             parse,
@@ -373,9 +372,9 @@ impl CharsetEncoding {
     }
 }
 
-pub trait EnvEventObserver: Debug + EventObserver {}
+pub trait EnvEventObserver: EventObserver {}
 
-impl<T> EnvEventObserver for T where T: EventObserver + Clone + Debug {}
+impl<T> EnvEventObserver for T where T: EventObserver{}
 
 /// Environment of the assembly
 #[allow(missing_docs)]
@@ -1206,8 +1205,8 @@ impl Env {
         }
     }
 
-    pub fn observer(&self) -> Rc<dyn EnvEventObserver> {
-        Rc::clone(&self.options().observer)
+    pub fn observer(&self) -> Arc<dyn EnvEventObserver> {
+        Arc::clone(&self.options().observer)
     }
 
     pub fn handle_print(&mut self) -> Result<(), AssemblerError> {
@@ -3011,7 +3010,7 @@ impl Env {
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
         let mmr = self.ga_mmr;
         let page_info = self.active_page_info_mut();
-        page_info.add_save_command(dbg!(SaveCommand::new(from, size, file, mmr)));
+        page_info.add_save_command(SaveCommand::new(from, size, file, mmr));
 
         Ok(())
     }
@@ -3425,7 +3424,7 @@ where
 #[deprecated(note = "use visit_tokens_one_pass")]
 pub fn visit_tokens<T: Visited>(
     tokens: &[T],
-    o: Rc<dyn EnvEventObserver>
+    o: Arc<dyn EnvEventObserver>
 ) -> Result<Env, AssemblerError> {
     visit_tokens_one_pass(tokens, o)
 }
@@ -3433,7 +3432,7 @@ pub fn visit_tokens<T: Visited>(
 /// Assemble the tokens doing one pass only (so symbols are not properly treated)
 pub fn visit_tokens_one_pass<T: Visited>(
     tokens: &[T],
-    o: Rc<dyn EnvEventObserver>
+    o: Arc<dyn EnvEventObserver>
 ) -> Result<Env, AssemblerError> {
     let mut opt = EnvOptions::default();
     opt.observer = o;
@@ -5249,7 +5248,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         },
     };
 
-    bytes.push(0b11000111 | p << 3);
+    bytes.push(0b11000111 | (p << 3));
     Ok(bytes)
 }
 
@@ -5568,7 +5567,7 @@ impl Env {
             assert!(arg2.is_register16());
             let reg = arg2.get_register16().unwrap();
             bytes.push(0xED);
-            bytes.push(0b0100_0010 | register16_to_code_with_sp(reg) << 4);
+            bytes.push(0b0100_0010 | (register16_to_code_with_sp(reg) << 4));
         }
 
         Ok(bytes)

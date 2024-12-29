@@ -13,11 +13,11 @@ use rustyline::Editor;
 use crate::cli::winnow::ascii::{space1, Caseless};
 use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
 use crate::cli::winnow::error::{
-    AddContext, ContextError, ErrMode, ParserError, StrContext, TreeError
+    AddContext, ContextError, ParserError, StrContext
 };
 use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
 use crate::cli::winnow::token::take_until;
-use crate::cli::winnow::{Located, PResult};
+use crate::cli::winnow::PResult;
 use crate::*;
 
 type Source<'src> = winnow::Located<&'src [u8]>;
@@ -92,7 +92,7 @@ impl Command {
                 use cpclib_common::resolve_path::*;
                 let path = fname.resolve();
                 let path = Utf8Path::from_path(path.as_ref()).unwrap();
-                Snapshot::load(&path)
+                Snapshot::load(path)
                     .map(|s| sna2.replace((fname.clone(), s)))
                     .map_err(|e| {
                         eprintln!("Error while loading {}. {}", path, e);
@@ -122,14 +122,10 @@ impl Command {
             Command::Disassemble(..) => todo!(),
 
             Command::Symbols(symbol) => {
-                sna.get_chunk("SYMB")
+                if let Some(v) = sna.get_chunk("SYMB")
                     .map(|chunk| chunk.ace_symbol_chunk().unwrap())
-                    .map(|chunk| (chunk.get_symbols()))
-                    //.flatten()
-                    .map(|v| {
-                        v.into_iter()
-                            .for_each(|s| println!("{} {:X}", s.name(), s.address()))
-                    });
+                    .map(|chunk| (chunk.get_symbols())) { v.into_iter()
+                            .for_each(|s| println!("{} {:X}", s.name(), s.address())) }
             },
 
             Command::Help => {
@@ -332,7 +328,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
 
     // `()` can be used when no completer is required
     let mut rl = Editor::<(), _>::new().unwrap();
-    if rl.load_history("snapshot.txt").is_err() {}
+    rl.load_history("snapshot.txt").is_err();
     loop {
         let fname1 = Utf8Path::new(fname).file_name().unwrap();
         let prompt = if let Some((fname2, _)) = &sna2 {
@@ -350,7 +346,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
 
                 let line = line.as_bytes();
 
-                let mut src = Source::new(line);
+                let src = Source::new(line);
                 match parse_line::<Source, ContextError>.parse(src) {
                     Ok(cmd) => cmd.handle(&mut sna, &mut sna2),
                     Err(e) => {

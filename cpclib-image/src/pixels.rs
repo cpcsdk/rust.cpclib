@@ -408,7 +408,7 @@ pub mod mode0 {
         let mut pen0 = 0;
         for pos in [7, 3, 5, 1].into_iter().rev() {
             pen0 *= 2;
-            if (b & 1 << pos as u8) != 0 {
+            if (b & (1 << pos as u8)) != 0 {
                 pen0 += 1;
             }
         }
@@ -416,7 +416,7 @@ pub mod mode0 {
         let mut pen1 = 0;
         for pos in [6, 2, 4, 0].into_iter().rev() {
             pen1 *= 2;
-            if (b & 1 << pos as u8) != 0 {
+            if (b & (1 << pos as u8)) != 0 {
                 pen1 += 1;
             }
         }

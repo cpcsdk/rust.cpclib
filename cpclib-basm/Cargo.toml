@@ -28,12 +28,12 @@ time.workspace = true
 test-generator.workspace = true
 camino-tempfile.workspace = true
 pretty_assertions.workspace = true
-#criterion.workspace = true
 globset.workspace = true
 regex.workspace = true
 serial_test.workspace = true
 parking_lot.workspace = true
 glob.workspace = true
+criterion = "0.5.1"
 
 
 [build-dependencies]

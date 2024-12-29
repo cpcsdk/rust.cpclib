@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
 use cpclib_asm::orgams::convert_from_to;
@@ -61,19 +63,22 @@ impl<E: EventObserver> Default for OrgamsRunner<E> {
     }
 }
 
-impl<E: EventObserver + 'static> RunnerWithClap for OrgamsRunner<E> {
+impl<E: EventObserver> RunnerWithClap for OrgamsRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver + 'static> Runner for OrgamsRunner<E> {
+impl<E: EventObserver> Runner for OrgamsRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
-        itr.insert(0, "orgams");
-        let matches = self.get_matches(&itr)?;
+        let matches = {
+            let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+            itr.insert(0, "orgams");
+            let matches = self.get_matches(&itr)?;
+            matches
+        };
 
         let from = matches.get_one::<Utf8PathBuf>("from").unwrap();
 
@@ -175,16 +180,16 @@ impl<E: EventObserver> Default for BasmRunner<E> {
     }
 }
 
-impl<E: EventObserver + Debug + 'static> RunnerWithClap for BasmRunner<E> {
+impl<E: EnvEventObserver + 'static> RunnerWithClap for BasmRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver + Debug + 'static> Runner for BasmRunner<E> {
-    type EventObserver = E;
+impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E>  {
+    type EventObserver = Arc<E>;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         let matches = self.get_matches(&itr)?;
 
@@ -206,15 +211,58 @@ impl<E: EventObserver + Debug + 'static> Runner for BasmRunner<E> {
 
         let start = std::time::Instant::now();
 
-        let o: &'static E = unsafe { std::mem::transmute(o) }; // o is alive all along the function
-        let o: Rc<dyn EnvEventObserver> = Rc::new(o);
-        match cpclib_basm::process(&matches, Rc::clone(&o)) {
+        /*
+        // The aim of this ugly class is to hide the pointer... no idea if it is good to do that
+        #[derive(Debug)]
+        struct RunnerEnvObserver<O> {
+            o: * const(),
+            _phantom: PhantomData<O>
+        }
+        impl<O> Clone for RunnerEnvObserver<O> {
+            fn clone(&self) -> Self {
+                Self{o: self.o, _phantom: Default::default()}
+            }
+        }
+        unsafe impl<O> Send for RunnerEnvObserver<O> {}
+        unsafe impl<O> Sync for RunnerEnvObserver<O> {}
+
+        impl<O> RunnerEnvObserver<O> {
+            fn new<E>(o: &E) -> Self {
+                let ptr: *const E = o;
+                let ptr: *const() = ptr as _;
+                Self {o: ptr, _phantom: Default::default()}
+            }
+        }
+
+        impl<O> Deref for RunnerEnvObserver<O> {
+            type Target = O;
+        
+            fn deref(&self) -> &Self::Target {
+                let ptr : *const Self::Target = self.o as _;
+                unsafe{&*ptr}
+            }
+        }
+        impl<O: EventObserver> EventObserver for RunnerEnvObserver<O> {
+            fn emit_stdout(&self, s: &str) {
+                self.deref().emit_stdout(s);
+            }
+        
+            fn emit_stderr(&self, s: &str) {
+                self.deref().emit_stderr(s);
+            }
+        }
+
+        let o = Rc::new(RunnerEnvObserver::new(o));
+        */
+        let o = Arc::clone(o);
+        let o: Arc<dyn EnvEventObserver> = o as Arc<dyn EnvEventObserver>;
+        match cpclib_basm::process(&matches, Arc::clone(&o)) {
             Ok((env, warnings)) => {
                 for warning in warnings {
                     o.emit_stdout(&format!("{warning}\n"));
                 }
 
-                let report = env.report(&start);
+                let report =     env.report(&start);
                 o.emit_stdout(&format!("{report}"));
 
                 Ok(())

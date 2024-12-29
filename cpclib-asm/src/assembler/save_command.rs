@@ -156,8 +156,6 @@ impl SaveCommand {
             other => *other
         };
 
-        dbg!(&file_type);
-
         // Generate the file
         let amsdos_file = match &file_type {
             FileType::AmsdosBin => {

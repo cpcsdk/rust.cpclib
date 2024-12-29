@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use cpclib_basm::{build_args_parser, process};
 
@@ -30,7 +30,7 @@ fn basm() -> i32 {
     ;
 
     let start = std::time::Instant::now();
-    let o = Rc::new(());
+    let o = Arc::new(());
     match process(&matches, o) {
         Ok((env, warnings)) => {
             for warning in warnings {

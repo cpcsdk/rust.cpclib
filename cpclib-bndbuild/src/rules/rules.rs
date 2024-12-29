@@ -4,7 +4,7 @@ use std::ops::Sub;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
-use dot_writer::{Attributes, DotWriter, Style};
+use dot_writer::{Attributes, DotWriter, Node, Scope, Style};
 use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;
 
@@ -146,9 +146,11 @@ impl Rules {
             let mut all_deps = HashSet::<String>::default();
             let mut all_tgts = HashSet::<String>::default();
 
+            // loop over each rule
             for rule in self.rules() {
                 let deps = rule.dependencies();
                 let tgts = rule.targets();
+
                 let cmd = rule
                     .commands()
                     .iter()
@@ -168,22 +170,38 @@ impl Rules {
                     cmd
                 };
 
+                let build_rule_node =  for <'a, 'b, 'c> |digraph: &'b mut Scope<'a, 'c>| -> Node<'b, 'c> {
+                    let mut rule_node = digraph.node_auto();
+                    if let Some(help) = rule.help() {
+                        rule_node.set("tooltip", help, true);
+                    }
+                    rule_node
+                };
+                let complete_rule_node = |cmd: &str, rule_node: &mut Node| {
+                    debug_assert!(!cmd.is_empty());
+                    rule_node.set_label(&cmd);
+                    rule_node.set_font("Courier New");
+                    rule_node.set_font_size(12.);
+                };
+
                 let mut rule_id = if deps.is_empty() {
-                    None
+                    if cmd.is_empty() {
+                        None
+                    } else {
+                        let mut rule_node = build_rule_node(&mut digraph);
+                        complete_rule_node(&cmd, &mut rule_node);
+                        Some(rule_node.id())
+                    }
                 }
                 else {
-                    let mut rule_node = digraph.node_auto();
+                    let mut rule_node = build_rule_node(&mut digraph);
                     if cmd.is_empty() {
                         rule_node.set("shape", "point", false);
                     }
                     else {
-                        rule_node.set_label(&cmd);
-                        rule_node.set_font("Courier New");
-                        rule_node.set_font_size(12.);
+                        complete_rule_node(&cmd, &mut rule_node);
                     }
-                    if let Some(help) = rule.help() {
-                        rule_node.set("tooltip", help, true);
-                    }
+                    
                     Some(rule_node.id())
                 };
 

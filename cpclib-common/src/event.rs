@@ -1,6 +1,6 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 
-pub trait EventObserver: Debug + Sync {
+pub trait EventObserver: Debug + Sync + Send {
     fn emit_stdout(&self, s: &str);
     fn emit_stderr(&self, s: &str);
 }
@@ -46,5 +46,16 @@ impl<E: EventObserver> EventObserver for Box<E> {
 
     fn emit_stderr(&self, s: &str) {
         self.as_ref().emit_stderr(s)
+    }
+}
+
+
+impl<T: EventObserver> EventObserver for Arc<T> {
+    fn emit_stdout(&self, s: &str) {
+        self.deref().emit_stdout(s)
+    }
+
+    fn emit_stderr(&self, s: &str) {
+        self.deref().emit_stderr(s)
     }
 }

@@ -283,7 +283,7 @@ pub fn assemble_to_amsdos_file(
 #[cfg(test)]
 mod test_super {
 
-    use std::rc::Rc;
+    
 
     use super::*;
 
@@ -406,7 +406,7 @@ Truc
 
     fn code_test(code: &'static str) {
         let asm_options = AssemblingOptions::new_case_insensitive();
-        let env_options = EnvOptions::new(ParserOptions::default(), asm_options, Rc::new(()));
+        let env_options = EnvOptions::new(ParserOptions::default(), asm_options, Arc::new(()));
         let res = assemble_with_options(code, env_options);
         res.map_err(|e| eprintln!("{e}")).unwrap();
     }

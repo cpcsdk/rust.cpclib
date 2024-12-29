@@ -48,6 +48,7 @@ serde.workspace = true
 shlex.workspace = true
 thiserror = "1.0"
 topologic = "1.1.0"
+clap_complete = "4.5.40"
 
 [build-dependencies]
 built.workspace = true

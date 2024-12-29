@@ -17,7 +17,7 @@ impl Tracker {
 	delegate::delegate! {
 		to self.0 {
 			pub fn get_command(&self) -> &str;
-			pub fn configuration<E: EventObserver +'static>(&self) -> DelegateApplicationDescription<E>;
+			pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E>;
 		}
 	}
 }

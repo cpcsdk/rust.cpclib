@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{sync::Arc};
 
 use cpclib_basm::*;
 
@@ -8,7 +8,7 @@ fn main() {
     claui::run(app, |matches| {
         dbg!(matches);
 
-        match process(matches, Rc::new(())) {
+        match process(matches, Arc::new(())) {
             Ok((_env, warnings)) => {
                 let warnings = warnings
                     .iter()

@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
@@ -51,7 +51,7 @@ pub enum AnyFileNameOwned {
     Standard(String)
 }
 
-impl<'fname> From<&AnyFileName<'fname>> for AnyFileNameOwned {
+impl From<&AnyFileName<'_>> for AnyFileNameOwned {
     fn from(value: &AnyFileName) -> Self {
         match value {
             AnyFileName::InImage { image, content } => Self::new_in_image(*image, *content),
@@ -204,9 +204,9 @@ impl<'fname> From<&'fname str> for AnyFileName<'fname> {
         const IMAGES_EXT: &[&str] = &[".dsk", ".edsk", ".hfe"];
 
         let components = fname.split(Self::DSK_SEPARATOR).collect_vec();
-        match &components[..] {
-            &[fname] => AnyFileName::Standard(fname),
-            &[first, second] => {
+        match components[..] {
+            [fname] => AnyFileName::Standard(fname),
+            [first, second] => {
                 let is_image = IMAGES_EXT
                     .iter()
                     .any(|ext| first.to_ascii_lowercase().ends_with(ext));

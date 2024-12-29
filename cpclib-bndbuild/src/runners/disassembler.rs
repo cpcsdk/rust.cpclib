@@ -66,13 +66,13 @@ impl<E: EventObserver> Default for BdasmRunner<E> {
     }
 }
 
-impl<E: EventObserver + Debug + 'static> RunnerWithClap for BdasmRunner<E> {
+impl<E: EventObserver> RunnerWithClap for BdasmRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver + Debug + 'static> Runner for BdasmRunner<E> {
+impl<E: EventObserver> Runner for BdasmRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {

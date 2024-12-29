@@ -76,7 +76,6 @@ pub struct MutiplatformUrls {
 }
 
 impl MutiplatformUrls {
-
     pub fn unique_url(url: &str) -> Self {
         MutiplatformUrls::builder()
             .linux(url)
@@ -100,7 +99,7 @@ pub trait CompilableInformation {
     fn target_os_commands(&self) -> Option<&'static [&'static [&'static str]]>;
 
     /// Produces the function that executes the list of commands
-    fn target_os_compiler<E: EventObserver + 'static>(&self) -> Option<Compiler<E>> {
+    fn target_os_compiler<E: EventObserver>(&self) -> Option<Compiler<E>> {
         if let Some(commands) = self.target_os_commands() {
             let install: Box<dyn Fn(&Utf8Path, &E) -> Result<(), String>> =
                 Box::new(|_path: &Utf8Path, o: &E| -> Result<(), String> {
@@ -120,7 +119,7 @@ pub trait CompilableInformation {
 
 pub trait DownloadableInformation {
     fn target_os_archive_format(&self) -> ArchiveFormat;
-    fn target_os_postinstall<E: EventObserver + 'static>(&self) -> Option<PostInstall<E>> {
+    fn target_os_postinstall<E: EventObserver>(&self) -> Option<PostInstall<E>> {
         None
     }
 }
@@ -251,7 +250,7 @@ pub trait HasConfiguration {
 pub trait GithubCompilableApplication:
     CompilableInformation + ExecutableInformation + GithubInformation + Default
 {
-    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self) // we assume a modern CPU
             .folder(self.target_os_folder())
@@ -265,7 +264,7 @@ pub trait GithubCompilableApplication:
 }
 
 pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation + Default {
-    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self) // we assume a modern CPU
             .folder(self.target_os_folder())
@@ -280,7 +279,7 @@ pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation +
 pub trait InternetStaticCompiledApplication:
     StaticInformation + ExecutableInformation + Default
 {
-    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
@@ -295,7 +294,7 @@ pub trait InternetStaticCompiledApplication:
 pub trait InternetDynamicCompiledApplication:
     DynamicUrlInformation + ExecutableInformation + Default
 {
-    fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())
             .folder(self.target_os_folder())
@@ -537,7 +536,7 @@ impl<E: EventObserver> DelegatedRunner<E> {
     }
 }
 
-impl<E: EventObserver + 'static> Runner for DelegatedRunner<E> {
+impl<E: EventObserver> Runner for DelegatedRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {

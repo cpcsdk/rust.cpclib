@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::ptr::addr_of;
 use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
@@ -100,6 +101,8 @@ impl Display for Task {
             Task::Snapshot(s) => (SNA_CMDS[0], s),
             Task::Tracker(t, s) => (t.get_command(), s),
             Task::Xfer(s) => (XFER_CMDS[0], s),
+            Task::Fap(s) => (FAP_CMDS[0], s),
+            Task::Snapshot(s) => (SNA_CMDS[0], s)
         };
 
         write!(
@@ -293,6 +296,12 @@ impl FromStr for Task {
 }
 
 impl Task {
+
+    // TODO rename Task as TaskInner and embed it in a Task struct that contains the real id
+    pub fn id(&self) -> usize {
+        (&raw const self) as _
+    }
+
     pub fn new_basm(args: &str) -> Self {
         Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }
@@ -355,6 +364,7 @@ impl Task {
             | Task::Hideur(t)
             | Task::ImgConverter(t)
             | Task::ImpDsk(t)
+            | Task::BndBuild(t)
             | Task::Martine(t)
             | Task::Rm(t)
             | Task::Snapshot(t)
@@ -393,10 +403,10 @@ impl Task {
             Task::ImgConverter(_) => false,
             Task::ImpDsk(_) => false,
             Task::Martine(t) => false,
-            Task::Rm(_) => false,
+            Task::Rm(_s) => false, // wrong when downloading files
             Task::Snapshot(_) => false,
             Task::Tracker(_, t) => true, // XXX think if false is better
-            Task::Xfer(_) => true // wrong when downloading files
+            Task::Xfer(_) => true,
         }
     }
 }

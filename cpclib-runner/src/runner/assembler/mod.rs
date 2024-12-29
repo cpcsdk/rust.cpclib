@@ -27,7 +27,7 @@ impl ExternAssembler {
         }
     }
 
-    pub fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             ExternAssembler::Rasm(r) => r.configuration(),
             ExternAssembler::Sjasmplus(r) => r.configuration(),

@@ -1,10 +1,12 @@
 #![feature(cfg_match)]
 #![feature(os_str_display)]
+#![feature(closure_lifetime_binder)]
 
 use std::env::current_dir;
 use std::sync::OnceLock;
 
 use app::BndBuilderApp;
+use clap_complete::Shell;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
@@ -100,7 +102,7 @@ pub fn build_args_parser() -> clap::Command {
     });
     let updatable_list = clearable_list;
 
-    Command::new("bndbuilder")
+    let cmd = Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
         .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any Benediction crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
         .author("Krusty/Benediction")
@@ -239,7 +241,16 @@ pub fn build_args_parser() -> clap::Command {
                 .value_name("TARGET")
                 .help("Provide the target(s) to run.")
                 .conflicts_with_all(["list", "init", "add"])
-        )
+        );
+
+    // TODO use query_shell https://crates.io/crates/query-shell to get the proper shell
+    let cmd = cmd.arg(Arg::new("completion")
+    .long("completion")
+    .action(ArgAction::Set)
+    .help("Generate autocompletion configuration")
+    .value_parser(value_parser!(Shell)));
+
+    cmd
 }
 
 pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {

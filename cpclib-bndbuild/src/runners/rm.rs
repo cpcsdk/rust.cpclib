@@ -47,9 +47,7 @@ impl<E: EventObserver> Runner for RmRunner<E> {
         for fname in itr
             .iter()
             .map(|s| s.as_ref())
-            //    .map(|s| glob(s).unwrap())
             .flat_map(expand_glob)
-        //    .map(|e| dbg!(e.unwrap()))
         {
             let fname = Utf8Path::new(&fname);
             let res = if fname.is_dir() {

@@ -19,7 +19,7 @@ impl Tracker {
 		}
 	}
 
-	pub fn configuration<E: EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
+	pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
 		match self {
 			Tracker::At3(v) => v.configuration(),
 		}

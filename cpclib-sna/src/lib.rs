@@ -43,8 +43,8 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
     let s = s.as_ref();
     let mut bytes = s.as_bstr();
     parse_value::<_, ContextError>(&mut bytes)
-        .map_err(|e| format!("Unable to parse {}. {}", s, e.to_string()))
-        .map_err(|s| SnapshotError::AnyError(s))
+        .map_err(|e| format!("Unable to parse {}. {}", s, e))
+        .map_err(SnapshotError::AnyError)
 }
 
 /// ! Re-implementation of createsnapshot by Ramlaid/Arkos
@@ -930,7 +930,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
             .unwrap()
             .collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
-            let fname = loads[i * 2 + 0];
+            let fname = loads[i * 2];
             let place = loads[i * 2 + 1];
 
             let address = {
@@ -957,7 +957,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
             .collect::<Vec<_>>();
 
         for i in 0..(data.len() / 2) {
-            let address = string_to_nb(data[i * 2 + 0])?;
+            let address = string_to_nb(data[i * 2])?;
             let value = string_to_nb(data[i * 2 + 1])?;
             assert!(value < 0x100);
 
@@ -982,7 +982,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
             .collect::<Vec<_>>();
         for i in 0..(loads.len() / 2) {
             // Read the parameters from the command line
-            let token = dbg!(loads[i * 2 + 0]);
+            let token = dbg!(loads[i * 2]);
             let token = SnapshotFlag::from_str(token).unwrap();
 
             let value = {

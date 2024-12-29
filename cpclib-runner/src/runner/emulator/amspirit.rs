@@ -52,7 +52,7 @@ impl DownloadableInformation for AmspiritVersion {
         ArchiveFormat::SevenZ
     }
 
-    fn target_os_postinstall<E: EventObserver + 'static>(
+    fn target_os_postinstall<E: EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
         let owned_original = match self {

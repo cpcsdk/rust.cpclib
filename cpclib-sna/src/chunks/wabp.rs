@@ -126,11 +126,11 @@ impl WinapeAddress {
     }
 
     pub fn has_count(&self) -> bool {
-        (self.0 & 1 << 31) != 0
+        (self.0 & (1 << 31)) != 0
     }
 
     pub fn has_condition(&self) -> bool {
-        (self.0 & 1 << 30) != 0
+        (self.0 & (1 << 30)) != 0
     }
 }
 

@@ -1,6 +1,7 @@
-use cpclib_runner::delegated::{
-    DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication
-};
+use std::sync::Arc;
+
+use cpclib_asm::EnvEventObserver;
+use cpclib_runner::delegated::{DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication};
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
@@ -9,7 +10,7 @@ use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
-use crate::event::BndBuilderObserved;
+use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cp::CpRunner;
@@ -25,14 +26,15 @@ use crate::task::Task;
 
 impl Task {
     #[inline]
-    pub fn configuration<E: EventObserver + 'static>(
+    pub fn configuration<E: EventObserver>(
         &self
     ) -> Option<DelegateApplicationDescription<E>> {
         match self {
             Task::Emulator(e, _) => {
                 match e {
                     crate::runners::emulator::Emulator::DirectAccess(e) => {
-                        Some(e.configuration::<E>())
+                        let conf: DelegateApplicationDescription<E> = e.configuration();
+                        Some(conf)
                     },
                     crate::runners::emulator::Emulator::ControlledAccess => None
                 }
@@ -50,6 +52,7 @@ impl Task {
             Task::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
             Task::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             Task::Martine(_) => Some(MartineVersion::default().configuration()),
+
             Task::Fap(_) => Some(FAPVersion::default().configuration()),
 
             _ => None
@@ -58,14 +61,13 @@ impl Task {
 }
 
 #[inline]
-pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String> {
-    let observer: &'static _ = unsafe { std::mem::transmute(observer) };
+pub fn execute<E: BndBuilderObserver + 'static>(task: &Task, observer: &Arc<E>) -> Result<(), String> {
     match task {
         Task::Emulator(e, _) => {
             match e {
                 crate::runners::emulator::Emulator::DirectAccess(e) => {
-                    DelegatedRunner {
-                        app: task.configuration::<()>().unwrap(),
+                    DelegatedRunner::<E> {
+                        app: task.configuration::<E>().unwrap(),
                         cmd: e.get_command().to_owned()
                     }
                     .run(task.args(), observer)
@@ -150,7 +152,8 @@ pub fn execute(task: &Task, observer: &impl EventObserver) -> Result<(), String>
     }
     .or_else(|e| {
         if task.ignore_errors() {
-            observer.emit_stdout(&format!("\t\tError ignored. {}", e));
+            dbg!(&observer);
+            observer.emit_stdout(&format!("\t\t[Error ignored] {}", e));
             Ok(())
         }
         else {

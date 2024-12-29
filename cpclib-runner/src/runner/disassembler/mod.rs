@@ -19,7 +19,7 @@ impl ExternDisassembler {
 		}
 	}
 
-	pub fn configuration<E: EventObserver +'static>(&self) -> DelegateApplicationDescription<E> {
+	pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
 		match self {
 			ExternDisassembler::Disark(v) => v.configuration(),
 		}

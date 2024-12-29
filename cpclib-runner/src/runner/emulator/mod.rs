@@ -116,7 +116,7 @@ impl Emulator {
 }
 
 impl Emulator {
-    pub fn configuration<E: EventObserver + 'static>(&self) -> DelegateApplicationDescription<E> {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),

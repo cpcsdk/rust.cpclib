@@ -6,11 +6,12 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use camino::Utf8Path;
+use cpclib_asm::EnvEventObserver;
 use cpclib_runner::event::EventObserver;
 
 use crate::task::Task;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BndBuilderState<'a> {
     ComputeDependencies(&'a Utf8Path),
     RunTasks,
@@ -35,11 +36,23 @@ pub enum BndBuilderEvent<'a> {
     Stderr(&'a str)
 }
 
-pub trait BndBuilderObserver: EventObserver {
+pub trait BndBuilderObserver: EventObserver  + EnvEventObserver {
     fn update(&mut self, event: BndBuilderEvent);
 }
 
-pub trait BndBuilderObserved: Debug {
+impl<T: BndBuilderObserver> BndBuilderObserver for Box<T> {
+    fn update(&mut self, event: BndBuilderEvent) {
+        self.deref_mut().update(event)
+    }
+}
+
+impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
+    fn update(&mut self, event: BndBuilderEvent) {
+        Arc::<T>::get_mut(self).unwrap().update(event)
+    }
+}
+
+pub trait BndBuilderObserved: Debug + Sync + Send {
     #[inline]
     fn emit_stdout<S: AsRef<str>>(&self, s: S) {
         self.notify(BndBuilderEvent::Stdout(s.as_ref()))
@@ -101,7 +114,7 @@ pub trait BndBuilderObserved: Debug {
             observer.update(event.clone());
         }
     }
-    fn observers(&self) -> ListOfBndBuilderObserverRc;
+    fn observers(&self) -> Arc<ListOfBndBuilderObserverRc>;
     fn add_observer(&mut self, observer: BndBuilderObserverRc);
 }
 
@@ -284,6 +297,7 @@ where E: BndBuilderObserved
     }
 }
 
+
 impl<E> EventObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved + Sync
 {
@@ -305,7 +319,7 @@ where E: BndBuilderObserved + Sync
 }
 
 impl<E> BndBuilderObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
-where E: BndBuilderObserved + Sync
+where E: BndBuilderObserved
 {
     fn update(&mut self, event: BndBuilderEvent) {
         unreachable!()

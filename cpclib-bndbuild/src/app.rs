@@ -1,11 +1,13 @@
-use std::io::Write;
+use std::io::{self, BufReader, Cursor, Write};
 use std::ops::Deref;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{parser, ArgMatches};
+use clap_complete::{generate, Shell};
 use cpclib_basm::build_args_parser;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
@@ -33,7 +35,7 @@ use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAM
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
-    observers: ListOfBndBuilderObserverRc
+    observers: Arc<ListOfBndBuilderObserverRc>
 }
 
 #[derive(Debug)]
@@ -46,6 +48,7 @@ pub enum BndBuilderCommandInner {
     Init,
     /// Clear cache folder
     Clear(Option<String>),
+    GenerateCompletion(Shell),
     /// Launch a direct command ans bypass bndbuild
     Direct(String),
     /// Add a task
@@ -76,16 +79,18 @@ pub enum BndBuilderCommandInner {
 #[derive(Debug)]
 pub struct BndBuilderCommand {
     inner: BndBuilderCommandInner,
-    observers: ListOfBndBuilderObserverRc
+    observers: Arc<ListOfBndBuilderObserverRc>
 }
 
 impl BndBuilderObserved for BndBuilderCommand {
-    fn observers(&self) -> ListOfBndBuilderObserverRc {
-        self.observers.clone()
+    fn observers(&self) -> Arc<ListOfBndBuilderObserverRc> {
+        Arc::clone(&self.observers)
     }
 
     fn add_observer(&mut self, observer: BndBuilderObserverRc) {
-        self.observers.add_observer(observer);
+        Arc::get_mut(&mut self.observers)
+            .unwrap()
+            .add_observer(observer);
     }
 }
 
@@ -122,6 +127,12 @@ impl BndBuilderCommand {
         let Self { inner, observers } = self;
 
         match inner {
+            BndBuilderCommandInner::GenerateCompletion(generator) => {
+                let mut cmd = crate::build_args_parser();
+                let name = cmd.get_name().to_string();
+                generate(generator, &mut cmd, name, &mut io::stdout());
+                Ok(None)
+            },
             BndBuilderCommandInner::InnerHelp(runner) => {
                 Self::execute_help(runner.as_str(), &observers);
                 Ok(None)
@@ -170,8 +181,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g) => {
-                Self::execute_dot(builder, g.as_deref(), observers)?;
+            BndBuilderCommandInner::Dot(builder, g, ) => {
+                Self::execute_dot(builder, g.as_ref().map(|g| g.as_str()), &observers)?;
                 Ok(None)
             }
         }
@@ -183,7 +194,7 @@ impl BndBuilderCommand {
         watch: bool,
         mut current_step: usize,
         builder: BndBuilder,
-        observers: ListOfBndBuilderObserverRc
+        observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
         let targets_provided = init_targets.is_some();
 
@@ -244,65 +255,42 @@ impl BndBuilderCommand {
         }
     }
 
-    fn execute_dot(
-        builder: BndBuilder,
-        g: Option<&str>,
-        _observers: ListOfBndBuilderObserverRc
-    ) -> Result<(), BndBuilderError> {
+    fn execute_dot<O: BndBuilderObserver>(builder: BndBuilder, g: Option<&str>,_observers: &O) -> Result<(), BndBuilderError> {
         let dot = builder.to_dot();
 
         if let Some(g) = g {
             let path: &Utf8Path = Utf8Path::new(g);
             match path.extension() {
-                Some(ext) if (ext == "svg") | (ext == "png") => {
+                Some(ext) if  (ext=="svg") | (ext == "png") => {
                     let mut child = Command::new("dot")
                         .arg(format!("-T{ext}"))
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .spawn()
-                        .map_err(|e| {
-                            BndBuilderError::AnyError(format!("Unable to spawn dot. {e}"))
-                        })?;
-                    child
-                        .stdin
-                        .take()
-                        .unwrap()
-                        .write_all(dot.as_bytes())
-                        .map_err(|e| {
-                            BndBuilderError::AnyError(format!(
-                                "Unable to send the dot content. {e}"
-                            ))
-                        })?;
-                    let output = child.wait_with_output().map_err(|e| {
-                        BndBuilderError::AnyError(format!("Error when executing  dot. {e}"))
-                    })?;
-                    std::fs::write(path, output.stdout).map_err(|e| {
-                        BndBuilderError::AnyError(format!("Error while saving {path}. {e}"))
-                    })
+                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to spawn dot. {e}")))?;
+                    child.stdin.take().unwrap().write_all(dot.as_bytes())
+                        .map_err(|e| BndBuilderError::AnyError(format!("Unable to send the dot content. {e}")))?;
+                    let output = child.wait_with_output()
+                        .map_err(|e| BndBuilderError::AnyError(format!("Error when executing  dot. {e}")))?;
+                    std::fs::write(path, output.stdout)
+                        .map_err(|e| BndBuilderError::AnyError(format!("Error while saving {path}. {e}")))
                 },
                 Some("dot") => {
-                    std::fs::write(path, dot).map_err(|e| BndBuilderError::AnyError(e.to_string()))
+                    std::fs::write(path, dot)
+                        .map_err(|e| BndBuilderError::AnyError(e.to_string()))
                 },
-                Some(ext) => {
-                    Err(BndBuilderError::AnyError(format!(
-                        "Invalid extension {ext} for {path}"
-                    )))
-                },
-                None => {
-                    Err(BndBuilderError::AnyError(format!(
-                        "Missing extension for {path}"
-                    )))
-                },
+                Some(ext) => Err(BndBuilderError::AnyError(format!("Invalid extension {ext} for {path}"))),
+                None => Err(BndBuilderError::AnyError(format!("Missing extension for {path}")))
             }
         }
-        else {
+        else  {
             builder.emit_stdout(dot);
             builder.emit_stdout("\n");
             Ok(())
         }
     }
 
-    fn execute_list(builder: BndBuilder, observers: ListOfBndBuilderObserverRc) {
+    fn execute_list<O: BndBuilderObserver>(builder: BndBuilder, observers: O) {
         for rule in builder.rules() {
             builder.emit_stdout(format!(
                 "{}{}: {}\n",
@@ -320,13 +308,13 @@ impl BndBuilderCommand {
         observers.emit_stdout(content.as_ref());
     }
 
-    fn execute_add_task<S: AsRef<str>>(
+    fn execute_add_task<S: AsRef<str>, O: BndBuilderObserver>(
         add: String,
         dependencies: Vec<S>,
         kind: String,
         builder: BndBuilder,
         fname: Utf8PathBuf,
-        _observers: ListOfBndBuilderObserverRc
+        _observers: O
     ) -> Result<(), BndBuilderError> {
         let targets = [add];
         let builder = builder.add_default_rule(&targets, &dependencies, &kind);
@@ -334,10 +322,12 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_direct<O: BndBuilderObserver>(
+    fn execute_direct<O>(
         cmd: &str,
-        observers: &O
-    ) -> Result<(), BndBuilderError> {
+        observers: &Arc<O>
+    ) -> Result<(), BndBuilderError> 
+    where  O: BndBuilderObserver + 'static
+    {
         // TODO remove strong dependency to serde_yaml and replace it by Task
         let task: Task = serde_yaml::from_str(cmd).map_err(BndBuilderError::ParseError)?;
 
@@ -346,7 +336,7 @@ impl BndBuilderCommand {
 
     /// Show the help of a given command
     /// TODO strenghten the help search by testing more keywords
-    fn execute_help<O: BndBuilderObserver>(runner: &str, observers: &O) {
+    fn execute_help<O: BndBuilderObserver + 'static>(runner: &str, observers: &Arc<O>) {
         let help = if is_emuctrl_cmd(runner) {
             EmuControlledRunner::<()>::render_help()
         }
@@ -503,7 +493,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
                 .tempfile()
-                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e)))?;
+                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e.to_string())))?;
             let tmp_exec = tmp_exec_path.as_file_mut();
 
             self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
@@ -570,12 +560,12 @@ impl BndBuilderApp {
     pub fn from_matches(matches: ArgMatches) -> Self {
         Self {
             matches,
-            observers: Vec::with_capacity(1).into()
+            observers: Arc::new(Vec::with_capacity(1).into())
         }
     }
 
     pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
-        self.observers.add_observer(o.into());
+        Arc::get_mut(&mut self.observers).unwrap().add_observer(o.into());
     }
 
     /// Get the string that represents the builder script after interpolation
@@ -646,6 +636,8 @@ impl BndBuilderApp {
                     .map(|s| s.as_str())
                     .join(" ");
                 return Ok(BndBuilderCommandInner::Direct(cmd));
+            } else if let Some(generator) = matches.get_one::<Shell>("completion").copied() {
+                return Ok(BndBuilderCommandInner::GenerateCompletion(generator))
             }
 
             // Search for the file to handle
@@ -723,10 +715,10 @@ impl BndBuilderApp {
 
             if matches.contains_id("dot") {
                 if let Some(g) = matches.get_one::<String>("dot") {
-                    Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())))
+                    return Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())));
                 }
                 else {
-                    Ok(BndBuilderCommandInner::Dot(builder, None))
+                    return Ok(BndBuilderCommandInner::Dot(builder, None));
                 }
             }
             else {
@@ -756,7 +748,7 @@ impl BndBuilderApp {
         get_inner().map(|inner| {
             BndBuilderCommand {
                 inner,
-                observers: self.observers.clone()
+                observers: Arc::clone(&self.observers)
             }
         })
     }

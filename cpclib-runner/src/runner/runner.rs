@@ -2,7 +2,6 @@ use std::io::{BufRead, BufReader};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::{Arc, Mutex};
 use std::thread;
 
 use clap::{ArgMatches, Command};
@@ -73,7 +72,7 @@ impl<E: EventObserver> ExternRunner<E> {
     }
 }
 
-impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
+impl<E: EventObserver> Runner for ExternRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -121,37 +120,25 @@ impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
             .take()
             .expect("Internal error, could not take stderr");
 
-        let o: &'static E = unsafe { std::mem::transmute(o) };
-
-        let o = Arc::new(Mutex::new(o));
-        let oerr = o.clone();
-        let oout = o.clone();
-
-        let stdout_thread = thread::spawn(move || {
-            let stdout_lines = BufReader::new(child_stdout).lines();
-            for line in stdout_lines {
-                let line = line.unwrap();
-                if let Ok(o) = oout.lock() {
+        
+        thread::scope(|s|{
+            s.spawn(||{
+                let stdout_lines = BufReader::new(child_stdout).lines();
+                for line in stdout_lines {
+                    let line = line.unwrap();
                     o.emit_stdout(&line);
                 }
-                else {
-                    unimplemented!()
-                }
-            }
-        });
-
-        let stderr_thread = thread::spawn(move || {
-            let stderr_lines = BufReader::new(child_stderr).lines();
-            for line in stderr_lines {
-                let line = line.unwrap();
-                if let Ok(o) = oerr.lock() {
+            });
+            s.spawn(||{
+                let stderr_lines = BufReader::new(child_stderr).lines();
+                for line in stderr_lines {
+                    let line = line.unwrap();
                     o.emit_stderr(&line);
                 }
-                else {
-                    unimplemented!()
-                }
-            }
+            });
         });
+
+
 
         let status = cmd
             .wait()
@@ -160,8 +147,6 @@ impl<E: EventObserver + 'static> Runner for ExternRunner<E> {
         if !status.success() {
             return Err("Error while launching the command.".to_owned());
         }
-        stdout_thread.join().unwrap();
-        stderr_thread.join().unwrap();
 
         Ok(())
     }
