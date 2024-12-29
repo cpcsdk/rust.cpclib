@@ -188,9 +188,24 @@ impl Rules {
                     if cmd.is_empty() {
                         None
                     } else {
-                        let mut rule_node = build_rule_node(&mut digraph);
-                        complete_rule_node(&cmd, &mut rule_node);
-                        Some(rule_node.id())
+                        let id = {
+                            let mut rule_node = build_rule_node(&mut digraph);
+                            complete_rule_node(&cmd, &mut rule_node);
+                            rule_node.id()
+                        };
+
+                        // we want the tule node to be aligned with the other ones that depend on files
+                        // so we add an extra hidden node
+                        let fill_id = {
+                            let mut fill_space_node = digraph.node_auto();
+                            fill_space_node.set_style(Style::Invisible);
+                            fill_space_node.id()
+                        };
+
+                        let e = digraph.edge(&fill_id, &id);
+                        e.attributes().set_style(Style::Invisible);
+
+                        Some(id)
                     }
                 }
                 else {
