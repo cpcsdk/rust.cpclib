@@ -146,6 +146,8 @@ impl Rules {
             let mut all_deps = HashSet::<String>::default();
             let mut all_tgts = HashSet::<String>::default();
 
+
+
             // loop over each rule
             for rule in self.rules() {
                 let deps = rule.dependencies();
@@ -226,7 +228,9 @@ impl Rules {
 
                     rule_id
                         .as_mut()
-                        .map(|rule_id| digraph.edge(&dep, rule_id.clone()));
+                        .map(|rule_id| {
+                            let e = digraph.edge(&dep, rule_id.clone());
+                        });
                 }
 
                 for tgt in tgts {
@@ -258,13 +262,17 @@ impl Rules {
                     .set("shape", "folder", false);
             }
 
-            for dep in all_deps.sub(&all_tgts) {
-                digraph
-                    .node_named(&dep)
+            {
+                let mut cluster = digraph.cluster();
+                cluster.set_style(Style::Invisible);
+                for dep in all_deps.sub(&all_tgts) {
+                    cluster.node_named(&dep)
                     .set("fontcolor", "darkgreen", false)
                     .set("shape", "cylinder", false)
                     .set_style(Style::Rounded);
+                }
             }
+
         }
 
         String::from_utf8_lossy(&output_bytes).into_owned()
