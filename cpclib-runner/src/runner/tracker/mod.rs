@@ -1,33 +1,35 @@
-use at3::{At3Version, AT_CMD};
 use cpclib_common::event::EventObserver;
+use at3::{At3Version, AT_CMD};
 
 use crate::delegated::{DelegateApplicationDescription, InternetStaticCompiledApplication};
 
 pub mod at3;
 
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Tracker {
-    At3(At3Version)
+	At3(At3Version)
 }
+
 
 impl Tracker {
-    pub fn get_command(&self) -> &str {
-        match self {
-            Tracker::At3(_) => AT_CMD
-        }
-    }
+	pub fn get_command(&self) -> &str {
+		match self {
+			Tracker::At3(_) => AT_CMD,
+		}
+	}
 
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        match self {
-            Tracker::At3(v) => v.configuration()
-        }
-    }
+	pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+		match self {
+			Tracker::At3(v) => v.configuration(),
+		}
+	}
 }
+
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{cpclib_download, StaticInformation};
-    use crate::runner::tracker::at3::At3Version;
+    use crate::{delegated::{cpclib_download, StaticInformation}, runner::tracker::at3::At3Version};
 
     #[test]
     fn test_download_at3() {

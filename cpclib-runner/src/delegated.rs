@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -222,43 +222,13 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
         let mut urls = MutiplatformUrls::default();
 
         if let Some(key) = self.linux_key() {
-            urls.linux = Some(format!(
-                "{}/{}",
-                GITHUB_URL,
-                map.get(key).ok_or_else(|| {
-                    format!(
-                        "'{}' not found among {}",
-                        key,
-                        map.keys().map(|s| format!("'{s}'")).join(", ")
-                    )
-                })?
-            ));
+            urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
         if let Some(key) = self.windows_key() {
-            urls.windows = Some(format!(
-                "{}/{}",
-                GITHUB_URL,
-                map.get(key).ok_or_else(|| {
-                    format!(
-                        "'{}' not found among {}",
-                        key,
-                        map.keys().map(|s| format!("'{s}'")).join(", ")
-                    )
-                })?
-            ));
+            urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
         if let Some(key) = self.macos_key() {
-            urls.macos = Some(format!(
-                "{}/{}",
-                GITHUB_URL,
-                map.get(key).ok_or_else(|| {
-                    format!(
-                        "'{}' not found among {}",
-                        key,
-                        map.keys().map(|s| format!("'{s}'")).join(", ")
-                    )
-                })?
-            ));
+            urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
         }
 
         Ok(urls)
@@ -410,7 +380,7 @@ impl<E: EventObserver> Deref for PostInstall<E> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum ArchiveFormat {
     Raw,
     Tar,
@@ -433,17 +403,6 @@ pub struct DelegateApplicationDescription<E: EventObserver> {
     pub post_install: Option<PostInstall<E>>,
     #[builder(default=RunInDir::CurrentDir)]
     pub in_dir: RunInDir
-}
-
-impl<E: EventObserver> Debug for DelegateApplicationDescription<E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DelegateApplicationDescription")
-            .field("folder", &self.folder)
-            .field("exec_fname", &self.exec_fname)
-            .field("archive_format", &self.archive_format)
-            .field("in_dir", &self.in_dir)
-            .finish()
-    }
 }
 
 pub fn base_cache_folder() -> Utf8PathBuf {
@@ -566,31 +525,14 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
     }
 }
 
-#[derive(Debug)]
 pub struct DelegatedRunner<E: EventObserver> {
-    /// The description of the application to run
     pub app: DelegateApplicationDescription<E>,
-    /// The command line
-    pub cmd: String,
-    /// Weither if the gui must be hidden or not
-    pub transparent: bool
+    pub cmd: String
 }
 
 impl<E: EventObserver> DelegatedRunner<E> {
     pub fn new(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
-        Self {
-            app,
-            cmd,
-            transparent: false
-        }
-    }
-
-    pub fn new_transparent(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
-        Self {
-            app,
-            cmd,
-            transparent: true
-        }
+        Self { app, cmd }
     }
 }
 
@@ -625,13 +567,7 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
         }
 
         // Delegate it to the appropriate luncher
-        let runner = if self.transparent {
-            ExternRunner::<E>::new_transparent(cfg.in_dir)
-        }
-        else {
-            ExternRunner::<E>::new(cfg.in_dir)
-        };
-        runner.inner_run(&command, o)
+        ExternRunner::<E>::new(cfg.in_dir).inner_run(&command, o)
     }
 
     fn get_command(&self) -> &str {

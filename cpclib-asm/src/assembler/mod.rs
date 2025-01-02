@@ -374,7 +374,7 @@ impl CharsetEncoding {
 
 pub trait EnvEventObserver: EventObserver {}
 
-impl<T> EnvEventObserver for T where T: EventObserver {}
+impl<T> EnvEventObserver for T where T: EventObserver{}
 
 /// Environment of the assembly
 #[allow(missing_docs)]

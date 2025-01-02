@@ -1,19 +1,10 @@
 #![feature(let_chains)]
 
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 
-use cpclib_asm::{
-    defb_elements, org, DataAccess, EnvOptions, Expr, ExprEvaluationExt, Listing, ListingExt,
-    Mnemonic, SymbolsTableTrait, Token, TokenExt, Value
-};
-use cpclib_common::camino::Utf8PathBuf;
-use cpclib_common::clap::{self, Arg, ArgAction, ArgMatches, Command};
-use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::error::ParseError;
-use cpclib_common::winnow::Parser;
+use std::{borrow::Cow, collections::HashMap, fs::File, io::Read};
+
+use cpclib_asm::{defb_elements, org, DataAccess, EnvOptions, Expr, ExprEvaluationExt, Listing, ListingExt, Mnemonic, SymbolsTableTrait, Token, TokenExt, Value};
+use cpclib_common::{camino::Utf8PathBuf, clap::{self, Arg, ArgAction, ArgMatches, Command}, smol_str::SmolStr, winnow::{error::ParseError, Parser}};
 use cpclib_disc::amsdos::AmsdosHeader;
 
 pub mod built_info {
@@ -25,6 +16,7 @@ static DESC_BEFORE: &str = const_format::formatc!(
     built_info::PROFILE,
     built_info::BUILT_TIME_UTC
 );
+
 
 /// Several expressions can refere to addresses
 /// TODO move it in a public library
@@ -167,154 +159,156 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
     }
 }
 
+
 pub fn process(matches: &ArgMatches) {
-    // Get the bytes to disassemble
-    let input_filename: &Utf8PathBuf = matches.get_one("INPUT").unwrap();
-    let mut input_bytes = Vec::new();
-    let mut file = File::open(input_filename).expect("Unable to open file");
-    file.read_to_end(&mut input_bytes)
-        .expect("Unable to read file");
-
-    // check if there is an amsdos header and remove it if any
-    let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
-        let header = AmsdosHeader::from_buffer(&input_bytes);
-        if header.is_checksum_valid() {
-            println!("Amsdos header detected and removed");
-            (&input_bytes[128..], Some(header.loading_address()))
-        }
-        else {
-            (input_bytes.as_ref(), None)
-        }
-    }
-    else {
-        (input_bytes.as_ref(), None)
-    };
-
-    // check if first bytes need to be removed
-    let input_bytes = if let Some(skip) = matches.get_one::<usize>("SKIP") {
-        eprintln!("; Skip {} bytes", skip);
-        &input_bytes[*skip..]
-    }
-    else {
-        input_bytes
-    };
-
-    // Disassemble
-    eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
-
-    // Retreive the listing
-    // TODO move that in its own function
-    let mut listing: Listing = if matches.contains_id("DATA_BLOC") {
-        // retreive the blocs and parse them
-        let mut blocs = matches
-            .get_many::<String>("DATA_BLOC")
-            .unwrap()
-            .map(|bloc| {
-                let split = bloc.split('-').collect::<Vec<_>>();
-                let start = usize::from_str_radix(split[0], 16).unwrap();
-                let length = match usize::from_str_radix(split[1], 10) {
-                    Ok(l) => Some(l),
-                    Err(_) => None
-                };
-                (start, length)
-            })
-            .collect::<Vec<_>>();
-        blocs.sort();
-
-        // make the listing for each of the blocs
-        let mut listings: Vec<Listing> = Vec::new();
-        let mut current_idx = 0;
-        while !blocs.is_empty() {
-            let &(bloc_idx, bloc_length) = blocs.first().unwrap();
-            if current_idx < bloc_idx {
-                listings.push(cpclib_asm::disass::disassemble(
-                    &input_bytes[current_idx..(bloc_idx - current_idx)]
-                ));
-                current_idx = bloc_idx;
-            }
-            else {
-                assert_eq!(current_idx, bloc_idx);
-                listings.push(
-                    defb_elements(match bloc_length {
-                        Some(l) => &input_bytes[current_idx..(current_idx + l)],
-                        None => &input_bytes[current_idx..]
-                    })
-                    .into()
-                );
-                blocs.remove(0);
-                current_idx += match bloc_length {
-                    Some(l) => l,
-                    None => input_bytes.len() - current_idx
-                };
-            }
-        }
-        if current_idx < input_bytes.len() {
-            listings.push(cpclib_asm::disass::disassemble(&input_bytes[current_idx..]));
-        }
-
-        // merge the blocs
-        listings
-            .into_iter()
-            .fold(Listing::new(), |mut lst, current| {
-                lst.inject_listing(&current);
-                lst
-            })
-    }
-    else {
-        // no blocs
-        cpclib_asm::disass::disassemble(input_bytes)
-    };
-
-    // add origin if any
-    if let Some(address) = matches.get_one::<String>("ORIGIN") {
-        let address = address.as_bytes();
-        let origin: Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
-        let origin = origin.expect("Unable to parse origin") as u16;
-        listing.insert(0, org(origin));
-    }
-    else if let Some(origin) = amsdos_load {
-        listing.insert(0, org(origin));
-    }
-
-    // add labels
-    let mut labels = if let Some(labels) = matches.get_many::<String>("LABEL") {
-        labels
-            .map(|label| {
-                let split = label.split('=').collect::<Vec<_>>();
-                assert_eq!(2, split.len());
-                let label = split[0];
-                let address = split[1].as_bytes();
-                let address: Result<u32, ParseError<_, ()>> =
-                    cpclib_common::parse_value.parse(address);
-                let address = address.expect("Unable to parse label value") as u16;
-                (address, Cow::Borrowed(label))
-            })
-            .collect::<HashMap<u16, Cow<str>>>()
-    }
-    else {
-        Default::default()
-    };
-
-    // get extra labels
-    for address in collect_addresses_from_expressions(&listing) {
-        let entry = labels.entry(address);
-        entry.or_insert(Cow::Owned(format!("label_{:.4x}", address)));
-    }
-    listing.inject_labels(labels);
-    inject_labels_into_expressions(&mut listing);
-
-    if matches.get_flag("COMPRESS") {
-        println!("{}", listing.to_string());
-    }
-    else {
-        let mut options = EnvOptions::default();
-        options.write_listing_output(std::io::stdout());
-        cpclib_asm::assemble_with_options(&listing.to_string(), options).unwrap();
-    }
+	  // Get the bytes to disassemble
+	  let input_filename: &Utf8PathBuf = matches.get_one("INPUT").unwrap();
+	  let mut input_bytes = Vec::new();
+	  let mut file = File::open(input_filename).expect("Unable to open file");
+	  file.read_to_end(&mut input_bytes)
+		  .expect("Unable to read file");
+  
+	  // check if there is an amsdos header and remove it if any
+	  let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
+		  let header = AmsdosHeader::from_buffer(&input_bytes);
+		  if header.is_checksum_valid() {
+			  println!("Amsdos header detected and removed");
+			  (&input_bytes[128..], Some(header.loading_address()))
+		  }
+		  else {
+			  (input_bytes.as_ref(), None)
+		  }
+	  }
+	  else {
+		  (input_bytes.as_ref(), None)
+	  };
+  
+	  // check if first bytes need to be removed
+	  let input_bytes = if let Some(skip) = matches.get_one::<usize>("SKIP") {
+		  eprintln!("; Skip {} bytes", skip);
+		  &input_bytes[*skip..]
+	  }
+	  else {
+		  input_bytes
+	  };
+  
+	  // Disassemble
+	  eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
+  
+	  // Retreive the listing
+	  // TODO move that in its own function
+	  let mut listing: Listing = if matches.contains_id("DATA_BLOC") {
+		  // retreive the blocs and parse them
+		  let mut blocs = matches
+			  .get_many::<String>("DATA_BLOC")
+			  .unwrap()
+			  .map(|bloc| {
+				  let split = bloc.split('-').collect::<Vec<_>>();
+				  let start = usize::from_str_radix(split[0], 16).unwrap();
+				  let length = match usize::from_str_radix(split[1], 10) {
+					  Ok(l) => Some(l),
+					  Err(_) => None
+				  };
+				  (start, length)
+			  })
+			  .collect::<Vec<_>>();
+		  blocs.sort();
+  
+		  // make the listing for each of the blocs
+		  let mut listings: Vec<Listing> = Vec::new();
+		  let mut current_idx = 0;
+		  while !blocs.is_empty() {
+			  let &(bloc_idx, bloc_length) = blocs.first().unwrap();
+			  if current_idx < bloc_idx {
+				  listings.push(cpclib_asm::disass::disassemble(
+					  &input_bytes[current_idx..(bloc_idx - current_idx)]
+				  ));
+				  current_idx = bloc_idx;
+			  }
+			  else {
+				  assert_eq!(current_idx, bloc_idx);
+				  listings.push(
+					  defb_elements(match bloc_length {
+						  Some(l) => &input_bytes[current_idx..(current_idx + l)],
+						  None => &input_bytes[current_idx..]
+					  })
+					  .into()
+				  );
+				  blocs.remove(0);
+				  current_idx += match bloc_length {
+					  Some(l) => l,
+					  None => input_bytes.len() - current_idx
+				  };
+			  }
+		  }
+		  if current_idx < input_bytes.len() {
+			  listings.push(cpclib_asm::disass::disassemble(&input_bytes[current_idx..]));
+		  }
+  
+		  // merge the blocs
+		  listings
+			  .into_iter()
+			  .fold(Listing::new(), |mut lst, current| {
+				  lst.inject_listing(&current);
+				  lst
+			  })
+	  }
+	  else {
+		  // no blocs
+		  cpclib_asm::disass::disassemble(input_bytes)
+	  };
+  
+	  // add origin if any
+	  if let Some(address) = matches.get_one::<String>("ORIGIN") {
+		  let address = address.as_bytes();
+		  let origin: Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
+		  let origin = origin.expect("Unable to parse origin") as u16;
+		  listing.insert(0, org(origin));
+	  }
+	  else if let Some(origin) = amsdos_load {
+		  listing.insert(0, org(origin));
+	  }
+  
+	  // add labels
+	  let mut labels = if let Some(labels) = matches.get_many::<String>("LABEL") {
+		  labels
+			  .map(|label| {
+				  let split = label.split('=').collect::<Vec<_>>();
+				  assert_eq!(2, split.len());
+				  let label = split[0];
+				  let address = split[1].as_bytes();
+				  let address: Result<u32, ParseError<_, ()>> =
+					  cpclib_common::parse_value.parse(address);
+				  let address = address.expect("Unable to parse label value") as u16;
+				  (address, Cow::Borrowed(label))
+			  })
+			  .collect::<HashMap<u16, Cow<str>>>()
+	  }
+	  else {
+		  Default::default()
+	  };
+  
+	  // get extra labels
+	  for address in collect_addresses_from_expressions(&listing) {
+		  let entry = labels.entry(address);
+		  entry.or_insert(Cow::Owned(format!("label_{:.4x}", address)));
+	  }
+	  listing.inject_labels(labels);
+	  inject_labels_into_expressions(&mut listing);
+  
+	  if matches.get_flag("COMPRESS") {
+		  println!("{}", listing.to_string());
+	  }
+	  else {
+		  let mut options = EnvOptions::default();
+		  options.write_listing_output(std::io::stdout());
+		  cpclib_asm::assemble_with_options(&listing.to_string(), options).unwrap();
+	  }
 }
 
+
 pub fn build_args_parser() -> Command {
-    Command::new("bdasm")
+	Command::new("bdasm")
 		.version(built_info::PKG_VERSION)
 		.author("Krusty/Benediction")
 		.about("Benediction disassembler")

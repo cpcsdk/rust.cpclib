@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -58,7 +59,7 @@ impl BndBuilder {
         &'b self,
         rule: &'r Utf8Path,
         task: &'t Task
-    ) -> Arc<Box<RuleTaskEventDispatcher<'b, 'r, 't, Self>>> {
+    ) -> Arc<Box<RuleTaskEventDispatcher<'b, 'r, 't, Self>>>{
         Arc::new(Box::new(RuleTaskEventDispatcher::new(self, rule, task)))
     }
 
@@ -267,12 +268,13 @@ impl BndBuilder {
     ) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
 
-        let p: &'static Utf8Path = unsafe { std::mem::transmute(p) };
-        let this: &'static Self = unsafe { std::mem::transmute(self) };
+        let p : &'static Utf8Path = unsafe{std::mem::transmute(p)};
+        let this: &'static Self = unsafe{std::mem::transmute(self)};
+        
 
         state.task_count += 1;
 
-        self.start_rule(p, state.task_count, state.nb_deps);
+        self.start_rule(&p, state.task_count, state.nb_deps);
 
         if let Some(rule) = this.rule(p) {
             if !rule.is_enabled() {
@@ -305,7 +307,7 @@ impl BndBuilder {
             self.emit_stdout(format!("\t{} is already up to date", &p));
         }
 
-        self.stop_rule(p);
+        self.stop_rule(&p);
 
         Ok(())
     }
@@ -362,9 +364,7 @@ impl BndBuilderObserved for BndBuilder {
     }
 
     fn add_observer(&mut self, observer: BndBuilderObserverRc) {
-        Arc::get_mut(&mut self.observers)
-            .unwrap()
-            .add_observer(observer);
+        Arc::get_mut(&mut self.observers).unwrap().add_observer(observer);
         dbg!(self.observers.len(), "observers available");
     }
 

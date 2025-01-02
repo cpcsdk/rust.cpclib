@@ -14,12 +14,13 @@ pub enum ConvGenericVersion {
 }
 
 impl ConvGenericVersion {
-    pub fn get_command(&self) -> &str {
-        CONVGENERIC_CMD
-    }
+	pub fn get_command(&self) -> &str {
+		CONVGENERIC_CMD
+	}
 }
 
 impl GithubCompilableApplication for ConvGenericVersion {}
+
 
 impl Display for ConvGenericVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -69,14 +70,9 @@ impl ExecutableInformation for ConvGenericVersion {
 impl CompilableInformation for ConvGenericVersion {
     fn target_os_commands(&self) -> Option<&'static [&'static [&'static str]]> {
         if cfg!(target_os = "linux") {
-            Some(&[&[
-                "gcc",
-                "convgeneric.c",
-                "-o",
-                "convgeneric",
-                "-lm",
-                "-lpng16"
-            ]])
+            Some(&[
+				&["gcc", "convgeneric.c", "-o", "convgeneric", "-lm", "-lpng16"]
+			])
         }
         else {
             None

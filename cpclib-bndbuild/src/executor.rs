@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use cpclib_runner::delegated::{
-    DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication
-};
+use cpclib_asm::EnvEventObserver;
+use cpclib_runner::delegated::{DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication};
 use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
@@ -23,13 +22,15 @@ use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::rm::RmRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
-use crate::task::InnerTask;
+use crate::task::Task;
 
-impl InnerTask {
+impl Task {
     #[inline]
-    pub fn configuration<E: EventObserver>(&self) -> Option<DelegateApplicationDescription<E>> {
+    pub fn configuration<E: EventObserver>(
+        &self
+    ) -> Option<DelegateApplicationDescription<E>> {
         match self {
-            InnerTask::Emulator(e, _) => {
+            Task::Emulator(e, _) => {
                 match e {
                     crate::runners::emulator::Emulator::DirectAccess(e) => {
                         let conf: DelegateApplicationDescription<E> = e.configuration();
@@ -39,7 +40,7 @@ impl InnerTask {
                 }
             },
 
-            InnerTask::Assembler(a, _) => {
+            Task::Assembler(a, _) => {
                 match a {
                     Assembler::Extern(extern_assembler) => {
                         Some(extern_assembler.configuration::<E>())
@@ -48,11 +49,11 @@ impl InnerTask {
                 }
             },
 
-            InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
-            InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
-            InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
+            Task::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
+            Task::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
+            Task::Martine(_) => Some(MartineVersion::default().configuration()),
 
-            InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
+            Task::Fap(_) => Some(FAPVersion::default().configuration()),
 
             _ => None
         }
@@ -60,18 +61,15 @@ impl InnerTask {
 }
 
 #[inline]
-pub fn execute<E: BndBuilderObserver + 'static>(
-    task: &InnerTask,
-    observer: &Arc<E>
-) -> Result<(), String> {
+pub fn execute<E: BndBuilderObserver + 'static>(task: &Task, observer: &Arc<E>) -> Result<(), String> {
     match task {
-        InnerTask::Emulator(e, _) => {
+        Task::Emulator(e, _) => {
             match e {
                 crate::runners::emulator::Emulator::DirectAccess(e) => {
-                    DelegatedRunner::<E>::new(
-                        task.configuration::<E>().unwrap(),
-                        e.get_command().to_owned()
-                    )
+                    DelegatedRunner::<E> {
+                        app: task.configuration::<E>().unwrap(),
+                        cmd: e.get_command().to_owned()
+                    }
                     .run(task.args(), observer)
                 },
                 crate::runners::emulator::Emulator::ControlledAccess => {
@@ -79,73 +77,83 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
-        InnerTask::Assembler(a, _) => {
+        Task::Assembler(a, _) => {
             match a {
                 Assembler::Basm => BasmRunner::default().run(task.args(), observer),
                 Assembler::Orgams => OrgamsRunner::default().run(task.args(), observer),
                 Assembler::Extern(e) => {
-                    DelegatedRunner::<E>::new(e.configuration(), a.get_command().to_owned())
-                        .run(task.args(), observer)
+                    DelegatedRunner {
+                        app: e.configuration(),
+                        cmd: a.get_command().to_owned()
+                    }
+                    .run(task.args(), observer)
                 },
             }
         },
-        InnerTask::Disassembler(d, _) => {
+        Task::Disassembler(d, _) => {
             match d {
                 crate::runners::disassembler::Disassembler::Bdasm => {
                     BdasmRunner::default().run(task.args(), observer)
                 },
                 crate::runners::disassembler::Disassembler::Extern(d) => {
-                    DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
-                        .run(task.args(), observer)
+                    DelegatedRunner {
+                        app: d.configuration(),
+                        cmd: d.get_command().to_owned()
+                    }
+                    .run(task.args(), observer)
                 },
             }
         },
-        InnerTask::Tracker(d, _) => {
-            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
-                .run(task.args(), observer)
-        },
-        InnerTask::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
-        InnerTask::Cp(_) => CpRunner::default().run(task.args(), observer),
-        InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
-        InnerTask::Echo(_) => EchoRunner::default().run(task.args(), observer),
-        InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),
-        InnerTask::Hideur(_) => HideurRunner::default().run(task.args(), observer),
-        InnerTask::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
-        InnerTask::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),
-        InnerTask::ImpDsk(_) => {
-            DelegatedRunner::<E>::new(
-                task.configuration().unwrap(),
-                ImpDskVersion::default().get_command().to_owned()
-            )
+        Task::Tracker(d, _) => {
+            DelegatedRunner {
+                app: d.configuration(),
+                cmd: d.get_command().to_owned()
+            }
             .run(task.args(), observer)
         },
-        InnerTask::Martine(_) => {
-            DelegatedRunner::<E>::new(
-                task.configuration().unwrap(),
-                MartineVersion::default().get_command().to_owned()
-            )
+        Task::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
+        Task::Cp(_) => CpRunner::default().run(task.args(), observer),
+        Task::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
+        Task::Echo(_) => EchoRunner::default().run(task.args(), observer),
+        Task::Extern(_) => ExternRunner::default().run(task.args(), observer),
+        Task::Hideur(_) => HideurRunner::default().run(task.args(), observer),
+        Task::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
+        Task::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),
+        Task::ImpDsk(_) => {
+            DelegatedRunner {
+                app: task.configuration().unwrap(),
+                cmd: ImpDskVersion::default().get_command().to_owned()
+            }
             .run(task.args(), observer)
         },
-        InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
-        InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
-        InnerTask::Fap(_) => {
-            DelegatedRunner::<E>::new(
-                task.configuration().unwrap(),
-                FAPVersion::default().get_command().to_owned()
-            )
+        Task::Martine(_) => {
+            DelegatedRunner {
+                app: task.configuration().unwrap(),
+                cmd: MartineVersion::default().get_command().to_owned()
+            }
             .run(task.args(), observer)
         },
-        InnerTask::Convgeneric(standard_task_arguments) => {
-            DelegatedRunner::<E>::new(
-                task.configuration().unwrap(),
-                ConvGenericVersion::default().get_command().to_owned()
-            )
+        Task::Rm(_) => RmRunner::default().run(task.args(), observer),
+        Task::Xfer(_) => XferRunner::default().run(task.args(), observer),
+        Task::Fap(_) => {
+            DelegatedRunner {
+                app: task.configuration().unwrap(),
+                cmd: FAPVersion::default().get_command().to_owned()
+            }
+            .run(task.args(), observer)
+        },
+        Task::Convgeneric(standard_task_arguments) => {
+            DelegatedRunner {
+                app: task.configuration().unwrap(),
+                cmd: ConvGenericVersion::default().get_command().to_owned()
+            }
             .run(task.args(), observer)
         },
     }
     .or_else(|e| {
         if task.ignore_errors() {
-            observer.emit_stdout(&format!("[Error ignored] {}", e));
+            dbg!(&observer);
+            observer.emit_stdout(&format!("\t\t[Error ignored] {}", e));
             Ok(())
         }
         else {

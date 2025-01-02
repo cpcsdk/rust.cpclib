@@ -44,7 +44,11 @@ impl<E: EventObserver> Runner for RmRunner<E> {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut errors = String::new();
 
-        for fname in itr.iter().map(|s| s.as_ref()).flat_map(expand_glob) {
+        for fname in itr
+            .iter()
+            .map(|s| s.as_ref())
+            .flat_map(expand_glob)
+        {
             let fname = Utf8Path::new(&fname);
             let res = if fname.is_dir() {
                 std::fs::remove_dir_all(fname)
@@ -59,7 +63,7 @@ impl<E: EventObserver> Runner for RmRunner<E> {
                 },
                 Err(e) => {
                     errors.push_str(&format!(
-                        "Unable to remove {}. {}.\n",
+                        "Unable to remove {}:{}.\n",
                         fname, // .display()
                         e
                     ))

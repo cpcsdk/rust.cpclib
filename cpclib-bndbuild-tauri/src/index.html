@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bndbuild</title>
+    <script type="module" src="/main.js" defer></script>
+    <style>
+      #logs .stderr{
+        color: red;
+      }
+
+      #logs .stdout{
+        color: green;
+      }
+
+      #logs {
+        text-align: start;
+        font-weight: bold;;
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="container">
+      <div>
+        <div id="svgContainer" style="float:left"></div>
+
+        <div>
+          <label id="ruleProgressLabel" for="ruleProgress">Rules progress:</label>
+          <progress id="ruleProgress" value="0" max="0"></progress>
+          <div id="logs" ></div>
+          <input type="submit" value="Clear" id ="clear_button"></input>
+          <input type="text" id="stdin"></input>
+        </div>
+      </div>
+
+
+      <div class="row">
+        <div id="statusContainer" ></div>
+      </div>
+    </main>
+  </body>
+</html>

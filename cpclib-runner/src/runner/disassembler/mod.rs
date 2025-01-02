@@ -5,24 +5,27 @@ use crate::delegated::{DelegateApplicationDescription, InternetStaticCompiledApp
 
 pub mod disark;
 
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ExternDisassembler {
-    Disark(DisarkVersion)
+	Disark(DisarkVersion)
 }
+
 
 impl ExternDisassembler {
-    pub fn get_command(&self) -> &str {
-        match self {
-            ExternDisassembler::Disark(disark_version) => DISARK_CMD
-        }
-    }
+	pub fn get_command(&self) -> &str {
+		match self {
+			ExternDisassembler::Disark(disark_version) => DISARK_CMD,
+		}
+	}
 
-    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        match self {
-            ExternDisassembler::Disark(v) => v.configuration()
-        }
-    }
+	pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+		match self {
+			ExternDisassembler::Disark(v) => v.configuration(),
+		}
+	}
 }
+
 
 #[cfg(test)]
 mod test {

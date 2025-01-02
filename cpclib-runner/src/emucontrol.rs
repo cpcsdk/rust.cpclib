@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
 use bon::builder;
@@ -8,14 +7,14 @@ use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
-use cpclib_common::winnow::stream::AsChar;
 use delegate;
-use enigo::{Enigo, Key, Keyboard, Settings};
+use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
 use xcap::image::{open, ImageBuffer, Rgba};
+use xcap::Window;
 
-use crate::ace_config::{AceConfig, AceConfigFlag, SANE_CONFIGURATION};
+use crate::ace_config::AceConfig;
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
@@ -29,345 +28,6 @@ type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub enum AmstradRom {
     Orgams,
     Unidos
-}
-
-type EmuScreenShot = ImageBuffer<Rgba<u8>, Vec<u8>>;
-
-#[derive(Debug)]
-pub enum EmuWindow {
-    Xcap(xcap::Window),
-    Xvfb(usize, Option<wmctrl::Window>)
-}
-
-impl EmuWindow {
-    pub fn capture_image(&self) -> EmuScreenShot {
-        match self {
-            EmuWindow::Xcap(window) => window.capture_image().unwrap(),
-            EmuWindow::Xvfb(display, window) => {
-                match window {
-                    Some(window) => {
-                        let cmd = std::process::Command::new("xwd")
-                            .args(["-name", window.title(), "-out", "/tmp/screen.xwd"])
-                            .output()
-                            .unwrap();
-
-                        unimplemented!()
-                    },
-
-                    None => {
-                        let cmd = std::process::Command::new("xwd")
-                            .args(["-out", "/tmp/screen.xwd"])
-                            .output()
-                            .unwrap();
-
-                        unimplemented!()
-                    }
-                }
-            },
-        }
-    }
-}
-
-enum WindowEventsManager {
-    Enigo(Enigo)
-}
-
-impl From<Enigo> for WindowEventsManager {
-    fn from(value: Enigo) -> Self {
-        Self::Enigo(value)
-    }
-}
-
-#[derive(Clone, Debug, Copy)]
-pub enum HostKey {
-    F1,
-    F2,
-    F3,
-    F4,
-    F5,
-    F6,
-    F7,
-    F8,
-    F9,
-    F10,
-    F11,
-    F12,
-    Ascii(char),
-    Return
-}
-
-impl HostKey {
-    pub fn enigo(&self) -> (Option<enigo::Key>, enigo::Key) {
-        match self {
-            Self::F1 => (None, Key::F1),
-            Self::F2 => (None, Key::F2),
-            Self::F3 => (None, Key::F3),
-            Self::F4 => (None, Key::F4),
-            Self::F5 => (None, Key::F5),
-            Self::F6 => (None, Key::F6),
-            Self::F7 => (None, Key::F7),
-            Self::F8 => (None, Key::F8),
-            Self::F9 => (None, Key::F9),
-            Self::F10 => (None, Key::F10),
-            Self::F11 => (None, Key::F11),
-            Self::F12 => (None, Key::F12),
-            Self::Ascii(c) => {
-                // handle boring French keyboard ?
-                if *c == '1' {
-                    (Some(Key::Shift), Key::Unicode('&'))
-                }
-                else if *c == '2' {
-                    (Some(Key::Shift), Key::Unicode('é'))
-                }
-                else if *c == '3' {
-                    (Some(Key::Shift), Key::Unicode('"'))
-                }
-                else if *c == '4' {
-                    (Some(Key::Shift), Key::Unicode('\''))
-                }
-                else if *c == '5' {
-                    (Some(Key::Shift), Key::Unicode('('))
-                }
-                else if *c == '6' {
-                    (Some(Key::Shift), Key::Unicode('-'))
-                }
-                else if *c == '7' {
-                    (Some(Key::Shift), Key::Unicode('è'))
-                }
-                else if *c == '8' {
-                    (Some(Key::Shift), Key::Unicode('_'))
-                }
-                else if *c == '9' {
-                    (Some(Key::Shift), Key::Unicode('ç'))
-                }
-                else if *c == '0' {
-                    (Some(Key::Shift), Key::Unicode('à'))
-                }
-                else if *c == '?' {
-                    (Some(Key::Shift), Key::Unicode(','))
-                }
-                else if *c == '.' {
-                    (Some(Key::Shift), Key::Unicode(';'))
-                }
-                else if *c == '/' {
-                    (Some(Key::Shift), Key::Unicode(':'))
-                }
-                else if *c == '§' {
-                    (Some(Key::Shift), Key::Unicode('!'))
-                }
-                else if *c == '%' {
-                    (Some(Key::Shift), Key::Unicode('ù'))
-                }
-                else if *c == '£' {
-                    (Some(Key::Shift), Key::Unicode('$'))
-                }
-                else if *c == '+' {
-                    (Some(Key::Shift), Key::Unicode('='))
-                }
-                else if c.is_ascii_uppercase() {
-                    (Some(Key::Shift), Key::Unicode(c.to_ascii_lowercase()))
-                }
-                else {
-                    (None, Key::Unicode(*c))
-                }
-            },
-            Self::Return => (None, Key::Return)
-        }
-    }
-}
-
-impl HostKey {
-    pub fn char(&self) -> Option<char> {
-        match self {
-            Self::Ascii(c) => Some(*c),
-            _ => None
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct HostKeys(Vec<HostKey>);
-
-impl From<char> for HostKey {
-    fn from(value: char) -> Self {
-        if value == '\n' {
-            HostKey::Return
-        }
-        else {
-            HostKey::Ascii(value)
-        }
-    }
-}
-
-impl Deref for HostKeys {
-    type Target = Vec<HostKey>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<&str> for HostKeys {
-    fn from(value: &str) -> Self {
-        Self(value.chars().map(|c| c.into()).collect_vec())
-    }
-}
-
-impl WindowEventsManager {
-    pub fn wait_a_bit() {
-        std::thread::sleep(Duration::from_millis(1000 / 20));
-    }
-
-    pub fn alt_key<K: Into<HostKey>>(&mut self, key: K) {
-        let key = key.into();
-        match self {
-            Self::Enigo(enigo) => {
-                self.enigo_press_with_extra(Key::Alt, key);
-            }
-        }
-    }
-
-    // TODO check why it is not written as the ALT version
-    pub fn ctrl_char<K: Into<HostKey>>(&mut self, c: K) {
-        let c = c.into();
-        match self {
-            Self::Enigo(enigo) => {
-                self.enigo_press_with_extra(Key::Control, c);
-            }
-        }
-    }
-
-    pub fn shift_char<K: Into<HostKey>>(&mut self, c: K) {
-        let c = c.into();
-
-        match self {
-            Self::Enigo(enigo) => {
-                self.enigo_press_with_extra(Key::Shift, c);
-            }
-        }
-    }
-
-    fn enigo_press_with_extra<K: Into<HostKey>>(&mut self, extra: Key, c: K) {
-        let c = c.into();
-
-        match self {
-            Self::Enigo(enigo) => {
-                let (extra2, c) = c.enigo();
-                if let Some(extra2) = extra2 {
-                    if extra2 != extra {
-                        eprintln!("{:?} requires a different modifier than {:?}", c, extra);
-                    }
-                }
-
-                enigo.key(extra, enigo::Direction::Press).unwrap();
-                Self::wait_a_bit();
-                enigo.key(c, enigo::Direction::Press).unwrap();
-                Self::wait_a_bit();
-                enigo.key(c, enigo::Direction::Release).unwrap();
-                Self::wait_a_bit();
-                enigo.key(extra, enigo::Direction::Release).unwrap();
-                Self::wait_a_bit();
-            },
-            _ => unreachable!()
-        }
-    }
-
-    pub fn type_text<T: Into<HostKeys>>(&mut self, txt: T) {
-        let txt = txt.into();
-        match self {
-            Self::Enigo(enigo) => {
-                // asking enigo to write the full char does not work at all
-                for k in txt.iter() {
-                    self.type_key(*k)
-                }
-            }
-        }
-    }
-
-    pub fn type_char(&mut self, c: char) {
-        match self {
-            Self::Enigo(enigo) => self.type_key(c)
-        }
-    }
-
-    pub fn type_key<K: Into<HostKey>>(&mut self, k: K) {
-        let k = k.into();
-        match self {
-            Self::Enigo(_) => {
-                let (meta, key) = k.enigo();
-                if let Some(meta) = meta {
-                    self.enigo_press_with_extra(meta, k);
-                }
-                else {
-                    self.enigo_click_key(key);
-                }
-            }
-        }
-    }
-
-    pub fn r#return(&mut self) {
-        self.type_char('\n')
-    }
-
-    fn enigo_click_key(&mut self, key: Key) {
-        match self {
-            // TODO really do this way ? This is more complex than expected
-            Self::Enigo(enigo) => {
-                // enigo.key(key, Direction::Click).unwrap(); // this does not work :(
-
-                enigo.key(key, enigo::Direction::Press).unwrap();
-                Self::wait_a_bit();
-                enigo.key(key, enigo::Direction::Release).unwrap();
-                Self::wait_a_bit();
-            },
-
-            _ => unreachable!()
-        }
-    }
-
-    // #[cfg(windows)]
-    // fn click_key(&mut self, key: Key) {
-    // dbg!(&key);
-    //
-    // #[cfg(windows)]
-    // match key {
-    // https://boostrobotics.eu/windows-key-codes/
-    // Key::Unicode(v) if v.is_ascii_digit() => {
-    // if false {
-    // let nb = v as u32 - '0' as u32;
-    //
-    // self.enigo
-    // .key(Key::RShift, enigo::Direction::Press)
-    // .unwrap();
-    // Self::wait_a_bit();
-    // Self::wait_a_bit();
-    //
-    // let lut = ['à', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç'][nb as usize];
-    // dbg!(nb, lut);
-    // let key = Key::Unicode(lut);
-    //
-    // self.enigo.key(key, enigo::Direction::Press).unwrap();
-    // Self::wait_a_bit();
-    // Self::wait_a_bit();
-    // self.enigo.key(key, enigo::Direction::Release).unwrap();
-    //
-    // self.enigo
-    // .key(Key::RShift, enigo::Direction::Release)
-    // .unwrap();
-    // Self::wait_a_bit();
-    // }
-    //
-    // self.enigo.text(dbg!(&format!("{v}"))).unwrap();
-    // },
-    // _ => {
-    // dbg!(key);
-    // self.enigo.key(key, enigo::Direction::Press).unwrap();
-    // Self::wait_a_bit();
-    // self.enigo.key(key, enigo::Direction::Release).unwrap();
-    // Self::wait_a_bit();
-    // }
-    // };
-    // }
 }
 
 /// Read a rasm debug file and convert it in winape sym string
@@ -390,7 +50,7 @@ pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
         .join("\n"))
 }
 
-#[derive(Debug, Clone, bon::Builder)]
+#[derive(Debug, bon::Builder)]
 pub struct EmulatorConf {
     pub(crate) drive_a: Option<Utf8PathBuf>,
     pub(crate) drive_b: Option<Utf8PathBuf>,
@@ -404,10 +64,7 @@ pub struct EmulatorConf {
 
     pub(crate) auto_run: Option<String>,
 
-    pub(crate) memory: Option<u32>,
-
-    /// Do not display the window
-    pub(crate) transparent: bool
+    pub(crate) memory: Option<u32>
 }
 
 impl EmulatorConf {
@@ -539,92 +196,31 @@ pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String>
     let args = conf.args_for_emu(emu)?;
     let app = emu.configuration();
 
-    let cmd = emu.get_command().into();
-    let runner = if conf.transparent {
-        DelegatedRunner::new_transparent(app, cmd)
-    }
-    else {
-        DelegatedRunner::new(app, cmd)
-    };
-
+    let runner = DelegatedRunner::new(app, emu.get_command().into());
     runner.inner_run(&args, &())
 }
 
-pub fn get_emulator_window(emu: &Emulator, conf: &EmulatorConf) -> EmuWindow {
-    if !conf.transparent {
-        get_emulator_window_xcap(emu)
-    }
-    else {
-        get_emulator_window_xvfb(emu)
-    }
-}
-
-// XX this code seems buggy ATM it is unable to collect the window, no idea why
-fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
-    // get the latest x server. Lets' hope it is the virtual one of the transparent emulator
-    let display = std::fs::read_dir("/tmp/.X11-unix")
-        .unwrap()
-        .filter_map(|f| f.ok())
-        .filter(|f| f.file_name().to_str().unwrap().starts_with("X"))
-        .map(|f| (f.file_name(), f.metadata().unwrap().created().unwrap()))
-        .sorted_by_key(|f| f.1)
-        .rev()
-        .take(1)
-        .map(|(f, _d)| f.to_str().unwrap()[1..].to_owned())
-        .next()
-        .unwrap();
-    let display_nb = display.parse::<usize>().unwrap();
-    // XX this part seems to work
-
-    // XX next seem to not work :(
-    // change the display to get the window list of the framebuffer
-    let backup_display = std::env::var("DISPLAY").unwrap();
-
-    std::env::set_var("DISPLAY", format!(":{}", &display));
-    let windows = wmctrl::get_windows();
-
-    let mut windows = windows
-        .into_iter()
-        .filter(|win| emu.window_name_corresponds(dbg!(win.title())))
-        .collect_vec();
-
-    let window = match windows.len() {
-        0 => None,
-        1 => windows.pop(),
-        _ => {
-            eprintln!("There are several available windows. I pick one, but it may be wrong");
-            windows.pop()
-        }
-    };
-
-    EmuWindow::Xvfb(display_nb, window)
-}
-
-fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
-    let windows = xcap::Window::all().unwrap();
+pub fn get_emulator_window(emu: &Emulator) -> Window {
+    let windows = Window::all().unwrap();
     let mut windows = windows
         .into_iter()
         .filter(|win| emu.window_name_corresponds(win.title()))
         .collect_vec();
 
-    let window = match windows.len() {
+    match windows.len() {
         0 => panic!("No window emulator found"),
         1 => windows.pop().unwrap(),
         _ => {
             eprintln!("There are several available windows. I pick one, but it may be wrong");
             windows.pop().unwrap()
         }
-    };
-
-    EmuWindow::Xcap(window)
+    }
 }
 
 trait UsedEmulator: Sized {
-    /// the default behavior consists in capturing the full window emulator.
-    /// This can of course be tailored to get the emulated screen area
-    fn screenshot(robot: &mut RobotImpl<Self>) -> EmuScreenShot
+    fn screenshot(robot: &mut RobotImpl<Self>) -> ImageBuffer<Rgba<u8>, Vec<u8>>
     where Self: Sized {
-        robot.window.capture_image()
+        robot.window.capture_image().unwrap()
     }
 }
 
@@ -644,11 +240,11 @@ impl UsedEmulator for AceUsedEmulator {
             .collect();
 
         // handlekey press
-        robot.type_key(HostKey::F10);
+        robot.click_key(Key::F10);
 
         let mut file = None;
         while file.is_none() {
-            WindowEventsManager::wait_a_bit();
+            RobotImpl::<AceUsedEmulator>::wait_a_bit();
             let after_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
                 .unwrap()
                 .map(|p| p.unwrap().as_path().to_owned())
@@ -665,7 +261,7 @@ impl UsedEmulator for AceUsedEmulator {
         let file = file.as_ref().unwrap();
         let mut im = xcap::image::open(file);
         while im.is_err() {
-            WindowEventsManager::wait_a_bit();
+            RobotImpl::<AceUsedEmulator>::wait_a_bit();
             im = xcap::image::open(file);
         }
         let im = im.unwrap().into_rgba8();
@@ -679,24 +275,10 @@ impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
-    pub(crate) window: EmuWindow,
-    pub(crate) events_manager: WindowEventsManager,
+    pub(crate) window: Window,
+    pub(crate) enigo: Enigo,
     pub(crate) emu: Emulator,
     _emu: PhantomData<E>
-}
-
-impl<E: UsedEmulator> Deref for RobotImpl<E> {
-    type Target = WindowEventsManager;
-
-    fn deref(&self) -> &Self::Target {
-        &self.events_manager
-    }
-}
-
-impl<E: UsedEmulator> DerefMut for RobotImpl<E> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.events_manager
-    }
 }
 
 pub enum Robot {
@@ -737,11 +319,11 @@ impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
     }
 }
 
-impl<E: UsedEmulator> From<(EmuWindow, WindowEventsManager, &Emulator)> for RobotImpl<E> {
-    fn from(value: (EmuWindow, WindowEventsManager, &Emulator)) -> Self {
+impl<E: UsedEmulator> From<(Window, Enigo, &Emulator)> for RobotImpl<E> {
+    fn from(value: (Window, Enigo, &Emulator)) -> Self {
         Self {
             window: value.0,
-            events_manager: value.1,
+            enigo: value.1,
             emu: value.2.clone(),
             _emu: PhantomData::<E>
         }
@@ -772,22 +354,18 @@ impl Robot {
 
     }
 
-    pub fn new(emu: &Emulator, window: EmuWindow, eventsManager: WindowEventsManager) -> Self {
+    pub fn new(emu: &Emulator, window: Window, enigo: Enigo) -> Self {
         match emu {
-            Emulator::Ace(_) => {
-                RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
-            },
-            Emulator::Cpcec(_) => {
-                RobotImpl::<CpcecUsedEmulator>::from((window, eventsManager, emu)).into()
-            },
+            Emulator::Ace(_) => RobotImpl::<AceUsedEmulator>::from((window, enigo, emu)).into(),
+            Emulator::Cpcec(_) => RobotImpl::<CpcecUsedEmulator>::from((window, enigo, emu)).into(),
             Emulator::Winape(_) => {
-                RobotImpl::<WinapeUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<WinapeUsedEmulator>::from((window, enigo, emu)).into()
             },
             Emulator::Amspirit(_) => {
-                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<AmspiritUsedEmulator>::from((window, enigo, emu)).into()
             },
             Emulator::SugarBoxV2(_) => {
-                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
+                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, enigo, emu)).into()
             },
         }
     }
@@ -809,19 +387,115 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
 impl<E: UsedEmulator> RobotImpl<E> {
     pub fn close(&mut self) {
-        self.events_manager.alt_key(HostKey::F4);
+        self.enigo.key(Key::Alt, Direction::Press).unwrap();
+        self.enigo.key(Key::F4, Direction::Click).unwrap();
+        self.enigo.key(Key::Alt, Direction::Release).unwrap();
+    }
+}
+
+impl<E: UsedEmulator> RobotImpl<E> {
+    fn type_text(&mut self, txt: &str) {
+        for c in txt.chars() {
+            self.click_char(dbg!(c));
+        }
+    }
+
+    fn click_keys(&mut self, keys: &[Key]) {
+        for key in keys {
+            self.click_key(*key);
+        }
+    }
+
+    fn click_char(&mut self, c: char) {
+        let key = match c {
+            '\n' => Key::Return,
+            _ => Key::Unicode(c)
+        };
+        self.click_key(key)
+    }
+
+    fn press_control_char(&mut self, c: char) {
+        self.enigo
+            .key(Key::Control, enigo::Direction::Press)
+            .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Unicode(c), enigo::Direction::Press)
+            .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Unicode(c), enigo::Direction::Release)
+            .unwrap();
+        Self::wait_a_bit();
+        self.enigo
+            .key(Key::Control, enigo::Direction::Release)
+            .unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn click_key(&mut self, key: Key) {
+        self.enigo.key(key, enigo::Direction::Press).unwrap();
+        Self::wait_a_bit();
+        Self::wait_a_bit();
+        self.enigo.key(key, enigo::Direction::Release).unwrap();
+        Self::wait_a_bit();
+        Self::wait_a_bit();
+    }
+
+    #[cfg(windows)]
+    fn click_key(&mut self, key: Key) {
+        dbg!(&key);
+
+        #[cfg(windows)]
+        match key {
+            // https://boostrobotics.eu/windows-key-codes/
+            Key::Unicode(v) if v.is_ascii_digit() => {
+                if false {
+                    let nb = v as u32 - '0' as u32;
+
+                    self.enigo
+                        .key(Key::RShift, enigo::Direction::Press)
+                        .unwrap();
+                    Self::wait_a_bit();
+                    Self::wait_a_bit();
+
+                    let lut = ['à', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç'][nb as usize];
+                    dbg!(nb, lut);
+                    let key = Key::Unicode(lut);
+
+                    self.enigo.key(key, enigo::Direction::Press).unwrap();
+                    Self::wait_a_bit();
+                    Self::wait_a_bit();
+                    self.enigo.key(key, enigo::Direction::Release).unwrap();
+
+                    self.enigo
+                        .key(Key::RShift, enigo::Direction::Release)
+                        .unwrap();
+                    Self::wait_a_bit();
+                }
+
+                self.enigo.text(dbg!(&format!("{v}"))).unwrap();
+            },
+            _ => {
+                dbg!(key);
+                self.enigo.key(key, enigo::Direction::Press).unwrap();
+                Self::wait_a_bit();
+                self.enigo.key(key, enigo::Direction::Release).unwrap();
+                Self::wait_a_bit();
+            }
+        };
     }
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
     pub fn unidos_select_drive(&mut self, drivea: Option<&str>, albireo: Option<&str>) {
         if drivea.is_some() {
-            self.events_manager.type_text("load\"dfa:");
-            self.events_manager.r#return();
+            self.type_text("load\"dfa:");
+            self.click_key(Key::Return);
         }
         else if albireo.is_some() {
-            self.events_manager.type_text("load\"sd:");
-            self.events_manager.r#return();
+            self.type_text("load\"sd:");
+            self.click_key(Key::Return);
         }
         else {
             panic!("No storage selected");
@@ -893,7 +567,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
     }
 
     fn orgams_jump(&mut self) -> Result<(), Screenshot> {
-        self.type_char('j');
+        self.click_char('j');
         Ok(())
     }
 
@@ -927,16 +601,16 @@ impl<E: UsedEmulator> RobotImpl<E> {
     fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
         println!("> Save result");
         // handle saving
-        self.type_char('b');
+        self.click_key(Key::Unicode('b'));
         std::thread::sleep(Duration::from_millis(2000));
         if let Some(dst) = dst {
             self.type_text(dst);
-            self.r#return();
+            self.click_key(Key::Return);
         }
         else {
-            self.r#return();
+            self.click_key(Key::Return);
             std::thread::sleep(Duration::from_millis(1000));
-            self.r#return();
+            self.click_key(Key::Return);
         }
         println!("  Filename provided.");
 
@@ -947,27 +621,31 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
     fn orgams_import(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         self.type_text("ùo");
-        self.r#return();
+        self.click_key(Key::Return);
 
         std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
 
-        self.ctrl_char('i');
+        self.press_control_char('i');
         std::thread::sleep(Duration::from_secs(1)); // we wait one second for orgams loading
 
         self.type_text(src);
-        self.r#return();
+        self.click_key(Key::Return);
 
         self.orgams_wait_import()
     }
 
     fn orgams_load(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         // Open orgams
-        println!("> Launch orgams and open file \"{src}\"");
+        println!("> Launch orgams and open file {src} from drive a");
 
         // French setup ?
-        let chars = "ùo,\"".to_owned() + src + "\"";
-        self.type_text(chars.as_str());
-        self.r#return();
+        let mut keys = vec![Key::Unicode('ù')];
+        keys.extend_from_slice(&[Key::Unicode('o'), Key::Unicode(','), Key::Unicode('"')]);
+        for c in src.chars() {
+            keys.push(Key::Unicode(c));
+        }
+        keys.extend_from_slice(&[Key::Unicode('"'), Key::Return]);
+        self.click_keys(&keys);
 
         let res = self.wait_orgams_loading();
         println!("  done.");
@@ -977,12 +655,12 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
     fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         println!("> Assemble {src}");
-        self.ctrl_char('1');
+        self.press_control_char('1');
 
         self.wait_orgams_assembling();
         println!("  done.");
 
-        let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.capture_image();
+        let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.capture_image().unwrap();
 
         if result
             .pixels()
@@ -993,6 +671,10 @@ impl<E: UsedEmulator> RobotImpl<E> {
         else {
             Err(result)
         }
+    }
+
+    pub fn wait_a_bit() {
+        std::thread::sleep(Duration::from_millis(1000 / 20));
     }
 
     fn wait_orgams_assembling(&mut self) {
@@ -1064,14 +746,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
 #[derive(Parser, Debug)]
 pub struct EmuCli {
-    #[arg(
-        short,
-        long,
-        help = "Completely hide the emulator window (not really tested ATM)",
-        default_value = "false"
-    )]
-    transparent: bool,
-
     #[arg(
         short = 'a',
         long = "drivea",
@@ -1234,7 +908,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     }
 
     let builder = EmulatorConf::builder()
-        .transparent(cli.transparent)
         .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
         .maybe_drive_b(cli.drive_b.clone().map(|a| a.into()))
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
@@ -1264,18 +937,25 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     if cli.emulator == Emu::Ace {
         // copy the non standard roms and configure the emu (at least ace)
         let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
-        let mut ace_conf = AceConfig::open_or_default(&ace_conf_path);
+        let mut ace_conf = AceConfig::open(&ace_conf_path);
 
-        let default = SANE_CONFIGURATION;
-        for (key, value) in default
-            .lines()
+        let default = "
+SCREEN=0
+CRTFILTER=0
+OVERSCAN=0
+VIDEOEXTRA=0
+COVER=0
+CRTC=0
+DOUBLESIZE=0
+        ";
+        for (key, value) in default.lines()
             .map(|l| l.trim())
-            .filter(|l| !l.is_empty())
-            .map(|l| l.split("=").collect_tuple().unwrap())
-        {
-            ace_conf.set(key, value);
-        }
+            .filter(|l| ! l.is_empty())
+            .map(|l| l.split("=").collect_tuple().unwrap()) {
+                ace_conf.set(key, value);
+            }
 
+            
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);
         }
@@ -1293,17 +973,17 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         ace_conf.set("KTRANS", 1);
         ace_conf.set("KGTRANS", 1);
 
-        let extra_roms: &[(AmstradRom, &[(&str, usize, Option<AceConfigFlag>)])] = &[
+        let extra_roms: &[(AmstradRom, &[(&str, usize)])] = &[
             (
                 AmstradRom::Unidos,
                 &[
-                    ("unidos.rom", 7, None),
-                    ("nova.rom", 8, Some(AceConfigFlag::PluginNova)),
-                    ("albireo.rom", 9, Some(AceConfigFlag::PluginAlbireo1)),
-                    ("parados12.fixedanyslot.fixedname.quiet.rom", 10, None)
+                    ("unidos.rom", 7),
+                    ("nova.rom", 8),
+                    ("albireo.rom", 9),
+                    ("parados12.fixedanyslot.fixedname.quiet.rom", 10)
                 ]
             ),
-            (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15, None)])
+            (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15)])
         ];
         // for fname in EmbeddedRoms::iter() {
         // println!("{fname}");
@@ -1316,7 +996,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 ace_conf.set("RAM", 576);
             }
 
-            for (rom, slot, plugin) in roms.iter() {
+            for (rom, slot) in roms.iter() {
                 let dst = emu.roms_folder().join(rom);
                 let exists = dst.exists();
 
@@ -1337,9 +1017,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 }
                 else {
                     ace_conf.set(key, dst.to_string());
-                    if let Some(plugin) = plugin {
-                        ace_conf.enable(*plugin);
-                    }
                 }
             }
         }
@@ -1412,10 +1089,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     }
 
     let t_emu = emu.clone();
-    let conf_thread = conf.clone();
-    let emu_thread = std::thread::spawn(move || {
-        start_emulator(&t_emu, &conf_thread).expect("Error detected while closing the emulator")
-    });
+    let emu_thread = std::thread::spawn(move || start_emulator(&t_emu, &conf).expect("Error detected while closing the emulator"));
 
     if cli.albireo.is_some() {
         std::thread::sleep(Duration::from_secs(5));
@@ -1424,19 +1098,9 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         std::thread::sleep(Duration::from_secs(3));
     }
 
-    let window = get_emulator_window(&emu, &conf);
-    let enigo_settings = {
-        let mut settings = Settings::default();
-        settings.linux_delay = 1000 / 10;
-        if let EmuWindow::Xvfb(display, _) = &window {
-            settings.x11_display = Some(format!(":{display}"));
-            settings.x11_display = Some(format!("{display}"));
-        }
-        settings
-    };
-    let enigo = Enigo::new(&enigo_settings).unwrap();
-    let events = enigo.into();
-    let mut robot = Robot::new(&emu, window, events);
+    let window = get_emulator_window(&emu);
+    let enigo = Enigo::new(&Settings::default()).unwrap();
+    let mut robot = Robot::new(&emu, window, enigo);
 
     #[cfg(windows)]
     std::thread::sleep(Duration::from_millis(1000 * 3));
@@ -1512,7 +1176,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
                 // restore previous
                 if backup_folder.exists() {
-                    std::fs::rename(&backup_folder, &emu_folder); //.unwrap();
+                    std::fs::rename(&backup_folder, &emu_folder).unwrap();
                 }
             }
         }

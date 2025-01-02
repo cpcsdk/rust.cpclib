@@ -36,7 +36,7 @@ pub enum BndBuilderEvent<'a> {
     Stderr(&'a str)
 }
 
-pub trait BndBuilderObserver: EventObserver + EnvEventObserver {
+pub trait BndBuilderObserver: EventObserver  + EnvEventObserver {
     fn update(&mut self, event: BndBuilderEvent);
 }
 
@@ -296,6 +296,7 @@ where E: BndBuilderObserved
         }
     }
 }
+
 
 impl<E> EventObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved + Sync

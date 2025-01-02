@@ -1,7 +1,6 @@
 #![feature(path_file_prefix)]
 
-use std::fs;
-use std::sync::Arc;
+use std::{fs, sync::Arc};
 
 use camino_tempfile::NamedUtf8TempFile;
 use cpclib_basm::{build_args_parser, process};

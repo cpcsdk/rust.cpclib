@@ -19,7 +19,7 @@
 
 - tgt: clean
   phony: true
-  cmd: -rm martine.scr SHOW.SCR
+  cmd: -rm martine.scr
 
 - tgt: distclean
   dep: clean

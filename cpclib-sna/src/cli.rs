@@ -12,7 +12,9 @@ use rustyline::Editor;
 
 use crate::cli::winnow::ascii::{space1, Caseless};
 use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
-use crate::cli::winnow::error::{AddContext, ContextError, ParserError, StrContext};
+use crate::cli::winnow::error::{
+    AddContext, ContextError, ParserError, StrContext
+};
 use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
 use crate::cli::winnow::token::take_until;
 use crate::cli::winnow::PResult;
@@ -120,14 +122,10 @@ impl Command {
             Command::Disassemble(..) => todo!(),
 
             Command::Symbols(symbol) => {
-                if let Some(v) = sna
-                    .get_chunk("SYMB")
+                if let Some(v) = sna.get_chunk("SYMB")
                     .map(|chunk| chunk.ace_symbol_chunk().unwrap())
-                    .map(|chunk| (chunk.get_symbols()))
-                {
-                    v.into_iter()
-                        .for_each(|s| println!("{} {:X}", s.name(), s.address()))
-                }
+                    .map(|chunk| (chunk.get_symbols())) { v.into_iter()
+                            .for_each(|s| println!("{} {:X}", s.name(), s.address())) }
             },
 
             Command::Help => {

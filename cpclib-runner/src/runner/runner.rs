@@ -1,13 +1,11 @@
 use std::io::{BufRead, BufReader};
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::process::{Child, Stdio};
+use std::process::Stdio;
 use std::thread;
 
 use clap::{ArgMatches, Command};
 use cpclib_common::itertools::Itertools;
-use transparent::{CommandExt, TransparentChild, TransparentRunner};
 
 use crate::event::EventObserver;
 use crate::runner::arguments::get_all_args;
@@ -56,7 +54,6 @@ pub trait RunnerWithClap: Runner + Default {
 
 pub struct ExternRunner<E: EventObserver> {
     in_dir: RunInDir,
-    transparent: bool,
     _phantom: PhantomData<E>
 }
 
@@ -70,15 +67,6 @@ impl<E: EventObserver> ExternRunner<E> {
     pub fn new(in_dir: RunInDir) -> Self {
         Self {
             in_dir,
-            transparent: false,
-            _phantom: Default::default()
-        }
-    }
-
-    pub fn new_transparent(in_dir: RunInDir) -> Self {
-        Self {
-            in_dir,
-            transparent: true,
             _phantom: Default::default()
         }
     }
@@ -116,49 +104,11 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             cmd.arg(arg);
         }
 
-        let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
-
-        enum MyChild {
-            Transparent(TransparentChild),
-            Standard(Child)
-        }
-        impl From<TransparentChild> for MyChild {
-            fn from(value: TransparentChild) -> Self {
-                Self::Transparent(value)
-            }
-        }
-        impl From<Child> for MyChild {
-            fn from(value: Child) -> Self {
-                Self::Standard(value)
-            }
-        }
-        impl Deref for MyChild {
-            type Target = Child;
-
-            fn deref(&self) -> &Self::Target {
-                match self {
-                    MyChild::Transparent(child) => child.deref(),
-                    MyChild::Standard(child) => child
-                }
-            }
-        }
-        impl DerefMut for MyChild {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                match self {
-                    MyChild::Transparent(child) => child.deref_mut(),
-                    MyChild::Standard(child) => child
-                }
-            }
-        }
-
-        let mut cmd: MyChild = if self.transparent {
-            cmd.spawn_transparent(&TransparentRunner::new())
-                .map(|c| c.into())
-        }
-        else {
-            cmd.spawn().map(|c| c.into())
-        }
-        .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
+        let mut cmd = cmd
+            .stderr(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
         // the process is running in another thread. We'll collect its outputs in yet other threads
         let child_stdout = cmd
@@ -170,15 +120,16 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             .take()
             .expect("Internal error, could not take stderr");
 
-        thread::scope(|s| {
-            s.spawn(|| {
+        
+        thread::scope(|s|{
+            s.spawn(||{
                 let stdout_lines = BufReader::new(child_stdout).lines();
                 for line in stdout_lines {
                     let line = line.unwrap();
                     o.emit_stdout(&line);
                 }
             });
-            s.spawn(|| {
+            s.spawn(||{
                 let stderr_lines = BufReader::new(child_stderr).lines();
                 for line in stderr_lines {
                     let line = line.unwrap();
@@ -186,6 +137,8 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 }
             });
         });
+
+
 
         let status = cmd
             .wait()

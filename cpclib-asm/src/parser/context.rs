@@ -216,7 +216,7 @@ impl ParserOptions {
         let path = path.into();
 
         if path.is_dir() {
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(target_arch ="wasm32"))]
             let path = path.canonicalize().unwrap();
 
             // manual fix for for windows. No idea why

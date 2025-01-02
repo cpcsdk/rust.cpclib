@@ -81,14 +81,14 @@ dbg = "1.0.4"
 delegate = "0.13.1"
 either = "1.13.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
-enigo = "0.3"
+enigo = "0.2.1"
 enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "11.3.1"
 exitcode = "1.1.2"
 gag = "1.0.0"
 getset = "0.1.3"
-gif = "0.12" # XXX may be compatible with gif-dispose
+gif = "0.12" # XXX may be copatible with gif-dispose
 gif-dispose = "4.0.1"
 glob = "0.3.1"
 globset = "0.4.15"
@@ -144,7 +144,6 @@ termize = { version = "0.1.1" }
 test-generator = "0.3.1"
 thiserror = "1.0"
 time = "0.3.36"
-transparent = "0.4.0"
 velcro = "0.5.4"
 winnow = { version = "0.6.20", features = ["simd"] }
 xcap = "0.0.11"
