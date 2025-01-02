@@ -1,6 +1,8 @@
 use std::fmt::Display;
-use std::ptr::addr_of;
+use std::ops::Deref;
 use std::str::FromStr;
+use std::sync::atomic::AtomicUsize;
+use std::sync::LazyLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
@@ -25,7 +27,7 @@ use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::Tracker;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Task {
+pub enum InnerTask {
     Assembler(Assembler, StandardTaskArguments),
     BndBuild(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
@@ -45,6 +47,73 @@ pub enum Task {
     Tracker(Tracker, StandardTaskArguments),
     Xfer(StandardTaskArguments)
 }
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Task {
+    inner: InnerTask,
+    id: usize
+}
+
+
+impl<'de> Deserialize<'de> for Task {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de> {
+        
+        InnerTask::deserialize(deserializer)
+            .map(|t| t.into())
+    }
+}
+impl Display for Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.inner)
+    }
+}
+
+impl From<InnerTask> for Task {
+    fn from(value: InnerTask) -> Self {
+        Self { inner: value, id: Self::next_id() }
+    }
+}
+
+impl Task {
+    fn next_id() -> usize {
+        static mut COUNTER: AtomicUsize = AtomicUsize::new(1);
+        unsafe{COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)}
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
+    }
+
+    pub fn new_basm(args: &str) -> Self {
+        InnerTask::new_basm(args).into() 
+    }
+
+    pub fn new_bndbuild(args: &str) -> Self {
+        InnerTask::new_bndbuild(args).into()
+    }
+
+    pub fn new_echo(args: &str) -> Self {
+        InnerTask::new_echo(args).into()
+    }
+
+    pub fn new_imgconverter(args: &str) -> Self {
+        InnerTask::new_imgconverter(args).into()
+    }
+
+    pub fn new_rm(args: &str) -> Self {
+        InnerTask::new_rm(args).into()
+    }
+}
+
+impl Deref for Task {
+    type Target = InnerTask;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 
 // list of keywords; do not forget to add them to bndbuild/lib.rs
 pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
@@ -80,29 +149,29 @@ pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
-impl Display for Task {
+impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
-            Task::Assembler(a, s) => (a.get_command(), s),
-            Task::BndBuild(s) => (BNDBUILD_CMDS[0], s),
-            Task::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
-            Task::Cp(s) => (CP_CMDS[0], s),
-            Task::Disassembler(d, s) => (d.get_command(), s),
-            Task::Disc(s) => (DISC_CMDS[0], s),
-            Task::Echo(s) => (ECHO_CMDS[0], s),
-            Task::Emulator(e, s) => (e.get_command(), s),
-            Task::Extern(s) => (EXTERN_CMDS[0], s),
-            Task::Fap(s) => (FAP_CMDS[0], s),
-            Task::Hideur(s) => (HIDEUR_CMDS[0], s),
-            Task::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
-            Task::ImpDsk(s) => (IMPDISC_CMDS[0], s),
-            Task::Martine(s) => (MARTINE_CMDS[0], s),
-            Task::Rm(s) => (RM_CMDS[0], s),
-            Task::Snapshot(s) => (SNA_CMDS[0], s),
-            Task::Tracker(t, s) => (t.get_command(), s),
-            Task::Xfer(s) => (XFER_CMDS[0], s),
-            Task::Fap(s) => (FAP_CMDS[0], s),
-            Task::Snapshot(s) => (SNA_CMDS[0], s)
+            Self::Assembler(a, s) => (a.get_command(), s),
+            Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
+            Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
+            Self::Cp(s) => (CP_CMDS[0], s),
+            Self::Disassembler(d, s) => (d.get_command(), s),
+            Self::Disc(s) => (DISC_CMDS[0], s),
+            Self::Echo(s) => (ECHO_CMDS[0], s),
+            Self::Emulator(e, s) => (e.get_command(), s),
+            Self::Extern(s) => (EXTERN_CMDS[0], s),
+            Self::Fap(s) => (FAP_CMDS[0], s),
+            Self::Hideur(s) => (HIDEUR_CMDS[0], s),
+            Self::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
+            Self::ImpDsk(s) => (IMPDISC_CMDS[0], s),
+            Self::Martine(s) => (MARTINE_CMDS[0], s),
+            Self::Rm(s) => (RM_CMDS[0], s),
+            Self::Snapshot(s) => (SNA_CMDS[0], s),
+            Self::Tracker(t, s) => (t.get_command(), s),
+            Self::Xfer(s) => (XFER_CMDS[0], s),
+            Self::Fap(s) => (FAP_CMDS[0], s),
+            Self::Snapshot(s) => (SNA_CMDS[0], s)
         };
 
         write!(
@@ -148,12 +217,12 @@ is_some_cmd!(
     xfer
 );
 
-impl<'de> Deserialize<'de> for Task {
+impl<'de> Deserialize<'de> for InnerTask {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where D: Deserializer<'de> {
         struct Line;
         impl Visitor<'_> for Line {
-            type Value = Task;
+            type Value = InnerTask;
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where E: serde::de::Error {
@@ -170,49 +239,49 @@ impl<'de> Deserialize<'de> for Task {
                 };
 
                 if is_ace_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_ace_default(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_ace_default(), std))
                 }
                 else if is_at_cmd(code) {
-                    Ok(Task::Tracker(Tracker::new_at3_default(), std))
+                    Ok(InnerTask::Tracker(Tracker::new_at3_default(), std))
                 }
                 else if is_convgeneric_cmd(code) {
-                    Ok(Task::Convgeneric(std))
+                    Ok(InnerTask::Convgeneric(std))
                 }
                 else if is_cpcec_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_cpcec_default(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_cpcec_default(), std))
                 }
                 else if is_amspirit_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_amspirit_default(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_amspirit_default(), std))
                 }
                 else if is_sugarbox_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_sugarbox_default(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_sugarbox_default(), std))
                 }
                 else if is_winape_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_winape_default(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_winape_default(), std))
                 }
                 else if is_emuctrl_cmd(code) {
-                    Ok(Task::Emulator(Emulator::new_controlled_access(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_controlled_access(), std))
                 }
                 else if is_basm_cmd(code) {
-                    Ok(Task::Assembler(Assembler::Basm, std))
+                    Ok(InnerTask::Assembler(Assembler::Basm, std))
                 }
                 else if is_bdasm_cmd(code) {
-                    Ok(Task::Disassembler(Disassembler::Bdasm, std))
+                    Ok(InnerTask::Disassembler(Disassembler::Bdasm, std))
                 }
                 else if is_disark_cmd(code) {
-                    Ok(Task::Disassembler(
+                    Ok(InnerTask::Disassembler(
                         Disassembler::Extern(ExternDisassembler::Disark(DisarkVersion::default())),
                         std
                     ))
                 }
                 else if is_fap_cmd(code) {
-                    Ok(Task::Fap(std))
+                    Ok(InnerTask::Fap(std))
                 }
                 else if is_orgams_cmd(code) {
-                    Ok(Task::Assembler(Assembler::Orgams, std))
+                    Ok(InnerTask::Assembler(Assembler::Orgams, std))
                 }
                 else if is_rasm_cmd(code) {
-                    Ok(Task::Assembler(
+                    Ok(InnerTask::Assembler(
                         Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
                             RasmVersion::default()
                         )),
@@ -220,7 +289,7 @@ impl<'de> Deserialize<'de> for Task {
                     ))
                 }
                 else if is_sjasmplus_cmd(code) {
-                    Ok(Task::Assembler(
+                    Ok(InnerTask::Assembler(
                         Assembler::Extern(
                             cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
                                 Default::default()
@@ -230,7 +299,7 @@ impl<'de> Deserialize<'de> for Task {
                     ))
                 }
                 else if is_vasm_cmd(code) {
-                    Ok(Task::Assembler(
+                    Ok(InnerTask::Assembler(
                         Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Vasm(
                             Default::default()
                         )),
@@ -238,40 +307,40 @@ impl<'de> Deserialize<'de> for Task {
                     ))
                 }
                 else if is_sna_cmd(code) {
-                    Ok(Task::Snapshot(std))
+                    Ok(InnerTask::Snapshot(std))
                 }
                 else if is_bndbuild_cmd(code) {
-                    Ok(Task::BndBuild(std))
+                    Ok(InnerTask::BndBuild(std))
                 }
                 else if is_cp_cmd(code) {
-                    Ok(Task::Cp(std))
+                    Ok(InnerTask::Cp(std))
                 }
                 else if is_disc_cmd(code) {
-                    Ok(Task::Disc(std))
+                    Ok(InnerTask::Disc(std))
                 }
                 else if is_echo_cmd(code) {
-                    Ok(Task::Echo(std))
+                    Ok(InnerTask::Echo(std))
                 }
                 else if is_extern_cmd(code) {
-                    Ok(Task::Extern(std))
+                    Ok(InnerTask::Extern(std))
                 }
                 else if is_hideur_cmd(code) {
-                    Ok(Task::Hideur(std))
+                    Ok(InnerTask::Hideur(std))
                 }
                 else if is_img2cpc_cmd(code) {
-                    Ok(Task::ImgConverter(std))
+                    Ok(InnerTask::ImgConverter(std))
                 }
                 else if is_impdisc_cmd(code) {
-                    Ok(Task::ImpDsk(std))
+                    Ok(InnerTask::ImpDsk(std))
                 }
                 else if is_martine_cmd(code) {
-                    Ok(Task::Martine(std))
+                    Ok(InnerTask::Martine(std))
                 }
                 else if is_rm_cmd(code) {
-                    Ok(Task::Rm(std))
+                    Ok(InnerTask::Rm(std))
                 }
                 else if is_xfer_cmd(code) {
-                    Ok(Task::Xfer(std))
+                    Ok(InnerTask::Xfer(std))
                 }
                 else {
                     Err(Error::custom(format!("{code} is an invalid command")))
@@ -287,7 +356,15 @@ impl<'de> Deserialize<'de> for Task {
     }
 }
 
+
 impl FromStr for Task {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        InnerTask::from_str(s).map(|t| t.into())
+    }
+}
+impl FromStr for InnerTask {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -295,13 +372,8 @@ impl FromStr for Task {
     }
 }
 
-impl Task {
-
-    // TODO rename Task as TaskInner and embed it in a Task struct that contains the real id
-    pub fn id(&self) -> usize {
-        (&raw const self) as _
-    }
-
+impl InnerTask {
+   
     pub fn new_basm(args: &str) -> Self {
         Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }
@@ -328,48 +400,48 @@ impl Task {
 
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
-            Task::Assembler(_, t)
-            | Task::BndBuild(t)
-            | Task::Convgeneric(t)
-            | Task::Cp(t)
-            | Task::Disassembler(_, t)
-            | Task::Disc(t)
-            | Task::ImpDsk(t)
-            | Task::Echo(t)
-            | Task::Extern(t)
-            | Task::Hideur(t)
-            | Task::ImgConverter(t)
-            | Task::Martine(t)
-            | Task::Rm(t)
-            | Task::Xfer(t)
-            | Task::Emulator(_, t)
-            | Task::Snapshot(t)
-            | Task::Tracker(_, t)
-            | Task::Fap(t) => t
+            InnerTask::Assembler(_, t)
+            | InnerTask::BndBuild(t)
+            | InnerTask::Convgeneric(t)
+            | InnerTask::Cp(t)
+            | InnerTask::Disassembler(_, t)
+            | InnerTask::Disc(t)
+            | InnerTask::ImpDsk(t)
+            | InnerTask::Echo(t)
+            | InnerTask::Extern(t)
+            | InnerTask::Hideur(t)
+            | InnerTask::ImgConverter(t)
+            | InnerTask::Martine(t)
+            | InnerTask::Rm(t)
+            | InnerTask::Xfer(t)
+            | InnerTask::Emulator(_, t)
+            | InnerTask::Snapshot(t)
+            | InnerTask::Tracker(_, t)
+            | InnerTask::Fap(t) => t
         }
     }
 
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
-            Task::Assembler(_, t)
-            | Task::BndBuild(t)
-            | Task::Convgeneric(t)
-            | Task::Cp(t)
-            | Task::Disassembler(_, t)
-            | Task::Disc(t)
-            | Task::Echo(t)
-            | Task::Emulator(_, t)
-            | Task::Extern(t)
-            | Task::Fap(t)
-            | Task::Hideur(t)
-            | Task::ImgConverter(t)
-            | Task::ImpDsk(t)
-            | Task::BndBuild(t)
-            | Task::Martine(t)
-            | Task::Rm(t)
-            | Task::Snapshot(t)
-            | Task::Tracker(_, t)
-            | Task::Xfer(t) => t
+            InnerTask::Assembler(_, t)
+            | InnerTask::BndBuild(t)
+            | InnerTask::Convgeneric(t)
+            | InnerTask::Cp(t)
+            | InnerTask::Disassembler(_, t)
+            | InnerTask::Disc(t)
+            | InnerTask::Echo(t)
+            | InnerTask::Emulator(_, t)
+            | InnerTask::Extern(t)
+            | InnerTask::Fap(t)
+            | InnerTask::Hideur(t)
+            | InnerTask::ImgConverter(t)
+            | InnerTask::ImpDsk(t)
+            | InnerTask::BndBuild(t)
+            | InnerTask::Martine(t)
+            | InnerTask::Rm(t)
+            | InnerTask::Snapshot(t)
+            | InnerTask::Tracker(_, t)
+            | InnerTask::Xfer(t) => t
         }
     }
 
@@ -389,24 +461,24 @@ impl Task {
     // TODO deeply check the arguments of the commands because here we may be wrong ...
     pub fn is_phony(&self) -> bool {
         match self {
-            Task::Assembler(..) => false, // wrong when displaying stuff
-            Task::BndBuild(_) => false,
-            Task::Convgeneric(_) => false,
-            Task::Cp(_) => false,
-            Task::Disassembler(..) => false,
-            Task::Disc(_) => false,
-            Task::Echo(_) => true,
-            Task::Emulator(..) => true,
-            Task::Extern(_) => false,
-            Task::Fap(..) => true,
-            Task::Hideur(_) => false,
-            Task::ImgConverter(_) => false,
-            Task::ImpDsk(_) => false,
-            Task::Martine(t) => false,
-            Task::Rm(_s) => false, // wrong when downloading files
-            Task::Snapshot(_) => false,
-            Task::Tracker(_, t) => true, // XXX think if false is better
-            Task::Xfer(_) => true,
+            InnerTask::Assembler(..) => false, // wrong when displaying stuff
+            InnerTask::BndBuild(_) => false,
+            InnerTask::Convgeneric(_) => false,
+            InnerTask::Cp(_) => false,
+            InnerTask::Disassembler(..) => false,
+            InnerTask::Disc(_) => false,
+            InnerTask::Echo(_) => true,
+            InnerTask::Emulator(..) => true,
+            InnerTask::Extern(_) => false,
+            InnerTask::Fap(..) => true,
+            InnerTask::Hideur(_) => false,
+            InnerTask::ImgConverter(_) => false,
+            InnerTask::ImpDsk(_) => false,
+            InnerTask::Martine(t) => false,
+            InnerTask::Rm(_s) => false, // wrong when downloading files
+            InnerTask::Snapshot(_) => false,
+            InnerTask::Tracker(_, t) => true, // XXX think if false is better
+            InnerTask::Xfer(_) => true
         }
     }
 }
@@ -428,16 +500,16 @@ impl StandardTaskArguments {
 
 #[cfg(test)]
 mod test {
-    use super::Task;
+    use super::InnerTask;
     use crate::task::StandardTaskArguments;
 
     #[test]
     fn test_deserialize_task() {
         let yaml = "basm toto.asm -o toto.o";
-        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        let task: InnerTask = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Assembler(
+            InnerTask::Assembler(
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
@@ -447,10 +519,10 @@ mod test {
         );
 
         let yaml = "-basm toto.asm -o toto.o";
-        let task: Task = serde_yaml::from_str(yaml).unwrap();
+        let task: InnerTask = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             task,
-            Task::Assembler(
+            InnerTask::Assembler(
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),

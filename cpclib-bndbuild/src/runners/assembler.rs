@@ -1,7 +1,5 @@
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::Deref;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
@@ -44,6 +42,14 @@ struct Orgams {
     )]
     from: Utf8PathBuf,
 
+    #[arg(
+        short,
+        long,
+        help = "Completely hide the emulator window",
+        default_value = "false"
+    )]
+    transparent: bool,
+
     #[command(flatten)]
     orgams: cpclib_runner::emucontrol::OrgamsCli
 }
@@ -76,11 +82,13 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
         let matches = {
             let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
             itr.insert(0, "orgams");
-            let matches = self.get_matches(&itr)?;
-            matches
+
+            self.get_matches(&itr)?
         };
 
         let from = matches.get_one::<Utf8PathBuf>("from").unwrap();
+
+        let transparent = matches.get_flag("transparent");
 
         if matches.get_flag("basm2orgams") {
             if from.is_dir() {
@@ -105,6 +113,10 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
 
             real_arguments.push("--emulator");
             real_arguments.push("ace");
+
+            if transparent {
+                real_arguments.push("--transparent");
+            }
 
             real_arguments.push("orgams");
 
@@ -186,7 +198,7 @@ impl<E: EnvEventObserver + 'static> RunnerWithClap for BasmRunner<E> {
     }
 }
 
-impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E>  {
+impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E> {
     type EventObserver = Arc<E>;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {
@@ -211,49 +223,47 @@ impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E>  {
 
         let start = std::time::Instant::now();
 
-        /*
         // The aim of this ugly class is to hide the pointer... no idea if it is good to do that
-        #[derive(Debug)]
-        struct RunnerEnvObserver<O> {
-            o: * const(),
-            _phantom: PhantomData<O>
-        }
-        impl<O> Clone for RunnerEnvObserver<O> {
-            fn clone(&self) -> Self {
-                Self{o: self.o, _phantom: Default::default()}
-            }
-        }
-        unsafe impl<O> Send for RunnerEnvObserver<O> {}
-        unsafe impl<O> Sync for RunnerEnvObserver<O> {}
-
-        impl<O> RunnerEnvObserver<O> {
-            fn new<E>(o: &E) -> Self {
-                let ptr: *const E = o;
-                let ptr: *const() = ptr as _;
-                Self {o: ptr, _phantom: Default::default()}
-            }
-        }
-
-        impl<O> Deref for RunnerEnvObserver<O> {
-            type Target = O;
-        
-            fn deref(&self) -> &Self::Target {
-                let ptr : *const Self::Target = self.o as _;
-                unsafe{&*ptr}
-            }
-        }
-        impl<O: EventObserver> EventObserver for RunnerEnvObserver<O> {
-            fn emit_stdout(&self, s: &str) {
-                self.deref().emit_stdout(s);
-            }
-        
-            fn emit_stderr(&self, s: &str) {
-                self.deref().emit_stderr(s);
-            }
-        }
-
-        let o = Rc::new(RunnerEnvObserver::new(o));
-        */
+        // #[derive(Debug)]
+        // struct RunnerEnvObserver<O> {
+        // o: * const(),
+        // _phantom: PhantomData<O>
+        // }
+        // impl<O> Clone for RunnerEnvObserver<O> {
+        // fn clone(&self) -> Self {
+        // Self{o: self.o, _phantom: Default::default()}
+        // }
+        // }
+        // unsafe impl<O> Send for RunnerEnvObserver<O> {}
+        // unsafe impl<O> Sync for RunnerEnvObserver<O> {}
+        //
+        // impl<O> RunnerEnvObserver<O> {
+        // fn new<E>(o: &E) -> Self {
+        // let ptr: *const E = o;
+        // let ptr: *const() = ptr as _;
+        // Self {o: ptr, _phantom: Default::default()}
+        // }
+        // }
+        //
+        // impl<O> Deref for RunnerEnvObserver<O> {
+        // type Target = O;
+        //
+        // fn deref(&self) -> &Self::Target {
+        // let ptr : *const Self::Target = self.o as _;
+        // unsafe{&*ptr}
+        // }
+        // }
+        // impl<O: EventObserver> EventObserver for RunnerEnvObserver<O> {
+        // fn emit_stdout(&self, s: &str) {
+        // self.deref().emit_stdout(s);
+        // }
+        //
+        // fn emit_stderr(&self, s: &str) {
+        // self.deref().emit_stderr(s);
+        // }
+        // }
+        //
+        // let o = Rc::new(RunnerEnvObserver::new(o));
         let o = Arc::clone(o);
         let o: Arc<dyn EnvEventObserver> = o as Arc<dyn EnvEventObserver>;
         match cpclib_basm::process(&matches, Arc::clone(&o)) {
@@ -262,7 +272,7 @@ impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E>  {
                     o.emit_stdout(&format!("{warning}\n"));
                 }
 
-                let report =     env.report(&start);
+                let report = env.report(&start);
                 o.emit_stdout(&format!("{report}"));
 
                 Ok(())

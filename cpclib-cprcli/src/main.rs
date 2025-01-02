@@ -74,9 +74,12 @@ fn main() {
         let to_remove = available.sub(&to_keep);
 
         for bank in to_remove.into_iter() {
-            cpr.remove_bank(bank as _).expect("Bank {bank} not present");
-            cpr2.as_mut()
-                .map(|cpr| cpr.remove_bank(bank as _).expect("Bank {bank} not present"));
+            cpr.remove_bank(bank as _)
+                .expect(&format!("Bank {bank} not present"));
+            cpr2.as_mut().map(|cpr| {
+                cpr.remove_bank(bank as _)
+                    .expect(&format!("Bank {bank} not present"))
+            });
         }
     }
 

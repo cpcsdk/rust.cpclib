@@ -17,7 +17,7 @@ cpclib-asm.workspace=true
 camino-tempfile.workspace = true
 clap = {workspace=true, features=["derive"]}
 delegate.workspace = true
-enigo.workspace = true
+enigo = {workspace = true, features = ["x11rb"]}
 sevenz-rust.workspace = true
 shlex.workspace = true
 ureq.workspace = true
@@ -33,7 +33,9 @@ tar = "0.4.43"
 zip-extract = "=0.1.3"
 rust-ini = "0.21.1"
 scraper = "0.20.0"
+transparent.workspace = true
 xz2 = "0.1.7"
+wmctrl = "0.1.8"
 
 [dev-dependencies]
 ureq.workspace = true

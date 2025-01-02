@@ -1,5 +1,5 @@
-use std::{process::Command, sync::Arc};
-use std::sync::LazyLock;
+use std::process::Command;
+use std::sync::{Arc, LazyLock};
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::error::AssemblerError;

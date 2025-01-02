@@ -7,7 +7,7 @@ use serde::{self, Deserialize, Deserializer};
 
 use crate::constraints::{deserialize_constraint, Constraint, Corresponds};
 use crate::expand_glob;
-use crate::task::Task;
+use crate::task::{InnerTask, Task};
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<Utf8PathBuf>, D::Error>
 where D: Deserializer<'de> {
@@ -139,20 +139,21 @@ where D: Deserializer<'de> {
 
         fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
         where A: serde::de::EnumAccess<'de> {
-            let t: Task =
+            let t: InnerTask =
                 Deserialize::deserialize(serde::de::value::EnumAccessDeserializer::new(data))?;
-            Ok(vec![t])
+            Ok(vec![t.into()])
         }
 
         fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
         where E: serde::de::Error {
-            let t: Task = Deserialize::deserialize(serde::de::value::StrDeserializer::new(v))?;
-            Ok(vec![t])
+            let t: InnerTask = Deserialize::deserialize(serde::de::value::StrDeserializer::new(v))?;
+            Ok(vec![t.into()])
         }
 
         fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
         where A: serde::de::SeqAccess<'de> {
-            Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))
+            let tasks : Vec<InnerTask> = Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
+            Ok(tasks.into_iter().map(Task::from).collect_vec())
         }
     }
 
