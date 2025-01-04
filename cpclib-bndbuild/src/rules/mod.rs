@@ -11,6 +11,7 @@ mod test {
     use crate::expand_glob;
     use crate::rules::{Rule, Rules};
     use crate::task::Task;
+    use std::ops::Deref;
 
     #[test]
     fn test_deserialize_rule1() {
@@ -23,10 +24,10 @@ commands:
         assert_eq!(rule.targets().len(), 2);
         assert_eq!(rule.dependencies().len(), 1);
         assert_eq!(
-            *rule.command(0),
+            rule.command(0).deref(),
             Task::new_basm(
                 "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            )
+            ).deref()
         );
     }
 
@@ -40,10 +41,10 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
         assert_eq!(rule.targets().len(), 2);
         assert_eq!(rule.dependencies().len(), 1);
         assert_eq!(
-            *rule.command(0),
+            rule.command(0).deref(),
             Task::new_basm(
                 "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            )
+            ).deref()
         );
     }
 

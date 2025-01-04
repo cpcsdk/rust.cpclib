@@ -105,6 +105,13 @@ impl Task {
     pub fn new_rm(args: &str) -> Self {
         InnerTask::new_rm(args).into()
     }
+
+
+    pub fn set_ignore_errors(mut self, flag: bool) -> Self {
+        let new =  self.inner.clone().set_ignore_errors(flag);
+        self.inner = new;
+        self
+    }
 }
 
 impl Deref for Task {
