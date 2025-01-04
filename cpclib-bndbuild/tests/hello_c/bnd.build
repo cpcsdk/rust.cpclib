@@ -1,0 +1,25 @@
+- tgt: run
+  dep: hello
+  cmd:
+   - extern pwd
+   - extern ls -l
+   - extern ./hello world
+
+- tgt: clean
+  cmd: -rm *.o
+
+- tgt: distclean
+  dep: clean
+  cmd: -rm hello
+
+- tgt: hello
+  dep: hello.o main.o
+  cmd: extern gcc hello.o main.o -o hello
+
+- tgt: hello.o
+  dep: hello.c hello.h
+  cmd: extern gcc -c hello.c
+
+- tgt: main.o
+  dep: main.c hello.h
+  cmd: extern gcc -c main.c

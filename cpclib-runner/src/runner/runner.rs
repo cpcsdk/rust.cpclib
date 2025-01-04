@@ -95,7 +95,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // however, it was maybe mandatory for Windows
         // let app = std::fs::canonicalize(&itr[0])
         //     .map_err(|e| format!("Wrong executable {}.{}", &itr[0], e.to_string()))?;
-        let app = &itr[0];
+        let app = itr[0];
 
         let cwd = std::env::current_dir()
             .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
@@ -107,7 +107,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         let in_dir = match self.in_dir {
             RunInDir::CurrentDir => cwd,
             RunInDir::AppDir => {
-                let base = if app == &"wine" { itr[1] } else { app };
+                let base = if app == "wine" { itr[1] } else { app };
                 PathBuf::from(std::path::Path::new(base).parent().unwrap()) // this path is because of AMSpiriT
             }
         };
@@ -118,6 +118,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
 
         let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
 
+        #[derive(Debug)]
         enum MyChild {
             Transparent(TransparentChild),
             Standard(Child)

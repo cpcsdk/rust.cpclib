@@ -6,22 +6,29 @@ pub fn get_all_args(arguments: &str) -> Result<Vec<String>, String> {
     let init_args = split(arguments)
         .ok_or_else(|| format!("There are errors in the arguments: {}", arguments))?;
     let mut res = Vec::new();
-    for p in init_args {
-        match glob(&p) {
-            Ok(entries) => {
-                let mut added = 0;
-                for entry in entries {
-                    match entry {
-                        Ok(p) => res.push(p.display().to_string()),
-                        Err(e) => res.push(e.path().display().to_string())
+    for (idx, p) in init_args.into_iter().enumerate() {
+        // XXX no pattern matching for the command name. 
+        //     TODO check if it is ok to do that.
+        //     It avoids issues when ./ is used in command name
+        if idx == 0 {
+            res.push(p)
+        } else {
+            match glob(&p) {
+                Ok(entries) => {
+                    let mut added = 0;
+                    for entry in entries {
+                        match entry {
+                            Ok(p) => res.push(p.display().to_string()),
+                            Err(e) => res.push(e.path().display().to_string())
+                        }
+                        added += 1;
                     }
-                    added += 1;
-                }
-                if added == 0 {
-                    res.push(p);
-                }
-            },
-            Err(_) => res.push(p)
+                    if added == 0 {
+                        res.push(p);
+                    }
+                },
+                Err(_) => res.push(p)
+            }
         }
     }
 
