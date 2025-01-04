@@ -21,6 +21,7 @@ enigo = {workspace = true, features = ["x11rb"]}
 sevenz-rust.workspace = true
 shlex.workspace = true
 ureq.workspace = true
+utf8-chars.workspace = true
 xcap.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 

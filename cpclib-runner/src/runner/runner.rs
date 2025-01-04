@@ -170,19 +170,33 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             .take()
             .expect("Internal error, could not take stderr");
 
+        use utf8_chars::BufReadCharsExt;
         thread::scope(|s| {
             s.spawn(|| {
-                let stdout_lines = BufReader::new(child_stdout).lines();
-                for line in stdout_lines {
-                    let line = line.unwrap();
-                    o.emit_stdout(&line);
+                let mut stdout = BufReader::new(child_stdout);
+                let mut current_string = String::new();
+                for c in stdout.chars() { // TODO handle a byte buffer
+                    if let Ok(c) = c {
+                        current_string.push(c);
+
+                        if c == '\n' {
+                            o.emit_stdout(&current_string);
+                            current_string.clear();
+                        }
+                    }
+                }
+                if !current_string.is_empty() {
+                    o.emit_stdout(&current_string);
                 }
             });
             s.spawn(|| {
+                // TODO use the same technique than stdout
                 let stderr_lines = BufReader::new(child_stderr).lines();
                 for line in stderr_lines {
                     let line = line.unwrap();
                     o.emit_stderr(&line);
+                    o.emit_stderr("\n");
+
                 }
             });
         });

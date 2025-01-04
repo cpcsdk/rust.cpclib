@@ -149,6 +149,7 @@ test-generator = "0.3.1"
 thiserror = "1.0"
 time = "0.3.37"
 transparent = "0.4.0"
+utf8-chars = "3.0.5"
 velcro = "0.5.4"
 winnow = { version = "0.6.21", features = ["simd"] }
 xcap = "0.0.11"
