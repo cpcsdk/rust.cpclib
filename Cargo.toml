@@ -5,6 +5,7 @@ members = [
   "cpclib-basm",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-bndbuild-tauri/src-tauri",
   "cpclib-common",
   "cpclib-cpr",
   "cpclib-cprcli", 
@@ -35,6 +36,7 @@ edition = "2021"
 license = "MIT"
 repository = "https://github.com/cpcsdk/rust.cpclib"
 homepage = "https://github.com/cpcsdk/rust.cpclib"
+description = "Amstrad CPC crossdev toolchain"
 
 [workspace.dependencies]
 
@@ -44,6 +46,7 @@ cpclib-basic = { version = "0.9.0", path = "cpclib-basic", default-features = fa
 cpclib-basm = { version = "0.9.0", path = "cpclib-basm", default-features = false }
 cpclib-bdasm = { version = "0.9.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.7.0", path = "cpclib-bndbuild", default-features = false }
+cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.9.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false }
 cpclib-crunchers = { version = "0.9.0", path = "cpclib-crunchers", default-features = false }
@@ -57,7 +60,8 @@ cpclib-tokens = { version = "0.9.0", path = "cpclib-tokens", default-features = 
 cpclib-xfer = { version = "0.9.0", path = "cpclib-xfer", default-features = false }
 cpclib-xfertool = { version = "0.9.0", path = "cpclib-xfertool", default-features = false }
 cpclib-z80emu = { version = "0.9.0", path = "cpclib-z80emu", default-features = false }
-anyhow = "1.0.93"
+
+anyhow = "1.0.95"
 arrayref = "0.3.9"
 as-slice = "0.2.1"
 bitfield = "0.14.0"
@@ -66,31 +70,31 @@ bitvec = "1.0.1"
 built = { version = "0.7.5", features = ["chrono"] }
 camino = "1.1.9"
 camino-tempfile = "1.1.1"
-cc = "1.2.1"
+cc = "1.2.7"
 cfg-if = "1.0.0"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
-clap = { version="4.5.21", features=["color"]}
+clap = { version="4.5.23", features=["color"]}
 codespan-reporting = "0.11.1"
 #contracts = "0.6.3"
-const_format = {version="0.2.33", features = ["fmt"]}
-crossbeam-channel = "0.5.13"
+const_format = {version="0.2.34", features = ["fmt"]}
+crossbeam-channel = "0.5.14"
 curl = "0.4.47"
 custom_error = "1.9.2"
 dbg = "1.0.4"
 delegate = "0.13.1"
 either = "1.13.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
-enigo = "0.2.1"
+enigo = "0.3"
 enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "11.3.1"
 exitcode = "1.1.2"
 gag = "1.0.0"
 getset = "0.1.3"
-gif = "0.12" # XXX may be copatible with gif-dispose
+gif = "0.12" # XXX may be compatible with gif-dispose
 gif-dispose = "4.0.1"
-glob = "0.3.1"
+glob = "0.3.2"
 globset = "0.4.15"
 hashbag = "0.1.12"
 hotwatch = { version = "0.5.0" }
@@ -98,35 +102,35 @@ hxcfe = "0.1.5"
 image = "0.25.5"
 indicatif = "0.17.9"
 itertools = "0.12.1"
-libc = "0.2.164"
+libc = "0.2.169"
 log = "0.4.22"
 minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.3"
 num_enum = "0.7.3"
 num-bigint = "0.4.6"
-nutype = "0.5.0"
-ordered-float = "4.5.0"
+nutype = "0.5.1"
+ordered-float = "4.6.0"
 ouroboros = "0.18.4"
 parking_lot = "0.12.3"
 paste = "1.0.15"
 path-absolutize = "3.1.1"
 pretty_assertions = "1.4.1"
-proc-macro2 = "1.0.89"
-quote = "1.0.37"
+proc-macro2 = "1.0.92"
+quote = "1.0.38"
 ratatui = "0.28.1"
 rayon = "1.10.0"
 regex = "1.11.1"
 remain = "0.2.14"
-ureq = "2.10.1"
+ureq = "2.12.1"
 resolve-path = "0.1.0"
 rust-embed = { version = "8.5.0", features = ["compression"] }
 rustyline = { version = "14.0.0" }
 rustyline-derive = { version = "0.10.0" }
-self_cell = "1.0.4"
+self_cell = "1.1.0"
 self_update = "0.41.0"
-semver = "1.0.23"
-serde = { version = "1.0.215", features = ["derive"] }
+semver = "1.0.24"
+serde = { version = "1.0.217", features = ["derive"] }
 serial_test = "3.2.0"
 sevenz-rust = "0.6.1"
 shlex = "1.3.0"
@@ -138,15 +142,17 @@ strsim = "0.11.1"
 strum = { version = "0.26", features = ["derive"] }
 subprocess = { version = "0.2.9" }
 substring = "1.4.5"
-syn = "2.0.87"
+syn = "2.0.94"
 term_grid = { version = "0.2.0" }
 termize = { version = "0.1.1" }
 test-generator = "0.3.1"
 thiserror = "1.0"
-time = "0.3.36"
+time = "0.3.37"
+transparent = "0.4.0"
 velcro = "0.5.4"
-winnow = { version = "0.6.20", features = ["simd"] }
+winnow = { version = "0.6.21", features = ["simd"] }
 xcap = "0.0.11"
+zip-extract = "=0.1.3"
 
 # gui based dependencies
 eframe = "0.29"
@@ -154,6 +160,8 @@ claui = "0.4"
 egui_file = "0.19"
 open = "5.3.1"
 
+
+[workspace.lints]
 
 [patch.crates-io]
 #choice_nocase = {path = "../../choice_nocase/"}
@@ -169,6 +177,7 @@ cpclib-basic = { path = "./cpclib-basic/" }
 cpclib-basm = { path = "./cpclib-basm/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
+cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }
 cpclib-common = { path = "./cpclib-common/" }
 cpclib-cpr = { path = "./cpclib-cpr/" }
 cpclib-crunchers = { path = "./cpclib-crunchers/" }

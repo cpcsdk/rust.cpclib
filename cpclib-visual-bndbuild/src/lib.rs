@@ -89,7 +89,6 @@ pub struct BndBuildApp {
     #[serde(skip)]
     request_open: bool,
 
-
     /// No need to update the output too often
     #[serde(skip)]
     last_tick: SystemTime,
@@ -303,7 +302,6 @@ impl BndBuildApp {
 
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-
                     if ui
                         .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
                         .clicked()
@@ -330,14 +328,13 @@ impl BndBuildApp {
                         });
                     }
 
-                    if self.filename.is_some() {
-                        if ui
+                    if self.filename.is_some()
+                        && ui
                             .add(Button::new("Reload").shortcut_text(ctx.format_shortcut(&CTRL_R)))
                             .clicked()
-                        {
-                            self.request_reload = true;
-                            ui.close_menu();
-                        }
+                    {
+                        self.request_reload = true;
+                        ui.close_menu();
                     }
                     ui.separator();
 
@@ -392,7 +389,6 @@ impl BndBuildApp {
                 ui.monospace(&self.logs);
             });
     }
-
 
     fn update_targets(&mut self, _ctx: &egui::Context, ui: &mut eframe::egui::Ui) {
         if let Some(bnl) = &self.builder_and_layers {
@@ -595,7 +591,6 @@ impl eframe::App for BndBuildApp {
             self.load(self.filename.clone().unwrap());
             ctx.request_repaint_after(REFRESH_DURATION); // ensure progress will be displayed
         }
-
 
         // Handle target
         if let Some(tgt) = self.requested_target.take() {

@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::io::{Cursor, Read};
 use std::ops::Deref;
 use std::rc::Rc;
@@ -57,10 +57,9 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
         let content = link.inner_html();
         let href = link.attr("href").unwrap();
         if content.contains(info.version_name()) && !href.contains("/tree/") {
-            dbg!(&link, &href);
-            return dbg!(Ok(
+            return Ok(
                 format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/")
-            ));
+            );
         }
     }
 
@@ -222,13 +221,43 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
         let mut urls = MutiplatformUrls::default();
 
         if let Some(key) = self.linux_key() {
-            urls.linux = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
+            urls.linux = Some(format!(
+                "{}/{}",
+                GITHUB_URL,
+                map.get(key).ok_or_else(|| {
+                    format!(
+                        "'{}' not found among {}",
+                        key,
+                        map.keys().map(|s| format!("'{s}'")).join(", ")
+                    )
+                })?
+            ));
         }
         if let Some(key) = self.windows_key() {
-            urls.windows = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
+            urls.windows = Some(format!(
+                "{}/{}",
+                GITHUB_URL,
+                map.get(key).ok_or_else(|| {
+                    format!(
+                        "'{}' not found among {}",
+                        key,
+                        map.keys().map(|s| format!("'{s}'")).join(", ")
+                    )
+                })?
+            ));
         }
         if let Some(key) = self.macos_key() {
-            urls.macos = Some(format!("{}/{}", GITHUB_URL, map.get(key).ok_or_else(|| format!("'{}' not found among {}", key, map.keys().map(|s| format!("'{s}'")).join(", ")))?));
+            urls.macos = Some(format!(
+                "{}/{}",
+                GITHUB_URL,
+                map.get(key).ok_or_else(|| {
+                    format!(
+                        "'{}' not found among {}",
+                        key,
+                        map.keys().map(|s| format!("'{s}'")).join(", ")
+                    )
+                })?
+            ));
         }
 
         Ok(urls)
@@ -380,7 +409,7 @@ impl<E: EventObserver> Deref for PostInstall<E> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ArchiveFormat {
     Raw,
     Tar,
@@ -403,6 +432,17 @@ pub struct DelegateApplicationDescription<E: EventObserver> {
     pub post_install: Option<PostInstall<E>>,
     #[builder(default=RunInDir::CurrentDir)]
     pub in_dir: RunInDir
+}
+
+impl<E: EventObserver> Debug for DelegateApplicationDescription<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DelegateApplicationDescription")
+            .field("folder", &self.folder)
+            .field("exec_fname", &self.exec_fname)
+            .field("archive_format", &self.archive_format)
+            .field("in_dir", &self.in_dir)
+            .finish()
+    }
 }
 
 pub fn base_cache_folder() -> Utf8PathBuf {
@@ -437,8 +477,11 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
     pub fn install(&self, o: &E) -> Result<(), String> {
         self.inner_install(o).inspect_err(|e| {
+            dbg!("There was an error, we need to do some cleaning", e);
             let dest = self.cache_folder();
+            dbg!("Try to remove ", &dest);
             let _ = std::fs::remove_dir_all(dest); // ignore error
+            dbg!("Should be done");
         })
     }
 
@@ -454,38 +497,38 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         // uncompress it
         match self.archive_format {
             ArchiveFormat::Raw => {
-                o.emit_stdout(&format!(">> Save to {}", self.exec_fname()));
+                o.emit_stdout(&format!(">> Save to {}\n", self.exec_fname()));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
                 std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::Tar => {
-                o.emit_stdout(">> Open tar archive");
+                o.emit_stdout(">> Open tar archive\n");
                 let mut archive = Archive::new(input);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarGz => {
-                o.emit_stdout(">> Open targz archive");
+                o.emit_stdout(">> Open targz archive\n");
                 let gz = GzDecoder::new(input);
                 let mut archive = Archive::new(gz);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::TarXz => {
-                o.emit_stdout(">> Open tarxz archive");
+                o.emit_stdout(">> Open tarxz archive\n");
                 let xz = XzDecoder::new(input);
                 let mut archive = Archive::new(xz);
                 archive.unpack(dest.clone()).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::Zip => {
-                o.emit_stdout(">> Unzip archive");
+                o.emit_stdout(">> Unzip archive\n");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true)
                     .map_err(|e| e.to_string())?;
             },
             ArchiveFormat::SevenZ => {
-                o.emit_stdout(">> Open 7z archive");
+                o.emit_stdout(">> Open 7z archive\n");
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
                 sevenz_rust::decompress(Cursor::new(buffer), dest.as_std_path())
@@ -494,15 +537,15 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }
 
         if let Some(compile) = &self.compile {
-            o.emit_stdout(">> Compile program");
+            o.emit_stdout(">> Compile program\n");
 
             let cwd = std::env::current_dir()
-                .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
+                .map_err(|e| format!("Unable to get the current working directory {}.\n", e))?;
             std::env::set_current_dir(&dest)
-                .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
+                .map_err(|e| format!("Unable to set the current working directory {}.\n", e))?;
             let res = compile(&dest, o);
             std::env::set_current_dir(&cwd)
-                .map_err(|e| format!("Unable to set the current working directory {}.", e))?;
+                .map_err(|e| format!("Unable to set the current working directory {}.\n", e))?;
             res
         }
         else {
@@ -510,7 +553,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }?;
 
         if let Some(post_install) = &self.post_install {
-            o.emit_stdout(">> Apply post-installation");
+            o.emit_stdout(">> Apply post-installation\n");
             post_install(self)
         }
         else {
@@ -520,19 +563,36 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
     fn download(&self, o: &E) -> Result<Response, String> {
         let url = self.download_fn_url.deref()()?;
-        o.emit_stdout(&format!(">> Download file {}", url));
+        o.emit_stdout(&format!(">> Download file {}\n", url));
         ureq::get(&url).call().map_err(|e| e.to_string())
     }
 }
 
+#[derive(Debug)]
 pub struct DelegatedRunner<E: EventObserver> {
+    /// The description of the application to run
     pub app: DelegateApplicationDescription<E>,
-    pub cmd: String
+    /// The command line
+    pub cmd: String,
+    /// Weither if the gui must be hidden or not
+    pub transparent: bool
 }
 
 impl<E: EventObserver> DelegatedRunner<E> {
     pub fn new(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
-        Self { app, cmd }
+        Self {
+            app,
+            cmd,
+            transparent: false
+        }
+    }
+
+    pub fn new_transparent(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
+        Self {
+            app,
+            cmd,
+            transparent: true
+        }
     }
 }
 
@@ -544,8 +604,13 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
 
         // ensure the emulator exists
         if !cfg.is_cached() {
-            o.emit_stdout("> Install application");
-            cfg.install(o)?;
+            o.emit_stdout("> Install application\n");
+            let res = cfg.install(o);
+            dbg!(&res);
+            if let Err(res) = res {
+                dbg!("Need to leave");
+                return Err(res);
+            }
         }
         assert!(cfg.is_cached());
 
@@ -567,7 +632,13 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
         }
 
         // Delegate it to the appropriate luncher
-        ExternRunner::<E>::new(cfg.in_dir).inner_run(&command, o)
+        let runner = if self.transparent {
+            ExternRunner::<E>::new_transparent(cfg.in_dir)
+        }
+        else {
+            ExternRunner::<E>::new(cfg.in_dir)
+        };
+        runner.inner_run(&command, o)
     }
 
     fn get_command(&self) -> &str {

@@ -1,15 +1,16 @@
 use std::io::Write;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use cpclib_bndbuild::cpclib_common::event::EventObserver;
 use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc};
 use cpclib_bndbuild::BndBuilder;
+use log;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct TauriBndBuilderObserver {
@@ -71,7 +72,6 @@ impl BndBuilderObserver for TauriBndBuilderObserver {
                     .unwrap()
             },
             cpclib_bndbuild::event::BndBuilderEvent::FailedRule(utf8_path) => {
-                dbg!("Failed {utf8_path");
                 self.app_handle
                     .emit("event-failed_rule", utf8_path)
                     .unwrap();
@@ -181,20 +181,112 @@ impl Deref for CachedBndBuilder {
     }
 }
 impl CachedBndBuilder {
-    pub fn new(mut builder: BndBuilder, app_handle: &AppHandle) -> Result<Self, String> {
+    pub async fn new(mut builder: BndBuilder, app_handle: &AppHandle) -> Result<Self, String> {
         let dot = builder.to_dot(true); // TODO handle compressed and not compressed version and show them on demand
+        log::info!("Try to convert {:?}", &dot);
+
+        // XXX the sidecar way does not work when bundled. No time to really look why
+        // let shell = app_handle.shell();
+        // let sidecar_command = shell.sidecar("dot").unwrap();
+        //
+        // let svg: String = tauri::async_runtime::block_on(async move {
+        // let (mut rx, mut child) = sidecar_command
+        // .args(["-Kdot", "-Tsvg"])
+        // .set_raw_out(true)
+        // .spawn()
+        // .unwrap();
+        //
+        // child.write(dot.as_bytes()).unwrap();
+        // drop(child); // XXX ensure stdin is closed
+        //
+        // let mut svg = Vec::new();
+        //
+        // while let Some(event) = rx.recv().await {
+        // match event {
+        // CommandEvent::Stdout(line) => {
+        // svg.extend(line.into_iter());
+        // },
+        // CommandEvent::Stderr(line) => {
+        // dbg!(String::from_utf8_lossy(&line));
+        // },
+        // CommandEvent::Error(e) => {
+        // return Err(format!("Error with graphviz conversion. {}", e));
+        // },
+        // CommandEvent::Terminated(terminated_payload) => break,
+        // _ => todo!()
+        // }
+        // }
+        //
+        // Ok(String::from_utf8_lossy(&svg).into_owned())
+        // })?;
+
+        #[cfg(target_os = "windows")]
+        let dot_command = {
+            // we provide graphviz because every installation is a nightmare on windows
+            let resource_path = app_handle
+                .path()
+                .resolve(
+                    "resources/Graphviz-12.2.1-win64/bin/dot.exe",
+                    tauri::path::BaseDirectory::Resource
+                )
+                .map_err(|e| format!("Unable to resolve graphvis path {e}"))?;
+            if !dbg!(&resource_path).exists() {
+                log::error!(
+                    "graphviz does not seem to be reachable {:?}",
+                    &resource_path
+                );
+                return Err(format!("{:?} does not exists", resource_path.to_str()));
+            }
+            let resource_path = std::path::absolute(&resource_path)
+                .map_err(|e| format!("Unable to absolutize {:?}. {}", resource_path, e))?;
+
+            resource_path.to_string_lossy().into_owned()
+        };
+        #[cfg(not(target_os = "windows"))]
+        let dot_command = {
+            // we expect graphviz to be installed on the host
+            "dot"
+        };
+
+        log::info!("Try to launch : {:?}", &dot_command);
+
+        // this stil does not seem to work in bundled way
+        // let mut child = std::process::Command::new(dot_command)
+        // .arg(format!("-Tsvg"))
+        // .stdin(std::process::Stdio::piped())
+        // .stdout(std::process::Stdio::piped())
+        // .spawn()
+        // .map_err(|e| format!("Unable to spawn dot. {e}"))?;
+        //
+        // send the dot file to the program
+        // child
+        // .stdin
+        // .take()
+        // .unwrap()
+        // .write_all(dot.as_bytes())
+        // .map_err(|e| "Error while piping the dot content".to_owned())?;
+        // let output = child
+        // .wait_with_output()
+        // .map_err(|e| "Error while retreiving the dot output".to_owned())?;
+        //
+        //
+        //
+        // let svg = String::from_utf8_lossy(&output.stdout).into_owned();
+
+        use tauri_plugin_shell::ShellExt;
 
         let shell = app_handle.shell();
-        let sidecar_command = shell.sidecar("dot").unwrap();
-
-        let svg: String = tauri::async_runtime::block_on(async move {
-            let (mut rx, mut child) = sidecar_command
+        let svg: String = {
+            let (mut rx, mut child) = shell
+                .command(dot_command)
                 .args(["-Kdot", "-Tsvg"])
                 .set_raw_out(true)
                 .spawn()
-                .unwrap();
+                .map_err(|e| format!("Unable to spawn dot. {e}"))?;
 
-            child.write(dot.as_bytes()).unwrap();
+            child
+                .write(dot.as_bytes())
+                .map_err(|e| "Error while piping the dot content".to_owned())?;
             drop(child); // XXX ensure stdin is closed
 
             let mut svg = Vec::new();
@@ -205,7 +297,9 @@ impl CachedBndBuilder {
                         svg.extend(line.into_iter());
                     },
                     CommandEvent::Stderr(line) => {
-                        dbg!(String::from_utf8_lossy(&line));
+                        let line = String::from_utf8_lossy(&line);
+                        log::info!("Obtaines line: {}", &line);
+                        drop(line);
                     },
                     CommandEvent::Error(e) => {
                         return Err(format!("Error with graphviz conversion. {}", e));
@@ -215,25 +309,19 @@ impl CachedBndBuilder {
                 }
             }
 
-            Ok(String::from_utf8_lossy(&svg).into_owned())
-        })?;
+            String::from_utf8_lossy(&svg).into_owned()
+        };
 
-        // let mut child = Command::new("dot")
-        // .arg(format!("-Tsvg"))
-        // .stdin(Stdio::piped())
-        // .stdout(Stdio::piped())
-        // .spawn()
-        // .unwrap();
-        // child.stdin.take().unwrap().write_all(dot.as_bytes()).unwrap();
-        // let output = child.wait_with_output().unwrap();
-        //
-        // let svg = String::from_utf8_lossy(&output.stdout).into_owned();
+        log::info!("Obtained svg {}", &svg);
 
         builder.add_observer(BndBuilderObserverRc::new(TauriBndBuilderObserver::new(
             app_handle
         )));
 
-        Ok(Self { builder: Arc::new(builder), svg })
+        Ok(Self {
+            builder: Arc::new(builder),
+            svg
+        })
     }
 
     pub fn svg(&self) -> &str {

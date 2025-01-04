@@ -129,7 +129,9 @@ impl Rules {
 }
 
 impl Rules {
-    pub fn to_dot(&self) -> String {
+    /// Generate a graphvis representation of the build
+    /// If compressed is activated, the rules are not shown
+    pub fn to_dot(&self, compressed: bool) -> String {
         let mut output_bytes = Vec::new();
         {
             let mut writer = DotWriter::from(&mut output_bytes);
@@ -145,8 +147,6 @@ impl Rules {
 
             let mut all_deps = HashSet::<String>::default();
             let mut all_tgts = HashSet::<String>::default();
-
-
 
             // loop over each rule
             for rule in self.rules() {
@@ -172,24 +172,32 @@ impl Rules {
                     cmd
                 };
 
-                let build_rule_node =  for <'a, 'b, 'c> |digraph: &'b mut Scope<'a, 'c>| -> Node<'b, 'c> {
-                    let mut rule_node = digraph.node_auto();
-                    if let Some(help) = rule.help() {
-                        rule_node.set("tooltip", help, true);
-                    }
-                    rule_node
-                };
+                let build_rule_node =
+                    for<'a, 'b, 'c> |digraph: &'b mut Scope<'a, 'c>| -> Node<'b, 'c> {
+                        let mut rule_node = digraph.node_auto();
+                        if let Some(help) = rule.help() {
+                            rule_node.set("tooltip", help, true);
+                        }
+                        rule_node
+                    };
                 let complete_rule_node = |cmd: &str, rule_node: &mut Node| {
                     debug_assert!(!cmd.is_empty());
-                    rule_node.set_label(&cmd);
-                    rule_node.set_font("Courier New");
-                    rule_node.set_font_size(12.);
+                    if compressed {
+                        rule_node.set("shape", "point", false);
+                        rule_node.set("tooltip", cmd, true);
+                    }
+                    else {
+                        rule_node.set_label(cmd);
+                        rule_node.set_font("Courier New");
+                        rule_node.set_font_size(12.);
+                    }
                 };
 
                 let mut rule_id = if deps.is_empty() {
                     if cmd.is_empty() {
                         None
-                    } else {
+                    }
+                    else {
                         let id = {
                             let mut rule_node = build_rule_node(&mut digraph);
                             complete_rule_node(&cmd, &mut rule_node);
@@ -218,7 +226,7 @@ impl Rules {
                     else {
                         complete_rule_node(&cmd, &mut rule_node);
                     }
-                    
+
                     Some(rule_node.id())
                 };
 
@@ -226,11 +234,9 @@ impl Rules {
                     let dep = format!("\"{}\"", dep);
                     all_deps.insert(dep.clone());
 
-                    rule_id
-                        .as_mut()
-                        .map(|rule_id| {
-                            let e = digraph.edge(&dep, rule_id.clone());
-                        });
+                    if let Some(rule_id) = rule_id.as_mut() {
+                        let e = digraph.edge(&dep, rule_id.clone());
+                    }
                 }
 
                 for tgt in tgts {
@@ -266,13 +272,13 @@ impl Rules {
                 let mut cluster = digraph.cluster();
                 cluster.set_style(Style::Invisible);
                 for dep in all_deps.sub(&all_tgts) {
-                    cluster.node_named(&dep)
-                    .set("fontcolor", "darkgreen", false)
-                    .set("shape", "cylinder", false)
-                    .set_style(Style::Rounded);
+                    cluster
+                        .node_named(&dep)
+                        .set("fontcolor", "darkgreen", false)
+                        .set("shape", "cylinder", false)
+                        .set_style(Style::Rounded);
                 }
             }
-
         }
 
         String::from_utf8_lossy(&output_bytes).into_owned()

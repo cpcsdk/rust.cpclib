@@ -13,7 +13,10 @@ use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
 use task::{
-    ACE_CMDS, AMSPIRIT_CMDS, AT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CONVGENERIC_CMDS, CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS, HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
+    ACE_CMDS, AMSPIRIT_CMDS, AT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CONVGENERIC_CMDS,
+    CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS,
+    HIDEUR_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS,
+    SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
 };
 use thiserror::Error;
 
@@ -41,38 +44,40 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
     cmd.command()?.execute()
 }
 
-pub fn build_args_parser() -> clap::Command {
+pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
+    (ACE_CMDS, true), // true for clearable, false for others
+    (AMSPIRIT_CMDS, true),
+    (AT_CMDS, true),
+    (BASM_CMDS, false),
+    (BDASM_CMDS, false),
+    (BNDBUILD_CMDS, false),
+    (CONVGENERIC_CMDS, true),
+    (CP_CMDS, false),
+    (CPCEC_CMDS, true),
+    (DISC_CMDS, false),
+    (DISARK_CMDS, true),
+    (ECHO_CMDS, false),
+    (EMUCTRL_CMDS, false),
+    (EXTERN_CMDS, false),
+    (FAP_CMDS, true),
+    (HIDEUR_CMDS, false),
+    (IMG2CPC_CMDS, false),
+    (IMPDISC_CMDS, true),
+    (MARTINE_CMDS, true),
+    (ORGAMS_CMDS, false),
+    (RASM_CMDS, true),
+    (RM_CMDS, false),
+    (SJASMPLUS_CMDS, true),
+    (SUGARBOX_CMDS, true),
+    (VASM_CMDS, true),
+    (WINAPE_CMDS, true),
+    (XFER_CMDS, false)
+];
+
+pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>){
     static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
-    let (commands_list, clearable_list) = COMMANDS_LIST.get_or_init(|| {
-        let all_applications = [
-            (ACE_CMDS, true),  // true for clearable, false for others
-            (AMSPIRIT_CMDS, true),
-            (AT_CMDS, true),
-            (BASM_CMDS, false),
-            (BDASM_CMDS, false),
-            (BNDBUILD_CMDS, false),
-            (CONVGENERIC_CMDS, true),
-            (CP_CMDS, false),
-            (CPCEC_CMDS, true),
-            (DISC_CMDS, false),
-            (DISARK_CMDS, true),
-            (ECHO_CMDS, false),
-            (EMUCTRL_CMDS, false),
-            (EXTERN_CMDS, false),
-            (FAP_CMDS, true),
-            (HIDEUR_CMDS, false),
-            (IMG2CPC_CMDS, false),
-            (IMPDISC_CMDS, true),
-            (MARTINE_CMDS, true),
-            (ORGAMS_CMDS, false),
-            (RASM_CMDS, true),
-            (RM_CMDS, false),
-            (SJASMPLUS_CMDS, true),
-            (SUGARBOX_CMDS, true),
-            (VASM_CMDS, true),
-            (WINAPE_CMDS, true),
-            (XFER_CMDS, false)
-        ];
+    COMMANDS_LIST.get_or_init(|| {
+        let all_applications = ALL_APPLICATIONS;
 
         let mut all = Vec::with_capacity(all_applications.iter().map(|l| l.0.len()).sum());
         let mut clearable = Vec::with_capacity(
@@ -99,7 +104,12 @@ pub fn build_args_parser() -> clap::Command {
         clearable.sort();
 
         (all, clearable)
-    });
+    })
+}
+
+pub fn build_args_parser() -> clap::Command {
+    static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
+    let (commands_list, clearable_list) = commands_list();
     let updatable_list = clearable_list;
 
     let cmd = Command::new("bndbuilder")
@@ -244,13 +254,14 @@ pub fn build_args_parser() -> clap::Command {
         );
 
     // TODO use query_shell https://crates.io/crates/query-shell to get the proper shell
-    let cmd = cmd.arg(Arg::new("completion")
-    .long("completion")
-    .action(ArgAction::Set)
-    .help("Generate autocompletion configuration")
-    .value_parser(value_parser!(Shell)));
 
-    cmd
+    cmd.arg(
+        Arg::new("completion")
+            .long("completion")
+            .action(ArgAction::Set)
+            .help("Generate autocompletion configuration")
+            .value_parser(value_parser!(Shell))
+    )
 }
 
 pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {

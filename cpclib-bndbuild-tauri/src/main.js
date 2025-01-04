@@ -1,51 +1,54 @@
-
+const USE_GAGS = false;
 
 window.addEventListener("DOMContentLoaded", () => {
 
 
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
-  const { message } = window.__TAURI__.dialog;
-  
-  
+  const { message, open } = window.__TAURI__.dialog;
+  const { attachConsole } = window.__TAURI__.log;
+
+  const detach = attachConsole();
+
+
   let svgEl;
   let statusEl;
   let logsEl;
   let clearEl;
-  
+
   /// For each rule, store the div that contains its logs
   let rulesDiv = new Map();
   /// Same for each task
   let tasksDivs = new Map();
-  
+
   let ruleProgressEl;
   let ruleProgressLabelEl;
-  
+
   let rules_list = [];
-  
+
   function update_rules_list() {
     const max_len = 10;
-  
+
     let content = rules_list.join(", ");
     let len = content.length;
-  
+
     if (len > max_len) {
       content = "..." + content.substring(len - max_len + 3);
     }
-  
+
     ruleProgressLabelEl.innerHTML = content;
-  
+
   }
-  
-  
+
+
   function add_log(elt, txt, kind) {
     console.log("txt", txt);
     let content = txt.replaceAll("\n", "<br/>");
     //let content = txt;
-    elt.innerHTML += "<span class=\"" + kind +"\">" + content + "</span>";
+    elt.innerHTML += "<span class=\"" + kind + "\">" + content + "</span>";
   }
-  
-  
+
+
   function clear_logs() {
     logsEl.innerHTML = "";
   }
@@ -61,10 +64,17 @@ window.addEventListener("DOMContentLoaded", () => {
   logsEl = document.querySelector("#logs");
   clearEl = document.querySelector("#clear_button");
 
-  
-  window.setInterval(()=> {
-    invoke("empty_gags")
-  }, 1000/100);
+  // no context menu
+  window.document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
+
+  if (USE_GAGS) {
+    window.setInterval(() => {
+      invoke("empty_gags")
+    }, 1000 / 100);
+  }
 
 
   // TODO consider all these events can happen in parallel as soon as
@@ -137,7 +147,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const human_duration = (duration / 1000) + " s";
 
     let [taskDiv, logDiv] = tasksDivs.get(task_id);
-  //  tasksDivs.delete(task_id);
+    //  tasksDivs.delete(task_id);
 
     taskDiv.firstChild.innerHtml += " " + human_duration;
   });
@@ -178,12 +188,88 @@ window.addEventListener("DOMContentLoaded", () => {
   listen("event-stderr", (event) => {
     console.log(event);
     add_log(logsEl, event.payload, "stderr");
-  })
+  });
+
+
+
+
+  listen("request-execute_target", (event) => {
+    execute_target(event.payload);
+  });
+  listen("request-load_build_file", async (event) => {
+    console.log("request load", event);
+    load_build_file(event.payload);
+  });
+  listen("request-reload", (event) => {
+    console.log("request-reload", event);
+    invoke("reload_file")
+      .then((msg) => { })
+      .catch((msg) => { });
+  });
+  listen("request-open", async (event) => {
+    const fname = await open({
+      "title": "Open a BNDbuild script",
+      "filters": [
+        {
+          "name": "BNDBuild files",
+          "extensions": ["build", "bnd", "yml"]
+        }
+      ]
+    });
+
+    console.log("try to open", fname);
+
+    load_build_file(fname);
+
+  });
+
+  listen("request-clear", (event) => {
+    invoke("clear_app", { soft: event.payload })
+      .then((msg) => console.log(msg))
+      .catch((msg) => console.error(msg));
+  });
+
+
+
+  async function load_build_file(fname) {
+    clear_logs();
+    statusEl.innerHTML = "<span>Loading " + fname + "</span>";
+    window.document.body.style.cursor = "wait";
+    svgEl.innerHTML = "";
+    invoke("load_build_file", { fname: fname })
+      .then((msg) => window.document.body.style.cursor = "default")
+      .catch((msg) => {
+        console.error(msg);
+        window.document.body.style.cursor = "default"
+  });
+  }
+
+
+
+  function execute_target(tgt) {
+    // ensure log area is cleared
+    clear_logs();
+
+    // Execute the target and handle success and error
+    invoke("execute_target", { tgt: tgt })
+      .then(async (msg) => {
+        console.log("execute_target success", msg);
+        await message("Build success", { title: 'BNDBuild', kind: 'info' });
+      })
+      .catch(async (msg) => {
+        console.log("execute_target failed", msg);
+        add_log(logsEl, msg, "stderr"); // TODO make the rust code generate events ! we do not have ot handle it now.
+        await message(msg, { title: 'BNDBuild', kind: 'error' });
+      });
+  }
+
+
 
   // When a bndbuild file is loaded, it is necessary
   // to replace the svg representation and  add the 
   // handlers to manage the clicks on targets
   listen('file-loaded', (event) => {
+    console.log(event);
     // Update the interface according to the loaded file
     svgEl.innerHTML = event.payload.svg;
     statusEl.innerHTML = event.payload.fname;
@@ -193,7 +279,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const links = svgEl.querySelectorAll("a");
     links.forEach(link => {
       // retreive the target to build
-      const target = link.getAttribute("xlink:title");
+      const tgt = link.getAttribute("xlink:title");
 
       // disable the normal behavior of the link
       link.removeAttribute("xlink:href");
@@ -202,23 +288,16 @@ window.addEventListener("DOMContentLoaded", () => {
       const parent = link.parentElement;
       parent.style.pointerEvents = "bounding-box"; // ensure whole g is clicable
       parent.style.cursor = "pointer";
-      parent.addEventListener("click", (e) => { // handle the click
-        // ensure log area is cleared
-        logsEl.innerHTML = "";
 
-        // Execute the target and handle success and error
-        invoke("execute_target", { tgt: target })
-          .then(async (msg) => {
-            console.log("execute_target success", msg);
-            await message("Build success", { title: 'BNDBuild', kind: 'info' });
-          })
-          .catch(async (msg) => {
-            console.log("execute_target failed", msg);
-            add_log(logsEl, msg, "stderr"); // TODO make the rust code generate events ! we do not have ot handle it now.
-            await message(msg, { title: 'BNDBuild', kind: 'error' });
-          });
+      // handle left click
+      parent.addEventListener("click", (e) => { // handle the click
+        execute_target(tgt);
       });
 
+      // handle right click
+      parent.addEventListener("contextmenu", (e) => {
+        invoke("open_contextual_menu_for_target", { tgt: tgt });
+      })
 
     });
 
@@ -226,13 +305,13 @@ window.addEventListener("DOMContentLoaded", () => {
     // we can assume that rust code from the menu is finished
     // and we can update the menu (especially the list of opened files)
     invoke("update_menu")
-        .then((msg) => console.log("menu update success", msg))
-        .catch((msg) => console.log("menu update failed", msg));
+      .then((msg) => console.log("menu update success", msg))
+      .catch((msg) => console.log("menu update failed", msg));
 
 
     clear_logs();
 
-    clearEl.addEventListener("click", ()=>{
+    clearEl.addEventListener("click", () => {
       // TODO when done during a construction, it is needed to do it differently
       // by inidividually clearing the dom element but not removing them
       clear_logs();

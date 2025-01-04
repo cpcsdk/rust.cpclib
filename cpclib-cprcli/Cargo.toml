@@ -11,7 +11,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-colored = "2.1.0"
+colored = "2.2.0"
 
 cpclib-common ={ workspace=true, features=["cmdline"] }
 cpclib-cpr.workspace = true

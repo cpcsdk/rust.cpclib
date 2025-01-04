@@ -52,9 +52,7 @@ impl DownloadableInformation for AmspiritVersion {
         ArchiveFormat::SevenZ
     }
 
-    fn target_os_postinstall<E: EventObserver>(
-        &self
-    ) -> Option<crate::delegated::PostInstall<E>> {
+    fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
         let owned_original = match self {
             AmspiritVersion::Rc1_01 => {
                 "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()

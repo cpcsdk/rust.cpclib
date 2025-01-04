@@ -15,7 +15,6 @@ pub enum RasmVersion {
 
 impl GithubCompilableApplication for RasmVersion {}
 
-
 impl Display for RasmVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "rasm {}", self.version_name())
@@ -76,6 +75,9 @@ impl CompilableInformation for RasmVersion {
 
 impl DownloadableInformation for RasmVersion {
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        ArchiveFormat::Zip
+        #[cfg(target_os = "linux")]
+        return ArchiveFormat::Zip;
+        #[cfg(target_os = "windows")]
+        return ArchiveFormat::Raw;
     }
 }

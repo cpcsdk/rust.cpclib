@@ -17,17 +17,14 @@ use std::sync::Arc;
 
 use cpclib_basm::{build_args_parser, process};
 
-
 static DESC_BEFORE: &str = const_format::formatc!(
     "Profile {} compiled: {}",
     cpclib_basm::built_info::PROFILE,
     cpclib_basm::built_info::BUILT_TIME_UTC
 );
 
-
 fn basm() -> i32 {
-    let matches = build_args_parser().before_help(DESC_BEFORE).get_matches()
-    ;
+    let matches = build_args_parser().before_help(DESC_BEFORE).get_matches();
 
     let start = std::time::Instant::now();
     let o = Arc::new(());
@@ -50,11 +47,12 @@ fn basm() -> i32 {
 }
 
 #[cfg(target_arch = "wasm32")]
-fn main() -> Result<(), i32>{
+fn main() -> Result<(), i32> {
     let code = basm();
     if code != 0 {
         Err(code)
-    } else {
+    }
+    else {
         Ok(())
     }
 }
@@ -65,9 +63,7 @@ fn main() {
 
     let code = std::thread::Builder::new()
         .stack_size(1024 * 1024 * 1024)
-        .spawn(|| {
-            basm()
-        })
+        .spawn(|| basm())
         .unwrap()
         .join()
         .unwrap();

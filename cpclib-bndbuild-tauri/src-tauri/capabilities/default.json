@@ -14,16 +14,18 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         {
+          "name": "dot",
           "args": [
             "-Kdot",
             "-Tsvg"
           ],
-          "name": "../binaries/dot",
-          "sidecar": true
+          "sidecar": false
         }
       ]
     },
+    "shell:allow-stdin-write",
     "shell:allow-open",
-    "shell:default"
+    "shell:default",
+    "log:default"
   ]
 }

@@ -10,14 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "bndbuild-tauri",
+        "title": "BNDBuild",
         "width": 800,
         "height": 600
       }
-    ],
-    "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; media-src stream: http://stream.localhost"
-    }
+    ]
   },
   "bundle": {
     "active": true,
@@ -28,9 +25,6 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "externalBin": [
-      "../binaries/dot"
     ]
   }
 }
