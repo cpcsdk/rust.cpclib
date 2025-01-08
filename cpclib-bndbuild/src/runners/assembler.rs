@@ -50,6 +50,7 @@ struct Orgams {
     )]
     transparent: bool,
 
+    // all other arguments are imported from the orgams command
     #[command(flatten)]
     orgams: cpclib_runner::emucontrol::OrgamsCli
 }
@@ -103,6 +104,7 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
         else {
             let mut real_arguments = Vec::new();
             real_arguments.push("orgams");
+
             if from.is_dir() {
                 real_arguments.push("--albireo");
             }
@@ -126,6 +128,23 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
             if let Some(dst) = matches.get_one::<String>("dst") {
                 real_arguments.push("--dst");
                 real_arguments.push(dst);
+            }
+
+            let mut need_k = false;
+            // XXX find a way to not duplicate everything and automatise it because this is fucking stupid...
+            //     Maybe clap provides already everythong
+            if matches.get_flag("edit") {
+                real_arguments.push("--edit");
+                need_k = true;
+            }
+            if matches.get_flag("jump") {
+                real_arguments.push("--jump");
+                need_k = true;
+            }
+
+
+            if need_k {
+                real_arguments.insert(1, "-k");
             }
 
             let cli = EmuCli::parse_from(real_arguments);

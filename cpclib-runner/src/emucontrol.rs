@@ -841,6 +841,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
+        dbg!(edit);
+
         self.unidos_select_drive(drivea, albireo);
 
         let load_res = if src.ends_with('o') || src.ends_with('O') {
@@ -1228,6 +1230,7 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmuControlledRunner<E> {
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -1464,7 +1467,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 Err("You must request to keep the emulator open with -k".to_string())
             }
             else {
-                println!("!!! Current limitation: Ace must be configure as\n - Amstrad old\n - with a French keyboard\n - a French firmware\n - Unidos with nova and albireo\n - and must have enough memory. !!! No idea yet how to overcome that without modifying ace");
                 robot.handle_orgams(
                     cli.drive_a.as_deref(),
                     cli.albireo.as_deref(),
