@@ -4,6 +4,8 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use cpclib_bndbuild::executor::execute;
+use cpclib_bndbuild::task::InnerTask;
 use tauri::async_runtime::Mutex;
 
 pub mod cache;
@@ -25,7 +27,7 @@ const STORE_FNAME: &str = "store.json";
 const STORE_RECENT_FILES_KEY: &str = "recent_files";
 const MAX_RECENT_FILES_LISTED: usize = 10;
 
-const USE_GAGS: bool = false;
+const USE_GAGS: bool = true;
 
 #[tauri::command]
 async fn empty_gags(app: AppHandle) {
@@ -92,6 +94,47 @@ async fn clear_app(
     .map_err(|e| e.to_string())
 }
 
+
+#[tauri::command]
+async fn select_cwd(dname: Utf8PathBuf, app: AppHandle) -> Result<(), String> {
+    log::info!("Select a working directory{}", dname);
+    let dname = &dname;
+
+    // change the directory
+    log::info!("before set_current_dir");
+    dbg!(std::env::set_current_dir(dname)
+        .map_err(|e| e.to_string()))?;
+    log::info!("after set_current_dir");
+
+
+    // Build the new state
+    let state: State<'_, Mutex<BndbuildState>> = app.state();
+    let mut state = state.deref().lock().await;
+    let gags = match state.deref_mut() {
+        BndbuildState::Loaded(state) => {
+            state.gags.take()
+        },
+
+        _ => if USE_GAGS {
+            Some((
+                gag::BufferRedirect::stdout().unwrap(),
+                gag::BufferRedirect::stderr().unwrap()
+            ))
+        }
+        else {
+            None
+        }
+    };
+
+    *state = BndbuildState::Workdir(WorkdirState{gags});
+
+    log::info!("left cwd");
+
+    Ok(())
+
+
+}
+
 #[tauri::command]
 async fn load_build_file(fname: Utf8PathBuf, app: AppHandle) -> Result<(), ()> {
     log::info!("load_build_file {}", fname);
@@ -104,7 +147,7 @@ async fn load_build_file(fname: Utf8PathBuf, app: AppHandle) -> Result<(), ()> {
     *state = BndbuildState::load(fname, &app).await;
 
     match state.deref() {
-        BndbuildState::Empty => {
+        BndbuildState::Empty | BndbuildState::Workdir(_)=> {
             unreachable!()
         },
         BndbuildState::Loaded(bndbuild_state_loaded) => {
@@ -242,6 +285,28 @@ async fn execute_target(tgt: String, state: State<'_, Mutex<BndbuildState>>) -> 
     res
 }
 
+#[tauri::command]
+async fn execute_manual_task(task: String, state: State<'_, Mutex<BndbuildState>>) -> Result<(), String> {
+    log::info!("execute_manual_task {}", &task);
+
+    let task = InnerTask::from_str(&task)?;
+
+
+    let builder = {
+        let state = state.lock().await;
+        let state = state.loaded_state().unwrap();
+        Arc::clone(&state.builder.builder)
+    };
+
+    // XXX For an unknown reason STDOUt is not transferred
+    let observers = builder.observers();
+    let res = execute(&task, &observers);
+
+    log::info!("execute_manual_task {} done", &task);
+    res
+
+}
+
 // there is an infinite loop when updating the menu from the rust code (probably because it runs from the menu itself)
 #[tauri::command]
 async fn update_menu(app: AppHandle) -> Result<(), String> {
@@ -273,6 +338,7 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         .enabled(app.state::<Mutex<BndbuildState>>().lock().await.is_loaded())
         .accelerator("CTRL+R")
         .build(app)?;
+    let mut select_cwd = MenuItemBuilder::new("Select working directory").accelerator("CTRL+S").build(app)?;
 
     let mut submenu_recent = SubmenuBuilder::new(app, "Recent files");
     let recent_files_string = if let Some(files) = store.get(STORE_RECENT_FILES_KEY) {
@@ -310,6 +376,8 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         .item(&open)
         .item(&submenu_recent)
         .item(&reload)
+        .separator()
+        .item(&select_cwd)
         .quit()
         .build()?;
 
@@ -360,6 +428,11 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         }
         else if event.id() == reload.id() {
             app.emit("request-reload", Option::<String>::None)
+                .inspect_err(|e| eprintln!("{e}"))
+                .unwrap();
+        }
+        else if event.id() == select_cwd.id() {
+            app.emit("request-select_cwd", Option::<String>::None)
                 .inspect_err(|e| eprintln!("{e}"))
                 .unwrap();
         }
@@ -419,12 +492,14 @@ pub fn run() {
                 .build()
         )
         .invoke_handler(tauri::generate_handler![
-            load_build_file,
-            execute_target,
-            update_menu,
             empty_gags,
+            execute_manual_task,
+            execute_target,
+            load_build_file,
             open_contextual_menu_for_target,
-            reload_file
+            reload_file,
+            select_cwd,
+            update_menu,
         ])
         .setup(|app| {
             log::info!("Setup app");
@@ -440,12 +515,18 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+/// Handle the state of the application
 #[derive(Default)]
 enum BndbuildState {
+    /// Nothing has been specified yet
     #[default]
     Empty,
+    /// A build script has been loaded
     Loaded(BndbuildStateLoaded),
-    LoadError(BndbuildStateLoadError)
+    /// A build script failed to load
+    LoadError(BndbuildStateLoadError),
+    /// A working directory has been selected
+    Workdir(WorkdirState)
 }
 
 impl BndbuildState {
@@ -466,6 +547,10 @@ impl BndbuildState {
     pub fn is_loaded(&self) -> bool {
         self.loaded_state().is_some()
     }
+}
+
+struct WorkdirState {
+    gags: Option<(gag::BufferRedirect, gag::BufferRedirect)> /* TODO remove this as soon as no runner directly print over stdout/stderr */
 }
 
 struct BndbuildStateLoaded {

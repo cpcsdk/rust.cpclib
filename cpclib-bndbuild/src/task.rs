@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
@@ -20,6 +20,8 @@ use cpclib_runner::runner::tracker::at3::AT_CMD;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
+use crate::event::BndBuilderObserver;
+use crate::execute;
 use crate::runners::assembler::Assembler;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
@@ -42,6 +44,7 @@ pub enum InnerTask {
     ImgConverter(StandardTaskArguments),
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
+    Mkdir(StandardTaskArguments),
     Rm(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
@@ -77,6 +80,15 @@ impl From<InnerTask> for Task {
 }
 
 impl Task {
+
+    pub fn execute<E: BndBuilderObserver + 'static>(
+        &self,
+        observer: &Arc<E>
+    ) -> Result<(), String> {
+        execute(self, observer)
+    }
+
+
     fn next_id() -> usize {
         static mut COUNTER: AtomicUsize = AtomicUsize::new(1);
         unsafe{COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)}
@@ -141,9 +153,14 @@ pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
 
+
+pub const CP_CMDS: &[&str] = &["cp", "copy"];
+pub const MKDIR_CMDS: &[&str] = &["mkdir"];
+pub const RM_CMDS: &[&str] = &["rm", "del"];
+
+
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
-pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
@@ -152,7 +169,6 @@ pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
-pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
@@ -173,6 +189,7 @@ impl Display for InnerTask {
             Self::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
             Self::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Self::Martine(s) => (MARTINE_CMDS[0], s),
+            Self::Mkdir(s) => (MKDIR_CMDS[0], s),
             Self::Rm(s) => (RM_CMDS[0], s),
             Self::Snapshot(s) => (SNA_CMDS[0], s),
             Self::Tracker(t, s) => (t.get_command(), s),
@@ -215,7 +232,7 @@ is_some_cmd!(
     fap,
     hideur,
     img2cpc, impdisc,
-    martine,
+    martine, mkdir,
     orgams,
     rasm, rm,
     sjasmplus, sna, sugarbox,
@@ -319,9 +336,6 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_bndbuild_cmd(code) {
                     Ok(InnerTask::BndBuild(std))
                 }
-                else if is_cp_cmd(code) {
-                    Ok(InnerTask::Cp(std))
-                }
                 else if is_disc_cmd(code) {
                     Ok(InnerTask::Disc(std))
                 }
@@ -343,11 +357,17 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_martine_cmd(code) {
                     Ok(InnerTask::Martine(std))
                 }
-                else if is_rm_cmd(code) {
-                    Ok(InnerTask::Rm(std))
-                }
                 else if is_xfer_cmd(code) {
                     Ok(InnerTask::Xfer(std))
+                }
+                else if is_cp_cmd(code) {
+                    Ok(InnerTask::Cp(std))
+                }
+                else if is_mkdir_cmd(code) {
+                    Ok(InnerTask::Mkdir(std))
+                }
+                else if is_rm_cmd(code) {
+                    Ok(InnerTask::Rm(std))
                 }
                 else {
                     Err(Error::custom(format!("{code} is an invalid command")))
@@ -419,6 +439,7 @@ impl InnerTask {
             | InnerTask::Hideur(t)
             | InnerTask::ImgConverter(t)
             | InnerTask::Martine(t)
+            | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
             | InnerTask::Xfer(t)
             | InnerTask::Emulator(_, t)
@@ -445,6 +466,7 @@ impl InnerTask {
             | InnerTask::ImpDsk(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Martine(t)
+            | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
             | InnerTask::Snapshot(t)
             | InnerTask::Tracker(_, t)
@@ -482,6 +504,7 @@ impl InnerTask {
             InnerTask::ImgConverter(_) => false,
             InnerTask::ImpDsk(_) => false,
             InnerTask::Martine(t) => false,
+            InnerTask::Mkdir(_) => false,
             InnerTask::Rm(_s) => false, // wrong when downloading files
             InnerTask::Snapshot(_) => false,
             InnerTask::Tracker(_, t) => true, // XXX think if false is better

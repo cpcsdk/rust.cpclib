@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bndbuild</title>
+    <title>BNDbuild</title>
     <script type="module" src="/main.js" defer></script>
     <style>
       #logs .stderr{
@@ -23,18 +23,30 @@
   </head>
 
   <body>
-    <main class="container">
-      <div>
-        <div id="svgContainer" style="float:left"></div>
+    <datalist id="tasksList">
+      <option value="rasm">basm</option>
+      <option value="basm">rasm</option>
+      <option value="ace">ace-dl</option>
+      <option value="at3">Arkos Tracker 3</option>
+    </datalist>
 
-        <div>
+    <main class="container">
+      <article id="bndbuildUI">
+        <div id="svgContainer" style="float:left"></div>
+      </article>
+
+      <article id="cmdBuild">
+        <input list="tasksList" name="cmdBuildTask" id="cmdBuildTask" />
+        <input type="button" name="cmdBuildBtn" id="cmdBuildBtn" value="Execute" />
+      </article>
+
+      <article id="cmdOutput">
           <label id="ruleProgressLabel" for="ruleProgress">Rules progress:</label>
           <progress id="ruleProgress" value="0" max="0"></progress>
           <div id="logs" ></div>
           <input type="submit" value="Clear" id ="clear_button"></input>
           <input type="text" id="stdin"></input>
-        </div>
-      </div>
+      </article>
 
 
       <div class="row">

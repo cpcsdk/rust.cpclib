@@ -26,6 +26,7 @@
     "shell:allow-stdin-write",
     "shell:allow-open",
     "shell:default",
-    "log:default"
+    "log:default",
+    "notification:default"
   ]
 }

@@ -14,13 +14,14 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
-use crate::runners::cp::CpRunner;
+use crate::runners::fs::cp::CpRunner;
+use crate::runners::fs::mkdir::MkdirRunner;
+use crate::runners::fs::rm::RmRunner;
 use crate::runners::disassembler::BdasmRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
-use crate::runners::rm::RmRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::InnerTask;
@@ -126,6 +127,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             )
             .run(task.args(), observer)
         },
+        InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
         InnerTask::Fap(_) => {

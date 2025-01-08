@@ -1,4 +1,4 @@
-const USE_GAGS = false;
+const USE_GAGS = true;
 
 window.addEventListener("DOMContentLoaded", () => {
 
@@ -15,6 +15,8 @@ window.addEventListener("DOMContentLoaded", () => {
   let statusEl;
   let logsEl;
   let clearEl;
+  let cmdBuildBtnElt;
+  let cmdBuildTaskElt;
 
   /// For each rule, store the div that contains its logs
   let rulesDiv = new Map();
@@ -49,10 +51,19 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
 
-  function clear_logs() {
+  function clearLogs() {
     logsEl.innerHTML = "";
   }
 
+  function executeManualTask() {
+    clearLogs();
+    invoke("execute_manual_task", {'task': cmdBuildTaskElt.value})
+      .then((evt) => console.log(evt))
+      .catch((evt) => {
+        console.log(evt);
+        add_log(logsEl, evt, "stderr")
+      });
+  }
 
 
   svgEl = document.querySelector("#svgContainer");
@@ -63,6 +74,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
   logsEl = document.querySelector("#logs");
   clearEl = document.querySelector("#clear_button");
+
+  cmdBuildBtnElt = document.querySelector("#cmdBuildBtn");
+  cmdBuildTaskElt = document.querySelector("#cmdBuildTask");
 
   // no context menu
   window.document.addEventListener("contextmenu", (event) => {
@@ -76,6 +90,15 @@ window.addEventListener("DOMContentLoaded", () => {
     }, 1000 / 100);
   }
 
+  cmdBuildBtnElt.addEventListener("click", (event) => {
+    executeManualTask();
+  });
+
+  cmdBuildTaskElt.addEventListener("keyup", (event) => {
+    if (event.key === 'Enter' || event.keyCode === 13) {
+      executeManualTask();
+    }
+  });
 
   // TODO consider all these events can happen in parallel as soon as
   //      we'll parallelized tasks execution
@@ -206,6 +229,22 @@ window.addEventListener("DOMContentLoaded", () => {
       .then((msg) => { })
       .catch((msg) => { });
   });
+  listen("request-select_cwd", async (event) => {
+    console.log("request-select_cwd", event);
+    const dname = await open({
+      "title": "Select the working directory",
+      "directory": true
+    });
+
+    console.log("Try to select dir", dname)
+    invoke("select_cwd", {"dname": dname})
+      .then((msg) => { 
+
+        svgEl.innerHTML = ""; // if we select a specific directory we cannot use a build script
+        statusEl.innerHTML = "Work directory: " + dname;
+      })
+      .catch((msg) => {add_log(logsEl, msg, "stderr");})
+  });
   listen("request-open", async (event) => {
     const fname = await open({
       "title": "Open a BNDbuild script",
@@ -232,7 +271,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
   async function load_build_file(fname) {
-    clear_logs();
+    clearLogs();
     statusEl.innerHTML = "<span>Loading " + fname + "</span>";
     window.document.body.style.cursor = "wait";
     svgEl.innerHTML = "";
@@ -248,7 +287,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function execute_target(tgt) {
     // ensure log area is cleared
-    clear_logs();
+    clearLogs();
 
     // Execute the target and handle success and error
     invoke("execute_target", { tgt: tgt })
@@ -272,7 +311,7 @@ window.addEventListener("DOMContentLoaded", () => {
     console.log(event);
     // Update the interface according to the loaded file
     svgEl.innerHTML = event.payload.svg;
-    statusEl.innerHTML = event.payload.fname;
+    statusEl.innerHTML = "Build file:" + event.payload.fname;
 
     // Setup the events listeners to launch the build
     // All targets are stored within an anchor
@@ -309,12 +348,12 @@ window.addEventListener("DOMContentLoaded", () => {
       .catch((msg) => console.log("menu update failed", msg));
 
 
-    clear_logs();
+    clearLogs();
 
     clearEl.addEventListener("click", () => {
       // TODO when done during a construction, it is needed to do it differently
       // by inidividually clearing the dom element but not removing them
-      clear_logs();
+      clearLogs();
     })
   });
 

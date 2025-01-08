@@ -20,11 +20,11 @@ use crate::event::{
 };
 use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
-use crate::runners::cp::CpRunner;
+use crate::runners::fs::cp::CpRunner;
+use crate::runners::fs::rm::RmRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
-use crate::runners::rm::RmRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
     is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
