@@ -114,7 +114,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
 mod test {
     use std::io::Write;
 
-    use crate::runners::cp::CpRunner;
+    use crate::runners::fs::cp::CpRunner;
     use crate::runners::Runner;
 
     #[test]
