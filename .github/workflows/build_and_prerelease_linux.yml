@@ -21,8 +21,8 @@ jobs:
             profile: minimal
             target: x86_64-unknown-linux-gnu
     - uses: Swatinem/rust-cache@v2
-    - name: tauri
-      run: cargo install create-tauri-app --locked
+    - name: install tauri cli
+      run: cargo install tauri-cli --version "^2.0.0" --locked
     - uses: actions-rs/cargo@v1
       with:
         command: build
