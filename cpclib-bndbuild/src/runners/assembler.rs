@@ -142,7 +142,6 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
                 need_k = true;
             }
 
-
             if need_k {
                 real_arguments.insert(1, "-k");
             }

@@ -21,6 +21,8 @@ jobs:
             profile: minimal
             target: x86_64-unknown-linux-gnu
     - uses: Swatinem/rust-cache@v2
+    - name: tauri
+      run: cargo install create-tauri-app --locked
     - uses: actions-rs/cargo@v1
       with:
         command: build
@@ -31,11 +33,8 @@ jobs:
         command: test
         toolchain: nightly
         args: --features hfe
-    - uses: tauri-apps/tauri-action@v0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        projectPath: "cpclib-bndbuild-tauri/"
+    - name: build tauri
+      run: cd cpclib-bndbuild-tauri && cargo tauri build
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
