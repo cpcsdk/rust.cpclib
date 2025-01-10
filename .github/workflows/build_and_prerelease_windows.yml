@@ -12,13 +12,26 @@ jobs:
 
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: houseabsolute/actions-rust-cross@v0
+    - uses: actions/checkout@v4
+    - uses: actions-rs/toolchain@v1
       with:
-          command: build
-          toolchain: nightly-x86_64-pc-windows-msvc
+          toolchain: nightly
+          profile: minimal
           target: x86_64-pc-windows-msvc
-          args: --release --bins
+    - uses: Swatinem/rust-cache@v2
+    - name: install tauri cli
+      run: cargo install tauri-cli --version "^2.0.0" --locked
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        toolchain: nightly
+        args: --bins --release
+    - uses: actions-rs/cargo@v1
+      with:
+        command: test
+        toolchain: nightly
+    - name: build tauri
+      run: cd cpclib-bndbuild-tauri && cargo tauri build
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
