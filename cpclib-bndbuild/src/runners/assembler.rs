@@ -91,7 +91,7 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
 
         let transparent = matches.get_flag("transparent");
 
-        if matches.get_flag("basm2orgams") {
+        if matches.get_flag("basm2orgamsa") {
             if from.is_dir() {
                 let src = matches.get_one::<String>("src").unwrap();
                 let tgt = matches.get_one::<String>("dst").unwrap();
@@ -130,6 +130,10 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
                 real_arguments.push(dst);
             }
 
+            if matches.get_flag("orgamsa2orgamsb") {
+                real_arguments.push("--orgamsa2orgamsb");
+            }
+
             let mut need_k = false;
             // XXX find a way to not duplicate everything and automatise it because this is fucking stupid...
             //     Maybe clap provides already everythong
@@ -145,6 +149,7 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
             if need_k {
                 real_arguments.insert(1, "-k");
             }
+
 
             let cli = EmuCli::parse_from(real_arguments);
             handle_arguments(cli, o)
