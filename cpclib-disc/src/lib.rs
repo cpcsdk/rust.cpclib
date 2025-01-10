@@ -10,7 +10,9 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use amsdos::AmsdosError;
-use cpclib_common::camino::Utf8Path;
+use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+#[cfg(feature = "cmdline")]
+use cpclib_common::clap;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
 use disc::Disc;
@@ -256,9 +258,34 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
         let head = Head::A;
 
         // loop over all the files to add them
-        for fname in sub.get_many::<String>("INPUT_FILES").unwrap() {
-            let ams_file = match AmsdosFile::open_valid(fname) {
-                Ok(ams_file) => {
+        for fname in sub.get_many::<Utf8PathBuf>("INPUT_FILES").unwrap() {
+            let ams_file = match dbg!(AmsdosFile::open_valid(fname)) {
+                Ok(mut ams_file) => {
+                    let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
+                    if let Err(e) = amsdos_fname {
+                        // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
+                        // then we try to replace it by the file name
+                        eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
+                        
+                        let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
+                        let mut pc_fname = pc_fname.split(".");
+                        let mut header = ams_file.header().expect("Need to handle ASCII files");
+                        dbg!(&header);
+                        let new_amsdos_fname = AmsdosFileName::new_correct_case(
+                            0, 
+                            pc_fname.next().unwrap(), 
+                            pc_fname.next().unwrap_or_default())?;
+                        assert!(pc_fname.next().is_none());
+                        
+                        
+                        header.set_amsdos_filename(&new_amsdos_fname);
+                        header.update_checksum();
+                        dbg!(&header);
+
+                        // replace the header with the modified filename
+                        let content = ams_file.content();
+                        ams_file = AmsdosFile::from_header_and_buffer(header, content)?;
+                    }
                     assert!(
                         ams_file.amsdos_filename().unwrap()?.is_valid(),
                         "Invalid amsdos filename ! {:?}",
@@ -271,6 +298,8 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                     panic!("Unable to load {fname}: {e:?}");
                 }
             };
+
+            dbg!(is_system, is_read_only, &behavior);
             disc.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
                 .unwrap();
         }
@@ -407,6 +436,7 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                                 .help("The files to add. They MUST have a header if they are BINARY or BASIC files. Otherwise, they are considered to be ASCII files.")
                                 .action(ArgAction::Append)
                                 .required(true)
+                                .value_parser(clap::value_parser!(Utf8PathBuf))
                             )
                             .arg(
                                 Arg::new("SYSTEM")
