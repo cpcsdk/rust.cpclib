@@ -150,7 +150,6 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
                 real_arguments.insert(1, "-k");
             }
 
-
             let cli = EmuCli::parse_from(real_arguments);
             handle_arguments(cli, o)
         }

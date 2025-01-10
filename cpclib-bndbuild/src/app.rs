@@ -20,9 +20,9 @@ use crate::event::{
 };
 use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
+use crate::runners::disc::DiscManagerRunner;
 use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::rm::RmRunner;
-use crate::runners::disc::DiscManagerRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::xfer::XferRunner;
@@ -84,13 +84,9 @@ pub struct BndBuilderCommand {
 
 impl BndBuilderCommand {
     pub fn new(inner: BndBuilderCommandInner, observers: Arc<ListOfBndBuilderObserverRc>) -> Self {
-
-        Self {
-            inner, observers
-        }
+        Self { inner, observers }
     }
 }
-
 
 impl BndBuilderObserved for BndBuilderCommand {
     fn observers(&self) -> Arc<ListOfBndBuilderObserverRc> {

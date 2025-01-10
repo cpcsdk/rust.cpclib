@@ -1,3 +1,3 @@
 pub mod cp;
-pub mod rm;
 pub mod mkdir;
+pub mod rm;

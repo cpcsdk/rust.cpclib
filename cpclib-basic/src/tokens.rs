@@ -1,8 +1,23 @@
 use std::fmt;
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+impl TryFrom<u8> for BasicTokenNoPrefix {
+    type Error = String;
 
-#[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
+    fn try_from(value: u8) -> Result<Self, String> {
+        match value {
+            5 => Err(format!("{value} is invalid")),
+            _ => Ok(unsafe { std::mem::transmute(value) })
+        }
+    }
+}
+
+impl From<BasicTokenNoPrefix> for u8 {
+    fn from(val: BasicTokenNoPrefix) -> Self {
+        val as u8
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum BasicTokenNoPrefix {
@@ -403,7 +418,24 @@ impl BasicTokenNoPrefix {
     }
 }
 
-#[derive(IntoPrimitive, TryFromPrimitive, Copy, Clone, PartialEq, Debug)]
+impl TryFrom<u8> for BasicTokenPrefixed {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, String> {
+        match value {
+            0x1E..0x40 | 0x50..0x71 | 0x80.. => Err(format!("{value} is invalid")),
+            _ => Ok(unsafe { std::mem::transmute(value) })
+        }
+    }
+}
+
+impl From<BasicTokenPrefixed> for u8 {
+    fn from(val: BasicTokenPrefixed) -> Self {
+        val as u8
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 #[repr(u8)]
 #[allow(missing_docs)]
 pub enum BasicTokenPrefixed {

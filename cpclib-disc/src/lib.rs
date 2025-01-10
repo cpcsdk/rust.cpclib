@@ -10,7 +10,9 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use amsdos::AmsdosError;
-use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::Utf8Path;
+#[cfg(feature = "cmdline")]
+use cpclib_common::camino::Utf8PathBuf;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap;
 #[cfg(feature = "cmdline")]
@@ -266,18 +268,18 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                         // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
                         // then we try to replace it by the file name
                         eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
-                        
+
                         let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
                         let mut pc_fname = pc_fname.split(".");
                         let mut header = ams_file.header().expect("Need to handle ASCII files");
                         dbg!(&header);
                         let new_amsdos_fname = AmsdosFileName::new_correct_case(
-                            0, 
-                            pc_fname.next().unwrap(), 
-                            pc_fname.next().unwrap_or_default())?;
+                            0,
+                            pc_fname.next().unwrap(),
+                            pc_fname.next().unwrap_or_default()
+                        )?;
                         assert!(pc_fname.next().is_none());
-                        
-                        
+
                         header.set_amsdos_filename(&new_amsdos_fname);
                         header.update_checksum();
                         dbg!(&header);

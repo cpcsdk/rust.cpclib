@@ -748,22 +748,21 @@ impl<E: UsedEmulator> From<(EmuWindow, WindowEventsManager, &Emulator)> for Robo
     }
 }
 
-
 #[derive(Clone, Copy, Debug)]
 pub enum OrgamsRobotAction<'a, 'b> {
-    LoadOrImportAndEdit{src: &'a str},
-    LoadOrImportAndSave{src: &'a str, tgt: &'b str},
-    LoadOrImportAndAssembleJump{src: &'a str},
-    LoadOrImportAndAssembleAndSave{src: &'a str, tgt: Option<&'b str>}
+    LoadOrImportAndEdit { src: &'a str },
+    LoadOrImportAndSave { src: &'a str, tgt: &'b str },
+    LoadOrImportAndAssembleJump { src: &'a str },
+    LoadOrImportAndAssembleAndSave { src: &'a str, tgt: Option<&'b str> }
 }
 
-impl<'a, 'b>  OrgamsRobotAction<'a, 'b> {
+impl<'a, 'b> OrgamsRobotAction<'a, 'b> {
     pub fn new_edit(src: &'a str) -> Self {
         Self::LoadOrImportAndEdit { src }
     }
 
     pub fn new_jump(src: &'a str) -> Self {
-        Self::LoadOrImportAndAssembleJump { src}
+        Self::LoadOrImportAndAssembleJump { src }
     }
 
     pub fn new_save_sources(src: &'a str, tgt: &'b str) -> Self {
@@ -773,23 +772,22 @@ impl<'a, 'b>  OrgamsRobotAction<'a, 'b> {
     pub fn new_save_binary(src: &'a str, tgt: Option<&'b str>) -> Self {
         Self::LoadOrImportAndAssembleAndSave { src, tgt }
     }
-
 }
 
 impl OrgamsRobotAction<'_, '_> {
     pub fn src(&self) -> &str {
         match self {
-            OrgamsRobotAction::LoadOrImportAndEdit { src, .. } |
-            OrgamsRobotAction::LoadOrImportAndSave { src , .. } |
-            OrgamsRobotAction::LoadOrImportAndAssembleJump { src , .. } |
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { src , .. } => src
+            OrgamsRobotAction::LoadOrImportAndEdit { src, .. }
+            | OrgamsRobotAction::LoadOrImportAndSave { src, .. }
+            | OrgamsRobotAction::LoadOrImportAndAssembleJump { src, .. }
+            | OrgamsRobotAction::LoadOrImportAndAssembleAndSave { src, .. } => src
         }
     }
 
     pub fn dst(&self) -> Option<&str> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndSave { tgt , ..} => Some(tgt),
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt , ..} => tgt.clone(),
+            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } => Some(tgt),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => tgt.clone(),
             _ => None
         }
     }
@@ -821,8 +819,6 @@ impl OrgamsRobotAction<'_, '_> {
             _ => None
         }
     }
-
-
 }
 
 impl Robot {
@@ -912,7 +908,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
-
         dbg!(&action);
 
         self.unidos_select_drive(drivea, albireo);
@@ -935,41 +930,41 @@ impl<E: UsedEmulator> RobotImpl<E> {
         if res.is_ok() {
             // need to update res
             res = {
-
-
                 dbg!(action.save_orgams_binary_source());
 
-            if action.edit() {
-                dbg!("edit requested");
-                // No need to do more when we want to edit a file
-                Ok(())
-            }
-            else {
-                if let Some(dst) = action.save_orgams_binary_source() {
-                    dbg!(dst);
-                    self.orgams_save_source(dst)
-                        .map_err(|screen| ("Error while saving sources".to_string(), screen))
+                if action.edit() {
+                    dbg!("edit requested");
+                    // No need to do more when we want to edit a file
+                    Ok(())
                 }
                 else {
-                    // we want to assemble the file
-                    self.orgams_assemble(src)
-                        .map_err(|screen| ("Error while assembling".to_string(), screen))
-                        .and_then(|_| {
-                            if action.jump() {
-                                self.orgams_jump()
-                                    .map_err(|screen| ("Error while jumping".to_string(), screen))
-                            }
-                            else {
-                                self.orgams_save(action.dst())
-                                    .map_err(|screen| ("Error while saving binary".to_string(), screen))
-                            }
-                        })
+                    if let Some(dst) = action.save_orgams_binary_source() {
+                        dbg!(dst);
+                        self.orgams_save_source(dst)
+                            .map_err(|screen| ("Error while saving sources".to_string(), screen))
+                    }
+                    else {
+                        // we want to assemble the file
+                        self.orgams_assemble(src)
+                            .map_err(|screen| ("Error while assembling".to_string(), screen))
+                            .and_then(|_| {
+                                if action.jump() {
+                                    self.orgams_jump().map_err(|screen| {
+                                        ("Error while jumping".to_string(), screen)
+                                    })
+                                }
+                                else {
+                                    self.orgams_save(action.dst()).map_err(|screen| {
+                                        ("Error while saving binary".to_string(), screen)
+                                    })
+                                }
+                            })
                     }
                 }
             }
         };
 
-       res.map_err(|(msg, screen)| {
+        res.map_err(|(msg, screen)| {
             let path = {
                 let tempfile = camino_tempfile::Builder::new()
                     .prefix("bnd_stuff")
@@ -1026,7 +1021,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save()
     }
-
 
     fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
         println!("> Save result");
@@ -1273,7 +1267,6 @@ pub struct OrgamsCli {
     )]
     orgamsa2orgamsb: bool,
 
-
     #[arg(
             short,
             long,
@@ -1342,7 +1335,6 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmuControlledRunner<E> {
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
-
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -1580,23 +1572,20 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 Err("You must request to keep the emulator open with -k".to_string())
             }
             else {
-
                 let action = if orgamsa2orgamsb {
                     OrgamsRobotAction::new_save_sources(&src, dst.as_ref().unwrap())
-                } else if edit {
+                }
+                else if edit {
                     OrgamsRobotAction::new_edit(&src)
-                } else if jump {
+                }
+                else if jump {
                     OrgamsRobotAction::new_jump(&src)
-                } else {
+                }
+                else {
                     OrgamsRobotAction::new_save_binary(&src, dst.as_deref())
                 };
 
-
-                robot.handle_orgams(
-                    cli.drive_a.as_deref(),
-                    cli.albireo.as_deref(),
-                    action
-                )
+                robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action)
             }
         },
 

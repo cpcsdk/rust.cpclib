@@ -2048,7 +2048,7 @@ impl LocatedListing {
                     Vec<LocatedToken>,
                     cpclib_common::winnow::error::ParseError<
                         cpclib_common::winnow::Stateful<
-                            cpclib_common::winnow::Located<&BStr>,
+                            cpclib_common::winnow::stream::LocatingSlice<&BStr>,
                             &ParserContext
                         >,
                         Z80ParserError

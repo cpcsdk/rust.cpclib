@@ -24,7 +24,8 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu",
-  "cpclib", "cpclib-bndbuild-ratatui",
+  "cpclib", 
+  #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
 
@@ -65,7 +66,7 @@ anyhow = "1.0.95"
 arrayref = "0.3.9"
 as-slice = "0.2.1"
 bitfield = "0.14.0"
-bitflags = "2.6.0"
+bitflags = "2.7.0"
 bitvec = "1.0.1"
 built = { version = "0.7.5", features = ["chrono"] }
 camino = "1.1.9"
@@ -74,7 +75,7 @@ cc = "1.2.7"
 cfg-if = "1.0.0"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
-clap = { version="4.5.23", features=["color"]}
+clap = { version="4.5.26", features=["color"]}
 codespan-reporting = "0.11.1"
 #contracts = "0.6.3"
 const_format = {version="0.2.34", features = ["fmt"]}
@@ -103,11 +104,10 @@ image = "0.25.5"
 indicatif = "0.17.9"
 itertools = "0.12.1"
 libc = "0.2.169"
-log = "0.4.22"
+log = "0.4.24"
 minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.3"
-num_enum = "0.7.3"
 num-bigint = "0.4.6"
 nutype = "0.5.1"
 ordered-float = "4.6.0"
@@ -118,7 +118,7 @@ path-absolutize = "3.1.1"
 pretty_assertions = "1.4.1"
 proc-macro2 = "1.0.92"
 quote = "1.0.38"
-ratatui = "0.28.1"
+#ratatui = "0.28.1"
 rayon = "1.10.0"
 regex = "1.11.1"
 remain = "0.2.14"
@@ -142,7 +142,7 @@ strsim = "0.11.1"
 strum = { version = "0.26", features = ["derive"] }
 subprocess = { version = "0.2.9" }
 substring = "1.4.5"
-syn = "2.0.94"
+syn = "2.0.96"
 term_grid = { version = "0.2.0" }
 termize = { version = "0.1.1" }
 test-generator = "0.3.1"
@@ -151,7 +151,7 @@ time = "0.3.37"
 transparent = "0.4.0"
 utf8-chars = "3.0.5"
 velcro = "0.5.4"
-winnow = { version = "0.6.21", features = ["simd"] }
+winnow = { version = "0.6.24", features = ["simd"] }
 xcap = "0.0.11"
 zip-extract = "=0.1.3"
 
@@ -159,7 +159,7 @@ zip-extract = "=0.1.3"
 eframe = "0.29"
 claui = "0.4"
 egui_file = "0.19"
-open = "5.3.1"
+open = "5.3.2"
 
 
 [workspace.lints]

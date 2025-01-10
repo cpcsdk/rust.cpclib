@@ -8,10 +8,11 @@ pub use rules::*;
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
+
     use crate::expand_glob;
     use crate::rules::{Rule, Rules};
     use crate::task::Task;
-    use std::ops::Deref;
 
     #[test]
     fn test_deserialize_rule1() {
@@ -27,7 +28,8 @@ commands:
             rule.command(0).deref(),
             Task::new_basm(
                 "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            ).deref()
+            )
+            .deref()
         );
     }
 
@@ -44,7 +46,8 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
             rule.command(0).deref(),
             Task::new_basm(
                 "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            ).deref()
+            )
+            .deref()
         );
     }
 

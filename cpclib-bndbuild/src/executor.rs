@@ -14,12 +14,12 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
-use crate::runners::fs::cp::CpRunner;
-use crate::runners::fs::mkdir::MkdirRunner;
-use crate::runners::fs::rm::RmRunner;
 use crate::runners::disassembler::BdasmRunner;
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
+use crate::runners::fs::cp::CpRunner;
+use crate::runners::fs::mkdir::MkdirRunner;
+use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::snapshot::SnapshotRunner;
@@ -151,7 +151,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             Ok(())
         }
         else {
-            dbg!("There was an error", &e);
+            // dbg!("There was an error", &e);
             Err(e)
         }
     })

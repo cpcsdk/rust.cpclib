@@ -13,7 +13,6 @@ use cpclib_common::riff::{RiffChunk, RiffCode};
 use cpclib_common::winnow::error::ContextError;
 #[cfg(feature = "cmdline")]
 use cpclib_common::winnow::stream::AsBStr;
-use num_enum::TryFromPrimitive;
 
 mod chunks;
 mod error;
@@ -72,7 +71,7 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
 
 pub const HEADER_SIZE: usize = 256;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum SnapshotVersion {
     /// Version 1 of Snapshsots
@@ -81,6 +80,19 @@ pub enum SnapshotVersion {
     V2,
     /// Version 3 of Snapshsots (use of chunks)
     V3
+}
+
+impl TryInto<SnapshotVersion> for u8 {
+    type Error = String;
+
+    fn try_into(self) -> Result<SnapshotVersion, Self::Error> {
+        match self {
+            1 => Ok(SnapshotVersion::V1),
+            2 => Ok(SnapshotVersion::V2),
+            3 => Ok(SnapshotVersion::V3),
+            _ => Err(format!("{self} is an invalid version number."))
+        }
+    }
 }
 
 impl SnapshotVersion {

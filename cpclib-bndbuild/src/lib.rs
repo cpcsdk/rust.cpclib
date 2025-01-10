@@ -74,7 +74,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (XFER_CMDS, false)
 ];
 
-pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>){
+pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>) {
     static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
     COMMANDS_LIST.get_or_init(|| {
         let all_applications = ALL_APPLICATIONS;

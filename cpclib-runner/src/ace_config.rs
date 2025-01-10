@@ -19,12 +19,12 @@ pub struct AceConfig {
     path: Utf8PathBuf,
     ini: Ini
 }
- 
+
 #[derive(Copy, Clone, Debug)]
 pub enum AceConfigFlag {
     PluginNova,
     PluginAlbireo1,
-    PluginAlbireo2,
+    PluginAlbireo2
 }
 
 impl AsRef<str> for AceConfigFlag {
@@ -32,7 +32,7 @@ impl AsRef<str> for AceConfigFlag {
         match self {
             AceConfigFlag::PluginNova => "PLUGIN_NOVA",
             AceConfigFlag::PluginAlbireo1 => "PLUGIN_ALBIREO1",
-            AceConfigFlag::PluginAlbireo2 => "PLUGIN_ALBIREO2",
+            AceConfigFlag::PluginAlbireo2 => "PLUGIN_ALBIREO2"
         }
     }
 }
@@ -48,12 +48,12 @@ impl AceConfig {
     }
 
     pub fn open_or_default<P: AsRef<Utf8Path>>(path: P) -> Self {
-        Self::open(&path)
-            .unwrap_or_else(|_e|{ // XXX is it ok to ignore the error ?
-                let ini = Self::default_ini();
-                let path = path.as_ref().to_owned();
-                AceConfig{ini, path}
-            })
+        Self::open(&path).unwrap_or_else(|_e| {
+            // XXX is it ok to ignore the error ?
+            let ini = Self::default_ini();
+            let path = path.as_ref().to_owned();
+            AceConfig { ini, path }
+        })
     }
 
     fn default_ini() -> Ini {
@@ -81,7 +81,6 @@ impl AceConfig {
             .set_to::<String>(None, key.to_string(), value.to_string())
     }
 
-
     pub fn enable(&mut self, flag: AceConfigFlag) {
         let key = flag.as_ref();
         self.set(key, "1");
@@ -91,6 +90,4 @@ impl AceConfig {
         let key = flag.as_ref();
         self.set(key, "0");
     }
-
-
 }

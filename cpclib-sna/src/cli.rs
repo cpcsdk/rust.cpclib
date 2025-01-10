@@ -18,7 +18,7 @@ use crate::cli::winnow::token::take_until;
 use crate::cli::winnow::PResult;
 use crate::*;
 
-type Source<'src> = winnow::Located<&'src [u8]>;
+type Source<'src> = winnow::stream::LocatingSlice<&'src [u8]>;
 
 #[derive(Debug)]
 enum Command {

@@ -27,7 +27,6 @@ either.workspace = true
 #getset.workspace = true
 #memchr.workspace = true
 serde.workspace = true
-num_enum.workspace = true
 paste.workspace = true
 thiserror.workspace = true
 

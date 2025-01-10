@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
@@ -57,14 +57,10 @@ pub struct Task {
     id: usize
 }
 
-
 impl<'de> Deserialize<'de> for Task {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de> {
-        
-        InnerTask::deserialize(deserializer)
-            .map(|t| t.into())
+    where D: Deserializer<'de> {
+        InnerTask::deserialize(deserializer).map(|t| t.into())
     }
 }
 impl Display for Task {
@@ -75,12 +71,14 @@ impl Display for Task {
 
 impl From<InnerTask> for Task {
     fn from(value: InnerTask) -> Self {
-        Self { inner: value, id: Self::next_id() }
+        Self {
+            inner: value,
+            id: Self::next_id()
+        }
     }
 }
 
 impl Task {
-
     pub fn execute<E: BndBuilderObserver + 'static>(
         &self,
         observer: &Arc<E>
@@ -88,10 +86,9 @@ impl Task {
         execute(self, observer)
     }
 
-
     fn next_id() -> usize {
         static mut COUNTER: AtomicUsize = AtomicUsize::new(1);
-        unsafe{COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)}
+        unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
     }
 
     pub fn id(&self) -> usize {
@@ -99,7 +96,7 @@ impl Task {
     }
 
     pub fn new_basm(args: &str) -> Self {
-        InnerTask::new_basm(args).into() 
+        InnerTask::new_basm(args).into()
     }
 
     pub fn new_bndbuild(args: &str) -> Self {
@@ -118,9 +115,8 @@ impl Task {
         InnerTask::new_rm(args).into()
     }
 
-
     pub fn set_ignore_errors(mut self, flag: bool) -> Self {
-        let new =  self.inner.clone().set_ignore_errors(flag);
+        let new = self.inner.clone().set_ignore_errors(flag);
         self.inner = new;
         self
     }
@@ -128,11 +124,11 @@ impl Task {
 
 impl Deref for Task {
     type Target = InnerTask;
+
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-
 
 // list of keywords; do not forget to add them to bndbuild/lib.rs
 pub const EMUCTRL_CMDS: &[&str] = &[EMUCTRL_CMD, "emu", "emuctrl", "emucontrol"];
@@ -153,11 +149,9 @@ pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
 
-
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const MKDIR_CMDS: &[&str] = &["mkdir"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
-
 
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
@@ -383,7 +377,6 @@ impl<'de> Deserialize<'de> for InnerTask {
     }
 }
 
-
 impl FromStr for Task {
     type Err = String;
 
@@ -400,7 +393,6 @@ impl FromStr for InnerTask {
 }
 
 impl InnerTask {
-   
     pub fn new_basm(args: &str) -> Self {
         Self::Assembler(Assembler::Basm, StandardTaskArguments::new(args))
     }

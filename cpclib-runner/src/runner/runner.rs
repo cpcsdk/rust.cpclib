@@ -176,7 +176,8 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             s.spawn(|| {
                 let mut stdout = BufReader::new(child_stdout);
                 let mut current_string = String::new();
-                for c in stdout.chars() { // TODO handle a byte buffer
+                for c in stdout.chars() {
+                    // TODO handle a byte buffer
                     if let Ok(c) = c {
                         current_string.push(c);
 
@@ -197,7 +198,6 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                     let line = line.unwrap();
                     o.emit_stderr(&line);
                     o.emit_stderr("\n");
-
                 }
             });
         });

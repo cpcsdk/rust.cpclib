@@ -7,12 +7,13 @@ pub fn get_all_args(arguments: &str) -> Result<Vec<String>, String> {
         .ok_or_else(|| format!("There are errors in the arguments: {}", arguments))?;
     let mut res = Vec::new();
     for (idx, p) in init_args.into_iter().enumerate() {
-        // XXX no pattern matching for the command name. 
+        // XXX no pattern matching for the command name.
         //     TODO check if it is ok to do that.
         //     It avoids issues when ./ is used in command name
         if idx == 0 {
             res.push(p)
-        } else {
+        }
+        else {
             match glob(&p) {
                 Ok(entries) => {
                     let mut added = 0;

@@ -75,10 +75,10 @@ fn main() {
 
         for bank in to_remove.into_iter() {
             cpr.remove_bank(bank as _)
-                .expect(&format!("Bank {bank} not present"));
+                .unwrap_or_else(|| panic!("Bank {bank} not present"));
             cpr2.as_mut().map(|cpr| {
                 cpr.remove_bank(bank as _)
-                    .expect(&format!("Bank {bank} not present"))
+                    .unwrap_or_else(|| panic!("Bank {bank} not present"))
             });
         }
     }

@@ -2,8 +2,8 @@ use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::stream::{AsBStr, Offset};
-use cpclib_common::winnow::{BStr, Located, Stateful};
+use cpclib_common::winnow::stream::{AsBStr, LocatingSlice, Offset};
+use cpclib_common::winnow::{BStr, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_span::LineSpanExt;
 
@@ -12,7 +12,7 @@ use super::ParsingState;
 
 // This type is only handled by the parser
 pub type InnerZ80Span = Stateful<
-    Located<
+    LocatingSlice<
         // the type of data, owned by the base listing of interest
         &'static BStr
     >,
@@ -210,7 +210,7 @@ impl From<&Z80Span> for Source {
 // let src = Arc::new(s);
 // let ctx = Arc::default();
 //
-// Self(LocatedSpan::new_extra(
+// Self(LocatingSliceSpan::new_extra(
 // The string is safe on the heap
 // unsafe { &*(src.as_str() as *const str) as &'static str },
 // (src, ctx)
@@ -221,7 +221,7 @@ impl From<&Z80Span> for Source {
 // check if still needed
 // impl Z80Span {
 // pub fn from_standard_span(
-// span: LocatedSpan<&'static str, ()>,
+// span: LocatingSliceSpan<&'static str, ()>,
 // extra: (Arc<String>, Arc<ParserContext>)
 // ) -> Self {
 // {
@@ -232,7 +232,7 @@ impl From<&Z80Span> for Source {
 // }
 //
 // Self(unsafe {
-// LocatedSpan::new_from_raw_offset(
+// LocatingSliceSpan::new_from_raw_offset(
 // span.location_offset(),
 // span.location_line(),
 // span.fragment(),
@@ -269,7 +269,7 @@ impl Z80Span {
         let ctx = unsafe { &*(ctx as *const ParserContext) as &'static ParserContext };
 
         Self(Stateful {
-            input: Located::new(src),
+            input: LocatingSlice::new(src),
             state: ctx
         })
     }

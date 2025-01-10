@@ -57,9 +57,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
         let content = link.inner_html();
         let href = link.attr("href").unwrap();
         if content.contains(info.version_name()) && !href.contains("/tree/") {
-            return Ok(
-                format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/")
-            );
+            return Ok(format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/"));
         }
     }
 

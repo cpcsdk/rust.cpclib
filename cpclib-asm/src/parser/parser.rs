@@ -20,10 +20,10 @@ use cpclib_common::winnow::combinator::{
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ErrorKind, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, Offset, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, LocatingSlice, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
-use cpclib_common::winnow::{self, BStr, Located, PResult, Parser, Stateful};
+use cpclib_common::winnow::{self, BStr, PResult, Parser, Stateful};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
@@ -730,7 +730,8 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
     let _ = alt((Caseless("PHASE"), Caseless("RORG"))).parse_next(input)?;
 
     let exp = cut_err(
-        delimited(my_space1, located_expr, my_space0).context("RORG: error in the expression")
+        delimited(my_space1, located_expr, my_space0)
+            .context(StrContext::Label("RORG: error in the expression"))
     )
     .parse_next(input)?;
 
@@ -740,7 +741,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 
     let _ = cut_err(
         preceded(my_space0, alt((Caseless("DEPHASE"), Caseless("REND"))))
-            .context("RORG: missing REND")
+            .context(StrContext::Label("RORG: missing REND"))
     )
     .parse_next(input)?;
 
@@ -758,7 +759,8 @@ pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListin
 pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let function_start = input.checkpoint();
     let _ = preceded(my_space0, parse_directive_word(b"FUNCTION")).parse_next(input)?;
-    let name = cut_err(parse_label(false).context("FUNCTION: wrong name")).parse_next(input)?; // TODO use a specific function for that
+    let name = cut_err(parse_label(false).context(StrContext::Label("FUNCTION: wrong name")))
+        .parse_next(input)?; // TODO use a specific function for that
 
     let cloned = *input;
     let arguments: Vec<InnerZ80Span> = cut_err(
@@ -778,16 +780,20 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
                 parse_comma
             )
         )
-        .context("FUNCTION: errors in parameters")
+        .context(StrContext::Label("FUNCTION: errors in parameters"))
     )
     .parse_next(input)?;
     let arguments = arguments.into_iter().map(|span| span.into()).collect_vec();
 
-    cut_err(preceded(my_space0, my_line_ending).context("FUNCTION: errors after parameters"))
-        .parse_next(input)?;
+    cut_err(
+        preceded(my_space0, my_line_ending)
+            .context(StrContext::Label("FUNCTION: errors after parameters"))
+    )
+    .parse_next(input)?;
 
     let listing =
-        cut_err(parse_function_listing.context("FUNCTION: invalid content")).parse_next(input)?;
+        cut_err(parse_function_listing.context(StrContext::Label("FUNCTION: invalid content")))
+            .parse_next(input)?;
 
     my_many0_nocollect(my_line_ending).parse_next(input)?;
     let _ = alt((
@@ -806,7 +812,8 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     let _ = parse_directive_word(b"MACRO").parse_next(input)?;
 
     // macro name
-    let name = cut_err(parse_label(false).context("MACRO: wrong name")).parse_next(input)?; // TODO use a specific function for that
+    let name = cut_err(parse_label(false).context(StrContext::Label("MACRO: wrong name")))
+        .parse_next(input)?; // TODO use a specific function for that
 
     parse_macro_inner(dir_start, name).parse_next(input)
 }
@@ -853,7 +860,9 @@ fn parse_macro_inner(
                     parse_directive_word(b"MEND")
                 ))
             )
-            .context("MACRO: impossible to collect macro content")
+            .context(StrContext::Label(
+                "MACRO: impossible to collect macro content"
+            ))
         )
         .parse_next(input)?;
 
@@ -879,7 +888,8 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     let while_start = input.checkpoint();
     let _ = parse_directive_word(b"WHILE").parse_next(input)?;
 
-    let cond = cut_err(located_expr.context("WHILE: error in condition")).parse_next(input)?;
+    let cond = cut_err(located_expr.context(StrContext::Label("WHILE: error in condition")))
+        .parse_next(input)?;
 
     // we must have either a new line or :
     alt((
@@ -888,13 +898,14 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     ))
     .parse_next(input)?;
 
-    let inner = cut_err(inner_code.context("WHILE: issue in the content")).parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label("WHILE: issue in the content")))
+        .parse_next(input)?;
     let _ = cut_err(
         preceded(
             my_space0,
             alt((parse_directive_word(b"ENDW"), parse_directive_word(b"WEND")))
         )
-        .context("WHILE: not closed")
+        .context(StrContext::Label("WHILE: not closed"))
     )
     .parse_next(input)?;
 
@@ -907,11 +918,14 @@ pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     let module_start = input.checkpoint();
     let _ = parse_directive_word(b"MODULE").parse_next(input)?;
 
-    let name = cut_err(parse_label(false).context("MODULE: error in naming")).parse_next(input)?;
+    let name = cut_err(parse_label(false).context(StrContext::Label("MODULE: error in naming")))
+        .parse_next(input)?;
 
-    let inner = cut_err(inner_code.context("MODULE: issue in the content")).parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label("MODULE: issue in the content")))
+        .parse_next(input)?;
     let _ = cut_err(
-        preceded(my_space0, parse_directive_word(b"ENDMODULE")).context("MODULE: not closed")
+        preceded(my_space0, parse_directive_word(b"ENDMODULE"))
+            .context(StrContext::Label("MODULE: not closed"))
     )
     .parse_next(input)?;
 
@@ -945,11 +959,12 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
     .parse_next(input)?;
 
     let inner =
-        cut_err(inner_code.context("CRUNCHED SECTION: issue in the content")).parse_next(input)?;
+        cut_err(inner_code.context(StrContext::Label("CRUNCHED SECTION: issue in the content")))
+            .parse_next(input)?;
 
     let _ = cut_err(
         ((my_space0, parse_directive_word(b"LZCLOSE"), my_space0))
-            .context("CRUNCHED SECTION section: not closed")
+            .context(StrContext::Label("CRUNCHED SECTION section: not closed"))
     )
     .parse_next(input)?;
 
@@ -964,8 +979,10 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     let switch_start = *input;
     let _ = parse_directive_word(b"SWITCH")(input)?;
 
-    let value = cut_err(preceded(my_space0, located_expr).context("SWITCH: tested value"))
-        .parse_next(input)?;
+    let value = cut_err(
+        preceded(my_space0, located_expr).context(StrContext::Label("SWITCH: tested value"))
+    )
+    .parse_next(input)?;
 
     let mut cases_listing = Vec::new();
     let mut default_listing = None;
@@ -978,7 +995,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                 ':'.value(()),
                 parse_comment.value(())
             )))
-            .context("SWITCH: whitespace error")
+            .context(StrContext::Label("SWITCH: whitespace error"))
         )
         .parse_next(input)?;
 
@@ -993,7 +1010,9 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                     ))
                     .value(true)
                 )
-                .context("SWITCH: endswitch not present after default listing.")
+                .context(StrContext::Label(
+                    "SWITCH: endswitch not present after default listing."
+                ))
             )
             .parse_next(input)?
         }
@@ -1017,12 +1036,14 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
         let value = preceded(my_space0, opt(parse_directive_word(b"CASE"))).parse_next(input)?;
         if value.is_some() {
             let value = cut_err(
-                delimited(my_space0, located_expr, opt(':')).context("SWITCH: case value error.")
+                delimited(my_space0, located_expr, opt(':'))
+                    .context(StrContext::Label("SWITCH: case value error."))
             )
             .parse_next(input)?;
 
             let inner =
-                cut_err(inner_code.context("SWITCH: error in case code")).parse_next(input)?;
+                cut_err(inner_code.context(StrContext::Label("SWITCH: error in case code")))
+                    .parse_next(input)?;
 
             let do_break =
                 opt(preceded(my_space0, parse_directive_word(b"BREAK"))).parse_next(input)?;
@@ -1036,11 +1057,14 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                     parse_directive_word(b"DEFAULT"),
                     opt((my_space0, ':'))
                 )
-                .context("Only CASE, DEFAULT or ENDSWITCH are expected.")
+                .context(StrContext::Label(
+                    "Only CASE, DEFAULT or ENDSWITCH are expected."
+                ))
             )
             .parse_next(input)?;
             let default =
-                cut_err(inner_code.context("SWITCH: error in default case")).parse_next(input)?;
+                cut_err(inner_code.context(StrContext::Label("SWITCH: error in default case")))
+                    .parse_next(input)?;
             default_listing = Some(default);
         }
     }
@@ -1057,7 +1081,8 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     // Get loop content
-    let inner = cut_err(inner_code.context("FOR: issue in the content")).parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label("FOR: issue in the content")))
+        .parse_next(input)?;
 
     // Collect end of loop
     let _ = cut_err(
@@ -1069,7 +1094,7 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
                 parse_directive_word(b"ENDF")
             ))
         )
-        .context("FOR: not closed")
+        .context(StrContext::Label("FOR: not closed"))
     )
     .parse_next(input)?;
 
@@ -1092,7 +1117,8 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
 
     let _ = parse_directive_word(b"CONFINED").parse_next(input)?;
 
-    let inner = cut_err(inner_code.context("CONFINED: issue in the content")).parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label("CONFINED: issue in the content")))
+        .parse_next(input)?;
 
     let _ = cut_err(
         preceded(
@@ -1103,7 +1129,7 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
                 parse_directive_word(b"ENDC")
             ))
         )
-        .context("CONFINED: not closed")
+        .context(StrContext::Label("CONFINED: not closed"))
     )
     .parse_next(input)?;
 
@@ -1129,14 +1155,15 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
         Some(count) => {
             let counter = cut_err(
                 opt(preceded(parse_comma, parse_label(false)))
-                    .context("REPEAT: issue in the counter")
+                    .context(StrContext::Label("REPEAT: issue in the counter"))
             )
             .parse_next(input)?;
             let counter_start = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
             let counter_step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
             let inner =
-                cut_err(inner_code.context("REPEAT: issue in the content")).parse_next(input)?;
+                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
+                    .parse_next(input)?;
 
             let _ = cut_err(
                 preceded(
@@ -1149,7 +1176,7 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
                         parse_directive_word(b"REND")
                     ))
                 )
-                .context("REPEAT: not closed")
+                .context(StrContext::Label("REPEAT: not closed"))
             )
             .parse_next(input)?;
 
@@ -1166,15 +1193,17 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 
         None => {
             let inner =
-                cut_err(inner_code.context("REPEAT: issue in the content")).parse_next(input)?;
+                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
+                    .parse_next(input)?;
 
             let _ = cut_err(
                 delimited(my_space0, parse_directive_word(b"UNTIL"), my_space0)
-                    .context("REPEAT ... UNTIL: not closed")
+                    .context(StrContext::Label("REPEAT ... UNTIL: not closed"))
             )
             .parse_next(input)?;
             let cond =
-                cut_err(located_expr.context("REPEAT UNTIL: condition error")).parse_next(input)?;
+                cut_err(located_expr.context(StrContext::Label("REPEAT UNTIL: condition error")))
+                    .parse_next(input)?;
             let token = LocatedTokenInner::RepeatUntil(cond, inner)
                 .into_located_token_between(&repeat_start, *input);
             Ok(token)
@@ -1193,18 +1222,21 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
     )
     .parse_next(input)?;
 
-    let counter =
-        cut_err(preceded(my_space0, parse_label(false)).context("ITERATE: issue in the counter"))
-            .parse_next(input)?;
+    let counter = cut_err(
+        preceded(my_space0, parse_label(false))
+            .context(StrContext::Label("ITERATE: issue in the counter"))
+    )
+    .parse_next(input)?;
 
     let comma_or_in = cut_err(
         preceded(my_space0, alt((parse_word(b"IN"), parse_comma)))
-            .context("ITERATE: expected ',' or 'in'")
+            .context(StrContext::Label("ITERATE: expected ',' or 'in'"))
     )
     .parse_next(input)?;
 
     let values = if comma_or_in.contains(&b',') {
-        let values = cut_err(expr_list.context("ITERATE: values issue")).parse_next(input)?;
+        let values = cut_err(expr_list.context(StrContext::Label("ITERATE: values issue")))
+            .parse_next(input)?;
         either::Either::Left(values)
     }
     else {
@@ -1217,13 +1249,14 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
                 parse_assemble,
                 parse_label(false).map(|l| LocatedExpr::Label(l.into()))
             ))
-            .context("ITERATE: list issue")
+            .context(StrContext::Label("ITERATE: list issue"))
         )
         .parse_next(input)?;
         either::Either::Right(values)
     };
 
-    let inner = cut_err(inner_code.context("ITERATE: issue in the content")).parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label("ITERATE: issue in the content")))
+        .parse_next(input)?;
 
     let _ = cut_err(
         ((
@@ -1236,7 +1269,7 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
             )),
             my_space0
         ))
-            .context("ITERATE: not closed")
+            .context(StrContext::Label("ITERATE: not closed"))
     )
     .parse_next(input)?;
 
@@ -1277,7 +1310,9 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
             take(1usize),
             parse_directive_word(b"ENDLOCOMOTIVE")
         )
-        .context("BASIC: impossible to collect BASIC content")
+        .context(StrContext::Label(
+            "BASIC: impossible to collect BASIC content"
+        ))
     )
     .parse_next(input)?;
 
@@ -1358,7 +1393,12 @@ pub fn parse_line_component_standard(
 
     let mut label: Option<InnerZ80Span> = if r#let.is_some() {
         // label is mandatory when there is let
-        cut_err(parse_label(false).context("LET: missing label").map(Some)).parse_next(input)?
+        cut_err(
+            parse_label(false)
+                .context(StrContext::Label("LET: missing label"))
+                .map(Some)
+        )
+        .parse_next(input)?
     }
     else {
         // let was absent
@@ -1400,7 +1440,7 @@ pub fn parse_line_component_standard(
     }
     else if r#let.is_some() {
         // LET needs =
-        cut_err(b"=".context("LET: missing ="))
+        cut_err(b"=".context(StrContext::Label("LET: missing =")))
             .map(Some)
             .parse_next(input)?;
         Some(LabelModifier::Equal(None)) // TODO check it is ok
@@ -1439,7 +1479,7 @@ pub fn parse_line_component_standard(
     if let Some(label_modifier) = label_modifier {
         if label_modifier == LabelModifier::Macro {
             let r#macro = parse_macro_inner(before_label, label.unwrap())
-                .context("MACRO: error on macro definition")
+                .context(StrContext::Label("MACRO: error on macro definition"))
                 .parse_next(input)?;
             return Ok((None, Some(r#macro)));
         }
@@ -1450,7 +1490,7 @@ pub fn parse_line_component_standard(
             | LabelModifier::Set
             | LabelModifier::Field => {
                 cut_err(located_expr.map(Some))
-                    .context("Value error")
+                    .context(StrContext::Label("Value error"))
                     .parse_next(input)?
             },
             _ => None
@@ -1461,7 +1501,7 @@ pub fn parse_line_component_standard(
                 cut_err(
                     preceded(my_space0, parse_label(false))
                         .map(Some)
-                        .context("Label expected")
+                        .context(StrContext::Label("Label expected"))
                 )
                 .parse_next(input)?
             },
@@ -1627,29 +1667,30 @@ pub fn parse_z80_directive_with_block(
 
     if input.state.options().is_orgams() {
         alt((
-            parse_macro.context("Error in macro"),
-            parse_repeat.context("Error in repetition"),
-            parse_conditional.context("Error in condition"),
+            parse_macro.context(StrContext::Label("Error in macro")),
+            parse_repeat.context(StrContext::Label("Error in repetition")),
+            parse_conditional.context(StrContext::Label("Error in condition")),
             parse_orgams_fail // TODO call it elsewhere
         ))
         .parse_next(input)
     }
     else {
         alt((
-            parse_basic.context("Basic code embedding"),
-            parse_macro.context("Error in macro"),
-            parse_crunched_section.context("Error in crunched section"),
-            parse_module.context("Error in module"),
-            parse_confined.context("Error in confined"),
-            parse_repeat.context("Error in repetition"),
-            parse_for.context("Error in for"),
-            parse_function.context("Error in function definition"),
-            parse_switch.context("Error in switch"),
-            parse_iterate.context("Error in iterate"),
-            parse_while.context("Error in while"),
-            parse_rorg.context("Error in rorg"),
-            parse_conditional.context("Error in condition"),
-            parse_assembler_control_max_passes_number.context("Error in assembler control")
+            parse_basic.context(StrContext::Label("Basic code embedding")),
+            parse_macro.context(StrContext::Label("Error in macro")),
+            parse_crunched_section.context(StrContext::Label("Error in crunched section")),
+            parse_module.context(StrContext::Label("Error in module")),
+            parse_confined.context(StrContext::Label("Error in confined")),
+            parse_repeat.context(StrContext::Label("Error in repetition")),
+            parse_for.context(StrContext::Label("Error in for")),
+            parse_function.context(StrContext::Label("Error in function definition")),
+            parse_switch.context(StrContext::Label("Error in switch")),
+            parse_iterate.context(StrContext::Label("Error in iterate")),
+            parse_while.context(StrContext::Label("Error in while")),
+            parse_rorg.context(StrContext::Label("Error in rorg")),
+            parse_conditional.context(StrContext::Label("Error in condition")),
+            parse_assembler_control_max_passes_number
+                .context(StrContext::Label("Error in assembler control"))
         ))
         .parse_next(input)
     }
@@ -1711,7 +1752,7 @@ pub fn parse_line(
 
             alt((eof::<_, Z80ParserError>, line_ending))
                 .value(())
-                .context("Line ending expected")
+                .context(StrContext::Label("Line ending expected"))
                 .parse_next(input)?;
 
             comment
@@ -1811,7 +1852,7 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
         opt(my_escaped(normal, '\\', escapable))
             .map(|s| s.unwrap_or_default())
             .with_taken(),
-        last.context("End of string not found")
+        last.context(StrContext::Label("End of string not found"))
     )
     .parse_next(input)?;
 
@@ -1918,10 +1959,12 @@ pub fn parse_charset_start_stop_end(
 
 pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, Z80ParserError> {
     // manage the string format - TODO manage the others too
-    let chars = parse_string.context("Missing string").parse_next(input)?;
+    let chars = parse_string
+        .context(StrContext::Label("Missing string"))
+        .parse_next(input)?;
     let chars = unsafe { std::str::from_utf8_unchecked(chars.as_ref().as_bytes()) };
     let start = preceded(parse_comma, expr)
-        .context("Missing start value")
+        .context(StrContext::Label("Missing start value"))
         .parse_next(input)?;
     let format = CharsetFormat::CharsList(chars.chars().collect_vec(), start);
 
@@ -1932,7 +1975,7 @@ pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, 
 pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let once_fname = (
         opt(delimited(my_space0, parse_word(b"ONCE"), my_space0)),
-        cut_err(parse_fname.context("INCLUDE: error in fname"))
+        cut_err(parse_fname.context(StrContext::Label("INCLUDE: error in fname")))
     )
         .parse_next(input)?;
 
@@ -2005,7 +2048,8 @@ pub fn parse_write_direct_memory(
         .parse_next(input)?;
 
     let bank =
-        cut_err(located_expr.context("WRITE DIRECT -1, -1: BANK expected")).parse_next(input)?;
+        cut_err(located_expr.context(StrContext::Label("WRITE DIRECT -1, -1: BANK expected")))
+            .parse_next(input)?;
 
     let token = LocatedTokenInner::Bank(Some(bank));
 
@@ -2108,12 +2152,13 @@ pub fn parse_section(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let start = cut_err(
-        delimited(my_space0, located_expr, my_space0).context("RANGE: wrong start address")
+        delimited(my_space0, located_expr, my_space0)
+            .context(StrContext::Label("RANGE: wrong start address"))
     )
     .parse_next(input)?;
     let stop = cut_err(
         preceded(parse_comma, delimited(my_space0, located_expr, my_space0))
-            .context("RANGE: wrong end address")
+            .context(StrContext::Label("RANGE: wrong end address"))
     )
     .parse_next(input)?;
     let label = cut_err(
@@ -2121,7 +2166,7 @@ pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
             parse_comma,
             delimited(my_space0, parse_label(false), my_space0)
         )
-        .context("RANGE: wrong name")
+        .context(StrContext::Label("RANGE: wrong name"))
     )
     .parse_next(input)?;
 
@@ -2386,8 +2431,8 @@ pub fn parse_directive_new(
 fn parse_directive_of_size_others(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2416,8 +2461,8 @@ fn parse_directive_of_size_others(
 fn parse_directive_of_size_10(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2441,8 +2486,8 @@ fn parse_directive_of_size_10(
 fn parse_directive_of_size_8(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2469,8 +2514,8 @@ fn parse_directive_of_size_8(
 fn parse_directive_of_size_7(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2497,8 +2542,8 @@ fn parse_directive_of_size_7(
 fn parse_directive_of_size_6(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2559,8 +2604,8 @@ fn parse_directive_of_size_6(
 fn parse_directive_of_size_5(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2591,8 +2636,8 @@ fn parse_directive_of_size_5(
 fn parse_directive_of_size_4(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2635,8 +2680,8 @@ fn parse_directive_of_size_4(
 fn parse_directive_of_size3(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2667,8 +2712,8 @@ fn parse_directive_of_size3(
 fn parse_directive_of_size_2(
     input: &mut InnerZ80Span,
     input_start: &Checkpoint<
-        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, Located<&'static BStr>>,
-        Stateful<Located<&'static BStr>, &'static context::ParserContext>
+        Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
+        Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
     within_struct: bool,
@@ -2748,7 +2793,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
             // Get the corresponding test
             let cond = cut_err(
                 delimited(my_space0, parse_conditional_condition(test_kind), my_space0)
-                    .context("Condition: error in the condition")
+                    .context(StrContext::Label("Condition: error in the condition"))
             )
             .parse_next(input)?;
             Some(cond)
@@ -2760,19 +2805,23 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         // Remove empty stuff
         let _ = cut_err(
             alt((
-                delimited(my_space0, parse_comment, line_ending).recognize(),
-                line_ending.recognize(),
-                ':'.recognize()
+                delimited(my_space0, parse_comment, line_ending).take(),
+                line_ending.take(),
+                ':'.take()
             ))
-            .context("Condition: condition must end by a new line or ':'")
+            .context(StrContext::Label(
+                "Condition: condition must end by a new line or ':'"
+            ))
         )
         .parse_next(input)
         .map_err(|e| e.add_context(input, &if_start, "Error in condition"))?;
 
         // get the conditionnal code
         // dbg!("Listing to extract code", &input);
-        let code = cut_err(inner_code.context("Condition: syntax error in conditionnal code"))
-            .parse_next(input)?;
+        let code = cut_err(inner_code.context(StrContext::Label(
+            "Condition: syntax error in conditionnal code"
+        )))
+        .parse_next(input)?;
         //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
 
         if let Some(condition) = condition {
@@ -2809,7 +2858,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
             my_space0,
             parse_directive_word(if is_orgams { b"END" } else { b"ENDIF" })
         ))
-        .recognize()
+        .take()
     )
         .parse_next(input)
         .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found"))?;
@@ -3047,7 +3096,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                         return *first.borrow(); // can be empty only at first loop
                     }
                 })
-                .context("Breapoint parameter error")
+                .context(StrContext::Label("Breapoint parameter error"))
         )
         .parse_next(input)?;
 
@@ -3216,7 +3265,7 @@ pub fn parse_optional_argname_and_value<'f, 's, O>(
         alt((
             (
                 parse_argname_to_assign(argname),
-                cut_err(valparser.context("Wrong value for argument"))
+                cut_err(valparser.context(StrContext::Label("Wrong value for argument")))
             )
                 .map(|(a, r)| (Some(a), r)),
             (valparser).map(|r| (None, r))
@@ -3310,7 +3359,9 @@ pub fn parse_assembler_control(
             parse_assembler_control_print_parse,
             parse_assembler_control_print_any_pass
         ))
-        .context("Wrong argument in ASSEMBLING_CONTROL directive")
+        .context(StrContext::Label(
+            "Wrong argument in ASSEMBLING_CONTROL directive"
+        ))
     )
     .parse_next(input)
 }
@@ -3330,16 +3381,18 @@ pub fn parse_assembler_control_max_passes_number(
 
     let count = cut_err(preceded(
         (
-            parse_word(b"SET_MAX_NB_OF_PASSES").context("Missing modified option"),
-            (my_space0, b'=', my_space0).context("Missing =")
+            parse_word(b"SET_MAX_NB_OF_PASSES")
+                .context(StrContext::Label("Missing modified option")),
+            (my_space0, b'=', my_space0).context(StrContext::Label("Missing ="))
         ),
-        located_expr.context("Expression expected")
+        located_expr.context(StrContext::Label("Expression expected"))
     ))
     .parse_next(input)?;
 
-    let inner =
-        cut_err(inner_code.context("ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"))
-            .parse_next(input)?;
+    let inner = cut_err(inner_code.context(StrContext::Label(
+        "ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"
+    )))
+    .parse_next(input)?;
 
     let _ = cut_err(
         preceded(
@@ -3349,7 +3402,7 @@ pub fn parse_assembler_control_max_passes_number(
                 parse_directive_word(b"ENDA")
             ))
         )
-        .context("REPEAT: not closed")
+        .context(StrContext::Label("REPEAT: not closed"))
     )
     .parse_next(input)?;
 
@@ -3426,7 +3479,7 @@ pub fn parse_stable_ticker_start(
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
     preceded(
         (Caseless("start"), alt((my_space1, parse_comma))),
-        cut_err(parse_label(false).context("Missing label"))
+        cut_err(parse_label(false).context(StrContext::Label("Missing label")))
     )
     .map(|name| LocatedTokenInner::StableTicker(StableTickerAction::<Z80Span>::Start(name.into())))
     .parse_next(input)
@@ -3462,7 +3515,8 @@ pub fn parse_bank(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let count = cut_err(located_expr.context("SKIP: wrong expression")).parse_next(input)?;
+    let count = cut_err(located_expr.context(StrContext::Label("SKIP: wrong expression")))
+        .parse_next(input)?;
 
     Ok(LocatedTokenInner::Skip(count))
 }
@@ -3574,7 +3628,8 @@ pub fn parse_ld_normal(
         )
         .parse_next(input)?;
 
-        let _ = cut_err(parse_comma.context("LD: missing comma")).parse_next(input)?;
+        let _ = cut_err(parse_comma.context(StrContext::Label("LD: missing comma")))
+            .parse_next(input)?;
 
         // src possibilities depend on dst
         let src = cut_err(cut_err(parse_ld_normal_src(&dst)))
@@ -3695,7 +3750,8 @@ pub fn parse_res_set_bit(
     res_or_set: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
-        let bit = cut_err(parse_expr.context("Wrong bit definition")).parse_next(input)?;
+        let bit = cut_err(parse_expr.context(StrContext::Label("Wrong bit definition")))
+            .parse_next(input)?;
 
         let _ = cut_err(parse_comma).parse_next(input)?;
 
@@ -3705,7 +3761,7 @@ pub fn parse_res_set_bit(
                 parse_hl_address,
                 parse_indexregister_with_index
             ))
-            .context("Wrong destination")
+            .context(StrContext::Label("Wrong destination"))
         )
         .parse_next(input)?;
 
@@ -3744,7 +3800,7 @@ pub fn parse_cp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                 parse_indexregister_with_index,
                 parse_expr
             ))
-            .context("CP: wrong argument")
+            .context(StrContext::Label("CP: wrong argument"))
         )
         .map(
             //   )
@@ -3768,9 +3824,11 @@ pub fn parse_export(
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
-        let labels: Vec<InnerZ80Span> =
-            cut_err(separated(0.., parse_label(false), parse_comma).context("Wrong parameters"))
-                .parse_next(input)?;
+        let labels: Vec<InnerZ80Span> = cut_err(
+            separated(0.., parse_label(false), parse_comma)
+                .context(StrContext::Label("Wrong parameters"))
+        )
+        .parse_next(input)?;
         let labels = labels.into_iter().map(Z80Span::from).collect_vec();
 
         if code == ExportKind::Export {
@@ -3826,7 +3884,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
     let start = input.checkpoint();
     let _ = my_space0(input)?;
     let name = take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9', '_'..='_'))
-        .context("Unable to read directive name")
+        .context(StrContext::Label("Unable to read directive name"))
         .parse_next(input)?;
 
     let mut end_directive_iter = if input.state.options().dotted_directive {
@@ -3869,12 +3927,12 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
         delimited(
             my_space0,
             alt((
-                located_expr.recognize(), // TODO handle evaluation or transposition
-                parse_string.recognize(),
+                located_expr.take(), // TODO handle evaluation or transposition
+                parse_string.take(),
                 my_many0_nocollect(none_of((
                     b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
                 )))
-                .recognize()
+                .take()
             )), // TODO find a way to give arguments with space
             alt((my_space0.value(()), eof.value(())))
         )
@@ -3922,7 +3980,7 @@ pub fn parse_macro_or_struct_call_inner(
         // if uncommented we do not detect (void) !
         // let nothing_after = peek((
         // space0,
-        // alt((parse_comment.recognize(), ':', '\n'))
+        // alt((parse_comment.take(), ':', '\n'))
         // ))
         // .parse_next(input)
         // .is_ok();
@@ -3996,12 +4054,9 @@ pub fn parse_macro_or_struct_call_inner(
         // avoid ambiguate code such as label nop
         if args.len() == 1 {
             let mut arg = (*input).update_slice(args[0].1);
-            if alt((
-                parse_word(b"NOP").recognize(),
-                parse_opcode_no_arg.recognize()
-            ))
-            .parse_next(&mut arg)
-            .is_ok()
+            if alt((parse_word(b"NOP").take(), parse_opcode_no_arg.take()))
+                .parse_next(&mut arg)
+                .is_ok()
             {
                 return Err(ErrMode::Cut(
                     Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
@@ -4040,8 +4095,8 @@ pub fn parse_macro_or_struct_call(
                     my_space0,
                     alt((':'.value(()), line_ending.value(()), eof.value(())))
                 )
-                    .recognize(),
-                ('.').recognize()
+                    .take(),
+                ('.').take()
             )))
         )
         .parse_next(input)?;
@@ -4147,11 +4202,14 @@ pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80Parse
 
 /// ...
 pub fn parse_assert(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let expr = cut_err(located_expr.context("ASSERT: expression error")).parse_next(input)?;
+    let expr = cut_err(located_expr.context(StrContext::Label("ASSERT: expression error")))
+        .parse_next(input)?;
 
-    let exps =
-        cut_err(opt(preceded(parse_comma, parse_print_inner)).context("ASSERT: comment error"))
-            .parse_next(input)?;
+    let exps = cut_err(
+        opt(preceded(parse_comma, parse_print_inner))
+            .context(StrContext::Label("ASSERT: comment error"))
+    )
+    .parse_next(input)?;
 
     Ok(LocatedTokenInner::Assert(expr, exps))
 }
@@ -4248,7 +4306,7 @@ fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserE
 pub fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     opt(my_space1)
-        .recognize()
+        .take()
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -4309,8 +4367,10 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
     let cloned = *input;
 
     let spaces = alt((
-        eof.value(()).context("End of file"), // end of file
-        one_of(|c: u8| c.is_space()).value(()).context("Space"), // space char
+        eof.value(()).context(StrContext::Label("End of file")), // end of file
+        one_of(|c: u8| c.is_space())
+            .value(())
+            .context(StrContext::Label("Space")), // space char
         (
             // continuated line
             space0,
@@ -4321,12 +4381,12 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
             space0
         )
             .value(())
-            .context("continuated line"),
+            .context(StrContext::Label("continuated line")),
         parse_multiline_comment.value(())
     ));
 
     my_repeat1::<_, _, (), Z80ParserError, _>(spaces)
-        .recognize()
+        .take()
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -4335,7 +4395,7 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
-    alt((line_ending.recognize(), ':'.recognize()))
+    alt((line_ending.take(), ':'.take()))
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -4344,7 +4404,7 @@ fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserEr
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
-    delimited(my_space0, ','.recognize(), my_space0)
+    delimited(my_space0, ','.take(), my_space0)
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -4372,7 +4432,7 @@ pub fn parse_logical_operator(
             parse_indexregister_with_index,
             parse_expr
         ))
-        .context("Wrong logical operand")
+        .context(StrContext::Label("Wrong logical operand"))
         .parse_next(input)?;
 
         Ok(LocatedTokenInner::new_opcode(operator, Some(operand), None))
@@ -4582,7 +4642,7 @@ pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
             parse_comma,
             alt((
                 parse_register8,
-                alt((parse_word(b"f").recognize(), "0")).map(|w| {
+                alt((parse_word(b"f").take(), "0")).map(|w| {
                     LocatedDataAccess::Expression(LocatedExpr::Value(
                         0,
                         cloned.update_slice(w).into()
@@ -4622,7 +4682,7 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
     let (destination, span) = opt(terminated(
         alt((
             parse_register8,
-            alt((Caseless("f").recognize(), "0")).map(|span| {
+            alt((Caseless("f").take(), "0")).map(|span| {
                 LocatedDataAccess::Expression(LocatedExpr::Value(
                     0,
                     cloned.update_slice(span).into()
@@ -4872,7 +4932,7 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("I"), not(alphanumeric1)))
-        .recognize()
+        .take()
         .parse_next(input)?;
     let da = LocatedDataAccess::SpecialRegisterI((*input).update_slice(da).into());
     Ok(da)
@@ -4883,7 +4943,7 @@ pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_register_r(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("R"), not(alphanumeric1)))
-        .recognize()
+        .take()
         .parse_next(input)?;
     let da = LocatedDataAccess::SpecialRegisterR((*input).update_slice(da).into());
     Ok(da)
@@ -4924,7 +4984,7 @@ fn register16_parser(
             Caseless(representation),
             not(one_of(('a'..='z', 'A'..='Z', '0'..='9', '_')))
         ))
-            .recognize()
+            .take()
             .parse_next(input)?;
 
         let span = (*input).update_slice(span);
@@ -4984,7 +5044,7 @@ macro_rules! parse_any_indexregister8 {
                         parse_word( stringify!($alias2).as_bytes()),
                     ))
                     , not(alphanumeric1)))
-                .recognize()
+                .take()
                 .parse_next(input)?;
 
                 let span = input.clone().update_slice(span);
@@ -5025,7 +5085,7 @@ pub fn parse_indexregister16(
     input: &mut InnerZ80Span
 ) -> PResult<LocatedDataAccess, Z80ParserError> {
     let code = terminated(take(2usize), not(alpha1))
-        .recognize()
+        .take()
         .parse_next(input)?;
 
     let reg = match code {
@@ -5093,7 +5153,7 @@ pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80Pa
         ((b'(', my_space0, parse_register_c, my_space0, b')')),
         ((b'[', my_space0, parse_register_c, my_space0, b']'))
     ))
-    .recognize()
+    .take()
     .parse_next(input)?;
     let span = (*input).update_slice(span);
 
@@ -5200,7 +5260,7 @@ pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
             preceded(my_space0, "]")
         )
     ))
-    .recognize()
+    .take()
     .parse_next(input)?;
 
     Ok(LocatedDataAccess::MemoryRegister16(
@@ -5240,7 +5300,8 @@ pub fn parse_expr(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80Par
 
 /// Parse standard org directive
 pub fn parse_org(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    let val1 = cut_err(located_expr.context("Invalid argument")).parse_next(input)?;
+    let val1 =
+        cut_err(located_expr.context(StrContext::Label("Invalid argument"))).parse_next(input)?;
     let val2 = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     Ok(LocatedTokenInner::Org { val1, val2 })
@@ -5251,7 +5312,8 @@ pub fn parse_defs(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
     let val = separated(
         1..,
         cut_err(
-            ((located_expr, opt(preceded(parse_comma, located_expr)))).context("Wrong argument")
+            ((located_expr, opt(preceded(parse_comma, located_expr))))
+                .context(StrContext::Label("Wrong argument"))
         ),
         parse_comma
     )
@@ -5262,8 +5324,9 @@ pub fn parse_defs(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 
 pub fn parse_nop(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     let val = cut_err(
-        opt(located_expr.map(LocatedDataAccess::from))
-            .context("Wrong argument. NOP expects an expression")
+        opt(located_expr.map(LocatedDataAccess::from)).context(StrContext::Label(
+            "Wrong argument. NOP expects an expression"
+        ))
     )
     .parse_next(input)?;
 
@@ -5351,15 +5414,15 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                 (
                     terminated(
                         parse_label(false),
-                        alt((
-                            ((my_space0, ':', my_space0)).recognize(),
-                            my_space1.recognize()
-                        ))
+                        alt((((my_space0, ':', my_space0)).take(), my_space1.take()))
                     )
                     .verify(|label: &InnerZ80Span| !label.eq_ignore_ascii_case(b"endstruct"))
-                    .context("STRUCT: label error")
+                    .context(StrContext::Label("STRUCT: label error"))
                     .map(|span: InnerZ80Span| Z80Span::from(span)),
-                    cut_err(parse_struct_directive.context("STRUCT: Invalid operation"))
+                    cut_err(
+                        parse_struct_directive
+                            .context(StrContext::Label("STRUCT: Invalid operation"))
+                    )
                 ),
                 my_many0_nocollect(alt((
                     my_space1.value(()),
@@ -5369,7 +5432,7 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
                 )))
             )
         )
-        .context("STRUCT: error in inner content")
+        .context(StrContext::Label("STRUCT: error in inner content"))
     )
     .parse_next(input)?;
 
@@ -5401,7 +5464,7 @@ fn parse_snaset(
 
         let values: Vec<_> = cut_err(separated(
             1..,
-            parse_flag_value_inner.context("SNASET: wrong flag value"),
+            parse_flag_value_inner.context(StrContext::Label("SNASET: wrong flag value")),
             delimited(my_space0, parse_comma, my_space0)
         ))
         .parse_next(input)?;
@@ -5496,7 +5559,7 @@ pub fn parse_label(
                     ".".value(()),
                     delimited('{', opt(expr), '}').value(())
                 )))
-            )).recognize()
+            )).take()
             .parse_next(input)?
         } else {
             ((
@@ -5520,7 +5583,7 @@ pub fn parse_label(
                     ".".value(()),
                     delimited('{', opt(expr), '}').value(())
                 )))
-            )).recognize()
+            )).take()
             .parse_next(input)?
         };
 
@@ -5647,7 +5710,7 @@ pub fn parse_macro_name(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Pa
         take_while(0.., (b'a'..=b'z', b'A'..=b'Z', b'0'..=b'9', b'_')),
         not('{')
     )
-        .recognize()
+        .take()
         .verify(move |name: &[u8]| {
             !(!ignore_ascii_case_allowed_label(name, dotted_directive, flavor))
         })
@@ -5671,7 +5734,7 @@ pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80
     .parse_next(input)?;
 
     let label =
-        preceded(my_space0, alt((parse_label(false).recognize(), "$$", "$"))).parse_next(input)?;
+        preceded(my_space0, alt((parse_label(false).take(), "$$", "$"))).parse_next(input)?;
 
     let span = build_span(input_offset, &input_start, *input);
     Ok(LocatedExpr::PrefixedLabel(
@@ -5714,7 +5777,7 @@ pub fn parse_counter(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parser
         parse_label(false), // BUG will accept too many cases
         (b'}', not(alphanumeric1))
     )
-    .recognize()
+    .take()
     .map(|l| LocatedExpr::Label(cloned.update_slice(l).into()))
     .parse_next(input)
 }
@@ -5786,7 +5849,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
 
     let not = opt(delimited(
         my_space0,
-        alt(('!'.recognize(), parse_word(b"NOT").recognize())),
+        alt(('!'.take(), parse_word(b"NOT").take())),
         my_space0
     ))
     .parse_next(input)?;
@@ -6086,7 +6149,7 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
     let (word, exp) = (
         delimited(my_space0, alpha1, my_space0),
         delimited((my_space0, "(", my_space0), located_expr, (my_space0, ")"))
-            .context("UNARY function: error in parameters")
+            .context(StrContext::Label("UNARY function: error in parameters"))
     )
         .parse_next(input)?;
 

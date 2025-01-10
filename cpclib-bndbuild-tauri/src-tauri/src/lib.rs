@@ -94,7 +94,6 @@ async fn clear_app(
     .map_err(|e| e.to_string())
 }
 
-
 #[tauri::command]
 async fn select_cwd(dname: Utf8PathBuf, app: AppHandle) -> Result<(), String> {
     log::info!("Select a working directory{}", dname);
@@ -102,37 +101,33 @@ async fn select_cwd(dname: Utf8PathBuf, app: AppHandle) -> Result<(), String> {
 
     // change the directory
     log::info!("before set_current_dir");
-    dbg!(std::env::set_current_dir(dname)
-        .map_err(|e| e.to_string()))?;
+    dbg!(std::env::set_current_dir(dname).map_err(|e| e.to_string()))?;
     log::info!("after set_current_dir");
-
 
     // Build the new state
     let state: State<'_, Mutex<BndbuildState>> = app.state();
     let mut state = state.deref().lock().await;
     let gags = match state.deref_mut() {
-        BndbuildState::Loaded(state) => {
-            state.gags.take()
-        },
+        BndbuildState::Loaded(state) => state.gags.take(),
 
-        _ => if USE_GAGS {
-            Some((
-                gag::BufferRedirect::stdout().unwrap(),
-                gag::BufferRedirect::stderr().unwrap()
-            ))
-        }
-        else {
-            None
-        }
+        _ => {
+            if USE_GAGS {
+                Some((
+                    gag::BufferRedirect::stdout().unwrap(),
+                    gag::BufferRedirect::stderr().unwrap()
+                ))
+            }
+            else {
+                None
+            }
+        },
     };
 
-    *state = BndbuildState::Workdir(WorkdirState{gags});
+    *state = BndbuildState::Workdir(WorkdirState { gags });
 
     log::info!("left cwd");
 
     Ok(())
-
-
 }
 
 #[tauri::command]
@@ -147,7 +142,7 @@ async fn load_build_file(fname: Utf8PathBuf, app: AppHandle) -> Result<(), ()> {
     *state = BndbuildState::load(fname, &app).await;
 
     match state.deref() {
-        BndbuildState::Empty | BndbuildState::Workdir(_)=> {
+        BndbuildState::Empty | BndbuildState::Workdir(_) => {
             unreachable!()
         },
         BndbuildState::Loaded(bndbuild_state_loaded) => {
@@ -286,11 +281,13 @@ async fn execute_target(tgt: String, state: State<'_, Mutex<BndbuildState>>) -> 
 }
 
 #[tauri::command]
-async fn execute_manual_task(task: String, state: State<'_, Mutex<BndbuildState>>) -> Result<(), String> {
+async fn execute_manual_task(
+    task: String,
+    state: State<'_, Mutex<BndbuildState>>
+) -> Result<(), String> {
     log::info!("execute_manual_task {}", &task);
 
     let task = InnerTask::from_str(&task)?;
-
 
     let builder = {
         let state = state.lock().await;
@@ -304,7 +301,6 @@ async fn execute_manual_task(task: String, state: State<'_, Mutex<BndbuildState>
 
     log::info!("execute_manual_task {} done", &task);
     res
-
 }
 
 // there is an infinite loop when updating the menu from the rust code (probably because it runs from the menu itself)
@@ -314,10 +310,7 @@ async fn update_menu(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn reload_file(
-    app: AppHandle,
-    state: State<'_, Mutex<BndbuildState>>
-) -> Result<(), String> {
+async fn reload_file(app: AppHandle, state: State<'_, Mutex<BndbuildState>>) -> Result<(), String> {
     log::info!("request_reload");
     let file_path = state.lock().await.loaded_state().unwrap().fname.clone();
     app.emit("request-load_build_file", file_path)
@@ -338,7 +331,9 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         .enabled(app.state::<Mutex<BndbuildState>>().lock().await.is_loaded())
         .accelerator("CTRL+R")
         .build(app)?;
-    let mut select_cwd = MenuItemBuilder::new("Select working directory").accelerator("CTRL+S").build(app)?;
+    let select_cwd = MenuItemBuilder::new("Select working directory")
+        .accelerator("CTRL+S")
+        .build(app)?;
 
     let mut submenu_recent = SubmenuBuilder::new(app, "Recent files");
     let recent_files_string = if let Some(files) = store.get(STORE_RECENT_FILES_KEY) {

@@ -152,7 +152,8 @@ where D: Deserializer<'de> {
 
         fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
         where A: serde::de::SeqAccess<'de> {
-            let tasks : Vec<InnerTask> = Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
+            let tasks: Vec<InnerTask> =
+                Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
             Ok(tasks.into_iter().map(Task::from).collect_vec())
         }
     }
