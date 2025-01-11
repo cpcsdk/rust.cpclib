@@ -97,11 +97,16 @@ It is preferably named `bndbuild.yml` but this can be overridden by the `-f` arg
 It contains list of rules.
 Each rule can have the following keys:
 
-- `tgt`: to list the files build by the rule.
-- `dep`: to list the files needed to build the rule.
-- `cmd`: a command, or a list of commands, executed by the rule. Commands prefixed by `-` can silently fail.
+- `tgt`: to list the files build by the rule. Either all the files in one line or one file per line. 
+- `dep`: to list the files needed to build the rule. Either all the files in one line or one file per line.
+- `cmd`: a command, or a list of commands, executed by the rule. Commands prefixed by `-` can silently fail. `$@` is replaced by the first target and `$<` is replaced by the first dependency.>
 - `help`: an optional help text to describe the rule.
 - `phony`: an optional tag to express the rule does not generate anyfile (it is inferred when the commands are not extern). Mainly serves for the `--watch` argument.
+- `constraint`: Allows to filter the rule for the specified expression
+   
+   * Functions: `hostname(MY_HOST)` is true if the machine is `MY_HOST`. `os(windows)`, `os(linux)`, and `os(macosx)` are true for the specified os.
+   * Negation: `not(EXPRESSION)` is true when `EXPRESSION` is false
+   * Combination: `and(EXPRESSION, EXPRESSION, ...)` and `or(EXPRESSION, EXPRESSION, ...)` allow to combine expressions
 
 ## Commands
 

@@ -50,6 +50,7 @@ thiserror = "1.0"
 topologic = "1.1.0"
 clap_complete = "4.5.42"
 utf8-chars = "3.0.5"
+fancy-regex = "0.14.0"
 
 [build-dependencies]
 built.workspace = true

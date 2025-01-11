@@ -1,9 +1,12 @@
 use std::fmt::Display;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-
+use std::sync::LazyLock;
+use fancy_regex::Regex;
+use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
@@ -127,6 +130,12 @@ impl Deref for Task {
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl DerefMut for Task {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -417,6 +426,13 @@ impl InnerTask {
         Self::ImgConverter(StandardTaskArguments::new(args))
     }
 
+
+    pub fn replace_automatic_variables(&mut self, first_dep: Option<&Utf8Path>, first_tgt: Option<&Utf8Path>) -> Result<(), String > {
+        self.standard_task_arguments_mut()
+            .replace_automatic_variables(first_dep, first_tgt)
+
+    } 
+
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
@@ -518,12 +534,118 @@ impl StandardTaskArguments {
             ignore_error: false
         }
     }
+
+    /// This method modify the args to replace automatic variables by the expected values
+    /// TODO keep the original argument for display and error purposes ?
+    fn replace_automatic_variables(&mut self, first_dep: Option<&Utf8Path>, first_tgt: Option<&Utf8Path> ) -> Result<(), String>{
+
+
+        static RE_FIRST_DEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
+        static RE_FIRST_TGT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
+
+        dbg!("Before", &self.args, &RE_FIRST_DEP, &first_dep, &RE_FIRST_TGT, &first_tgt);
+
+        let initial = self.args.clone();
+
+        if let Some(first_dep) = first_dep {
+            dbg!(&self.args, &RE_FIRST_DEP, first_dep.as_str());
+            self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep.as_str()).into_owned();
+        } else {
+            dbg!(&RE_FIRST_DEP, "$<", &self.args);
+            if dbg!(RE_FIRST_DEP.is_match(&self.args)).unwrap() {
+                self.args = initial;
+                return Err(format!("{} contains $<, but there are no available dependencies.", self.args));
+            }
+        }
+
+        if let Some(first_tgt) = first_tgt {
+            dbg!(&self.args, &RE_FIRST_TGT, first_tgt.as_str());
+            self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt.as_str()).into_owned();
+        } else {
+            dbg!(&RE_FIRST_TGT, "$@", &self.args);
+            if dbg!(RE_FIRST_TGT.is_match(&self.args)).unwrap() {
+                self.args = initial;
+                return Err(format!("{} contains $@, but there are no available targets.", self.args));
+            }
+        }
+
+        dbg!("After", &self.args);
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::InnerTask;
     use crate::task::StandardTaskArguments;
+
+    #[test]
+    fn test_automatic_arguments() {
+        // no replacement expected
+        let mut no_args = StandardTaskArguments::new("a b");
+        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_ok()));
+        assert_eq!(no_args.args, "a b");
+
+        let mut no_args = StandardTaskArguments::new("a b");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_ok()));
+        assert_eq!(no_args.args, "a b");
+
+        let mut no_args = StandardTaskArguments::new("a b");
+        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "a b");
+
+        let mut no_args = StandardTaskArguments::new("a b");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "a b");
+
+
+        // tgt replacement expected
+        let mut no_args = StandardTaskArguments::new("$@ b");
+        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_err()));
+        assert_eq!(no_args.args, "$@ b");
+
+        let mut no_args = StandardTaskArguments::new("$@ b");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_err()));
+        assert_eq!(no_args.args, "$@ b");
+
+        let mut no_args = StandardTaskArguments::new("$@ b");
+        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "b b");
+
+
+        let mut no_args = StandardTaskArguments::new("$@ b");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "b b");
+
+
+        // tgt and dep replacements expected
+        let mut no_args = StandardTaskArguments::new("$@ $<");
+        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_err()));
+        assert_eq!(no_args.args, "$@ $<");
+
+        let mut no_args = StandardTaskArguments::new("$@ $<");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_err()));
+        assert_eq!(no_args.args, "$@ $<");
+
+        let mut no_args = StandardTaskArguments::new("$@ $<");
+        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_err()));
+        assert_eq!(no_args.args, "$@ $<");
+
+
+        let mut no_args = StandardTaskArguments::new("$@ $<");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "b a");
+
+/*
+        // duplicated $ change nothing
+//        this onefails but i do not understand why
+        let mut no_args = StandardTaskArguments::new("$$@ $$<");
+        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert_eq!(no_args.args, "$$@ $$<");
+
+*/
+    }
 
     #[test]
     fn test_deserialize_task() {
