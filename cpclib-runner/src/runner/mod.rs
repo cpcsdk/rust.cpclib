@@ -9,5 +9,6 @@ pub mod fap;
 pub mod impdisc;
 pub mod martine;
 pub mod tracker;
+pub mod hspcompiler;
 
 pub use runner::{ExternRunner, Runner, RunnerWithClap};

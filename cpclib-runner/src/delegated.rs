@@ -604,7 +604,6 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
         if !cfg.is_cached() {
             o.emit_stdout("> Install application\n");
             let res = cfg.install(o);
-            dbg!(&res);
             if let Err(res) = res {
                 dbg!("Need to leave");
                 return Err(res);

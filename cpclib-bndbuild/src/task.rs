@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use fancy_regex::Regex;
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
@@ -44,6 +45,7 @@ pub enum InnerTask {
     Extern(StandardTaskArguments),
     Fap(StandardTaskArguments),
     Hideur(StandardTaskArguments),
+    HspCompiler(StandardTaskArguments),
     ImgConverter(StandardTaskArguments),
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
@@ -158,6 +160,8 @@ pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
 
+pub const HSPC_CMDS: &[&str] =&[HSPC_CMD, "hspc"];
+
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const MKDIR_CMDS: &[&str] = &["mkdir"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
@@ -189,6 +193,7 @@ impl Display for InnerTask {
             Self::Extern(s) => (EXTERN_CMDS[0], s),
             Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
+            Self::HspCompiler(s) => (HSPC_CMDS[0], s),
             Self::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
             Self::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Self::Martine(s) => (MARTINE_CMDS[0], s),
@@ -233,7 +238,7 @@ is_some_cmd!(
     disark, disc,
     echo, emuctrl, r#extern,
     fap,
-    hideur,
+    hideur,hspc,
     img2cpc, impdisc,
     martine, mkdir,
     orgams,
@@ -357,6 +362,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_impdisc_cmd(code) {
                     Ok(InnerTask::ImpDsk(std))
                 }
+                else if is_hspc_cmd(code) {
+                    Ok(InnerTask::HspCompiler(std))
+                }
                 else if is_martine_cmd(code) {
                     Ok(InnerTask::Martine(std))
                 }
@@ -445,6 +453,7 @@ impl InnerTask {
             | InnerTask::Echo(t)
             | InnerTask::Extern(t)
             | InnerTask::Hideur(t)
+            | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
@@ -470,6 +479,7 @@ impl InnerTask {
             | InnerTask::Extern(t)
             | InnerTask::Fap(t)
             | InnerTask::Hideur(t)
+            | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
             | InnerTask::ImpDsk(t)
             | InnerTask::BndBuild(t)
@@ -509,6 +519,7 @@ impl InnerTask {
             InnerTask::Extern(_) => false,
             InnerTask::Fap(..) => true,
             InnerTask::Hideur(_) => false,
+            InnerTask::HspCompiler(_) => false,
             InnerTask::ImgConverter(_) => false,
             InnerTask::ImpDsk(_) => false,
             InnerTask::Martine(t) => false,

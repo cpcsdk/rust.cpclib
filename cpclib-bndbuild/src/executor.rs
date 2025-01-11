@@ -7,6 +7,7 @@ use cpclib_runner::emucontrol::EmuControlledRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::fap::FAPVersion;
+use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
@@ -50,6 +51,7 @@ impl InnerTask {
             },
 
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
+            InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
 
@@ -117,6 +119,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
                 ImpDskVersion::default().get_command().to_owned()
+            )
+            .run(task.args(), observer)
+        },
+        InnerTask::HspCompiler(_) => {
+            DelegatedRunner::<E>::new(
+                task.configuration().unwrap(),
+                HspCompilerVersion::default().get_command().to_owned()
             )
             .run(task.args(), observer)
         },
