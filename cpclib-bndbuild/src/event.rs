@@ -336,11 +336,11 @@ impl BndBuilderDefaultObserver {
 
 impl EventObserver for BndBuilderDefaultObserver {
     fn emit_stdout(&self, s: &str) {
-        println!("{s}");
+        print!("{s}");
     }
 
     fn emit_stderr(&self, s: &str) {
-        eprintln!("{s}");
+        eprint!("{s}");
     }
 }
 
@@ -380,8 +380,8 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
                     eprintln!("[{tgt}]\t{line}")
                 }
             },
-            BndBuilderEvent::Stdout(s) => println!("{s}"),
-            BndBuilderEvent::Stderr(s) => println!("{s}")
+            BndBuilderEvent::Stdout(s) => print!("{s}"),
+            BndBuilderEvent::Stderr(s) => print!("{s}")
         }
     }
 }

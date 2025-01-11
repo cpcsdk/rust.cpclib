@@ -303,7 +303,7 @@ impl BndBuilder {
             });
         }
         else {
-            self.emit_stdout(format!("\t{} is already up to date", &p));
+            self.emit_stdout(format!("\t{} is already up to date\n", &p));
         }
 
         self.stop_rule(p);
