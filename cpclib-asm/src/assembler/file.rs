@@ -406,3 +406,7 @@ pub fn handle_source_encoding(_fname: &str, _content: &[u8]) -> Result<String, A
         "i have deactivated this stuff to speed up everything. Let's consider each source is UTF8!"
     )
 }
+
+
+
+// TODO add file saving functions and factorize code from other places

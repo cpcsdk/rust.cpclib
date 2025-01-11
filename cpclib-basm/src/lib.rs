@@ -22,9 +22,13 @@ use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::combinator::alt;
 use cpclib_common::winnow::Parser;
-use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
+use cpclib_disc::amsdos::{AmsdosError, AmsdosFile, AmsdosFileName, AmsdosHeader};
+use cpclib_disc::disc::Disc;
+use cpclib_disc::edsk::Head;
+use cpclib_disc::open_disc;
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
+use file::AnyFileNameOwned;
 
 use crate::embedded::EmbeddedFiles;
 
@@ -72,12 +76,14 @@ pub enum BasmError {
         msg: String
     },
 
-    InvalidArgument(String)
+    InvalidArgument(String),
+    AmsdosError(AmsdosError)
 }
 
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            BasmError::AmsdosError(e) => write!(f, "AmsdosError {}", e.to_string()),
             BasmError::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
             BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {
@@ -110,6 +116,12 @@ impl Display for BasmError {
 impl From<AssemblerError> for BasmError {
     fn from(error: AssemblerError) -> Self {
         BasmError::AssemblerError { error }
+    }
+}
+
+impl From<AmsdosError> for BasmError {
+    fn from(value: AmsdosError) -> Self {
+        BasmError::AmsdosError(value)
     }
 }
 
@@ -497,7 +509,11 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                     "[WARNING] You are saving a file with .sna extension without using --sna flag"
                 );
             }
-            let amsdos_filename = AmsdosFileName::try_from(pc_filename.as_str());
+
+
+            let any_fname: AnyFileNameOwned = AnyFileNameOwned::from(pc_filename.as_str());
+            let any_fname = any_fname.as_any_filename();
+            let amsdos_filename = AmsdosFileName::try_from(any_fname.content_filename());
 
             // Raise an error if the filename is not compatible with the header
             if (matches.get_flag("BINARY_HEADER") || matches.get_flag("BASIC_HEADER"))
@@ -509,7 +525,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
 
             // Compute the headers if needed
-            let header = if matches.get_flag("BINARY_HEADER") {
+            let header = if matches.get_flag("BINARY_HEADER") || any_fname.use_image()  {
                 AmsdosHeader::compute_binary_header(
                     &amsdos_filename.unwrap(),
                     env.loading_address().unwrap(),
@@ -528,27 +544,53 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 Vec::new()
             };
 
-            // Save file on disc
-            let mut f = File::create(pc_filename).map_err(|e| {
-                BasmError::Io {
-                    io: e,
-                    ctx: format!("creating \"{}\"", pc_filename)
+            if any_fname.use_image() { // BUG here we are not able to handle ASCII files. will do it only if needed
+                let disc_filename = any_fname.image_filename().unwrap();
+                let mut disc = open_disc(disc_filename, false).map_err(|msg| {
+                    AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg))
+                })?;
+
+                let head = Head::A;
+                let system = false;
+                let read_only = false;
+
+                let amsdos_file = AmsdosFile::from_header_and_buffer(AmsdosHeader::from_buffer(&header), &binary)?;
+                disc.add_amsdos_file(
+                    &amsdos_file,
+                    head,
+                    read_only,
+                    system,
+                    env.options().assemble_options().save_behavior()
+                )?;
+
+                disc.save(disc_filename).map_err(|e| {
+                    AssemblerError::AssemblingError {
+                        msg: format!("Error while saving {e}")
+                    }
+                })?;
+            } else {
+                // Save file on disc
+                let mut f = File::create(pc_filename).map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("creating \"{}\"", pc_filename)
+                    }
+                })?;
+                if !header.is_empty() {
+                    f.write_all(&header).map_err(|e| {
+                        BasmError::Io {
+                            io: e,
+                            ctx: format!("saving \"{}\"", pc_filename)
+                        }
+                    })?;
                 }
-            })?;
-            if !header.is_empty() {
-                f.write_all(&header).map_err(|e| {
+                f.write_all(&binary).map_err(|e| {
                     BasmError::Io {
                         io: e,
                         ctx: format!("saving \"{}\"", pc_filename)
                     }
                 })?;
             }
-            f.write_all(&binary).map_err(|e| {
-                BasmError::Io {
-                    io: e,
-                    ctx: format!("saving \"{}\"", pc_filename)
-                }
-            })?;
         }
     }
 
