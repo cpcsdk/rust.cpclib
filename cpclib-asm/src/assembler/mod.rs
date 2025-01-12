@@ -5026,7 +5026,12 @@ where
             )
         },
         Mnemonic::Ret => assemble_ret(arg1.as_ref()),
-        Mnemonic::Rst => assemble_rst(arg1.as_ref().unwrap(), env),
+        Mnemonic::Rst => if let Some(arg2) = arg2.as_ref() {
+            assemble_rst_fake(arg1.as_ref().unwrap(), arg2, env)
+        } else {
+            // normal RST
+            assemble_rst(arg1.as_ref().unwrap(), env)
+        },
         Mnemonic::Im => assemble_im(arg1.as_ref().unwrap(), env),
         Mnemonic::Nop => {
             env.assemble_nop(
@@ -5223,6 +5228,39 @@ fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, AssemblerE
     }
 
     Ok(bytes)
+}
+
+
+fn assemble_rst_fake<D: DataAccessElem>(arg1: &D, arg2: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
+where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+
+    let val = env
+        .resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?
+        .int()?;
+
+    let _p = match val {
+        0x38 | 7 | 38 => 0b111,
+        _ => {
+            return Err(AssemblerError::InvalidArgument {
+                msg: format!("Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.", val)
+            })
+        },
+    };
+
+    let flag = arg1.get_flag_test().unwrap();
+    if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {
+        return Err(AssemblerError::InvalidArgument {
+            msg: format!("Conditionnal RST cannot take {} as flag. Expected values are C|NC|Z|NZ.", flag)
+        })
+    }
+
+    assemble_opcode(
+        Mnemonic::Jr, 
+        &Some(DataAccess::from(flag)), 
+        &Some(DataAccess::from( Expr::Label("$".into()).add(Expr::Value(1)) )), 
+        &None, 
+        env)
+
 }
 
 fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &Env) -> Result<Bytes, AssemblerError>

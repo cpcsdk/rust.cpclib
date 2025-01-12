@@ -39,3 +39,9 @@
 	SRL B : RR C : RL B : RRC B
 	SRL D : RR E : RL D : RRC D
 	SRL H : RR L : RL H : RRC H
+
+
+	JR Z,$+1
+	JR NZ,$+1
+	JR C,$+1
+	JR NC,$+1

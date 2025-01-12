@@ -2261,7 +2261,11 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
             parse_shifts_and_rotations(Mnemonic::Rr),
             parse_shifts_and_rotations_fake(Mnemonic::Rr),
         )).parse_next(input),
-        choice_nocase!(b"RST") => parse_rst.parse_next(input),
+        choice_nocase!(b"RST") => {
+                alt((
+                parse_rst_fake, parse_rst
+            )).parse_next(input)
+        },
 
         choice_nocase!(b"SBC") => parse_sbc.parse_next(input),
         choice_nocase!(b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
@@ -4755,6 +4759,38 @@ pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
         None
     ))
 }
+
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+
+    let (flag, _, val) = (
+        parse_flag_test
+            .verify(|t| t == &FlagTest::Z || t == &FlagTest::NZ ||t == &FlagTest::C || t == &FlagTest::NC)
+            .with_taken(),
+        parse_comma,
+        parse_expr
+    ).parse_next(input)?;
+
+
+    let flag = {
+        let span = (*input).update_slice(flag.1);
+        LocatedDataAccess::FlagTest(flag.0, span.into())
+    };
+
+    let token = LocatedTokenInner::new_opcode(
+        Mnemonic::Rst,
+        Some(flag.into()),
+        Some(val)
+    );
+    let warning = LocatedTokenInner::WarningWrapper(
+        Box::new(token),
+        "This is a fake instruction assembled using several opcodes".into()
+    );
+
+    Ok(warning)
+}
+
 
 /// Parse the IM instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]

@@ -38,3 +38,9 @@
 	RRC BC 
 	RRC DE
 	RRC HL
+
+
+	RST Z,#38
+	RST NZ,#38
+	RST C,#38
+	RST NC,#38
