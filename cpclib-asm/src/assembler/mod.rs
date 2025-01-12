@@ -5616,6 +5616,38 @@ impl Env {
             } + register8_to_code(reg);
             add_byte(&mut bytes, byte);
         }
+        else if target.is_register16() {
+            // here we handle a fake instruction
+            let reg16 = target.get_register16().unwrap();
+            let opcodes: &[(Mnemonic, Option<Register8>)] = match mne {
+                Mnemonic::Srl => &[ (Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
+                Mnemonic::Sra => &[ (Mnemonic::Sra, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
+                Mnemonic::Sl1 => &[ (Mnemonic::Sl1, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
+                Mnemonic::Sla => &[ (Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
+                Mnemonic::Rr => &[ (Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
+                Mnemonic::Rl => &[ (Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
+                Mnemonic::Rlc => &[ 
+                    (Mnemonic::Sla, reg16.high()), 
+                    (Mnemonic::Rl, reg16.low()),
+                    (Mnemonic::Rr, reg16.high()),
+                    (Mnemonic::Rlc, reg16.high()),
+                ],
+                Mnemonic::Rrc => &[
+                    (Mnemonic::Srl, reg16.high()), 
+                    (Mnemonic::Rr, reg16.low()),
+                    (Mnemonic::Rl, reg16.high()),
+                    (Mnemonic::Rrc, reg16.high()),
+                ],
+
+                _ => unreachable!()
+            };
+
+            for  instruction in opcodes.into_iter().map(|op|{
+                Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None)
+            }) {
+                instruction.visited(self)?;
+            }
+        }
         else {
             assert!(target.is_address_in_register16() || target.is_indexregister_with_index());
 

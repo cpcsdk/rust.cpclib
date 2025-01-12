@@ -554,34 +554,25 @@ impl StandardTaskArguments {
         static RE_FIRST_DEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
         static RE_FIRST_TGT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
 
-        dbg!("Before", &self.args, &RE_FIRST_DEP, &first_dep, &RE_FIRST_TGT, &first_tgt);
-
         let initial = self.args.clone();
 
         if let Some(first_dep) = first_dep {
-            dbg!(&self.args, &RE_FIRST_DEP, first_dep.as_str());
             self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep.as_str()).into_owned();
         } else {
-            dbg!(&RE_FIRST_DEP, "$<", &self.args);
-            if dbg!(RE_FIRST_DEP.is_match(&self.args)).unwrap() {
+            if RE_FIRST_DEP.is_match(&self.args).unwrap() {
                 self.args = initial;
                 return Err(format!("{} contains $<, but there are no available dependencies.", self.args));
             }
         }
 
         if let Some(first_tgt) = first_tgt {
-            dbg!(&self.args, &RE_FIRST_TGT, first_tgt.as_str());
             self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt.as_str()).into_owned();
         } else {
-            dbg!(&RE_FIRST_TGT, "$@", &self.args);
-            if dbg!(RE_FIRST_TGT.is_match(&self.args)).unwrap() {
+            if RE_FIRST_TGT.is_match(&self.args).unwrap() {
                 self.args = initial;
                 return Err(format!("{} contains $@, but there are no available targets.", self.args));
             }
         }
-
-        dbg!("After", &self.args);
-
         Ok(())
     }
 }

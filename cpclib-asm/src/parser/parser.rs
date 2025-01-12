@@ -2245,19 +2245,43 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 
         choice_nocase!(b"RES") => parse_res_set_bit(Mnemonic::Res).parse_next(input),
         choice_nocase!(b"RET") => parse_ret.parse_next(input),
-        choice_nocase!(b"RLC") => parse_shifts_and_rotations(Mnemonic::Rlc).parse_next(input),
-        choice_nocase!(b"RL") => parse_shifts_and_rotations(Mnemonic::Rl).parse_next(input),
-        choice_nocase!(b"RRC") => parse_shifts_and_rotations(Mnemonic::Rrc).parse_next(input),
-        choice_nocase!(b"RR") => parse_shifts_and_rotations(Mnemonic::Rr).parse_next(input),
+        choice_nocase!(b"RLC") => alt((
+            parse_shifts_and_rotations(Mnemonic::Rlc),
+            parse_shifts_and_rotations_fake(Mnemonic::Rlc)
+        )).parse_next(input),
+        choice_nocase!(b"RL") => alt((
+            parse_shifts_and_rotations(Mnemonic::Rl),
+            parse_shifts_and_rotations_fake(Mnemonic::Rl)
+        )).parse_next(input),
+        choice_nocase!(b"RRC") => alt((
+            parse_shifts_and_rotations(Mnemonic::Rrc),
+            parse_shifts_and_rotations_fake(Mnemonic::Rrc)
+        )).parse_next(input),
+        choice_nocase!(b"RR") => alt((
+            parse_shifts_and_rotations(Mnemonic::Rr),
+            parse_shifts_and_rotations_fake(Mnemonic::Rr),
+        )).parse_next(input),
         choice_nocase!(b"RST") => parse_rst.parse_next(input),
 
         choice_nocase!(b"SBC") => parse_sbc.parse_next(input),
         choice_nocase!(b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
         choice_nocase!(b"SL") /*1*/  => cut_err(preceded(('1', my_space1), parse_shifts_and_rotations(Mnemonic::Sl1))).parse_next(input),
-        choice_nocase!(b"SLA") => parse_shifts_and_rotations(Mnemonic::Sla).parse_next(input),
-        choice_nocase!(b"SLL") => parse_shifts_and_rotations(Mnemonic::Sl1).parse_next(input),
-        choice_nocase!(b"SRA") => parse_shifts_and_rotations(Mnemonic::Sra).parse_next(input),
-        choice_nocase!(b"SRL") => parse_shifts_and_rotations(Mnemonic::Srl).parse_next(input),
+        choice_nocase!(b"SLA") => alt((
+            parse_shifts_and_rotations(Mnemonic::Sla),
+            parse_shifts_and_rotations_fake(Mnemonic::Sla),
+        )).parse_next(input),
+        choice_nocase!(b"SLL") => alt((
+            parse_shifts_and_rotations(Mnemonic::Sl1),
+            parse_shifts_and_rotations_fake(Mnemonic::Sl1),
+        )).parse_next(input),
+        choice_nocase!(b"SRA") => alt((
+            parse_shifts_and_rotations(Mnemonic::Sra),
+            parse_shifts_and_rotations_fake(Mnemonic::Sra)
+        )).parse_next(input),
+        choice_nocase!(b"SRL") => alt((
+            parse_shifts_and_rotations(Mnemonic::Srl),
+            parse_shifts_and_rotations_fake(Mnemonic::Srl),
+        )).parse_next(input),
         choice_nocase!(b"SUB") => parse_sub.parse_next(input),
 
         choice_nocase!(b"XOR") => parse_logical_operator(Mnemonic::Xor).parse_next(input),
@@ -4773,6 +4797,30 @@ pub fn parse_shifts_and_rotations(
         let arg2 = opt(preceded(parse_comma, parse_register8)).parse_next(input)?;
 
         Ok(LocatedTokenInner::new_opcode(oper, Some(arg), arg2))
+    }
+}
+
+pub fn parse_shifts_and_rotations_fake(
+    oper: Mnemonic
+)  -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+
+        let _start = *input;
+        let arg = alt((
+            parse_register16,
+        ))
+        .parse_next(input)?;
+
+
+        let token = LocatedTokenInner::new_opcode(oper, Some(arg), None);
+        let warning = LocatedTokenInner::WarningWrapper(
+            Box::new(token),
+            "This is a fake instruction assembled using several opcodes".into()
+        );
+
+
+        Ok(warning)
+
     }
 }
 
