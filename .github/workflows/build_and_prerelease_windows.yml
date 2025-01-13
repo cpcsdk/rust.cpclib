@@ -42,5 +42,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: "target/release/*.exe"
+          artifacts: "target/release/*.exe target/release/bundle/nsis/*.exe"
   
