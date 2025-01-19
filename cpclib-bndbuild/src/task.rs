@@ -292,7 +292,7 @@ impl<'de> Deserialize<'de> for InnerTask {
                     Ok(InnerTask::Emulator(Emulator::new_winape_default(), std))
                 }
                 else if is_emuctrl_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_controlled_access(), std))
+                    Ok(InnerTask::Emulator(Emulator::new_facade(), std))
                 }
                 else if is_basm_cmd(code) {
                     Ok(InnerTask::Assembler(Assembler::Basm, std))

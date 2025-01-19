@@ -1298,12 +1298,12 @@ pub enum Commands {
 
 pub const EMUCTRL_CMD: &str = "cpc";
 
-pub struct EmuControlledRunner<E: EventObserver> {
+pub struct EmulatorFacadeRunner<E: EventObserver> {
     command: Command,
     _phantom: PhantomData<E>
 }
 
-impl<E: EventObserver> Default for EmuControlledRunner<E> {
+impl<E: EventObserver> Default for EmulatorFacadeRunner<E> {
     fn default() -> Self {
         Self {
             command: EmuCli::command(),
@@ -1312,15 +1312,18 @@ impl<E: EventObserver> Default for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver> Runner for EmuControlledRunner<E> {
+impl<E: EventObserver> Runner for EmulatorFacadeRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
-        itr.insert(0, "cpc");
-        let cli = EmuCli::parse_from(itr);
+        itr.insert(0, EMUCTRL_CMD);
+        dbg!(&itr);
+        dbg!("ici");
+        let cli = dbg!(EmuCli::parse_from(itr));
+        dbg!("la");
 
-        handle_arguments(cli, o)
+        handle_arguments(dbg!(cli), o)
     }
 
     fn get_command(&self) -> &str {
@@ -1328,13 +1331,16 @@ impl<E: EventObserver> Runner for EmuControlledRunner<E> {
     }
 }
 
-impl<E: EventObserver + 'static> RunnerWithClap for EmuControlledRunner<E> {
+impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+
+    dbg!(&cli);
+
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;

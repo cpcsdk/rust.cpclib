@@ -17,7 +17,7 @@ impl FAPVersion {
 }
 
 cfg_match! {
-    cfg(target_os = "linux") =>
+    target_os = "linux" =>
     {
         impl FAPVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
@@ -33,7 +33,7 @@ cfg_match! {
             }
         }
     }
-    cfg(target_os = "windows") =>
+    target_os = "windows" =>
     {
         impl FAPVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
@@ -50,7 +50,7 @@ cfg_match! {
         }
 
     }
-    cfg(target_os = "macos") =>
+    target_os = "macos" =>
     {
 
     }

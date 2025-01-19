@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cpclib_runner::delegated::{
     DelegateApplicationDescription, DelegatedRunner, GithubCompilableApplication
 };
-use cpclib_runner::emucontrol::EmuControlledRunner;
+use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::fap::FAPVersion;
@@ -33,11 +33,11 @@ impl InnerTask {
         match self {
             InnerTask::Emulator(e, _) => {
                 match e {
-                    crate::runners::emulator::Emulator::DirectAccess(e) => {
+                    crate::runners::emulator::Emulator::EmulatorProxy(e) => {
                         let conf: DelegateApplicationDescription<E> = e.configuration();
                         Some(conf)
                     },
-                    crate::runners::emulator::Emulator::ControlledAccess => None
+                    crate::runners::emulator::Emulator::EmulatorFacade => None
                 }
             },
 
@@ -70,15 +70,15 @@ pub fn execute<E: BndBuilderObserver + 'static>(
     match task {
         InnerTask::Emulator(e, _) => {
             match e {
-                crate::runners::emulator::Emulator::DirectAccess(e) => {
+                crate::runners::emulator::Emulator::EmulatorProxy(e) => {
                     DelegatedRunner::<E>::new(
                         task.configuration::<E>().unwrap(),
                         e.get_command().to_owned()
                     )
                     .run(task.args(), observer)
                 },
-                crate::runners::emulator::Emulator::ControlledAccess => {
-                    EmuControlledRunner::default().run(task.args(), observer)
+                crate::runners::emulator::Emulator::EmulatorFacade => {
+                    EmulatorFacadeRunner::default().run(task.args(), observer)
                 },
             }
         },

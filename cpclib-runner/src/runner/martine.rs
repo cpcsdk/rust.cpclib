@@ -16,7 +16,7 @@ impl MartineVersion {
 }
 
 cfg_match! {
-    cfg(target_os = "linux") =>
+    target_os = "linux" =>
     {
         impl MartineVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
@@ -32,7 +32,7 @@ cfg_match! {
             }
         }
     }
-    cfg(target_os = "windows") =>
+    target_os = "windows" =>
     {
         impl MartineVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
@@ -49,7 +49,7 @@ cfg_match! {
         }
 
     }
-    cfg(target_os = "macos") =>
+    target_os = "macos" =>
     {
 
     }

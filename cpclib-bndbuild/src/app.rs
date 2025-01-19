@@ -12,7 +12,7 @@ use cpclib_basm::build_args_parser;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::delegated::base_cache_folder;
-use cpclib_runner::emucontrol::EmuControlledRunner;
+use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::runner::RunnerWithClap;
 
 use crate::event::{
@@ -363,7 +363,7 @@ impl BndBuilderCommand {
     /// TODO strenghten the help search by testing more keywords
     fn execute_help<O: BndBuilderObserver + 'static>(runner: &str, observers: &Arc<O>) {
         let help = if is_emuctrl_cmd(runner) {
-            EmuControlledRunner::<()>::render_help()
+            EmulatorFacadeRunner::<()>::render_help()
         }
         else if is_basm_cmd(runner) {
             BasmRunner::<()>::render_help()
