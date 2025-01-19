@@ -93,6 +93,9 @@ where Self: Debug + Sized + Sync
     fn for_stop(&self) -> &Self::Expr;
     fn for_step(&self) -> Option<&Self::Expr>;
 
+    fn is_repeat_token(&self) -> bool;
+    fn repeat_token(&self) -> &Self;
+
     fn is_repeat_until(&self) -> bool;
     fn repeat_until_listing(&self) -> &[Self];
     fn repeat_until_condition(&self) -> &Self::Expr;

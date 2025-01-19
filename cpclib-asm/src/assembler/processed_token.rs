@@ -65,6 +65,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Module(SimpleListingState<'token, T>),
+    RepeatToken(SingleTokenState<'token, T>, &'token <T as ListingElement>::Expr),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>),
     While(SimpleListingState<'token, T>),
@@ -76,6 +77,11 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
 struct IncbinState {
     contents: BTreeMap<Utf8PathBuf, Vec<u8>>
+}
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+struct SingleTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
+    token: Box<ProcessedToken<'token, T>>,
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -558,6 +564,12 @@ where
             span: token.possible_span().cloned()
         }))
     }
+    else if token.is_repeat_token() {
+        Some(ProcessedTokenState::RepeatToken(SingleTokenState {
+            token: Box::new(build_processed_token(token.repeat_token(), env)?)
+            
+        }, token.repeat_count()))
+    }
     else if token.is_assembler_control()
         && token
             .assembler_control_command()
@@ -939,6 +951,13 @@ where
                             self.token.for_step(),
                             processed_tokens,
                             span.as_ref()
+                        )
+                    },
+
+                    Some(ProcessedTokenState::RepeatToken(state, count)) => {
+                        env.visit_repeat_token(
+                            &mut state.token,
+                            count,
                         )
                     },
 

@@ -4094,6 +4094,29 @@ impl Env {
         Ok(())
     }
 
+
+    /// Handle the repetition of single opcode
+    pub fn visit_repeat_token<'token, T, E>(
+        &mut self,
+        opcode: &mut ProcessedToken<'token, T>,
+        count: &E,
+    )  -> Result<(), AssemblerError> 
+    where 
+    E: ExprEvaluationExt,
+        T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt,
+            ProcessedToken<'token, T>: FunctionBuilder
+    {
+        let repeat = self.resolve_expr_must_never_fail(count)?;
+        let repeat = repeat.int()?;
+        for _ in (0..repeat) {
+            opcode.visited(self)?;
+        }
+        Ok(())
+    }
+
     /// Handle the standard repetition directive
     pub fn visit_repeat<'token, T, E>(
         &mut self,

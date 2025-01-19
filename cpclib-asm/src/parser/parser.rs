@@ -5420,7 +5420,9 @@ pub fn parse_nop(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
-    let token = preceded(
+    let input_start = input.checkpoint();
+
+    let token: LocatedToken = preceded(
         my_space0,
         alpha1.verify_map(|word: &[u8]| {
             match word {
@@ -5470,6 +5472,39 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
         LocatedTokenInner::OpCode(mne, None, None, None).into_located_token_at(span)
     })
     .parse_next(input)?;
+
+
+    // http://rasm.wikidot.com/directives:repete
+    // Some instructions may have repeated counts, so we modify them
+    let token: LocatedToken = match & token.inner.as_ref().left().unwrap() {
+        LocatedTokenInner::OpCode( Mnemonic::Ldi | Mnemonic::Ldd |
+            Mnemonic::Rlca | Mnemonic::Rrca |
+            Mnemonic::Ini | Mnemonic::Ind |
+            Mnemonic::Outi | Mnemonic::Outd |
+            Mnemonic:: Halt, 
+            located_data_access, 
+            located_data_access1, 
+            register8) => {
+                debug_assert!(located_data_access.is_none());
+                debug_assert!(located_data_access1.is_none());
+                debug_assert!(register8.is_none());
+
+                let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
+                if let Some(repeat) = repeat {
+                    LocatedTokenInner::RepeatToken{
+                        token: Box::new(token), 
+                        repeat: repeat
+                    }.into_located_token_between(&input_start, *input)
+                } else {
+                    token
+                }
+            },
+   
+        _ => {
+            token
+        }   
+    };
+
 
     Ok(token)
 }

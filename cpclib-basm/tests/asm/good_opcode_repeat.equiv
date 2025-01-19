@@ -1,0 +1,10 @@
+ repeat 2: LDI  : endr
+ repeat 3: LDD : endr
+ repeat 4: RLCA : endr
+ repeat 3: RRCA : endr
+ repeat 2: NOP : endr
+ repeat 3: INI : endr
+ repeat 4: IND : endr
+ repeat 3: OUTI : endr
+ repeat 2: OUTD : endr
+ repeat 3: HALT : endr

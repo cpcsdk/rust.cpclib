@@ -19,6 +19,22 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn is_repeat_token(&self) -> bool {
+            match self {
+                Self::RepeatToken { .. } => true,
+                _ => false
+            }
+        }
+
+        #[inline]
+        fn repeat_token(&self) -> &Self {
+            match self {
+                Self::RepeatToken{token, ..} => token,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
         fn is_save(&self) -> bool {
             match self {
                 Self::Save { .. } => true,
@@ -428,6 +444,7 @@ macro_rules! listing_element_impl_most_methods {
         fn repeat_count(&self) -> &Self::Expr {
             match self {
                 Self::Repeat(e, ..) => e,
+                Self::RepeatToken{repeat, ..} => repeat,
                 _ => unreachable!()
             }
         }

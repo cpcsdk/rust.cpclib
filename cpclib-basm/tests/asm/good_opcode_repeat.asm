@@ -1,0 +1,10 @@
+ LDI  2
+ LDD 3 
+ RLCA 4
+ RRCA 3
+ NOP 2
+ INI 3
+ IND 4
+ OUTI 3
+ OUTD 2
+ HALT 3
