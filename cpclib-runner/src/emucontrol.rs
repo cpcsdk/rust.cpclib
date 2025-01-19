@@ -908,8 +908,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
-        dbg!(&action);
-
         self.unidos_select_drive(drivea, albireo);
         let mut res;
 
@@ -925,13 +923,10 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
         .map_err(|screen| (format!("Error while loading {}", src), screen));
 
-        dbg!(&res);
         // if file has been loaded, handle next action
         if res.is_ok() {
             // need to update res
             res = {
-                dbg!(action.save_orgams_binary_source());
-
                 if action.edit() {
                     dbg!("edit requested");
                     // No need to do more when we want to edit a file
@@ -939,7 +934,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 }
                 else {
                     if let Some(dst) = action.save_orgams_binary_source() {
-                        dbg!(dst);
                         self.orgams_save_source(dst)
                             .map_err(|screen| ("Error while saving sources".to_string(), screen))
                     }
@@ -1318,12 +1312,9 @@ impl<E: EventObserver> Runner for EmulatorFacadeRunner<E> {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
         itr.insert(0, EMUCTRL_CMD);
-        dbg!(&itr);
-        dbg!("ici");
-        let cli = dbg!(EmuCli::parse_from(itr));
-        dbg!("la");
+        let cli = EmuCli::try_parse_from(itr).map_err(|e| e.to_string())?;
 
-        handle_arguments(dbg!(cli), o)
+        handle_arguments(cli, o)
     }
 
     fn get_command(&self) -> &str {
@@ -1338,8 +1329,6 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
-
-    dbg!(&cli);
 
     if cli.clear_cache {
         clear_base_cache_folder()
