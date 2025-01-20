@@ -6067,13 +6067,13 @@ where
     else if arg1.is_address_in_indexregister16() {
         let dst = arg1.get_indexregister16().unwrap();
         add_index_register_code(&mut bytes, dst);
-        add_byte(&mut bytes, indexed_register16_to_code(dst));
 
         if arg2.is_register8() {
             let src = arg2.get_register8().unwrap();
             let src = register8_to_code(src);
             let code = 0b0111_0000 | src;
             bytes.push(code);
+            bytes.push(0);
         }
         else if arg2.is_expression() {
             let exp = arg2.get_expression().unwrap();
@@ -6119,12 +6119,12 @@ where
         if arg2.is_indexregister16() {
             match arg2.get_indexregister16().unwrap() {
                 IndexRegister16::Ix => {
-                    bytes.push(0xDD);
+                    bytes.push(DD);
                     bytes.push(0b0010_0010);
                     add_word(&mut bytes, address as _);
                 },
                 IndexRegister16::Iy => {
-                    bytes.push(0xFD);
+                    bytes.push(FD);
                     bytes.push(0b0010_0010);
                     add_word(&mut bytes, address as _);
                 }
@@ -7064,7 +7064,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(res.as_ref(), &[0xDD, 0xCB, 3, 0b10010110]);
+        assert_eq!(res.as_ref(), &[DD, 0xCB, 3, 0b10010110]);
 
         let env = Env::default();
         let res = assemble_bit_res_or_set(
@@ -7076,7 +7076,7 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(res.as_ref(), &[0xDD, 0xCB, 3, 0b10010000]);
+        assert_eq!(res.as_ref(), &[DD, 0xCB, 3, 0b10010000]);
     }
 
     #[test]
