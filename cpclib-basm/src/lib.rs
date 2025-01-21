@@ -510,7 +510,6 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 );
             }
 
-
             let any_fname: AnyFileNameOwned = AnyFileNameOwned::from(pc_filename.as_str());
             let any_fname = any_fname.as_any_filename();
             let amsdos_filename = AmsdosFileName::try_from(any_fname.content_filename());
@@ -525,7 +524,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
 
             // Compute the headers if needed
-            let header = if matches.get_flag("BINARY_HEADER") || any_fname.use_image()  {
+            let header = if matches.get_flag("BINARY_HEADER") || any_fname.use_image() {
                 AmsdosHeader::compute_binary_header(
                     &amsdos_filename.unwrap(),
                     env.loading_address().unwrap(),
@@ -544,7 +543,8 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 Vec::new()
             };
 
-            if any_fname.use_image() { // BUG here we are not able to handle ASCII files. will do it only if needed
+            if any_fname.use_image() {
+                // BUG here we are not able to handle ASCII files. will do it only if needed
                 let disc_filename = any_fname.image_filename().unwrap();
                 let mut disc = open_disc(disc_filename, false).map_err(|msg| {
                     AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg))
@@ -554,7 +554,10 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 let system = false;
                 let read_only = false;
 
-                let amsdos_file = AmsdosFile::from_header_and_buffer(AmsdosHeader::from_buffer(&header), &binary)?;
+                let amsdos_file = AmsdosFile::from_header_and_buffer(
+                    AmsdosHeader::from_buffer(&header),
+                    &binary
+                )?;
                 disc.add_amsdos_file(
                     &amsdos_file,
                     head,
@@ -568,7 +571,8 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                         msg: format!("Error while saving {e}")
                     }
                 })?;
-            } else {
+            }
+            else {
                 // Save file on disc
                 let mut f = File::create(pc_filename).map_err(|e| {
                     BasmError::Io {

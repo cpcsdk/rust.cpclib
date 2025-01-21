@@ -407,6 +407,4 @@ pub fn handle_source_encoding(_fname: &str, _content: &[u8]) -> Result<String, A
     )
 }
 
-
-
 // TODO add file saving functions and factorize code from other places

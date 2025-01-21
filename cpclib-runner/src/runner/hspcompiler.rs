@@ -13,9 +13,8 @@ pub enum HspCompilerVersion {
     V_2_0 // V2_2_5
 }
 
-
 impl HspCompilerVersion {
-	pub fn get_command(&self) -> &str {
+    pub fn get_command(&self) -> &str {
         HSPC_CMD
     }
 }
