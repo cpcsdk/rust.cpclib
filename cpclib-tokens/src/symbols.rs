@@ -759,15 +759,15 @@ pub struct ValueLocation {
     location: Option<Location>
 }
 
-impl Into<Value> for ValueLocation {
-    fn into(self) -> Value {
-        self.value
+impl From<ValueLocation> for Value {
+    fn from(val: ValueLocation) -> Self {
+        val.value
     }
 }
 
-impl Into<evalexpr::Value> for ValueLocation {
-    fn into(self) -> evalexpr::Value {
-        self.value.into()
+impl From<ValueLocation> for evalexpr::Value {
+    fn from(val: ValueLocation) -> Self {
+        val.value.into()
     }
 }
 
@@ -778,9 +778,9 @@ impl From<expression::ExprResult> for ValueLocation {
     }
 }
 
-impl Into<Option<Location>> for ValueLocation {
-    fn into(self) -> Option<Location> {
-        self.location
+impl From<ValueLocation> for Option<Location> {
+    fn from(val: ValueLocation) -> Self {
+        val.location
     }
 }
 
@@ -811,10 +811,10 @@ impl ValueLocation {
     }
 }
 
-impl Into<ValueLocation> for Value {
-    fn into(self) -> ValueLocation {
+impl From<Value> for ValueLocation {
+    fn from(val: Value) -> Self {
         ValueLocation{
-            value: self,
+            value: val,
             location: None
         }
     }
@@ -1441,7 +1441,7 @@ impl SymbolsTable {
 
         let value = value.into();
         self.current_pass_map.insert(symbol.clone(), value.clone());
-        Ok(self.map.insert(symbol, value.into()))
+        Ok(self.map.insert(symbol, value))
     }
 
 

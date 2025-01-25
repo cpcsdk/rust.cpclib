@@ -4780,7 +4780,7 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 
     let token = LocatedTokenInner::new_opcode(
         Mnemonic::Rst,
-        Some(flag.into()),
+        Some(flag),
         Some(val)
     );
     let warning = LocatedTokenInner::WarningWrapper(
@@ -5489,11 +5489,11 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
                 debug_assert!(located_data_access1.is_none());
                 debug_assert!(register8.is_none());
 
-                let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
+                let repeat = opt(preceded(my_space1, located_expr)).parse_next(input)?;
                 if let Some(repeat) = repeat {
                     LocatedTokenInner::RepeatToken{
                         token: Box::new(token), 
-                        repeat: repeat
+                        repeat
                     }.into_located_token_between(&input_start, *input)
                 } else {
                     token

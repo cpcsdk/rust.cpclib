@@ -94,7 +94,7 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
                 continue;
             }
 
-            match v {
+            match v.value() {
                 Value::Expr(expr) => {
                     if expr.is_int() {
                         address_to_label.insert(v.integer().unwrap() as u16, s.value());

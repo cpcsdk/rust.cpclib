@@ -83,7 +83,7 @@ pub enum BasmError {
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BasmError::AmsdosError(e) => write!(f, "AmsdosError {}", e.to_string()),
+            BasmError::AmsdosError(e) => write!(f, "AmsdosError {}", e),
             BasmError::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
             BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
             BasmError::InvalidAmsdosFilename { filename } => {

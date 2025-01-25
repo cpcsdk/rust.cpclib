@@ -63,7 +63,7 @@ fn main() {
 
     let code = std::thread::Builder::new()
         .stack_size(1024 * 1024 * 1024)
-        .spawn(|| basm())
+        .spawn(basm)
         .unwrap()
         .join()
         .unwrap();

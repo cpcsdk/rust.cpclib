@@ -1,3 +1,5 @@
+use cpclib_asm::ValueLocation;
+
 use crate::preamble::*;
 use crate::z80::*;
 
@@ -11,7 +13,7 @@ impl Z80 {
         let pc = self.pc().value() as i32;
         self.context
             .symbols_mut()
-            .set_symbol_to_value("$", pc)
+            .set_symbol_to_value("$", ValueLocation::new_unlocated(pc))
             .unwrap();
 
         match opcode {
@@ -487,7 +489,7 @@ mod test {
     fn jp_symbol() {
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
-        symbols.set_symbol_to_value("LABEL", 0x4000u16);
+        symbols.set_symbol_to_value("LABEL", Value::from(0x4000u16));
         z80.setup_symbol_table(&symbols);
 
         z80.pc_mut().set(0x4000);

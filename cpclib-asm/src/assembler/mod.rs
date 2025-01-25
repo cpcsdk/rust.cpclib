@@ -2399,7 +2399,7 @@ impl Env {
         
 
         self.symbols_mut()
-            .set_symbol_to_value(name.as_str(), ValueLocation::new(r#struct, span.clone()))?;
+            .set_symbol_to_value(name.as_str(), ValueLocation::new(r#struct, span))?;
 
         Ok(())
     }
@@ -4125,7 +4125,7 @@ impl Env {
     {
         let repeat = self.resolve_expr_must_never_fail(count)?;
         let repeat = repeat.int()?;
-        for _ in (0..repeat) {
+        for _ in 0..repeat {
             opcode.visited(self)?;
         }
         Ok(())
@@ -5719,7 +5719,7 @@ impl Env {
                 _ => unreachable!()
             };
 
-            for  instruction in opcodes.into_iter().map(|op|{
+            for  instruction in opcodes.iter().map(|op|{
                 Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None)
             }) {
                 instruction.visited(self)?;

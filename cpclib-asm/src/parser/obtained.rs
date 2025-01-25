@@ -1335,7 +1335,7 @@ impl ListingElement for LocatedToken {
     fn repeat_token(&self) -> &Self {
         match &self.inner {
             either::Left(LocatedTokenInner::RepeatToken{token, ..}) => {
-                &token
+                token
             },
             _ => unreachable!()
         }
@@ -1819,7 +1819,7 @@ impl MayHaveSpan for Z80Span {
     }
 
     fn possible_span(&self) -> Option<&Z80Span> {
-        Some(&self)
+        Some(self)
     }
 
     fn span(&self) -> &Z80Span {

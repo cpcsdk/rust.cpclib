@@ -787,7 +787,7 @@ impl OrgamsRobotAction<'_, '_> {
     pub fn dst(&self) -> Option<&str> {
         match self {
             OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } => Some(tgt),
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => tgt.clone(),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => *tgt,
             _ => None
         }
     }
@@ -815,7 +815,7 @@ impl OrgamsRobotAction<'_, '_> {
 
     pub fn save_orgams_binary(&self) -> Option<Option<&str>> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(tgt.clone()),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(*tgt),
             _ => None
         }
     }
@@ -932,28 +932,26 @@ impl<E: UsedEmulator> RobotImpl<E> {
                     // No need to do more when we want to edit a file
                     Ok(())
                 }
+                else if let Some(dst) = action.save_orgams_binary_source() {
+                    self.orgams_save_source(dst)
+                        .map_err(|screen| ("Error while saving sources".to_string(), screen))
+                }
                 else {
-                    if let Some(dst) = action.save_orgams_binary_source() {
-                        self.orgams_save_source(dst)
-                            .map_err(|screen| ("Error while saving sources".to_string(), screen))
-                    }
-                    else {
-                        // we want to assemble the file
-                        self.orgams_assemble(src)
-                            .map_err(|screen| ("Error while assembling".to_string(), screen))
-                            .and_then(|_| {
-                                if action.jump() {
-                                    self.orgams_jump().map_err(|screen| {
-                                        ("Error while jumping".to_string(), screen)
-                                    })
-                                }
-                                else {
-                                    self.orgams_save(action.dst()).map_err(|screen| {
-                                        ("Error while saving binary".to_string(), screen)
-                                    })
-                                }
-                            })
-                    }
+                    // we want to assemble the file
+                    self.orgams_assemble(src)
+                        .map_err(|screen| ("Error while assembling".to_string(), screen))
+                        .and_then(|_| {
+                            if action.jump() {
+                                self.orgams_jump().map_err(|screen| {
+                                    ("Error while jumping".to_string(), screen)
+                                })
+                            }
+                            else {
+                                self.orgams_save(action.dst()).map_err(|screen| {
+                                    ("Error while saving binary".to_string(), screen)
+                                })
+                            }
+                        })
                 }
             }
         };
