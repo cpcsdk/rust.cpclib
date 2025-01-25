@@ -1156,12 +1156,12 @@ where
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })
                             .map_err(|e| {
-                                let e = AssemblerError::MacroError {
+                                let e = dbg!(AssemblerError::MacroError {
                                     name: name.into(),
                                     root: Box::new(e),
                                     location: env.symbols().value(name).unwrap().unwrap().location().cloned()
 
-                                };
+                                });
                                 let caller_span = self.possible_span();
                                 match caller_span {
                                     Some(span) => {

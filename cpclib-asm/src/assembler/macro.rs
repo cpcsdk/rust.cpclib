@@ -85,7 +85,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
                         r#macro.nb_args()
                     )
                 }),
-                location: None // TODO set up the location
+                location: r#macro.source().cloned() // TODO set up the location
             })
         }
         else {
@@ -254,7 +254,7 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
                         r#struct.nb_args()
                     )
                 }),
-                location: None // TODO setup the location
+                location: r#struct.source().cloned() // TODO setup the location
             })
         }
         else {

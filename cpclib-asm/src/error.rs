@@ -13,7 +13,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
-use cpclib_tokens::symbols::{Location, PhysicalAddress, Symbol, SymbolError};
+use cpclib_tokens::symbols::{Source, PhysicalAddress, Symbol, SymbolError};
 use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
@@ -132,7 +132,7 @@ pub enum AssemblerError {
     //    #[fail(display = "Error when applying macro {}. {}", name, root)]
     MacroError {
         name: SmolStr,
-        location: Option<Location>,
+        location: Option<Source>,
         root: Box<AssemblerError>
     },
 
@@ -164,7 +164,7 @@ pub enum AssemblerError {
     AlreadyDefinedSymbol {
         symbol: SmolStr,
         kind: SmolStr,
-        here: Option<Location>,
+        here: Option<Source>,
     },
 
     //   #[fail(display = "IO error: {}", msg)]

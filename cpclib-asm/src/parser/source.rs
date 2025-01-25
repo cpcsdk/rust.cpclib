@@ -24,14 +24,6 @@ pub type InnerZ80Span = Stateful<
 #[derive(Clone, PartialEq, Eq)]
 pub struct Z80Span(pub(crate) InnerZ80Span);
 
-impl From<&Z80Span> for cpclib_tokens::symbols::Location {
-    fn from(val: &Z80Span) -> Self {
-        let l = val.relative_line_and_column(); // TODO use an absolute, no ?
-        let fname = val.filename();
-        cpclib_tokens::symbols::Location::new(fname, l.0, l.1)
-    }
-}
-
 impl From<InnerZ80Span> for Z80Span {
     fn from(value: InnerZ80Span) -> Self {
         Self(value)

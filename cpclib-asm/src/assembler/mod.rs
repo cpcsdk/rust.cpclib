@@ -695,7 +695,7 @@ impl Env {
         // if self.symbols().contains_symbol(symbol.clone())? {
         // return Err(AssemblerError::IncoherentCode{msg: format!("Function parameter {} already present", symbol)})
         // }
-        self.symbols.set_symbol_to_value(symbol, ValueLocation::new_unlocated(value))?;
+        self.symbols.set_symbol_to_value(symbol, ValueAndSource::new_unlocated(value))?;
         Ok(())
     }
 
@@ -706,11 +706,11 @@ impl Env {
         &mut self,
         label: &str,
         value: E,
-        location: Option<Location>
+        location: Option<Source>
     ) -> Result<(), AssemblerError> {
         let already_present = self.symbols().contains_symbol(label)?;
         let value = value.into();
-        let value = ValueLocation::new(value, location);
+        let value = ValueAndSource::new(value, location);
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => {
@@ -2342,16 +2342,13 @@ impl Env {
             });
         }
 
-        let location = source.as_ref().map(|s| {
-            (s.filename(), s.relative_line_and_column())
-        });
-        let location: Option<Location> = source.map(|s| s.into());
+        let location: Option<Source> = dbg!(source.map(|s| s.into()));
         let source = source.map(|s| s.into());
 
         let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);
         self.symbols_mut().set_symbol_to_value(
             name,
-            ValueLocation::new(r#macro, location)
+            ValueAndSource::new(r#macro, location)
         )?;
         Ok(())
     }
@@ -2392,14 +2389,14 @@ impl Env {
         for (f, s) in r#struct.fields_size(self.symbols()) {
             self.symbols_mut()
                 .set_symbol_to_value(format!("{}.{}", name, f), 
-                ValueLocation::new(index, span)
+                ValueAndSource::new(index, span)
             )?;
             index += s;
         }
         
 
         self.symbols_mut()
-            .set_symbol_to_value(name.as_str(), ValueLocation::new(r#struct, span))?;
+            .set_symbol_to_value(name.as_str(), ValueAndSource::new(r#struct, span.clone()))?;
 
         Ok(())
     }
@@ -4125,7 +4122,7 @@ impl Env {
     {
         let repeat = self.resolve_expr_must_never_fail(count)?;
         let repeat = repeat.int()?;
-        for _ in 0..repeat {
+        for _ in (0..repeat) {
             opcode.visited(self)?;
         }
         Ok(())
@@ -5719,7 +5716,7 @@ impl Env {
                 _ => unreachable!()
             };
 
-            for  instruction in opcodes.iter().map(|op|{
+            for  instruction in opcodes.into_iter().map(|op|{
                 Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None)
             }) {
                 instruction.visited(self)?;

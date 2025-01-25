@@ -1,4 +1,4 @@
-use cpclib_asm::ValueLocation;
+use cpclib_asm::ValueAndSource;
 
 use crate::preamble::*;
 use crate::z80::*;
@@ -13,7 +13,7 @@ impl Z80 {
         let pc = self.pc().value() as i32;
         self.context
             .symbols_mut()
-            .set_symbol_to_value("$", ValueLocation::new_unlocated(pc))
+            .set_symbol_to_value("$", ValueAndSource::new_unlocated(pc))
             .unwrap();
 
         match opcode {
