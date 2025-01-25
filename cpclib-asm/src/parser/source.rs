@@ -2,13 +2,13 @@ use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::stream::{AsBStr, LocatingSlice, Offset};
+use cpclib_common::winnow::stream::{AsBStr, LocatingSlice, Location, Offset};
 use cpclib_common::winnow::{BStr, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_span::LineSpanExt;
 
 use super::context::ParserContext;
-use super::ParsingState;
+use super::{MayHaveSpan, ParsingState};
 
 // This type is only handled by the parser
 pub type InnerZ80Span = Stateful<
@@ -23,6 +23,14 @@ pub type InnerZ80Span = Stateful<
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Z80Span(pub(crate) InnerZ80Span);
+
+impl Into<cpclib_tokens::symbols::Location> for &Z80Span {
+    fn into(self) -> cpclib_tokens::symbols::Location {
+        let l = self.relative_line_and_column(); // TODO use an absolute, no ?
+        let fname = self.filename();
+        cpclib_tokens::symbols::Location::new(fname, l.0, l.1)
+    }
+}
 
 impl From<InnerZ80Span> for Z80Span {
     fn from(value: InnerZ80Span) -> Self {

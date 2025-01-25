@@ -14,7 +14,7 @@ use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext}
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
+use crate::{expression, AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhysicalAddress {
@@ -673,7 +673,7 @@ impl Symbol {
 /// TODO add all the other methods
 pub trait SymbolsTableTrait {
     /// Return the symbols that correspond to integer values
-    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)>;
+    fn expression_symbol(&self) -> Vec<(&Symbol, &ValueLocation)>;
 
     /// Return true if the symbol has already been used in an expression
     fn is_used<S>(&self, symbol: S) -> bool
@@ -692,7 +692,7 @@ pub trait SymbolsTableTrait {
         Symbol: From<S>,
         S: AsRef<str>;
 
-    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>
+    fn value<S>(&self, symbol: S) -> Result<Option<&ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
@@ -713,16 +713,16 @@ pub trait SymbolsTableTrait {
         Symbol: From<S>,
         S: AsRef<str>;
 
-    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
 
-    fn assign_symbol_to_value<S, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>
+    ) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
@@ -731,15 +731,110 @@ pub trait SymbolsTableTrait {
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError>;
 }
 
+
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Location {
+    fname: String,
+    row: usize,
+    column: usize
+}
+
+impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:{}", &self.fname, self.row, self.column)
+    }
+}
+impl Location {
+    pub fn new(fname: &str, row: usize, column: usize) -> Self {
+        Location {
+            fname: fname.to_owned(),
+            row, column
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub struct ValueLocation {
+    value: Value,
+    location: Option<Location>
+}
+
+impl Into<Value> for ValueLocation {
+    fn into(self) -> Value {
+        self.value
+    }
+}
+
+impl Into<evalexpr::Value> for ValueLocation {
+    fn into(self) -> evalexpr::Value {
+        self.value.into()
+    }
+}
+
+impl From<expression::ExprResult> for ValueLocation {
+    fn from(value: expression::ExprResult) -> Self {
+        let value: Value = value.into();
+        value.into()
+    }
+}
+
+impl Into<Option<Location>> for ValueLocation {
+    fn into(self) -> Option<Location> {
+        self.location
+    }
+}
+
+impl ValueLocation {
+    pub fn new<V: Into<Value>, L: Into<Location>>(value: V, location: Option<L>) -> Self {
+        let value = value.into();
+        let location = location.map(|l| l.into());
+        Self {location, value}
+    }
+
+    pub fn new_unlocated<V: Into<Value>>(value: V) -> Self {
+        Self {
+            location: None,
+            value: value.into()
+        }
+    }
+
+    pub fn location(&self) -> Option<&Location> {
+        self.location.as_ref()
+    }
+
+    pub fn is_located(&self) -> bool {
+        self.location.is_some()
+    }
+
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+}
+
+impl Into<ValueLocation> for Value {
+    fn into(self) -> ValueLocation {
+        ValueLocation{
+            value: self,
+            location: None
+        }
+    }
+}
+
+impl Deref for ValueLocation {
+    type Target = Value;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 /// Handle Tree like maps.
 #[derive(Debug, Clone, Default)]
 struct ModuleSymbolTable {
-    current: HashMap<Symbol, Value>,
+    current: HashMap<Symbol, ValueLocation>,
     children: HashMap<Symbol, ModuleSymbolTable>
 }
 
 impl Deref for ModuleSymbolTable {
-    type Target = HashMap<Symbol, Value>;
+    type Target = HashMap<Symbol, ValueLocation>;
 
     fn deref(&self) -> &Self::Target {
         &self.current
@@ -778,7 +873,7 @@ impl ModuleSymbolTable {
 
 struct ModuleSymbolTableIterator<'t> {
     others: Vec<&'t ModuleSymbolTable>,
-    current: std::collections::hash_map::Iter<'t, Symbol, Value>
+    current: std::collections::hash_map::Iter<'t, Symbol, ValueLocation>
 }
 
 impl<'t> ModuleSymbolTableIterator<'t> {
@@ -790,7 +885,7 @@ impl<'t> ModuleSymbolTableIterator<'t> {
     }
 }
 impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
-    type Item = (&'t Symbol, &'t Value);
+    type Item = (&'t Symbol, &'t ValueLocation);
 
     fn next(&mut self) -> Option<Self::Item> {
         let current = self.current.next();
@@ -908,7 +1003,7 @@ impl SymbolsTable {
         for model in replace.iter() {
             let local_expr = &model[1..model.len() - 1]; // remove {}
 
-            let local_value = match self.value::<&str>(local_expr)? {
+            let local_value = match self.value::<&str>(local_expr)?.map(|vl| vl.value()) {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
@@ -1019,11 +1114,11 @@ impl SymbolsTable {
 
 impl SymbolsTableTrait for SymbolsTable {
     #[inline]
-    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
+    fn expression_symbol(&self) -> Vec<(&Symbol, &ValueLocation)> {
         self.map
             .iter()
             .filter(|(_k, v)| {
-                match v {
+                match v.value() {
                     Value::Expr(_) | Value::Address(_) => true,
                     _ => false
                 }
@@ -1048,11 +1143,11 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     #[inline]
-    fn assign_symbol_to_value<S, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>
+    ) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1085,7 +1180,7 @@ impl SymbolsTableTrait for SymbolsTable {
 
     /// Returns the Value at the given key
     #[inline]
-    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>
+    fn value<S>(&self, symbol: S) -> Result<Option<&ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1143,7 +1238,7 @@ impl SymbolsTableTrait for SymbolsTable {
 
     /// Remove the given symbol name from the table. (used by undef)
     #[inline]
-    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1202,8 +1297,7 @@ impl SymbolsTable {
         let mut key = "".to_owned();
         for value in self.counters.clone() {
             key.push('#');
-            self.assign_symbol_to_value(key.clone(), value.clone())
-                .expect("[BUG] symbol {key} MUST be set to {value");
+            self.assign_symbol_to_value(key.clone(), value).unwrap(); // Here we lost the location :(
         }
     }
 }
@@ -1212,7 +1306,7 @@ impl SymbolsTable {
 impl SymbolsTable {
     pub fn laxist() -> Self {
         let mut map = ModuleSymbolTable::default();
-        map.insert(Symbol::from("$"), Value::Expr(0.into()));
+        map.insert(Symbol::from("$"), Value::Expr(0.into()).into());
         let mut table = SymbolsTable::default();
         table.dummy = true;
         table.current_global_label = "".into();
@@ -1305,12 +1399,12 @@ impl SymbolsTable {
     /// Update `$` value
     #[inline]
     pub fn set_current_address(&mut self, address: PhysicalAddress) {
-        self.map.insert("$".into(), Value::Address(address));
+        self.map.insert("$".into(), Value::Address(address).into());
     }
 
     #[inline]
     pub fn set_current_output_address(&mut self, address: PhysicalAddress) {
-        self.map.insert("$$".into(), Value::Address(address));
+        self.map.insert("$$".into(), Value::Address(address).into());
     }
 
     /// Set the given symbol to $ value
@@ -1324,6 +1418,7 @@ impl SymbolsTable {
         let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
         self.current_address().map(|val| {
             let value = Value::Expr(val.into());
+            let value: ValueLocation = value.into();
             self.map.insert(symbol.clone(), value.clone());
             self.current_pass_map.insert(symbol, value);
         })
@@ -1332,11 +1427,11 @@ impl SymbolsTable {
     /// Set the given Value to the given value
     /// Return the previous value if any
     #[inline]
-    pub fn set_symbol_to_value<S, V: Into<Value>>(
+    pub fn set_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>
+    ) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1346,12 +1441,12 @@ impl SymbolsTable {
 
         let value = value.into();
         self.current_pass_map.insert(symbol.clone(), value.clone());
-
-        Ok(self.map.insert(symbol, value))
+        Ok(self.map.insert(symbol, value.into()))
     }
 
+
     #[inline]
-    pub fn update_symbol_to_value<S, V: Into<Value>>(
+    pub fn update_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
@@ -1477,7 +1572,7 @@ impl SymbolsTable {
 
         Ok(iter
             .filter(|(_k, v)| {
-                match (v, r#for) {
+                match (v.value(), r#for) {
                     (Value::Expr(_), SymbolFor::Number)
                     | (Value::Expr(_), SymbolFor::Address)
                     | (Value::Address(_), SymbolFor::Address)
@@ -1514,7 +1609,7 @@ impl SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(match self.value(symbol)? {
+        Ok(match self.value(symbol)?.map(|v| v.value()) {
             Some(Value::Expr(_)) => "number",
             Some(Value::Address(_)) => "address",
             Some(Value::Macro(_)) => "macro",
@@ -1631,11 +1726,11 @@ impl SymbolsTableCaseDependent {
     }
 
     #[inline]
-    pub fn set_symbol_to_value<S, V: Into<Value>>(
+    pub fn set_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>
+    ) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1645,7 +1740,7 @@ impl SymbolsTableCaseDependent {
     }
 
     #[inline]
-    pub fn update_symbol_to_value<S, E: Into<Value>>(
+    pub fn update_symbol_to_value<S, E: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: E
@@ -1749,7 +1844,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn expression_symbol(&self) -> Vec<(&Symbol, &Value)> {
+    fn expression_symbol(&self) -> Vec<(&Symbol, &ValueLocation)> {
         self.table.expression_symbol()
     }
 
@@ -1794,7 +1889,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn value<S>(&self, symbol: S) -> Result<Option<&Value>, SymbolError>
+    fn value<S>(&self, symbol: S) -> Result<Option<&ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1803,7 +1898,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<Value>, SymbolError>
+    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1825,11 +1920,11 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn assign_symbol_to_value<S, V: Into<Value>>(
+    fn assign_symbol_to_value<S, V: Into<ValueLocation>>(
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<Option<Value>, SymbolError>
+    ) -> Result<Option<ValueLocation>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>

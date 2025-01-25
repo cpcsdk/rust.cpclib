@@ -8,6 +8,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::SmallVec;
+use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::cut_err;
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
@@ -1781,6 +1782,51 @@ impl MayHaveSpan for LocatedToken {
         &self.span
     }
 }
+
+impl MayHaveSpan for &SmolStr {
+    fn has_span(&self) -> bool {
+        false
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        None
+    }
+
+    fn span(&self) -> &Z80Span {
+        unreachable!()
+    }
+}
+
+impl MayHaveSpan for &Z80Span {
+    fn has_span(&self) -> bool {
+        true
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        Some(self)
+    }
+
+    fn span(&self) -> &Z80Span {
+        self
+    }
+}
+
+
+
+impl MayHaveSpan for Z80Span {
+    fn has_span(&self) -> bool {
+        true
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        Some(&self)
+    }
+
+    fn span(&self) -> &Z80Span {
+        self
+    }
+}
+
 
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {

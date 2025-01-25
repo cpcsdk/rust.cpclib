@@ -695,7 +695,7 @@ impl Env {
         // if self.symbols().contains_symbol(symbol.clone())? {
         // return Err(AssemblerError::IncoherentCode{msg: format!("Function parameter {} already present", symbol)})
         // }
-        self.symbols.set_symbol_to_value(symbol, value)?;
+        self.symbols.set_symbol_to_value(symbol, ValueLocation::new_unlocated(value))?;
         Ok(())
     }
 
@@ -705,10 +705,12 @@ impl Env {
     fn add_symbol_to_symbol_table<E: Into<Value>>(
         &mut self,
         label: &str,
-        value: E
+        value: E,
+        location: Option<Location>
     ) -> Result<(), AssemblerError> {
         let already_present = self.symbols().contains_symbol(label)?;
         let value = value.into();
+        let value = ValueLocation::new(value, location);
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => {
@@ -1001,9 +1003,9 @@ impl Env {
         }
 
         if AssemblingPass::FirstPass == self.pass {
-            self.add_symbol_to_symbol_table("BASM_VERSION", built_info::PKG_VERSION.to_owned());
-            self.add_symbol_to_symbol_table("BASM", 1);
-            self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", cfg!(feature = "hfe"));
+            self.add_symbol_to_symbol_table("BASM_VERSION", built_info::PKG_VERSION.to_owned(), None);
+            self.add_symbol_to_symbol_table("BASM", 1, None);
+            self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", cfg!(feature = "hfe"), None);
         }
     }
 
@@ -2193,8 +2195,8 @@ impl Env {
         Ok(label)
     }
 
-    fn visit_label<S: SourceString>(&mut self, label: S) -> Result<(), AssemblerError> {
-        let label = self.symbols().normalize_symbol(label.as_str());
+    fn visit_label<S: SourceString + MayHaveSpan>(&mut self, label_span: S) -> Result<(), AssemblerError> {
+        let label = self.symbols().normalize_symbol(label_span.as_str());
         let label = label.value();
 
         // A label cannot be defined multiple times
@@ -2209,7 +2211,8 @@ impl Env {
                     .extend_local_and_patterns_for_symbol(label)
                     .map(std::convert::Into::<SmolStr>::into)
                     .unwrap_or_else(|_| SmolStr::from(label)),
-                kind: self.symbols().kind(label)?.into()
+                kind: self.symbols().kind(label)?.into(),
+                here: self.symbols().value(label).unwrap().unwrap().location().cloned()
             })
         }
         else {
@@ -2225,11 +2228,11 @@ impl Env {
             let value = self.symbols().current_address().unwrap_or_default();
             let addr = self.logical_to_physical_address(value);
 
-            self.add_symbol_to_symbol_table(label, addr)
+            self.add_symbol_to_symbol_table(label, addr, label_span.possible_span().map(|s| s.into()))
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind }) = &res {
+        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind , here: _}) = &res {
             if kind == "macro" || kind == "struct" {
                 let message = AssemblerError::AssemblingError {
                     msg:
@@ -2339,11 +2342,16 @@ impl Env {
             });
         }
 
+        let location = source.as_ref().map(|s| {
+            (s.filename(), s.relative_line_and_column())
+        });
+        let location: Option<Location> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
+        let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);
         self.symbols_mut().set_symbol_to_value(
             name,
-            Macro::new(name.into(), arguments, code.to_owned(), source, flavor)
+            ValueLocation::new(r#macro, location)
         )?;
         Ok(())
     }
@@ -2369,7 +2377,7 @@ impl Env {
         &mut self,
         name: S1,
         content: &[(S2, T)],
-        source: Option<&Z80Span>
+        span: Option<&Z80Span>
     ) -> Result<(), AssemblerError> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name.as_str())? {
             return Err(AssemblerError::SymbolAlreadyExists {
@@ -2377,16 +2385,21 @@ impl Env {
             });
         }
 
-        let r#struct = Struct::new(name.as_str(), content, source.map(|s| s.into()));
+        let r#struct = Struct::new(name.as_str(), content, span.map(|s| s.into()));
         // add inner index BEFORE the structure. It should reduce infinite loops
         let mut index = 0;
+
         for (f, s) in r#struct.fields_size(self.symbols()) {
             self.symbols_mut()
-                .set_symbol_to_value(format!("{}.{}", name, f), index)?;
+                .set_symbol_to_value(format!("{}.{}", name, f), 
+                ValueLocation::new(index, span)
+            )?;
             index += s;
         }
+        
+
         self.symbols_mut()
-            .set_symbol_to_value(name.as_str(), r#struct)?;
+            .set_symbol_to_value(name.as_str(), ValueLocation::new(r#struct, span.clone()))?;
 
         Ok(())
     }
@@ -2564,7 +2577,7 @@ impl Env {
         Ok(())
     }
 
-    fn visit_next_and_co<E: ExprElement + ExprEvaluationExt, S1: SourceString, S2: SourceString>(
+    fn visit_next_and_co<E: ExprElement + ExprEvaluationExt, S1: SourceString + MayHaveSpan, S2: SourceString>(
         &mut self,
         destination: S1,
         source: S2,
@@ -2578,7 +2591,8 @@ impl Env {
             let kind = self.symbols().kind(Symbol::from(destination.as_str()))?;
             return Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: destination.as_str().into(),
-                kind: kind.into()
+                kind: kind.into(),
+                here: None
             });
         }
 
@@ -2589,7 +2603,7 @@ impl Env {
                 .assign_symbol_to_value(destination.as_str(), value.clone())?;
         }
         else {
-            self.add_symbol_to_symbol_table(destination.as_str(), value.clone())?;
+            self.add_symbol_to_symbol_table(destination.as_str(), value.clone(), destination.possible_span().map(|s| s.into()))?;
         }
         if let Some(o) = self.output_trigger.as_mut() {
             o.replace_code_address(&value)
@@ -4482,19 +4496,20 @@ impl Env {
 }
 
 impl Env {
-    fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString>(
+    fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString + MayHaveSpan >(
         &mut self,
-        label: &S,
+        label_span: &S,
         exp: &E
     ) -> Result<(), AssemblerError> {
-        if self.symbols().contains_symbol(label.as_str())? && self.pass.is_first_pass() {
+        if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
             Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: label.as_str().into(),
-                kind: self.symbols().kind(label.as_str())?.into()
+                symbol: label_span.as_str().into(),
+                kind: self.symbols().kind(label_span.as_str())?.into(),
+                here: label_span.possible_span().map(|s| s.into())
             })
         }
         else {
-            let label = self.handle_global_and_local_labels(label.as_str())?;
+            let label = self.handle_global_and_local_labels(label_span.as_str())?;
 
             if label.starts_with(".") {
                 let warning = AssemblerError::AssemblingError {
@@ -4517,19 +4532,20 @@ impl Env {
             if let Some(o) = self.output_trigger.as_mut() {
                 o.replace_code_address(&value)
             }
-            self.add_symbol_to_symbol_table(label, value)
+            self.add_symbol_to_symbol_table(label, value, label_span.possible_span().map(|s| s.into()))
         }
     }
 
-    fn visit_field<E: ExprEvaluationExt + ExprElement + Debug + MayHaveSpan, S: SourceString>(
+    fn visit_field<E: ExprEvaluationExt + ExprElement + Debug + MayHaveSpan, S: SourceString + MayHaveSpan>(
         &mut self,
-        label: S,
+        label_span: S,
         exp: &E
     ) -> Result<(), AssemblerError> {
-        if self.symbols().contains_symbol(label.as_str())? && self.pass.is_first_pass() {
+        if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
             Err(AssemblerError::AlreadyDefinedSymbol {
-                symbol: label.as_str().into(),
-                kind: self.symbols().kind(label.as_str())?.into()
+                symbol: label_span.as_str().into(),
+                kind: self.symbols().kind(label_span.as_str())?.into(),
+                here: None
             })
         }
         else {
@@ -4544,7 +4560,7 @@ impl Env {
                 return Err(e);
             }
 
-            let label = self.handle_global_and_local_labels(label.as_str())?;
+            let label = self.handle_global_and_local_labels(label_span.as_str())?;
             if !label.starts_with('.') {
                 self.symbols_mut().set_current_label(label)?;
             }
@@ -4553,7 +4569,7 @@ impl Env {
             if let Some(o) = self.output_trigger.as_mut() {
                 o.replace_code_address(&value)
             }
-            self.add_symbol_to_symbol_table(label, value)?;
+            self.add_symbol_to_symbol_table(label, value, label_span.possible_span().map(|l| l.into()))?;
 
             self.map_counter = self.map_counter.wrapping_add(delta);
 
@@ -4870,7 +4886,7 @@ pub fn visit_stableticker<S: AsRef<str>>(
                 }
 
                 // force the injection of the value
-                env.symbols_mut().set_symbol_to_value(label, count)?;
+                env.symbols_mut().set_symbol_to_value(label, Value::from(count))?;
                 Ok(())
             }
             else {

@@ -295,7 +295,7 @@ impl ParserOptions {
             // make the replacement
             for model in replace.iter() {
                 let local_symbol = &model[1..model.len() - 1]; // remove {}
-                let local_value = match env.symbols().value(local_symbol) {
+                let local_value = match env.symbols().value(local_symbol).map(|vl| vl.map(|vl| vl.value())) {
                     Ok(Some(Value::String(s))) => s.to_string(),
                     Ok(Some(Value::Expr(e))) => e.to_string(),
                     Ok(Some(Value::Counter(e))) => e.to_string(),

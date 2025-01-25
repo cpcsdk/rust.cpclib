@@ -13,7 +13,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
-use cpclib_tokens::symbols::{PhysicalAddress, Symbol, SymbolError};
+use cpclib_tokens::symbols::{Location, PhysicalAddress, Symbol, SymbolError};
 use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
@@ -132,6 +132,7 @@ pub enum AssemblerError {
     //    #[fail(display = "Error when applying macro {}. {}", name, root)]
     MacroError {
         name: SmolStr,
+        location: Option<Location>,
         root: Box<AssemblerError>
     },
 
@@ -162,7 +163,8 @@ pub enum AssemblerError {
     // TODO add symbol type
     AlreadyDefinedSymbol {
         symbol: SmolStr,
-        kind: SmolStr
+        kind: SmolStr,
+        here: Option<Location>,
     },
 
     //   #[fail(display = "IO error: {}", msg)]
@@ -547,8 +549,13 @@ impl AssemblerError {
                 write!(f, "Code  already exceeds limits of 0x{:X}", limit)
             },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
-            AssemblerError::AlreadyDefinedSymbol { symbol, kind } => {
-                write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind)
+            AssemblerError::AlreadyDefinedSymbol { symbol, kind , here} => {
+                if let Some(here) = here {
+                    write!(f, "Symbol \"{}\" already defined as a {} in {}", symbol, kind, here)
+                }
+                 else {
+                    write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind)
+                 }
             },
 
             AssemblerError::MultipleErrors { errors } => {
@@ -627,8 +634,12 @@ impl AssemblerError {
                 nb_paramers: _,
                 nb_arguments: _
             } => todo!(),
-            AssemblerError::MacroError { name, root } => {
-                write!(f, "Error in macro call: {}\n{}", name, root)
+            AssemblerError::MacroError { name, location, root } => {
+                if let Some(location) = location {
+                    write!(f, "Error in macro call {} (defined in {})\n{}", name, location, root)
+                } else {
+                    write!(f, "Error in macro call: {}\n{}", name, root)
+                }
             },
             AssemblerError::WrongSymbolType {
                 symbol: s,
@@ -700,10 +711,17 @@ impl AssemblerError {
                             write!(f, "{}", msg)
                         },
 
-                        AssemblerError::MacroError { name, root } => {
+                        AssemblerError::MacroError { name, location, root } => {
+
+                            let msg = if let Some(location) = location{
+                                format!("Error in macro call {} (defined in {})", name, location)
+
+                            } else {
+                                format!("Error in macro call {}", name)
+                            };
+
                             let msg = build_simple_error_message(
-                                &format!("Error in macro call: {}", name),
-                                span,
+                                &msg,span,
                                 Severity::Error
                             );
                             write!(f, "{}\n{}", msg, root)

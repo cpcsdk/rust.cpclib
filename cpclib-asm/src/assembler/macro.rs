@@ -84,7 +84,8 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
                         args.len(),
                         r#macro.nb_args()
                     )
-                })
+                }),
+                location: None // TODO set up the location
             })
         }
         else {
@@ -252,7 +253,8 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
                         args.len(),
                         r#struct.nb_args()
                     )
-                })
+                }),
+                location: None // TODO setup the location
             })
         }
         else {

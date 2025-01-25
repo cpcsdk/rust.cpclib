@@ -323,7 +323,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
         }
         else if $self.is_label() {
             let label = $self.label();
-            match sym.value(label)? {
+            match sym.value(label)?.map(|vl| vl.value()) {
                 Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),

@@ -1158,7 +1158,9 @@ where
                             .map_err(|e| {
                                 let e = AssemblerError::MacroError {
                                     name: name.into(),
-                                    root: Box::new(e)
+                                    root: Box::new(e),
+                                    location: env.symbols().value(name).unwrap().unwrap().location().cloned()
+
                                 };
                                 let caller_span = self.possible_span();
                                 match caller_span {
