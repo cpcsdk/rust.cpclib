@@ -17,9 +17,6 @@ name = "bndbuild_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 
-[build]
-target-dir = "../../target"
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

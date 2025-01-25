@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
+use std::cell::OnceCell;
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
@@ -323,7 +324,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         let mut selected_idx = None;
         let mut request_additional_pass = false;
         use cpclib_tokens::ExprResult;
-        let FLAG_FAILURE: ExprResult = "__BASM_INNER_TEST_FAILURE__".to_owned().into();
+        let FLAG_FAILURE: OnceCell<ExprResult> = OnceCell::new();
+        let FLAG_FAILURE = FLAG_FAILURE.get_or_init(||"__BASM_INNER_TEST_FAILURE__".to_owned().into());
 
         for idx in 0..self.token.if_nb_tests() {
             let (test, _) = self.token.if_test(idx);
@@ -335,7 +337,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 // Expression must be true
                 let value = env
                     .resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
-                if value == FLAG_FAILURE {
+                if &value == FLAG_FAILURE {
                     // no code is executed if the test cannot be done
                     return Ok(None);
                 }
@@ -349,7 +351,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 let exp = test.expr_unchecked();
                 let value = env
                     .resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
-                if value == FLAG_FAILURE {
+                if &value == FLAG_FAILURE {
                     // no code is executed if the test cannot be done
                     return Ok(None);
                 }
@@ -401,7 +403,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             // Label must exist at this specific moment
             else if test.is_label_exists_test() {
                 let label = test.label_unchecked();
-                if env.symbols().contains_symbol(label)? {
+                if env.symbols().symbol_exist_in_current_pass(label)? {
                     selected_idx = Some(idx);
                     break;
                 }
@@ -409,7 +411,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             // Label must not exist at this specific moment
             else {
                 let label = test.label_unchecked();
-                if !env.symbols().contains_symbol(label)? {
+                if !env.symbols().symbol_exist_in_current_pass(label)? {
                     selected_idx = Some(idx);
                     break;
                 }

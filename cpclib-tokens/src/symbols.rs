@@ -1808,8 +1808,10 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
         Symbol: From<S>,
         S: AsRef<str>
     {
+        let normalized = self.normalize_symbol(symbol);
+        let _ = self.table.current_pass_map.remove(&normalized);
         self.table
-            .remove_symbol::<Symbol>(self.normalize_symbol(symbol))
+            .remove_symbol::<Symbol>(normalized)
     }
 
     #[inline]

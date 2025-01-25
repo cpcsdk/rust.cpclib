@@ -242,6 +242,8 @@ Example:
 
 ### IFDEF, IFNDEF
 
+Check if a label as ALREADY been defined before reading this directive.
+
 Example:
 ```z80
 --8<-- "cpclib-basm/tests/asm/good_ifndef.asm"

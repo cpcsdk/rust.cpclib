@@ -1,3 +1,6 @@
+	;;
+	; Here, we check a standard use case of ifdef/ifndef
+		
 	ifdef toto
 		fail "BUG in assembler. toto is not yet defined"
 	endif
