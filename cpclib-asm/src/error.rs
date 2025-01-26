@@ -1073,7 +1073,7 @@ fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
 }
 
 fn buffer() -> Buffer {
-    if cfg!(feature = "colored_error") {
+    if cfg!(feature = "colored_errors") {
         Buffer::ansi()
     }
     else {
@@ -1082,7 +1082,7 @@ fn buffer() -> Buffer {
 }
 
 fn config() -> codespan_reporting::term::Config {
-    if cfg!(feature = "colored_error") {
+    if cfg!(feature = "colored_errors") {
         codespan_reporting::term::Config::default()
     }
     else {
