@@ -2342,7 +2342,7 @@ impl Env {
             });
         }
 
-        let location: Option<Source> = dbg!(source.map(|s| s.into()));
+        let location: Option<Source> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
         let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);

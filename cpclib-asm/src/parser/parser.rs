@@ -2981,7 +2981,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
     loop {
         let _arg = cut_err(
             opt(parse_breakpoint_argument)
-                .verify(|arg| {
+                .verify_map(|arg| {
                     // at the same time verify if it is ok and update
                     if let Some(arg) = arg {
                         match arg {
@@ -2989,11 +2989,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut address = address.borrow_mut();
                                 let address = address.deref_mut();
                                 if address.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    address.replace((Some(*arg), value.clone()));
-                                    true
+                                    address.replace((Some(arg), value));
+                                    Some(())
                                 }
                             },
 
@@ -3001,11 +3001,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut r#type = r#type.borrow_mut();
                                 let r#type = r#type.deref_mut();
                                 if r#type.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    r#type.replace((Some(*arg), value.clone()));
-                                    true
+                                    r#type.replace((Some(arg), value));
+                                    Some(())
                                 }
                             },
 
@@ -3013,11 +3013,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut access = access.borrow_mut();
                                 let access = access.deref_mut();
                                 if access.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    access.replace((*arg, value.clone()));
-                                    true
+                                    access.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3025,11 +3025,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut run = run.borrow_mut();
                                 let run = run.deref_mut();
                                 if run.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    run.replace((*arg, value.clone()));
-                                    true
+                                    run.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3037,11 +3037,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = mask.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3049,11 +3049,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = size.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3061,11 +3061,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = value.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, val.clone()));
-                                    true
+                                    item.replace((arg, val));
+                                    Some(())
                                 }
                             },
 
@@ -3073,11 +3073,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = value_mask.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3085,11 +3085,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = name.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3097,11 +3097,11 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = condition.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
@@ -3109,19 +3109,19 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                                 let mut item = step.borrow_mut();
                                 let item = item.deref_mut();
                                 if item.is_some() {
-                                    false
+                                    None
                                 }
                                 else {
-                                    item.replace((*arg, value.clone()));
-                                    true
+                                    item.replace((arg, value));
+                                    Some(())
                                 }
                             },
 
-                            _ => true // TODO implement the tests
+                            _ => Some(()) // TODO implement the tests
                         }
                     }
                     else {
-                        return *first.borrow(); // can be empty only at first loop
+                        return if *first.borrow() {Some(())} else {None}; // can be empty only at first loop
                     }
                 })
                 .context(StrContext::Label("Breapoint parameter error"))
@@ -4780,7 +4780,7 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 
     let token = LocatedTokenInner::new_opcode(
         Mnemonic::Rst,
-        Some(flag),
+        Some(flag.into()),
         Some(val)
     );
     let warning = LocatedTokenInner::WarningWrapper(
@@ -5489,11 +5489,11 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
                 debug_assert!(located_data_access1.is_none());
                 debug_assert!(register8.is_none());
 
-                let repeat = opt(preceded(my_space1, located_expr)).parse_next(input)?;
+                let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
                 if let Some(repeat) = repeat {
                     LocatedTokenInner::RepeatToken{
                         token: Box::new(token), 
-                        repeat
+                        repeat: repeat
                     }.into_located_token_between(&input_start, *input)
                 } else {
                     token
