@@ -6,7 +6,7 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
     BinaryOperation, BinaryTransformation, DataAccess, DataAccessElem, Expr, ExprElement,
-    ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token
+    ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token, UnaryOperation
 };
 
 use crate::{
@@ -90,6 +90,12 @@ impl ToOrgams for BinaryOperation {
     }
 }
 
+impl ToOrgams for UnaryOperation {
+    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        Ok(self.to_string().to_ascii_uppercase().into())
+    }
+}
+
 macro_rules! expr_to_orgams {
     () => {
         fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
@@ -142,6 +148,17 @@ macro_rules! expr_to_orgams {
                     format!("{}{}{}", rleft, op, rright)
                 },
 
+                Self::UnaryOperation(op, exp, ..) => {
+                    let exp = exp.to_orgams_string()?;
+                    let op = op.to_orgams_string()?;
+
+                    format!("{} {}", exp, op)
+                },
+
+                Self::Bool(f, ..) => {
+                    format!("{}", if *f {0} else {1})
+                }
+
                 _ => unimplemented!("{:?}", self)
             };
 
@@ -165,8 +182,16 @@ macro_rules! test_kind_to_orgams {
                 let expr = self.expr_unchecked();
                 Ok(format!("IF {}", expr.to_orgams_string()?).into())
             }
+            else if self.is_label_exists_test() {
+                let label = self.label_unchecked();
+                Ok(format!("IFDEF {}", label).into())
+            }
+            else if self.is_label_nexists_test() {
+                let label = self.label_unchecked();
+                Ok(format!("IFNDEF {}", label).into())
+            }
             else {
-                Err(format!("{:?}", self).into())
+                Err(format!("{:?} unhandled", self).into())
             }
         }
     };

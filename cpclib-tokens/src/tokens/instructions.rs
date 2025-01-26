@@ -990,6 +990,14 @@ impl fmt::Display for Token {
             Token::Equ{label, expr}
                  => write!(f, "{} EQU {}", label, expr.to_simplified_string()),
 
+            Token::Fail(msg) => {
+                if let Some(msg) = msg {
+                    write!(f, "FAIL {}", msg.iter().map(|e| e.to_string()).join(", "))
+                } else {
+                    write!(f, "FAIL")
+                }
+            }
+
             Token::If(tests, default) => {
                 let get_code_string = |tokens: &[Token]| {
                     let mut code_part = String::new();
@@ -1176,6 +1184,7 @@ impl fmt::Display for Token {
                         }
                     }
             },
+
 
 
 

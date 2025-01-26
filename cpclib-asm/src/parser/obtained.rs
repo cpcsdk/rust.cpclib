@@ -838,7 +838,8 @@ impl TestKindElement for LocatedTestKind {
 
     fn expr_unchecked(&self) -> &Self::Expr {
         match self {
-            LocatedTestKind::True(exp) | LocatedTestKind::False(exp) => exp,
+            LocatedTestKind::True(exp) | LocatedTestKind::False(exp)
+            => exp,
             _ => panic!()
         }
     }
@@ -1590,6 +1591,11 @@ impl ListingElement for LocatedTokenInner {
             Self::Assert(test, print) => {
                 Cow::Owned(Token::Assert(test.to_expr().into_owned(), print.clone()))
             },
+
+
+            Self::Fail(msg) => {
+                Cow::Owned(Token::Fail(msg.clone()))
+            }
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
