@@ -45,4 +45,4 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: false
-          artifacts: "target/release/basm, target/release/bdasm,             target/release/bndbuild, target/release/catalog,  target/release/cpc2img, target/release/cpclib-visual-bndbuild, target/release/visual-basm,  target/release/hideur, target/release/imgconverter, target/release/snapshot target/release/bundle/deb/bndbuild-tauri_0.1.0_amd64.deb target/release/bundle/rpm/bndbuild-tauri-0.1.0-1.x86_64.rpm target/release/bundle/appimage/bndbuild-tauri_0.1.0_amd64.AppImage"
+          artifacts: "target/release/basm, target/release/bdasm, target/release/bndbuild-gui, target/release/bndbuild, target/release/catalog,  target/release/cpc2img, target/release/cpclib-visual-bndbuild, target/release/visual-basm,  target/release/hideur, target/release/imgconverter, target/release/snapshot, target/release/bundle/deb/bndbuild-tauri_0.1.0_amd64.deb, target/release/bundle/rpm/bndbuild-tauri-0.1.0-1.x86_64.rpm, target/release/bundle/appimage/bndbuild-tauri_0.1.0_amd64.AppImage"

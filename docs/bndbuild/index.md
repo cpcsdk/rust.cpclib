@@ -5,13 +5,99 @@
 Crossdev tool tailored to build Amstrad CPC project although it can generalize to z80-related projects or even any buildable projects.
 It embeds the Benediction crossdev ecosystem such as `basm`, `m4`, `img2cpc` but can still execute external programs such as `sjasmplus`, `rasm`, `winape`, `ace` it is able to download and install or any command chosen by the user.
 
-The build rules are described in a `yaml` file. Check for example a simple test project at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy> folder, or a more complicated one that use various commands and templating at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/ucpm>.
+It can be used  as a command launcher or a build system and is available as a command line and a graphical version.
 
-Commands can be launched also without using the build rules.
-You can also see `bndbuild` as a universal proxy to plenty of crossdev tools without manually installing them.
-A graphical version is available in `bndbuild-gui`.
+As it is still in beta stage, I do not properly play with version numbering. This will be fixed as soon as there is a user base
+using it.
 
-The documentation is quite minimal at the moment, but included examples code should be still valid and assembled properly. The user base being quite small, lots of bugs can remain. Do note hesitate to fill issues <https://github.com/cpcsdk/rust.cpclib/issues> or propose fixes.
+## Command launcher
+
+You can see `bndbuild` as a universal proxy to plenty of crossdev tools without manually installing them.
+See the documentation and the `--direct` argument.
+So if you are not a user of the other Benediction tools, and whatever you are using the build system, 
+`bndbuild` can still ease your crossdev workflow by taking care of downloading, installing and launching tools.
+See the help for the list of available tools. Fell free to request more in the issue tracker.
+
+## Build system
+
+You can see `bndbuild` as a build system similar to Makefile but with a different syntax and better integration.
+The build rules are described in a `yaml` file templated by ` jinja`  engine. Check for example a simple test project at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy> folder, or a more complicated one that use various commands and templating at <https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/ucpm>.
+
+
+
+The documentation is quite minimal at the moment, but included examples code should be still valid and assembled properly. 
+The user base being quite small, lots of bugs can remain. Do note hesitate to fill issues <https://github.com/cpcsdk/rust.cpclib/issues> or propose fixes.
+
+
+
+## Installation
+
+### Download
+
+Prefer to compile yourself `bndbuild`. But you can still download latest versions here:
+
+- [Command line version for Windows](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe)
+- [Command line version for Linux](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild)
+- [Graphical version for Windows](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild-gui.exe)
+- [Graphical version for Linux](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild-gui)
+- [Installer for the experimental new graphical version for Windows](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild-tauri_0.1.0_x64-setup.exe)
+- [Installer for the experimental new graphical version for Linux](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild-tauri_0.1.0_amd64.AppImage)
+
+Windows antivirus tend to flag `rust` programs as virus. Sadly it is the case for `bndbuild`.
+
+### Compile
+
+You need to install the `rust` toolchain with its nightly version to compile `bndbuild` (<https://rustup.rs/>) as well as some additional dependencies.
+
+- unbuntu-like dependencies: libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev
+- windows: msvc
+- macos: ??? it probably does not compile yet
+
+```bash
+$ git clone git@github.com:cpcsdk/rust.cpclib.git --depth 1
+$ cd rust.cpclib/
+$ cargo install --path cpclib-bndbuild          # For the command line version
+$ cargo install --path cpclib-visual-bndbuild   # For the graphical version
+$ cd cpclib-bndbuild-tauri && cargo tauri build # To create the new version. The folder target/release/bundle contains the installers
+```
+
+## Build format
+
+The rules description file must respect the `yaml` text file format.
+It can be named `bndbuild.yml`, `bnd.build` or `build.bnd` but this can be overridden by the `-f` argument.
+It contains list of rules.
+Each rule can have the following keys:
+
+- `tgt`: to list the files build by the rule. Either all the files in one line or one file per line. 
+- `dep`: to list the files needed to build the rule. Either all the files in one line or one file per line.
+- `cmd`: a command, or a list of commands, executed by the rule. Commands prefixed by `-` can silently fail. `$@` is replaced by the first target and `$<` is replaced by the first dependency.>
+- `help`: an optional help text to describe the rule.
+- `phony`: an optional tag to express the rule does not generate anyfile (it is inferred when the commands are not extern). Mainly serves for the `--watch` argument.
+- `constraint`: Allows to filter the rule for the specified expression
+   
+   * Functions: `hostname(MY_HOST)` is true if the machine is `MY_HOST`. `os(windows)`, `os(linux)`, and `os(macosx)` are true for the specified os.
+   * Negation: `not(EXPRESSION)` is true when `EXPRESSION` is false
+   * Combination: `and(EXPRESSION, EXPRESSION, ...)` and `or(EXPRESSION, EXPRESSION, ...)` allow to combine expressions
+
+
+If you know how to configure your IDE to statically verify your yaml files, here is the configuration you can provide: <https://raw.githubusercontent.com/cpcsdk/rust.cpclib/refs/heads/master/cpclib-bndbuild/schema.json>
+
+## Templating
+
+A jinja-like templating is used to generate the final yaml file : <https://docs.rs/minijinja/latest/minijinja/syntax/index.html>.
+So you can automatically generate rules with its macro system.
+
+
+## Example
+
+Here is an example to build a dummy Amstrad CPC project and execute on the real machine thanks to the m4.
+It is available in [tests/dummy](https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy) (the repository does not contains the external tools needed to properly build the project. It is straightforward to add them).
+Successive calls to the build task do nothing as soon as no file has been modified.
+It is also possible to watch the dependencies of a given task to automatically build it when they are modified.
+This cannot be seen with the capture, but each time m4 command is launched, the project is send into the CPC machine (it takes several seconds however).
+
+![Animation](dummy.gif)
+
 
 ## Help
 
@@ -79,34 +165,6 @@ Options:
 
 cpclib-bndbuild 0.6.0 embedded by cpclib-bndbuild 0.6.0
 ```
-
-## Example
-
-Here is an example to build a dummy Amstrad CPC project and execute on the real machine thanks to the m4.
-It is available in [tests/dummy](https://github.com/cpcsdk/rust.cpclib/tree/master/cpclib-bndbuild/tests/dummy) (the repository does not contains the external tools needed to properly build the project. It is straightforward to add them).
-Successive calls to the build task do nothing as soon as no file has been modified.
-It is also possible to watch the dependencies of a given task to automatically build it when they are modified.
-This cannot be seen with the capture, but each time m4 command is launched, the project is send into the CPC machine (it takes several seconds however).
-
-![Animation](dummy.gif)
-
-## Format
-
-The rules description file must respect the `yaml` text file format.
-It is preferably named `bndbuild.yml` but this can be overridden by the `-f` argument.
-It contains list of rules.
-Each rule can have the following keys:
-
-- `tgt`: to list the files build by the rule. Either all the files in one line or one file per line. 
-- `dep`: to list the files needed to build the rule. Either all the files in one line or one file per line.
-- `cmd`: a command, or a list of commands, executed by the rule. Commands prefixed by `-` can silently fail. `$@` is replaced by the first target and `$<` is replaced by the first dependency.>
-- `help`: an optional help text to describe the rule.
-- `phony`: an optional tag to express the rule does not generate anyfile (it is inferred when the commands are not extern). Mainly serves for the `--watch` argument.
-- `constraint`: Allows to filter the rule for the specified expression
-   
-   * Functions: `hostname(MY_HOST)` is true if the machine is `MY_HOST`. `os(windows)`, `os(linux)`, and `os(macosx)` are true for the specified os.
-   * Negation: `not(EXPRESSION)` is true when `EXPRESSION` is false
-   * Combination: `and(EXPRESSION, EXPRESSION, ...)` and `or(EXPRESSION, EXPRESSION, ...)` allow to combine expressions
 
 ## Commands
 
@@ -1095,24 +1153,3 @@ Options:
 
 cpclib-xfertool 0.8.1 embedded by cpclib-bndbuild 0.6.0
 ```
-
-## Templating
-
-A jinja-like templating is used to generate the final yaml file : <https://docs.rs/minijinja/latest/minijinja/syntax/index.html>.
-
-## Install
-
-### Download
-
-Prefer to compile yourself bndbuild. But you can still download latest versions for windows here:
-- [command line version](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe)
-- [graphical version](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/cpclib-visual-bndbuild.exe)
-
-### Compile
-
-You need to install the `rust` toolchain with its nightly version to compile `bndbuild` (<https://rustup.rs/>) as well as some additional dependencies.
-
-- unbuntu-like dependencies: libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev
-- windows: msvc
-- macos: ??? it probably does not compile yet
-
