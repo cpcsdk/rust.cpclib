@@ -68,11 +68,11 @@ name = "bndbuild"
 path = "src/main.rs"
 
 [features]
-default = ["sna-interactive"]
+default = ["sna-interactive","colored_errors"]
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
 sna-interactive = ["cpclib-sna/interactive"]
-
+colored_errors = ["cpclib-basm/colored_errors"]
 [profile.release]
 debug = 1
