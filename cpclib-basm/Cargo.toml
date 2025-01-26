@@ -34,7 +34,7 @@ serial_test.workspace = true
 parking_lot.workspace = true
 glob.workspace = true
 criterion = "0.5.1"
-
+strip-ansi-escapes = "0.2.1"
 
 [build-dependencies]
 built = { version = "0.7.5", features = ["chrono"] }

@@ -107,11 +107,9 @@ fn expect_warning_but_success(real_fname: &str) {
         .split("\n")
         .map(|l| RE1.replace(l, "").replace('\r', ""))
         .join(":");
-    dbg!(&content);
     while RE2.is_match(&content) {
         content = RE2.replace_all(&content, ":").to_string();
     }
-    dbg!(&content);
 
     let content = if content.starts_with(':') {
         &content[1..]
@@ -119,7 +117,6 @@ fn expect_warning_but_success(real_fname: &str) {
     else {
         &content[..]
     };
-    dbg!(&content);
 
     let content = if let Some(':') = content.chars().last() {
         &content[..content.len() - 1]
@@ -128,11 +125,8 @@ fn expect_warning_but_success(real_fname: &str) {
         content
     };
 
-    dbg!(&content);
 
     let content = content.replace("\\:", "");
-
-    dbg!(&content);
 
     if !content.is_empty() {
         let input_file =
@@ -163,7 +157,7 @@ fn expect_warning_but_success(real_fname: &str) {
         }
 
         let stderr = std::str::from_utf8(&res.stderr).unwrap();
-        if !stderr.contains("warning: ") {
+        if !strip_ansi_escapes::strip_str(&stderr).contains("warning: ") {
             panic!("No warning have been generated");
         }
     }
