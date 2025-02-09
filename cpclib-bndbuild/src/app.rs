@@ -506,7 +506,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                     "bndbuild.exe"
                 )
             }
-            else if cfg!(target_os = "windows") {
+            else if cfg!(not(target_os = "windows")) {
                 (
                     "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild",
                     "bndbuild"
