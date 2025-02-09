@@ -1,12 +1,9 @@
 use std::fmt::Display;
-use std::ops::Deref;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::atomic::AtomicUsize;
-use std::sync::Arc;
-use std::sync::LazyLock;
-use cpclib_runner::runner::hspcompiler::HSPC_CMD;
-use fancy_regex::Regex;
+use std::sync::{Arc, LazyLock};
+
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
@@ -18,9 +15,11 @@ use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
 use cpclib_runner::runner::fap::FAP_CMD;
+use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
+use fancy_regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
 
@@ -548,29 +547,45 @@ impl StandardTaskArguments {
 
     /// This method modify the args to replace automatic variables by the expected values
     /// TODO keep the original argument for display and error purposes ?
-    fn replace_automatic_variables(&mut self, first_dep: Option<&Utf8Path>, first_tgt: Option<&Utf8Path> ) -> Result<(), String>{
-
-
-        static RE_FIRST_DEP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
-        static RE_FIRST_TGT: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
+    fn replace_automatic_variables(
+        &mut self,
+        first_dep: Option<&Utf8Path>,
+        first_tgt: Option<&Utf8Path>
+    ) -> Result<(), String> {
+        static RE_FIRST_DEP: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
+        static RE_FIRST_TGT: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
 
         let initial = self.args.clone();
 
         if let Some(first_dep) = first_dep {
-            self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep.as_str()).into_owned();
-        } else {
+            self.args = RE_FIRST_DEP
+                .replace_all(&self.args, first_dep.as_str())
+                .into_owned();
+        }
+        else {
             if RE_FIRST_DEP.is_match(&self.args).unwrap() {
                 self.args = initial;
-                return Err(format!("{} contains $<, but there are no available dependencies.", self.args));
+                return Err(format!(
+                    "{} contains $<, but there are no available dependencies.",
+                    self.args
+                ));
             }
         }
 
         if let Some(first_tgt) = first_tgt {
-            self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt.as_str()).into_owned();
-        } else {
+            self.args = RE_FIRST_TGT
+                .replace_all(&self.args, first_tgt.as_str())
+                .into_owned();
+        }
+        else {
             if RE_FIRST_TGT.is_match(&self.args).unwrap() {
                 self.args = initial;
-                return Err(format!("{} contains $@, but there are no available targets.", self.args));
+                return Err(format!(
+                    "{} contains $@, but there are no available targets.",
+                    self.args
+                ));
             }
         }
         Ok(())

@@ -15,7 +15,7 @@ use enigo::{Enigo, Key, Keyboard, Settings};
 use fs_extra;
 use xcap::image::{open, ImageBuffer, Rgba};
 
-use crate::ace_config::{AceConfig, AceConfigFlag, SANE_CONFIGURATION};
+use crate::ace_config::{AceConfig, AceConfigFlag};
 use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
@@ -787,7 +787,7 @@ impl OrgamsRobotAction<'_, '_> {
     pub fn dst(&self) -> Option<&str> {
         match self {
             OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } => Some(tgt),
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => *tgt,
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => tgt.clone(),
             _ => None
         }
     }
@@ -815,7 +815,7 @@ impl OrgamsRobotAction<'_, '_> {
 
     pub fn save_orgams_binary(&self) -> Option<Option<&str>> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(*tgt),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(tgt.clone()),
             _ => None
         }
     }
@@ -1365,16 +1365,11 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         // copy the non standard roms and configure the emu (at least ace)
         let ace_conf_path = emu.ace_version().unwrap().config_file(); // todo get it programmatically
         let mut ace_conf = AceConfig::open_or_default(&ace_conf_path);
+        ace_conf.sanitize();
 
-        let default = SANE_CONFIGURATION;
-        for (key, value) in default
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty())
-            .map(|l| l.split("=").collect_tuple().unwrap())
-        {
-            ace_conf.set(key, value);
-        }
+        ace_conf.remove_cartridge();
+        ace_conf.select_crtc(0);
+
 
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);

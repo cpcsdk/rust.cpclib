@@ -697,7 +697,10 @@ pub enum Token {
         // start value
         Option<Expr>
     ),
-    RepeatToken{token: Box<Self>, repeat: Expr},
+    RepeatToken {
+        token: Box<Self>,
+        repeat: Expr
+    },
     RepeatUntil(Expr, Listing),
     /// Return value from a function
     Return(Expr),

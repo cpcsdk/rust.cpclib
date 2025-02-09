@@ -2,8 +2,9 @@ use std::error::Error;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use ini::Ini;
+use cpclib_common::itertools::Itertools;
 
-pub const SANE_CONFIGURATION: &str = "
+const SANE_CONFIGURATION: &str = "
 SCREEN=0
 CRTFILTER=0
 OVERSCAN=0
@@ -38,6 +39,8 @@ impl AsRef<str> for AceConfigFlag {
 }
 
 impl AceConfig {
+
+    // On ly machine default file is in /home/romain/.config/ACE-DL_futuristics/config.cfg
     pub fn open<P: AsRef<Utf8Path>>(path: P) -> Result<Self, Box<dyn Error>> {
         let p = path.as_ref();
         let ini = Ini::load_from_file(p)?;
@@ -72,22 +75,49 @@ impl AceConfig {
         &self.path
     }
 
-    pub fn remove<Key: AsRef<str>>(&mut self, key: &Key) {
+    pub fn sanitize(&mut self) -> &mut Self {
+        let default = SANE_CONFIGURATION;
+        for (key, value) in default
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .map(|l| l.split("=").collect_tuple().unwrap())
+        {
+            self.set(key, value);
+        }
+
+        self
+    }
+
+    pub fn remove<Key: AsRef<str> + ?Sized>(&mut self, key: &Key) -> &mut Self{
         self.ini.delete_from::<String>(None, key.as_ref());
+        self
     }
 
-    pub fn set<Key: ToString, Value: ToString>(&mut self, key: Key, value: Value) {
+    pub fn set<Key: ToString, Value: ToString>(&mut self, key: Key, value: Value) -> &mut Self{
         self.ini
-            .set_to::<String>(None, key.to_string(), value.to_string())
+            .set_to::<String>(None, key.to_string(), value.to_string());
+        self
     }
 
-    pub fn enable(&mut self, flag: AceConfigFlag) {
+    pub fn enable(&mut self, flag: AceConfigFlag) -> &mut Self{
         let key = flag.as_ref();
         self.set(key, "1");
+        self
     }
 
-    pub fn disable(&mut self, flag: AceConfigFlag) {
+    pub fn disable(&mut self, flag: AceConfigFlag) -> &mut Self{
         let key = flag.as_ref();
         self.set(key, "0");
+        self
     }
+
+    pub fn remove_cartridge(&mut self) -> &Self {
+        self.remove("CARTRIDGE")
+    }
+
+    pub fn select_crtc(&mut self, crtc: u8) -> &Self {
+        self.set("CRTC", crtc)
+    }
+
 }
