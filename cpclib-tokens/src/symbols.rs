@@ -388,7 +388,6 @@ impl Display for Source {
     }
 }
 
-
 impl Source {
     pub fn new(fname: String, line: usize, column: usize) -> Self {
         Source {
@@ -738,9 +737,6 @@ pub trait SymbolsTableTrait {
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError>;
 }
 
-
-
-
 #[derive(Clone, Debug)]
 pub struct ValueAndSource {
     value: Value,
@@ -776,7 +772,7 @@ impl ValueAndSource {
     pub fn new<V: Into<Value>, L: Into<Source>>(value: V, location: Option<L>) -> Self {
         let value = value.into();
         let location = location.map(|l| l.into());
-        Self {location, value}
+        Self { location, value }
     }
 
     pub fn new_unlocated<V: Into<Value>>(value: V) -> Self {
@@ -801,7 +797,7 @@ impl ValueAndSource {
 
 impl From<Value> for ValueAndSource {
     fn from(val: Value) -> Self {
-        ValueAndSource{
+        ValueAndSource {
             value: val,
             location: None
         }
@@ -810,6 +806,7 @@ impl From<Value> for ValueAndSource {
 
 impl Deref for ValueAndSource {
     type Target = Value;
+
     fn deref(&self) -> &Self::Target {
         &self.value
     }
@@ -1432,7 +1429,6 @@ impl SymbolsTable {
         Ok(self.map.insert(symbol, value))
     }
 
-
     #[inline]
     pub fn update_symbol_to_value<S, V: Into<ValueAndSource>>(
         &mut self,
@@ -1893,8 +1889,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     {
         let normalized = self.normalize_symbol(symbol);
         let _ = self.table.current_pass_map.remove(&normalized);
-        self.table
-            .remove_symbol::<Symbol>(normalized)
+        self.table.remove_symbol::<Symbol>(normalized)
     }
 
     #[inline]

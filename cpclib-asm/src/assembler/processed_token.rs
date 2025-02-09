@@ -1,9 +1,9 @@
 use std::borrow::{Borrow, Cow};
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::cell::OnceCell;
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
@@ -66,7 +66,10 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
     Iterate(SimpleListingState<'token, T>),
     MacroCallOrBuildStruct(ExpandState),
     Module(SimpleListingState<'token, T>),
-    RepeatToken(SingleTokenState<'token, T>, &'token <T as ListingElement>::Expr),
+    RepeatToken(
+        SingleTokenState<'token, T>,
+        &'token <T as ListingElement>::Expr
+    ),
     Repeat(SimpleListingState<'token, T>),
     RepeatUntil(SimpleListingState<'token, T>),
     While(SimpleListingState<'token, T>),
@@ -82,7 +85,7 @@ struct IncbinState {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct SingleTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
-    token: Box<ProcessedToken<'token, T>>,
+    token: Box<ProcessedToken<'token, T>>
 }
 
 #[derive(PartialEq, Eq, Clone)]
@@ -325,7 +328,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         let mut request_additional_pass = false;
         use cpclib_tokens::ExprResult;
         let FLAG_FAILURE: OnceCell<ExprResult> = OnceCell::new();
-        let FLAG_FAILURE = FLAG_FAILURE.get_or_init(||"__BASM_INNER_TEST_FAILURE__".to_owned().into());
+        let FLAG_FAILURE =
+            FLAG_FAILURE.get_or_init(|| "__BASM_INNER_TEST_FAILURE__".to_owned().into());
 
         for idx in 0..self.token.if_nb_tests() {
             let (test, _) = self.token.if_test(idx);
@@ -567,10 +571,12 @@ where
         }))
     }
     else if token.is_repeat_token() {
-        Some(ProcessedTokenState::RepeatToken(SingleTokenState {
-            token: Box::new(build_processed_token(token.repeat_token(), env)?)
-            
-        }, token.repeat_count()))
+        Some(ProcessedTokenState::RepeatToken(
+            SingleTokenState {
+                token: Box::new(build_processed_token(token.repeat_token(), env)?)
+            },
+            token.repeat_count()
+        ))
     }
     else if token.is_assembler_control()
         && token
@@ -957,10 +963,7 @@ where
                     },
 
                     Some(ProcessedTokenState::RepeatToken(state, count)) => {
-                        env.visit_repeat_token(
-                            &mut state.token,
-                            count,
-                        )
+                        env.visit_repeat_token(&mut state.token, count)
                     },
 
                     Some(ProcessedTokenState::FunctionDefinition(FunctionDefinitionState(
@@ -1159,8 +1162,13 @@ where
                                 let e = dbg!(AssemblerError::MacroError {
                                     name: name.into(),
                                     root: Box::new(e),
-                                    location: env.symbols().value(name).unwrap().unwrap().location().cloned()
-
+                                    location: env
+                                        .symbols()
+                                        .value(name)
+                                        .unwrap()
+                                        .unwrap()
+                                        .location()
+                                        .cloned()
                                 });
                                 let caller_span = self.possible_span();
                                 match caller_span {

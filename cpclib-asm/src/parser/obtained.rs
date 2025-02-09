@@ -838,8 +838,7 @@ impl TestKindElement for LocatedTestKind {
 
     fn expr_unchecked(&self) -> &Self::Expr {
         match self {
-            LocatedTestKind::True(exp) | LocatedTestKind::False(exp)
-            => exp,
+            LocatedTestKind::True(exp) | LocatedTestKind::False(exp) => exp,
             _ => panic!()
         }
     }
@@ -1024,7 +1023,7 @@ pub enum LocatedTokenInner {
         Option<LocatedDataAccess>,
         Option<Register8>
     ),
-    
+
     Org {
         val1: LocatedExpr,
         val2: Option<LocatedExpr>
@@ -1041,7 +1040,7 @@ pub enum LocatedTokenInner {
         Option<LocatedExpr>, // Start value
         Option<LocatedExpr>  // Step value
     ),
-    RepeatToken{
+    RepeatToken {
         token: Box<LocatedToken>,
         repeat: LocatedExpr
     },
@@ -1190,7 +1189,7 @@ impl ListingElement for LocatedToken {
     is_stuff_delegate!(
         is_print is_buildcpr is_label is_equ
         is_assign is_module is_directive is_rorg
-        is_iterate is_for is_repeat_until is_repeat 
+        is_iterate is_for is_repeat_until is_repeat
         is_macro_definition is_if is_include is_incbin
         is_call_macro_or_build_struct is_function_definition
         is_crunched_section is_confined is_switch
@@ -1335,12 +1334,9 @@ impl ListingElement for LocatedToken {
 
     fn repeat_token(&self) -> &Self {
         match &self.inner {
-            either::Left(LocatedTokenInner::RepeatToken{token, ..}) => {
-                token
-            },
+            either::Left(LocatedTokenInner::RepeatToken { token, .. }) => token,
             _ => unreachable!()
         }
-        
     }
 
     fn function_definition_inner(&self) -> &[Self] {
@@ -1409,8 +1405,6 @@ impl ListingElement for LocatedToken {
     fn assembler_control_get_listing(&self) -> &[Self] {
         self.assembler_control_command().get_listing()
     }
-    
-
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -1592,10 +1586,7 @@ impl ListingElement for LocatedTokenInner {
                 Cow::Owned(Token::Assert(test.to_expr().into_owned(), print.clone()))
             },
 
-
-            Self::Fail(msg) => {
-                Cow::Owned(Token::Fail(msg.clone()))
-            }
+            Self::Fail(msg) => Cow::Owned(Token::Fail(msg.clone())),
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
@@ -1817,8 +1808,6 @@ impl MayHaveSpan for &Z80Span {
     }
 }
 
-
-
 impl MayHaveSpan for Z80Span {
     fn has_span(&self) -> bool {
         true
@@ -1832,7 +1821,6 @@ impl MayHaveSpan for Z80Span {
         self
     }
 }
-
 
 impl Clone for LocatedToken {
     fn clone(&self) -> Self {

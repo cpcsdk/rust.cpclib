@@ -125,7 +125,6 @@ fn expect_warning_but_success(real_fname: &str) {
         content
     };
 
-
     let content = content.replace("\\:", "");
 
     if !content.is_empty() {

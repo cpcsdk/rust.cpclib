@@ -31,7 +31,7 @@ use crate::task::{
     is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_winape_cmd,
     is_xfer_cmd, Task
 };
-use crate::{execute, init_project, BndBuilder, BndBuilderError, EXPECTED_FILENAMES};
+use crate::{execute, init_project, BndBuilder, BndBuilderError, ALL_APPLICATIONS, EXPECTED_FILENAMES};
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
@@ -482,7 +482,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         observers: &dyn BndBuilderObserver,
         cmd: Option<&str>
     ) -> Result<(), BndBuilderError> {
-        if let Some(command) = cmd {
+        let update_command = |command|  -> Result<(), BndBuilderError>  {
             Self::execute_clear(observers, Some(command))?;
 
             match Task::from_str(command)
@@ -490,7 +490,8 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                 .configuration::<()>()
             {
                 Some(conf) => {
-                    conf.install(&());
+                    conf.install(&())
+                        .map_err(|e| BndBuilderError::UpdateError(e))
                 },
                 None => {
                     return Err(BndBuilderError::AnyError(format!(
@@ -498,8 +499,9 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                     )));
                 }
             }
-        }
-        else {
+        };
+
+        let update_self = ||  -> Result<(), BndBuilderError>   {
             let (asset_url, asset_name) = if cfg!(target_os = "windows") {
                 (
                     "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe",
@@ -523,9 +525,32 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
 
             self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
             self_update::self_replace::self_replace(tmp_exec_path).unwrap();
-        }
+            Ok(())
+        };
 
-        Ok(())
+
+        let update_all = ||  -> Result<(), BndBuilderError>   {
+            update_self()?;
+            for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| if *clearable {
+                Some(cmd[0])
+            } else {
+                None
+            }) {
+                update_command(cmd)?;
+            }
+            Ok(())
+        };
+
+
+        if let Some(cmd) = cmd {
+            match cmd {
+                "self" => update_self(),
+                "all" => update_all(),
+                cmd => update_command(cmd)
+            }
+        } else {
+            update_self()
+        }
     }
 
     fn execute_init(observers: &dyn BndBuilderObserver) -> Result<(), BndBuilderError> {

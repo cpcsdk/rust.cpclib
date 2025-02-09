@@ -695,7 +695,8 @@ impl Env {
         // if self.symbols().contains_symbol(symbol.clone())? {
         // return Err(AssemblerError::IncoherentCode{msg: format!("Function parameter {} already present", symbol)})
         // }
-        self.symbols.set_symbol_to_value(symbol, ValueAndSource::new_unlocated(value))?;
+        self.symbols
+            .set_symbol_to_value(symbol, ValueAndSource::new_unlocated(value))?;
         Ok(())
     }
 
@@ -1003,7 +1004,11 @@ impl Env {
         }
 
         if AssemblingPass::FirstPass == self.pass {
-            self.add_symbol_to_symbol_table("BASM_VERSION", built_info::PKG_VERSION.to_owned(), None);
+            self.add_symbol_to_symbol_table(
+                "BASM_VERSION",
+                built_info::PKG_VERSION.to_owned(),
+                None
+            );
             self.add_symbol_to_symbol_table("BASM", 1, None);
             self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", cfg!(feature = "hfe"), None);
         }
@@ -2195,7 +2200,10 @@ impl Env {
         Ok(label)
     }
 
-    fn visit_label<S: SourceString + MayHaveSpan>(&mut self, label_span: S) -> Result<(), AssemblerError> {
+    fn visit_label<S: SourceString + MayHaveSpan>(
+        &mut self,
+        label_span: S
+    ) -> Result<(), AssemblerError> {
         let label = self.symbols().normalize_symbol(label_span.as_str());
         let label = label.value();
 
@@ -2212,7 +2220,13 @@ impl Env {
                     .map(std::convert::Into::<SmolStr>::into)
                     .unwrap_or_else(|_| SmolStr::from(label)),
                 kind: self.symbols().kind(label)?.into(),
-                here: self.symbols().value(label).unwrap().unwrap().location().cloned()
+                here: self
+                    .symbols()
+                    .value(label)
+                    .unwrap()
+                    .unwrap()
+                    .location()
+                    .cloned()
             })
         }
         else {
@@ -2228,11 +2242,20 @@ impl Env {
             let value = self.symbols().current_address().unwrap_or_default();
             let addr = self.logical_to_physical_address(value);
 
-            self.add_symbol_to_symbol_table(label, addr, label_span.possible_span().map(|s| s.into()))
+            self.add_symbol_to_symbol_table(
+                label,
+                addr,
+                label_span.possible_span().map(|s| s.into())
+            )
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(AssemblerError::AlreadyDefinedSymbol { symbol: _, kind , here: _}) = &res {
+        if let Err(AssemblerError::AlreadyDefinedSymbol {
+            symbol: _,
+            kind,
+            here: _
+        }) = &res
+        {
             if kind == "macro" || kind == "struct" {
                 let message = AssemblerError::AssemblingError {
                     msg:
@@ -2346,10 +2369,8 @@ impl Env {
         let source = source.map(|s| s.into());
 
         let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);
-        self.symbols_mut().set_symbol_to_value(
-            name,
-            ValueAndSource::new(r#macro, location)
-        )?;
+        self.symbols_mut()
+            .set_symbol_to_value(name, ValueAndSource::new(r#macro, location))?;
         Ok(())
     }
 
@@ -2388,12 +2409,9 @@ impl Env {
 
         for (f, s) in r#struct.fields_size(self.symbols()) {
             self.symbols_mut()
-                .set_symbol_to_value(format!("{}.{}", name, f), 
-                ValueAndSource::new(index, span)
-            )?;
+                .set_symbol_to_value(format!("{}.{}", name, f), ValueAndSource::new(index, span))?;
             index += s;
         }
-        
 
         self.symbols_mut()
             .set_symbol_to_value(name.as_str(), ValueAndSource::new(r#struct, span.clone()))?;
@@ -2574,7 +2592,11 @@ impl Env {
         Ok(())
     }
 
-    fn visit_next_and_co<E: ExprElement + ExprEvaluationExt, S1: SourceString + MayHaveSpan, S2: SourceString>(
+    fn visit_next_and_co<
+        E: ExprElement + ExprEvaluationExt,
+        S1: SourceString + MayHaveSpan,
+        S2: SourceString
+    >(
         &mut self,
         destination: S1,
         source: S2,
@@ -2600,7 +2622,11 @@ impl Env {
                 .assign_symbol_to_value(destination.as_str(), value.clone())?;
         }
         else {
-            self.add_symbol_to_symbol_table(destination.as_str(), value.clone(), destination.possible_span().map(|s| s.into()))?;
+            self.add_symbol_to_symbol_table(
+                destination.as_str(),
+                value.clone(),
+                destination.possible_span().map(|s| s.into())
+            )?;
         }
         if let Some(o) = self.output_trigger.as_mut() {
             o.replace_code_address(&value)
@@ -4105,20 +4131,19 @@ impl Env {
         Ok(())
     }
 
-
     /// Handle the repetition of single opcode
     pub fn visit_repeat_token<'token, T, E>(
         &mut self,
         opcode: &mut ProcessedToken<'token, T>,
-        count: &E,
-    )  -> Result<(), AssemblerError> 
-    where 
-    E: ExprEvaluationExt,
+        count: &E
+    ) -> Result<(), AssemblerError>
+    where
+        E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
-            ProcessedToken<'token, T>: FunctionBuilder
+        ProcessedToken<'token, T>: FunctionBuilder
     {
         let repeat = self.resolve_expr_must_never_fail(count)?;
         let repeat = repeat.int()?;
@@ -4493,7 +4518,7 @@ impl Env {
 }
 
 impl Env {
-    fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString + MayHaveSpan >(
+    fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString + MayHaveSpan>(
         &mut self,
         label_span: &S,
         exp: &E
@@ -4529,11 +4554,18 @@ impl Env {
             if let Some(o) = self.output_trigger.as_mut() {
                 o.replace_code_address(&value)
             }
-            self.add_symbol_to_symbol_table(label, value, label_span.possible_span().map(|s| s.into()))
+            self.add_symbol_to_symbol_table(
+                label,
+                value,
+                label_span.possible_span().map(|s| s.into())
+            )
         }
     }
 
-    fn visit_field<E: ExprEvaluationExt + ExprElement + Debug + MayHaveSpan, S: SourceString + MayHaveSpan>(
+    fn visit_field<
+        E: ExprEvaluationExt + ExprElement + Debug + MayHaveSpan,
+        S: SourceString + MayHaveSpan
+    >(
         &mut self,
         label_span: S,
         exp: &E
@@ -4566,7 +4598,11 @@ impl Env {
             if let Some(o) = self.output_trigger.as_mut() {
                 o.replace_code_address(&value)
             }
-            self.add_symbol_to_symbol_table(label, value, label_span.possible_span().map(|l| l.into()))?;
+            self.add_symbol_to_symbol_table(
+                label,
+                value,
+                label_span.possible_span().map(|l| l.into())
+            )?;
 
             self.map_counter = self.map_counter.wrapping_add(delta);
 
@@ -4883,7 +4919,8 @@ pub fn visit_stableticker<S: AsRef<str>>(
                 }
 
                 // force the injection of the value
-                env.symbols_mut().set_symbol_to_value(label, Value::from(count))?;
+                env.symbols_mut()
+                    .set_symbol_to_value(label, Value::from(count))?;
                 Ok(())
             }
             else {
@@ -5062,11 +5099,14 @@ where
             )
         },
         Mnemonic::Ret => assemble_ret(arg1.as_ref()),
-        Mnemonic::Rst => if let Some(arg2) = arg2.as_ref() {
-            assemble_rst_fake(arg1.as_ref().unwrap(), arg2, env)
-        } else {
-            // normal RST
-            assemble_rst(arg1.as_ref().unwrap(), env)
+        Mnemonic::Rst => {
+            if let Some(arg2) = arg2.as_ref() {
+                assemble_rst_fake(arg1.as_ref().unwrap(), arg2, env)
+            }
+            else {
+                // normal RST
+                assemble_rst(arg1.as_ref().unwrap(), env)
+            }
         },
         Mnemonic::Im => assemble_im(arg1.as_ref().unwrap(), env),
         Mnemonic::Nop => {
@@ -5266,37 +5306,48 @@ fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, AssemblerE
     Ok(bytes)
 }
 
-
-fn assemble_rst_fake<D: DataAccessElem>(arg1: &D, arg2: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
-where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
-
+fn assemble_rst_fake<D: DataAccessElem>(
+    arg1: &D,
+    arg2: &D,
+    env: &mut Env
+) -> Result<Bytes, AssemblerError>
+where
+    <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+{
     let val = env
         .resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?
         .int()?;
 
-    let _p = match val {
-        0x38 | 7 | 38 => 0b111,
-        _ => {
-            return Err(AssemblerError::InvalidArgument {
-                msg: format!("Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.", val)
+    let _p =
+        match val {
+            0x38 | 7 | 38 => 0b111,
+            _ => return Err(AssemblerError::InvalidArgument {
+                msg: format!(
+                    "Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.",
+                    val
+                )
             })
-        },
-    };
+        };
 
     let flag = arg1.get_flag_test().unwrap();
     if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {
         return Err(AssemblerError::InvalidArgument {
-            msg: format!("Conditionnal RST cannot take {} as flag. Expected values are C|NC|Z|NZ.", flag)
-        })
+            msg: format!(
+                "Conditionnal RST cannot take {} as flag. Expected values are C|NC|Z|NZ.",
+                flag
+            )
+        });
     }
 
     assemble_opcode(
-        Mnemonic::Jr, 
-        &Some(DataAccess::from(flag)), 
-        &Some(DataAccess::from( Expr::Label("$".into()).add(Expr::Value(1)) )), 
-        &None, 
-        env)
-
+        Mnemonic::Jr,
+        &Some(DataAccess::from(flag)),
+        &Some(DataAccess::from(
+            Expr::Label("$".into()).add(Expr::Value(1))
+        )),
+        &None,
+        env
+    )
 }
 
 fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &Env) -> Result<Bytes, AssemblerError>
@@ -5694,31 +5745,36 @@ impl Env {
             // here we handle a fake instruction
             let reg16 = target.get_register16().unwrap();
             let opcodes: &[(Mnemonic, Option<Register8>)] = match mne {
-                Mnemonic::Srl => &[ (Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
-                Mnemonic::Sra => &[ (Mnemonic::Sra, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
-                Mnemonic::Sl1 => &[ (Mnemonic::Sl1, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
-                Mnemonic::Sla => &[ (Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
-                Mnemonic::Rr => &[ (Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low()) ],
-                Mnemonic::Rl => &[ (Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high()) ],
-                Mnemonic::Rlc => &[ 
-                    (Mnemonic::Sla, reg16.high()), 
-                    (Mnemonic::Rl, reg16.low()),
-                    (Mnemonic::Rr, reg16.high()),
-                    (Mnemonic::Rlc, reg16.high()),
-                ],
-                Mnemonic::Rrc => &[
-                    (Mnemonic::Srl, reg16.high()), 
-                    (Mnemonic::Rr, reg16.low()),
-                    (Mnemonic::Rl, reg16.high()),
-                    (Mnemonic::Rrc, reg16.high()),
-                ],
+                Mnemonic::Srl => &[(Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                Mnemonic::Sra => &[(Mnemonic::Sra, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                Mnemonic::Sl1 => &[(Mnemonic::Sl1, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                Mnemonic::Sla => &[(Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                Mnemonic::Rr => &[(Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                Mnemonic::Rl => &[(Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                Mnemonic::Rlc => {
+                    &[
+                        (Mnemonic::Sla, reg16.high()),
+                        (Mnemonic::Rl, reg16.low()),
+                        (Mnemonic::Rr, reg16.high()),
+                        (Mnemonic::Rlc, reg16.high())
+                    ]
+                },
+                Mnemonic::Rrc => {
+                    &[
+                        (Mnemonic::Srl, reg16.high()),
+                        (Mnemonic::Rr, reg16.low()),
+                        (Mnemonic::Rl, reg16.high()),
+                        (Mnemonic::Rrc, reg16.high())
+                    ]
+                },
 
                 _ => unreachable!()
             };
 
-            for  instruction in opcodes.into_iter().map(|op|{
-                Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None)
-            }) {
+            for instruction in opcodes
+                .into_iter()
+                .map(|op| Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None))
+            {
                 instruction.visited(self)?;
             }
         }

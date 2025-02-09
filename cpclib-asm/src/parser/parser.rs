@@ -3121,7 +3121,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                         }
                     }
                     else {
-                        return if *first.borrow() {Some(())} else {None}; // can be empty only at first loop
+                        return if *first.borrow() { Some(()) } else { None }; // can be empty only at first loop
                     }
                 })
                 .context(StrContext::Label("Breapoint parameter error"))
@@ -4763,26 +4763,23 @@ pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-
     let (flag, _, val) = (
         parse_flag_test
-            .verify(|t| t == &FlagTest::Z || t == &FlagTest::NZ ||t == &FlagTest::C || t == &FlagTest::NC)
+            .verify(|t| {
+                t == &FlagTest::Z || t == &FlagTest::NZ || t == &FlagTest::C || t == &FlagTest::NC
+            })
             .with_taken(),
         parse_comma,
         parse_expr
-    ).parse_next(input)?;
-
+    )
+        .parse_next(input)?;
 
     let flag = {
         let span = (*input).update_slice(flag.1);
         LocatedDataAccess::FlagTest(flag.0, span.into())
     };
 
-    let token = LocatedTokenInner::new_opcode(
-        Mnemonic::Rst,
-        Some(flag.into()),
-        Some(val)
-    );
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(flag.into()), Some(val));
     let warning = LocatedTokenInner::WarningWrapper(
         Box::new(token),
         "This is a fake instruction assembled using several opcodes".into()
@@ -4790,7 +4787,6 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 
     Ok(warning)
 }
-
 
 /// Parse the IM instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -4838,15 +4834,10 @@ pub fn parse_shifts_and_rotations(
 
 pub fn parse_shifts_and_rotations_fake(
     oper: Mnemonic
-)  -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
-
         let _start = *input;
-        let arg = alt((
-            parse_register16,
-        ))
-        .parse_next(input)?;
-
+        let arg = alt((parse_register16,)).parse_next(input)?;
 
         let token = LocatedTokenInner::new_opcode(oper, Some(arg), None);
         let warning = LocatedTokenInner::WarningWrapper(
@@ -4854,9 +4845,7 @@ pub fn parse_shifts_and_rotations_fake(
             "This is a fake instruction assembled using several opcodes".into()
         );
 
-
         Ok(warning)
-
     }
 }
 
@@ -5473,38 +5462,42 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
     })
     .parse_next(input)?;
 
-
     // http://rasm.wikidot.com/directives:repete
     // Some instructions may have repeated counts, so we modify them
-    let token: LocatedToken = match & token.inner.as_ref().left().unwrap() {
-        LocatedTokenInner::OpCode( Mnemonic::Ldi | Mnemonic::Ldd |
-            Mnemonic::Rlca | Mnemonic::Rrca |
-            Mnemonic::Ini | Mnemonic::Ind |
-            Mnemonic::Outi | Mnemonic::Outd |
-            Mnemonic:: Halt, 
-            located_data_access, 
-            located_data_access1, 
-            register8) => {
-                debug_assert!(located_data_access.is_none());
-                debug_assert!(located_data_access1.is_none());
-                debug_assert!(register8.is_none());
+    let token: LocatedToken = match &token.inner.as_ref().left().unwrap() {
+        LocatedTokenInner::OpCode(
+            Mnemonic::Ldi
+            | Mnemonic::Ldd
+            | Mnemonic::Rlca
+            | Mnemonic::Rrca
+            | Mnemonic::Ini
+            | Mnemonic::Ind
+            | Mnemonic::Outi
+            | Mnemonic::Outd
+            | Mnemonic::Halt,
+            located_data_access,
+            located_data_access1,
+            register8
+        ) => {
+            debug_assert!(located_data_access.is_none());
+            debug_assert!(located_data_access1.is_none());
+            debug_assert!(register8.is_none());
 
-                let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
-                if let Some(repeat) = repeat {
-                    LocatedTokenInner::RepeatToken{
-                        token: Box::new(token), 
-                        repeat: repeat
-                    }.into_located_token_between(&input_start, *input)
-                } else {
-                    token
+            let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
+            if let Some(repeat) = repeat {
+                LocatedTokenInner::RepeatToken {
+                    token: Box::new(token),
+                    repeat
                 }
-            },
-   
-        _ => {
-            token
-        }   
-    };
+                .into_located_token_between(&input_start, *input)
+            }
+            else {
+                token
+            }
+        },
 
+        _ => token
+    };
 
     Ok(token)
 }

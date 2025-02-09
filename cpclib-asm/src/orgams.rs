@@ -6,7 +6,8 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
     BinaryOperation, BinaryTransformation, DataAccess, DataAccessElem, Expr, ExprElement,
-    ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token, UnaryOperation
+    ListingElement, MacroParam, MacroParamElement, Mnemonic, TestKind, TestKindElement, Token,
+    UnaryOperation
 };
 
 use crate::{
@@ -156,8 +157,8 @@ macro_rules! expr_to_orgams {
                 },
 
                 Self::Bool(f, ..) => {
-                    format!("{}", if *f {0} else {1})
-                }
+                    format!("{}", if *f { 0 } else { 1 })
+                },
 
                 _ => unimplemented!("{:?}", self)
             };

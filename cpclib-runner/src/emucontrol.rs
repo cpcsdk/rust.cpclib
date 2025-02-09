@@ -942,9 +942,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
                         .map_err(|screen| ("Error while assembling".to_string(), screen))
                         .and_then(|_| {
                             if action.jump() {
-                                self.orgams_jump().map_err(|screen| {
-                                    ("Error while jumping".to_string(), screen)
-                                })
+                                self.orgams_jump()
+                                    .map_err(|screen| ("Error while jumping".to_string(), screen))
                             }
                             else {
                                 self.orgams_save(action.dst()).map_err(|screen| {
@@ -1327,7 +1326,6 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
-
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -1369,7 +1367,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
         ace_conf.remove_cartridge();
         ace_conf.select_crtc(0);
-
 
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);

@@ -133,12 +133,11 @@ pub fn build_args_parser() -> clap::Command {
         )
         .arg(
             Arg::new("update")
-                .help("Update bndbuild executable for the last version available on github")
                 .long("update")
                 .short('u')
                 .num_args(0..=1)
-                .value_parser(updatable_list.clone())
-                .help("Update bndbuild or a given embedded application if provided.")
+                .value_parser(updatable_list.iter().chain(&["self", "all"]).collect_vec())
+                .help("Update bndbuild or a given embedded application if provided. If all is provided, it update all applications and bndbuild itslef")
                 .exclusive(true)
         )
         
@@ -394,12 +393,14 @@ pub enum BndBuilderError {
     UnknownTarget(String),
     #[error("{0}")]
     AnyError(String),
-    #[error("Update error: {0}")]
-    UpdateError(self_update::errors::Error)
+    #[error("Self-update error: {0}")]
+    SelfUpdateError(self_update::errors::Error),
+    #[error("Udate error: {0}")]
+    UpdateError(String)
 }
 
 impl From<self_update::errors::Error> for BndBuilderError {
     fn from(value: self_update::errors::Error) -> Self {
-        Self::UpdateError(value)
+        Self::SelfUpdateError(value)
     }
 }

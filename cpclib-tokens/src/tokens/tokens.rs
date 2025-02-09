@@ -29,7 +29,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn repeat_token(&self) -> &Self {
             match self {
-                Self::RepeatToken{token, ..} => token,
+                Self::RepeatToken { token, .. } => token,
                 _ => unreachable!()
             }
         }
@@ -444,7 +444,7 @@ macro_rules! listing_element_impl_most_methods {
         fn repeat_count(&self) -> &Self::Expr {
             match self {
                 Self::Repeat(e, ..) => e,
-                Self::RepeatToken{repeat, ..} => repeat,
+                Self::RepeatToken { repeat, .. } => repeat,
                 _ => unreachable!()
             }
         }

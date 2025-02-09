@@ -13,7 +13,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
-use cpclib_tokens::symbols::{Source, PhysicalAddress, Symbol, SymbolError};
+use cpclib_tokens::symbols::{PhysicalAddress, Source, Symbol, SymbolError};
 use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
 
 use crate::assembler::AssemblingPass;
@@ -164,7 +164,7 @@ pub enum AssemblerError {
     AlreadyDefinedSymbol {
         symbol: SmolStr,
         kind: SmolStr,
-        here: Option<Source>,
+        here: Option<Source>
     },
 
     //   #[fail(display = "IO error: {}", msg)]
@@ -549,13 +549,17 @@ impl AssemblerError {
                 write!(f, "Code  already exceeds limits of 0x{:X}", limit)
             },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
-            AssemblerError::AlreadyDefinedSymbol { symbol, kind , here} => {
+            AssemblerError::AlreadyDefinedSymbol { symbol, kind, here } => {
                 if let Some(here) = here {
-                    write!(f, "Symbol \"{}\" already defined as a {} in {}", symbol, kind, here)
+                    write!(
+                        f,
+                        "Symbol \"{}\" already defined as a {} in {}",
+                        symbol, kind, here
+                    )
                 }
-                 else {
+                else {
                     write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind)
-                 }
+                }
             },
 
             AssemblerError::MultipleErrors { errors } => {
@@ -634,10 +638,19 @@ impl AssemblerError {
                 nb_paramers: _,
                 nb_arguments: _
             } => todo!(),
-            AssemblerError::MacroError { name, location, root } => {
+            AssemblerError::MacroError {
+                name,
+                location,
+                root
+            } => {
                 if let Some(location) = location {
-                    write!(f, "Error in macro call {} (defined in {})\n{}", name, location, root)
-                } else {
+                    write!(
+                        f,
+                        "Error in macro call {} (defined in {})\n{}",
+                        name, location, root
+                    )
+                }
+                else {
                     write!(f, "Error in macro call: {}\n{}", name, root)
                 }
             },
@@ -711,19 +724,19 @@ impl AssemblerError {
                             write!(f, "{}", msg)
                         },
 
-                        AssemblerError::MacroError { name, location, root } => {
-
-                            let msg = if let Some(location) = location{
+                        AssemblerError::MacroError {
+                            name,
+                            location,
+                            root
+                        } => {
+                            let msg = if let Some(location) = location {
                                 format!("Error in macro call {} (defined in {})", name, location)
-
-                            } else {
+                            }
+                            else {
                                 format!("Error in macro call {}", name)
                             };
 
-                            let msg = build_simple_error_message(
-                                &msg,span,
-                                Severity::Error
-                            );
+                            let msg = build_simple_error_message(&msg, span, Severity::Error);
                             write!(f, "{}\n{}", msg, root)
                         },
 
