@@ -34,29 +34,26 @@ async fn empty_gags(app: AppHandle) {
     let state: State<'_, Mutex<BndbuildState>> = app.state();
     let mut lock = state.lock().await;
     {
-        match lock.deref_mut() {
-            BndbuildState::Loaded(loaded) => {
-                let mut content = String::new();
-                let content1 = &mut content;
-                loaded
-                    .gags
-                    .as_mut()
-                    .map(|gag| gag.0.read_to_string(content1));
-                if !content.is_empty() {
-                    loaded.builder.emit_stdout(&content);
-                }
+        if let BndbuildState::Loaded(loaded) = lock.deref_mut() {
+            let mut content = String::new();
+            let content1 = &mut content;
+            loaded
+                .gags
+                .as_mut()
+                .map(|gag| gag.0.read_to_string(content1));
+            if !content.is_empty() {
+                loaded.builder.emit_stdout(&content);
+            }
 
-                content.clear();
-                let content1 = &mut content;
-                loaded
-                    .gags
-                    .as_mut()
-                    .map(|gag| gag.1.read_to_string(content1));
-                if !content.is_empty() {
-                    loaded.builder.emit_stderr(&content);
-                }
-            },
-            _ => {}
+            content.clear();
+            let content1 = &mut content;
+            loaded
+                .gags
+                .as_mut()
+                .map(|gag| gag.1.read_to_string(content1));
+            if !content.is_empty() {
+                loaded.builder.emit_stderr(&content);
+            }
         }
     }
 }
@@ -276,8 +273,8 @@ async fn execute_target(tgt: String, state: State<'_, Mutex<BndbuildState>>) -> 
         Arc::clone(&state.builder.builder)
     };
 
-    let res = builder.execute(tgt).map_err(|e| e.to_string());
-    res
+    
+    builder.execute(tgt).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -436,7 +433,7 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
             .position(|file_item| file_item.id() == event.id())
         {
             let fname = &recent_files_string[pos];
-            let fname = Utf8PathBuf::from_str(&fname).unwrap();
+            let fname = Utf8PathBuf::from_str(fname).unwrap();
             // load_build_file(&fname, cloned_app); // TODO call asynchronously ?
             let _ = app
                 .emit("request-load_build_file", fname)

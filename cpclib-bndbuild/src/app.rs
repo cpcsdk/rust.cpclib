@@ -482,26 +482,39 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         observers: &dyn BndBuilderObserver,
         cmd: Option<&str>
     ) -> Result<(), BndBuilderError> {
-        let update_command = |command|  -> Result<(), BndBuilderError>  {
-            Self::execute_clear(observers, Some(command))?;
+        let update_command = |command, can_install|  -> Result<(), BndBuilderError>  {
+            observers.emit_stdout(&format!("> Update {command}\n"));
 
-            match Task::from_str(command)
-                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?
-                .configuration::<()>()
+            let task = Task::from_str(command)
+                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+            
+
+            match task.configuration::<()>()
             {
                 Some(conf) => {
-                    conf.install(&())
-                        .map_err(|e| BndBuilderError::UpdateError(e))
+                    let installed = conf.cache_folder().exists();
+                    // try to delete only if exists
+                    if  installed {
+                        Self::execute_clear(observers, Some(command))?;
+                    }
+
+                    if !installed && can_install {
+                        conf.install(&())
+                            .map_err(BndBuilderError::UpdateError)
+                    } else {
+                        Ok(())
+                    }
                 },
                 None => {
-                    return Err(BndBuilderError::AnyError(format!(
+                    Err(BndBuilderError::AnyError(format!(
                         "{command} is not an embedded command."
-                    )));
+                    )))
                 }
             }
         };
 
         let update_self = ||  -> Result<(), BndBuilderError>   {
+            observers.emit_stdout("> Update bndbuild\n");
             let (asset_url, asset_name) = if cfg!(target_os = "windows") {
                 (
                     "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe",
@@ -529,14 +542,14 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         };
 
 
-        let update_all = ||  -> Result<(), BndBuilderError>   {
+        let update_all = |can_install|  -> Result<(), BndBuilderError>   {
             update_self()?;
             for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| if *clearable {
                 Some(cmd[0])
             } else {
                 None
             }) {
-                update_command(cmd)?;
+                update_command(cmd, can_install)?;
             }
             Ok(())
         };
@@ -545,8 +558,9 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         if let Some(cmd) = cmd {
             match cmd {
                 "self" => update_self(),
-                "all" => update_all(),
-                cmd => update_command(cmd)
+                "all" => update_all(true),
+                "installed" => update_all(false),
+                cmd => update_command(cmd, true)
             }
         } else {
             update_self()
@@ -583,7 +597,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         std::fs::remove_dir_all(folder)
             .context("Error when removing cache folder")
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
-        observers.emit_stdout("Cache folder cleared");
+        observers.emit_stdout(">> Cache folder cleared\n");
         Ok(())
     }
 }

@@ -15,7 +15,7 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
-use crate::runners::disassembler::BdasmRunner;
+use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::fs::cp::CpRunner;
@@ -50,12 +50,19 @@ impl InnerTask {
                 }
             },
 
-            InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
-            InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
-            InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
+            InnerTask::Disassembler(d,_ ) => {
+                match d {
+                    Disassembler::Extern(e) => Some(e.configuration()),
+                    _ => None
+                }
+            }
 
             InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
+            InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
+            InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
+            InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
+            InnerTask::Tracker(t, _) => Some(t.configuration()),
 
             _ => None
         }

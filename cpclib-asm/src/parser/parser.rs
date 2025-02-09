@@ -2979,7 +2979,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
     let first = std::rc::Rc::new(std::cell::RefCell::new(true));
 
     loop {
-        let _arg = cut_err(
+        cut_err(
             opt(parse_breakpoint_argument)
                 .verify_map(|arg| {
                     // at the same time verify if it is ok and update
@@ -3120,9 +3120,7 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             _ => Some(()) // TODO implement the tests
                         }
                     }
-                    else {
-                        return if *first.borrow() { Some(()) } else { None }; // can be empty only at first loop
-                    }
+                    else if *first.borrow() { Some(()) } else { None }
                 })
                 .context(StrContext::Label("Breapoint parameter error"))
         )
@@ -4779,7 +4777,7 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
         LocatedDataAccess::FlagTest(flag.0, span.into())
     };
 
-    let token = LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(flag.into()), Some(val));
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(flag), Some(val));
     let warning = LocatedTokenInner::WarningWrapper(
         Box::new(token),
         "This is a fake instruction assembled using several opcodes".into()
@@ -5483,7 +5481,7 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
             debug_assert!(located_data_access1.is_none());
             debug_assert!(register8.is_none());
 
-            let repeat = opt((preceded(my_space1, located_expr))).parse_next(input)?;
+            let repeat = opt(preceded(my_space1, located_expr)).parse_next(input)?;
             if let Some(repeat) = repeat {
                 LocatedTokenInner::RepeatToken {
                     token: Box::new(token),

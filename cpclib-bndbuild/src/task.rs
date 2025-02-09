@@ -564,14 +564,12 @@ impl StandardTaskArguments {
                 .replace_all(&self.args, first_dep.as_str())
                 .into_owned();
         }
-        else {
-            if RE_FIRST_DEP.is_match(&self.args).unwrap() {
-                self.args = initial;
-                return Err(format!(
-                    "{} contains $<, but there are no available dependencies.",
-                    self.args
-                ));
-            }
+        else if RE_FIRST_DEP.is_match(&self.args).unwrap() {
+            self.args = initial;
+            return Err(format!(
+                "{} contains $<, but there are no available dependencies.",
+                self.args
+            ));
         }
 
         if let Some(first_tgt) = first_tgt {
@@ -579,14 +577,12 @@ impl StandardTaskArguments {
                 .replace_all(&self.args, first_tgt.as_str())
                 .into_owned();
         }
-        else {
-            if RE_FIRST_TGT.is_match(&self.args).unwrap() {
-                self.args = initial;
-                return Err(format!(
-                    "{} contains $@, but there are no available targets.",
-                    self.args
-                ));
-            }
+        else if RE_FIRST_TGT.is_match(&self.args).unwrap() {
+            self.args = initial;
+            return Err(format!(
+                "{} contains $@, but there are no available targets.",
+                self.args
+            ));
         }
         Ok(())
     }

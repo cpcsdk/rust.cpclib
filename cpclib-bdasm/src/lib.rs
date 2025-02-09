@@ -212,10 +212,7 @@ pub fn process(matches: &ArgMatches) {
             .map(|bloc| {
                 let split = bloc.split('-').collect::<Vec<_>>();
                 let start = usize::from_str_radix(split[0], 16).unwrap();
-                let length = match usize::from_str_radix(split[1], 10) {
-                    Ok(l) => Some(l),
-                    Err(_) => None
-                };
+                let length = usize::from_str_radix(split[1], 10).ok();
                 (start, length)
             })
             .collect::<Vec<_>>();

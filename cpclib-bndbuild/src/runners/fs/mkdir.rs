@@ -82,7 +82,7 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
             }
             else {
                 let res = if parents {
-                    std::fs::create_dir_all(&fname)
+                    std::fs::create_dir_all(fname)
                 }
                 else {
                     std::fs::create_dir(fname)

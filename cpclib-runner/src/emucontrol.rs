@@ -787,7 +787,7 @@ impl OrgamsRobotAction<'_, '_> {
     pub fn dst(&self) -> Option<&str> {
         match self {
             OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } => Some(tgt),
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => tgt.clone(),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => *tgt,
             _ => None
         }
     }
@@ -815,7 +815,7 @@ impl OrgamsRobotAction<'_, '_> {
 
     pub fn save_orgams_binary(&self) -> Option<Option<&str>> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(tgt.clone()),
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(*tgt),
             _ => None
         }
     }

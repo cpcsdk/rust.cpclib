@@ -156,7 +156,7 @@ fn expect_warning_but_success(real_fname: &str) {
         }
 
         let stderr = std::str::from_utf8(&res.stderr).unwrap();
-        if !strip_ansi_escapes::strip_str(&stderr).contains("warning: ") {
+        if !strip_ansi_escapes::strip_str(stderr).contains("warning: ") {
             panic!("No warning have been generated");
         }
     }

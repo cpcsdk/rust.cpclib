@@ -94,7 +94,7 @@ pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>) {
                 })
                 .sum()
         );
-        for l in all_applications.into_iter() {
+        for l in all_applications.iter() {
             all.extend_from_slice(l.0);
             if l.1 {
                 clearable.extend_from_slice(l.0);
@@ -136,8 +136,8 @@ pub fn build_args_parser() -> clap::Command {
                 .long("update")
                 .short('u')
                 .num_args(0..=1)
-                .value_parser(updatable_list.iter().chain(&["self", "all"]).collect_vec())
-                .help("Update bndbuild or a given embedded application if provided. If all is provided, it update all applications and bndbuild itslef")
+                .value_parser(updatable_list.iter().chain(&["self", "all", "installed"]).collect_vec())
+                .help("Update (or install) bndbuild or a given embedded application if provided. There are specific cases: if `all` is provided, it update all applications and bndbuild itself, if `installed` is provided it update only installed applications, if `self` is provide, it updates bndbuild itself.")
                 .exclusive(true)
         )
         
