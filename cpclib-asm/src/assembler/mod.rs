@@ -5318,16 +5318,17 @@ where
         .resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?
         .int()?;
 
-    let _p =
-        match val {
-            0x38 | 7 | 38 => 0b111,
-            _ => return Err(AssemblerError::InvalidArgument {
+    let _p = match val {
+        0x38 | 7 | 38 => 0b111,
+        _ => {
+            return Err(AssemblerError::InvalidArgument {
                 msg: format!(
                     "Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.",
                     val
                 )
             })
-        };
+        },
+    };
 
     let flag = arg1.get_flag_test().unwrap();
     if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {

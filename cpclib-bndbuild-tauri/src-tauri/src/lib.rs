@@ -273,7 +273,6 @@ async fn execute_target(tgt: String, state: State<'_, Mutex<BndbuildState>>) -> 
         Arc::clone(&state.builder.builder)
     };
 
-    
     builder.execute(tgt).map_err(|e| e.to_string())
 }
 

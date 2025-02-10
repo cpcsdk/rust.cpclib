@@ -31,7 +31,9 @@ use crate::task::{
     is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_winape_cmd,
     is_xfer_cmd, Task
 };
-use crate::{execute, init_project, BndBuilder, BndBuilderError, ALL_APPLICATIONS, EXPECTED_FILENAMES};
+use crate::{
+    execute, init_project, BndBuilder, BndBuilderError, ALL_APPLICATIONS, EXPECTED_FILENAMES
+};
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
@@ -482,26 +484,24 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         observers: &dyn BndBuilderObserver,
         cmd: Option<&str>
     ) -> Result<(), BndBuilderError> {
-        let update_command = |command, can_install|  -> Result<(), BndBuilderError>  {
+        let update_command = |command, can_install| -> Result<(), BndBuilderError> {
             observers.emit_stdout(&format!("> Update {command}\n"));
 
-            let task = Task::from_str(command)
-                .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
-            
+            let task =
+                Task::from_str(command).map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
-            match task.configuration::<()>()
-            {
+            match task.configuration::<()>() {
                 Some(conf) => {
                     let installed = conf.cache_folder().exists();
                     // try to delete only if exists
-                    if  installed {
+                    if installed {
                         Self::execute_clear(observers, Some(command))?;
                     }
 
                     if !installed && can_install {
-                        conf.install(&())
-                            .map_err(BndBuilderError::UpdateError)
-                    } else {
+                        conf.install(&()).map_err(BndBuilderError::UpdateError)
+                    }
+                    else {
                         Ok(())
                     }
                 },
@@ -509,11 +509,11 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                     Err(BndBuilderError::AnyError(format!(
                         "{command} is not an embedded command."
                     )))
-                }
+                },
             }
         };
 
-        let update_self = ||  -> Result<(), BndBuilderError>   {
+        let update_self = || -> Result<(), BndBuilderError> {
             observers.emit_stdout("> Update bndbuild\n");
             let (asset_url, asset_name) = if cfg!(target_os = "windows") {
                 (
@@ -541,19 +541,20 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             Ok(())
         };
 
-
-        let update_all = |can_install|  -> Result<(), BndBuilderError>   {
+        let update_all = |can_install| -> Result<(), BndBuilderError> {
             update_self()?;
-            for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| if *clearable {
-                Some(cmd[0])
-            } else {
-                None
+            for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| {
+                if *clearable {
+                    Some(cmd[0])
+                }
+                else {
+                    None
+                }
             }) {
                 update_command(cmd, can_install)?;
             }
             Ok(())
         };
-
 
         if let Some(cmd) = cmd {
             match cmd {
@@ -562,7 +563,8 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                 "installed" => update_all(false),
                 cmd => update_command(cmd, true)
             }
-        } else {
+        }
+        else {
             update_self()
         }
     }

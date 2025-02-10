@@ -159,7 +159,7 @@ pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
 
-pub const HSPC_CMDS: &[&str] =&[HSPC_CMD, "hspc"];
+pub const HSPC_CMDS: &[&str] = &[HSPC_CMD, "hspc"];
 
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const MKDIR_CMDS: &[&str] = &["mkdir"];
@@ -433,12 +433,14 @@ impl InnerTask {
         Self::ImgConverter(StandardTaskArguments::new(args))
     }
 
-
-    pub fn replace_automatic_variables(&mut self, first_dep: Option<&Utf8Path>, first_tgt: Option<&Utf8Path>) -> Result<(), String > {
+    pub fn replace_automatic_variables(
+        &mut self,
+        first_dep: Option<&Utf8Path>,
+        first_tgt: Option<&Utf8Path>
+    ) -> Result<(), String> {
         self.standard_task_arguments_mut()
             .replace_automatic_variables(first_dep, first_tgt)
-
-    } 
+    }
 
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
@@ -597,67 +599,85 @@ mod test {
     fn test_automatic_arguments() {
         // no replacement expected
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, None)
+            .is_ok()));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), None)
+            .is_ok()));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, Some("b".into()))
+            .is_ok()));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), Some("b".into()))
+            .is_ok()));
         assert_eq!(no_args.args, "a b");
-
 
         // tgt replacement expected
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_err()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, None)
+            .is_err()));
         assert_eq!(no_args.args, "$@ b");
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_err()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), None)
+            .is_err()));
         assert_eq!(no_args.args, "$@ b");
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, Some("b".into()))
+            .is_ok()));
         assert_eq!(no_args.args, "b b");
-
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), Some("b".into()))
+            .is_ok()));
         assert_eq!(no_args.args, "b b");
-
 
         // tgt and dep replacements expected
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args.replace_automatic_variables(None, None).is_err()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, None)
+            .is_err()));
         assert_eq!(no_args.args, "$@ $<");
 
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), None).is_err()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), None)
+            .is_err()));
         assert_eq!(no_args.args, "$@ $<");
 
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args.replace_automatic_variables(None, Some("b".into())).is_err()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(None, Some("b".into()))
+            .is_err()));
         assert_eq!(no_args.args, "$@ $<");
 
-
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        assert!(dbg!(no_args
+            .replace_automatic_variables(Some("a".into()), Some("b".into()))
+            .is_ok()));
         assert_eq!(no_args.args, "b a");
 
-/*
         // duplicated $ change nothing
-//        this onefails but i do not understand why
-        let mut no_args = StandardTaskArguments::new("$$@ $$<");
-        assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
-        assert_eq!(no_args.args, "$$@ $$<");
-
-*/
+        //        this onefails but i do not understand why
+        // let mut no_args = StandardTaskArguments::new("$$@ $$<");
+        // assert!(dbg!(no_args.replace_automatic_variables(Some("a".into()), Some("b".into())).is_ok()));
+        // assert_eq!(no_args.args, "$$@ $$<");
+        //
     }
 
     #[test]

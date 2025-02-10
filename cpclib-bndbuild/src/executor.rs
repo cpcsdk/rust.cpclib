@@ -51,12 +51,12 @@ impl InnerTask {
             },
 
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
-            InnerTask::Disassembler(d,_ ) => {
+            InnerTask::Disassembler(d, _) => {
                 match d {
                     Disassembler::Extern(e) => Some(e.configuration()),
                     _ => None
                 }
-            }
+            },
 
             InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),

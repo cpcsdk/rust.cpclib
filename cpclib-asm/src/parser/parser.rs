@@ -3120,7 +3120,12 @@ pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, 
                             _ => Some(()) // TODO implement the tests
                         }
                     }
-                    else if *first.borrow() { Some(()) } else { None }
+                    else if *first.borrow() {
+                        Some(())
+                    }
+                    else {
+                        None
+                    }
                 })
                 .context(StrContext::Label("Breapoint parameter error"))
         )
