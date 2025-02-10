@@ -86,6 +86,10 @@ impl CompilableInformation for ConvGenericVersion {
 
 impl DownloadableInformation for ConvGenericVersion {
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        ArchiveFormat::Zip
+        #[cfg(target_os = "windows")]
+        return ArchiveFormat::Raw;
+        
+        #[cfg(not(target_os = "windows"))]
+        return ArchiveFormat::Zip;
     }
 }
