@@ -14,6 +14,7 @@ use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
+#[cfg(feature = "fap")]
 use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
@@ -42,6 +43,7 @@ pub enum InnerTask {
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
+    #[cfg(feature = "fap")]
     Fap(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     HspCompiler(StandardTaskArguments),
@@ -170,6 +172,7 @@ pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
+#[cfg(feature = "fap")]
 pub const FAP_CMDS: &[&str] = &[FAP_CMD];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
@@ -190,6 +193,7 @@ impl Display for InnerTask {
             Self::Echo(s) => (ECHO_CMDS[0], s),
             Self::Emulator(e, s) => (e.get_command(), s),
             Self::Extern(s) => (EXTERN_CMDS[0], s),
+            #[cfg(feature = "fap")]
             Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
             Self::HspCompiler(s) => (HSPC_CMDS[0], s),
@@ -201,6 +205,7 @@ impl Display for InnerTask {
             Self::Snapshot(s) => (SNA_CMDS[0], s),
             Self::Tracker(t, s) => (t.get_command(), s),
             Self::Xfer(s) => (XFER_CMDS[0], s),
+            #[cfg(feature = "fap")]
             Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Snapshot(s) => (SNA_CMDS[0], s)
         };
@@ -236,7 +241,6 @@ is_some_cmd!(
     convgeneric, cp, cpcec,
     disark, disc,
     echo, emuctrl, r#extern,
-    fap,
     hideur,hspc,
     img2cpc, impdisc,
     martine, mkdir,
@@ -247,6 +251,14 @@ is_some_cmd!(
     winape,
     xfer
 );
+
+#[cfg(feature = "fap")]
+is_some_cmd!(fap);
+
+#[cfg(not(feature = "fap"))]
+pub fn is_fap_cmd(code: &str) -> bool {
+    false
+}
 
 impl<'de> Deserialize<'de> for InnerTask {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -306,7 +318,14 @@ impl<'de> Deserialize<'de> for InnerTask {
                     ))
                 }
                 else if is_fap_cmd(code) {
-                    Ok(InnerTask::Fap(std))
+                    #[cfg(feature = "fap")]
+                    let res = Ok(InnerTask::Fap(std));
+
+                    #[cfg(not(feature = "fap"))]
+                    let res = unreachable!();
+
+                    res
+
                 }
                 else if is_orgams_cmd(code) {
                     Ok(InnerTask::Assembler(Assembler::Orgams, std))
@@ -462,8 +481,9 @@ impl InnerTask {
             | InnerTask::Xfer(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Snapshot(t)
-            | InnerTask::Tracker(_, t)
-            | InnerTask::Fap(t) => t
+            | InnerTask::Tracker(_, t) => t,
+            #[cfg(feature = "fap")]
+            InnerTask::Fap(t)  => t
         }
     }
 
@@ -478,7 +498,6 @@ impl InnerTask {
             | InnerTask::Echo(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Extern(t)
-            | InnerTask::Fap(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
@@ -489,7 +508,9 @@ impl InnerTask {
             | InnerTask::Rm(t)
             | InnerTask::Snapshot(t)
             | InnerTask::Tracker(_, t)
-            | InnerTask::Xfer(t) => t
+            | InnerTask::Xfer(t) => t,
+            #[cfg(feature = "fap")]
+            InnerTask::Fap(t)  => t
         }
     }
 
@@ -518,6 +539,7 @@ impl InnerTask {
             InnerTask::Echo(_) => true,
             InnerTask::Emulator(..) => true,
             InnerTask::Extern(_) => false,
+            #[cfg(feature = "fap")]
             InnerTask::Fap(..) => true,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,

@@ -14,10 +14,14 @@ use cpclib_common::itertools::Itertools;
 use lazy_regex::regex_captures;
 use task::{
     ACE_CMDS, AMSPIRIT_CMDS, AT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CONVGENERIC_CMDS,
-    CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, FAP_CMDS,
+    CPCEC_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS,
     HIDEUR_CMDS, HSPC_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS,
     RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
 };
+
+#[cfg(feature = "fap")]
+use task::FAP_CMDS;
+
 use thiserror::Error;
 
 use crate::executor::*;
@@ -59,6 +63,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (ECHO_CMDS, false),
     (EMUCTRL_CMDS, false),
     (EXTERN_CMDS, false),
+    #[cfg(feature = "fap")]
     (FAP_CMDS, true),
     (HIDEUR_CMDS, false),
     (HSPC_CMDS, true),

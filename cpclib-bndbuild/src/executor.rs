@@ -6,6 +6,7 @@ use cpclib_runner::delegated::{
 use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
+#[cfg(feature = "fap")]
 use cpclib_runner::runner::fap::FAPVersion;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
@@ -58,7 +59,9 @@ impl InnerTask {
                 }
             },
 
+            #[cfg(feature = "fap")]
             InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
+
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
             InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
@@ -146,6 +149,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
+        #[cfg(feature = "fap")]
         InnerTask::Fap(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),

@@ -76,3 +76,4 @@ sna-interactive = ["cpclib-sna/interactive"]
 colored_errors = ["cpclib-basm/colored_errors"]
 [profile.release]
 debug = 1
+fap = ["cpclib-runner/fap"]

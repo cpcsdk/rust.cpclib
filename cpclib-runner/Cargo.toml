@@ -43,3 +43,8 @@ ureq.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 fs_extra = "1.3.0"
+
+
+[features]
+default = []
+fap = []
