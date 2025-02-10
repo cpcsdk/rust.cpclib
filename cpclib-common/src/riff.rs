@@ -28,7 +28,7 @@ impl From<&[u8]> for RiffCode {
 
 impl From<&str> for RiffCode {
     fn from(value: &str) -> Self {
-        let code = value.as_bytes().take(..4).unwrap();
+        let code = &value.as_bytes()[..4];
         RiffCode::new([code[0], code[1], code[2], code[3]])
     }
 }
