@@ -1,10 +1,11 @@
+use cpclib_crunchers::lzsa::LzsaMinMatch;
 use cpclib_crunchers::shrinkler::ShrinklerConfiguration;
 use cpclib_crunchers::CompressMethod;
 
 static DATA_TO_CRUNCH: &[u8] = "AAAAAAAAAAAAAAAAABNBNBNBNBAAAAAAAAACVCBCBCA".as_bytes();
 
 fn crunch_any(method: CompressMethod) {
-    let res = method.compress(DATA_TO_CRUNCH);
+    let res = method.compress(DATA_TO_CRUNCH).unwrap();
     dbg!(res.len(), DATA_TO_CRUNCH.len());
     assert!(res.len() < DATA_TO_CRUNCH.len());
 }
@@ -45,4 +46,15 @@ fn crunch_lz48() {
 #[test]
 fn crunch_lz49() {
     crunch_any(CompressMethod::Lz49)
+}
+
+
+
+#[test]
+fn crunch_lzsa() {
+    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V1, None));
+    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V2, None));
+    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V1, Some(LzsaMinMatch::Val4)));
+    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V2, Some(LzsaMinMatch::Val4)));
+
 }

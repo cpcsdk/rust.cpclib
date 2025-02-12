@@ -1,4 +1,7 @@
+#![feature(vec_into_raw_parts)]
+
 use lz49::lz49_encode_legacy;
+use lzsa::{LzsaMinMatch, LzsaVersion};
 #[cfg(not(target_arch = "wasm32"))]
 use shrinkler::ShrinklerConfiguration;
 
@@ -16,6 +19,9 @@ pub mod zx0;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shrinkler;
 
+
+pub mod lzsa;
+
 pub enum CompressMethod {
     #[cfg(not(target_arch = "wasm32"))]
     Apultra,
@@ -25,6 +31,7 @@ pub enum CompressMethod {
     Lz4,
     Lz48,
     Lz49,
+    Lzsa(LzsaVersion, Option<LzsaMinMatch>),
     #[cfg(not(target_arch = "wasm32"))]
     Shrinkler(ShrinklerConfiguration),
     #[cfg(not(target_arch = "wasm32"))]
@@ -32,20 +39,21 @@ pub enum CompressMethod {
 }
 
 impl CompressMethod {
-    pub fn compress(&self, data: &[u8]) -> Vec<u8> {
+    pub fn compress(&self, data: &[u8]) -> Result<Vec<u8>, ()> {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Apultra => apultra::compress(data),
+            CompressMethod::Apultra => Ok(apultra::compress(data)),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Exomizer => exomizer::compress(data),
+            CompressMethod::Exomizer => Ok(exomizer::compress(data)),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Lz4 => lz4::compress(data),
-            CompressMethod::Lz48 => lz48::lz48_encode_legacy(data),
-            CompressMethod::Lz49 => lz49_encode_legacy(data),
+            CompressMethod::Lz4 => Ok(lz4::compress(data)),
+            CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data)),
+            CompressMethod::Lz49 => Ok(lz49_encode_legacy(data)),
+            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, minmatch.clone()),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Shrinkler(conf) => conf.compress(data),
+            CompressMethod::Shrinkler(conf) => Ok(conf.compress(data)),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Zx0 => zx0::compress(data)
+            CompressMethod::Zx0 => Ok(zx0::compress(data))
         }
     }
 }
