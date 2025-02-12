@@ -19,6 +19,9 @@ impl Cruncher for CrunchType {
             CrunchType::LZ48 => Ok(CompressMethod::Lz48),
             CrunchType::LZ49 => Ok(CompressMethod::Lz49),
 
+            CrunchType::LZSA1 => Ok(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V1, None)),
+            CrunchType::LZSA2 => Ok(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V2, None)),
+
             CrunchType::LZX7 => {
                 Err(AssemblerError::AssemblingError {
                     msg: "LZX7 compression not implemented".to_owned()

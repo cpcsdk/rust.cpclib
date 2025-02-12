@@ -371,6 +371,8 @@ pub enum CrunchType {
     LZEXO,
     #[cfg(not(target_arch = "wasm32"))]
     LZAPU,
+    LZSA1,
+    LZSA2,
     #[cfg(not(target_arch = "wasm32"))]
     Shrinkler
 }
@@ -1063,6 +1065,8 @@ impl fmt::Display for Token {
                                 CrunchType::LZEXO => "INCEXO",
                                 #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZAPU => "INCAPU",
+                                CrunchType::LZSA1 => "INCLZSA1",
+                                CrunchType::LZSA2 => "INCLZSA2",
                                 #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Shrinkler => "INCSHRINKLER",
                             }
