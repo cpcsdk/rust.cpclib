@@ -33,6 +33,7 @@ impl<'a> From<&'a Utf8Path> for Fname<'a, '_> {
     }
 }
 
+
 impl<'a> From<&'a str> for Fname<'a, '_> {
     fn from(value: &'a str) -> Self {
         let p: &Utf8Path = value.into();
@@ -240,6 +241,7 @@ pub fn get_filename_to_read<S: AsRef<str>>(
     AnyFileName::from(fname).path_for_base_filename(options, env)
 }
 
+/// TODO refactor and move that from asm stuff. Should be done only in the disc crate
 /// Load a file and remove header if any
 /// - if path is provided, this is the file name used
 /// - if a string is provided, there is a search of appropriate filename

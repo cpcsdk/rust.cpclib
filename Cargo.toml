@@ -24,7 +24,7 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu",
-  "cpclib", 
+  "cpclib", "cpclib-crunch", 
   #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
@@ -50,6 +50,7 @@ cpclib-bndbuild = { version = "0.7.0", path = "cpclib-bndbuild", default-feature
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.9.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false }
+cpclib-crunch = { version = "0.1.0", path = "cpclib-crunch", default-features = false }
 cpclib-crunchers = { version = "0.9.0", path = "cpclib-crunchers", default-features = false }
 cpclib-disc = { version = "0.9.2", path = "cpclib-disc", default-features = false }
 cpclib-image = { version = "0.9.0", path = "cpclib-image", default-features = false }
@@ -75,7 +76,7 @@ cc = "1.2.10"
 cfg-if = "1.0.0"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
-clap = { version="4.5.26", features=["color"]}
+clap = { version="4.5.26", features=["color", "derive"]}
 codespan-reporting = "0.11.1"
 #contracts = "0.6.3"
 const_format = {version="0.2.34", features = ["fmt"]}
@@ -181,6 +182,7 @@ cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
 cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }
 cpclib-common = { path = "./cpclib-common/" }
 cpclib-cpr = { path = "./cpclib-cpr/" }
+cpclib-crunch = { path = "./cpclib-crunch/" }
 cpclib-crunchers = { path = "./cpclib-crunchers/" }
 cpclib-disc = { path = "./cpclib-disc/" }
 cpclib-image = { path = "./cpclib-image/" }
