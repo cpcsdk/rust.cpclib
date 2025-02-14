@@ -21,6 +21,7 @@ cpclib-disc.workspace = true
 cpclib-common.workspace = true
 cpclib-cpr.workspace = true
 cpclib-image.workspace = true
+cpclib-files.workspace = true
 
 arrayref.workspace = true
 #assert_matches.workspace = true

@@ -27,6 +27,8 @@ use std::ops::{Deref, Neg};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
+
+
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -36,6 +38,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
+use cpclib_files::{FileType, StorageSupport};
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 use file::AnyFileNameOwned;
@@ -3010,16 +3013,16 @@ impl Env {
                     SaveType::Ascii => FileType::Ascii,
                     SaveType::Disc(_) | SaveType::Tape => FileType::Auto /* TODO handle vases based on file names */
                 };
-                SaveFile {
+                SaveFile::new(
                     support,
-                    file: (file_type, amsdos_fname)
-                }
+                     (file_type, amsdos_fname)
+                )
             },
             (None, Some(dsk_fname), amsdos_fname) => {
-                SaveFile {
-                    support: StorageSupport::Disc(dsk_fname),
-                    file: (FileType::Auto, amsdos_fname)
-                }
+                SaveFile::new(
+                     StorageSupport::Disc(dsk_fname),
+                    (FileType::Auto, amsdos_fname)
+                )
             },
             (Some(save_type), None, amsdos_fname) => {
                 let file_type = match save_type {
@@ -3030,16 +3033,16 @@ impl Env {
                         unimplemented!("Handle the error message");
                     }
                 };
-                SaveFile {
-                    support: StorageSupport::Host,
-                    file: (file_type, amsdos_fname)
-                }
+                SaveFile::new(
+                     StorageSupport::Host,
+                     (file_type, amsdos_fname)
+                )
             },
             (None, None, amsdos_fname) => {
-                SaveFile {
-                    support: StorageSupport::Host,
-                    file: (FileType::Ascii, amsdos_fname)
-                }
+                SaveFile::new(
+                     StorageSupport::Host,
+                     (FileType::Ascii, amsdos_fname)
+                )
             },
             (a, b, c) => unimplemented!("{a:?} {b:?} {c:?}")
         };

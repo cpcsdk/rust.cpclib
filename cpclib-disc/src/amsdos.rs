@@ -162,8 +162,18 @@ impl AmsdosFileName {
             .to_owned()
     }
 
+    /// Produce the filname as expected by AMSDOS including . for empty extension
     pub fn filename(&self) -> String {
         format!("{}.{}", self.name(), self.extension())
+    }
+
+    /// Produce the filname as expected by AMSDOS excluding . for empty extension
+    pub fn ibm_filename(&self) -> String {
+        if self.extension().is_empty() {
+            self.name()
+        } else {
+            format!("{}.{}", self.name(), self.extension())
+        }
     }
 
     pub fn filename_with_user(&self) -> String {

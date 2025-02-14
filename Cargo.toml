@@ -24,7 +24,7 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu",
-  "cpclib", "cpclib-crunch", 
+  "cpclib", "cpclib-crunch", "cpclib-files", 
   #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
@@ -53,6 +53,7 @@ cpclib-cpr = { version = "0.7.0", path = "cpclib-cpr", default-features = false 
 cpclib-crunch = { version = "0.1.0", path = "cpclib-crunch", default-features = false }
 cpclib-crunchers = { version = "0.9.0", path = "cpclib-crunchers", default-features = false }
 cpclib-disc = { version = "0.9.2", path = "cpclib-disc", default-features = false }
+cpclib-files = { version = "0.1.0", path = "cpclib-files", default-features = false }
 cpclib-image = { version = "0.9.0", path = "cpclib-image", default-features = false }
 cpclib-imgconverter = { version = "0.9.0", path = "cpclib-imgconverter", default-features = false }
 cpclib-macros = { version = "0.9.0", path = "cpclib-macros", default-features = false }
@@ -185,6 +186,7 @@ cpclib-cpr = { path = "./cpclib-cpr/" }
 cpclib-crunch = { path = "./cpclib-crunch/" }
 cpclib-crunchers = { path = "./cpclib-crunchers/" }
 cpclib-disc = { path = "./cpclib-disc/" }
+cpclib-files = { path = "./cpclib-files/" }
 cpclib-image = { path = "./cpclib-image/" }
 cpclib-imgconverter = { path = "./cpclib-imgconverter/" }
 cpclib-macros = { path = "./cpclib-macros/" }

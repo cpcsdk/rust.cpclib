@@ -21,10 +21,8 @@
 // unsigned char track0s1_encoding; // alternate track_encoding for track 0 Side 1
 // }picfileformatheader;
 
-use camino_tempfile::{Builder, NamedUtf8TempFile};
+use camino_tempfile::Builder;
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::itertools::Itertools;
-use enumn::N;
 use hxcfe::{Hxcfe, Img, TrackEncoding};
 
 use crate::builder::build_edsk_from_cfg;

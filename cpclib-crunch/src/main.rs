@@ -2,7 +2,8 @@ use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::clap;
 use clap::{Parser, ValueEnum};
 use cpclib_crunchers::{lzsa::LzsaVersion, CompressMethod};
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
+use cpclib_disc::amsdos::{AmsdosAddBehavior, AmsdosFile, AmsdosFileName};
+use cpclib_files::FileAndSupport;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -18,7 +19,10 @@ struct CrunchArgs {
     keep_header: bool,
 
     #[arg(short, long, help="Compressed output file. Can be a binary, an Amsdos file, a file in a disc")]
-    output: Utf8PathBuf
+    output: Utf8PathBuf,
+
+    #[arg(short='H', long, help="Add a header when storing the file on the host", default_value_t=false)]
+    header: bool
 }
 
 #[derive(Debug, ValueEnum, Clone)]
@@ -76,18 +80,16 @@ fn main() {
     let crunched = cruncher.compress(&data)
         .expect("Error when crunching file");
 
-    eprintln!("LIMITATION: current version systematically save a file with amsdos header.\nNext version will be more flexible");
 
+    let file_and_support = FileAndSupport::new_auto(args.output, args.header);
 
-   let file =  AmsdosFile::binary_file_from_buffer(
-        &AmsdosFileName::try_from(args.output.as_str()).expect("Invalid amsdos fname"),
-        0xc000,
-        0xc000,
-        &crunched
-    ).expect("Error when creating the amsdos file");
-
-    std::fs::write(file.amsdos_filename().unwrap().unwrap().filename(), file.header_and_content())
-        .expect("Error when saving file");
-
+    dbg!(&file_and_support);
+    
+    file_and_support.save(
+        &crunched, 
+        Some(0xc000),
+        None,
+        Some(AmsdosAddBehavior::ReplaceAndEraseIfPresent)
+    ).expect("Error when saving the file");
 
 }

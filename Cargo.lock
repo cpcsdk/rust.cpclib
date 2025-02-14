@@ -2142,6 +2142,7 @@ dependencies = [
  "cpclib-cpr",
  "cpclib-crunchers",
  "cpclib-disc",
+ "cpclib-files",
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
@@ -2330,6 +2331,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-crunchers",
  "cpclib-disc",
+ "cpclib-files",
 ]
 
 [[package]]
@@ -2376,6 +2378,16 @@ dependencies = [
  "glob",
  "ntest",
  "serial_test",
+]
+
+[[package]]
+name = "cpclib-files"
+version = "0.1.0"
+dependencies = [
+ "cpclib-common",
+ "cpclib-disc",
+ "delegate 0.13.2",
+ "either",
 ]
 
 [[package]]

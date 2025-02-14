@@ -62,6 +62,6 @@ impl Cruncher for CrunchType {
                                                                                         * }, */
         }?;
 
-        method.compress(raw).map_err(|_| AssemblerError::AssemblingError { msg: format!("Error when crunching") })
+        method.compress(raw).map_err(|_| AssemblerError::AssemblingError { msg: "Error when crunching".to_string() })
     }
 }

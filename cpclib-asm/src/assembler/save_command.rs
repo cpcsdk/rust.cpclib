@@ -1,70 +1,18 @@
-use std::convert::TryFrom;
 
-use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_disc::amsdos::{AmsdosFile, AmsdosFileName};
 use cpclib_disc::disc::Disc;
-use cpclib_disc::edsk::Head;
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
-use cpclib_disc::open_disc;
+
+use cpclib_files::*;
 
 use super::report::SavedFile;
 use super::Env;
 use crate::error::AssemblerError;
 use crate::progress::{self, Progress};
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub enum FileType {
-    AmsdosBin,
-    AmsdosBas,
-    Ascii,
-    Auto
-}
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum StorageSupport {
-    Disc(Utf8PathBuf),
-    Tape(Utf8PathBuf),
-    Host
-}
+pub type SaveFile = FileAndSupport;
 
-impl StorageSupport {
-    pub fn in_disc(&self) -> bool {
-        matches!(self, Self::Disc(_))
-    }
-
-    pub fn in_tape(&self) -> bool {
-        matches!(self, Self::Tape(_))
-    }
-
-    pub fn in_host(&self) -> bool {
-        matches!(self, Self::Host)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SaveFile {
-    pub(crate) support: StorageSupport,
-    pub(crate) file: (FileType, Utf8PathBuf)
-}
-
-impl SaveFile {
-    delegate::delegate! {
-        to self.support {
-            pub fn in_disc(&self) -> bool;
-            pub fn in_tape(&self) -> bool;
-            pub fn in_host(&self) -> bool;
-        }
-    }
-
-    pub fn filename(&self) -> Utf8PathBuf {
-        match &self.support {
-            StorageSupport::Disc(p) => Utf8PathBuf::from(format!("{}#{}", p, self.file.1)),
-            StorageSupport::Tape(utf8_path_buf) => todo!(),
-            StorageSupport::Host => Utf8PathBuf::from(format!("{}", &self.file.1))
-        }
-    }
-}
 
 /// Save command information
 /// RMR is already properly set up when executing the instruction
@@ -92,22 +40,6 @@ impl SaveCommand {
 
     pub fn can_be_saved_in_parallel(&self) -> bool {
         self.file.in_host()
-    }
-
-    pub fn amsdos_filename(&self) -> &Utf8Path {
-        &self.file.file.1
-    }
-
-    pub fn file_type(&self) -> &FileType {
-        &self.file.file.0
-    }
-
-    pub fn container_filename(&self) -> Option<&Utf8Path> {
-        match &self.file.support {
-            StorageSupport::Disc(d) => Some(d.as_path()),
-            StorageSupport::Tape(t) => Some(t.as_path()),
-            StorageSupport::Host => None
-        }
     }
 
     /// Really make the save - Prerequisit : the page is properly selected
@@ -139,107 +71,30 @@ impl SaveCommand {
         // get the data from the CPC memory
         let data = env.get_memory(from as _, size as _);
 
-        // ensure we have no more AUTO file type by converting them in the more appropriate one
-        let file_type = match self.file_type() {
-            FileType::Auto => {
-                let lower = self.amsdos_filename().as_str().to_lowercase();
-                if lower.ends_with(".bas") {
-                    FileType::AmsdosBas
-                }
-                else if lower.ends_with(".asc") {
-                    FileType::Ascii
-                }
-                else {
-                    FileType::AmsdosBin
-                }
-            },
-            other => *other
-        };
+        // Generate and save the file
 
-        // Generate the file
-        let amsdos_file = match &file_type {
-            FileType::AmsdosBin => {
-                let loading_address = from as u16;
-                let execution_address = match env.run_options {
-                    Some((exec_address, _)) if exec_address < loading_address + size as u16 => {
-                        exec_address
-                    },
-                    _ => loading_address
-                };
-                AmsdosFile::binary_file_from_buffer(
-                    &AmsdosFileName::try_from(self.amsdos_filename().as_str())?,
-                    loading_address,
-                    execution_address,
-                    &data
-                )?
+        dbg!(&self.file).save(
+            data, 
+            Some(from as u16),
+            match env.run_options {
+                Some((exec_address, _)) if exec_address < from as u16 + size as u16 => {
+                    Some(exec_address)
+                },
+                _ => None
             },
-            FileType::AmsdosBas => {
-                AmsdosFile::basic_file_from_buffer(
-                    &AmsdosFileName::try_from(self.amsdos_filename().as_str())?,
-                    &data
-                )?
-            },
-            FileType::Ascii => {
-                match AmsdosFileName::try_from(self.amsdos_filename().as_str()) {
-                    Ok(amsfname) => AmsdosFile::ascii_file_from_buffer_with_name(&amsfname, &data),
-                    Err(e) => {
-                        if self.file.in_disc() {
-                            Err(e)?;
-                        }
-                        AmsdosFile::from_buffer(&data)
-                    }
-                }
-            },
-            FileType::Auto => unreachable!()
-        };
+            Some(env.options().assemble_options().save_behavior())
+        )
+        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving. {e}") })       
+        ?;
 
-        // save the file
-        match &self.file.support {
-            StorageSupport::Disc(disc_filename) => {
-                let mut disc = open_disc(disc_filename, false).map_err(|msg| {
-                    AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg))
-                })?;
-
-                let head = Head::A;
-                let system = false;
-                let read_only = false;
-
-                disc.add_amsdos_file(
-                    &amsdos_file,
-                    head,
-                    read_only,
-                    system,
-                    env.options().assemble_options().save_behavior()
-                )?;
-
-                disc.save(disc_filename).map_err(|e| {
-                    AssemblerError::AssemblingError {
-                        msg: format!("Error while saving {e}")
-                    }
-                })?;
-            },
-            StorageSupport::Tape(utf8_path_buf) => unimplemented!(),
-            StorageSupport::Host => {
-                std::fs::write(self.amsdos_filename(), amsdos_file.header_and_content()).map_err(
-                    |e| {
-                        AssemblerError::AssemblingError {
-                            msg: format!(
-                                "Error while saving \"{}\". {}",
-                                &self.amsdos_filename(),
-                                e
-                            )
-                        }
-                    }
-                )?;
-            }
-        }
+        
 
         if env.options().show_progress() {
-            Progress::progress().remove_save(progress::normalize(self.amsdos_filename()));
+            Progress::progress().remove_save(progress::normalize(&self.file.filename()));
         }
 
         Ok(SavedFile {
-            name: self.amsdos_filename().to_owned(),
+            name: self.file.filename().to_owned(),
             size: size as _
         })
     }

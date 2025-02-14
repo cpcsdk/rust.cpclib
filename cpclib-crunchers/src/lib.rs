@@ -49,7 +49,7 @@ impl CompressMethod {
             CompressMethod::Lz4 => Ok(lz4::compress(data)),
             CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data)),
             CompressMethod::Lz49 => Ok(lz49_encode_legacy(data)),
-            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, minmatch.clone()),
+            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, *minmatch),
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Shrinkler(conf) => Ok(conf.compress(data)),
             #[cfg(not(target_arch = "wasm32"))]

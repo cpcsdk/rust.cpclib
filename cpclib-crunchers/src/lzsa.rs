@@ -38,9 +38,9 @@ pub enum LzsaMinMatch{
 pub fn compress(data: &[u8], version: LzsaVersion, minmatch: Option<LzsaMinMatch>) -> Result<Vec<u8>, ()> {
 	let p_input_data = data.as_ptr();
 
-	let mut lenout: libc::c_int = 0;
+	let lenout: libc::c_int = 0;
 
-	let mut compressed_data = Vec::with_capacity(65536);
+	let compressed_data = Vec::with_capacity(65536);
 	let (p_output_data, n_compressed_size, n_max_compressed_size) = compressed_data.into_raw_parts();
 
 	debug_assert_eq!(n_compressed_size, 0);
