@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::process::{Child, Stdio};
 use std::thread;
 
+use clap::builder::styling::AnsiColor;
+use clap::builder::Styles;
 use clap::{ArgMatches, Command, Parser, FromArgMatches};
 use cpclib_common::itertools::Itertools;
 use transparent::{CommandExt, TransparentChild, TransparentRunner};
@@ -59,12 +61,20 @@ pub trait RunnerWithClap: Runner + Default {
     }
 
     fn render_help() -> String {
-        Self::default()
+        let cmd = Self::default()
             .get_clap_command()
-            .clone()
+            .clone();
+
+
+        let styles = Styles::styled()
+            .header(AnsiColor::Yellow.on_default())
+            .usage(AnsiColor::Green.on_default())
+            .literal(AnsiColor::Green.on_default())
+            .placeholder(AnsiColor::Green.on_default());
+        cmd.styles(styles)
             .disable_help_flag(true)
             .render_long_help()
-            .to_string()
+            .ansi().to_string()
     }
 
     fn render_version() -> String {
