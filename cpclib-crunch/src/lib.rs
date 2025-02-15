@@ -1,3 +1,4 @@
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::{camino::Utf8PathBuf, clap::CommandFactory};
 use cpclib_common::clap;
 use clap::{Parser, ValueEnum};
@@ -18,16 +19,19 @@ pub struct CrunchArgs {
     cruncher: Cruncher,
 
     #[arg(short, long, help="Input file to compress. Can be a binary (my_file.o), an Amsdos file (FILE.BIN), a file in a disc (my_disc.dsk#FILE.BIN")]
-    input: Utf8PathBuf,
+    input: Option<Utf8PathBuf>,
 
     #[arg(short, long, help="Also crunch the header. This is useful for binary files where the first bytes still correspond to a valid amsdos header", default_value_t=false)]
     keep_header: bool,
 
-    #[arg(short, long, help="Compressed output file. Can be a binary, an Amsdos file, a file in a disc")]
-    output: Utf8PathBuf,
+    #[arg(short, long, help="Compressed output file. Can be a binary, an Amsdos file, a file in a disc", requires="input")]
+    output: Option<Utf8PathBuf>,
 
     #[arg(short='H', long, help="Add a header when storing the file on the host", default_value_t=false)]
-    header: bool
+    header: bool,
+
+    #[arg(short, long, help="Show the z80 decompression source", default_value_t=false, conflicts_with="input")]
+    z80: bool
 }
 
 #[derive(Debug, ValueEnum, Clone)]
@@ -44,15 +48,45 @@ pub enum Cruncher {
 }
 
 
+impl Cruncher {
+    pub fn z80(&self) -> &Utf8Path {
+        let fname = match self {
+            Cruncher::Apultra => "inner://unaplib.asm",
+            Cruncher::Exomizer => "inner://deexo.asm",
+            Cruncher::Lz4 => "inner://lz4_docent.asm",
+            Cruncher::Lz48 => "inner://lz48decrunch.asm",
+            Cruncher::Lz49 => "inner://lz49decrunch.asm",
+            Cruncher::Lzsa1 => "inner://unlzsa1_fast.asm",
+            Cruncher::Lzsa2 => "inner://unlzsa1_fast.asm",
+            Cruncher::Shrinkler => "inner://deshrink.asm",
+            Cruncher::Zx0 => "inner://dzx0_fast.asm",
+        };
+        fname.into()
+    }
+}
+
+
 pub fn command() -> clap::Command {
 	CrunchArgs::command()
 }
 
 pub fn process(args: CrunchArgs) -> Result<(), String> {
 
+    if args.z80 {
+        let fname = args.cruncher.z80();
+        let content = cpclib_asm::file::load_file(fname, &Default::default()).unwrap().0;
+        let content = Vec::from(content);
+        let content = String::from_utf8(content).unwrap();
+        println!("; Import \"{fname}\" in basm or include the following content:\n{content}");
+        return Ok(());
+    }
+
+
+
+
     // TODO move loading code in the disc crate
-    let (data, header) = cpclib_asm::file::load_file(args.input.as_path(), &Default::default())
-        .map_err(|e| format!("Unable to load the input file {}.\n{}", args.input, e))
+    let (data, header) = cpclib_asm::file::load_file(args.input.as_ref().unwrap().as_path(), &Default::default())
+        .map_err(|e| format!("Unable to load the input file {}.\n{}", args.input.unwrap(), e))
         .map_err(|e| format!("Error while loading the file. {e}"))?;
 
     // keep header if needed
@@ -88,7 +122,7 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
         .map_err(|e| format!("Error when crunching file."))?;
 
 
-    let file_and_support = FileAndSupport::new_auto(args.output, args.header);
+    let file_and_support = FileAndSupport::new_auto(args.output.unwrap(), args.header);
 
     
     file_and_support.save(
