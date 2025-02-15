@@ -1,0 +1,44 @@
+
+
+- tgt: all
+  dep: crunch.exo crunch.lz48 crunch.apultra crunch.lz4 crunch.lz49 crunch.lzsa1 crunch.lzsa2 crunch.shrinkler crunch.zx0
+
+- tgt: distclean
+  phony: true
+  cmd: -rm crunch.exo crunch.lz48 crunch.apultra crunch.lz4 crunch.lz49 crunch.lzsa1 crunch.lzsa2 crunch.shrinkler crunch.zx0
+
+- tgt: crunch.exo
+  dep: bnd.build
+  cmd: crunch -c exomizer -i $< -o $@
+
+- tgt: crunch.lz48
+  dep: bnd.build
+  cmd: crunch -c lz48 -i $< -o $@
+
+- tgt: crunch.lz49
+  dep: bnd.build
+  cmd: crunch -c lz48 -i $< -o $@
+
+- tgt: crunch.apultra
+  dep: bnd.build
+  cmd: crunch -c apultra -i $< -o $@
+
+- tgt: crunch.lz4
+  dep: bnd.build
+  cmd: crunch -c lz4 -i $< -o $@
+
+- tgt: crunch.lzsa1
+  dep: bnd.build
+  cmd: crunch -c lzsa1 -i $< -o $@
+
+- tgt: crunch.lzsa2
+  dep: bnd.build
+  cmd: crunch -c lzsa2 -i $< -o $@
+
+- tgt: crunch.shrinkler
+  dep: bnd.build
+  cmd: crunch -c shrinkler -i $< -o $@
+
+- tgt: crunch.zx0
+  dep: bnd.build
+  cmd: crunch -c zx0 -i $< -o $@

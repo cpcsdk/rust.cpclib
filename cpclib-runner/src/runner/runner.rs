@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Child, Stdio};
 use std::thread;
 
-use clap::{ArgMatches, Command};
+use clap::{ArgMatches, Command, Parser, FromArgMatches};
 use cpclib_common::itertools::Itertools;
 use transparent::{CommandExt, TransparentChild, TransparentRunner};
 
@@ -37,11 +37,25 @@ pub trait Runner {
 pub trait RunnerWithClap: Runner + Default {
     fn get_clap_command(&self) -> &Command;
 
-    fn get_matches<S: AsRef<str>>(&self, itr: &[S]) -> Result<ArgMatches, String> {
-        self.get_clap_command()
+    /// Return the match objectthat encodes the corresponding options.
+    /// If version or help is requested, output them and consumes the args
+    fn get_matches<S: AsRef<str>>(&self, itr: &[S], e: &dyn EventObserver) -> Result<Option<ArgMatches>, String> {
+        let args = self.get_clap_command()
             .clone()
             .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+
+        if args.get_flag("version") {
+            self.emit_version(e);
+            Ok(None)
+        }
+        else if args.get_flag("help") {
+            self.emit_help(e);
+            Ok(None)
+        }
+        else {
+            Ok(Some(args))
+        }
     }
 
     fn render_help() -> String {
@@ -52,6 +66,40 @@ pub trait RunnerWithClap: Runner + Default {
             .render_long_help()
             .to_string()
     }
+
+    fn render_version() -> String {
+        Self::default()
+            .get_clap_command().clone().render_version()
+    }
+    fn emit_help(&self, e: &dyn EventObserver) {
+        e.emit_stdout(&Self::render_help());
+    }
+
+    fn emit_version(&self, e: &dyn EventObserver) {
+        e.emit_stdout(&Self::render_version());
+
+    }
+
+}
+
+pub trait RunnerWithClapMatches : RunnerWithClap {
+
+}
+
+pub trait RunnerWithClapDerive: RunnerWithClap {
+    type Args: Parser;
+    fn get_args<S: AsRef<str>>(&self, itr: &[S], e: &dyn EventObserver) -> Result<Option<Self::Args>, String> {
+
+        let matches = self.get_matches(itr, e)?;
+        if matches.is_none() {
+            return Ok(None);
+        }
+        let matches = matches.unwrap();
+        let args: Self::Args = Self::Args::from_arg_matches(&matches).expect("BUG");
+        Ok(Some(args))
+
+    }
+
 }
 
 pub struct ExternRunner<E: EventObserver> {

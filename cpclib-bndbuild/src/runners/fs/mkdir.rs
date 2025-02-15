@@ -5,6 +5,7 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap::{self, Arg, ArgAction};
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use crate::runners::{Runner, RunnerWithClap};
 use crate::task::MKDIR_CMDS;
@@ -55,6 +56,9 @@ impl<E: EventObserver> RunnerWithClap for MkdirRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for MkdirRunner<E> {
+}
+
 impl<E: EventObserver> Runner for MkdirRunner<E> {
     type EventObserver = E;
 
@@ -64,8 +68,14 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
         let matches = {
             let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
             itr.insert(0, "mkdir");
-            self.get_matches(&itr)?
+            self.get_matches(&itr, o)?
         };
+
+
+        if matches.is_none() {
+            return Ok(());
+        }
+        let matches = matches.unwrap();
 
         let parents = matches.get_flag("parents");
 

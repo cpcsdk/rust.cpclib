@@ -2234,6 +2234,7 @@ dependencies = [
  "cpclib-basm",
  "cpclib-bdasm",
  "cpclib-common",
+ "cpclib-crunch",
  "cpclib-disc",
  "cpclib-imgconverter",
  "cpclib-runner",
@@ -2327,6 +2328,7 @@ dependencies = [
 name = "cpclib-crunch"
 version = "0.1.0"
 dependencies = [
+ "built",
  "cpclib-asm",
  "cpclib-common",
  "cpclib-crunchers",

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 use cpclib_sna;
 
@@ -37,11 +38,20 @@ impl<E: EventObserver> RunnerWithClap for SnapshotRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for SnapshotRunner<E> {
+}
+
 impl<E: EventObserver> Runner for SnapshotRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let matches = self.get_matches(itr)?;
+        let matches = self.get_matches(itr,o)?;
+
+        if matches.is_none() {
+            return Ok(());
+        }
+        let matches = matches.unwrap();
+
         cpclib_sna::process(&matches, o).map_err(|e| format!("{:?}", e))
     }
 

@@ -16,6 +16,7 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
+use crate::runners::crunch::CrunchRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
@@ -101,6 +102,9 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                         .run(task.args(), observer)
                 },
             }
+        },
+        InnerTask::Crunch(_) => {
+            CrunchRunner::default().run(task.args(), observer)
         },
         InnerTask::Disassembler(d, _) => {
             match d {

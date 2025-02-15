@@ -6,6 +6,7 @@ use cpclib_bdasm::process;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::BDASM_CMDS;
@@ -72,28 +73,20 @@ impl<E: EventObserver> RunnerWithClap for BdasmRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for BdasmRunner<E> {
+}
+
 impl<E: EventObserver> Runner for BdasmRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
-        let matches = self.get_matches(&itr)?;
+        let matches = self.get_matches(&itr, o)?;
 
-        if matches.get_flag("version") {
-            o.emit_stdout(&self.get_clap_command().clone().render_version());
+        if matches.is_none() {
             return Ok(());
         }
-
-        if matches.get_flag("help") {
-            o.emit_stdout(
-                &self
-                    .get_clap_command()
-                    .clone()
-                    .render_long_help()
-                    .to_string()
-            );
-            return Ok(());
-        }
+        let matches = matches.unwrap();
 
         process(&matches);
         Ok(())

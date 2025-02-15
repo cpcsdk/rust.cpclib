@@ -24,6 +24,7 @@ cpclib-basm = { workspace = true, default-features = false, features = [
     "xferlib",
 ] }
 cpclib-asm.workspace = true
+cpclib-crunch.workspace = true
 cpclib-sna = { workspace = true, features = ["cmdline"] }
 cpclib-disc = { workspace = true, features = ["cmdline"] }
 cpclib-imgconverter = { workspace = true, features = ["xferlib"] }
@@ -74,6 +75,8 @@ rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
 sna-interactive = ["cpclib-sna/interactive"]
 colored_errors = ["cpclib-basm/colored_errors"]
+fap = ["cpclib-runner/fap"]
+
+
 [profile.release]
 debug = 1
-fap = ["cpclib-runner/fap"]

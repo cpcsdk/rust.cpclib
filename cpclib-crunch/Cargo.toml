@@ -16,5 +16,8 @@ cpclib-files = {workspace = true}
 cpclib-disc = {workspace = true}
 cpclib-asm = {workspace = true}
 
+[build-dependencies]
+built = { version = "0.7.5", features = ["chrono"] }
+
 [lints]
 workspace = true

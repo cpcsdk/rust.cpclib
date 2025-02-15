@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use cpclib_common::clap::{self, Command};
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
@@ -35,6 +36,9 @@ impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for BndBuildRunner<E> {
+}
+
 impl<E: EventObserver> Runner for BndBuildRunner<E> {
     type EventObserver = E;
 
@@ -43,7 +47,13 @@ impl<E: EventObserver> Runner for BndBuildRunner<E> {
         let cwd = std::env::current_dir().unwrap();
 
         // this will change the cwd
-        let matches = self.get_matches(itr)?;
+        let matches = self.get_matches(itr, o)?;
+        if matches.is_none() {
+            return Ok(());
+        }
+        let matches = matches.unwrap();
+
+
         crate::process_matches(&matches).map_err(|e| e.to_string())?;
 
         // restoration of cwd

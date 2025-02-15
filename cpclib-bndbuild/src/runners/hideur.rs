@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use cpclib_disc::hideur::{hideur_build_arg_parser, hideur_handle};
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::built_info;
@@ -37,11 +38,20 @@ impl<E: EventObserver> RunnerWithClap for HideurRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for HideurRunner<E> {
+
+}
+
 impl<E: EventObserver> Runner for HideurRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let matches = self.get_matches(itr)?;
+        let matches = self.get_matches(itr, o)?;
+        if matches.is_none() {
+            return Ok(());
+        }
+        let matches = matches.unwrap();
+        
         hideur_handle(&matches).map_err(|e| e.to_string())
     }
 

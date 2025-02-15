@@ -38,6 +38,7 @@ pub enum InnerTask {
     BndBuild(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
+    Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
     Echo(StandardTaskArguments),
@@ -181,6 +182,8 @@ pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
 pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
+pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
+
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
@@ -188,6 +191,7 @@ impl Display for InnerTask {
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
+            Self::Crunch(s) => (CRUNCH_CMDS[0], s),
             Self::Disassembler(d, s) => (d.get_command(), s),
             Self::Disc(s) => (DISC_CMDS[0], s),
             Self::Echo(s) => (ECHO_CMDS[0], s),
@@ -238,7 +242,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at,
     basm, bdasm, bndbuild,
-    convgeneric, cp, cpcec,
+    convgeneric, crunch, cp, cpcec,
     disark, disc,
     echo, emuctrl, r#extern,
     hideur,hspc,
@@ -286,6 +290,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_at_cmd(code) {
                     Ok(InnerTask::Tracker(Tracker::new_at3_default(), std))
+                }
+                else if is_crunch_cmd(code) {
+                    Ok(InnerTask::Crunch(std))
                 }
                 else if is_convgeneric_cmd(code) {
                     Ok(InnerTask::Convgeneric(std))
@@ -466,6 +473,7 @@ impl InnerTask {
             InnerTask::Assembler(_, t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
+            | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
@@ -492,6 +500,7 @@ impl InnerTask {
             InnerTask::Assembler(_, t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
+            | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
@@ -534,6 +543,7 @@ impl InnerTask {
             InnerTask::BndBuild(_) => false,
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cp(_) => false,
+            InnerTask::Crunch(_) => false,
             InnerTask::Disassembler(..) => false,
             InnerTask::Disc(_) => false,
             InnerTask::Echo(_) => true,

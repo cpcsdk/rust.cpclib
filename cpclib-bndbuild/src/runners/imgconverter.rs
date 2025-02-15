@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use cpclib_common::clap::{Arg, ArgAction, Command};
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
@@ -53,30 +54,20 @@ impl<E: EventObserver> RunnerWithClap for ImgConverterRunner<E> {
     }
 }
 
+impl<E: EventObserver> RunnerWithClapMatches for ImgConverterRunner<E> {
+}
+
 impl<E: EventObserver> Runner for ImgConverterRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let args = self.get_clap_command().clone();
 
-        // let itr = Some(self.get_command()).into_iter().chain(itr.iter().map(|s| s.as_ref())).collect_vec(); XXX done
-
-        let matches = self.get_matches(itr)?;
-        if matches.get_flag("version") {
-            o.emit_stdout(&self.get_clap_command().clone().render_version());
+        let matches = self.get_matches(itr, o)?;
+        if matches.is_none() {
             return Ok(());
         }
-
-        if matches.get_flag("help") {
-            o.emit_stdout(
-                &self
-                    .get_clap_command()
-                    .clone()
-                    .render_long_help()
-                    .to_string()
-            );
-            return Ok(());
-        }
+        let matches = matches.unwrap();
 
         cpclib_imgconverter::process(&matches, args).map_err(|e| e.to_string())
     }
