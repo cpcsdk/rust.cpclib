@@ -70,12 +70,14 @@ impl<E: EventObserver> Runner for BndBuildRunner<E> {
         let matches = matches.unwrap();
 
 
-        crate::process_matches(&matches).map_err(|e| e.to_string())?;
-
+        let res = crate::process_matches(&matches);
         // restoration of cwd
         std::env::set_current_dir(cwd).unwrap();
 
-        Ok(())
+        
+        res.map_err(|e| {
+            e.to_string()
+        })
     }
 
     fn get_command(&self) -> &str {

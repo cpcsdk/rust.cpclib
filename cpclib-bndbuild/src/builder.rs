@@ -140,6 +140,8 @@ impl BndBuilder {
         working_directory: Option<P>,
         definitions: &[(S1, S2)]
     ) -> Result<String, BndBuilderError> {
+
+        // XXX here it is problematic to modify work dir
         if let Some(working_directory) = working_directory {
             let working_directory = working_directory.as_ref();
             std::env::set_current_dir(working_directory).map_err(|e| {
@@ -153,7 +155,9 @@ impl BndBuilder {
         // get the content of the file
         let mut content = Default::default();
         rdr.read_to_string(&mut content)
-            .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
+            .map_err(|e| {
+                BndBuilderError::AnyError(e.to_string())
+            })?;
 
         // apply jinja templating
         let mut env = Environment::new();
@@ -189,7 +193,9 @@ impl BndBuilder {
             env.add_global(key, value);
         }
         env.render_str(&content, context!())
-            .map_err(|e| BndBuilderError::AnyError(e.to_string()))
+            .map_err(|e| {
+                BndBuilderError::AnyError(e.to_string())
+            })
     }
 
     pub fn from_string(content: String) -> Result<Self, BndBuilderError> {

@@ -1,7 +1,4 @@
 use cpclib_common::clap::Parser;
-
-use std::os::unix::process;
-
 use cpclib_crunch::CrunchArgs;
 
 fn main() -> Result<(), String>{

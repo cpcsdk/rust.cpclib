@@ -124,7 +124,10 @@ impl BndBuilderCommand {
     pub fn execute(self) -> Result<(), BndBuilderError> {
         let mut step = Some(self);
         while let Some(inner) = step {
-            step = inner.execute_one_step()?;
+            let previous_dir = std::env::current_dir().unwrap();
+            let res = inner.execute_one_step();
+            std::env::set_current_dir(previous_dir).unwrap();
+            step = res?;
         }
 
         Ok(())
@@ -637,7 +640,8 @@ impl BndBuilderApp {
     }
 
     /// Get the string that represents the builder script after interpolation
-    pub fn get_buildfile_content(&self, fname: &Utf8Path) -> Result<String, BndBuilderError> {
+    pub fn get_buildfile_content<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<String, BndBuilderError> {
+        let fname = fname.as_ref();
         // Get the variables definition
         let definitions =
             if let Some(definitions) = self.matches.get_many::<String>("DEFINE_SYMBOL") {
@@ -710,8 +714,17 @@ impl BndBuilderApp {
             }
 
             // Search for the file to handle
-            let fname = if let Some(fname) = matches.get_one::<String>("file") {
-                fname.as_str()
+            let fname: Utf8PathBuf = if let Some(fname) = matches.get_one::<String>("file") {
+                let fname: &Utf8Path = fname.as_str().into();
+
+                if fname.is_dir() {
+                    EXPECTED_FILENAMES.into_iter()
+                        .map(|f| fname.join(f))
+                        .find(|p| p.exists())
+                        .unwrap_or_else(||fname.to_owned())
+                } else {
+                    fname.to_owned()
+                }
             }
             else {
                 let mut selected = &EXPECTED_FILENAMES[1];
@@ -720,14 +733,19 @@ impl BndBuilderApp {
                         selected = fname;
                     }
                 }
-                selected
+                selected.into()
             };
-            let fname = Utf8Path::new(fname);
+
+            let fname = &fname;
 
             // the other commands need the build file to exist
-            if !Utf8Path::new(fname).exists() {
+            if !fname.is_file() {
                 {
-                    let mut error_msg = format!("{fname} does not exists.");
+                    let mut error_msg = if fname.is_dir() {
+                        format!("Build directory `{fname}` does not contains a build file.")
+                    } else {
+                        format!("Build file `{fname}` does not exists.")
+                    };
                     if let Some(Some(fname)) = matches
                         .get_many::<String>("target")
                         .map(|s| s.into_iter().next())
@@ -750,6 +768,8 @@ impl BndBuilderApp {
                     return Err(BndBuilderError::AnyError(error_msg));
                 }
             }
+
+
 
             let content = self.get_buildfile_content(fname)?;
 
