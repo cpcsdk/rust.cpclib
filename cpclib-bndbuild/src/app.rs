@@ -498,7 +498,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                         Self::execute_clear(observers, Some(command))?;
                     }
 
-                    if !installed && can_install {
+                    if installed || can_install {
                         conf.install(&()).map_err(BndBuilderError::UpdateError)
                     }
                     else {
