@@ -284,6 +284,7 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"IFNDEF",
     b"IFNOT",
     b"IFUSED",
+    b"IFNUSED",
     b"ITER",
     b"ITERATE",
     b"LZ4",
@@ -2800,6 +2801,8 @@ enum KindOfConditional {
 pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
+  //  dbg!(&input);
+
     let if_clone = *input;
     let if_start = input.checkpoint();
 
@@ -2821,6 +2824,9 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         ))
         .parse_next(input);
 
+
+      //  dbg!(&if_token_or_error);
+
         // leave if the first loop does not have a test
         if first_loop && if_token_or_error.is_err() {
             input.reset(&if_start);
@@ -2840,6 +2846,9 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         else {
             None
         };
+
+
+     //   dbg!(&condition);
 
         // Remove empty stuff
         let _ = cut_err(
@@ -2862,6 +2871,9 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
         )))
         .parse_next(input)?;
         //  dbg!(unsafe{std::str::from_utf8_unchecked(input.as_bytes())});
+
+      //  dbg!(&code);
+
 
         if let Some(condition) = condition {
             conditions.push((condition, code));
