@@ -103,9 +103,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
-        InnerTask::Crunch(_) => {
-            CrunchRunner::default().run(task.args(), observer)
-        },
+        InnerTask::Crunch(_) => CrunchRunner::default().run(task.args(), observer),
         InnerTask::Disassembler(d, _) => {
             match d {
                 crate::runners::disassembler::Disassembler::Bdasm => {

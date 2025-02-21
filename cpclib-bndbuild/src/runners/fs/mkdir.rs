@@ -56,8 +56,7 @@ impl<E: EventObserver> RunnerWithClap for MkdirRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for MkdirRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for MkdirRunner<E> {}
 
 impl<E: EventObserver> Runner for MkdirRunner<E> {
     type EventObserver = E;
@@ -70,7 +69,6 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
             itr.insert(0, "mkdir");
             self.get_matches(&itr, o)?
         };
-
 
         if matches.is_none() {
             return Ok(());

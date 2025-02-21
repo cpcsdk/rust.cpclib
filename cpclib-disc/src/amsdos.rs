@@ -171,7 +171,8 @@ impl AmsdosFileName {
     pub fn ibm_filename(&self) -> String {
         if self.extension().is_empty() {
             self.name()
-        } else {
+        }
+        else {
             format!("{}.{}", self.name(), self.extension())
         }
     }

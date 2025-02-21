@@ -54,8 +54,7 @@ impl<E: EventObserver> RunnerWithClap for ImgConverterRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for ImgConverterRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for ImgConverterRunner<E> {}
 
 impl<E: EventObserver> Runner for ImgConverterRunner<E> {
     type EventObserver = E;

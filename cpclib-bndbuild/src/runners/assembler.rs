@@ -77,8 +77,7 @@ impl<E: EventObserver> RunnerWithClap for OrgamsRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for OrgamsRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for OrgamsRunner<E> {}
 
 impl<E: EventObserver> Runner for OrgamsRunner<E> {
     type EventObserver = E;
@@ -228,8 +227,7 @@ impl<E: EnvEventObserver + 'static> RunnerWithClap for BasmRunner<E> {
     }
 }
 
-impl<E: EnvEventObserver + 'static> RunnerWithClapMatches for BasmRunner<E> {
-}
+impl<E: EnvEventObserver + 'static> RunnerWithClapMatches for BasmRunner<E> {}
 
 impl<E: EnvEventObserver + 'static> Runner for BasmRunner<E> {
     type EventObserver = Arc<E>;

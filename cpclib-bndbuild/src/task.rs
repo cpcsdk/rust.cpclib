@@ -332,7 +332,6 @@ impl<'de> Deserialize<'de> for InnerTask {
                     let res = unreachable!();
 
                     res
-
                 }
                 else if is_orgams_cmd(code) {
                     Ok(InnerTask::Assembler(Assembler::Orgams, std))
@@ -491,7 +490,7 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::Tracker(_, t) => t,
             #[cfg(feature = "fap")]
-            InnerTask::Fap(t)  => t
+            InnerTask::Fap(t) => t
         }
     }
 
@@ -519,7 +518,7 @@ impl InnerTask {
             | InnerTask::Tracker(_, t)
             | InnerTask::Xfer(t) => t,
             #[cfg(feature = "fap")]
-            InnerTask::Fap(t)  => t
+            InnerTask::Fap(t) => t
         }
     }
 

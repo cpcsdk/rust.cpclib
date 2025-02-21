@@ -40,7 +40,6 @@ fn build() {
         .shared_flag(true)
         .cargo_metadata(true)
         .compile("lz4");
-
 }
 
 fn build_shrinkler() {
@@ -53,8 +52,6 @@ fn build_shrinkler() {
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.cpp");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
 }
-
-
 
 fn build_lzsa() {
     cc::Build::new()

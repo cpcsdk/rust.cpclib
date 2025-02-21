@@ -57,8 +57,7 @@ impl<E: EventObserver> RunnerWithClap for DiscManagerRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for DiscManagerRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for DiscManagerRunner<E> {}
 
 impl<E: EventObserver> Runner for DiscManagerRunner<E> {
     type EventObserver = E;

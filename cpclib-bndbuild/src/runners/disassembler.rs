@@ -73,8 +73,7 @@ impl<E: EventObserver> RunnerWithClap for BdasmRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for BdasmRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for BdasmRunner<E> {}
 
 impl<E: EventObserver> Runner for BdasmRunner<E> {
     type EventObserver = E;

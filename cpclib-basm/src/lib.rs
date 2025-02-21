@@ -352,7 +352,7 @@ pub fn assemble(
         })?;
 
     let _ = env
-        .handle_post_actions()
+        .handle_post_actions(listing)
         .map(|(remu, wabp)| -> Result<(), BasmError> {
             if let Some(remu) = remu {
                 if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {

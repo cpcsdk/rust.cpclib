@@ -41,12 +41,12 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
 pub trait ExprEvaluationExt: Display {
     /// Simple evaluation without context => can only evaluate number based operations.
     fn eval(&self) -> Result<ExprResult, AssemblerError> {
-        let env = Env::default();
-        self.resolve(&env)
+        let mut env = Env::default();
+        self.resolve(&mut env)
     }
 
     /// Resolve the expression base on the env context
-    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError>;
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError>;
 
     /// Get all the symbols used
     fn symbols_used(&self) -> Vec<&str>;
@@ -87,7 +87,7 @@ impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
     }
 
     /// TODO handle float numbers
-    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
         let arg = self.arg.resolve(env)?;
 
         let res = match self.func {
@@ -186,7 +186,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
             .collect_vec()
     }
 
-    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
         let arg1 = self.arg1.resolve(env)?;
         let arg2 = self.arg2.resolve(env)?;
 
@@ -226,9 +226,9 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
 
 
 
-        let sym = $env.symbols();
 
-        let binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, AssemblerError> {
+
+        let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, AssemblerError> {
             let res_left = left.resolve($env);
             let res_right = right.resolve($env);
 
@@ -323,10 +323,10 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
         }
         else if $self.is_label() {
             let label = $self.label();
-            match sym.value(label)?.map(|vl| vl.value()) {
+            match  $env.symbols().value(label)?.map(|vl| vl.value()) {
                 Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
-                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len(sym).into()),
+                Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len($env.symbols()).into()),
                 Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.into()),
                 Some(e) => { Err(AssemblerError::WrongSymbolType {
                     symbol: label.into(),
@@ -342,7 +342,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                     // here it is more problematic
                     AssemblerError::UnknownSymbol {
                         symbol: label.into(),
-                        closest: sym.closest_symbol(label, SymbolFor::Number)?,
+                        closest:  $env.symbols().closest_symbol(label, SymbolFor::Number)?,
                     }
                 })
             }
@@ -434,10 +434,14 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
             let d = $self.function_name();
             let expr = $self.function_args();
 
+
+            let mut params = Vec::with_capacity(expr.len());
+            for p in expr.iter() {
+                let v = $env.resolve_expr_may_fail_in_first_pass(p) ?;
+                params.push(v);
+            }
+
             let f = $env.any_function(d)?;
-            let params = expr.iter()
-                        .map(|p| $env.resolve_expr_may_fail_in_first_pass(p))
-                        .collect::<Result<Vec<ExprResult>, AssemblerError>>()?;
             f.eval($env, &params)
 
 
@@ -483,7 +487,7 @@ impl ExprEvaluationExt for Expr {
         }
     }
 
-    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
         resolve_impl!(self, env)
     }
 }

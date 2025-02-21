@@ -16,7 +16,7 @@ use crate::{AssemblingOptions, EnvOptions};
 pub trait TokenExt: ListingElement + Debug + Visited {
     fn estimated_duration(&self) -> Result<usize, AssemblerError>;
     /// Unroll the tokens when it represents a loop
-    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
+    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
@@ -120,7 +120,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
 impl TokenExt for Token {
     /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
-    fn unroll(&self, env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
         if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
             let count: Result<ExprResult, AssemblerError> = expr.resolve(env);
             if count.is_err() {

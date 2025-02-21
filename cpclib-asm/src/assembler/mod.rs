@@ -27,8 +27,6 @@ use std::ops::{Deref, Neg};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
-
-
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -337,7 +335,7 @@ impl CharsetEncoding {
         self.lut.clear()
     }
 
-    pub fn update(&mut self, spec: &CharsetFormat, env: &Env) -> Result<(), AssemblerError> {
+    pub fn update(&mut self, spec: &CharsetFormat, env: &mut Env) -> Result<(), AssemblerError> {
         match spec {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
@@ -579,7 +577,7 @@ impl Env {
     }
 
     pub fn build_fname<E: ExprEvaluationExt + Debug>(
-        &self,
+        &mut self,
         exp: &E
     ) -> Result<String, AssemblerError> {
         let fname = match self.resolve_expr_must_never_fail(exp) {
@@ -619,14 +617,14 @@ impl Env {
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
     pub fn resolve_expr_may_fail_in_first_pass<E: ExprEvaluationExt>(
-        &self,
+        &mut self,
         exp: &E
     ) -> Result<ExprResult, AssemblerError> {
         self.resolve_expr_may_fail_in_first_pass_with_default(exp, 0)
     }
 
     pub fn resolve_index_may_fail_in_first_pass<E: ExprEvaluationExt>(
-        &self,
+        &mut self,
         (op, exp): (BinaryOperation, &E)
     ) -> Result<ExprResult, AssemblerError> {
         let res = self.resolve_expr_may_fail_in_first_pass(exp)?;
@@ -643,10 +641,12 @@ impl Env {
         E: ExprEvaluationExt,
         R: Into<ExprResult>
     >(
-        &self,
+        &mut self,
         exp: &E,
         r: R
     ) -> Result<ExprResult, AssemblerError> {
+        self.track_used_symbols(exp);
+
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -671,7 +671,7 @@ impl Env {
     /// Compute the expression thanks to the symbol table of the environment.
     /// An error is systematically raised if the expression is not solvable (i.e., labels are unknown)
     fn resolve_expr_must_never_fail<E: ExprEvaluationExt>(
-        &self,
+        &mut self,
         exp: &E
     ) -> Result<ExprResult, AssemblerError> {
         match exp.resolve(self) {
@@ -1019,9 +1019,17 @@ impl Env {
 
     /// Handle the actions to do after assembling.
     /// ATM it is only the save of data for each page
-    pub fn handle_post_actions(
-        &mut self
-    ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError> {
+    pub fn handle_post_actions<'token, T>(
+        &mut self,
+        tokens: &'token [T]
+    ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError>
+    where
+        T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt + ExprElement,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
         self.handle_print()?;
         self.handle_assert()?;
 
@@ -1062,6 +1070,18 @@ impl Env {
         }
 
         self.saved_files = Some(self.handle_file_save()?);
+
+        // Add an additional pass to build the listing (this way it is built only one time)
+        if self.options().assemble_options().output_builder.is_some() {
+            let mut tokens = processed_token::build_processed_tokens_list(tokens, self)
+                .expect("No errors must occur here");
+            self.pass = AssemblingPass::ListingPass;
+            self.start_new_pass();
+            processed_token::visit_processed_tokens(&mut tokens, self)
+                .map_err(|e| eprintln!("{}", e))
+                .expect("No error can arise in listing output mode; there is a bug somewhere");
+        }
+
         Ok((remu, wabp))
     }
 
@@ -1793,7 +1813,7 @@ impl Env {
     }
 
     /// Evaluate the expression according to the current state of the environment
-    pub fn eval(&self, expr: &Expr) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&mut self, expr: &Expr) -> Result<ExprResult, AssemblerError> {
         expr.resolve(self)
     }
 
@@ -2385,8 +2405,8 @@ impl Env {
         let bytes = self.assemble_nop(Mnemonic::Nop, Some(count))?;
         self.output_bytes(&bytes)?;
 
-        self.stable_counters
-            .update_counters(self.resolve_expr_may_fail_in_first_pass(count)?.int()? as _);
+        let count = self.resolve_expr_may_fail_in_first_pass(count)?.int()? as _;
+        self.stable_counters.update_counters(count);
         Ok(())
     }
 
@@ -2851,7 +2871,7 @@ impl Env {
 
     #[inline]
     fn prepropress_string_formatted_expression(
-        &self,
+        &mut self,
         info: &[FormattedExpr]
     ) -> Result<PreprocessedFormattedString, AssemblerError> {
         PreprocessedFormattedString::try_new(info, self)
@@ -2876,7 +2896,7 @@ impl Env {
             .add_pause_command(span.cloned().into());
     }
 
-    pub fn visit_fail(&self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
+    pub fn visit_fail(&mut self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
         let repr = info
             .map(|info| self.prepropress_string_formatted_expression(info))
             .unwrap_or_else(|| Ok(Default::default()))?;
@@ -3013,14 +3033,11 @@ impl Env {
                     SaveType::Ascii => FileType::Ascii,
                     SaveType::Disc(_) | SaveType::Tape => FileType::Auto /* TODO handle vases based on file names */
                 };
-                SaveFile::new(
-                    support,
-                     (file_type, amsdos_fname)
-                )
+                SaveFile::new(support, (file_type, amsdos_fname))
             },
             (None, Some(dsk_fname), amsdos_fname) => {
                 SaveFile::new(
-                     StorageSupport::Disc(dsk_fname),
+                    StorageSupport::Disc(dsk_fname),
                     (FileType::Auto, amsdos_fname)
                 )
             },
@@ -3033,16 +3050,10 @@ impl Env {
                         unimplemented!("Handle the error message");
                     }
                 };
-                SaveFile::new(
-                     StorageSupport::Host,
-                     (file_type, amsdos_fname)
-                )
+                SaveFile::new(StorageSupport::Host, (file_type, amsdos_fname))
             },
             (None, None, amsdos_fname) => {
-                SaveFile::new(
-                     StorageSupport::Host,
-                     (FileType::Ascii, amsdos_fname)
-                )
+                SaveFile::new(StorageSupport::Host, (FileType::Ascii, amsdos_fname))
             },
             (a, b, c) => unimplemented!("{a:?} {b:?} {c:?}")
         };
@@ -3249,7 +3260,7 @@ impl Env {
 
 impl Env {
     fn assemble_nop<E: ExprEvaluationExt>(
-        &self,
+        &mut self,
         kind: Mnemonic,
         count: Option<&E>
     ) -> Result<Bytes, AssemblerError> {
@@ -3440,15 +3451,6 @@ where
         if let Err(e) = res {
             return Err((Some(tokens), env, e));
         }
-    }
-
-    // Add an additional pass to build the listing (this way it is built only one time)
-    if env.options().assemble_options().output_builder.is_some() {
-        env.pass = AssemblingPass::ListingPass;
-        env.start_new_pass();
-        processed_token::visit_processed_tokens(&mut tokens, &mut env)
-            .map_err(|e| eprintln!("{}", e))
-            .expect("No error can arise in listing output mode; there is a bug somewhere");
     }
 
     env.cleanup_warnings();
@@ -4313,8 +4315,8 @@ impl Env {
 
     /// Generate a string that is helpfull for assertion understanding (i.e. show the operation and evaluate the rest)
     /// Crash if expression cannot be computed
-    fn to_assert_string<E: ExprEvaluationExt + ExprElement>(&self, exp: &E) -> String {
-        let format = |oper, left, right| {
+    fn to_assert_string<E: ExprEvaluationExt + ExprElement>(&mut self, exp: &E) -> String {
+        let mut format = |oper, left, right| {
             format!(
                 "0x{:x} {} 0x{:x}",
                 self.resolve_expr_must_never_fail(left).unwrap(),
@@ -4340,11 +4342,15 @@ impl Env {
                     format(code, left, right)
                 },
 
-                None => format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
+                None => {
+                    let d = self.resolve_expr_must_never_fail(exp).unwrap();
+                    format!("0x{:x}", d)
+                }
             }
         }
         else {
-            format!("0x{:x}", self.resolve_expr_must_never_fail(exp).unwrap())
+            let d = self.resolve_expr_must_never_fail(exp).unwrap();
+            format!("0x{:x}", d)
         }
     }
 
@@ -4974,7 +4980,7 @@ pub fn assemble_defs_item<E: ExprEvaluationExt>(
 pub fn assemble_align(
     expr: &Expr,
     fill: Option<&Expr>,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError> {
     let expression = env.resolve_expr_must_never_fail(expr)?.int()? as u16;
     let current = env.symbols().current_address()?;
@@ -5186,7 +5192,7 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
 fn assemble_inc_dec<D: DataAccessElem>(
     mne: Mnemonic,
     arg1: &D,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
@@ -5354,7 +5360,7 @@ where
     )
 }
 
-fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &Env) -> Result<Bytes, AssemblerError>
+fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     let mut bytes = Bytes::new();
     let val = env
@@ -5381,7 +5387,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
     Ok(bytes)
 }
 
-fn assemble_im<D: DataAccessElem>(arg1: &D, env: &Env) -> Result<Bytes, AssemblerError>
+fn assemble_im<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     let mut bytes = Bytes::new();
     let val = env
@@ -5489,8 +5495,6 @@ where
             }
             add_word(&mut bytes, address as u16);
         }
-
-        env.track_used_symbols(e);
     }
     else if arg2.is_address_in_register16() {
         assert_eq!(arg2.get_register16(), Some(Register16::Hl));
@@ -5514,7 +5518,7 @@ where
     Ok(bytes)
 }
 
-fn assemble_djnz<D: DataAccessElem>(arg1: &D, env: &Env) -> Result<Bytes, AssemblerError>
+fn assemble_djnz<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     if let Some(expr) = arg1.get_expression() {
         let mut bytes = Bytes::new();
@@ -5865,7 +5869,7 @@ impl Env {
 fn assemble_ld<D: DataAccessElem + Debug>(
     arg1: &D,
     arg2: &D,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
@@ -6433,8 +6437,14 @@ where
     }
 }
 
-fn assemble_in<D: DataAccessElem>(arg1: &D, arg2: &D, env: &Env) -> Result<Bytes, AssemblerError>
-where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+fn assemble_in<D: DataAccessElem>(
+    arg1: &D,
+    arg2: &D,
+    env: &mut Env
+) -> Result<Bytes, AssemblerError>
+where
+    <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+{
     let mut bytes = Bytes::new();
 
     if arg1.is_expression() {
@@ -6476,8 +6486,14 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
     }
 }
 
-fn assemble_out<D: DataAccessElem>(arg1: &D, arg2: &D, env: &Env) -> Result<Bytes, AssemblerError>
-where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+fn assemble_out<D: DataAccessElem>(
+    arg1: &D,
+    arg2: &D,
+    env: &mut Env
+) -> Result<Bytes, AssemblerError>
+where
+    <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+{
     let mut bytes = Bytes::new();
 
     if arg2.is_expression() {
@@ -6566,7 +6582,7 @@ fn assemble_push<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
 fn assemble_logical_operator<D: DataAccessElem>(
     mnemonic: Mnemonic,
     arg1: &D,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
@@ -6662,7 +6678,7 @@ fn assemble_add_or_adc<D: DataAccessElem>(
     mnemonic: Mnemonic,
     arg1: Option<&D>,
     arg2: &D,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
@@ -6809,7 +6825,7 @@ fn assemble_bit_res_or_set<D: DataAccessElem>(
     arg1: &D,
     arg2: &D,
     hidden: Option<&Register8>,
-    env: &Env
+    env: &mut Env
 ) -> Result<Bytes, AssemblerError>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt

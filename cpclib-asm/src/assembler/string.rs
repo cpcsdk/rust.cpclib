@@ -46,7 +46,7 @@ impl Display for PreprocessedFormattedString {
 impl PreprocessedFormattedExpr {
     pub fn try_new(
         fe: &FormattedExpr,
-        env: &Env
+        env: &mut Env
     ) -> Result<PreprocessedFormattedExpr, AssemblerError> {
         match fe {
             FormattedExpr::Raw(Expr::String(string)) => {
@@ -66,7 +66,7 @@ impl PreprocessedFormattedExpr {
 }
 
 impl PreprocessedFormattedString {
-    pub fn try_new(info: &[FormattedExpr], env: &Env) -> Result<Self, AssemblerError> {
+    pub fn try_new(info: &[FormattedExpr], env: &mut Env) -> Result<Self, AssemblerError> {
         let mut components = Vec::with_capacity(info.len());
         for component in info.iter() {
             components.push(PreprocessedFormattedExpr::try_new(component, env)?);

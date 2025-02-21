@@ -38,14 +38,13 @@ impl<E: EventObserver> RunnerWithClap for SnapshotRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for SnapshotRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for SnapshotRunner<E> {}
 
 impl<E: EventObserver> Runner for SnapshotRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let matches = self.get_matches(itr,o)?;
+        let matches = self.get_matches(itr, o)?;
 
         if matches.is_none() {
             return Ok(());

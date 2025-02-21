@@ -1,8 +1,6 @@
-
 use cpclib_disc::disc::Disc;
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
-
 use cpclib_files::*;
 
 use super::report::SavedFile;
@@ -10,9 +8,7 @@ use super::Env;
 use crate::error::AssemblerError;
 use crate::progress::{self, Progress};
 
-
 pub type SaveFile = FileAndSupport;
-
 
 /// Save command information
 /// RMR is already properly set up when executing the instruction
@@ -73,21 +69,23 @@ impl SaveCommand {
 
         // Generate and save the file
 
-        dbg!(&self.file).save(
-            data, 
-            Some(from as u16),
-            match env.run_options {
-                Some((exec_address, _)) if exec_address < from as u16 + size as u16 => {
-                    Some(exec_address)
+        dbg!(&self.file)
+            .save(
+                data,
+                Some(from as u16),
+                match env.run_options {
+                    Some((exec_address, _)) if exec_address < from as u16 + size as u16 => {
+                        Some(exec_address)
+                    },
+                    _ => None
                 },
-                _ => None
-            },
-            Some(env.options().assemble_options().save_behavior())
-        )
-        .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error while saving. {e}") })       
-        ?;
-
-        
+                Some(env.options().assemble_options().save_behavior())
+            )
+            .map_err(|e| {
+                AssemblerError::AssemblingError {
+                    msg: format!("Error while saving. {e}")
+                }
+            })?;
 
         if env.options().show_progress() {
             Progress::progress().remove_save(progress::normalize(&self.file.filename()));

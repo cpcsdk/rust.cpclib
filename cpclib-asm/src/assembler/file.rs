@@ -33,7 +33,6 @@ impl<'a> From<&'a Utf8Path> for Fname<'a, '_> {
     }
 }
 
-
 impl<'a> From<&'a str> for Fname<'a, '_> {
     fn from(value: &'a str) -> Self {
         let p: &Utf8Path = value.into();

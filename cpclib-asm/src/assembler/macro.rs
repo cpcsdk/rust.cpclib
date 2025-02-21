@@ -14,13 +14,13 @@ use crate::Env;
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
     /// Returns a string version of the element after expansion
-    fn expand(&self, env: &Env) -> Result<String, AssemblerError>;
+    fn expand(&self, env: &mut Env) -> Result<String, AssemblerError>;
 }
 
 #[inline]
 fn expand_param<'p, P: MacroParamElement>(
     m: &'p P,
-    env: &Env
+    env: &mut Env
 ) -> Result<beef::lean::Cow<'p, str>, AssemblerError> {
     let extended = if m.is_single() {
         let s = m.single_argument();
@@ -66,15 +66,15 @@ fn expand_param<'p, P: MacroParamElement>(
 
 /// Encodes both the arguments and the macro
 #[derive(Debug)]
-pub struct MacroWithArgs<'m, 'a, P: MacroParamElement> {
-    r#macro: &'m Macro,
-    args: &'a [P]
+pub struct MacroWithArgs<P: MacroParamElement> {
+    r#macro: Macro,
+    args: Vec<P>
 }
 
-impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
+impl<P: MacroParamElement> MacroWithArgs<P> {
     /// The construction fails if the number pf arguments is incorrect
     #[inline]
-    pub fn build(r#macro: &'m Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
+    pub fn build(r#macro: &Macro, args: &[P]) -> Result<Self, AssemblerError> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),
@@ -89,7 +89,10 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
             })
         }
         else {
-            Ok(Self { r#macro, args })
+            Ok(Self {
+                r#macro: r#macro.clone(),
+                args: args.to_vec()
+            })
         }
     }
 
@@ -104,7 +107,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     }
 
     #[inline]
-    fn expand_for_basm(&self, env: &Env) -> Result<String, AssemblerError> {
+    fn expand_for_basm(&self, env: &mut Env) -> Result<String, AssemblerError> {
         //        assert_eq!(args.len(), self.nb_args());
         let listing = self.r#macro.code();
         let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
@@ -148,7 +151,7 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     }
 
     #[inline]
-    fn expand_for_orgams(&self, env: &Env) -> Result<String, AssemblerError> {
+    fn expand_for_orgams(&self, env: &mut Env) -> Result<String, AssemblerError> {
         let listing = self.r#macro.code();
         let all_expanded = self
             .args
@@ -187,10 +190,10 @@ impl<'m, 'a, P: MacroParamElement> MacroWithArgs<'m, 'a, P> {
     }
 }
 
-impl<P: MacroParamElement> Expandable for MacroWithArgs<'_, '_, P> {
+impl<P: MacroParamElement> Expandable for MacroWithArgs<P> {
     /// Develop the macro with the given arguments
     #[inline]
-    fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
+    fn expand(&self, env: &mut Env) -> Result<String, AssemblerError> {
         if self.flavor() == AssemblerFlavor::Basm {
             self.expand_for_basm(env)
         }
@@ -232,18 +235,18 @@ impl<P: MacroParamElement> Expandable for MacroWithArgs<'_, '_, P> {
 }
 
 #[derive(Debug)]
-pub struct StructWithArgs<'s, 'a, P: MacroParamElement> {
-    r#struct: &'s Struct,
-    args: &'a [P]
+pub struct StructWithArgs<P: MacroParamElement> {
+    r#struct: Struct,
+    args: Vec<P>
 }
 
-impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
+impl<P: MacroParamElement> StructWithArgs<P> {
     pub fn r#struct(&self) -> &Struct {
-        self.r#struct
+        &self.r#struct
     }
 
     /// The construction fails if the number pf arguments is incorrect
-    pub fn build(r#struct: &'s Struct, args: &'a [P]) -> Result<Self, AssemblerError> {
+    pub fn build(r#struct: &Struct, args: &[P]) -> Result<Self, AssemblerError> {
         if r#struct.nb_args() < args.len() {
             Err(AssemblerError::MacroError {
                 name: r#struct.name().into(),
@@ -258,7 +261,10 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
             })
         }
         else {
-            Ok(Self { r#struct, args })
+            Ok(Self {
+                r#struct: r#struct.clone(),
+                args: args.to_vec()
+            })
         }
     }
 
@@ -267,11 +273,11 @@ impl<'s, 'a, P: MacroParamElement> StructWithArgs<'s, 'a, P> {
     }
 }
 
-impl<P: MacroParamElement> Expandable for StructWithArgs<'_, '_, P> {
+impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
-    fn expand(&self, env: &Env) -> Result<String, AssemblerError> {
+    fn expand(&self, env: &mut Env) -> Result<String, AssemblerError> {
         //        dbg!("{:?} != {:?}", self.args, self.r#struct().content());
 
         let prefix = ""; // TODO acquire this prefix

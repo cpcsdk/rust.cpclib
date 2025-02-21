@@ -640,7 +640,10 @@ impl BndBuilderApp {
     }
 
     /// Get the string that represents the builder script after interpolation
-    pub fn get_buildfile_content<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<String, BndBuilderError> {
+    pub fn get_buildfile_content<P: AsRef<Utf8Path>>(
+        &self,
+        fname: P
+    ) -> Result<String, BndBuilderError> {
         let fname = fname.as_ref();
         // Get the variables definition
         let definitions =
@@ -718,11 +721,13 @@ impl BndBuilderApp {
                 let fname: &Utf8Path = fname.as_str().into();
 
                 if fname.is_dir() {
-                    EXPECTED_FILENAMES.into_iter()
+                    EXPECTED_FILENAMES
+                        .iter()
                         .map(|f| fname.join(f))
                         .find(|p| p.exists())
-                        .unwrap_or_else(||fname.to_owned())
-                } else {
+                        .unwrap_or_else(|| fname.to_owned())
+                }
+                else {
                     fname.to_owned()
                 }
             }
@@ -743,7 +748,8 @@ impl BndBuilderApp {
                 {
                     let mut error_msg = if fname.is_dir() {
                         format!("Build directory `{fname}` does not contains a build file.")
-                    } else {
+                    }
+                    else {
                         format!("Build file `{fname}` does not exists.")
                     };
                     if let Some(Some(fname)) = matches
@@ -768,8 +774,6 @@ impl BndBuilderApp {
                     return Err(BndBuilderError::AnyError(error_msg));
                 }
             }
-
-
 
             let content = self.get_buildfile_content(fname)?;
 

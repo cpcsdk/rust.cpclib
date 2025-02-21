@@ -462,7 +462,7 @@ impl ExprElement for LocatedExpr {
 
 impl ExprEvaluationExt for LocatedExpr {
     /// Resolve by adding localisation in case of error
-    fn resolve(&self, env: &Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
         let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
 
         ensure_orgams_type(res, env)
@@ -500,7 +500,8 @@ impl ExprEvaluationExt for LocatedExpr {
             },
 
             LocatedExpr::UnaryTokenOperation(_, box _t, _) => {
-                unimplemented!("Need to retreive the symbols from the operation")
+                eprintln!("symbols_used is not implemented for UnaryTokenOperation");
+                vec![]
             }
         }
     }
@@ -1973,7 +1974,7 @@ impl TokenExt for LocatedToken {
         self.to_token().estimated_duration()
     }
 
-    fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, _env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
         todo!()
     }
 

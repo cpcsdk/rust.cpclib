@@ -38,9 +38,7 @@ impl<E: EventObserver> RunnerWithClap for HideurRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for HideurRunner<E> {
-
-}
+impl<E: EventObserver> RunnerWithClapMatches for HideurRunner<E> {}
 
 impl<E: EventObserver> Runner for HideurRunner<E> {
     type EventObserver = E;
@@ -51,7 +49,7 @@ impl<E: EventObserver> Runner for HideurRunner<E> {
             return Ok(());
         }
         let matches = matches.unwrap();
-        
+
         hideur_handle(&matches).map_err(|e| e.to_string())
     }
 

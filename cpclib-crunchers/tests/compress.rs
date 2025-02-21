@@ -48,13 +48,22 @@ fn crunch_lz49() {
     crunch_any(CompressMethod::Lz49)
 }
 
-
-
 #[test]
 fn crunch_lzsa() {
-    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V1, None));
-    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V2, None));
-    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V1, Some(LzsaMinMatch::Val4)));
-    crunch_any(CompressMethod::Lzsa(cpclib_crunchers::lzsa::LzsaVersion::V2, Some(LzsaMinMatch::Val4)));
-
+    crunch_any(CompressMethod::Lzsa(
+        cpclib_crunchers::lzsa::LzsaVersion::V1,
+        None
+    ));
+    crunch_any(CompressMethod::Lzsa(
+        cpclib_crunchers::lzsa::LzsaVersion::V2,
+        None
+    ));
+    crunch_any(CompressMethod::Lzsa(
+        cpclib_crunchers::lzsa::LzsaVersion::V1,
+        Some(LzsaMinMatch::Val4)
+    ));
+    crunch_any(CompressMethod::Lzsa(
+        cpclib_crunchers::lzsa::LzsaVersion::V2,
+        Some(LzsaMinMatch::Val4)
+    ));
 }

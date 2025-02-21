@@ -289,7 +289,7 @@ impl Z80 {
     /// Read the value provided by the given access.
     /// None is returned if we do not have enough information to get it
     /// TODO better emulation to never return None
-    fn get_value(&self, access: &DataAccess) -> Option<u16> {
+    fn get_value(&mut self, access: &DataAccess) -> Option<u16> {
         match access {
             DataAccess::Memory(ref exp) => {
                 self.eval_expr(exp)
@@ -415,8 +415,8 @@ impl Z80 {
     }
 
     #[allow(clippy::cast_sign_loss)]
-    fn eval_expr(&self, expr: &Expr) -> Option<u16> {
-        match expr.resolve(&self.context.env) {
+    fn eval_expr(&mut self, expr: &Expr) -> Option<u16> {
+        match expr.resolve(&mut self.context.env) {
             Ok(val) => Some(val.abs().unwrap().int().unwrap() as u16),
             Err(_) => None
         }

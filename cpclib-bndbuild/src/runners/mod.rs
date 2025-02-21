@@ -2,6 +2,7 @@ use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 pub mod assembler;
 pub mod bndbuild;
+pub mod crunch;
 pub mod disassembler;
 pub mod disc;
 pub mod echo;
@@ -12,4 +13,3 @@ pub mod imgconverter;
 pub mod snapshot;
 pub mod tracker;
 pub mod xfer;
-pub mod crunch;

@@ -54,8 +54,7 @@ impl<E: EventObserver> RunnerWithClap for XferRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for XferRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for XferRunner<E> {}
 
 impl<E: EventObserver> Runner for XferRunner<E> {
     type EventObserver = E;

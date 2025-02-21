@@ -19,7 +19,6 @@ pub mod zx0;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shrinkler;
 
-
 pub mod lzsa;
 
 pub enum CompressMethod {

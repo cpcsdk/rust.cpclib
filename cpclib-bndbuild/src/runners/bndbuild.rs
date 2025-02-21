@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use clap::{Arg, ArgAction, ArgMatches};
+use clap::ArgMatches;
 use cpclib_common::clap::{self, Command};
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
@@ -17,8 +17,7 @@ pub struct BndBuildRunner<E: EventObserver> {
 impl<E: EventObserver> Default for BndBuildRunner<E> {
     fn default() -> Self {
         let command = crate::build_args_parser();
-        let command = command.no_binary_name(true)
-            .after_help(format!(
+        let command = command.no_binary_name(true).after_help(format!(
             "{} {} embedded by {} {}",
             crate::built_info::PKG_NAME,
             crate::built_info::PKG_VERSION,
@@ -37,26 +36,27 @@ impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
         &self.command
     }
 
-    fn get_matches<S: AsRef<str>>(&self, itr: &[S], e: &dyn EventObserver) -> Result<Option<ArgMatches>, String> {
-        let args = self.get_clap_command()
+    fn get_matches<S: AsRef<str>>(
+        &self,
+        itr: &[S],
+        e: &dyn EventObserver
+    ) -> Result<Option<ArgMatches>, String> {
+        let args = self
+            .get_clap_command()
             .clone()
             .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
             .map_err(|e| e.to_string())?;
 
-            
         {
             Ok(Some(args))
         }
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for BndBuildRunner<E> {
-}
+impl<E: EventObserver> RunnerWithClapMatches for BndBuildRunner<E> {}
 
 impl<E: EventObserver> Runner for BndBuildRunner<E> {
     type EventObserver = E;
-
-    
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         // backup of cwd
@@ -69,15 +69,11 @@ impl<E: EventObserver> Runner for BndBuildRunner<E> {
         }
         let matches = matches.unwrap();
 
-
         let res = crate::process_matches(&matches);
         // restoration of cwd
         std::env::set_current_dir(cwd).unwrap();
 
-        
-        res.map_err(|e| {
-            e.to_string()
-        })
+        res.map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {

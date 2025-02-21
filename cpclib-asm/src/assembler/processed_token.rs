@@ -106,7 +106,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     fn build(
         tokens: &'token [T],
         span: Option<Z80Span>,
-        env: &Env
+        env: &mut Env
     ) -> Result<Self, AssemblerError> {
         Ok(Self {
             processed_tokens: build_processed_tokens_list(tokens, env)?,
@@ -145,17 +145,16 @@ impl IncludeState {
             });
         }
 
-        let options = env.options();
-
         // Build the state if needed / retreive it otherwise
         let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
-            let content = read_source(fname.clone(), options.parse_options())?;
+            let content = read_source(fname.clone(), env.options().parse_options())?;
 
-            if options.show_progress() {
+            if env.options().show_progress() {
                 Progress::progress().add_parse(progress::normalize(fname));
             }
 
-            let builder = options
+            let builder = env
+                .options()
                 .clone()
                 .context_builder()
                 .set_current_filename(fname.clone());
@@ -163,7 +162,7 @@ impl IncludeState {
             let listing = parse_z80_with_context_builder(content, builder)?;
 
             // Remove the progression
-            if options.show_progress() {
+            if env.options().show_progress() {
                 Progress::progress().remove_parse(progress::normalize(fname));
             }
 
@@ -317,7 +316,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
     fn choose_listing_to_assemble(
         &mut self,
-        env: &Env
+        env: &mut Env
     ) -> Result<Option<&mut [ProcessedToken<'token, T>]>, AssemblerError>
     where
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -467,7 +466,7 @@ pub type AssemblerInfo = AssemblerError;
 /// Build a processed token based on the base token
 pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
-    env: &Env
+    env: &mut Env
 ) -> Result<ProcessedToken<'token, T>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
@@ -499,7 +498,9 @@ where
                         match parse_z80_with_context_builder(content, ctx_builder) {
                             Ok(listing) => {
                                 // Filename has already been added
-                                if token.include_is_standard_include() && options.show_progress {
+                                if token.include_is_standard_include()
+                                    && env.options().show_progress()
+                                {
                                     Progress::progress().remove_parse(progress::normalize(&fname));
                                 }
 
@@ -657,13 +658,13 @@ pub fn build_processed_tokens_list<
     T: Visited + Debug + Sync + ListingElement + MayHaveSpan
 >(
     tokens: &'token [T],
-    env: &Env
+    env: &mut Env
 ) -> Result<Vec<ProcessedToken<'token, T>>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
-    let options = env.options().parse_options();
-    if options.show_progress {
+    let show_progress = env.options().parse_options().show_progress;
+    if show_progress {
         // // temporarily deactivate parallel processing while i have not found a way to compile it
         // #[cfg(not(target_arch = "wasm32"))]
         // let iter = tokens.par_iter();
@@ -676,7 +677,7 @@ where
             .flat_map(|t| {
                 let fname = t.include_fname();
                 let fname = env.build_fname(fname)?;
-                get_filename_to_read(fname, options, Some(env))
+                get_filename_to_read(fname, env.options().parse_options(), Some(env))
             })
             .collect::<Vec<_>>();
         let include_fnames = include_fnames.iter().map(|t| progress::normalize(t));
@@ -759,7 +760,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 {
     /// Generate the tokens needed for the macro or the struct
     #[inline]
-    pub fn update_macro_or_struct_state(&mut self, env: &Env) -> Result<(), AssemblerError>
+    pub fn update_macro_or_struct_state(&mut self, env: &mut Env) -> Result<(), AssemblerError>
     where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
         let caller = self.token;
         let name = caller.macro_call_name();
@@ -801,8 +802,11 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
             // get the generated code
             // TODO handle some errors there
-            let (source, code, flavor) = if let Some(ref r#macro) = r#macro {
-                (r#macro.source(), r#macro.expand(env)?, r#macro.flavor())
+            let (source, code, flavor) = if let Some(r#macro) = &r#macro {
+                let source = r#macro.source();
+                let flavor = r#macro.flavor();
+                let code = r#macro.expand(env)?;
+                (source, code, flavor)
             }
             else {
                 let r#struct = r#struct.as_ref().unwrap();
@@ -899,7 +903,6 @@ where
             }
             // Behavior based on the state (for ease of writting)
             else {
-                let options = env.options();
                 // Handle the tokens depending on their specific state
                 match &mut self.state {
                     Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
@@ -1005,14 +1008,14 @@ where
                         let fname = env.build_fname(fname)?;
                         let to_print_fname = &fname;
                         let fname =
-                            get_filename_to_read(&fname, options.parse_options(), Some(env))?;
+                            get_filename_to_read(&fname, env.options().parse_options(), Some(env))?;
 
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file
 
                             let (data, header) =
-                                load_file(fname.as_path(), options.parse_options())?;
+                                load_file(fname.as_path(), env.options().parse_options())?;
 
                             if let Some(header) = header {
                                 let ams_fname = header
@@ -1379,9 +1382,9 @@ mod test_super {
 
         let tokens = parse_z80(src).unwrap();
         let token = &tokens[0];
-        let env = Env::default();
+        let mut env = Env::default();
 
-        let processed = build_processed_token(token, &env);
+        let processed = build_processed_token(token, &mut env);
         assert!(matches!(
             processed.unwrap().state,
             Some(ProcessedTokenState::Include(..))

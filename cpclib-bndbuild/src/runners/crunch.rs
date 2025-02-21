@@ -3,11 +3,10 @@ use std::marker::PhantomData;
 use clap::{Arg, ArgAction, Command};
 use cpclib_common::event::EventObserver;
 use cpclib_crunch::CrunchArgs;
-use cpclib_runner::runner::{runner::RunnerWithClapDerive, Runner, RunnerWithClap};
-use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::runner::RunnerWithClapDerive;
+use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::CRUNCH_CMDS;
-
 
 pub struct CrunchRunner<E: EventObserver> {
     command: clap::Command,
@@ -70,7 +69,6 @@ impl<E: EventObserver> Runner for CrunchRunner<E> {
             return Ok(());
         }
         let matches = matches.unwrap();
-
 
         let start = std::time::Instant::now();
 
