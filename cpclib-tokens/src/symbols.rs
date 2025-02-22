@@ -938,11 +938,11 @@ impl SymbolsTable {
         self.current_pass_map.add_children("".to_owned().into());
     }
 
-    pub fn used_symbols(&self) -> impl Iterator<Item=&Symbol> {
+    pub fn used_symbols(&self) -> impl Iterator<Item = &Symbol> {
         self.used_symbols.iter()
     }
 
-    pub fn available_symbols(&self) -> impl Iterator<Item=&Symbol> {
+    pub fn available_symbols(&self) -> impl Iterator<Item = &Symbol> {
         self.map.keys()
     }
 
@@ -1009,7 +1009,7 @@ impl SymbolsTable {
                     for variable in tree.iter_variable_identifiers() {
                         let variable_value = self
                             .value::<&str>(variable)?
-                            .ok_or_else(|| { SymbolError::WrongSymbol(variable.into()) })?;
+                            .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?;
                         context
                             .set_value(variable.to_owned(), variable_value.clone().into())
                             .unwrap();

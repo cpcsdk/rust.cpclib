@@ -63,7 +63,26 @@ pub struct OrgamsRunner<E: EventObserver> {
 
 impl<E: EventObserver> Default for OrgamsRunner<E> {
     fn default() -> Self {
-        let command = <Orgams as CommandFactory>::command().name("orgams");
+        let command = <Orgams as CommandFactory>::command()
+            .name("orgams")
+            .no_binary_name(true)
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            );
         Self {
             command,
             _phantom: Default::default()
@@ -85,7 +104,6 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let matches = {
             let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
-            itr.insert(0, "orgams");
 
             self.get_matches(&itr, o)?
         };

@@ -909,16 +909,23 @@ impl Env {
         }
     }
 
-
     fn retrieve_options_symbols(&mut self) {
-        let symbols =self.options().symbols().available_symbols().cloned().collect_vec();
+        let symbols = self
+            .options()
+            .symbols()
+            .available_symbols()
+            .cloned()
+            .collect_vec();
         for symbol in symbols {
-            let value = self.options().symbols().value(symbol.clone()).unwrap().unwrap().clone();
-            
-            self.symbols_mut().set_symbol_to_value(
-                symbol, 
-                value
-            );
+            let value = self
+                .options()
+                .symbols()
+                .value(symbol.clone())
+                .unwrap()
+                .unwrap()
+                .clone();
+
+            self.symbols_mut().set_symbol_to_value(symbol, value);
         }
     }
 

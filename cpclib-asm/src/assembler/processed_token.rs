@@ -365,7 +365,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
-
             // IFUSED
             else if test.is_label_used_test() {
                 let label = test.label_unchecked();
@@ -387,7 +386,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
-
             // IFNUSED
             else if test.is_label_nused_test() {
                 let label = test.label_unchecked();
@@ -409,8 +407,6 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
-
-
             // Label must exist at this specific moment
             // IFDEF
             else if test.is_label_exists_test() {
@@ -420,8 +416,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
-
-            //IFNDEF
+            // IFNDEF
             // Label must not exist at this specific moment
             else {
                 let label = test.label_unchecked();
