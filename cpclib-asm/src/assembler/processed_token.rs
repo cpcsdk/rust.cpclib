@@ -335,6 +335,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             let token_adr = test as *const _ as usize;
 
             // Expression must be true
+            // IF
             if test.is_true_test() {
                 let exp = test.expr_unchecked();
                 // Expression must be true
@@ -350,6 +351,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 }
             }
             // Expression must be false
+            // IFNOT
             else if test.is_false_test() {
                 let exp = test.expr_unchecked();
                 let value = env
@@ -363,6 +365,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
+
+            // IFUSED
             else if test.is_label_used_test() {
                 let label = test.label_unchecked();
                 let decision = env.symbols().is_used(label);
@@ -383,6 +387,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
+
+            // IFNUSED
             else if test.is_label_nused_test() {
                 let label = test.label_unchecked();
                 let decision = !env.symbols().is_used(label);
@@ -403,7 +409,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
+
+
             // Label must exist at this specific moment
+            // IFDEF
             else if test.is_label_exists_test() {
                 let label = test.label_unchecked();
                 if env.symbols().symbol_exist_in_current_pass(label)? {
@@ -411,6 +420,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                     break;
                 }
             }
+
+            //IFNDEF
             // Label must not exist at this specific moment
             else {
                 let label = test.label_unchecked();
@@ -1162,7 +1173,7 @@ where
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })
                             .map_err(|e| {
-                                let e = dbg!(AssemblerError::MacroError {
+                                let e = AssemblerError::MacroError {
                                     name: name.into(),
                                     root: Box::new(e),
                                     location: env
@@ -1172,7 +1183,7 @@ where
                                         .unwrap()
                                         .location()
                                         .cloned()
-                                });
+                                };
                                 let caller_span = self.possible_span();
                                 match caller_span {
                                     Some(span) => {

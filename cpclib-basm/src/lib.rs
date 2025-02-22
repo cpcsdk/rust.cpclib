@@ -322,6 +322,7 @@ pub fn assemble(
                 .symbols_mut()
                 .assign_symbol_to_value(symbol, value.clone())
                 .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
+
             o.emit_stdout(&format!("Assigned {} to {}", value, symbol));
         }
     }

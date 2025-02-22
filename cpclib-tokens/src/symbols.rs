@@ -938,6 +938,14 @@ impl SymbolsTable {
         self.current_pass_map.add_children("".to_owned().into());
     }
 
+    pub fn used_symbols(&self) -> impl Iterator<Item=&Symbol> {
+        self.used_symbols.iter()
+    }
+
+    pub fn available_symbols(&self) -> impl Iterator<Item=&Symbol> {
+        self.map.keys()
+    }
+
     /// Setup the current label for local to global labels conversions
     #[inline]
     pub fn set_current_global_label<S>(&mut self, symbol: S) -> Result<(), SymbolError>
@@ -999,9 +1007,9 @@ impl SymbolsTable {
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = dbg!(self
+                        let variable_value = self
                             .value::<&str>(variable)?
-                            .ok_or_else(|| { SymbolError::WrongSymbol(variable.into()) }))?;
+                            .ok_or_else(|| { SymbolError::WrongSymbol(variable.into()) })?;
                         context
                             .set_value(variable.to_owned(), variable_value.clone().into())
                             .unwrap();

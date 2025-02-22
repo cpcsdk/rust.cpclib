@@ -909,6 +909,19 @@ impl Env {
         }
     }
 
+
+    fn retrieve_options_symbols(&mut self) {
+        let symbols =self.options().symbols().available_symbols().cloned().collect_vec();
+        for symbol in symbols {
+            let value = self.options().symbols().value(symbol.clone()).unwrap().unwrap().clone();
+            
+            self.symbols_mut().set_symbol_to_value(
+                symbol, 
+                value
+            );
+        }
+    }
+
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) {
@@ -998,7 +1011,10 @@ impl Env {
             if can_change_request {
                 self.request_additional_pass = false.into();
             }
+
+            // reset the symbol table
             self.symbols.new_pass();
+            self.retrieve_options_symbols();
 
             if self.options.show_progress() {
                 #[cfg(not(target_arch = "wasm32"))]
@@ -3373,6 +3389,7 @@ impl Env {
             env.options().symbols().clone(),
             env.options().case_sensitive()
         );
+        env.retrieve_options_symbols();
 
         if let Some(builder) = &env.options().assemble_options().output_builder {
             env.output_trigger = ListingOutputTrigger {
@@ -3435,6 +3452,7 @@ where
     ProcessedToken<'token, T>: FunctionBuilder
 {
     let mut env = Env::new(options);
+
     let mut tokens = match processed_token::build_processed_tokens_list(tokens, &mut env) {
         Ok(tokens) => tokens,
         Err(e) => return Err((None, env, e))
