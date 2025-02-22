@@ -1,4 +1,6 @@
 use std::marker::PhantomData;
+use crate::event::{BndBuilderObserver, BndBuilderObserverRc};
+use std::sync::{Arc, RwLock};
 
 use clap::ArgMatches;
 use cpclib_common::clap::{self, Command};
@@ -58,7 +60,7 @@ impl<E: EventObserver> RunnerWithClapMatches for BndBuildRunner<E> {}
 impl<E: EventObserver> Runner for BndBuildRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {
         // backup of cwd
         let cwd = std::env::current_dir().unwrap();
 
@@ -69,7 +71,9 @@ impl<E: EventObserver> Runner for BndBuildRunner<E> {
         }
         let matches = matches.unwrap();
 
-        let res = crate::process_matches(&matches);
+        // BUG here we skip the observer. It is necessary to find a way to use it properly
+        let o = BndBuilderObserverRc::new_default();
+        let res = crate::process_matches_with_observer(&matches, o);
         // restoration of cwd
         std::env::set_current_dir(cwd).unwrap();
 

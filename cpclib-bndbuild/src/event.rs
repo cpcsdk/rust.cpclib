@@ -119,7 +119,7 @@ pub trait BndBuilderObserved: Debug + Sync + Send {
 }
 
 #[derive(Debug, Clone)]
-pub struct BndBuilderObserverRc(Arc<RwLock<dyn BndBuilderObserver + Sync + Send>>);
+pub struct BndBuilderObserverRc(pub(crate) Arc<RwLock<dyn BndBuilderObserver + Sync + Send>>);
 #[derive(Clone, Debug)]
 pub struct ListOfBndBuilderObserverRc(Vec<BndBuilderObserverRc>);
 
