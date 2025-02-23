@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use clap::{Arg, ArgAction};
 use cpclib_disc::hideur::{hideur_build_arg_parser, hideur_handle};
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
@@ -24,7 +25,24 @@ impl<E: EventObserver> Default for HideurRunner<E> {
             cpclib_disc::built_info::PKG_VERSION,
             built_info::PKG_NAME,
             built_info::PKG_VERSION
-        ));
+        ))
+        
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .short('h')
+                .action(ArgAction::SetTrue)
+                .exclusive(true) // does not seem to work
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .short('V')
+                .help("Print version")
+                .action(ArgAction::SetTrue)
+                .exclusive(true) // does not seem to work
+        )
+        ;
         Self {
             command,
             _phantom: Default::default()
