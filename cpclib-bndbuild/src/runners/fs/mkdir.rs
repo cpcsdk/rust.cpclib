@@ -35,9 +35,31 @@ impl<E: EventObserver> Default for MkdirRunner<E> {
                         .help("Set to specify if missing parent directories must be created")
                 )
                 .arg(
+                    Arg::new("ignore")
+                        .short('i')
+                        .long("ignore")
+                        .action(ArgAction::SetTrue)
+                        .help("Set to specify we ignore existing folders")
+                )
+                .arg(
                     Arg::new("arguments")
                         .action(ArgAction::Append)
                         .help("Folders to create.")
+                )
+                .arg(
+                    Arg::new("help")
+                        .long("help")
+                        .short('h')
+                        .action(ArgAction::SetTrue)
+                        .exclusive(true) // does not seem to work
+                )
+                .arg(
+                    Arg::new("version")
+                        .long("version")
+                        .short('V')
+                        .help("Print version")
+                        .action(ArgAction::SetTrue)
+                        .exclusive(true) // does not seem to work
                 ),
             _phantom: Default::default()
         }
@@ -86,7 +108,9 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
             let fname = Utf8Path::new(&fname);
 
             if fname.exists() {
-                errors.push_str(&format!("{} already exists\n", fname,))
+                if !matches.get_flag("ignore") {
+                    errors.push_str(&format!("{} already exists. Use --ignore to not crash.\n", fname,));
+                }
             }
             else {
                 let res = if parents {
