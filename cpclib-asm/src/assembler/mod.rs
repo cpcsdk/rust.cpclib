@@ -1092,7 +1092,6 @@ impl Env {
             self.sna.add_chunk(remu.clone());
         }
 
-        self.saved_files = Some(self.handle_file_save()?);
 
         // Add an additional pass to build the listing (this way it is built only one time)
         if self.options().assemble_options().output_builder.is_some() {
@@ -1104,6 +1103,12 @@ impl Env {
                 .map_err(|e| eprintln!("{}", e))
                 .expect("No error can arise in listing output mode; there is a bug somewhere");
         }
+
+        // BUG this is definitevely a bug 
+        // - I have moved file saving here because output was wrong when done before listing
+        // - Ther eis no reason to do that. it should even be the opposite
+        self.saved_files = Some(self.handle_file_save()?);
+
 
         Ok((remu, wabp))
     }
