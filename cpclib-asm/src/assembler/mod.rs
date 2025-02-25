@@ -66,6 +66,7 @@ use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, MemoryPhysicalAddress};
 
+
 #[derive(Clone, Copy, PartialEq)]
 enum OutputKind {
     Snapshot,
