@@ -59,7 +59,7 @@ impl DynamicUrlInformation for AceVersion {
                     .get("x64 (64 bits)")
                     .map(|url| format!("{}/{}", ACE_URL, url));
                 let linux = map
-                    .get("Ubuntu 22.04 LTS (AVX2)")
+                    .get("Ubuntu 24.04 LTS (AVX2)")
                     .map(|url| format!("{}/{}", ACE_URL, url));
 
                 Ok(MutiplatformUrls {
