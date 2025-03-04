@@ -67,6 +67,10 @@ impl AceConfig {
     }
 
     pub fn save(&self) -> std::io::Result<()> {
+        let folder = self.path.parent().unwrap();
+        if !folder.exists() {
+            std::fs::create_dir_all(folder);
+        }
         self.save_as(&self.path)
     }
 
