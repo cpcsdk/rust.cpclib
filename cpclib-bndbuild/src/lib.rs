@@ -2,9 +2,9 @@
 #![feature(os_str_display)]
 #![feature(closure_lifetime_binder)]
 
-use crate::event::BndBuilderObserverRc;
 use std::env::current_dir;
 use std::sync::OnceLock;
+
 use app::BndBuilderApp;
 use clap_complete::Shell;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -22,6 +22,7 @@ use task::{
 };
 use thiserror::Error;
 
+use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
 pub use crate::BndBuilder;
 
@@ -46,13 +47,14 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
     cmd.command()?.execute()
 }
 
-
-pub fn process_matches_with_observer(matches: &ArgMatches, o: BndBuilderObserverRc) -> Result<(), BndBuilderError> {
+pub fn process_matches_with_observer(
+    matches: &ArgMatches,
+    o: BndBuilderObserverRc
+) -> Result<(), BndBuilderError> {
     let mut cmd = BndBuilderApp::from_matches(matches.clone());
     cmd.add_observer(o);
     cmd.command()?.execute()
 }
-
 
 pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (ACE_CMDS, true), // true for clearable, false for others

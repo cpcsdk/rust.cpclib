@@ -614,7 +614,7 @@ impl BndBuilderApp {
     /// - Return an error in case of arguments error
     pub fn new() -> Result<Option<Self>, clap::error::Error> {
         let cmd = crate::build_args_parser();
-        
+
         match cmd.clone().try_get_matches() {
             Result::Ok(matches) => Ok(Some(Self::from_matches(matches))),
             Result::Err(e) => {

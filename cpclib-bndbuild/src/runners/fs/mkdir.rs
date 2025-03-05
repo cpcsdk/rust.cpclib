@@ -109,7 +109,10 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
 
             if fname.exists() {
                 if !matches.get_flag("ignore") {
-                    errors.push_str(&format!("{} already exists. Use --ignore to not crash.\n", fname,));
+                    errors.push_str(&format!(
+                        "{} already exists. Use --ignore to not crash.\n",
+                        fname,
+                    ));
                 }
             }
             else {

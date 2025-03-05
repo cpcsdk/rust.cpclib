@@ -1,6 +1,4 @@
 use std::marker::PhantomData;
-use crate::event::{BndBuilderObserver, BndBuilderObserverRc};
-use std::sync::{Arc, RwLock};
 
 use clap::ArgMatches;
 use cpclib_common::clap::{self, Command};
@@ -9,6 +7,7 @@ use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
+use crate::event::BndBuilderObserverRc;
 use crate::task::BNDBUILD_CMDS;
 
 pub struct BndBuildRunner<E: EventObserver> {

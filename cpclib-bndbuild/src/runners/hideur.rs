@@ -19,30 +19,30 @@ pub struct HideurRunner<E: EventObserver> {
 impl<E: EventObserver> Default for HideurRunner<E> {
     fn default() -> Self {
         let command = hideur_build_arg_parser();
-        let command = command.no_binary_name(true).after_help(format!(
-            "{} {} embedded by {} {}",
-            cpclib_disc::built_info::PKG_NAME,
-            cpclib_disc::built_info::PKG_VERSION,
-            built_info::PKG_NAME,
-            built_info::PKG_VERSION
-        ))
-        
-        .arg(
-            Arg::new("help")
-                .long("help")
-                .short('h')
-                .action(ArgAction::SetTrue)
-                .exclusive(true) // does not seem to work
-        )
-        .arg(
-            Arg::new("version")
-                .long("version")
-                .short('V')
-                .help("Print version")
-                .action(ArgAction::SetTrue)
-                .exclusive(true) // does not seem to work
-        )
-        ;
+        let command = command
+            .no_binary_name(true)
+            .after_help(format!(
+                "{} {} embedded by {} {}",
+                cpclib_disc::built_info::PKG_NAME,
+                cpclib_disc::built_info::PKG_VERSION,
+                built_info::PKG_NAME,
+                built_info::PKG_VERSION
+            ))
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            );
         Self {
             command,
             _phantom: Default::default()

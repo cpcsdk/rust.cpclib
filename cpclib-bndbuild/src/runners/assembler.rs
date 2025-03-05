@@ -103,7 +103,7 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let matches = {
-            let mut itr = itr.iter().map(|s| s.as_ref()).collect_vec();
+            let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
 
             self.get_matches(&itr, o)?
         };
