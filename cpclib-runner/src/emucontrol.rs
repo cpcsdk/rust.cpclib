@@ -1,10 +1,12 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 use std::time::Duration;
 
 use bon::builder;
-use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{value_parser, ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
@@ -29,6 +31,58 @@ type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 pub enum AmstradRom {
     Orgams,
     Unidos
+}
+
+
+#[derive(Debug, Default, Clone, Copy)]
+#[repr(u8)]
+pub enum Crtc {
+    #[default]
+    Zero = 0,
+    One,
+    Two, 
+    Three,
+    Four
+}
+
+impl Display for Crtc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = *self as u8;
+        write!(f, "{val}")
+    }
+}
+
+
+impl TryFrom<u8> for Crtc {
+    type Error = String;
+    
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Crtc::Zero),
+            1 => Ok(Crtc::One),
+            2 => Ok(Crtc::Two),
+            3 => Ok(Crtc::Three),
+            4 => Ok(Crtc::Four),
+
+            val => Err(format!("{val} is not a valid CRTC value"))
+        }    
+    }
+}
+
+impl FromStr for Crtc {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "0" | "zero" => Ok(Crtc::Zero),
+            "1" | "one" => Ok(Crtc::One),
+            "2" | "two" => Ok(Crtc::Two),
+            "3" | "three" => Ok(Crtc::Three),
+            "4" | "four" => Ok(Crtc::Four),
+
+            val => Err(format!("{val} is not a valid CRTC value"))          
+        }
+    }
 }
 
 type EmuScreenShot = ImageBuffer<Rgba<u8>, Vec<u8>>;
@@ -405,6 +459,8 @@ pub struct EmulatorConf {
     pub(crate) auto_run: Option<String>,
 
     pub(crate) memory: Option<u32>,
+
+    pub(crate) crtc: Option<Crtc>,
 
     /// Do not display the window
     pub(crate) transparent: bool
@@ -1191,8 +1247,11 @@ pub struct EmuCli {
     )]
     snapshot: Option<String>,
 
-    #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "192", "256", "320", "576", "1088", "2112"]))]
+    #[arg(short, long, value_parser = clap::builder::PossibleValuesParser::new(&["64", "128", "192", "256", "320", "576", "1088", "2112"]), help="Memory configuration")]
     memory: Option<String>,
+
+    #[arg(short, long, value_parser = value_parser!(Crtc), help="Choice of the CRTC [possible values: 0, 1, 2, 3, 4]")]
+    crtc: Option<Crtc>,
 
     #[arg(short, long, default_value = "ace", alias = "emu")]
     emulator: Emu,
@@ -1200,7 +1259,7 @@ pub struct EmuCli {
     #[arg(short, long, action = ArgAction::SetTrue, help = "Keep the emulator open after the interaction")]
     keepemulator: bool,
 
-    #[arg(short, long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
+    #[arg(short='C', long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
     clear_cache: bool,
 
     #[arg(short, long, action = ArgAction::Append, help = "rasm-compatible debug file (for ace ATM)")]
@@ -1335,6 +1394,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .transparent(cli.transparent)
         .maybe_drive_a(cli.drive_a.clone().map(|a| a.into()))
         .maybe_drive_b(cli.drive_b.clone().map(|a| a.into()))
+        .maybe_crtc(cli.crtc.map(|c| c.try_into().unwrap()))
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
@@ -1366,7 +1426,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         ace_conf.sanitize();
 
         ace_conf.remove_cartridge();
-        ace_conf.select_crtc(0);
+        ace_conf.select_crtc(cli.crtc.unwrap_or_default());
 
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);

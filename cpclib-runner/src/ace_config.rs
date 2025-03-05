@@ -4,6 +4,8 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use ini::Ini;
 
+use crate::emucontrol::Crtc;
+
 const SANE_CONFIGURATION: &str = "
 SCREEN=0
 CRTFILTER=0
@@ -119,7 +121,7 @@ impl AceConfig {
         self.remove("CARTRIDGE")
     }
 
-    pub fn select_crtc(&mut self, crtc: u8) -> &Self {
+    pub fn select_crtc(&mut self, crtc: Crtc) -> &Self {
         self.set("CRTC", crtc)
     }
 }
