@@ -25,14 +25,16 @@ jobs:
       run: cargo install tauri-cli --version "^2.0.0" --locked
     - uses: actions-rs/cargo@v1
       with:
-        command: build
-        toolchain: nightly
-        args: --bins --release --features hfe
-    - uses: actions-rs/cargo@v1
-      with:
         command: test
         toolchain: nightly
         args: --features hfe
+    - name: "cleanup after test"
+      run: "cargo clean"
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        toolchain: nightly
+        args: --bins --release --features hfe
     - name: build tauri
       run: cd cpclib-bndbuild-tauri && cargo tauri build
     - uses: ncipollo/release-action@v1
