@@ -12,3 +12,4 @@
  ASSERT memory(0x200) == 'a'
  ASSERT memory(0x201) == 'A' 
  
+

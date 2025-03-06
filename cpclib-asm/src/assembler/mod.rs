@@ -30,6 +30,7 @@ use std::time::Instant;
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::chars::{char_to_amscii, Charset};
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
@@ -366,7 +367,9 @@ impl CharsetEncoding {
     }
 
     pub fn transform_char(&self, c: char) -> u8 {
-        self.lut.get(&c).cloned().unwrap_or(c as i32) as _
+        self.lut.get(&c)
+            .cloned()
+            .unwrap_or_else(|| char_to_amscii(c, Charset::English).unwrap_or(c as _) as i32) as _
     }
 
     pub fn transform_string(&self, s: &str) -> Vec<u8> {
@@ -4727,11 +4730,17 @@ impl DbLikeKind {
 }
 
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement>(
+pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
     kind: DbLikeKind,
     exprs: &[E],
     env: &mut Env
-) -> Result<(), AssemblerError> {
+) -> Result<(), AssemblerError> 
+
+{
+
+    dbg!(&exprs);
+
+
     let mask = kind.mask();
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {

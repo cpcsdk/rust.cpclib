@@ -1,5 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
+use core::str;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -1847,21 +1848,25 @@ pub fn parse_assign_operator(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
-    let first = alt(('"', '\'')).parse_next(input)? as char;
-    let last = first;
-    let (normal, escapable) = match first {
-        '\'' => (none_of(('\\', '\'')), one_of(('\\', '\''))),
-        '"' => (none_of(('\\', '"')), one_of(('\\', '"'))),
+    let opener = alt(('"', '\'')).parse_next(input)? as char;
+    let closer = opener;
+    let (normal, escapable) = match opener {
+        '\'' => (none_of(('\\', '\'')).take(), one_of(('\\', '\''))),
+        '"' => (none_of(('\\', '"')).take(), one_of(('\\', '"'))),
         _ => unreachable!()
     };
+
 
     let (string, slice) = terminated(
         opt(my_escaped(normal, '\\', escapable))
             .map(|s| s.unwrap_or_default())
             .with_taken(),
-        last.context(StrContext::Label("End of string not found"))
+        closer.context(StrContext::Label("End of string not found"))
     )
     .parse_next(input)?;
+
+    dbg!(&string);
+    dbg!(&slice);
 
     let slice = (*input).update_slice(slice);
 
@@ -1896,35 +1901,39 @@ where
     I: crate::parser::parser::winnow::stream::StreamIsPartial,
     I: Stream,
     <I as Stream>::Token: AsChar + Clone,
+    <I as Stream>::Slice: AsBytes,
     I: cpclib_common::winnow::stream::Compare<char>,
     F: Parser<I, O1, Error>,
     G: Parser<I, O2, Error>,
     Error: ParserError<I> + Debug,
-    O1: Debug + AsChar,
+    O1: Debug,
     O2: Debug + AsChar
 {
     move |input: &mut I| {
-        let mut res = String::new();
+        let mut res = Vec::new();
 
         let start = input.checkpoint();
 
         while input.eof_offset() > 0 {
             let current_len = input.eof_offset();
 
-            match opt(normal.by_ref()).parse_next(input)? {
+            match opt(normal.by_ref().take()).parse_next(input)? {
                 Some(c) => {
-                    res.push(c.as_char());
+                    res.extend(c.as_bytes());
                     if input.eof_offset() == current_len {
-                        return Ok(res);
+                        return Ok(String::from_utf8_lossy(&res).into_owned());
                     }
                 },
                 None => {
                     if opt(control_char).parse_next(input)?.is_some() {
                         let c = escapable.parse_next(input)?;
-                        res.push(c.as_char());
+                        let c = c.as_char();
+                        let mut buffer = [0; 4];
+                        let s = c.encode_utf8(&mut buffer);
+                        res.extend(s.bytes());
                     }
                     else {
-                        return Ok(res);
+                        return Ok(String::from_utf8_lossy(&res).into_owned());
                     }
                 },
             }
@@ -1932,7 +1941,7 @@ where
 
         input.reset(&start);
         input.finish();
-        Ok(res)
+        Ok(String::from_utf8_lossy(&res).into_owned())
     }
 }
 

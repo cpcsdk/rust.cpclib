@@ -4,6 +4,7 @@ pub mod clap_extra;
 pub mod event;
 pub mod parse;
 pub mod riff;
+pub mod chars;
 
 #[cfg(feature = "cmdline")]
 pub use ::clap;

@@ -48,6 +48,11 @@ impl SymbolOutputFormat {
                         format!("{} equ {}", k.value(), m)
                     },
 
+                    Value::Expr(ExprResult::Char(c)) => {
+                        let c = *c as char;
+                        format!("{} equ '{}{}'", k.value(), if c== '\'' {"\\"} else { ""},  c )
+                    }
+
                     _ => unimplemented!("{:?}", v)
                 }
             },
