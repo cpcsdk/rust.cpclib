@@ -237,10 +237,11 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
     }
 }
 
+/// BUG bytes must be enced in utf8
 pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match s1 {
         ExprResult::List(l1) => {
-            l1.iter()
+            let bytes = l1.iter()
                 .enumerate()
                 .map(|(idx, v)| {
                     let v = v.int()?;
@@ -250,10 +251,13 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                         })
                     }
                     else {
-                        Ok(v as u8 as char)
+                        Ok(v as u8)
                     }
                 })
-                .collect::<Result<String, AssemblerError>>()
+                .collect::<Result<Vec<u8>, AssemblerError>>()?;
+
+                String::from_utf8(bytes)
+                .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error when generating a string. {e}") })
                 .map(|s| s.into())
         },
 

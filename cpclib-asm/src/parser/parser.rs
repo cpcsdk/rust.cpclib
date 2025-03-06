@@ -1865,9 +1865,6 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
     )
     .parse_next(input)?;
 
-    dbg!(&string);
-    dbg!(&slice);
-
     let slice = (*input).update_slice(slice);
 
     Ok(UnescapedString(string, slice.into()))

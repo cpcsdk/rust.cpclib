@@ -4738,9 +4738,6 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
 
 {
 
-    dbg!(&exprs);
-
-
     let mask = kind.mask();
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
@@ -4760,10 +4757,15 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
         match &expr {
             ExprResult::Float(_)
             | ExprResult::Value(_)
-            | ExprResult::Bool(_)
-            | ExprResult::Char(_) => output(env, expr.int()?, mask),
+            | ExprResult::Bool(_) => output(env, expr.int()?, mask),
+            ExprResult::Char(c) => { // XXX here it is problematci c shold be a char and not a byte
+                let c = env.charset_encoding.transform_char(*c as char);
+                output(env, expr.int()?, mask)
+            },
             ExprResult::String(s) => {
-                for c in s.chars() {
+                let bytes = env.charset_encoding.transform_string(s);
+
+                for c in bytes {
                     output(env, c as _, mask)?;
                 }
                 Ok(())
@@ -4787,6 +4789,8 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
 
     let backup_address = env.logical_output_address();
     for exp in exprs.iter() {
+        dbg!(&exp);
+
         if exp.is_string() {
             let s = exp.string();
             let bytes = env.charset_encoding.transform_string(s);
