@@ -171,7 +171,7 @@ fn macro_args_single() {
     let (_ctx_, span) = ctx_and_span(code);
     let arg = dbg!(parse_macro_arg.parse(span.into())).unwrap();
 
-    assert_eq!(arg.to_macro_param(), MacroParam::Single("1".to_string()))
+    assert_eq!(arg.to_macro_param(), MacroParam::RawArgument("1".to_string()))
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn macro_args_list_1() {
 
     assert_eq!(
         arg.to_macro_param(),
-        MacroParam::List(vec![Box::new(MacroParam::Single("1".to_string()))])
+        MacroParam::List(vec![Box::new(MacroParam::RawArgument("1".to_string()))])
     )
 }
 
@@ -195,8 +195,8 @@ fn macro_args_list_2() {
     assert_eq!(
         arg.to_macro_param(),
         MacroParam::List(vec![
-            Box::new(MacroParam::Single("1".to_string())),
-            Box::new(MacroParam::Single("3".to_string())),
+            Box::new(MacroParam::RawArgument("1".to_string())),
+            Box::new(MacroParam::RawArgument("3".to_string())),
         ])
     )
 }
@@ -210,9 +210,9 @@ fn macro_args_list_3() {
     assert_eq!(
         arg.to_macro_param(),
         MacroParam::List(vec![
-            Box::new(MacroParam::Single("1".to_string())),
-            Box::new(MacroParam::Single("".to_string())),
-            Box::new(MacroParam::Single("3".to_string())),
+            Box::new(MacroParam::RawArgument("1".to_string())),
+            Box::new(MacroParam::RawArgument("".to_string())),
+            Box::new(MacroParam::RawArgument("3".to_string())),
         ])
     )
 }

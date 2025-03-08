@@ -3969,6 +3969,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
 pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z80ParserError> {
     let _start_input = input.checkpoint();
     let cloned = *input;
+
     let param = alt((
         delimited(
             (my_space0, ('[')),
@@ -3984,19 +3985,25 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
         }),
         delimited(
             my_space0,
-            alt((
-                located_expr.take(), // TODO handle evaluation or transposition
-                parse_string.take(),
-                my_many0_nocollect(none_of((
-                    b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
-                )))
-                .take()
-            )), // TODO find a way to give arguments with space
-            alt((my_space0.value(()), eof.value(())))
+            (
+                opt(Caseless("{eval}").value(())),
+                alt((
+                    located_expr.take(), // TODO handle evaluation or transposition
+                    parse_string.take(),
+                    my_many0_nocollect(none_of((
+                        b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
+                    )))
+                    .take()
+                ))), // TODO find a way to give arguments with space
+                alt((my_space0.value(()), eof.value(())))
         )
-        .map(|s| cloned.update_slice(s))
-        .map(Z80Span::from)
-        .map(LocatedMacroParam::Single)
+        .map(|(eval, s)| (eval.is_some(), cloned.update_slice(s)))
+        .map(|(eval, arg)| (eval, Z80Span::from(arg)))
+        .map(|(eval, arg)| if eval {
+            LocatedMacroParam::EvaluatedArgument(arg)
+        } else {
+            LocatedMacroParam::RawArgument(arg)
+        })
     ))
     .parse_next(input)?;
 
@@ -4082,7 +4089,7 @@ pub fn parse_macro_or_struct_call_inner(
                                 parse_macro_arg.with_taken(),
                                 my_space1
                                     .map(|space: InnerZ80Span| {
-                                        LocatedMacroParam::Single(space.into())
+                                        LocatedMacroParam::RawArgument(space.into())
                                         // string of size 0;
                                     })
                                     .with_taken()
@@ -7233,6 +7240,18 @@ endif"
             res.as_ref().unwrap().1.as_ref().unwrap().is_assign(),
             "{:?}",
             &res
+        );
+    }
+
+    #[test]
+    fn test_parse_marco_arg() {
+        assert_eq!(
+            parse_test(parse_macro_arg, "arg").as_ref().unwrap().to_macro_param(),
+            MacroParam::RawArgument("arg".into())
+        );
+        assert_eq!(
+            parse_test(parse_macro_arg, "{eval}arg").as_ref().unwrap().to_macro_param(),
+            MacroParam::EvaluatedArgument("arg".into())
         );
     }
 

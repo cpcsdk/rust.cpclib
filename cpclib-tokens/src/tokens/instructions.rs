@@ -18,7 +18,8 @@ use crate::{Listing, Register8};
 /// However, it can be a list of parameters to allows nested structs
 pub enum MacroParam {
     /// Standard argument
-    Single(String),
+    RawArgument(String),
+    EvaluatedArgument(String),
     /// A list of argument that will be provided in a nested macro call
     List(Vec<Box<MacroParam>>)
 }
@@ -26,7 +27,7 @@ pub enum MacroParam {
 impl ToString for MacroParam {
     fn to_string(&self) -> String {
         match self {
-            Self::Single(s) => s.clone(),
+            Self::RawArgument(s) | Self::EvaluatedArgument(s)=> s.clone(),
             Self::List(l) => {
                 format!("[{}]", l.iter().map(|p| p.to_string()).join(","))
             }
@@ -39,18 +40,28 @@ pub trait MacroParamElement: Clone + core::fmt::Debug {
 
     fn is_single(&self) -> bool;
     fn is_list(&self) -> bool;
+    fn is_empty(&self) -> bool {
+        self.is_single() && self.single_argument().is_empty()
+    }
 
     fn single_argument(&self) -> beef::lean::Cow<str>;
     fn list_argument(&self) -> &[Box<Self>];
+
+    fn must_be_evaluated(&self) -> bool;
 }
 
 impl MacroParamElement for MacroParam {
-    fn empty() -> Self {
-        Self::Single("".to_owned())
+    fn must_be_evaluated(&self) -> bool {
+        matches!(self, MacroParam::EvaluatedArgument(..))
     }
 
+    fn empty() -> Self {
+        Self::RawArgument("".to_owned())
+    }
+
+
     fn is_single(&self) -> bool {
-        matches!(self, MacroParam::Single(_))
+        matches!(self, MacroParam::RawArgument(_) | MacroParam::EvaluatedArgument(_))
     }
 
     fn is_list(&self) -> bool {
@@ -59,32 +70,25 @@ impl MacroParamElement for MacroParam {
 
     fn single_argument(&self) -> beef::lean::Cow<str> {
         match self {
-            MacroParam::Single(s) => beef::lean::Cow::borrowed(s),
+            MacroParam::RawArgument(s) | MacroParam::EvaluatedArgument(s)=> beef::lean::Cow::borrowed(s),
             MacroParam::List(_) => unreachable!()
         }
     }
 
     fn list_argument(&self) -> &[Box<Self>] {
         match self {
-            MacroParam::Single(_) => unreachable!(),
-            MacroParam::List(l) => l
+            MacroParam::List(l) => l,
+            _ => unreachable!()
         }
     }
 }
 
 impl MacroParam {
-    pub fn is_single(&self) -> bool {
-        match self {
-            Self::Single(_) => true,
-            _ => false
-        }
-    }
-
     /// Rename the arguments when they are a macro call
     /// XXX I am pretty sure such implementation is faulty when there are nested calls !!! It needs to be checked (maybe nested stuff has to be removed)
     pub fn do_apply_macro_labels_modification(&mut self, seed: usize) {
         match self {
-            Self::Single(s) => {
+            Self::RawArgument(s) | Self::EvaluatedArgument(s) => {
                 Expr::do_apply_macro_labels_modification(s, seed);
             },
             Self::List(l) => {
@@ -95,12 +99,6 @@ impl MacroParam {
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Single(s) => s.trim().is_empty(),
-            Self::List(_l) => false
-        }
-    }
 }
 
 #[remain::sorted]

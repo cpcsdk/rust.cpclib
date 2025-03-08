@@ -713,8 +713,10 @@ impl DataAccessElem for LocatedDataAccess {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatedMacroParam {
     Empty,
-    /// Standard argument
-    Single(Z80Span),
+    /// Standard argument directly propagated
+    RawArgument(Z80Span),
+    /// Standard argument evaluated before exapansion
+    EvaluatedArgument(Z80Span),
     /// A list of argument that will be provided in a nested macro call
     List(Vec<Box<LocatedMacroParam>>)
 }
@@ -724,9 +726,14 @@ impl MacroParamElement for LocatedMacroParam {
         Self::Empty
     }
 
-    fn is_single(&self) -> bool {
-        matches!(self, LocatedMacroParam::Single(..))
+    fn must_be_evaluated(&self) -> bool {
+        matches!(self, LocatedMacroParam::EvaluatedArgument(..))
     }
+
+    fn is_single(&self) -> bool {
+        matches!(self, LocatedMacroParam::RawArgument(..) | LocatedMacroParam::EvaluatedArgument(..))
+    }
+
 
     fn is_list(&self) -> bool {
         matches!(self, LocatedMacroParam::List(..))
@@ -735,7 +742,7 @@ impl MacroParamElement for LocatedMacroParam {
     fn single_argument(&self) -> beef::lean::Cow<str> {
         match &self {
             LocatedMacroParam::Empty => beef::lean::Cow::borrowed(""),
-            LocatedMacroParam::Single(ref s) => beef::lean::Cow::borrowed(s.as_str()),
+            LocatedMacroParam::RawArgument(s) | LocatedMacroParam::EvaluatedArgument(s)=> beef::lean::Cow::borrowed(s.as_str()),
             LocatedMacroParam::List(_) => unreachable!()
         }
     }
@@ -751,9 +758,6 @@ impl MacroParamElement for LocatedMacroParam {
 impl LocatedMacroParam {
     pub fn to_macro_param(&self) -> MacroParam {
         match self {
-            LocatedMacroParam::Empty | LocatedMacroParam::Single(_) => {
-                MacroParam::Single(self.single_argument().to_string())
-            },
             LocatedMacroParam::List(params) => {
                 MacroParam::List(
                     params
@@ -763,20 +767,21 @@ impl LocatedMacroParam {
                         .collect_vec()
                 )
             },
+
+            LocatedMacroParam::RawArgument(_) | LocatedMacroParam::Empty => {
+                MacroParam::RawArgument(self.single_argument().to_string())
+            },
+
+            LocatedMacroParam::EvaluatedArgument(_) => {
+                MacroParam::EvaluatedArgument(self.single_argument().to_string())
+            },
         }
     }
 
-    pub fn is_empty(&self) -> bool {
-        match self {
-            LocatedMacroParam::Empty => true,
-            LocatedMacroParam::Single(text) => text.is_empty(),
-            _ => false
-        }
-    }
 
     pub fn span(&self) -> Z80Span {
         match self {
-            LocatedMacroParam::Single(span) => span.clone(),
+            LocatedMacroParam::RawArgument(span) | LocatedMacroParam::EvaluatedArgument(span)=> span.clone(),
             LocatedMacroParam::List(_) => todo!(),
             LocatedMacroParam::Empty => panic!()
         }

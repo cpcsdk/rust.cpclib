@@ -25,9 +25,8 @@ fn expand_param<'p, P: MacroParamElement>(
     let extended = if m.is_single() {
         let s = m.single_argument();
         let trimmed = s.trim();
-        const EVAL: &str = "{eval}";
-        if trimmed.starts_with(EVAL) {
-            let src = &s[EVAL.len()..];
+        if m.must_be_evaluated() {
+            let src = &s[..];
             let ctx_builder = env
                 .options()
                 .parse_options()
