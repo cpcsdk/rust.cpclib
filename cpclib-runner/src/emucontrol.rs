@@ -1265,6 +1265,12 @@ pub struct EmuCli {
     #[arg(short, long, action = ArgAction::Append, help = "rasm-compatible debug file (for ace ATM)")]
     debug: Vec<Utf8PathBuf>,
 
+    #[arg(long, action= ArgAction::SetTrue)]
+    break_on_bad_vbl: bool,
+
+    #[arg(long, action= ArgAction::SetTrue)]
+    break_on_bad_hbl: bool,
+
     #[arg(short='r', long, aliases = ["auto", "run", "autoRunFile"], action = ArgAction::Set, help = "The file to run" )]
     auto_run_file: Option<String>,
 
@@ -1398,7 +1404,10 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
-        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()));
+        .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
+        .break_on_bad_hbl(cli.break_on_bad_hbl)
+        .break_on_bad_vbl(cli.break_on_bad_vbl)
+        ;
     let conf = builder.build();
 
     let emu = match cli.emulator {
@@ -1427,6 +1436,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
         ace_conf.remove_cartridge();
         ace_conf.select_crtc(cli.crtc.unwrap_or_default());
+        ace_conf.set_bool("BVBLBREAK", cli.break_on_bad_vbl);
+        ace_conf.set_bool("BHBLBREAK", cli.break_on_bad_hbl);
 
         if let Some(mem) = &cli.memory {
             ace_conf.set("RAM", mem);

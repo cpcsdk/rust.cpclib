@@ -105,6 +105,13 @@ impl AceConfig {
         self
     }
 
+    pub fn set_bool<Key: ToString>(&mut self, key: Key, value: bool) -> &mut Self {
+        self.set(
+            key, 
+            if value {"1"} else {"0"}
+        )
+    }
+
     pub fn enable(&mut self, flag: AceConfigFlag) -> &mut Self {
         let key = flag.as_ref();
         self.set(key, "1");
