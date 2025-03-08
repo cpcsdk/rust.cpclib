@@ -33,14 +33,13 @@ pub enum AmstradRom {
     Unidos
 }
 
-
 #[derive(Debug, Default, Clone, Copy)]
 #[repr(u8)]
 pub enum Crtc {
     #[default]
     Zero = 0,
     One,
-    Two, 
+    Two,
     Three,
     Four
 }
@@ -52,10 +51,9 @@ impl Display for Crtc {
     }
 }
 
-
 impl TryFrom<u8> for Crtc {
     type Error = String;
-    
+
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Crtc::Zero),
@@ -65,13 +63,13 @@ impl TryFrom<u8> for Crtc {
             4 => Ok(Crtc::Four),
 
             val => Err(format!("{val} is not a valid CRTC value"))
-        }    
+        }
     }
 }
 
 impl FromStr for Crtc {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "0" | "zero" => Ok(Crtc::Zero),
@@ -80,7 +78,7 @@ impl FromStr for Crtc {
             "3" | "three" => Ok(Crtc::Three),
             "4" | "four" => Ok(Crtc::Four),
 
-            val => Err(format!("{val} is not a valid CRTC value"))          
+            val => Err(format!("{val} is not a valid CRTC value"))
         }
     }
 }
@@ -455,6 +453,8 @@ pub struct EmulatorConf {
 
     #[builder(default)]
     pub(crate) debug_files: Vec<Utf8PathBuf>,
+    pub(crate) break_on_bad_vbl: bool,
+    pub(crate) break_on_bad_hbl: bool,
 
     pub(crate) auto_run: Option<String>,
 

@@ -27,7 +27,7 @@ pub enum MacroParam {
 impl ToString for MacroParam {
     fn to_string(&self) -> String {
         match self {
-            Self::RawArgument(s) | Self::EvaluatedArgument(s)=> s.clone(),
+            Self::RawArgument(s) | Self::EvaluatedArgument(s) => s.clone(),
             Self::List(l) => {
                 format!("[{}]", l.iter().map(|p| p.to_string()).join(","))
             }
@@ -59,9 +59,11 @@ impl MacroParamElement for MacroParam {
         Self::RawArgument("".to_owned())
     }
 
-
     fn is_single(&self) -> bool {
-        matches!(self, MacroParam::RawArgument(_) | MacroParam::EvaluatedArgument(_))
+        matches!(
+            self,
+            MacroParam::RawArgument(_) | MacroParam::EvaluatedArgument(_)
+        )
     }
 
     fn is_list(&self) -> bool {
@@ -70,7 +72,9 @@ impl MacroParamElement for MacroParam {
 
     fn single_argument(&self) -> beef::lean::Cow<str> {
         match self {
-            MacroParam::RawArgument(s) | MacroParam::EvaluatedArgument(s)=> beef::lean::Cow::borrowed(s),
+            MacroParam::RawArgument(s) | MacroParam::EvaluatedArgument(s) => {
+                beef::lean::Cow::borrowed(s)
+            },
             MacroParam::List(_) => unreachable!()
         }
     }
@@ -98,7 +102,6 @@ impl MacroParam {
             },
         }
     }
-
 }
 
 #[remain::sorted]

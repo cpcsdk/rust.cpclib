@@ -1856,7 +1856,6 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
         _ => unreachable!()
     };
 
-
     let (string, slice) = terminated(
         opt(my_escaped(normal, '\\', escapable))
             .map(|s| s.unwrap_or_default())
@@ -3994,15 +3993,19 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
                         b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
                     )))
                     .take()
-                ))), // TODO find a way to give arguments with space
-                alt((my_space0.value(()), eof.value(())))
+                ))
+            ), // TODO find a way to give arguments with space
+            alt((my_space0.value(()), eof.value(())))
         )
         .map(|(eval, s)| (eval.is_some(), cloned.update_slice(s)))
         .map(|(eval, arg)| (eval, Z80Span::from(arg)))
-        .map(|(eval, arg)| if eval {
-            LocatedMacroParam::EvaluatedArgument(arg)
-        } else {
-            LocatedMacroParam::RawArgument(arg)
+        .map(|(eval, arg)| {
+            if eval {
+                LocatedMacroParam::EvaluatedArgument(arg)
+            }
+            else {
+                LocatedMacroParam::RawArgument(arg)
+            }
         })
     ))
     .parse_next(input)?;
@@ -7246,11 +7249,17 @@ endif"
     #[test]
     fn test_parse_marco_arg() {
         assert_eq!(
-            parse_test(parse_macro_arg, "arg").as_ref().unwrap().to_macro_param(),
+            parse_test(parse_macro_arg, "arg")
+                .as_ref()
+                .unwrap()
+                .to_macro_param(),
             MacroParam::RawArgument("arg".into())
         );
         assert_eq!(
-            parse_test(parse_macro_arg, "{eval}arg").as_ref().unwrap().to_macro_param(),
+            parse_test(parse_macro_arg, "{eval}arg")
+                .as_ref()
+                .unwrap()
+                .to_macro_param(),
             MacroParam::EvaluatedArgument("arg".into())
         );
     }

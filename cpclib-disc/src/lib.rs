@@ -261,7 +261,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
         // loop over all the files to add them
         for fname in sub.get_many::<Utf8PathBuf>("INPUT_FILES").unwrap() {
-            let ams_file = match (AmsdosFile::open_valid(fname)) {
+            let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(mut ams_file) => {
                     let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
                     if let Err(e) = amsdos_fname {

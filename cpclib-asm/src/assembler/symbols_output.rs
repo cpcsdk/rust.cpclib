@@ -6,15 +6,8 @@ use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType, RemuChunk, RemuEntry}
 use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
 
-
-pub const NEVER_EXPORTED_SYMBOLS :&[&str] = &[
-    "$", "$$",
-    "BASM_VERSION",
-    "BASM",
-    "BASM_FEATURE_HFE"
-];
-
-
+pub const NEVER_EXPORTED_SYMBOLS: &[&str] =
+    &["$", "$$", "BASM_VERSION", "BASM", "BASM_FEATURE_HFE"];
 
 pub enum SymbolOutputFormat {
     Basm,
@@ -50,8 +43,13 @@ impl SymbolOutputFormat {
 
                     Value::Expr(ExprResult::Char(c)) => {
                         let c = *c as char;
-                        format!("{} equ '{}{}'", k.value(), if c== '\'' {"\\"} else { ""},  c )
-                    }
+                        format!(
+                            "{} equ '{}{}'",
+                            k.value(),
+                            if c == '\'' { "\\" } else { "" },
+                            c
+                        )
+                    },
 
                     _ => unimplemented!("{:?}", v)
                 }
@@ -224,8 +222,8 @@ impl SymbolOutputGenerator {
 
         let value = sym.value();
 
-        if NEVER_EXPORTED_SYMBOLS.iter().find(|&&nes| nes == value).is_some() {
-            return false;
+        if NEVER_EXPORTED_SYMBOLS.iter().any(|&nes| nes == value) {
+            false
         }
         else if self.all_allowed {
             !Self::is_included(&self.forbidden, sym)

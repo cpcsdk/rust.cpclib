@@ -67,7 +67,6 @@ use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, MemoryPhysicalAddress};
 
-
 #[derive(Clone, Copy, PartialEq)]
 enum OutputKind {
     Snapshot,
@@ -367,9 +366,11 @@ impl CharsetEncoding {
     }
 
     pub fn transform_char(&self, c: char) -> u8 {
-        self.lut.get(&c)
+        self.lut
+            .get(&c)
             .cloned()
-            .unwrap_or_else(|| char_to_amscii(c, Charset::English).unwrap_or(c as _) as i32) as _
+            .unwrap_or_else(|| char_to_amscii(c, Charset::English).unwrap_or(c as _) as i32)
+            as _
     }
 
     pub fn transform_string(&self, s: &str) -> Vec<u8> {
@@ -1096,7 +1097,6 @@ impl Env {
             self.sna.add_chunk(remu.clone());
         }
 
-
         // Add an additional pass to build the listing (this way it is built only one time)
         if self.options().assemble_options().output_builder.is_some() {
             let mut tokens = processed_token::build_processed_tokens_list(tokens, self)
@@ -1108,11 +1108,10 @@ impl Env {
                 .expect("No error can arise in listing output mode; there is a bug somewhere");
         }
 
-        // BUG this is definitevely a bug 
+        // BUG this is definitevely a bug
         // - I have moved file saving here because output was wrong when done before listing
         // - Ther eis no reason to do that. it should even be the opposite
         self.saved_files = Some(self.handle_file_save()?);
-
 
         Ok((remu, wabp))
     }
@@ -4734,10 +4733,7 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
     kind: DbLikeKind,
     exprs: &[E],
     env: &mut Env
-) -> Result<(), AssemblerError> 
-
-{
-
+) -> Result<(), AssemblerError> {
     let mask = kind.mask();
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
@@ -4755,10 +4751,11 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
 
     let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
         match &expr {
-            ExprResult::Float(_)
-            | ExprResult::Value(_)
-            | ExprResult::Bool(_) => output(env, expr.int()?, mask),
-            ExprResult::Char(c) => { // XXX here it is problematci c shold be a char and not a byte
+            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
+                output(env, expr.int()?, mask)
+            },
+            ExprResult::Char(c) => {
+                // XXX here it is problematci c shold be a char and not a byte
                 let c = env.charset_encoding.transform_char(*c as char);
                 output(env, expr.int()?, mask)
             },

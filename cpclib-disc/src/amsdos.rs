@@ -226,10 +226,10 @@ impl AmsdosFileName {
     }
 
     pub fn is_valid_char(char: u8) -> bool {
-
-
         // (char >= 'a' as u8 && char <= 'z' as u8) ||
-        let res = char.is_ascii_uppercase()
+        // by definition ' ' is already used to fill space
+
+        char.is_ascii_uppercase()
             || char.is_ascii_digit()
             || char == b'!'
             || char == b'"'
@@ -243,9 +243,7 @@ impl AmsdosFileName {
             || char == b'{'
             || char == b'}'
             || char == b'-'
-            || char == b' '; // by definition ' ' is already used to fill space
-
-        res
+            || char == b' '
     }
 
     // Build a AmsdosFileName ensuring the case is correct

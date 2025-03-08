@@ -731,9 +731,11 @@ impl MacroParamElement for LocatedMacroParam {
     }
 
     fn is_single(&self) -> bool {
-        matches!(self, LocatedMacroParam::RawArgument(..) | LocatedMacroParam::EvaluatedArgument(..))
+        matches!(
+            self,
+            LocatedMacroParam::RawArgument(..) | LocatedMacroParam::EvaluatedArgument(..)
+        )
     }
-
 
     fn is_list(&self) -> bool {
         matches!(self, LocatedMacroParam::List(..))
@@ -742,7 +744,9 @@ impl MacroParamElement for LocatedMacroParam {
     fn single_argument(&self) -> beef::lean::Cow<str> {
         match &self {
             LocatedMacroParam::Empty => beef::lean::Cow::borrowed(""),
-            LocatedMacroParam::RawArgument(s) | LocatedMacroParam::EvaluatedArgument(s)=> beef::lean::Cow::borrowed(s.as_str()),
+            LocatedMacroParam::RawArgument(s) | LocatedMacroParam::EvaluatedArgument(s) => {
+                beef::lean::Cow::borrowed(s.as_str())
+            },
             LocatedMacroParam::List(_) => unreachable!()
         }
     }
@@ -778,10 +782,11 @@ impl LocatedMacroParam {
         }
     }
 
-
     pub fn span(&self) -> Z80Span {
         match self {
-            LocatedMacroParam::RawArgument(span) | LocatedMacroParam::EvaluatedArgument(span)=> span.clone(),
+            LocatedMacroParam::RawArgument(span) | LocatedMacroParam::EvaluatedArgument(span) => {
+                span.clone()
+            },
             LocatedMacroParam::List(_) => todo!(),
             LocatedMacroParam::Empty => panic!()
         }

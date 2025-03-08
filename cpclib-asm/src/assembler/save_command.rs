@@ -69,7 +69,7 @@ impl SaveCommand {
 
         // Generate and save the file
 
-        &self.file
+        self.file
             .save(
                 data,
                 Some(from as u16),

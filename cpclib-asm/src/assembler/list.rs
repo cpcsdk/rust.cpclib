@@ -241,7 +241,8 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
 pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
     match s1 {
         ExprResult::List(l1) => {
-            let bytes = l1.iter()
+            let bytes = l1
+                .iter()
                 .enumerate()
                 .map(|(idx, v)| {
                     let v = v.int()?;
@@ -256,8 +257,12 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                 })
                 .collect::<Result<Vec<u8>, AssemblerError>>()?;
 
-                String::from_utf8(bytes)
-                .map_err(|e| AssemblerError::AssemblingError { msg: format!("Error when generating a string. {e}") })
+            String::from_utf8(bytes)
+                .map_err(|e| {
+                    AssemblerError::AssemblingError {
+                        msg: format!("Error when generating a string. {e}")
+                    }
+                })
                 .map(|s| s.into())
         },
 
