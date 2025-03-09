@@ -7,6 +7,7 @@ use std::sync::{Arc, LazyLock};
 use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
+use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
 use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::disark::{DisarkVersion, DISARK_CMD};
@@ -156,6 +157,7 @@ pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
 pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
+pub const UZ80_CMDS: &[&str] = &[UZ80_CMD];
 pub const VASM_CMDS: &[&str] = &[VASM_CMD];
 
 pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
@@ -253,6 +255,7 @@ is_some_cmd!(
     orgams,
     rasm, rm,
     sjasmplus, sna, sugarbox,
+    uz80,
     vasm,
     winape,
     xfer
@@ -348,6 +351,11 @@ impl<'de> Deserialize<'de> for InnerTask {
                         )),
                         std
                     ))
+                }
+                else if is_uz80_cmd(code) {
+                    Ok(InnerTask::Assembler(
+                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80((Default::default()))), 
+                        std))
                 }
                 else if is_sjasmplus_cmd(code) {
                     Ok(InnerTask::Assembler(

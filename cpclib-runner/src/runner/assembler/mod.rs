@@ -1,10 +1,12 @@
 pub mod rasm;
 pub mod sjasmplus;
 pub mod vasm;
+pub mod uz80;
 
 use cpclib_common::event::EventObserver;
 pub use rasm::{RasmVersion, RASM_CMD};
 pub use sjasmplus::{SjasmplusVersion, SJASMPLUS_CMD};
+use uz80::{Uz80Version, UZ80_CMD};
 pub use vasm::{VasmVersion, VASM_CMD};
 
 use crate::delegated::{
@@ -15,7 +17,8 @@ use crate::delegated::{
 pub enum ExternAssembler {
     Rasm(RasmVersion),
     Sjasmplus(SjasmplusVersion),
-    Vasm(VasmVersion)
+    Uz80(Uz80Version),
+    Vasm(VasmVersion),
 }
 
 impl ExternAssembler {
@@ -23,6 +26,7 @@ impl ExternAssembler {
         match self {
             ExternAssembler::Rasm(_) => RASM_CMD,
             ExternAssembler::Vasm(_) => VASM_CMD,
+            ExternAssembler::Uz80(_) => UZ80_CMD,
             ExternAssembler::Sjasmplus(_) => SJASMPLUS_CMD
         }
     }
@@ -31,6 +35,7 @@ impl ExternAssembler {
         match self {
             ExternAssembler::Rasm(r) => r.configuration(),
             ExternAssembler::Sjasmplus(r) => r.configuration(),
+            ExternAssembler::Uz80(u) => u.configuration(),
             ExternAssembler::Vasm(r) => r.configuration()
         }
     }

@@ -33,6 +33,7 @@ impl Tracker {
 mod test {
     use crate::delegated::{cpclib_download, StaticInformation};
     use crate::runner::tracker::at3::At3Version;
+    use crate::runner::tracker::chipnsfx::ChipnsfxVersion;
 
     #[test]
     fn test_download_at3() {
@@ -45,7 +46,7 @@ mod test {
     #[test]
     #[ignore]
     fn test_download_chipnsfx() {
-        let urls = Chipnsfx::default().static_download_urls();
+        let urls = ChipnsfxVersion::default().static_download_urls();
         assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
