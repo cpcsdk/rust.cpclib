@@ -46,7 +46,7 @@ impl DownloadableInformation for Uz80Version {
 impl ExecutableInformation for Uz80Version {
     fn target_os_folder(&self) -> &'static str {
         static FOLDER: OnceLock<String> = OnceLock::new();
-        FOLDER.get_or_init(|| format!("at3_{}", self)).as_str()
+        FOLDER.get_or_init(|| format!("uz80_{}", self)).as_str()
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
