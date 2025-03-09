@@ -19,4 +19,10 @@ impl Tracker {
             Default::default()
         ))
     }
+
+    pub fn new_chipnsfx_default() -> Self {
+        Self(cpclib_runner::runner::tracker::Tracker::Chipnsfx(
+            Default::default()
+        ))
+    }
 }

@@ -4786,8 +4786,6 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
 
     let backup_address = env.logical_output_address();
     for exp in exprs.iter() {
-        dbg!(&exp);
-
         if exp.is_string() {
             let s = exp.string();
             let bytes = env.charset_encoding.transform_string(s);

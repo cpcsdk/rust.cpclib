@@ -20,6 +20,7 @@ use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
+use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
 use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer};
@@ -161,6 +162,7 @@ pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
 pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
 pub const AT_CMDS: &[&str] = &[AT_CMD, "ArkosTracker3"];
+pub const CHIPNSFX_CMDS: &[&str] = &[CHIPNSFX_CMD];
 
 pub const HSPC_CMDS: &[&str] = &[HSPC_CMD, "hspc"];
 
@@ -242,7 +244,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at,
     basm, bdasm, bndbuild,
-    convgeneric, crunch, cp, cpcec,
+    chipnsfx, convgeneric, crunch, cp, cpcec,
     disark, disc,
     echo, emuctrl, r#extern,
     hideur,hspc,
@@ -290,6 +292,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_at_cmd(code) {
                     Ok(InnerTask::Tracker(Tracker::new_at3_default(), std))
+                }
+                else if is_chipnsfx_cmd(code) {
+                    Ok(InnerTask::Tracker(Tracker::new_chipnsfx_default(), std))
                 }
                 else if is_crunch_cmd(code) {
                     Ok(InnerTask::Crunch(std))
