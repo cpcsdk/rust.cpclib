@@ -1533,7 +1533,7 @@ impl std::fmt::Debug for AmsdosHeader {
         writeln!(f, "Loading address 0x{:x}", self.loading_address())?;
         writeln!(f, "Execution address 0x{:x}", self.execution_address())?;
         writeln!(f, "Checksum 0x{:x}", self.checksum())?;
-        writeln!(f, "Is valid {}", self.represent_a_valid_file())?;
+        writeln!(f, "Checksum valid {}", self.represent_a_valid_file())?;
         Ok(())
     }
 }
@@ -1854,7 +1854,7 @@ impl AmsdosFile {
             .unwrap_or(false)
     }
 
-    /// Read a file from disc and success if there is no io error and if the header if correct
+    /// Read a file from disc and succeed if there is no io error and if the header if correct
     pub fn open_valid<P: AsRef<Utf8Path>>(path: P) -> Result<Self, AmsdosError> {
         let mut f = File::open(path.as_ref())?;
         let mut content = Vec::new();

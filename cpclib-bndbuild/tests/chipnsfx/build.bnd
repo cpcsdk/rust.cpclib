@@ -3,6 +3,11 @@
 {%-   set SELECTED_MUSIC = "WINGSOD5.CHP" -%}
 {%- endif -%}
 
+{# use -DEMULATOR="ace" to open with ace #}
+{%- if not EMULATOR -%}
+{%-   set EMULATOR = "cpcec" -%}
+{%- endif -%}
+
 {# Generic macro that could  used anywhere. takes a .CHP and build a .asm #}
 {% macro compile_chipnsfx(from, to="chipnsfz.mus", opt="-t") -%}
 - tgt: {{to}}
@@ -27,11 +32,11 @@
     - dsk $@ add $<
 
 {# launch on an emulator #}
-- dep: CHIPNSFZ.BAS
+- dep: CHIPNSFZ.DSK
   tgt: emu
   phony: true
-  cmd: emu --emulator=cpcec --drivea=CHIPNSFZ.DSK --auto-run-file CHIPNSFZ.BAS
+  cmd: emu --emulator={{EMULATOR}} --drivea=CHIPNSFZ.DSK --auto-run-file CHIPNSFZ.BAS run
 
-- tgt: clean
+- tgt: distclean
   phony: true
   cmd: -rm *.BAS *dsk chipnsfz.mus

@@ -264,7 +264,8 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             let ams_file = match AmsdosFile::open_valid(fname) {
                 Ok(mut ams_file) => {
                     let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
-                    if let Err(e) = amsdos_fname {
+
+                    if amsdos_fname.is_err() || !amsdos_fname.unwrap().is_valid() {
                         // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
                         // then we try to replace it by the file name
                         eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
@@ -272,7 +273,6 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                         let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
                         let mut pc_fname = pc_fname.split(".");
                         let mut header = ams_file.header().expect("Need to handle ASCII files");
-                        dbg!(&header);
                         let new_amsdos_fname = AmsdosFileName::new_correct_case(
                             0,
                             pc_fname.next().unwrap(),
@@ -288,6 +288,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                         let content = ams_file.content();
                         ams_file = AmsdosFile::from_header_and_buffer(header, content)?;
                     }
+
                     assert!(
                         ams_file.amsdos_filename().unwrap()?.is_valid(),
                         "Invalid amsdos filename ! {:?}",
