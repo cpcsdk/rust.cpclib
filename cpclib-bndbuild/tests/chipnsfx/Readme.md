@@ -1,0 +1,1 @@
+This example shows how to compile a chipnsfx music and run it on an emulator

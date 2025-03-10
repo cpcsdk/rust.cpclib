@@ -1,0 +1,92 @@
+; --------------------------------------
+; AMSDOS FILE HEADER AND BASIC BOOTSTRAP
+; --------------------------------------
+
+load	= $0170;$0100;
+type	= 0;2;
+	org load-$80
+	ds $12
+	db type
+	dw 0,load
+	ds 1
+	dw last-load,exec
+	ds $24
+	dw last-load
+	ds 1
+	dw type+(load&255)+(load>>8)+2*((last-load)&255)+2*((last-load)>>8)+(exec&255)+(exec>>8)
+	ds $3B
+	if type<2
+		dw load_-$-2,0,$1A83,exec,$C001
+		db "CHIPNSFX+256 C.N.G.",0,0,0
+load_
+	endif
+
+; --------------
+; HARDWARE SETUP
+; --------------
+
+exec
+	ld hl,$D000
+	ld d,h
+	ld e,l
+	inc de
+	ld (hl),$F0
+	ld bc,$2000-1
+	ldir
+
+	ld hl,$C9FB
+	ld ($38),hl
+
+continue
+frame
+	halt
+	ld a,$F5
+	in a,(0)
+	rrca
+	jr nc,frame
+	ld bc,$7F10
+	out (c),c
+	ld c,$54
+	out (c),c
+	halt
+	halt
+	ld c,$4B
+	halt
+	out (c),c
+	if DEBUG
+		ld a,$AA
+		rlca
+		ld ($-2),a
+		call c,chip_play
+	else
+		call chip_play
+	endif
+	ld bc,$7F54
+	out (c),c
+	halt
+	ld c,$4B
+	out (c),c
+	jr frame
+
+writepsg
+	push bc
+	ld b,$F4
+	out (c),c
+	ld bc,$F6C0
+	out (c),c
+	out (c)
+	ld b,$F4
+	out (c),a
+	ld bc,$F680
+	out (c),c
+	out (c)
+	pop bc
+	ret
+
+CHIPNSFX_FLAG = 0+256+512;+128
+chipnsfx
+	include "chipnsfx.i80"
+	include "chipnsfz.mus"
+
+last
+	end

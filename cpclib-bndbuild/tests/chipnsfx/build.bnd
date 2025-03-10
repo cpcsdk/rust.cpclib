@@ -1,0 +1,37 @@
+{# use -DSELECTED_MUSIC="other.chp" to select another music #}
+{%- if not SELECTED_MUSIC -%}
+{%-   set SELECTED_MUSIC = "WINGSOD5.CHP" -%}
+{%- endif -%}
+
+{# Generic macro that could  used anywhere. takes a .CHP and build a .asm #}
+{% macro compile_chipnsfx(from, to="chipnsfz.mus", opt="-t") -%}
+- tgt: {{to}}
+  from: {{from}}
+  cmd: chipnsfx {{from}} {{to}} {{opt}}
+{%- endmacro %}
+
+
+{# Generate the rule that compile a musix #}
+{{ compile_chipnsfx(SELECTED_MUSIC, opt="-lchip_song_ -t") }}
+
+{# Build the basic file that contains player and mlusic #}
+- tgt: CHIPNSFZ.BAS
+  dep: CHIPNSFZ.S80 CHIPNSFX.I80 chipnsfz.mus
+  cmd: uz80 -q CHIPNSFZ.S80 -o$@
+
+{# Create a dsk to transfert #}
+- tgt: CHIPNSFZ.DSK
+  dep: CHIPNSFZ.BAS
+  cmd:
+    - dsk $@ format
+    - dsk $@ add $<
+
+{# launch on an emulator #}
+- dep: CHIPNSFZ.BAS
+  tgt: emu
+  phony: true
+  cmd: emu --emulator=cpcec --drivea=CHIPNSFZ.DSK --auto-run-file CHIPNSFZ.BAS
+
+- tgt: clean
+  phony: true
+  cmd: -rm *.BAS *dsk chipnsfz.mus
