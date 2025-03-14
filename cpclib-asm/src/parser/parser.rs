@@ -5564,7 +5564,7 @@ pub fn parse_label(
                     )).value(()),
                     delimited('{', expr, '}').value(())
                 )),
-                my_many0_nocollect(alt((
+                repeat::<_, _, (), _, _>(0.., alt((
                     take_while(1..,
                         (b'a'..=b'z',
                         b'A'..=b'Z',
@@ -5589,7 +5589,7 @@ pub fn parse_label(
                     )).value(()),
                     delimited('{', expr, '}').value(())
                 )),
-                my_many0_nocollect(alt((
+                repeat::<_, _, (), _, _>(0.., alt((
                     take_while(1..,
                         (b'a'..=b'z',
                         b'A'..=b'Z',
