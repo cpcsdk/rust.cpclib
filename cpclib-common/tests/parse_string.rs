@@ -2,11 +2,11 @@ use winnow::ascii::escaped;
 use winnow::combinator::{alt, terminated};
 use winnow::stream::UpdateSlice;
 use winnow::token::{none_of, one_of};
-use winnow::{BStr, Located, PResult, Parser, Stateful};
+use winnow::{BStr, LocatingSlice, PResult, Parser, Stateful};
 
 fn parse_string<'src>(
-    input: &mut Stateful<Located<&'src BStr>, ()>
-) -> PResult<Stateful<Located<&'src BStr>, ()>> {
+    input: &mut Stateful<LocatingSlice<&'src BStr>, ()>
+) -> PResult<Stateful<LocatingSlice<&'src BStr>, ()>> {
     let mut first = '"';
     let last = first;
     let normal = none_of(('\\', '"'));
@@ -41,7 +41,7 @@ fn test_parse_string() {
         r#""\" et voila""#
     ] {
         let string = Stateful {
-            input: Located::new(BStr::new(string)),
+            input: LocatingSlice::new(BStr::new(string)),
             state: ()
         };
         let res = parse_string.parse(string);

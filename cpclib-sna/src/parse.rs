@@ -26,7 +26,7 @@ where
 
     match SnapshotFlag::from_str(word) {
         Ok(flag) => Ok(flag),
-        Err(_e) => Err(ErrMode::from_error_kind(input, ErrorKind::Verify))
+        Err(_e) => Err(ErrMode::from_input(input))
     }
 }
 

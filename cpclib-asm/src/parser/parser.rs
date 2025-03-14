@@ -186,6 +186,7 @@ const INSTRUCTIONS: &[&[u8]] = &[
 
 const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"#",
+    b"ABYTE",
     b"ALIGN",
     b"ASMCONTROL",
     b"ASSERT",
@@ -685,9 +686,8 @@ where
                         Ok(_o) => {
                             // infinite loop check: the parser must always consume
                             if i.eof_offset() == len {
-                                return Err(ErrMode::Backtrack(E::from_error_kind(
-                                    i,
-                                    ErrorKind::Many
+                                return Err(ErrMode::Backtrack(E::from_input(
+                                    i
                                 )));
                             }
                         }
@@ -1353,7 +1353,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
             match e {
                 ErrMode::Incomplete(_) => todo!(),
                 ErrMode::Backtrack(e) => {
-                    let mut error = Z80ParserError::from_error_kind(input, ErrorKind::Fail);
+                    let mut error = Z80ParserError::from_input(input);
                     for ctx in e.context() {
                         error = error.add_context(input, &start, ctx.clone());
                     }
@@ -1361,7 +1361,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
                     ErrMode::Backtrack(error)
                 },
                 ErrMode::Cut(e) => {
-                    let mut error = Z80ParserError::from_error_kind(input, ErrorKind::Fail);
+                    let mut error = Z80ParserError::from_input(input);
                     for ctx in e.context() {
                         error = error.add_context(input, &start, ctx.clone());
                     }
@@ -1832,7 +1832,7 @@ pub fn parse_assign_operator(
 
         _ => {
             return Err(ErrMode::Cut(
-                Z80ParserError::from_error_kind(input, ErrorKind::Alt).add_context(
+                Z80ParserError::from_input(input).add_context(
                     input,
                     &start,
                     "Wrong symbol"
@@ -2303,9 +2303,8 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
         choice_nocase!(b"XOR") => parse_logical_operator(Mnemonic::Xor).parse_next(input),
 
         _ => {
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         },
     }?;
@@ -2403,7 +2402,7 @@ fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToke
     // Only one argument is allowed
     if (directive.is_db() || directive.is_dw()) && directive.data_exprs().len() > 1 {
         return Err(ErrMode::Cut(
-            Z80ParserError::from_error_kind(input, ErrorKind::Many).add_context(
+            Z80ParserError::from_input(input).add_context(
                 input,
                 &input_start,
                 "0 or 1 arguments are expected"
@@ -2490,9 +2489,8 @@ fn parse_directive_of_size_others(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2515,9 +2513,8 @@ fn parse_directive_of_size_10(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2549,9 +2546,8 @@ fn parse_directive_of_size_8(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2577,9 +2573,8 @@ fn parse_directive_of_size_7(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2639,9 +2634,8 @@ fn parse_directive_of_size_6(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2659,6 +2653,9 @@ fn parse_directive_of_size_5(
 ) -> PResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
+               choice_nocase!(b"ABYTE") => {
+                       parse_db_or_dw_or_str(DbDwStr::Abyte, within_struct).parse_next(input)
+        }        
         choice_nocase!(b"LIMIT") => parse_limit.parse_next(input),
         choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause),
         choice_nocase!(b"PRINT") => parse_print(true).parse_next(input),
@@ -2671,9 +2668,8 @@ fn parse_directive_of_size_5(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2715,9 +2711,8 @@ fn parse_directive_of_size_4(
         },
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2747,9 +2742,8 @@ fn parse_directive_of_size3(
         choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input),
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -2782,9 +2776,8 @@ fn parse_directive_of_size_2(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -3792,9 +3785,8 @@ fn parse_ld_normal_src(
         }
         else {
             input.reset(&input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         }
     }
@@ -3899,6 +3891,7 @@ pub fn parse_export(
 
 #[derive(PartialEq)]
 pub enum DbDwStr {
+    Abyte,
     Db,
     Dw,
     Str
@@ -3912,6 +3905,14 @@ pub fn parse_db_or_dw_or_str(
     empty_list_allowed: bool
 ) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+        let abyte_delta = if code == DbDwStr::Abyte {
+            Some(cut_err(terminated(located_expr, parse_comma).context(StrContext::Label("ABYTE: delta issue"))).parse_next(input)?)
+        } else {
+            None
+        };
+
+
+
         // STRUCT directive allows to have no arguments
         let expr = if empty_list_allowed {
             expr_list.parse_next(input).unwrap_or(Default::default())
@@ -3919,6 +3920,7 @@ pub fn parse_db_or_dw_or_str(
         else {
             expr_list
                 .context(match code {
+                    DbDwStr::Abyte => "ABYTE: error in arguments",
                     DbDwStr::Dw => "DEFW: error in arguments",
                     DbDwStr::Db => "DEFB: error in arguments",
                     DbDwStr::Str => "STR: error in arguments"
@@ -3929,7 +3931,8 @@ pub fn parse_db_or_dw_or_str(
         Ok(match code {
             DbDwStr::Db => LocatedTokenInner::Defb(expr),
             DbDwStr::Dw => LocatedTokenInner::Defw(expr),
-            DbDwStr::Str => LocatedTokenInner::Str(expr)
+            DbDwStr::Str => LocatedTokenInner::Str(expr),
+            DbDwStr::Abyte => LocatedTokenInner::Abyte(abyte_delta.unwrap(), expr),
         })
     }
 }
@@ -3955,9 +3958,8 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
 
     if !end_directive_iter.any(|&a| a == name.to_ascii_uppercase()) {
         input.reset(&start);
-        return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-            &name,
-            ErrorKind::Verify
+        return Err(ErrMode::Backtrack(Z80ParserError::from_input(
+            &name
         )));
     }
 
@@ -4032,7 +4034,7 @@ pub fn parse_macro_or_struct_call_inner(
             input.state.options().assembler_flavor
         ) {
             return Err(ErrMode::Backtrack(
-                Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                Z80ParserError::from_input(input).add_context(
                     input,
                     &input_start,
                     if for_struct {
@@ -4127,7 +4129,7 @@ pub fn parse_macro_or_struct_call_inner(
                 .is_ok()
             {
                 return Err(ErrMode::Cut(
-                    Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                    Z80ParserError::from_input(input).add_context(
                         input,
                         &input_start,
                         if for_struct {
@@ -4176,7 +4178,7 @@ pub fn parse_macro_or_struct_call(
             input.state.options().assembler_flavor
         ) {
             return Err(ErrMode::Backtrack(
-                Z80ParserError::from_error_kind(input, ErrorKind::Verify).add_context(
+                Z80ParserError::from_input(input).add_context(
                     input,
                     &input_start,
                     if for_struct {
@@ -4604,9 +4606,8 @@ pub fn parse_add_or_adc(
             .parse_next(input)
         }
         else {
-            return Err(ErrMode::Cut(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            return Err(ErrMode::Cut(Z80ParserError::from_input(
+                input
             )));
         }?;
 
@@ -4987,9 +4988,8 @@ pub fn parse_register16(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
         choice_nocase!(b"DE") => Register16::De,
         choice_nocase!(b"HL") => Register16::Hl,
         _ => {
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            return Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         },
     };
@@ -5205,9 +5205,8 @@ pub fn parse_indexregister16(
         choice_nocase!(b"IX") => IndexRegister16::Ix,
         choice_nocase!(b"IY") => IndexRegister16::Iy,
         _ => {
-            return Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Alt
+            return Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             )))
         },
     };
@@ -5635,7 +5634,7 @@ fn parse_snaset(
 
         let flag = parse_flag::<_, ()>(&mut flagname.as_bytes()).map_err(|_e| {
             input.reset(&input_start);
-            ErrMode::Backtrack(Z80ParserError::from_error_kind(input, ErrorKind::Verify))
+            ErrMode::Backtrack(Z80ParserError::from_input(input))
         })?;
         Ok(LocatedTokenInner::SnaSet(flag, value))
     }
@@ -5775,9 +5774,8 @@ pub fn parse_label(
         label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
             !ignore_ascii_case_allowed_label( true_label, input.state.options().dotted_directive, input.state.options().assembler_flavor)  {
             input.reset(&start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-                input,
-                ErrorKind::Verify
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(
+                input
             ).add_context(input, &start, "You cannot use a directive or an instruction as a label")
             ))
         }
@@ -5844,9 +5842,8 @@ pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z8
         Ok((*input).update_slice(keyword))
     }
     else {
-        Err(ErrMode::Backtrack(Z80ParserError::from_error_kind(
-            input,
-            ErrorKind::Verify
+        Err(ErrMode::Backtrack(Z80ParserError::from_input(
+            input
         )))
     }
 }

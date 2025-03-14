@@ -567,6 +567,8 @@ pub enum AssemblerFlavor {
 #[derive(Debug, Clone, Hash, PartialEq)]
 #[allow(missing_docs)]
 pub enum Token {
+    Abyte(Expr, Vec<Expr>),
+
     Align(Expr, Option<Expr>),
     AssemblerControl(StandardAssemblerControlCommand),
     Assert(Expr, Option<Vec<FormattedExpr>>),

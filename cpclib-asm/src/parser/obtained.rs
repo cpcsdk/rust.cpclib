@@ -13,7 +13,7 @@ use cpclib_common::winnow::combinator::cut_err;
 use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{AsBStr, AsBytes, Offset, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take;
-use cpclib_common::winnow::{BStr, PResult, Parser};
+use cpclib_common::winnow::{BStr, ModalResult, Parser};
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotFlag,
     SnapshotVersion
@@ -925,6 +925,7 @@ impl AssemblerControlCommand for LocatedAssemblerControlCommand {
 // Encode the LocatedToken BEFORE computing its span
 #[derive(Debug, PartialEq, Eq)]
 pub enum LocatedTokenInner {
+    Abyte(LocatedExpr, Vec<LocatedExpr>),
     Align(LocatedExpr, Option<LocatedExpr>),
     Assert(LocatedExpr, Option<Vec<FormattedExpr>>),
     AssemblerControl(LocatedAssemblerControlCommand),
@@ -2163,7 +2164,7 @@ impl LocatedListing {
         input_code: &mut InnerZ80Span,
         new_state: ParsingState,
         only_one_instruction: bool
-    ) -> PResult<Arc<LocatedListing>, Z80ParserError> {
+    ) -> ModalResult<Arc<LocatedListing>, Z80ParserError> {
         let mut tokens = Vec::with_capacity(20);
 
         let ctx_moved_in_builder = input_code.state.clone_with_state(new_state);

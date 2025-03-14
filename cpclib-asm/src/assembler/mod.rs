@@ -3524,6 +3524,7 @@ macro_rules! visit_token_impl {
     ($token:ident, $env:ident, $span:ident, $cls:tt) => {{
         $env.update_dollar();
         match &$token {
+            $cls::Abyte(d, l) => $env.visit_abyte(d, l.as_ref()),
             $cls::Align(ref boundary, ref fill) => $env.visit_align(boundary, fill.as_ref()),
             $cls::Assert(ref exp, ref txt) => {
                 visit_assert(exp, txt.as_ref(), $env, $span)?;
@@ -3578,8 +3579,8 @@ macro_rules! visit_token_impl {
 
             $cls::Comment(_) => Ok(()), // Nothing to do for a comment
 
-            $cls::Defb(l) => visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), $env),
-            $cls::Defw(l) => visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), $env),
+            $cls::Defb(l) => $env.visit_db_or_dw_or_str(DbLikeKind::Defb, l.as_ref(), 0.into()),
+            $cls::Defw(l) => $env.visit_db_or_dw_or_str(DbLikeKind::Defw, l.as_ref(), 0.into()),
             $cls::Defs(l) => visit_defs(l, $env),
 
             $cls::End => visit_end($env),
@@ -3676,7 +3677,7 @@ macro_rules! visit_token_impl {
                 ref start,
                 ref step
             } => $env.visit_starting_index(start.as_ref(), step.as_ref()),
-            $cls::Str(l) => visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), $env),
+            $cls::Str(l) => $env.visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), 0.into()),
             $cls::Struct(ref name, ref content) => {
                 $env.visit_struct_definition(name, content.as_slice(), $span)
             },
@@ -4728,15 +4729,29 @@ impl DbLikeKind {
     }
 }
 
+impl Env {
+    pub fn visit_abyte<E1: ExprEvaluationExt + ExprElement + Debug, E2: ExprEvaluationExt + ExprElement + Debug>(&mut self, delta: &E1, exprs: &[E2]) -> Result<(), AssemblerError> {
+        let delta = self.resolve_expr_may_fail_in_first_pass(delta)?;
+        self.visit_db_or_dw_or_str(DbLikeKind::Defb, exprs, delta)
+    }
+
 // TODO refactor code with assemble_opcode or other functions manipulating bytes
 pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
+    &mut self,
     kind: DbLikeKind,
     exprs: &[E],
-    env: &mut Env
+    delta: ExprResult
 ) -> Result<(), AssemblerError> {
+    let env = self;
+
+    let delta = delta.int()?;
+
+
     let mask = kind.mask();
 
     let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
+        let val = val + delta;
+
         if mask == 0xFF {
             env.output_byte(val as u8)?;
         }
@@ -4816,6 +4831,7 @@ pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
     }
 
     Ok(())
+}
 }
 
 impl Env {

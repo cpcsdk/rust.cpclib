@@ -178,10 +178,8 @@ impl TokenExt for Token {
             },
 
             Token::Defb(e) | Token::Defw(e) | Token::Str(e) => {
-                use crate::assembler::visit_db_or_dw_or_str;
-
                 let mut env = Env::default();
-                visit_db_or_dw_or_str(self.into(), e, &mut env)
+                env.visit_db_or_dw_or_str(self.into(), e, 0.into())
                     .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
                 wrap(&env.produced_bytes())
             },

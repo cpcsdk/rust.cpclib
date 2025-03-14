@@ -1,8 +1,8 @@
 use std::str;
 
 use cpclib_common::winnow::ascii::{space0, space1, Caseless};
-use cpclib_common::winnow::combinator::{alt, preceded, rest};
-use cpclib_common::winnow::token::take_till;
+use cpclib_common::winnow::combinator::{alt, preceded};
+use cpclib_common::winnow::token::{rest, take_till};
 use cpclib_common::winnow::{PResult, Parser};
 
 #[derive(Debug, Clone)]
