@@ -567,7 +567,7 @@ mod test {
     use std::ops::Deref;
 
     use cpclib_common::winnow::error::ParseError;
-    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::ModalParser;
     use cpclib_tokens::{DataAccess, Expr};
 
     use super::{ctx_and_span, ToOrgams};
@@ -590,7 +590,7 @@ mod test {
         }
     }
 
-    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+    fn parse_test<O, P: ModalParser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,
         code: &'static str
     ) -> TestResult<O>

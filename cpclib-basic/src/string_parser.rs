@@ -7,7 +7,7 @@ use cpclib_common::winnow::error::{ContextError, ParserError, StrContext};
 use cpclib_common::winnow::stream::AsChar;
 use cpclib_common::winnow::token::{one_of, take_while};
 /// ! Locomotive basic parser routines.
-use cpclib_common::winnow::{Parser, *};
+use cpclib_common::winnow::{ModalParser, *};
 use paste::paste;
 
 use crate::tokens::*;
@@ -994,7 +994,7 @@ pub fn dec_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
         .parse_next(input)
 }
 
-pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
+pub fn test_parse<'code, P: ModalParser<&'code str, Vec<BasicToken>, ContextError>>(
     mut parser: P,
     code: &'code str
 ) -> BasicLine {
@@ -1007,7 +1007,7 @@ pub fn test_parse<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
     }
 }
 
-pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(
+pub fn test_parse1<'code, P: ModalParser<&'code str, BasicToken, ContextError>>(
     mut parser: P,
     code: &'code str
 ) -> BasicLine {
@@ -1020,7 +1020,7 @@ pub fn test_parse1<'code, P: Parser<&'code str, BasicToken, ContextError>>(
     }
 }
 
-pub fn test_parse_and_compare<'code, P: Parser<&'code str, Vec<BasicToken>, ContextError>>(
+pub fn test_parse_and_compare<'code, P: ModalParser<&'code str, Vec<BasicToken>, ContextError>>(
     parser: P,
     code: &'code str,
     bytes: &[u8]

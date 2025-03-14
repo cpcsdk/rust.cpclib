@@ -2,7 +2,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take_until;
-use cpclib_common::winnow::{ModalResult, Parser};
+use cpclib_common::winnow::{ModalResult, ModalParser, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
 use super::{
@@ -191,7 +191,7 @@ mod test {
     use std::ops::Deref;
 
     use cpclib_common::winnow::error::{ErrMode, ParseError};
-    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::ModalParser;
 
     use crate::error::AssemblerError;
     use crate::preamble::{
@@ -243,7 +243,7 @@ mod test {
         (ctx, span)
     }
 
-    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+    fn parse_test<O, P: ModalParser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,
         code: &'static str
     ) -> TestResult<O>
