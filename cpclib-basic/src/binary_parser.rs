@@ -1,7 +1,7 @@
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow;
 use cpclib_common::winnow::combinator::{eof, repeat, terminated};
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 use winnow::binary::{le_u16, u8};
 use winnow::combinator::cut_err;
 
@@ -10,7 +10,7 @@ use crate::binary_parser::winnow::token::take;
 use crate::tokens::{BasicTokenPrefixed, *};
 use crate::{BasicLine, BasicProgram};
 
-pub fn program(bytes: &mut &[u8]) -> PResult<BasicProgram, ContextError<&'static str>> {
+pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<&'static str>> {
     let lines: Vec<BasicLine> = repeat(0.., line_or_end.context("Error when parsing a basic line"))
         .verify(|lines: &Vec<Option<BasicLine>>| lines.last().map(|l| l.is_none()).unwrap_or(true))
         .map(|mut lines: Vec<Option<BasicLine>>| {
@@ -25,7 +25,7 @@ pub fn program(bytes: &mut &[u8]) -> PResult<BasicProgram, ContextError<&'static
 // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC&mobileaction=toggle_view_desktop#Structure_of_a_BASIC_program
 // Some(BasicLine) for a Line
 // None for End
-pub fn line_or_end(bytes: &mut &[u8]) -> PResult<Option<BasicLine>, ContextError<&'static str>> {
+pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextError<&'static str>> {
     let length = cut_err(le_u16.context("Expecting a line length")).parse_next(bytes)?;
 
     // leave if it is the end of the program
@@ -56,7 +56,7 @@ pub fn line_or_end(bytes: &mut &[u8]) -> PResult<Option<BasicLine>, ContextError
     Ok(Some(line))
 }
 
-pub fn parse_tokens(bytes: &mut &[u8]) -> PResult<Vec<BasicToken>, ContextError<&'static str>> {
+pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextError<&'static str>> {
     let mut tokens = Vec::with_capacity(bytes.len());
     while !bytes.is_empty() {
         let code = BasicTokenNoPrefix::try_from(u8.parse_next(bytes)?).unwrap();

@@ -8,11 +8,11 @@ use cpclib_common::winnow::stream::{
     AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice
 };
 use cpclib_common::winnow::token::take_while;
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 
 use crate::flags::{FlagValue, SnapshotFlag};
 
-pub fn parse_flag<I, Error: ParserError<I>>(input: &mut I) -> PResult<SnapshotFlag, Error>
+pub fn parse_flag<I, Error: ParserError<I>>(input: &mut I) -> ModalResult<SnapshotFlag, Error>
 where
     I: StreamIsPartial,
     I: Stream,
@@ -30,7 +30,7 @@ where
     }
 }
 
-pub fn parse_flag_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<FlagValue>
+pub fn parse_flag_value<I, Error: ParserError<I>>(input: &mut I) -> ModalResult<FlagValue>
 where
     I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
 

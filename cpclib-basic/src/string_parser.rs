@@ -13,12 +13,12 @@ use paste::paste;
 use crate::tokens::*;
 use crate::{BasicError, BasicLine, BasicProgram};
 
-type BasicSeveralTokensResult<'src> = PResult<Vec<BasicToken>, ContextError<StrContext>>;
-type BasicOneTokenResult<'src> = PResult<BasicToken, ContextError<StrContext>>;
-type BasicLineResult<'src> = PResult<BasicLine, ContextError<StrContext>>;
+type BasicSeveralTokensResult<'src> = ModalResult<Vec<BasicToken>, ContextError<StrContext>>;
+type BasicOneTokenResult<'src> = ModalResult<BasicToken, ContextError<StrContext>>;
+type BasicLineResult<'src> = ModalResult<BasicLine, ContextError<StrContext>>;
 
 /// Parse complete basic program"],
-pub fn parse_basic_program(input: &mut &str) -> PResult<BasicProgram, ContextError<StrContext>> {
+pub fn parse_basic_program(input: &mut &str) -> ModalResult<BasicProgram, ContextError<StrContext>> {
     repeat(0.., parse_basic_line)
         .map(BasicProgram::new)
         .parse_next(input)
@@ -960,7 +960,7 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn hex_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
+pub fn hex_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
     take_while(1..=4, AsChar::is_hex_digit)
         .map(|parsed: &str| {
             let mut res = 0_u32;
@@ -977,7 +977,7 @@ pub fn hex_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
 
 /// XXX stolen to the asm parser
 #[inline]
-pub fn dec_u16_inner(input: &mut &str) -> PResult<u16, ContextError> {
+pub fn dec_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
     take_while(1.., '0'..='9')
         .verify(|parsed: &str| parsed.len() <= 5)
         .map(|parsed: &str| {

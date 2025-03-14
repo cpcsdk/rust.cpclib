@@ -4,7 +4,7 @@ use std::ops::Deref;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::ascii::{alphanumeric1, space0, Caseless};
 use cpclib_common::winnow::combinator::{alt, delimited, repeat, separated, terminated};
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 use serde::{self, Deserialize, Deserializer};
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Hash, Clone)]
@@ -141,11 +141,11 @@ where D: Deserializer<'de> {
     Ok(Some(cons))
 }
 
-fn parse_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_constraint(input: &mut &str) -> ModalResult<Constraint> {
     alt((parse_logical_constraint, parse_positive_constraint)).parse_next(input)
 }
 
-fn parse_negated_constraint(input: &mut &str) -> PResult<LogicalExpression> {
+fn parse_negated_constraint(input: &mut &str) -> ModalResult<LogicalExpression> {
     delimited(
         (Caseless("not("), space0),
         parse_positive_constraint,
@@ -155,7 +155,7 @@ fn parse_negated_constraint(input: &mut &str) -> PResult<LogicalExpression> {
     .parse_next(input)
 }
 
-fn parse_positive_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_positive_constraint(input: &mut &str) -> ModalResult<Constraint> {
     alt((
         parse_and_or_constraint.map(Constraint::from),
         parse_leaf_constraint
@@ -163,7 +163,7 @@ fn parse_positive_constraint(input: &mut &str) -> PResult<Constraint> {
     .parse_next(input)
 }
 
-fn parse_and_or_constraint(input: &mut &str) -> PResult<LogicalExpression> {
+fn parse_and_or_constraint(input: &mut &str) -> ModalResult<LogicalExpression> {
     #[derive(Clone)]
     enum Logic {
         And,
@@ -190,13 +190,13 @@ fn parse_and_or_constraint(input: &mut &str) -> PResult<LogicalExpression> {
         .parse_next(input)
 }
 
-fn parse_logical_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_logical_constraint(input: &mut &str) -> ModalResult<Constraint> {
     alt((parse_negated_constraint, parse_and_or_constraint))
         .map(Constraint::from)
         .parse_next(input)
 }
 
-fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_os_constraint(input: &mut &str) -> ModalResult<Constraint> {
     Caseless("os").parse_next(input)?;
     delimited(
         ('(', space0),
@@ -211,7 +211,7 @@ fn parse_os_constraint(input: &mut &str) -> PResult<Constraint> {
     .parse_next(input)
 }
 
-fn parse_hostname_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_hostname_constraint(input: &mut &str) -> ModalResult<Constraint> {
     delimited(
         (Caseless("hostname("), space0),
         repeat(1.., alt((alphanumeric1, "_", "-"))),
@@ -221,7 +221,7 @@ fn parse_hostname_constraint(input: &mut &str) -> PResult<Constraint> {
     .parse_next(input)
 }
 
-fn parse_leaf_constraint(input: &mut &str) -> PResult<Constraint> {
+fn parse_leaf_constraint(input: &mut &str) -> ModalResult<Constraint> {
     alt((parse_hostname_constraint, parse_os_constraint)).parse_next(input)
 }
 

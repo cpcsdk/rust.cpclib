@@ -24,7 +24,7 @@ use cpclib_common::winnow::stream::{
     Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, LocatingSlice, Offset, Stream, UpdateSlice
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
-use cpclib_common::winnow::{self, BStr, PResult, Parser, Stateful};
+use cpclib_common::winnow::{self, BStr, ModalResult, Parser, Stateful};
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
@@ -493,7 +493,7 @@ pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, Assembl
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 /// nom many0 does not seem to fit our parser requirements
 /// TODO check if winnow is better on this side
-pub fn my_many0<O, E, F, C>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> PResult<C, E>
+pub fn my_many0<O, E, F, C>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<C, E>
 where
     F: Parser<InnerZ80Span, O, E>,
     E: ParserError<InnerZ80Span>,
@@ -548,7 +548,7 @@ fn my_separated0_in<'vec, O, O2, E, F, G, C>(
     mut sep: G,
     mut f: F,
     r#in: &'vec mut C
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), E> + 'vec
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), E> + 'vec
 where
     F: Parser<InnerZ80Span, Either<O, Vec<O>>, E> + 'vec,
     G: Parser<InnerZ80Span, O2, E> + 'vec,
@@ -629,7 +629,7 @@ where
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), E>
+pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), E>
 where
     F: Parser<InnerZ80Span, O, E>,
     E: ParserError<InnerZ80Span>
@@ -662,7 +662,7 @@ where
 pub fn my_many_till_nocollect<O, P, E, F, G>(
     mut f: F,
     mut g: G
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<((), P), E>
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<((), P), E>
 where
     F: Parser<InnerZ80Span, O, E>,
     G: Parser<InnerZ80Span, P, E>,
@@ -701,14 +701,14 @@ where
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn inner_code(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+pub fn inner_code(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80ParserError> {
     inner_code_with_state(input.state.state, false).parse_next(input)
 }
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn one_instruction_inner_code(
     input: &mut InnerZ80Span
-) -> PResult<LocatedListing, Z80ParserError> {
+) -> ModalResult<LocatedListing, Z80ParserError> {
     inner_code_with_state(input.state.state, true).parse_next(input)
 }
 
@@ -719,7 +719,7 @@ pub fn one_instruction_inner_code(
 pub fn inner_code_with_state(
     new_state: ParsingState,
     only_one_instruction: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedListing, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -730,7 +730,7 @@ pub fn inner_code_with_state(
 }
 
 /// TODO
-pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0.parse_next(input)?;
     let rorg_start = input.checkpoint();
     let _ = alt((Caseless("PHASE"), Caseless("RORG"))).parse_next(input)?;
@@ -757,12 +757,12 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserEr
 }
 
 /// TODO - limit the listing possibilities
-pub fn parse_function_listing(input: &mut InnerZ80Span) -> PResult<LocatedListing, Z80ParserError> {
+pub fn parse_function_listing(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80ParserError> {
     // dbg!("parse_function_listing requests FunctionLimited state");
     inner_code_with_state(ParsingState::FunctionLimited, false).parse_next(input)
 }
 
-pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_function(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let function_start = input.checkpoint();
     let _ = preceded(my_space0, parse_directive_word(b"FUNCTION")).parse_next(input)?;
     let name = cut_err(parse_label(false).context(StrContext::Label("FUNCTION: wrong name")))
@@ -813,7 +813,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
 }
 
 /// TODO
-pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_macro(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let dir_start = input.checkpoint();
     let _ = parse_directive_word(b"MACRO").parse_next(input)?;
 
@@ -827,8 +827,8 @@ pub fn parse_macro(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 fn parse_macro_inner(
     dir_start: <InnerZ80Span as Stream>::Checkpoint,
     name: InnerZ80Span
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
         // macro arguments
         let arguments = preceded(
             opt(parse_comma), // comma after macro name is not mandatory
@@ -889,7 +889,7 @@ fn parse_macro_inner(
 }
 
 /// TODO
-pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
     let while_start = input.checkpoint();
     let _ = parse_directive_word(b"WHILE").parse_next(input)?;
@@ -920,7 +920,7 @@ pub fn parse_while(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
     Ok(token)
 }
 
-pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_module(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let module_start = input.checkpoint();
     let _ = parse_directive_word(b"MODULE").parse_next(input)?;
 
@@ -941,7 +941,7 @@ pub fn parse_module(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 }
 
 /// Parse a sub-listing part that aims at being crunched after being assembled at first pass
-pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_crunched_section(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let crunched_start = input.checkpoint();
     let kind = preceded(
         my_space0,
@@ -982,7 +982,7 @@ pub fn parse_crunched_section(input: &mut InnerZ80Span) -> PResult<LocatedToken,
 }
 
 /// Parse the switch directive
-pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     my_many0_nocollect(alt((my_space1.value(()), my_line_ending.value(())))).parse_next(input)?;
     let switch_start = *input;
     let _ = parse_directive_word(b"SWITCH")(input)?;
@@ -1078,7 +1078,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     }
 }
 
-pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let for_start = input.checkpoint();
     let _ = preceded(my_space0, parse_directive_word(b"FOR")).parse_next(input)?;
 
@@ -1119,7 +1119,7 @@ pub fn parse_for(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserErr
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_confined(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     // let _ = my_space0(input)?;
     let confined_start = input.checkpoint();
 
@@ -1146,7 +1146,7 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Pars
     Ok(token)
 }
 
-pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let repeat_start = input.checkpoint();
     let _ = preceded(
         my_space0,
@@ -1219,7 +1219,7 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
     }
 }
 
-pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_iterate(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let iterate_start = input.checkpoint();
     let _ = preceded(
         my_space0,
@@ -1287,7 +1287,7 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
 }
 
 /// TODO
-pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_basic(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let basic_start = input.checkpoint();
     let _ = ((my_space0, Caseless("LOCOMOTIVE"), my_space0)).parse_next(input)?;
 
@@ -1340,12 +1340,12 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 /// Parse the instruction to hide basic lines
 pub fn parse_basic_hide_lines(
     input: &mut InnerZ80Span
-) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
+) -> ModalResult<Vec<LocatedExpr>, Z80ParserError> {
     let _ = ((Caseless("HIDE_LINES"), my_space1)).parse_next(input)?;
     expr_list.parse_next(input)
 }
 
-pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z80ParserError> {
+pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> ModalResult<FlagValue, Z80ParserError> {
     let start = input.checkpoint();
     cpclib_sna::parse::parse_flag_value::<InnerZ80Span, Z80ParserError>
         .parse_next(input)
@@ -1376,7 +1376,7 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> PResult<FlagValue, Z8
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line_component(
     input: &mut InnerZ80Span
-) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
+) -> ModalResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
     my_space0.parse_next(input)?;
 
     parse_line_component_standard.parse_next(input)
@@ -1386,7 +1386,7 @@ pub fn parse_line_component(
 /// next  token is a separator :, \n, eof
 pub fn parse_line_component_standard(
     input: &mut InnerZ80Span
-) -> PResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
+) -> ModalResult<(Option<LocatedToken>, Option<LocatedToken>), Z80ParserError> {
     if input.state.options().is_orgams() {
         let repeat = opt(parse_orgams_repeat).parse_next(input)?;
         if repeat.is_some() {
@@ -1620,7 +1620,7 @@ pub fn parse_line_component_standard(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line_or_with_comment(
     input: &mut InnerZ80Span
-) -> PResult<Option<LocatedToken>, Z80ParserError> {
+) -> ModalResult<Option<LocatedToken>, Z80ParserError> {
     // let _ =opt(line_ending).parse_next(input)?;
     let _before_comment = *input;
     let comment = delimited(my_space0, opt(parse_comment), my_space0).parse_next(input)?;
@@ -1638,7 +1638,7 @@ pub fn parse_line_or_with_comment(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_single_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_single_token(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     // Get the token
     alt((parse_token, parse_directive)).parse_next(input)
 }
@@ -1656,7 +1656,7 @@ enum LabelModifier {
 }
 
 /// Accept "fname" as in most assemblers and fname as in vasm
-pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_fname(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     alt((
         parse_string.map(|s: UnescapedString| LocatedExpr::String(s)),
         terminated(parse_label(false), not(alt(("/", "://"))))
@@ -1670,7 +1670,7 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_z80_directive_with_block(
     input: &mut InnerZ80Span
-) -> PResult<LocatedToken, Z80ParserError> {
+) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
 
     if input.state.options().is_orgams() {
@@ -1706,7 +1706,7 @@ pub fn parse_z80_directive_with_block(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_lines(input: &mut InnerZ80Span) -> PResult<Vec<LocatedToken>, Z80ParserError> {
+pub fn parse_lines(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedToken>, Z80ParserError> {
     let mut tokens = Vec::with_capacity(100);
 
     loop {
@@ -1726,8 +1726,8 @@ pub fn parse_lines(input: &mut InnerZ80Span) -> PResult<Vec<LocatedToken>, Z80Pa
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_line(
     r#in: &mut Vec<LocatedToken>
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
-    move |input: &mut InnerZ80Span| -> PResult<(), Z80ParserError> {
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), Z80ParserError> + '_ {
+    move |input: &mut InnerZ80Span| -> ModalResult<(), Z80ParserError> {
         my_space0.parse_next(input)?;
 
         let mut components: SmallVec<[_; 1]> = Default::default();
@@ -1787,7 +1787,7 @@ pub fn parse_line(
 
 pub fn parse_z80_line_complete(
     r#in: &mut Vec<LocatedToken>
-) -> impl FnMut(&mut InnerZ80Span) -> PResult<(), Z80ParserError> + '_ {
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), Z80ParserError> + '_ {
     parse_line(r#in)
 }
 
@@ -1795,7 +1795,7 @@ pub fn parse_z80_line_complete(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assign_operator(
     input: &mut InnerZ80Span
-) -> PResult<Option<BinaryOperation>, Z80ParserError> {
+) -> ModalResult<Option<BinaryOperation>, Z80ParserError> {
     let start = input.checkpoint();
     let word = take_while(1..=3, |c| {
         c == b'='
@@ -1847,7 +1847,7 @@ pub fn parse_assign_operator(
 /// Parser for file names in appropriate directives
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80ParserError> {
+pub fn parse_string(input: &mut InnerZ80Span) -> ModalResult<UnescapedString, Z80ParserError> {
     let opener = alt(('"', '\'')).parse_next(input)? as char;
     let closer = opener;
     let (normal, escapable) = match opener {
@@ -1871,7 +1871,7 @@ pub fn parse_string(input: &mut InnerZ80Span) -> PResult<UnescapedString, Z80Par
 
 pub fn parse_stringlike_without_quote(
     input: &mut InnerZ80Span
-) -> PResult<UnescapedString, Z80ParserError> {
+) -> ModalResult<UnescapedString, Z80ParserError> {
     let (normal, escapable) = (
         none_of(('\\', ' ', '\r', '\n', ':', ';')),
         one_of(('\\', ' ', ':', ';'))
@@ -1941,7 +1941,7 @@ where
     }
 }
 
-pub fn parse_charset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_charset(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let charset =
         opt(alt((parse_charset_string, parse_charset_start_stop_end))).parse_next(input)?;
 
@@ -1952,7 +1952,7 @@ pub fn parse_charset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 
 pub fn parse_charset_start_stop_end(
     input: &mut InnerZ80Span
-) -> PResult<CharsetFormat, Z80ParserError> {
+) -> ModalResult<CharsetFormat, Z80ParserError> {
     let (start, stop, end) = ((
         expr,
         preceded(parse_comma, expr),
@@ -1969,7 +1969,7 @@ pub fn parse_charset_start_stop_end(
     Ok(format)
 }
 
-pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, Z80ParserError> {
+pub fn parse_charset_string(input: &mut InnerZ80Span) -> ModalResult<CharsetFormat, Z80ParserError> {
     // manage the string format - TODO manage the others too
     let chars = parse_string
         .context(StrContext::Label("Missing string"))
@@ -1984,7 +1984,7 @@ pub fn parse_charset_string(input: &mut InnerZ80Span) -> PResult<CharsetFormat, 
 }
 
 /// Parser for the include directive
-pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_include(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let once_fname = (
         opt(delimited(my_space0, parse_word(b"ONCE"), my_space0)),
         cut_err(parse_fname.context(StrContext::Label("INCLUDE: error in fname")))
@@ -2019,8 +2019,8 @@ pub fn parse_include(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_incbin(
     transformation: BinaryTransformation
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let fname = preceded(my_space0, parse_fname).parse_next(input)?;
 
         let offset =
@@ -2047,7 +2047,7 @@ pub fn parse_incbin(
 /// we do not care of the parameters for roms as we are not working in an emulator
 pub fn parse_write_direct_memory(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     // filter all the stuff before
     let _ = ((
         Caseless("DIRECT"),
@@ -2080,8 +2080,8 @@ pub enum SaveKind {
 /// Parse both save directive and write direct in a file
 pub fn parse_save(
     save_kind: SaveKind
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if save_kind == SaveKind::WriteDirect {
             (parse_word(b"DIRECT"), not((my_space0, "-1"))).parse_next(input)?;
         }
@@ -2148,13 +2148,13 @@ pub fn parse_save(
 }
 
 /// Parse  UNDEF directive.
-pub fn parse_undef(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_undef(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let label = parse_label(false).parse_next(input)?;
 
     Ok(LocatedTokenInner::Undef(label.into()))
 }
 
-pub fn parse_section(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_section(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let name = preceded(my_space0, parse_label(false)).parse_next(input)?;
 
     Ok(LocatedTokenInner::Section(name.into()))
@@ -2162,7 +2162,7 @@ pub fn parse_section(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_range(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let start = cut_err(
         delimited(my_space0, located_expr, my_space0)
             .context(StrContext::Label("RANGE: wrong start address"))
@@ -2184,7 +2184,7 @@ pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 
     Ok(LocatedTokenInner::Range(label.into(), start, stop))
 }
-// pub fn parse_assign(input: &mut InnerZ80Span) -> PResult<TokenInner, Z80ParserError> {
+// pub fn parse_assign(input: &mut InnerZ80Span) -> ModalResult<TokenInner, Z80ParserError> {
 // let ((label, op, value)) = ((
 // parse_label(false),
 // delimited(space0, parse_assign_operator, space0),
@@ -2196,7 +2196,7 @@ pub fn parse_range(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_token(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let parsing_state = input.state.state;
 
     alt((parse_token1, parse_token2))
@@ -2206,13 +2206,13 @@ pub fn parse_token(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserE
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_token1(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_token1(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     parse_opcode_no_arg(input)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
     // Get the first word that will drive the rest of parsing
@@ -2316,7 +2316,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parser
 /// Parse ex af, af' instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_ex_af(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_ex_af(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     ((
         //        parse_word(b"EX"),
         parse_register_af,
@@ -2330,7 +2330,7 @@ pub fn parse_ex_af(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pa
 /// Parse ex hl, de instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     alt((
         ((
             //          Caseless("EX"),
@@ -2356,7 +2356,7 @@ pub fn parse_ex_hl_de(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 /// Parse ex (sp), hl
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let destination = ((
         //     Caseless("EX"),
         //      space1,
@@ -2379,7 +2379,7 @@ pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_struct_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_struct_directive(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     alt((
         parse_struct_directive_inner,
         parse_macro_or_struct_call(false, true)
@@ -2389,7 +2389,7 @@ pub fn parse_struct_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken,
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     // XXX Sadly the state is stored within the context that cannot
     //     by changed. So we can cannot really use parsing state sutf
 
@@ -2413,7 +2413,7 @@ fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> PResult<LocatedToke
 }
 
 /// Parse any directive
-pub fn parse_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_directive(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let parsing_state = input.state.state;
     parse_directive_new(&parsing_state.clone())
         .verify(move |d| d.is_accepted(&parsing_state))
@@ -2427,10 +2427,10 @@ pub fn parse_directive(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Par
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_directive_new(
     local_parsing_state: &ParsingState
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> + '_ {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> + '_ {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
         let is_orgams = input.state.options().is_orgams();
 
         let input_start = input.checkpoint();
@@ -2476,7 +2476,7 @@ fn parse_directive_of_size_others(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match &word.to_ascii_uppercase()[..] {
         // 12
         #[cfg(not(target_arch = "wasm32"))]
@@ -2505,7 +2505,7 @@ fn parse_directive_of_size_10(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input),
         choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input),
@@ -2529,7 +2529,7 @@ fn parse_directive_of_size_8(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"BINCLUDE") => parse_incbin(BinaryTransformation::None).parse_next(input),
         choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input),
@@ -2562,7 +2562,7 @@ fn parse_directive_of_size_7(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"INCLUDE") => parse_include.parse_next(input),
         choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input),
@@ -2589,7 +2589,7 @@ fn parse_directive_of_size_6(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ASSERT") => parse_assert.parse_next(input),
 
@@ -2650,7 +2650,7 @@ fn parse_directive_of_size_5(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
                choice_nocase!(b"ABYTE") => {
@@ -2684,7 +2684,7 @@ fn parse_directive_of_size_4(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"DEFB")
         | choice_nocase!(b"DEFM")
@@ -2727,7 +2727,7 @@ fn parse_directive_of_size3(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input),
 
@@ -2758,7 +2758,7 @@ fn parse_directive_of_size_2(
     is_orgams: bool,
     within_struct: bool,
     word: &[u8]
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"BY") if is_orgams => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
@@ -2797,7 +2797,7 @@ enum KindOfConditional {
 /// TODO shorten the string code source
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
     //  dbg!(&input);
@@ -2922,8 +2922,8 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_conditional_condition(
     code: KindOfConditional
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTestKind, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTestKind, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTestKind, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTestKind, Z80ParserError> {
         match &code {
             KindOfConditional::If => located_expr.map(LocatedTestKind::True).parse_next(input),
 
@@ -2959,7 +2959,7 @@ fn parse_conditional_condition(
 }
 
 /// Parse a breakpoint instruction
-pub fn parse_breakpoint(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_breakpoint(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let expr = opt(terminated(located_expr, not('='))
         .with_taken()
         .verify(|(e, s)| {
@@ -3227,7 +3227,7 @@ pub enum BreakPointArgument {
 
 pub fn parse_breakpoint_argument(
     input: &mut InnerZ80Span
-) -> PResult<BreakPointArgument, Z80ParserError> {
+) -> ModalResult<BreakPointArgument, Z80ParserError> {
     alt((
         parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value)
             .map(|(k, v)| BreakPointArgument::Type { arg: k, value: v }),
@@ -3260,25 +3260,25 @@ pub fn parse_breakpoint_argument(
 
 pub fn parse_breakpoint_type_value(
     input: &mut InnerZ80Span
-) -> PResult<RemuBreakPointType, Z80ParserError> {
+) -> ModalResult<RemuBreakPointType, Z80ParserError> {
     parse_convertible_word(input)
 }
 
 pub fn parse_breakpoint_access_value(
     input: &mut InnerZ80Span
-) -> PResult<RemuBreakPointAccessMode, Z80ParserError> {
+) -> ModalResult<RemuBreakPointAccessMode, Z80ParserError> {
     parse_convertible_word(input)
 }
 
 pub fn parse_breakpoint_run_value(
     input: &mut InnerZ80Span
-) -> PResult<RemuBreakPointRunMode, Z80ParserError> {
+) -> ModalResult<RemuBreakPointRunMode, Z80ParserError> {
     parse_convertible_word(input)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> PResult<T, Z80ParserError> {
+pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> ModalResult<T, Z80ParserError> {
     delimited(my_space0, alpha1, my_space0)
         .verify_map(|word| T::from_str(unsafe { std::str::from_utf8_unchecked(word) }).ok())
         .parse_next(input)
@@ -3286,7 +3286,7 @@ pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> PResult<T
 
 pub fn parse_argname_to_assign(
     argname: &str
-) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> + use<'_> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> + use<'_> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -3301,15 +3301,15 @@ pub fn parse_argname_to_assign(
 
 pub fn parse_argname_and_value<'f, 's, O>(
     argname: &'s str,
-    valparser: &'f dyn Fn(&mut InnerZ80Span) -> PResult<O, Z80ParserError>
-) -> impl Fn(&mut InnerZ80Span) -> PResult<(InnerZ80Span, O), Z80ParserError> + use<'f, 's, O> {
+    valparser: &'f dyn Fn(&mut InnerZ80Span) -> ModalResult<O, Z80ParserError>
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<(InnerZ80Span, O), Z80ParserError> + use<'f, 's, O> {
     move |input: &mut InnerZ80Span| (parse_argname_to_assign(argname), valparser).parse_next(input)
 }
 
 pub fn parse_optional_argname_and_value<'f, 's, O>(
     argname: &'s str,
-    valparser: &'f dyn Fn(&mut InnerZ80Span) -> PResult<O, Z80ParserError>
-) -> impl Fn(&mut InnerZ80Span) -> PResult<(Option<InnerZ80Span>, O), Z80ParserError> + use<'f, 's, O>
+    valparser: &'f dyn Fn(&mut InnerZ80Span) -> ModalResult<O, Z80ParserError>
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<(Option<InnerZ80Span>, O), Z80ParserError> + use<'f, 's, O>
 {
     move |input: &mut InnerZ80Span| {
         alt((
@@ -3324,7 +3324,7 @@ pub fn parse_optional_argname_and_value<'f, 's, O>(
     }
 }
 
-pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_bankset(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let count = located_expr.parse_next(input)?;
 
     Ok(LocatedTokenInner::Bankset(count))
@@ -3332,8 +3332,8 @@ pub fn parse_bankset(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 
 pub fn parse_buildsna(
     directive_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
             parse_word(b"BUILDSNA").parse_next(input)?;
         }
@@ -3359,7 +3359,7 @@ pub enum RunEnt {
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let exp = cut_err(located_expr.context(match &kind {
             RunEnt::Run => "RUN expects at least one expression (e.g. RUN $)",
             RunEnt::Ent => "ENT expects one expression"
@@ -3381,7 +3381,7 @@ macro_rules! directive_with_expr {
     ($name:ident, $enum:tt) => {
         #[cfg_attr(not(target_arch = "wasm32"), inline)]
         #[cfg_attr(target_arch = "wasm32", inline(never))]
-        pub fn $name(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+        pub fn $name(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
             let exp = located_expr.parse_next(input)?;
 
             Ok((LocatedTokenInner::$enum(exp)))
@@ -3394,7 +3394,7 @@ directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
 
-pub fn parse_startingindex(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_startingindex(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let start = opt(located_expr).parse_next(input)?;
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
@@ -3403,7 +3403,7 @@ pub fn parse_startingindex(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
 
 pub fn parse_assembler_control(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     cut_err(
         alt((
             parse_assembler_control_print_parse,
@@ -3420,7 +3420,7 @@ pub fn parse_assembler_control(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_max_passes_number(
     input: &mut InnerZ80Span
-) -> PResult<LocatedToken, Z80ParserError> {
+) -> ModalResult<LocatedToken, Z80ParserError> {
     let asmctrl_start = input.checkpoint();
 
     let _ = preceded(
@@ -3469,7 +3469,7 @@ pub fn parse_assembler_control_max_passes_number(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_print_any_pass(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     preceded(
         (parse_word(b"PRINT_ANY_PASS"), parse_comma),
         parse_print_inner
@@ -3486,7 +3486,7 @@ pub fn parse_assembler_control_print_any_pass(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_assembler_control_print_parse(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let input2: InnerZ80Span = *input;
 
     preceded((parse_word(b"PRINT_PARSE"), parse_comma), parse_print_inner)
@@ -3517,7 +3517,7 @@ pub fn parse_assembler_control_print_parse(
 }
 
 /// Parse tickin directives
-pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     alt((parse_stable_ticker_start, parse_stable_ticker_stop)).parse_next(input)
 }
 
@@ -3526,7 +3526,7 @@ pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> PResult<LocatedTokenInne
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_stable_ticker_start(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     preceded(
         (Caseless("start"), alt((my_space1, parse_comma))),
         cut_err(parse_label(false).context(StrContext::Label("Missing label")))
@@ -3540,7 +3540,7 @@ pub fn parse_stable_ticker_start(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_stable_ticker_stop(
     input: &mut InnerZ80Span
-) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     Caseless("stop").parse_next(input)?;
 
     let name = opt(preceded(
@@ -3556,7 +3556,7 @@ pub fn parse_stable_ticker_stop(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_bank(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_bank(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let count = opt(located_expr).parse_next(input)?;
 
     Ok(LocatedTokenInner::Bank(count))
@@ -3564,7 +3564,7 @@ pub fn parse_bank(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_skip(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let count = cut_err(located_expr.context(StrContext::Label("SKIP: wrong expression")))
         .parse_next(input)?;
 
@@ -3576,10 +3576,10 @@ pub fn parse_skip(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld(
     mnemonic_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         alt((
             parse_ld_fake(mnemonic_name_parsed),
             parse_ld_normal(mnemonic_name_parsed)
@@ -3592,10 +3592,10 @@ pub fn parse_ld(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld_fake(
     mnemonic_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !mnemonic_name_parsed {
             terminated(parse_word(b"LD"), my_space1).parse_next(input)?;
         }
@@ -3649,8 +3649,8 @@ pub fn parse_ld_fake(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ld_normal(
     mnemonic_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !mnemonic_name_parsed {
             parse_word(b"LD").parse_next(input)?;
         }
@@ -3696,7 +3696,7 @@ pub fn parse_ld_normal(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_ld_normal_src(
     dst: &LocatedDataAccess
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> + '_ {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> + '_ {
     move |input: &mut InnerZ80Span| {
         let input_start = input.checkpoint();
         if dst.is_register_sp() {
@@ -3797,8 +3797,8 @@ fn parse_ld_normal_src(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_res_set_bit(
     res_or_set: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let bit = cut_err(parse_expr.context(StrContext::Label("Wrong bit definition")))
             .parse_next(input)?;
 
@@ -3835,7 +3835,7 @@ pub fn parse_res_set_bit(
 /// Parse CP tokens
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_cp(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_cp(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     //   preceded(
     //    parse_word(b"CP"),
 
@@ -3869,10 +3869,10 @@ pub enum ExportKind {
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_export(
     code: ExportKind
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let labels: Vec<InnerZ80Span> = cut_err(
             separated(0.., parse_label(false), parse_comma)
                 .context(StrContext::Label("Wrong parameters"))
@@ -3903,8 +3903,8 @@ pub enum DbDwStr {
 pub fn parse_db_or_dw_or_str(
     code: DbDwStr,
     empty_list_allowed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let abyte_delta = if code == DbDwStr::Abyte {
             Some(cut_err(terminated(located_expr, parse_comma).context(StrContext::Label("ABYTE: delta issue"))).parse_next(input)?)
         } else {
@@ -3940,7 +3940,7 @@ pub fn parse_db_or_dw_or_str(
 // Fail if we do not read a forbidden keyword
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let start = input.checkpoint();
     let _ = my_space0(input)?;
     let name = take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9', '_'..='_'))
@@ -3967,7 +3967,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> PResult<InnerZ80Span
 
     Ok(name)
 }
-pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z80ParserError> {
+pub fn parse_macro_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedMacroParam, Z80ParserError> {
     let _start_input = input.checkpoint();
     let cloned = *input;
 
@@ -4021,7 +4021,7 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> PResult<LocatedMacroParam, Z
 pub fn parse_macro_or_struct_call_inner(
     for_struct: bool,
     name: InnerZ80Span
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| {
         let input_start = input.checkpoint();
 
@@ -4154,8 +4154,8 @@ pub fn parse_macro_or_struct_call_inner(
 pub fn parse_macro_or_struct_call(
     allowed_to_return_a_label: bool,
     for_struct: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedToken, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
         my_space0(input)?;
         let input_start = input.checkpoint();
         let name = terminated(
@@ -4201,7 +4201,7 @@ pub fn parse_macro_or_struct_call(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_directive_word(
     name: &'static [u8]
-) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> + 'static {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> + 'static {
     move |input: &mut InnerZ80Span| {
         if input.state.options().dotted_directive {
             preceded(b'.', parse_word(name)).parse_next(input)
@@ -4217,10 +4217,10 @@ fn parse_directive_word(
 /// Consume the word and the empty space after
 fn parse_word(
     name: &'static [u8]
-) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<InnerZ80Span, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<InnerZ80Span, Z80ParserError> {
         let word = terminated(
             Caseless(name),
             alt((
@@ -4242,7 +4242,7 @@ fn parse_word(
 /// ...
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_djnz(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     preceded(opt(parse_comma), parse_expr)
         .map(|expr| LocatedTokenInner::new_opcode(Mnemonic::Djnz, Some(expr), None))
         .parse_next(input)
@@ -4251,7 +4251,7 @@ pub fn parse_djnz(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
 /// ...
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80ParserError> {
+pub fn expr_list(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedExpr>, Z80ParserError> {
     let mut exprs = Vec::new();
     loop {
         let expr = opt(located_expr).parse_next(input)?;
@@ -4271,7 +4271,7 @@ pub fn expr_list(input: &mut InnerZ80Span) -> PResult<Vec<LocatedExpr>, Z80Parse
 }
 
 /// ...
-pub fn parse_assert(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_assert(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let expr = cut_err(located_expr.context(StrContext::Label("ASSERT: expression error")))
         .parse_next(input)?;
 
@@ -4285,14 +4285,14 @@ pub fn parse_assert(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80P
 }
 
 /// ...
-pub fn parse_align(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_align(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let boundary = located_expr.parse_next(input)?;
     let fill = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     Ok(LocatedTokenInner::Align(boundary, fill))
 }
 
-pub fn parse_print_inner(input: &mut InnerZ80Span) -> PResult<Vec<FormattedExpr>, Z80ParserError> {
+pub fn parse_print_inner(input: &mut InnerZ80Span) -> ModalResult<Vec<FormattedExpr>, Z80ParserError> {
     separated(
         1..,
         alt((
@@ -4315,10 +4315,10 @@ pub fn parse_print_inner(input: &mut InnerZ80Span) -> PResult<Vec<FormattedExpr>
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_print(
     directive_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
             parse_word(b"PRINT").parse_next(input)?;
         }
@@ -4331,8 +4331,8 @@ pub fn parse_print(
 
 pub fn parse_fail(
     directive_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
             parse_word(b"FAIL").parse_next(input)?;
         }
@@ -4347,7 +4347,7 @@ pub fn parse_fail(
 /// WARNING: only formated case is taken into account
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserError> {
+fn formatted_expr(input: &mut InnerZ80Span) -> ModalResult<FormattedExpr, Z80ParserError> {
     let _ = ('{').parse_next(input)?;
     let format = alt((
         Caseless("INT").value(ExprFormat::Int),
@@ -4373,7 +4373,7 @@ fn formatted_expr(input: &mut InnerZ80Span) -> PResult<FormattedExpr, Z80ParserE
 /// Handle \ in end of line
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_space0(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space0(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     opt(my_space1)
         .take()
@@ -4393,7 +4393,7 @@ where
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn my_repeat1_<I, O, C, E, F>(f: &mut F, i: &mut I) -> PResult<C, E>
+fn my_repeat1_<I, O, C, E, F>(f: &mut F, i: &mut I) -> ModalResult<C, E>
 where
     I: Stream,
     C: Accumulate<O>,
@@ -4433,7 +4433,7 @@ where
 /// Handle \ in end of line
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space1(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
 
     let spaces = alt((
@@ -4463,7 +4463,7 @@ pub fn my_space1(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserErr
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+fn my_line_ending(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     alt((line_ending.take(), ':'.take()))
         .map(|s| cloned.update_slice(s))
@@ -4472,7 +4472,7 @@ fn my_line_ending(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserEr
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+fn parse_comma(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     delimited(my_space0, ','.take(), my_space0)
         .map(|s| cloned.update_slice(s))
@@ -4480,7 +4480,7 @@ fn parse_comma(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError
 }
 
 /// ...
-pub fn parse_protect(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_protect(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let start = located_expr.parse_next(input)?;
 
     let end = preceded(parse_comma, located_expr).parse_next(input)?;
@@ -4493,8 +4493,8 @@ pub fn parse_protect(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80
 /// ...
 pub fn parse_logical_operator(
     operator: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let operand = alt((
             parse_register8,
             parse_indexregister8,
@@ -4512,7 +4512,7 @@ pub fn parse_logical_operator(
 /// Substraction with A register
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =Caseless("SUB").parse_next(input)?;
     //  let _ =space1(input)?;
 
@@ -4537,7 +4537,7 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 /// Par se the SBC instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =Caseless("SBC").parse_next(input)?;
     //   let _ =space1(input)?;
 
@@ -4573,8 +4573,8 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_add_or_adc(
     add_or_adc: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let first = opt(terminated(
             alt((parse_register_a, parse_register_hl, parse_indexregister16)),
             parse_comma
@@ -4624,8 +4624,8 @@ pub fn parse_add_or_adc(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_push_n_pop(
     push_or_pop: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let mut registers: Vec<_> = separated(
             1..,
             alt((parse_register16, parse_indexregister16)),
@@ -4654,7 +4654,7 @@ pub fn parse_push_n_pop(
 /// ...
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_ret(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_ret(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let (cond, cond_bytes) = opt(parse_flag_test).with_taken().parse_next(input)?;
 
     let token = LocatedTokenInner::new_opcode(
@@ -4673,8 +4673,8 @@ pub fn parse_ret(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_inc_dec(
     inc_or_dec: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let register = alt((
             parse_register16,
             parse_indexregister16,
@@ -4697,7 +4697,7 @@ pub fn parse_inc_dec(
 /// TODO manage other out formats
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_out(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     //  let _ =parse_word(b"OUT").parse_next(input)?;
 
     // get the port proposal
@@ -4744,7 +4744,7 @@ pub fn parse_out(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 /// Parse all the in flavors
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_in(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"IN").parse_next(input)?;
     let cloned = *input;
     // get the port proposal
@@ -4790,7 +4790,7 @@ pub fn parse_in(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 /// Parse the rst instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_rst(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"RST").parse_next(input)?;
     let val = parse_expr(input)?;
 
@@ -4803,7 +4803,7 @@ pub fn parse_rst(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_rst_fake(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let (flag, _, val) = (
         parse_flag_test
             .verify(|t| {
@@ -4832,7 +4832,7 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z8
 /// Parse the IM instruction
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_im(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_im(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     // let _ =parse_word(b"IM").parse_next(input)?;
     let val = parse_expr(input)?;
 
@@ -4854,10 +4854,10 @@ pub fn parse_im(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_shifts_and_rotations(
     oper: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
         let arg = alt((
             parse_register8,
@@ -4875,8 +4875,8 @@ pub fn parse_shifts_and_rotations(
 
 pub fn parse_shifts_and_rotations_fake(
     oper: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
         let arg = alt((parse_register16,)).parse_next(input)?;
 
@@ -4895,10 +4895,10 @@ pub fn parse_shifts_and_rotations_fake(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_call_jp_or_jr(
     call_jp_or_jr: Mnemonic
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
         let flag_test =
@@ -4952,7 +4952,7 @@ pub fn parse_call_jp_or_jr(
 /// ...
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_flag_test(input: &mut InnerZ80Span) -> PResult<FlagTest, Z80ParserError> {
+pub fn parse_flag_test(input: &mut InnerZ80Span) -> ModalResult<FlagTest, Z80ParserError> {
     alt((
         parse_word(b"NZ").value(FlagTest::NZ),
         parse_word(b"Z").value(FlagTest::Z),
@@ -4978,7 +4978,7 @@ pub fn parse_flag_test(input: &mut InnerZ80Span) -> PResult<FlagTest, Z80ParserE
 /// TODO rename to emphasize it is standard reigsters
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register16(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register16(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let _start = input.checkpoint();
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
 
@@ -5004,7 +5004,7 @@ pub fn parse_register16(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 /// TODO rename to emphasize it is standard reigsters
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register8(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     #[derive(PartialEq)]
     enum Reg16Modifier {
         Low,
@@ -5043,7 +5043,7 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z
 /// Parse register i
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_i(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("I"), not(alphanumeric1)))
         .take()
         .parse_next(input)?;
@@ -5054,7 +5054,7 @@ pub fn parse_register_i(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 /// Parse register r
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_r(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_r(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("R"), not(alphanumeric1)))
         .take()
         .parse_next(input)?;
@@ -5067,7 +5067,7 @@ macro_rules! parse_any_register8 {
         /// Parse register $char
         #[cfg_attr(not(target_arch = "wasm32"), inline)]
         #[cfg_attr(target_arch = "wasm32", inline(never))]
-        pub fn $name(i: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+        pub fn $name(i: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
             let span = parse_word($char)(i)?;
 
             Ok((LocatedDataAccess::Register8($reg, span.into())))
@@ -5089,7 +5089,7 @@ parse_any_register8!(parse_register_l, b"l", Register8::L);
 fn register16_parser(
     representation: &'static str,
     register: Register16
-) -> impl for<'src, 'ctx> Fn(&mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+) -> impl for<'src, 'ctx> Fn(&mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -5111,7 +5111,7 @@ macro_rules! parse_any_register16 {
         /// Parse the $char register and return it as a DataAccess
         #[cfg_attr(not(target_arch = "wasm32"), inline)]
         #[cfg_attr(target_arch = "wasm32", inline(never))]
-        pub fn $name(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+        pub fn $name(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
             register16_parser($char, $reg).parse_next(input)
         }
     };
@@ -5126,7 +5126,7 @@ parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 /// Parse the IX register
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_ix(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_ix(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_ix())
         .parse_next(input)
@@ -5135,7 +5135,7 @@ pub fn parse_register_ix(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
 /// Parse the IY register
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_iy(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_iy(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_iy())
         .parse_next(input)
@@ -5148,7 +5148,7 @@ macro_rules! parse_any_indexregister8 {
             /// Parse register $reg
             #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-            pub fn [<parse_register_ $reg:lower>] (input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+            pub fn [<parse_register_ $reg:lower>] (input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
                 let _start = input.clone();
                 let span = ((
                     alt((
@@ -5181,7 +5181,7 @@ parse_any_indexregister8!(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister8(
     input: &mut InnerZ80Span
-) -> PResult<LocatedDataAccess, Z80ParserError> {
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     alt((
         parse_register_ixh,
         parse_register_iyh,
@@ -5196,7 +5196,7 @@ pub fn parse_indexregister8(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister16(
     input: &mut InnerZ80Span
-) -> PResult<LocatedDataAccess, Z80ParserError> {
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let code = terminated(take(2usize), not(alpha1))
         .take()
         .parse_next(input)?;
@@ -5222,7 +5222,7 @@ pub fn parse_indexregister16(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister_with_index(
     input: &mut InnerZ80Span
-) -> PResult<LocatedDataAccess, Z80ParserError> {
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let start_checkpoint = input.checkpoint();
     let start_eof_offset = input.eof_offset();
     let (open, _, reg) =
@@ -5260,7 +5260,7 @@ pub fn parse_indexregister_with_index(
 /// Parse (C) used in in/out
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_portc(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         ((b'(', my_space0, parse_register_c, my_space0, b')')),
         ((b'[', my_space0, parse_register_c, my_space0, b']'))
@@ -5275,7 +5275,7 @@ pub fn parse_portc(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80Pa
 /// Parse (nn) used in in/out
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_portnn(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let (address, span) = alt((
         delimited("(", located_expr, preceded(my_space0, ")")),
         delimited("[", located_expr, preceded(my_space0, "]"))
@@ -5290,7 +5290,7 @@ pub fn parse_portnn(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80P
 /// Parse an address access `(expression)`
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     // let filter = |c: u8| {
     // c == b'/'
     // || c == b'+'
@@ -5333,7 +5333,7 @@ pub fn parse_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80
 /// Parse (R16)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_reg_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let (reg, span) = alt((
         delimited(
             terminated("(", my_space0),
@@ -5359,7 +5359,7 @@ pub fn parse_reg_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess,
 /// Parse (HL)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_hl_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         delimited(
             terminated("(", my_space0),
@@ -5386,7 +5386,7 @@ pub fn parse_hl_address(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, 
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_indexregister_address(
     input: &mut InnerZ80Span
-) -> PResult<LocatedDataAccess, Z80ParserError> {
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let (reg, res) = delimited(
         terminated("(", my_space0),
         parse_indexregister16,
@@ -5405,13 +5405,13 @@ pub fn parse_indexregister_address(
 /// Parse an expression and returns it inside a DataAccession::Expression
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_expr(input: &mut InnerZ80Span) -> PResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let expr = located_expr.parse_next(input)?;
     Ok(LocatedDataAccess::Expression(expr))
 }
 
 /// Parse standard org directive
-pub fn parse_org(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_org(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let val1 =
         cut_err(located_expr.context(StrContext::Label("Invalid argument"))).parse_next(input)?;
     let val2 = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
@@ -5420,7 +5420,7 @@ pub fn parse_org(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Parse defs instruction. TODO add optional parameters
-pub fn parse_defs(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_defs(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let val = separated(
         1..,
         cut_err(
@@ -5434,7 +5434,7 @@ pub fn parse_defs(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Par
     Ok(LocatedTokenInner::Defs(val))
 }
 
-pub fn parse_nop(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_nop(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let val = cut_err(
         opt(located_expr.map(LocatedDataAccess::from)).context(StrContext::Label(
             "Wrong argument. NOP expects an expression"
@@ -5446,7 +5446,7 @@ pub fn parse_nop(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Pars
 }
 
 /// Parse any opcode having no argument
-pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     let input_start = input.checkpoint();
 
@@ -5541,13 +5541,13 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
     Ok(token)
 }
 
-fn parse_snainit(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let fname = parse_fname(input)?;
 
     Ok(LocatedTokenInner::SnaInit(fname))
 }
 
-fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
+fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let name = cut_err(parse_label(false)).parse_next(input)?;
 
     // TODO parse inner with filtering on the allowed operations
@@ -5603,8 +5603,8 @@ fn parse_struct(input: &mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80Parse
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_snaset(
     directive_name_parsed: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedTokenInner, Z80ParserError> {
-    move |input: &mut InnerZ80Span| -> PResult<LocatedTokenInner, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         if !directive_name_parsed {
             parse_word(b"SNASET").parse_next(input)?;
         }
@@ -5643,7 +5643,7 @@ fn parse_snaset(
 /// Parse a comment that start by `;` and ends at the end of the line.
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_comment(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     preceded(alt((b";", b"//")), take_till(0.., |ch| ch == b'\n'))
         .take()
@@ -5656,7 +5656,7 @@ pub fn parse_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80Parse
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     delimited(b"/*", take_until(0.., "*/"), b"*/")
         .map(|string: &[u8]| {
@@ -5669,7 +5669,7 @@ pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> PResult<LocatedToken
 /// TODO
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn string_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     parse_string.map(LocatedExpr::String).parse_next(input)
 }
 
@@ -5679,7 +5679,7 @@ pub fn string_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_label(
     doubledots: bool
-) -> impl Fn(&mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -5820,7 +5820,7 @@ fn ignore_ascii_case_allowed_label(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_end_directive(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     if input.state.options().dotted_directive {
         b'.'.parse_next(input)?;
     }
@@ -5850,7 +5850,7 @@ pub fn parse_end_directive(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z8
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_macro_name(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_macro_name(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let dotted_directive = input.state.options().dotted_directive;
     let flavor = input.state.options().assembler_flavor;
 
@@ -5870,7 +5870,7 @@ pub fn parse_macro_name(input: &mut InnerZ80Span) -> PResult<InnerZ80Span, Z80Pa
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let _ = my_space0(input)?;
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -5909,7 +5909,7 @@ pub fn prefixed_label_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80
 /// Read a value
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_value(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let (val, span) = cpclib_common::parse_value.with_taken().parse_next(input)?;
 
     let span = (*input).update_slice(span);
@@ -5919,7 +5919,7 @@ pub fn parse_value(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserEr
 /// Parse a repetition counter
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_counter(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_counter(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let cloned = *input;
     delimited(
         b'{',
@@ -5934,7 +5934,7 @@ pub fn parse_counter(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parser
 /// Read a parenthesed expression
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parens(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -5958,7 +5958,7 @@ pub fn parens(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -5975,7 +5975,7 @@ pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> PResult<LocatedExp
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_bool_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
     let bool = alt((
@@ -5990,7 +5990,7 @@ pub fn parse_bool_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 /// Get a factor
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
     let input_start = input.checkpoint();
@@ -6098,7 +6098,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn negative_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6117,7 +6117,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Pars
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let _input_start = input.checkpoint();
     let _input_offset = input.eof_offset();
 
@@ -6137,13 +6137,13 @@ pub fn number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> 
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn positive_number(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn positive_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     preceded(opt('+'), number).parse_next(input)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_labelprefix(input: &mut InnerZ80Span) -> PResult<LabelPrefix, Z80ParserError> {
+pub fn parse_labelprefix(input: &mut InnerZ80Span) -> ModalResult<LabelPrefix, Z80ParserError> {
     alt((
         Caseless("{pageset}").value(LabelPrefix::Pageset),
         Caseless("{bank}").value(LabelPrefix::Bank),
@@ -6168,7 +6168,7 @@ fn fold_exprs(
 /// Compute operations related to * % /
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn term(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6195,9 +6195,9 @@ fn parse_oper<F>(
     inner: F,
     pattern: &'static str,
     symbol: BinaryOperation
-) -> impl Fn(&mut InnerZ80Span) -> PResult<(BinaryOperation, LocatedExpr), Z80ParserError>
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<(BinaryOperation, LocatedExpr), Z80ParserError>
 where
-    F: Fn(&mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError>
+    F: Fn(&mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError>
 {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -6222,9 +6222,9 @@ fn parse_bool<F>(
     inner: F,
     pattern: &'static str,
     symbol: BinaryOperation
-) -> impl Fn(&mut InnerZ80Span) -> PResult<(BinaryOperation, LocatedExpr), Z80ParserError>
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<(BinaryOperation, LocatedExpr), Z80ParserError>
 where
-    F: Fn(&mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError>
+    F: Fn(&mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError>
 {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -6241,7 +6241,7 @@ where
 /// Parse an expression
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn expr2(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn expr2(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6261,7 +6261,7 @@ pub fn expr2(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
     Ok(fold_exprs(initial, remainder, span))
 }
 
-fn expr(input: &mut InnerZ80Span) -> PResult<Expr, Z80ParserError> {
+fn expr(input: &mut InnerZ80Span) -> ModalResult<Expr, Z80ParserError> {
     located_expr
         .map(|e| e.to_expr().into_owned())
         .parse_next(input)
@@ -6270,7 +6270,7 @@ fn expr(input: &mut InnerZ80Span) -> PResult<Expr, Z80ParserError> {
 /// TODO replace ALL expr parse by a located version
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     if input.state.options().is_orgams() {
         return parse_orgams_expression.parse_next(input);
     }
@@ -6291,7 +6291,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserE
 /// parse functions with one argument
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6339,7 +6339,7 @@ pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExp
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_binary_function_call(
     input: &mut InnerZ80Span
-) -> PResult<LocatedExpr, Z80ParserError> {
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6370,7 +6370,7 @@ pub fn parse_binary_function_call(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_any_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_any_function_call(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6395,7 +6395,7 @@ pub fn parse_any_function_call(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn token_function<'a>(
     function_name: &'static str
-) -> impl Fn(&mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
@@ -6410,7 +6410,7 @@ pub fn token_function<'a>(
 }
 
 /// Parse the duration function
-pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_duration(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let (token, span) = token_function("duration").with_taken().parse_next(input)?;
 
     let span = (*input).update_slice(span).into();
@@ -6422,7 +6422,7 @@ pub fn parse_duration(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parse
 }
 
 /// Parse the single opcode assembling function
-pub fn parse_assemble(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_assemble(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let (token, span) = token_function("opcode").with_taken().parse_next(input)?;
 
     let span = (*input).update_slice(span).into();
@@ -6435,7 +6435,7 @@ pub fn parse_assemble(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80Parse
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn shift(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn shift(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let start = input.checkpoint();
     let start_eof_offset = input.eof_offset();
 
@@ -6456,7 +6456,7 @@ pub fn shift(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
 /// Parse operation related to + - & |
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn comp(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let start = input.checkpoint();
     let start_eof_offset = input.eof_offset();
 

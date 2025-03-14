@@ -15,7 +15,7 @@ use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
 use crate::cli::winnow::error::{AddContext, ContextError, ParserError, StrContext};
 use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
 use crate::cli::winnow::token::take_until;
-use crate::cli::winnow::PResult;
+use crate::cli::winnow::ModalResult;
 use crate::*;
 
 type Source<'src> = winnow::stream::LocatingSlice<&'src [u8]>;
@@ -139,7 +139,7 @@ impl Command {
     }
 }
 
-fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -170,7 +170,7 @@ where
     .parse_next(input)
 }
 
-fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -198,7 +198,7 @@ where
         .parse_next(input)
 }
 
-fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -230,7 +230,7 @@ where
         .parse_next(input)
 }
 
-fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -259,7 +259,7 @@ where
     .parse_next(input)
 }
 
-fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -282,7 +282,7 @@ where
         .parse_next(input)
 }
 
-fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> PResult<Command, Error>
+fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>

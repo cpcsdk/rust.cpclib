@@ -3,11 +3,11 @@ use winnow::combinator::{alt, not, opt, terminated};
 use winnow::error::{AddContext, ParserError, StrContext};
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
 use winnow::token::take_while;
-use winnow::{PResult, Parser};
+use winnow::{ModalResult, Parser};
 
 #[inline]
 ///  (prefix) space number suffix
-pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> PResult<u32, Error>
+pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> ModalResult<u32, Error>
 where
     I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
     <I as Stream>::Slice: AsBytes,

@@ -3,7 +3,7 @@ use std::str;
 use cpclib_common::winnow::ascii::{space0, space1, Caseless};
 use cpclib_common::winnow::combinator::{alt, preceded};
 use cpclib_common::winnow::token::{rest, take_till};
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 
 #[derive(Debug, Clone)]
 pub(crate) enum XferCommand {
@@ -29,52 +29,52 @@ pub(crate) enum XferCommand {
 
 // TODO find a way to reduce code duplicaiton
 
-fn ls_path(input: &mut &str) -> PResult<XferCommand> {
+fn ls_path(input: &mut &str) -> ModalResult<XferCommand> {
     preceded((Caseless("ls"), space1), rest)
         .map(|path: &str| XferCommand::Ls(Some(path.to_string())))
         .parse_next(input)
 }
 
-fn ls_no_path(input: &mut &str) -> PResult<XferCommand> {
+fn ls_no_path(input: &mut &str) -> ModalResult<XferCommand> {
     Caseless("ls")
         .value(XferCommand::Ls(None))
         .parse_next(input)
 }
 
-fn ls(input: &mut &str) -> PResult<XferCommand> {
+fn ls(input: &mut &str) -> ModalResult<XferCommand> {
     alt((ls_path, ls_no_path)).parse_next(input)
 }
 
-fn cd_path(input: &mut &str) -> PResult<XferCommand> {
+fn cd_path(input: &mut &str) -> ModalResult<XferCommand> {
     preceded((Caseless("cd"), space1), rest)
         .map(|path: &str| XferCommand::Cd(Some(path.to_string())))
         .parse_next(input)
 }
 
-fn cd_no_path(input: &mut &str) -> PResult<XferCommand> {
+fn cd_no_path(input: &mut &str) -> ModalResult<XferCommand> {
     Caseless("cd")
         .value(XferCommand::Cd(None))
         .parse_next(input)
 }
 
-fn cd(input: &mut &str) -> PResult<XferCommand> {
+fn cd(input: &mut &str) -> ModalResult<XferCommand> {
     alt((cd_path, cd_no_path)).parse_next(input)
 }
 
-fn launch(input: &mut &str) -> PResult<XferCommand> {
+fn launch(input: &mut &str) -> ModalResult<XferCommand> {
     preceded((Caseless("launch"), space1), rest)
         .map(|path: &str| XferCommand::LaunchHost(path.to_string()))
         .parse_next(input)
 }
 
-fn local(input: &mut &str) -> PResult<XferCommand> {
+fn local(input: &mut &str) -> ModalResult<XferCommand> {
     preceded((Caseless("!"), space0), rest)
         .map(|path: &str| XferCommand::LocalCommand(path.to_string()))
         .parse_next(input)
 }
 
 /// PUT a file on the M4 with defining a directory
-fn put(input: &mut &str) -> PResult<XferCommand> {
+fn put(input: &mut &str) -> ModalResult<XferCommand> {
     preceded(
         (Caseless("put"), space1),
         take_till(1.., char::is_whitespace)
@@ -84,7 +84,7 @@ fn put(input: &mut &str) -> PResult<XferCommand> {
 }
 
 /// Delete a file from the M4
-fn rm(input: &mut &str) -> PResult<XferCommand> {
+fn rm(input: &mut &str) -> ModalResult<XferCommand> {
     preceded(
         (
             alt((
@@ -101,7 +101,7 @@ fn rm(input: &mut &str) -> PResult<XferCommand> {
     .parse_next(input)
 }
 
-fn no_arg(input: &mut &str) -> PResult<XferCommand> {
+fn no_arg(input: &mut &str) -> ModalResult<XferCommand> {
     alt((
         Caseless("pwd").value(XferCommand::Pwd),
         Caseless("help").value(XferCommand::Help),
@@ -114,6 +114,6 @@ fn no_arg(input: &mut &str) -> PResult<XferCommand> {
 }
 
 /// Launch the parsing of the line
-pub(crate) fn parse_command(input: &mut &str) -> PResult<XferCommand> {
+pub(crate) fn parse_command(input: &mut &str) -> ModalResult<XferCommand> {
     alt((cd, ls, launch, local, put, rm, no_arg)).parse_next(input)
 }

@@ -2,7 +2,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take_until;
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
 use super::{
@@ -33,7 +33,7 @@ pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"IF", b"MACRO"];
 
 pub static END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"END", b"ENDM", b"]"];
 
-pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
     "!!".parse_next(input)?;
@@ -49,7 +49,7 @@ pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80P
     Ok(token)
 }
 
-pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z80ParserError> {
+pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();
 
     let amount = terminated(located_expr, (my_space0, "**", my_space0)).parse_next(input)?;
@@ -73,7 +73,7 @@ pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> PResult<LocatedToken, Z8
 }
 
 #[inline]
-pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let mut factors = Vec::new();
     let mut operators = Vec::new();
 
@@ -114,7 +114,7 @@ pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> PResult<LocatedExpr,
 }
 
 #[inline]
-pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> PResult<BinaryOperation, Z80ParserError> {
+pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> ModalResult<BinaryOperation, Z80ParserError> {
     alt((
         '+'.value(BinaryOperation::Add),
         '-'.value(BinaryOperation::Sub),
@@ -130,7 +130,7 @@ pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> PResult<BinaryOperatio
 #[inline]
 pub fn parse_orgams_ordered_expression(
     input: &mut InnerZ80Span
-) -> PResult<LocatedExpr, Z80ParserError> {
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let mut factors = Vec::new();
     let mut operators = Vec::new();
 
@@ -169,7 +169,7 @@ pub fn parse_orgams_ordered_expression(
 }
 
 #[inline]
-pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> PResult<LocatedExpr, Z80ParserError> {
+pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let before_bracket = input.checkpoint();
     let bracket = opt(('[', my_space0)).parse_next(input)?;
     let exp = if bracket.is_some() {

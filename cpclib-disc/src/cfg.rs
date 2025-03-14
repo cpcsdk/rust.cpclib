@@ -10,7 +10,7 @@ use cpclib_common::winnow::ascii::{line_ending, space0, Caseless};
 use cpclib_common::winnow::combinator::{
     alt, delimited, opt, preceded, repeat, separated, terminated
 };
-use cpclib_common::winnow::{PResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 /// Parser of the disc configuraiton used by the Arkos Loader
 use custom_error::custom_error;
 use itertools::Itertools;
@@ -357,15 +357,15 @@ impl From<&ExtendedDsk> for DiscConfig {
     }
 }
 
-fn number(input: &mut &[u8]) -> PResult<u16> {
+fn number(input: &mut &[u8]) -> ModalResult<u16> {
     cpclib_common::parse_value(input).map(|v| v as u16)
 }
 
-fn list_of_values(input: &mut &[u8]) -> PResult<Vec<u16>> {
+fn list_of_values(input: &mut &[u8]) -> ModalResult<Vec<u16>> {
     separated(0.., number, b',').parse_next(input)
 }
 
-fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<u16> {
+fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> ModalResult<u16> {
     move |input: &mut &[u8]| {
         delimited(
             (space0, Caseless(key), space0, b'=', space0),
@@ -376,7 +376,7 @@ fn value_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<u16> {
     }
 }
 
-fn list_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<Vec<u16>> {
+fn list_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> ModalResult<Vec<u16>> {
     move |input: &mut &[u8]| {
         delimited(
             (space0, Caseless(key), space0, b'=', space0),
@@ -387,11 +387,11 @@ fn list_of_key(key: &'static [u8]) -> impl Fn(&mut &[u8]) -> PResult<Vec<u16>> {
     }
 }
 
-fn empty_line(input: &mut &[u8]) -> PResult<()> {
+fn empty_line(input: &mut &[u8]) -> ModalResult<()> {
     (space0, line_ending).parse_next(input).map(|_| ())
 }
 
-fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
+fn track_group_head(input: &mut &[u8]) -> ModalResult<TrackGroup> {
     let head = alt((
         delimited(
             Caseless("[Track-"),
@@ -437,7 +437,7 @@ fn track_group_head(input: &mut &[u8]) -> PResult<TrackGroup> {
 }
 
 /// TODO allow to write the information in a different order
-pub fn parse_config(input: &mut &[u8]) -> PResult<DiscConfig> {
+pub fn parse_config(input: &mut &[u8]) -> ModalResult<DiscConfig> {
     let nb_tracks = preceded(
         repeat::<_, _, (), _, _>(0.., empty_line),
         value_of_key(b"NbTrack")

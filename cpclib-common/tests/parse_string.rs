@@ -2,11 +2,11 @@ use winnow::ascii::escaped;
 use winnow::combinator::{alt, terminated};
 use winnow::stream::UpdateSlice;
 use winnow::token::{none_of, one_of};
-use winnow::{BStr, LocatingSlice, PResult, Parser, Stateful};
+use winnow::{BStr, LocatingSlice, ModalResult, Parser, Stateful};
 
 fn parse_string<'src>(
     input: &mut Stateful<LocatingSlice<&'src BStr>, ()>
-) -> PResult<Stateful<LocatingSlice<&'src BStr>, ()>> {
+) -> ModalResult<Stateful<LocatingSlice<&'src BStr>, ()>> {
     let mut first = '"';
     let last = first;
     let normal = none_of(('\\', '"'));
