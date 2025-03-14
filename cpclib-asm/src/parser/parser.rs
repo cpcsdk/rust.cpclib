@@ -489,59 +489,7 @@ pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, Assembl
     parse_z80_with_context_builder(code, ParserContextBuilder::default())
 }
 
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
-/// nom many0 does not seem to fit our parser requirements
-/// TODO check if winnow is better on this side
-pub fn my_many0<O, E, F, C>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<C, E>
-where
-    F: Parser<InnerZ80Span, O, E>,
-    E: ParserError<InnerZ80Span>,
-    C: Accumulate<O>
-{
-    #[cfg_attr(not(target_arch = "wasm32"), inline)]
-    #[cfg_attr(target_arch = "wasm32", inline(never))]
-    move |i: &mut InnerZ80Span| {
-        let mut acc = C::initial(Some(0));
-        let start = i.checkpoint();
-        let len = i.eof_offset();
 
-        match f.parse_next(i) {
-            Err(ErrMode::Backtrack(_)) => {
-                i.reset(&start);
-                return Ok(acc);
-            },
-            #[allow(deprecated)]
-            Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
-            Ok(o) => {
-                if len == i.eof_offset() {
-                    return Ok(acc); // diff is here
-                }
-                acc = C::initial(Some(4));
-                acc.accumulate(o);
-            }
-        }
-
-        loop {
-            let start = i.checkpoint();
-            let len = i.eof_offset();
-
-            match f.parse_next(i) {
-                Err(ErrMode::Backtrack(_)) => {
-                    i.reset(&start);
-                    return Ok(acc);
-                },
-                Err(e) => return Err(e),
-                Ok(o) => {
-                    if len == i.eof_offset() {
-                        return Ok(acc); // diff is here
-                    }
-                    acc.accumulate(o);
-                }
-            }
-        }
-    }
-}
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -6178,7 +6126,7 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let input_offset = input.eof_offset();
 
     let initial = parse_factor(input)?;
-    let remainder = my_many0(alt((
+    let remainder = repeat(0.., alt((
         parse_oper(parse_factor, "*", BinaryOperation::Mul),
         parse_oper(parse_factor, "%", BinaryOperation::Mod),
         parse_oper(parse_factor, "MOD", BinaryOperation::Mod),
@@ -6251,7 +6199,7 @@ pub fn expr2(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let input_offset = input.eof_offset();
 
     let initial = shift(input)?;
-    let remainder = my_many0(alt((
+    let remainder = repeat(0.., alt((
         parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
         parse_oper(shift, "<", BinaryOperation::StrictlyLower),
         parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
@@ -6284,7 +6232,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let input_offset = input.eof_offset();
 
     let initial = expr2(input)?;
-    let remainder = my_many0(alt((
+    let remainder = repeat(0.., alt((
         parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
         parse_oper(expr2, "||", BinaryOperation::BooleanOr)
     )))
@@ -6445,7 +6393,7 @@ pub fn shift(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let start_eof_offset = input.eof_offset();
 
     let initial = comp(input)?;
-    let remainder = my_many0(alt((
+    let remainder = repeat(0.., alt((
         parse_oper(comp, "<<", BinaryOperation::LeftShift),
         parse_oper(comp, ">>", BinaryOperation::RightShift)
     )))
@@ -6466,7 +6414,7 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let start_eof_offset = input.eof_offset();
 
     let initial = term(input)?;
-    let remainder = my_many0(alt((
+    let remainder = repeat(0.., alt((
         parse_oper(term, "+", BinaryOperation::Add),
         parse_oper(term, "-", BinaryOperation::Sub),
         parse_oper(term, "&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
