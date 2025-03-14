@@ -19,7 +19,10 @@ use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, C
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
-use cpclib_common::winnow::error::{AddContext, ErrMode, ErrorKind, ParserError, StrContext};
+
+#[allow(deprecated)]
+use cpclib_common::winnow::error::ErrorKind;
+use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
     Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, LocatingSlice, Offset, Stream, UpdateSlice
 };
@@ -50,7 +53,7 @@ pub enum Z80ParserErrorKind {
     /// Indicates which character was expected by the `char` function
     Char(char),
     /// Error kind given by various nom parsers
-    Winnow(ErrorKind),
+    Winnow,
     /// Chain of errors provided by an inner listing
     Inner {
         listing: std::sync::Arc<LocatedListing>,
@@ -77,12 +80,6 @@ impl Z80ParserError {
     }
 }
 
-impl From<ErrorKind> for Z80ParserErrorKind {
-    fn from(other: ErrorKind) -> Self {
-        Self::Winnow(other)
-    }
-}
-
 impl From<char> for Z80ParserErrorKind {
     fn from(other: char) -> Self {
         Self::Char(other)
@@ -100,17 +97,20 @@ impl Z80ParserError {
 }
 
 impl ParserError<InnerZ80Span> for Z80ParserError {
+
+    #[allow(deprecated)]
     fn from_error_kind(input: &InnerZ80Span, kind: ErrorKind) -> Self {
-        Self(vec![(*input, kind.into())])
+        Self(vec![(*input, Z80ParserErrorKind::Winnow)])
     }
 
+    #[allow(deprecated)]
     fn append(
         mut self,
         input: &InnerZ80Span,
         token_start: &<InnerZ80Span as Stream>::Checkpoint,
         kind: ErrorKind
     ) -> Self {
-        self.0.push((*input, kind.into()));
+        self.0.push((*input, Z80ParserErrorKind::Winnow));
         self
     }
 
@@ -511,6 +511,7 @@ where
                 i.reset(&start);
                 return Ok(acc);
             },
+            #[allow(deprecated)]
             Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
             Ok(o) => {
                 if len == i.eof_offset() {
@@ -571,6 +572,7 @@ where
                 i.reset(&start);
                 return Ok(());
             },
+            #[allow(deprecated)]
             Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
             Ok(o) => {
                 match o {
@@ -595,6 +597,7 @@ where
                     i.reset(&start);
                     return Ok(()); // no pb everything is already in the vec result
                 },
+                #[allow(deprecated)]
                 Err(e) => return Err(e.append(i, &start, ErrorKind::Many)),
                 Ok(_) => {
                     // infinite loop check: the parser must always consume
@@ -680,6 +683,7 @@ where
                     match f.parse_next(i) {
                         Err(ErrMode::Backtrack(_err)) => {
                             i.reset(&start_i);
+                            #[allow(deprecated)]
                             return Err(ErrMode::Backtrack(e.append(i, &start_i, ErrorKind::Many)));
                         },
                         Err(e) => return Err(e),
@@ -4402,6 +4406,7 @@ where
 {
     let start = i.checkpoint();
     match f.parse_next(i) {
+        #[allow(deprecated)]
         Err(e) => Err(e.append(i, &start, ErrorKind::Many)),
         Ok(o) => {
             let mut acc = C::initial(None);

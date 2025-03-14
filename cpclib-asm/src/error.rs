@@ -409,12 +409,12 @@ impl AssemblerError {
                     .map(|e| {
                         match e.1 {
                             Z80ParserErrorKind::Context(_)
-                            | Z80ParserErrorKind::Winnow(_)
+                            | Z80ParserErrorKind::Winnow
                             | Z80ParserErrorKind::Char(_) => {
                                 // Get the real are build the context
                                 let ctx: std::borrow::Cow<str> = match e.1 {
                                     Z80ParserErrorKind::Context(ctx) => Cow::Owned(ctx.to_string()),
-                                    Z80ParserErrorKind::Winnow(_) => "Unknown error".into(),
+                                    Z80ParserErrorKind::Winnow => "Unknown error".into(),
                                     Z80ParserErrorKind::Char(c) => {
                                         format!("Error with char '{}'", c).into()
                                     },

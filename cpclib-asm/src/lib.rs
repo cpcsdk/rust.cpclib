@@ -1,3 +1,4 @@
+#![deny(deprecated)]
 #![feature(assert_matches)]
 #![feature(specialization)]
 #![feature(exact_size_is_empty)]
