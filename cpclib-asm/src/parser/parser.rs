@@ -666,7 +666,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80
         cut_err(parse_function_listing.context(StrContext::Label("FUNCTION: invalid content")))
             .parse_next(input)?;
 
-    my_many0_nocollect(my_line_ending).parse_next(input)?;
+    repeat::<_, _, (), _, _>(0.., my_line_ending).parse_next(input)?;
     let _ = alt((
         parse_directive_word(b"ENDF"),
         parse_directive_word(b"ENDFUNCTION")
@@ -862,7 +862,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 
     loop {
         cut_err(
-            my_many0_nocollect(alt((
+            repeat::<_, _, (), _, _>(0..,alt((
                 my_space1.value(()),
                 line_ending.value(()),
                 ':'.value(()),
@@ -2740,7 +2740,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             conditions.push((condition, code));
 
             let r#else = opt(preceded(
-                my_many0_nocollect(alt((
+                repeat::<_, _, (), _, _>(0.., alt((
                     my_space1.value(()),
                     line_ending.value(()),
                     ':'.value(())
@@ -3856,7 +3856,7 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedMacroPara
                 alt((
                     located_expr.take(), // TODO handle evaluation or transposition
                     parse_string.take(),
-                    my_many0_nocollect(none_of((
+                    repeat::<_, _, (), _, _>(0..,none_of((
                         b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
                     )))
                     .take()
@@ -5422,7 +5422,7 @@ fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80P
         repeat(
             1..,
             delimited(
-                my_many0_nocollect(alt((
+                repeat::<_, _,(), _, _>(0.., alt((
                     my_space1.value(()),
                     parse_comment.value(()),
                     line_ending.value(()),
@@ -5441,7 +5441,7 @@ fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80P
                             .context(StrContext::Label("STRUCT: Invalid operation"))
                     )
                 ),
-                my_many0_nocollect(alt((
+                repeat::<_,_, (), _, _>(0.., alt((
                     my_space1.value(()),
                     parse_comment.value(()),
                     line_ending.value(()),
