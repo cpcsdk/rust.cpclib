@@ -2,7 +2,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take_until;
-use cpclib_common::winnow::{ModalParser, ModalResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
 use super::{

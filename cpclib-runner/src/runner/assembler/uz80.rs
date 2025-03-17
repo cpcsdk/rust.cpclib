@@ -50,7 +50,7 @@ impl ExecutableInformation for Uz80Version {
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
-        return "UZ80.EXE";
+        "UZ80.EXE"
     }
 }
 

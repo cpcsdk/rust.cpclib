@@ -355,7 +355,7 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_uz80_cmd(code) {
                     Ok(InnerTask::Assembler(
                         Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80(
-                            (Default::default())
+                            Default::default()
                         )),
                         std
                     ))

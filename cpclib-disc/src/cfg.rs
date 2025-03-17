@@ -121,7 +121,7 @@ impl DiscConfig {
         let head = head.into();
         self.track_groups
             .iter()
-            .find(move |info| info.head == head && info.tracks.iter().any(|&val| val == track))
+            .find(move |info| info.head == head && info.tracks.contains(&track))
     }
 
     pub fn track_idx_iterator(&self) -> impl Iterator<Item = (&Head, u8)> {

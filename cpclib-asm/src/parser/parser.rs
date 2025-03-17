@@ -33,7 +33,6 @@ use cpclib_sna::{
 };
 use cpclib_tokens::ListingElement;
 // use crc::*;
-use either::Either;
 use obtained::LocatedTokenInner;
 
 use super::context::*;

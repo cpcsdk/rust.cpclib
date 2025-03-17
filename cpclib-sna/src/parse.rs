@@ -3,7 +3,7 @@ use std::str::FromStr;
 use cpclib_common::parse_value;
 use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::combinator::{alt, delimited, preceded, separated};
-use cpclib_common::winnow::error::{ErrMode, ErrorKind, ParserError};
+use cpclib_common::winnow::error::{ErrMode, ParserError};
 use cpclib_common::winnow::stream::{
     AsBytes, AsChar, Compare, Stream, StreamIsPartial, UpdateSlice
 };

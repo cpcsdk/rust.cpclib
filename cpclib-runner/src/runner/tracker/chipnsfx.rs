@@ -50,7 +50,7 @@ impl ExecutableInformation for ChipnsfxVersion {
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
-        return "CHIPNSFX.EXE";
+        "CHIPNSFX.EXE"
     }
 }
 

@@ -222,7 +222,7 @@ impl SymbolOutputGenerator {
 
         let value = sym.value();
 
-        if NEVER_EXPORTED_SYMBOLS.iter().any(|&nes| nes == value) {
+        if NEVER_EXPORTED_SYMBOLS.contains(&value) {
             false
         }
         else if self.all_allowed {
