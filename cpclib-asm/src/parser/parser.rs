@@ -19,7 +19,6 @@ use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, C
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
-
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
@@ -97,7 +96,6 @@ impl Z80ParserError {
 }
 
 impl ParserError<InnerZ80Span> for Z80ParserError {
-
     #[allow(deprecated)]
     fn from_error_kind(input: &InnerZ80Span, kind: ErrorKind) -> Self {
         Self(vec![(*input, Z80ParserErrorKind::Winnow)])
@@ -489,8 +487,6 @@ pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, Assembl
     parse_z80_with_context_builder(code, ParserContextBuilder::default())
 }
 
-
-
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), E>
@@ -551,9 +547,7 @@ where
                         Ok(_o) => {
                             // infinite loop check: the parser must always consume
                             if i.eof_offset() == len {
-                                return Err(ErrMode::Backtrack(E::from_input(
-                                    i
-                                )));
+                                return Err(ErrMode::Backtrack(E::from_input(i)));
                             }
                         }
                     }
@@ -622,7 +616,9 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pars
 }
 
 /// TODO - limit the listing possibilities
-pub fn parse_function_listing(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80ParserError> {
+pub fn parse_function_listing(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedListing, Z80ParserError> {
     // dbg!("parse_function_listing requests FunctionLimited state");
     inner_code_with_state(ParsingState::FunctionLimited, false).parse_next(input)
 }
@@ -806,7 +802,9 @@ pub fn parse_module(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 }
 
 /// Parse a sub-listing part that aims at being crunched after being assembled at first pass
-pub fn parse_crunched_section(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+pub fn parse_crunched_section(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedToken, Z80ParserError> {
     let crunched_start = input.checkpoint();
     let kind = preceded(
         my_space0,
@@ -862,12 +860,15 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 
     loop {
         cut_err(
-            repeat::<_, _, (), _, _>(0..,alt((
-                my_space1.value(()),
-                line_ending.value(()),
-                ':'.value(()),
-                parse_comment.value(())
-            )))
+            repeat::<_, _, (), _, _>(
+                0..,
+                alt((
+                    my_space1.value(()),
+                    line_ending.value(()),
+                    ':'.value(()),
+                    parse_comment.value(())
+                ))
+            )
             .context(StrContext::Label("SWITCH: whitespace error"))
         )
         .parse_next(input)?;
@@ -1696,13 +1697,11 @@ pub fn parse_assign_operator(
         b"||=" => Some(BinaryOperation::BooleanOr),
 
         _ => {
-            return Err(ErrMode::Cut(
-                Z80ParserError::from_input(input).add_context(
-                    input,
-                    &start,
-                    "Wrong symbol"
-                )
-            ))
+            return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+                input,
+                &start,
+                "Wrong symbol"
+            )))
         },
     };
 
@@ -1834,7 +1833,9 @@ pub fn parse_charset_start_stop_end(
     Ok(format)
 }
 
-pub fn parse_charset_string(input: &mut InnerZ80Span) -> ModalResult<CharsetFormat, Z80ParserError> {
+pub fn parse_charset_string(
+    input: &mut InnerZ80Span
+) -> ModalResult<CharsetFormat, Z80ParserError> {
     // manage the string format - TODO manage the others too
     let chars = parse_string
         .context(StrContext::Label("Missing string"))
@@ -2244,7 +2245,9 @@ pub fn parse_ex_mem_sp(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInne
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_struct_directive(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+pub fn parse_struct_directive(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedToken, Z80ParserError> {
     alt((
         parse_struct_directive_inner,
         parse_macro_or_struct_call(false, true)
@@ -2254,7 +2257,9 @@ pub fn parse_struct_directive(input: &mut InnerZ80Span) -> ModalResult<LocatedTo
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+fn parse_struct_directive_inner(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedToken, Z80ParserError> {
     // XXX Sadly the state is stored within the context that cannot
     //     by changed. So we can cannot really use parsing state sutf
 
@@ -2266,13 +2271,11 @@ fn parse_struct_directive_inner(input: &mut InnerZ80Span) -> ModalResult<Located
 
     // Only one argument is allowed
     if (directive.is_db() || directive.is_dw()) && directive.data_exprs().len() > 1 {
-        return Err(ErrMode::Cut(
-            Z80ParserError::from_input(input).add_context(
-                input,
-                &input_start,
-                "0 or 1 arguments are expected"
-            )
-        ));
+        return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+            input,
+            &input_start,
+            "0 or 1 arguments are expected"
+        )));
     }
     Ok(directive)
 }
@@ -2354,9 +2357,7 @@ fn parse_directive_of_size_others(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2378,9 +2379,7 @@ fn parse_directive_of_size_10(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2411,9 +2410,7 @@ fn parse_directive_of_size_8(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2438,9 +2435,7 @@ fn parse_directive_of_size_7(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2499,9 +2494,7 @@ fn parse_directive_of_size_6(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2518,9 +2511,9 @@ fn parse_directive_of_size_5(
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
         choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
-               choice_nocase!(b"ABYTE") => {
-                       parse_db_or_dw_or_str(DbDwStr::Abyte, within_struct).parse_next(input)
-        }        
+        choice_nocase!(b"ABYTE") => {
+            parse_db_or_dw_or_str(DbDwStr::Abyte, within_struct).parse_next(input)
+        },
         choice_nocase!(b"LIMIT") => parse_limit.parse_next(input),
         choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause),
         choice_nocase!(b"PRINT") => parse_print(true).parse_next(input),
@@ -2533,9 +2526,7 @@ fn parse_directive_of_size_5(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2576,9 +2567,7 @@ fn parse_directive_of_size_4(
         },
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2607,9 +2596,7 @@ fn parse_directive_of_size3(
         choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input),
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2641,9 +2628,7 @@ fn parse_directive_of_size_2(
 
         _ => {
             input.reset(input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -2824,7 +2809,9 @@ fn parse_conditional_condition(
 }
 
 /// Parse a breakpoint instruction
-pub fn parse_breakpoint(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_breakpoint(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let expr = opt(terminated(located_expr, not('='))
         .with_taken()
         .verify(|(e, s)| {
@@ -3143,7 +3130,9 @@ pub fn parse_breakpoint_run_value(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_convertible_word<T: FromStr>(input: &mut InnerZ80Span) -> ModalResult<T, Z80ParserError> {
+pub fn parse_convertible_word<T: FromStr>(
+    input: &mut InnerZ80Span
+) -> ModalResult<T, Z80ParserError> {
     delimited(my_space0, alpha1, my_space0)
         .verify_map(|word| T::from_str(unsafe { std::str::from_utf8_unchecked(word) }).ok())
         .parse_next(input)
@@ -3259,7 +3248,9 @@ directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
 
-pub fn parse_startingindex(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_startingindex(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let start = opt(located_expr).parse_next(input)?;
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
@@ -3382,7 +3373,9 @@ pub fn parse_assembler_control_print_parse(
 }
 
 /// Parse tickin directives
-pub fn parse_stable_ticker(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_stable_ticker(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     alt((parse_stable_ticker_start, parse_stable_ticker_stop)).parse_next(input)
 }
 
@@ -3650,9 +3643,7 @@ fn parse_ld_normal_src(
         }
         else {
             input.reset(&input_start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
+            Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
         }
     }
 }
@@ -3771,12 +3762,17 @@ pub fn parse_db_or_dw_or_str(
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let abyte_delta = if code == DbDwStr::Abyte {
-            Some(cut_err(terminated(located_expr, parse_comma).context(StrContext::Label("ABYTE: delta issue"))).parse_next(input)?)
-        } else {
+            Some(
+                cut_err(
+                    terminated(located_expr, parse_comma)
+                        .context(StrContext::Label("ABYTE: delta issue"))
+                )
+                .parse_next(input)?
+            )
+        }
+        else {
             None
         };
-
-
 
         // STRUCT directive allows to have no arguments
         let expr = if empty_list_allowed {
@@ -3797,7 +3793,7 @@ pub fn parse_db_or_dw_or_str(
             DbDwStr::Db => LocatedTokenInner::Defb(expr),
             DbDwStr::Dw => LocatedTokenInner::Defw(expr),
             DbDwStr::Str => LocatedTokenInner::Str(expr),
-            DbDwStr::Abyte => LocatedTokenInner::Abyte(abyte_delta.unwrap(), expr),
+            DbDwStr::Abyte => LocatedTokenInner::Abyte(abyte_delta.unwrap(), expr)
         })
     }
 }
@@ -3805,7 +3801,9 @@ pub fn parse_db_or_dw_or_str(
 // Fail if we do not read a forbidden keyword
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_forbidden_keyword(
+    input: &mut InnerZ80Span
+) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let start = input.checkpoint();
     let _ = my_space0(input)?;
     let name = take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9', '_'..='_'))
@@ -3823,9 +3821,7 @@ pub fn parse_forbidden_keyword(input: &mut InnerZ80Span) -> ModalResult<InnerZ80
 
     if !end_directive_iter.any(|&a| a == name.to_ascii_uppercase()) {
         input.reset(&start);
-        return Err(ErrMode::Backtrack(Z80ParserError::from_input(
-            &name
-        )));
+        return Err(ErrMode::Backtrack(Z80ParserError::from_input(&name)));
     }
 
     let _ = my_space0(input)?;
@@ -3856,9 +3852,10 @@ pub fn parse_macro_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedMacroPara
                 alt((
                     located_expr.take(), // TODO handle evaluation or transposition
                     parse_string.take(),
-                    repeat::<_, _, (), _, _>(0..,none_of((
-                        b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'
-                    )))
+                    repeat::<_, _, (), _, _>(
+                        0..,
+                        none_of((b' ', b',', b'\r', b'\n', b'\t', b']', b'[', b';', b':'))
+                    )
                     .take()
                 ))
             ), // TODO find a way to give arguments with space
@@ -3993,18 +3990,16 @@ pub fn parse_macro_or_struct_call_inner(
                 .parse_next(&mut arg)
                 .is_ok()
             {
-                return Err(ErrMode::Cut(
-                    Z80ParserError::from_input(input).add_context(
-                        input,
-                        &input_start,
-                        if for_struct {
-                            "First argument of STRUCT cannot be an opcode with no argument"
-                        }
-                        else {
-                            "First argument of MACRO or STRUCT cannot be an opcode with no argument"
-                        }
-                    )
-                ));
+                return Err(ErrMode::Cut(Z80ParserError::from_input(input).add_context(
+                    input,
+                    &input_start,
+                    if for_struct {
+                        "First argument of STRUCT cannot be an opcode with no argument"
+                    }
+                    else {
+                        "First argument of MACRO or STRUCT cannot be an opcode with no argument"
+                    }
+                )));
             }
         }
 
@@ -4157,7 +4152,9 @@ pub fn parse_align(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z
     Ok(LocatedTokenInner::Align(boundary, fill))
 }
 
-pub fn parse_print_inner(input: &mut InnerZ80Span) -> ModalResult<Vec<FormattedExpr>, Z80ParserError> {
+pub fn parse_print_inner(
+    input: &mut InnerZ80Span
+) -> ModalResult<Vec<FormattedExpr>, Z80ParserError> {
     separated(
         1..,
         alt((
@@ -4472,9 +4469,7 @@ pub fn parse_add_or_adc(
             .parse_next(input)
         }
         else {
-            return Err(ErrMode::Cut(Z80ParserError::from_input(
-                input
-            )));
+            return Err(ErrMode::Cut(Z80ParserError::from_input(input)));
         }?;
 
         Ok(LocatedTokenInner::new_opcode(
@@ -4844,7 +4839,9 @@ pub fn parse_flag_test(input: &mut InnerZ80Span) -> ModalResult<FlagTest, Z80Par
 /// TODO rename to emphasize it is standard reigsters
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register16(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register16(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let _start = input.checkpoint();
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
 
@@ -4853,11 +4850,7 @@ pub fn parse_register16(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcce
         choice_nocase!(b"BC") => Register16::Bc,
         choice_nocase!(b"DE") => Register16::De,
         choice_nocase!(b"HL") => Register16::Hl,
-        _ => {
-            return Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
-        },
+        _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };
 
     let span = (*input).update_slice(code);
@@ -4909,7 +4902,9 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcces
 /// Parse register i
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_i(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_i(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("I"), not(alphanumeric1)))
         .take()
         .parse_next(input)?;
@@ -4920,7 +4915,9 @@ pub fn parse_register_i(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcce
 /// Parse register r
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_r(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_r(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let da = ((Caseless("R"), not(alphanumeric1)))
         .take()
         .parse_next(input)?;
@@ -4992,7 +4989,9 @@ parse_any_register16!(parse_register_hl, "HL", Register16::Hl);
 /// Parse the IX register
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_ix(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_ix(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_ix())
         .parse_next(input)
@@ -5001,7 +5000,9 @@ pub fn parse_register_ix(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcc
 /// Parse the IY register
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_register_iy(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_register_iy(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     parse_indexregister16
         .verify(|d: &LocatedDataAccess| d.is_register_iy())
         .parse_next(input)
@@ -5070,11 +5071,7 @@ pub fn parse_indexregister16(
     let reg = match code {
         choice_nocase!(b"IX") => IndexRegister16::Ix,
         choice_nocase!(b"IY") => IndexRegister16::Iy,
-        _ => {
-            return Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            )))
-        },
+        _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };
 
     let span = (*input).update_slice(code);
@@ -5199,7 +5196,9 @@ pub fn parse_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess,
 /// Parse (R16)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_reg_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_reg_address(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let (reg, span) = alt((
         delimited(
             terminated("(", my_space0),
@@ -5225,7 +5224,9 @@ pub fn parse_reg_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcc
 /// Parse (HL)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_hl_address(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+pub fn parse_hl_address(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let span = alt((
         delimited(
             terminated("(", my_space0),
@@ -5422,12 +5423,15 @@ fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80P
         repeat(
             1..,
             delimited(
-                repeat::<_, _,(), _, _>(0.., alt((
-                    my_space1.value(()),
-                    parse_comment.value(()),
-                    line_ending.value(()),
-                    ':'.value(())
-                ))),
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        my_space1.value(()),
+                        parse_comment.value(()),
+                        line_ending.value(()),
+                        ':'.value(())
+                    ))
+                ),
                 (
                     terminated(
                         parse_label(false),
@@ -5441,12 +5445,15 @@ fn parse_struct(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80P
                             .context(StrContext::Label("STRUCT: Invalid operation"))
                     )
                 ),
-                repeat::<_,_, (), _, _>(0.., alt((
-                    my_space1.value(()),
-                    parse_comment.value(()),
-                    line_ending.value(()),
-                    ':'.value(())
-                )))
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        my_space1.value(()),
+                        parse_comment.value(()),
+                        line_ending.value(()),
+                        ':'.value(())
+                    ))
+                )
             )
         )
         .context(StrContext::Label("STRUCT: error in inner content"))
@@ -5522,7 +5529,9 @@ pub fn parse_comment(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80P
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_multiline_comment(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+pub fn parse_multiline_comment(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
     delimited(b"/*", take_until(0.., "*/"), b"*/")
         .map(|string: &[u8]| {
@@ -5708,9 +5717,7 @@ pub fn parse_end_directive(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span
         Ok((*input).update_slice(keyword))
     }
     else {
-        Err(ErrMode::Backtrack(Z80ParserError::from_input(
-            input
-        )))
+        Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     }
 }
 
@@ -5824,7 +5831,9 @@ pub fn parens(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErr
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_expr_bracketed_list(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_expr_bracketed_list(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6039,12 +6048,15 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let input_offset = input.eof_offset();
 
     let initial = parse_factor(input)?;
-    let remainder = repeat(0.., alt((
-        parse_oper(parse_factor, "*", BinaryOperation::Mul),
-        parse_oper(parse_factor, "%", BinaryOperation::Mod),
-        parse_oper(parse_factor, "MOD", BinaryOperation::Mod),
-        parse_oper(parse_factor, "/", BinaryOperation::Div)
-    )))
+    let remainder = repeat(
+        0..,
+        alt((
+            parse_oper(parse_factor, "*", BinaryOperation::Mul),
+            parse_oper(parse_factor, "%", BinaryOperation::Mod),
+            parse_oper(parse_factor, "MOD", BinaryOperation::Mod),
+            parse_oper(parse_factor, "/", BinaryOperation::Div)
+        ))
+    )
     .parse_next(input)?;
 
     let span = build_span(input_offset, &input_start, *input);
@@ -6112,15 +6124,18 @@ pub fn expr2(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let input_offset = input.eof_offset();
 
     let initial = shift(input)?;
-    let remainder = repeat(0.., alt((
-        parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
-        parse_oper(shift, "<", BinaryOperation::StrictlyLower),
-        parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
-        parse_oper(shift, ">", BinaryOperation::StrictlyGreater),
-        parse_oper(shift, "==", BinaryOperation::Equal),
-        parse_oper(shift, "=", BinaryOperation::Equal),
-        parse_oper(shift, "!=", BinaryOperation::Different)
-    )))
+    let remainder = repeat(
+        0..,
+        alt((
+            parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
+            parse_oper(shift, "<", BinaryOperation::StrictlyLower),
+            parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
+            parse_oper(shift, ">", BinaryOperation::StrictlyGreater),
+            parse_oper(shift, "==", BinaryOperation::Equal),
+            parse_oper(shift, "=", BinaryOperation::Equal),
+            parse_oper(shift, "!=", BinaryOperation::Different)
+        ))
+    )
     .parse_next(input)?;
 
     let span = build_span(input_offset, &input_start, *input);
@@ -6145,10 +6160,13 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let input_offset = input.eof_offset();
 
     let initial = expr2(input)?;
-    let remainder = repeat(0.., alt((
-        parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
-        parse_oper(expr2, "||", BinaryOperation::BooleanOr)
-    )))
+    let remainder = repeat(
+        0..,
+        alt((
+            parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
+            parse_oper(expr2, "||", BinaryOperation::BooleanOr)
+        ))
+    )
     .parse_next(input)?;
     let span = build_span(input_offset, &input_start, *input);
     Ok(fold_exprs(initial, remainder, span))
@@ -6157,7 +6175,9 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
 /// parse functions with one argument
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_unary_function_call(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_unary_function_call(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6236,7 +6256,9 @@ pub fn parse_binary_function_call(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_any_function_call(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_any_function_call(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
@@ -6306,10 +6328,13 @@ pub fn shift(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let start_eof_offset = input.eof_offset();
 
     let initial = comp(input)?;
-    let remainder = repeat(0.., alt((
-        parse_oper(comp, "<<", BinaryOperation::LeftShift),
-        parse_oper(comp, ">>", BinaryOperation::RightShift)
-    )))
+    let remainder = repeat(
+        0..,
+        alt((
+            parse_oper(comp, "<<", BinaryOperation::LeftShift),
+            parse_oper(comp, ">>", BinaryOperation::RightShift)
+        ))
+    )
     .parse_next(input)?;
 
     Ok(fold_exprs(

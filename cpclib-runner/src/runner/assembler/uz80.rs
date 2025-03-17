@@ -29,11 +29,11 @@ impl StaticInformation for Uz80Version {
         static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
 
         URL.get_or_init(|| {
-		MutiplatformUrls::builder()
-			.linux("http://cngsoft.no-ip.org/uz80-20240224.zip")
-			.windows("http://cngsoft.no-ip.org/uz80-20240224.zip")
-			.build()
-		})
+            MutiplatformUrls::builder()
+                .linux("http://cngsoft.no-ip.org/uz80-20240224.zip")
+                .windows("http://cngsoft.no-ip.org/uz80-20240224.zip")
+                .build()
+        })
     }
 }
 

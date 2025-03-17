@@ -354,8 +354,11 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_uz80_cmd(code) {
                     Ok(InnerTask::Assembler(
-                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80((Default::default()))), 
-                        std))
+                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80(
+                            (Default::default())
+                        )),
+                        std
+                    ))
                 }
                 else if is_sjasmplus_cmd(code) {
                     Ok(InnerTask::Assembler(

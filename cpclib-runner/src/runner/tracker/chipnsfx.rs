@@ -29,11 +29,11 @@ impl StaticInformation for ChipnsfxVersion {
         static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
 
         URL.get_or_init(|| {
-		MutiplatformUrls::builder()
-			.linux("http://cngsoft.no-ip.org/chipnsfx-20241231.zip")
-			.windows("http://cngsoft.no-ip.org/chipnsfx-20241231.zip")
-			.build()
-		})
+            MutiplatformUrls::builder()
+                .linux("http://cngsoft.no-ip.org/chipnsfx-20241231.zip")
+                .windows("http://cngsoft.no-ip.org/chipnsfx-20241231.zip")
+                .build()
+        })
     }
 }
 

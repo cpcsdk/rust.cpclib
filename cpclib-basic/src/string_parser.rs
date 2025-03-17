@@ -18,7 +18,9 @@ type BasicOneTokenResult<'src> = ModalResult<BasicToken, ContextError<StrContext
 type BasicLineResult<'src> = ModalResult<BasicLine, ContextError<StrContext>>;
 
 /// Parse complete basic program"],
-pub fn parse_basic_program(input: &mut &str) -> ModalResult<BasicProgram, ContextError<StrContext>> {
+pub fn parse_basic_program(
+    input: &mut &str
+) -> ModalResult<BasicProgram, ContextError<StrContext>> {
     repeat(0.., parse_basic_line)
         .map(BasicProgram::new)
         .parse_next(input)

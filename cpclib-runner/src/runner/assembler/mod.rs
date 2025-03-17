@@ -1,7 +1,7 @@
 pub mod rasm;
 pub mod sjasmplus;
-pub mod vasm;
 pub mod uz80;
+pub mod vasm;
 
 use cpclib_common::event::EventObserver;
 pub use rasm::{RasmVersion, RASM_CMD};
@@ -18,7 +18,7 @@ pub enum ExternAssembler {
     Rasm(RasmVersion),
     Sjasmplus(SjasmplusVersion),
     Uz80(Uz80Version),
-    Vasm(VasmVersion),
+    Vasm(VasmVersion)
 }
 
 impl ExternAssembler {

@@ -1406,8 +1406,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .maybe_auto_run(cli.auto_run_file.clone())
         .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
         .break_on_bad_hbl(cli.break_on_bad_hbl)
-        .break_on_bad_vbl(cli.break_on_bad_vbl)
-        ;
+        .break_on_bad_vbl(cli.break_on_bad_vbl);
     let conf = builder.build();
 
     let emu = match cli.emulator {

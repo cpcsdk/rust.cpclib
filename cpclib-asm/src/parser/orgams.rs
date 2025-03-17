@@ -2,7 +2,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
 use cpclib_common::winnow::token::take_until;
-use cpclib_common::winnow::{ModalResult, ModalParser, Parser};
+use cpclib_common::winnow::{ModalParser, ModalResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
 use super::{
@@ -73,7 +73,9 @@ pub fn parse_orgams_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken
 }
 
 #[inline]
-pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_orgams_expression(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
     let mut factors = Vec::new();
     let mut operators = Vec::new();
 
@@ -114,7 +116,9 @@ pub fn parse_orgams_expression(input: &mut InnerZ80Span) -> ModalResult<LocatedE
 }
 
 #[inline]
-pub fn parse_orgams_operator(input: &mut InnerZ80Span) -> ModalResult<BinaryOperation, Z80ParserError> {
+pub fn parse_orgams_operator(
+    input: &mut InnerZ80Span
+) -> ModalResult<BinaryOperation, Z80ParserError> {
     alt((
         '+'.value(BinaryOperation::Add),
         '-'.value(BinaryOperation::Sub),

@@ -42,7 +42,6 @@ mod test {
         assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
-
     #[test]
     #[ignore]
     fn test_download_chipnsfx() {

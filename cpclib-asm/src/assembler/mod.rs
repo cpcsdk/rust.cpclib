@@ -4730,108 +4730,114 @@ impl DbLikeKind {
 }
 
 impl Env {
-    pub fn visit_abyte<E1: ExprEvaluationExt + ExprElement + Debug, E2: ExprEvaluationExt + ExprElement + Debug>(&mut self, delta: &E1, exprs: &[E2]) -> Result<(), AssemblerError> {
+    pub fn visit_abyte<
+        E1: ExprEvaluationExt + ExprElement + Debug,
+        E2: ExprEvaluationExt + ExprElement + Debug
+    >(
+        &mut self,
+        delta: &E1,
+        exprs: &[E2]
+    ) -> Result<(), AssemblerError> {
         let delta = self.resolve_expr_may_fail_in_first_pass(delta)?;
         self.visit_db_or_dw_or_str(DbLikeKind::Defb, exprs, delta)
     }
 
-// TODO refactor code with assemble_opcode or other functions manipulating bytes
-pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
-    &mut self,
-    kind: DbLikeKind,
-    exprs: &[E],
-    delta: ExprResult
-) -> Result<(), AssemblerError> {
-    let env = self;
+    // TODO refactor code with assemble_opcode or other functions manipulating bytes
+    pub fn visit_db_or_dw_or_str<E: ExprEvaluationExt + ExprElement + Debug>(
+        &mut self,
+        kind: DbLikeKind,
+        exprs: &[E],
+        delta: ExprResult
+    ) -> Result<(), AssemblerError> {
+        let env = self;
 
-    let delta = delta.int()?;
+        let delta = delta.int()?;
 
+        let mask = kind.mask();
 
-    let mask = kind.mask();
+        let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
+            let val = val + delta;
 
-    let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
-        let val = val + delta;
+            if mask == 0xFF {
+                env.output_byte(val as u8)?;
+            }
+            else {
+                let high = ((val & 0xFF00) >> 8) as u8;
+                let low = (val & 0xFF) as u8;
+                env.output_byte(low)?;
+                env.output_byte(high)?;
+            }
+            Ok(())
+        };
 
-        if mask == 0xFF {
-            env.output_byte(val as u8)?;
-        }
-        else {
-            let high = ((val & 0xFF00) >> 8) as u8;
-            let low = (val & 0xFF) as u8;
-            env.output_byte(low)?;
-            env.output_byte(high)?;
-        }
-        Ok(())
-    };
+        let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
+            match &expr {
+                ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
+                    output(env, expr.int()?, mask)
+                },
+                ExprResult::Char(c) => {
+                    // XXX here it is problematci c shold be a char and not a byte
+                    let c = env.charset_encoding.transform_char(*c as char);
+                    output(env, expr.int()?, mask)
+                },
+                ExprResult::String(s) => {
+                    let bytes = env.charset_encoding.transform_string(s);
 
-    let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
-        match &expr {
-            ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
-                output(env, expr.int()?, mask)
-            },
-            ExprResult::Char(c) => {
-                // XXX here it is problematci c shold be a char and not a byte
-                let c = env.charset_encoding.transform_char(*c as char);
-                output(env, expr.int()?, mask)
-            },
-            ExprResult::String(s) => {
-                let bytes = env.charset_encoding.transform_string(s);
-
-                for c in bytes {
-                    output(env, c as _, mask)?;
-                }
-                Ok(())
-            },
-            ExprResult::List(l) => {
-                for c in l {
-                    output(env, c.int()?, mask)?;
-                }
-                Ok(())
-            },
-            ExprResult::Matrix { .. } => {
-                for row in expr.matrix_rows() {
-                    for c in row.list_content() {
+                    for c in bytes {
+                        output(env, c as _, mask)?;
+                    }
+                    Ok(())
+                },
+                ExprResult::List(l) => {
+                    for c in l {
                         output(env, c.int()?, mask)?;
                     }
+                    Ok(())
+                },
+                ExprResult::Matrix { .. } => {
+                    for row in expr.matrix_rows() {
+                        for c in row.list_content() {
+                            output(env, c.int()?, mask)?;
+                        }
+                    }
+                    Ok(())
                 }
-                Ok(())
+            }
+        };
+
+        let backup_address = env.logical_output_address();
+        for exp in exprs.iter() {
+            if exp.is_string() {
+                let s = exp.string();
+                let bytes = env.charset_encoding.transform_string(s);
+                for b in &bytes {
+                    output(env, *b as _, mask)?
+                }
+                env.update_dollar();
+            }
+            else if exp.is_char() {
+                let c = exp.char();
+                let b = env.charset_encoding.transform_char(c);
+                output(env, b as _, mask)?;
+                env.update_dollar();
+            }
+            else {
+                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
+                output_expr_result(env, val, mask)?;
+                env.update_dollar();
             }
         }
-    };
 
-    let backup_address = env.logical_output_address();
-    for exp in exprs.iter() {
-        if exp.is_string() {
-            let s = exp.string();
-            let bytes = env.charset_encoding.transform_string(s);
-            for b in &bytes {
-                output(env, *b as _, mask)?
-            }
-            env.update_dollar();
+        // Patch the last char of a str
+        if matches!(kind, DbLikeKind::Str) && backup_address < env.logical_output_address() {
+            let last_address = env.logical_output_address() - 1;
+            let last_address = env.logical_to_physical_address(last_address as _);
+            let last_value = env.peek(&last_address);
+            env.poke(last_value | 0x80, &last_address);
         }
-        else if exp.is_char() {
-            let c = exp.char();
-            let b = env.charset_encoding.transform_char(c);
-            output(env, b as _, mask)?;
-            env.update_dollar();
-        }
-        else {
-            let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-            output_expr_result(env, val, mask)?;
-            env.update_dollar();
-        }
+
+        Ok(())
     }
-
-    // Patch the last char of a str
-    if matches!(kind, DbLikeKind::Str) && backup_address < env.logical_output_address() {
-        let last_address = env.logical_output_address() - 1;
-        let last_address = env.logical_to_physical_address(last_address as _);
-        let last_value = env.peek(&last_address);
-        env.poke(last_value | 0x80, &last_address);
-    }
-
-    Ok(())
-}
 }
 
 impl Env {

@@ -25,7 +25,9 @@ pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<&'st
 // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC&mobileaction=toggle_view_desktop#Structure_of_a_BASIC_program
 // Some(BasicLine) for a Line
 // None for End
-pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextError<&'static str>> {
+pub fn line_or_end(
+    bytes: &mut &[u8]
+) -> ModalResult<Option<BasicLine>, ContextError<&'static str>> {
     let length = cut_err(le_u16.context("Expecting a line length")).parse_next(bytes)?;
 
     // leave if it is the end of the program
