@@ -115,6 +115,7 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
         #[cfg(debug_assertions)]
         panic!("assert `{}` failed at {:#?}", _message, input);
         #[cfg(not(debug_assertions))]
+        #[allow(deprecated)]
         Self::from_error_kind(input, ErrorKind::Assert)
     }
 
