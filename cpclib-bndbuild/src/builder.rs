@@ -16,7 +16,10 @@ use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
 use crate::BndBuilderError;
 
-pub const EXPECTED_FILENAMES: &[&str] = &["bndbuild.yml", "build.bnd", "bnd.build"];
+pub const EXPECTED_FILENAMES: &[&str] = &[
+    "bndbuild.yml", "build.bnd", "bnd.build",
+    "BNDBUILD.YML", "BUILD.BND", "BND.BUILD", // ACE fuck up by uppercasing files
+    ];
 
 #[derive(Default)]
 struct ExecutionState {
