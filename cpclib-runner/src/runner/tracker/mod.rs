@@ -1,4 +1,4 @@
-use at3::{extra::SongToAkm, At3Version, AT_CMD};
+use at3::{extra::*, At3Version, AT_CMD};
 use chipnsfx::{ChipnsfxVersion, CHIPNSFX_CMD};
 use cpclib_common::event::EventObserver;
 
@@ -31,20 +31,44 @@ impl Tracker {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SongConverter {
-    SongToAkm(SongToAkm)
+    SongToAkm(SongToAkm),
+    SongToAkg(SongToAkg),
+    SongToAky(SongToAky),
+    SongToEvents(SongToEvents),
+    SongToRaw(SongToRaw),
+    SongToSoundEffects(SongToSoundEffects),
+    SongToVgm(SongToVgm),
+    SongToWav(SongToWav),
+    SongToYm(SongToYm),
 }
 
 
 impl SongConverter {
     pub fn get_command(&self) -> &str {
         match self {
-            Self::SongToAkm(_) => SongToAkm::CMD
+            Self::SongToAkg(_) => SongToAkg::CMD,
+            Self::SongToAkm(_) => SongToAkm::CMD,
+            Self::SongToAky(_) => SongToAky::CMD,
+            Self::SongToEvents(_) => SongToEvents::CMD,
+            Self::SongToRaw(_) => SongToRaw::CMD,
+            Self::SongToSoundEffects(_) => SongToSoundEffects::CMD,
+            Self::SongToVgm(_) => SongToVgm::CMD,
+            Self::SongToWav(_) => SongToWav::CMD,
+            Self::SongToYm(_) => SongToYm::CMD,
         }
     }
 
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
+            Self::SongToAkg(v) => v.configuration(),
             Self::SongToAkm(v) => v.configuration(),
+            Self::SongToAky(v) => v.configuration(),
+            Self::SongToEvents(v) => v.configuration(),
+            Self::SongToRaw(v) => v.configuration(),
+            Self::SongToSoundEffects(v) => v.configuration(),
+            Self::SongToVgm(v) => v.configuration(),
+            Self::SongToWav(v) => v.configuration(),
+            Self::SongToYm(v) => v.configuration(),
         }
     }
 }

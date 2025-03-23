@@ -69,7 +69,8 @@ pub mod extra {
     use super::At3Version;
 
     macro_rules!  generate_song_handler {
-        ($name: ident) => {
+        ($($name: ident)*) => {
+        $(
 
             #[derive(Clone, Debug, PartialEq, Eq, Hash)]
             pub struct $name(ExtraTool<At3Version>);
@@ -80,7 +81,7 @@ pub mod extra {
                 }
             }
 
-            impl Default for SongToAkm {
+            impl Default for $name {
                 fn default() -> Self {
                     let extra = ExtraTool::builder()
                         .tool(Default::default())
@@ -91,15 +92,15 @@ pub mod extra {
                 }
             }
 
-            impl SongToAkm {
+            impl $name {
                 pub const CMD: &'static str = stringify!($name);
             }
 
 
-            
+        )*
         };
     }
 
-    generate_song_handler!{SongToAkm}
+    generate_song_handler!{SongToAkg  SongToAkm  SongToAky  SongToEvents  SongToRaw  SongToSoundEffects  SongToVgm  SongToWav  SongToYm}
 
 }

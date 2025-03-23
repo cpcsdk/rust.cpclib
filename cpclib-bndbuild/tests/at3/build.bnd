@@ -1,0 +1,54 @@
+# `bndbuild generate_all` convert the music in the 4 expected formats
+# `bndbuild play` uses vlc to play the wav version of the music 
+# `bndbuild at3` opens AT3. Sadly AT3 does not take input arguments, so it cannot automatically open a given file
+
+- tgt: generate_all
+  phony: true
+  dep: 
+    - "'Targhan - Crtc - End part.akm'"
+    - "'Targhan - Crtc - End part.aky'"
+    - "'Targhan - Crtc - End part.akg'"
+    - "'Targhan - Crtc - End part.wav'"
+
+- tgt: play
+  phony: true
+  dep: "'Targhan - Crtc - End part.wav'"
+  cmd: extern vlc "$<"
+
+- tgt: at3
+  phony: true
+  cmd: at3 
+
+{% macro convert_music(converter, from, to) -%}
+- tgt: "{{to}}"
+  dep: "{{from}}"
+  cmd: {{converter}} {{from}} {{to}}
+{%- endmacro %}
+
+{% macro compile_akm(from, to) -%}
+{{convert_music("SongToAkm", from, to)}}
+{%- endmacro %}
+
+{% macro compile_aky(from, to) -%}
+{{convert_music("SongToAky", from, to)}}
+{%- endmacro %}
+
+{% macro compile_akg(from, to) -%}
+{{convert_music("SongToAkg", from, to)}}
+{%- endmacro %}
+
+{% macro to_wav(from, to) -%}
+{{convert_music("SongToWav", from, to)}}
+{%- endmacro %}
+
+
+{{ compile_akm("'Targhan - Crtc - End part.aks'", 	"'Targhan - Crtc - End part.akm'") }}
+{{ compile_akg("'Targhan - Crtc - End part.aks'", 	"'Targhan - Crtc - End part.akg'") }}
+{{ compile_aky("'Targhan - Crtc - End part.aks'", 	"'Targhan - Crtc - End part.aky'") }}
+{{ to_wav("'Targhan - Crtc - End part.aks'", 	"'Targhan - Crtc - End part.wav'") }}
+
+
+
+- tgt: distclean
+  phony: true
+  cmd: -rm *.akm *.akg *.wav *.aky

@@ -20,7 +20,7 @@ use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
-use cpclib_runner::runner::tracker::at3::extra::SongToAkm;
+use cpclib_runner::runner::tracker::at3::extra::{SongToAkg, SongToAkm, SongToAky, SongToEvents, SongToRaw, SongToSoundEffects, SongToVgm, SongToWav, SongToYm};
 use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
@@ -191,6 +191,14 @@ pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
 pub const SONG2AKM_CMDS: &[&str] = &[SongToAkm::CMD];
+pub const SONG2AKG_CMDS: &[&str] = &[SongToAkg::CMD];
+pub const SONG2AKY_CMDS: &[&str] = &[SongToAky::CMD];
+pub const SONG2EVENTS_CMDS: &[&str] = &[SongToEvents::CMD];
+pub const SONG2RAW_CMDS: &[&str] = &[SongToRaw::CMD];
+pub const SONG2SOUNDEFFECTS_CMDS: &[&str] = &[SongToSoundEffects::CMD];
+pub const SONG2VGM_CMDS: &[&str] = &[SongToVgm::CMD];
+pub const SONG2WAV_CMDS: &[&str] = &[SongToWav::CMD];
+pub const SONG2YM_CMDS: &[&str] = &[SongToYm::CMD];
 
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -261,6 +269,14 @@ is_some_cmd!(
     rasm, rm,
     sjasmplus, sna, sugarbox,
     song2akm,
+    song2akg,
+    song2aky,
+    song2events,
+    song2raw,
+    song2soundeffects,
+    song2vgm,
+    song2wav,
+    song2ym,
     uz80,
     vasm,
     winape,
@@ -308,6 +324,32 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_song2akm_cmd(code) {
                     Ok(InnerTask::SongConverter(SongConverter::new_song_to_akm_default(), std))
                 }
+
+                else if is_song2aky_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_aky_default(), std))
+                }
+                else if is_song2akg_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_akg_default(), std))
+                }
+                else if is_song2events_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_events_default(), std))
+                }
+                else if is_song2raw_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_raw_default(), std))
+                }
+                else if is_song2soundeffects_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_sound_effects_default(), std))
+                }
+                else if is_song2vgm_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_vgm_default(), std))
+                }
+                else if is_song2wav_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_wav_default(), std))
+                }
+                else if is_song2ym_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_ym_default(), std))
+                }
+
                 else if is_crunch_cmd(code) {
                     Ok(InnerTask::Crunch(std))
                 }
