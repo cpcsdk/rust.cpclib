@@ -68,30 +68,38 @@ pub mod extra {
 
     use super::At3Version;
 
+    macro_rules!  generate_song_handler {
+        ($name: ident) => {
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SongToAkm(ExtraTool<At3Version>);
-    impl Deref for SongToAkm {
-        type Target = ExtraTool<At3Version>;
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
+            #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+            pub struct $name(ExtraTool<At3Version>);
+            impl Deref for $name {
+                type Target = ExtraTool<At3Version>;
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
+            }
+
+            impl Default for SongToAkm {
+                fn default() -> Self {
+                    let extra = ExtraTool::builder()
+                        .tool(Default::default())
+                        .target_os_exec_fname(concat!("tools/", stringify!($name)))
+                        .build();
+
+                    Self(extra)
+                }
+            }
+
+            impl SongToAkm {
+                pub const CMD: &'static str = stringify!($name);
+            }
+
+
+            
+        };
     }
 
-    impl Default for SongToAkm {
-        fn default() -> Self {
-            let extra = ExtraTool::builder()
-                .tool(Default::default())
-                .target_os_exec_fname("tools/SongToAkm")
-                .build();
-
-            Self(extra)
-        }
-    }
-
-    impl SongToAkm {
-        pub const CMD: &'static str = "SongToAkm";
-    }
-
+    generate_song_handler!{SongToAkm}
 
 }
