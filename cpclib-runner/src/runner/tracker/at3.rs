@@ -59,3 +59,39 @@ impl ExecutableInformation for At3Version {
 }
 
 impl InternetStaticCompiledApplication for At3Version {}
+
+
+pub mod extra {
+    use std::ops::Deref;
+
+    use crate::runner::extra::ExtraTool;
+
+    use super::At3Version;
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SongToAkm(ExtraTool<At3Version>);
+    impl Deref for SongToAkm {
+        type Target = ExtraTool<At3Version>;
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl Default for SongToAkm {
+        fn default() -> Self {
+            let extra = ExtraTool::builder()
+                .tool(Default::default())
+                .target_os_exec_fname("tools/SongToAkm")
+                .build();
+
+            Self(extra)
+        }
+    }
+
+    impl SongToAkm {
+        pub const CMD: &'static str = "SongToAkm";
+    }
+
+
+}

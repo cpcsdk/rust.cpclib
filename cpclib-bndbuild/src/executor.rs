@@ -115,6 +115,11 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
+        InnerTask::SongConverter(d, _) => {
+            DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
+                .run(task.args(), observer)
+        },
+
         InnerTask::Tracker(d, _) => {
             DelegatedRunner::<E>::new(d.configuration(), d.get_command().to_owned())
                 .run(task.args(), observer)

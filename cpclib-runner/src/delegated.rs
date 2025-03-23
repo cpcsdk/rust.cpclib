@@ -304,7 +304,7 @@ pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation +
 }
 
 pub trait InternetStaticCompiledApplication:
-    StaticInformation + ExecutableInformation + Default
+    StaticInformation + ExecutableInformation
 {
     fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()

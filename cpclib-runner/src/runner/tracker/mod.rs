@@ -1,4 +1,4 @@
-use at3::{At3Version, AT_CMD};
+use at3::{extra::SongToAkm, At3Version, AT_CMD};
 use chipnsfx::{ChipnsfxVersion, CHIPNSFX_CMD};
 use cpclib_common::event::EventObserver;
 
@@ -28,6 +28,27 @@ impl Tracker {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SongConverter {
+    SongToAkm(SongToAkm)
+}
+
+
+impl SongConverter {
+    pub fn get_command(&self) -> &str {
+        match self {
+            Self::SongToAkm(_) => SongToAkm::CMD
+        }
+    }
+
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
+            Self::SongToAkm(v) => v.configuration(),
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod test {

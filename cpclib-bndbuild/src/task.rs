@@ -20,6 +20,7 @@ use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
+use cpclib_runner::runner::tracker::at3::extra::SongToAkm;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
@@ -32,7 +33,7 @@ use crate::runners::assembler::Assembler;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::hideur::HIDEUR_CMD;
-use crate::runners::tracker::Tracker;
+use crate::runners::tracker::{Tracker, SongConverter};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InnerTask {
@@ -56,6 +57,7 @@ pub enum InnerTask {
     Mkdir(StandardTaskArguments),
     Rm(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
+    SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
     Xfer(StandardTaskArguments)
 }
@@ -188,6 +190,8 @@ pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
+pub const SONG2AKM_CMDS: &[&str] = &[SongToAkm::CMD];
+
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
@@ -211,6 +215,7 @@ impl Display for InnerTask {
             Self::Mkdir(s) => (MKDIR_CMDS[0], s),
             Self::Rm(s) => (RM_CMDS[0], s),
             Self::Snapshot(s) => (SNA_CMDS[0], s),
+            Self::SongConverter(t, s) => (t.get_command(), s),
             Self::Tracker(t, s) => (t.get_command(), s),
             Self::Xfer(s) => (XFER_CMDS[0], s),
             #[cfg(feature = "fap")]
@@ -255,6 +260,7 @@ is_some_cmd!(
     orgams,
     rasm, rm,
     sjasmplus, sna, sugarbox,
+    song2akm,
     uz80,
     vasm,
     winape,
@@ -298,6 +304,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_chipnsfx_cmd(code) {
                     Ok(InnerTask::Tracker(Tracker::new_chipnsfx_default(), std))
+                }
+                else if is_song2akm_cmd(code) {
+                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_akm_default(), std))
                 }
                 else if is_crunch_cmd(code) {
                     Ok(InnerTask::Crunch(std))
@@ -504,6 +513,7 @@ impl InnerTask {
             | InnerTask::Xfer(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Snapshot(t)
+            | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t) => t,
             #[cfg(feature = "fap")]
             InnerTask::Fap(t) => t
@@ -531,6 +541,7 @@ impl InnerTask {
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
             | InnerTask::Snapshot(t)
+            | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
             | InnerTask::Xfer(t) => t,
             #[cfg(feature = "fap")]
@@ -574,6 +585,7 @@ impl InnerTask {
             InnerTask::Mkdir(_) => false,
             InnerTask::Rm(_s) => false, // wrong when downloading files
             InnerTask::Snapshot(_) => false,
+            InnerTask::SongConverter(_, t) => false,
             InnerTask::Tracker(_, t) => true, // XXX think if false is better
             InnerTask::Xfer(_) => true
         }

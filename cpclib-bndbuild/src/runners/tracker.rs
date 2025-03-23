@@ -26,3 +26,27 @@ impl Tracker {
         ))
     }
 }
+
+
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SongConverter(cpclib_runner::runner::tracker::SongConverter);
+
+impl SongConverter {
+    delegate::delegate! {
+        to self.0 {
+            pub fn get_command(&self) -> &str;
+            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E>;
+        }
+    }
+
+    pub fn new_song_to_akm_default() -> Self {
+        Self(cpclib_runner::runner::tracker::SongConverter::SongToAkm(
+            Default::default()
+        ))
+    }
+
+
+}
+
