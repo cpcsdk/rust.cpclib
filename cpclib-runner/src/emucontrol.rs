@@ -813,6 +813,7 @@ pub enum OrgamsRobotAction<'a, 'b> {
 }
 
 impl<'a, 'b> OrgamsRobotAction<'a, 'b> {
+
     pub fn new_edit(src: &'a str) -> Self {
         Self::LoadOrImportAndEdit { src }
     }
@@ -821,9 +822,22 @@ impl<'a, 'b> OrgamsRobotAction<'a, 'b> {
         Self::LoadOrImportAndAssembleJump { src }
     }
 
-    pub fn new_save_sources(src: &'a str, tgt: &'b str) -> Self {
-        Self::LoadOrImportAndSave { src, tgt }
+    pub fn new_save_sources(src: &'a str, tgt: &'b str) -> Result<Self, String> {
+        if ! (tgt.ends_with(".o") || tgt.ends_with(".O")) {
+            Err(format!("{tgt} is not a binary orgams file format"))
+        } else {
+            Ok(Self::LoadOrImportAndSave { src, tgt })
+        }
     }
+
+    pub fn new_export_sources(src: &'a str, tgt: &'b str) -> Result<Self, String> {
+        if ! (src.ends_with(".o") || src.ends_with(".O")) {
+            Err(format!("{src} is not a binary orgams file format"))
+        } else {
+            Ok(Self::LoadOrImportAndSave { src, tgt })
+        }
+    }
+
 
     pub fn new_save_binary(src: &'a str, tgt: Option<&'b str>) -> Self {
         Self::LoadOrImportAndAssembleAndSave { src, tgt }
@@ -864,7 +878,14 @@ impl OrgamsRobotAction<'_, '_> {
 
     pub fn save_orgams_binary_source(&self) -> Option<&str> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } => Some(tgt),
+            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } if tgt.ends_with(".o") || tgt.ends_with(".O") => Some(tgt),
+            _ => None
+        }
+    }
+
+    pub fn save_orgams_ascii_source(&self) -> Option<&str> {
+        match self {
+            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } if !(tgt.ends_with(".o") || tgt.ends_with(".O")) => Some(tgt),
             _ => None
         }
     }
@@ -874,6 +895,10 @@ impl OrgamsRobotAction<'_, '_> {
             OrgamsRobotAction::LoadOrImportAndAssembleAndSave { tgt, .. } => Some(*tgt),
             _ => None
         }
+    }
+
+    pub fn request_assembling(&self) -> bool {
+        matches!(self, OrgamsRobotAction::LoadOrImportAndAssembleAndSave { ..} | OrgamsRobotAction::LoadOrImportAndAssembleJump { .. })
     }
 }
 
@@ -979,6 +1004,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
         .map_err(|screen| (format!("Error while loading {}", src), screen));
 
+
         // if file has been loaded, handle next action
         if res.is_ok() {
             // need to update res
@@ -988,11 +1014,18 @@ impl<E: UsedEmulator> RobotImpl<E> {
                     // No need to do more when we want to edit a file
                     Ok(())
                 }
-                else if let Some(dst) = action.save_orgams_binary_source() {
+                else if let Some(dst) = dbg!(action.save_orgams_binary_source()) {
                     self.orgams_save_source(dst)
                         .map_err(|screen| ("Error while saving sources".to_string(), screen))
                 }
+                else if let Some(dst) = dbg!(action.save_orgams_ascii_source()) {
+                    dbg!("export file");
+
+                    self.orgams_export_source(dst)
+                        .map_err(|screen| (format!("Error while exporting source to {dst}"), screen))
+                }
                 else {
+                    dbg!("Assemble file");
                     // we want to assemble the file
                     self.orgams_assemble(src)
                         .map_err(|screen| ("Error while assembling".to_string(), screen))
@@ -1064,6 +1097,20 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.ctrl_char('s');
         self.type_text(dst);
         self.r#return();
+
+        std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
+        self.orgams_wait_save()
+    }
+
+    fn orgams_export_source(&mut self, dst: &str) -> Result<(), Screenshot> {
+        dbg!("Tentative to export {dst}");
+        self.ctrl_char('e');
+        self.type_text(dst);
+        self.r#return();
+
+        std::thread::sleep(Duration::from_millis(1000 / 2));
+        self.type_char('W');
+
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save()
@@ -1295,33 +1342,45 @@ use clap::Args;
 #[derive(Args, Clone, Debug)]
 pub struct OrgamsCli {
     /// lists test values
-    #[arg(short, long, help = "Filename to assemble or edit")]
+    #[arg(short, long, help = "Filename to assemble or edit", aliases = &["source", "input"])]
     src: String,
 
     #[arg(
         short,
         long,
         help = "Filename to save after assembling. By default use the one provided by orgams"
-    )]
+        , aliases = &["destination", "tgt", "target", "ouput"])]
     dst: Option<String>,
 
     #[arg(
-            short,
             long,
             action = ArgAction::SetTrue,
             requires = "dst",
-            help = "Convert a Z80 source file into an ascii orgams file"
+            help = "Convert a Z80 source file into an ascii orgams file",
+            aliases = &["basm2o"],
+            group = "convert"
         )]
     basm2orgamsa: bool,
 
     #[arg(
-        short,
         long,
         action = ArgAction::SetTrue,
         requires = "dst",
-        help = "Convert an ASCII-compatible orgams file  into a binary orgams file"
+        help = "Convert an ASCII-compatible orgams file  into a binary orgams file",
+        aliases = &["a2o"],
+        group = "convert"
     )]
     orgamsa2orgamsb: bool,
+
+    #[arg(
+        long,
+        action = ArgAction::SetTrue,
+        requires = "dst",
+        help = "Convert a binary orgams file into an ASCII-compatible orgams file",
+        aliases = &["o2a"],
+        group = "convert"
+    )]
+    orgamsb2orgamsa: bool,
 
     #[arg(
             short,
@@ -1391,6 +1450,8 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
 }
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+    dbg!(&cli);
+    
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -1603,6 +1664,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     #[cfg(windows)]
     std::thread::sleep(Duration::from_millis(1000 * 3));
 
+
+    dbg!(&cli.command);
     let res = match cli.command {
         Commands::Orgams(OrgamsCli {
             src,
@@ -1610,7 +1673,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             jump,
             edit,
             basm2orgamsa,
-            orgamsa2orgamsb
+            orgamsa2orgamsb,
+            orgamsb2orgamsa
         }) => {
             if basm2orgamsa {
                 if let Some(albi) = &cli.albireo {
@@ -1628,7 +1692,10 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             }
             else {
                 let action = if orgamsa2orgamsb {
-                    OrgamsRobotAction::new_save_sources(&src, dst.as_ref().unwrap())
+                    OrgamsRobotAction::new_save_sources(&src, dst.as_ref().unwrap())?
+                }
+                else if orgamsb2orgamsa {
+                    OrgamsRobotAction::new_export_sources(&src, dst.as_ref().unwrap())?
                 }
                 else if edit {
                     OrgamsRobotAction::new_edit(&src)
@@ -1640,6 +1707,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                     OrgamsRobotAction::new_save_binary(&src, dst.as_deref())
                 };
 
+                dbg!(&action);
                 robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action)
             }
         },
@@ -1654,6 +1722,9 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             Ok(())
         }
     };
+
+
+    dbg!(&res);
 
     if !cli.keepemulator {
         robot.close();

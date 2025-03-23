@@ -39,7 +39,8 @@ struct Orgams {
         short,
         long,
         value_name = "DATA_SOURCE",
-        help = "Data source (a folder for using albireo or a disc image)"
+        help = "Data source (a folder for using albireo or a disc image)",
+        default_value = "."
     )]
     from: Utf8PathBuf,
 
@@ -157,6 +158,9 @@ impl<E: EventObserver> Runner for OrgamsRunner<E> {
 
             if matches.get_flag("orgamsa2orgamsb") {
                 real_arguments.push("--orgamsa2orgamsb");
+            }
+            if matches.get_flag("orgamsb2orgamsa") {
+                real_arguments.push("--orgamsb2orgamsa");
             }
 
             let mut need_k = false;
