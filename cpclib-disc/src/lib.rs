@@ -282,7 +282,6 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
                         header.set_amsdos_filename(&new_amsdos_fname);
                         header.update_checksum();
-                        dbg!(&header);
 
                         // replace the header with the modified filename
                         let content = ams_file.content();
