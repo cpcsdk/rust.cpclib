@@ -48,6 +48,12 @@ fn crunch_lz49() {
     crunch_any(CompressMethod::Lz49)
 }
 
+
+#[test]
+fn crunch_upkr() {
+    crunch_any(CompressMethod::Upkr)
+}
+
 #[test]
 fn crunch_lzsa() {
     crunch_any(CompressMethod::Lzsa(

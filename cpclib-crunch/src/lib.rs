@@ -68,6 +68,7 @@ pub enum Cruncher {
     Lzsa1,
     Lzsa2,
     Shrinkler,
+    Upkr,
     Zx0
 }
 
@@ -82,7 +83,8 @@ impl Cruncher {
             Cruncher::Lzsa1 => "inner://unlzsa1_fast.asm",
             Cruncher::Lzsa2 => "inner://unlzsa1_fast.asm",
             Cruncher::Shrinkler => "inner://deshrink.asm",
-            Cruncher::Zx0 => "inner://dzx0_fast.asm"
+            Cruncher::Zx0 => "inner://dzx0_fast.asm",
+            Cruncher::Upkr => "inner://uncrunch/upkr.asm"
         };
         fname.into()
     }
@@ -143,7 +145,8 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
         Cruncher::Lzsa1 => CompressMethod::Lzsa(LzsaVersion::V1, None),
         Cruncher::Lzsa2 => CompressMethod::Lzsa(LzsaVersion::V1, None),
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
-        Cruncher::Zx0 => CompressMethod::Zx0
+        Cruncher::Zx0 => CompressMethod::Zx0,
+        Cruncher::Upkr => CompressMethod::Upkr,
     };
 
     let crunched = cruncher

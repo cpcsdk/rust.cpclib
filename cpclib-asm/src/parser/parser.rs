@@ -232,12 +232,14 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"INCAPU",
     b"INCZX0",
     b"INCSHRINKLER",
+    b"INCUPKR",
     b"LET",
     b"LIMIT",
     b"LIST",
     b"LZEXO",
     b"LZSA1",
     b"LZSA2",
+    b"LZUPKR",
     b"MAP",
     b"MODULE",
     b"NOEXPORT",
@@ -817,6 +819,8 @@ pub fn parse_crunched_section(
             parse_directive_word(b"LZ49").value(CrunchType::LZ49),
             #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
             #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX7").value(CrunchType::LZX7),
             #[cfg(not(target_arch = "wasm32"))]
@@ -2432,7 +2436,10 @@ fn parse_directive_of_size_7(
         choice_nocase!(b"PROTECT") => parse_protect.parse_next(input),
         choice_nocase!(b"SECTION") => parse_section.parse_next(input),
         choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
-
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCUPKR") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
+        },
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))

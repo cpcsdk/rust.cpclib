@@ -375,7 +375,9 @@ pub enum CrunchType {
     LZSA1,
     LZSA2,
     #[cfg(not(target_arch = "wasm32"))]
-    Shrinkler
+    Shrinkler,
+    #[cfg(not(target_arch = "wasm32"))]
+    Upkr
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
@@ -1072,6 +1074,8 @@ impl fmt::Display for Token {
                                 CrunchType::LZSA2 => "INCLZSA2",
                                 #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Shrinkler => "INCSHRINKLER",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::Upkr => "INCUPKR",
                             }
                         }
                     };

@@ -34,6 +34,8 @@ pub enum CompressMethod {
     #[cfg(not(target_arch = "wasm32"))]
     Shrinkler(ShrinklerConfiguration),
     #[cfg(not(target_arch = "wasm32"))]
+    Upkr,
+    #[cfg(not(target_arch = "wasm32"))]
     Zx0
 }
 
@@ -51,6 +53,16 @@ impl CompressMethod {
             CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, *minmatch),
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Shrinkler(conf) => Ok(conf.compress(data)),
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressMethod::Upkr => {
+                let mut config = upkr::Config::default();
+                config.use_bitstream = true;
+                config.bitstream_is_big_endian = true;
+                config.invert_bit_encoding = true;
+                config.simplified_prob_update = true;
+                let level = 9;
+                Ok(upkr::pack(data, level, &config, None))
+            }
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Zx0 => Ok(zx0::compress(data))
         }

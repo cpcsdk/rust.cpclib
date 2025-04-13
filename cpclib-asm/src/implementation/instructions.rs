@@ -46,7 +46,11 @@ impl Cruncher for CrunchType {
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZAPU => Ok(CompressMethod::Apultra),
             #[cfg(not(target_arch = "wasm32"))]
-            CrunchType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())) /* #[cfg(target_arch = "wasm32")]
+            CrunchType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::Upkr => Ok(CompressMethod::Upkr),
+            
+            /* #[cfg(target_arch = "wasm32")]
                                                                                         * CrunchType::LZ4 => {
                                                                                         * Err(AssemblerError::AssemblingError {
                                                                                         * msg: "LZ4 compression not available".to_owned()
