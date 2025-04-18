@@ -477,7 +477,17 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
-                Emulator::Amspirit(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string())
+                Emulator::Amspirit(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
+                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk0={}", drive_a)),
+            }
+        }
+
+        if let Some(crtc) = &self.crtc {
+            match emu {
+                Emulator::CpcEmuPower(_) => {
+                    args.push(format!("--crtc={}", crtc));
+                },
+                _ => {}
             }
         }
 
@@ -487,7 +497,8 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned())
+                Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk1={}", drive_b)),
             }
         }
 
@@ -497,13 +508,16 @@ impl EmulatorConf {
                 Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(sna.to_string()),
                 Emulator::Winape(winape_version) => {
-                    let fname = emu.wine_compatible_fname(sna)?;
-                    args.push(format!("/SN:{fname}"));
-                },
+                                let fname = emu.wine_compatible_fname(sna)?;
+                                args.push(format!("/SN:{fname}"));
+                            },
                 Emulator::Amspirit(v) => {
-                    let fname = emu.wine_compatible_fname(sna)?;
-                    args.push(format!("--file={}", fname));
-                }
+                                let fname = emu.wine_compatible_fname(sna)?;
+                                args.push(format!("--file={}", fname));
+                            }
+                Emulator::CpcEmuPower(cpc_emu_power_version) => {
+                    args.push(format!("--sna={}", sna));
+                },
             }
         }
 
@@ -514,7 +528,8 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
-                Emulator::SugarBoxV2(_) => todo!()
+                Emulator::SugarBoxV2(_) => todo!(),
+                Emulator::CpcEmuPower(cpc_emu_power_version) => todo!(),
             }
         }
 
@@ -583,7 +598,10 @@ impl EmulatorConf {
                 Emulator::Amspirit(_) => {
                     args.push(format!("--run={run}"));
                 },
-                Emulator::SugarBoxV2(_) => unimplemented!()
+                Emulator::SugarBoxV2(_) => unimplemented!(),
+                Emulator::CpcEmuPower(_) => {
+                    args.push(format!("--auto=RUN\"{}", run))
+                }
             }
         }
 
@@ -689,6 +707,7 @@ struct CpcecUsedEmulator {}
 struct WinapeUsedEmulator {}
 struct AmspiritUsedEmulator {}
 struct SugarBoxV2UsedEmulator {}
+struct CpcEmuPowerUsedEmulator{}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -733,6 +752,7 @@ impl UsedEmulator for CpcecUsedEmulator {}
 impl UsedEmulator for WinapeUsedEmulator {}
 impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
+impl UsedEmulator for CpcEmuPowerUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: EmuWindow,
@@ -760,7 +780,8 @@ pub enum Robot {
     Cpcec(RobotImpl<CpcecUsedEmulator>),
     Winape(RobotImpl<WinapeUsedEmulator>),
     Amspirit(RobotImpl<AmspiritUsedEmulator>),
-    SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>)
+    SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
+    CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>)
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -790,6 +811,12 @@ impl From<RobotImpl<AmspiritUsedEmulator>> for Robot {
 impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
     fn from(value: RobotImpl<SugarBoxV2UsedEmulator>) -> Self {
         Self::SugarboxV2(value)
+    }
+}
+
+impl From<RobotImpl<CpcEmuPowerUsedEmulator>> for Robot {
+    fn from(value: RobotImpl<CpcEmuPowerUsedEmulator>) -> Self {
+        Self::CpcEmuPower(value)
     }
 }
 
@@ -910,6 +937,7 @@ impl Robot {
             Robot::Winape(r) => r,
             Robot::Amspirit(r) => r,
             Robot::SugarboxV2(r) => r,
+            Robot::CpcEmuPower(r) => r
         } {
             fn handle_orgams(
                 &mut self,
@@ -939,6 +967,9 @@ impl Robot {
             },
             Emulator::SugarBoxV2(_) => {
                 RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
+            },
+            Emulator::CpcEmuPower(_) => {
+                RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
             },
         }
     }
@@ -1334,7 +1365,8 @@ pub enum Emu {
     Winape,
     Cpcec,
     Amspirit,
-    Sugarbox
+    Sugarbox,
+    Cpcemupower
 }
 
 use clap::Args;
@@ -1475,7 +1507,8 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         Emu::Winape => Emulator::Winape(Default::default()),
         Emu::Cpcec => Emulator::Cpcec(Default::default()),
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
-        Emu::Sugarbox => Emulator::SugarBoxV2(Default::default())
+        Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
+        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
     };
 
     {

@@ -20,7 +20,7 @@ use task::{
     EXTERN_CMDS, HIDEUR_CMDS, HSPC_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, ORGAMS_CMDS,
     RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SUGARBOX_CMDS, UZ80_CMDS, VASM_CMDS, WINAPE_CMDS,
     XFER_CMDS,
-    SONG2AKM_CMDS
+    SONG2AKM_CMDS, CPCEMUPOWER_CMDS
 };
 use thiserror::Error;
 
@@ -69,6 +69,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (CONVGENERIC_CMDS, true),
     (CP_CMDS, false),
     (CPCEC_CMDS, true),
+    (CPCEMUPOWER_CMDS, true),
     (DISC_CMDS, false),
     (DISARK_CMDS, true),
     (ECHO_CMDS, false),

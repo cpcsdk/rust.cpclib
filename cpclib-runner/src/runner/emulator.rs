@@ -3,12 +3,14 @@ pub mod amspirit;
 pub mod cpcec;
 pub mod sugarbox;
 pub mod winape;
+pub mod cpcemupower;
 
 use std::path::absolute;
 
 pub use ace::*;
 pub use amspirit::*;
 pub use cpcec::*;
+use cpcemupower::{CpcEmuPowerVersion, CPCEMUPOWER_CMD};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
 pub use sugarbox::*;
@@ -24,6 +26,7 @@ pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
     Cpcec(CpcecVersion),
+    CpcEmuPower(CpcEmuPowerVersion),
     Winape(WinapeVersion),
     SugarBoxV2(SugarBoxV2Version)
 }
@@ -64,7 +67,8 @@ impl Emulator {
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
-            Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD
+            Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
+            Emulator::CpcEmuPower(cpc_emu_power_version) => CPCEMUPOWER_CMD,
         }
     }
 
@@ -75,7 +79,8 @@ impl Emulator {
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
-            Emulator::SugarBoxV2(_) => unimplemented!()
+            Emulator::SugarBoxV2(_) => unimplemented!(),
+            Emulator::CpcEmuPower(_) => unimplemented!()
         }
     }
 
@@ -122,7 +127,8 @@ impl Emulator {
             Emulator::Cpcec(v) => v.configuration(),
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
-            Emulator::SugarBoxV2(v) => v.configuration()
+            Emulator::SugarBoxV2(v) => v.configuration(),
+            Emulator::CpcEmuPower(v) => v.configuration()
         }
     }
 }
