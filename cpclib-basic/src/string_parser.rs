@@ -45,7 +45,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 let char = next.chars().next().unwrap();
                 match char {
                     ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
-                    '\n' => {},
+                    '\n' | '\r' => {},
                     _ => panic!("char '{}' is unhandled", char)
                 }
             }
