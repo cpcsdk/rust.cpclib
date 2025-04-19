@@ -20,6 +20,10 @@ impl Emulator {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CpcEmuPower(Default::default()))
     }
 
+    pub fn new_capriceforever_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CapriceForever(Default::default()))
+    }
+
     pub fn new_winape_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Winape(
             Default::default()

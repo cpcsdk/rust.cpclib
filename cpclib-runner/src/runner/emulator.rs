@@ -1,5 +1,6 @@
 pub mod ace;
 pub mod amspirit;
+pub mod caprice_forever;
 pub mod cpcec;
 pub mod sugarbox;
 pub mod winape;
@@ -9,6 +10,7 @@ use std::path::absolute;
 
 pub use ace::*;
 pub use amspirit::*;
+use caprice_forever::{CapriceForeverVersion, CAPRICEFOREVER_CMD};
 pub use cpcec::*;
 use cpcemupower::{CpcEmuPowerVersion, CPCEMUPOWER_CMD};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
@@ -25,6 +27,7 @@ use crate::delegated::{
 pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
+    CapriceForever(CapriceForeverVersion),
     Cpcec(CpcecVersion),
     CpcEmuPower(CpcEmuPowerVersion),
     Winape(WinapeVersion),
@@ -61,10 +64,19 @@ impl Emulator {
         matches!(self, Emulator::Winape(_))
     }
 
+    pub fn is_caprice_forever(&self) -> bool {
+        matches!(self, Emulator::CapriceForever(_))
+    }
+
+    pub fn is_cpcemupower_forever(&self) -> bool {
+        matches!(self, Emulator::CpcEmuPower(_))
+    }
+
     pub fn get_command(&self) -> &str {
         match self {
             Emulator::Ace(_) => ACE_CMD,
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
+            Emulator::CapriceForever(_) => CAPRICEFOREVER_CMD,
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
@@ -80,7 +92,8 @@ impl Emulator {
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
-            Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower")
+            Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower"),
+            Emulator::CapriceForever(caprice_forever_version) => window_name.starts_with("CaPriCe Forever"),
         }
     }
 
@@ -128,7 +141,8 @@ impl Emulator {
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),
-            Emulator::CpcEmuPower(v) => v.configuration()
+            Emulator::CpcEmuPower(v) => v.configuration(),
+            Emulator::CapriceForever(v) => v.configuration(),
         }
     }
 }

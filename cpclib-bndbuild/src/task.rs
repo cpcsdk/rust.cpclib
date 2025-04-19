@@ -12,6 +12,7 @@ use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VAS
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::disark::{DisarkVersion, DISARK_CMD};
 use cpclib_runner::runner::disassembler::ExternDisassembler;
+use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
@@ -156,6 +157,7 @@ pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
+pub const CAPRICEFOREVER_CMDS: &[&str] = &[CAPRICEFOREVER_CMD];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
@@ -261,7 +263,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at,
     basm, bdasm, bndbuild,
-    chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
+    capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
     disark, disc,
     echo, emuctrl, r#extern,
     hideur,hspc,
@@ -372,6 +374,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_cpcemupower_cmd(code) {
                     Ok(InnerTask::Emulator(Emulator::new_cpcemupower_default(), std))
+                }
+                else if is_capriceforever_cmd(code) {
+                    Ok(InnerTask::Emulator(Emulator::new_capriceforever_default(), std))
                 }
                 else if is_emuctrl_cmd(code) {
                     Ok(InnerTask::Emulator(Emulator::new_facade(), std))
