@@ -478,7 +478,7 @@ impl EmulatorConf {
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
                 Emulator::Amspirit(_) => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
-                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk0={}", drive_a)),
+                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk0={}", emu.wine_compatible_fname(drive_a)?.to_string())),
             }
         }
 
@@ -498,7 +498,7 @@ impl EmulatorConf {
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk1={}", drive_b)),
+                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?.to_string())),
             }
         }
 
@@ -1740,7 +1740,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                     OrgamsRobotAction::new_save_binary(&src, dst.as_deref())
                 };
 
-                dbg!(&action);
                 robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action)
             }
         },

@@ -80,7 +80,7 @@ impl Emulator {
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
-            Emulator::CpcEmuPower(_) => unimplemented!()
+            Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower")
         }
     }
 
