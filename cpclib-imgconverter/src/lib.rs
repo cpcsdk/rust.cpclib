@@ -544,6 +544,9 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                 if let Some(&r1) = scr.get_one("R1") {
                     format.horizontal_displayed = r1;
                 }
+                if let Some(&r6) = scr.get_one("R6") {
+                    format.vertical_displayed = r6;
+                }
             }
             OutputFormat::CPCMemory {
                 output_dimension: format,
@@ -1019,7 +1022,16 @@ pub fn build_args_parser() -> clap::Command {
                                 .alias("horizontal-displayed-character-number")
                                 .alias("width")
                                 .value_parser(clap::value_parser!(u8))
-                        ).arg(
+                        )
+                        .arg(
+                            Arg::new("R6")
+                                .help("Screen height in number of chars")
+                                .long("r6")
+                                .alias("vertical-displayed-character-number")
+                                .alias("width")
+                                .value_parser(clap::value_parser!(u8))
+                        )
+                        .arg(
                             Arg::new("SCR")
                             .long("output")
                             .short('o')
