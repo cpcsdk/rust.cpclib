@@ -260,11 +260,11 @@ impl TransformationsList {
 #[derive(Clone, Copy)]
 pub struct CPCScreenDimension {
     /// Number of bytes in width
-    horizontal_displayed: u8,
+    pub horizontal_displayed: u8,
     /// Number of chars in height
-    vertical_displayed: u8,
+    pub vertical_displayed: u8,
     /// Number of pixel line per char line
-    maximum_raster_address: u8
+    pub maximum_raster_address: u8
 }
 
 impl Debug for CPCScreenDimension {

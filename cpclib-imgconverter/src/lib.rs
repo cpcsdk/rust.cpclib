@@ -539,8 +539,14 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         }
         else {
             // assume it is a standard screen
+            let mut format = CPCScreenDimension::standard();
+            if let Some(scr) = matches.subcommand_matches("scr") {
+                if let Some(&r1) = scr.get_one("R1") {
+                    format.horizontal_displayed = r1;
+                }
+            }
             OutputFormat::CPCMemory {
-                output_dimension: CPCScreenDimension::standard(),
+                output_dimension: format,
                 display_address: DisplayCRTCAddress::new_standard_from_page(3)
             }
         }
@@ -613,8 +619,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let output_format = get_output_format(matches);
     let conversion = ImageConverter::convert(
         input_file,
-        dbg!(palette),
-        dbg!(output_mode.into()),
+        palette,
+        output_mode.into(),
         transformations,
         &output_format,
         crop_if_too_large
@@ -1007,6 +1013,13 @@ pub fn build_args_parser() -> clap::Command {
                                 .required(false)
                         )
                         .arg(
+                            Arg::new("R1")
+                                .help("Screen width in number of chars")
+                                .long("r1")
+                                .alias("horizontal-displayed-character-number")
+                                .alias("width")
+                                .value_parser(clap::value_parser!(u8))
+                        ).arg(
                             Arg::new("SCR")
                             .long("output")
                             .short('o')
