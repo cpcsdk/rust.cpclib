@@ -1092,7 +1092,11 @@ pub struct ImageConverter<'a> {
     output: &'a OutputFormat,
 
     /// List of transformations
-    transformations: TransformationsList
+    transformations: TransformationsList,
+
+    /// Crop image if too large in comparison to result screen
+    crop_if_too_large: bool
+
 }
 
 #[allow(missing_docs)]
@@ -1103,12 +1107,13 @@ impl<'a> ImageConverter<'a> {
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
-        output: &'a OutputFormat
+        output: &'a OutputFormat,
+        crop_if_too_large: bool
     ) -> anyhow::Result<Output>
     where
         P: AsRef<Utf8Path>
     {
-        Self::convert_impl(input_file.as_ref(), palette, mode, transformations, output)
+        Self::convert_impl(input_file.as_ref(), palette, mode, transformations, output, crop_if_too_large)
     }
 
     fn convert_impl(
@@ -1116,13 +1121,15 @@ impl<'a> ImageConverter<'a> {
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
-        output: &'a OutputFormat
+        output: &'a OutputFormat,
+        crop_if_too_large: bool
     ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: palette.clone(),
             mode,
             transformations: transformations.clone(),
-            output
+            output,
+            crop_if_too_large
         };
 
         if let OutputFormat::LinearEncodedChuncky = output {
@@ -1143,7 +1150,8 @@ impl<'a> ImageConverter<'a> {
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::LinearEncodedSprite
+                &OutputFormat::LinearEncodedSprite,
+                crop_if_too_large
             )?;
 
             match linear {
@@ -1183,7 +1191,8 @@ impl<'a> ImageConverter<'a> {
                 palette,
                 mode,
                 transformations,
-                &OutputFormat::GrayCodedSprite
+                &OutputFormat::GrayCodedSprite,
+                crop_if_too_large
             )?;
 
             match graycoded {
@@ -1229,7 +1238,8 @@ impl<'a> ImageConverter<'a> {
             palette: None,
             mode: Mode::Zero, // TODO make the mode an optional argument,
             output,
-            transformations: TransformationsList::default()
+            transformations: TransformationsList::default(),
+            crop_if_too_large: false
         };
 
         converter.apply_sprite_conversion(sprite)
@@ -1400,11 +1410,13 @@ impl<'a> ImageConverter<'a> {
 
         // Check if the destination is compatible
         if screen_width < sprite.pixel_width() {
-            return Err(anyhow::anyhow!(
-                "The image width ({}) is larger than the cpc screen width ({})",
-                sprite.pixel_width(),
-                screen_width
-            ));
+            if !self.crop_if_too_large {
+                return Err(anyhow::anyhow!(
+                    "The image width ({}) is larger than the cpc screen width ({})",
+                    sprite.pixel_width(),
+                    screen_width
+                ));
+            }
         }
         else if screen_width > sprite.pixel_width() {
             eprintln!(
@@ -1415,11 +1427,13 @@ impl<'a> ImageConverter<'a> {
         }
 
         if screen_height < sprite.height() {
-            return Err(anyhow::anyhow!(
-                "The image height ({}) is larger than the cpc screen height ({})",
-                sprite.height(),
-                screen_height
-            ));
+            if !self.crop_if_too_large {
+                return Err(anyhow::anyhow!(
+                    "The image height ({}) is larger than the cpc screen height ({})",
+                    sprite.height(),
+                    screen_height
+                ));
+            }
         }
         else if screen_height > sprite.height() {
             eprintln!(

@@ -609,13 +609,15 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let sub_exec = matches.subcommand_matches("exec");
     let sub_scr = matches.subcommand_matches("scr");
 
+    let crop_if_too_large = matches.get_flag("CROP_IF_TOO_LARGE");
     let output_format = get_output_format(matches);
     let conversion = ImageConverter::convert(
         input_file,
         dbg!(palette),
         dbg!(output_mode.into()),
         transformations,
-        &output_format
+        &output_format,
+        crop_if_too_large
     )?;
 
     if sub_sprite.is_some() {
@@ -890,7 +892,7 @@ pub fn build_args_parser() -> clap::Command {
                             })
                    )
 
-                   .arg(
+                .arg(
                     Arg::new("MODE")
                         .short('m')
                         .long("mode")
@@ -898,6 +900,12 @@ pub fn build_args_parser() -> clap::Command {
                         .value_name("MODE")
                         .default_value("0")
                         .value_parser(["0", "1", "2"])
+                )
+                .arg(
+                    Arg::new("CROP_IF_TOO_LARGE")
+                        .long("crop")
+                        .help("Crop the picture if it is too large according  to the destination")
+                        .action(ArgAction::SetTrue)
                 )
                 .arg(
                     Arg::new("FULLSCREEN")
