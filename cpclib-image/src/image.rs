@@ -372,11 +372,11 @@ impl ColorMatrix {
         self.data.iter().flatten().unique().count()
     }
 
-    /// Returns the palette used (as soon as there is less than 16 inks)
-    pub fn extract_palette(&self) -> Palette {
+    /// Returns the palette used (as soon as there is less than the maximum number of inks fr the requested mode)
+    pub fn extract_palette(&self, mode: Mode) -> Palette {
         let mut p = Palette::empty();
         for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
-            if idx >= 16 {
+            if idx >= mode.max_colors() {
                 // do we really want to fail ? maybe we can have special modes to handle there
                 panic!("[ERROR] your picture uses more than 16 different colors. Palette: {:?}. Wrong ink: {:?}", p, color);
             }
@@ -541,7 +541,7 @@ impl ColorMatrix {
     /// Convert the matrix as a sprite, given the right mode and an optional palette
     pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>) -> Sprite {
         // Extract the palette is not provided as an argument
-        let palette = palette.unwrap_or_else(|| self.extract_palette());
+        let palette = palette.unwrap_or_else(|| self.extract_palette(mode));
 
         // Really make the conversion
         let pens = inks_to_pens(&self.data, &palette);
