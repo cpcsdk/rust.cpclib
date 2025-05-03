@@ -486,12 +486,13 @@ fn parse_int(repr: &str) -> usize {
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
-        match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
-            "linear" => OutputFormat::LinearEncodedSprite,
-            "graycoded" => OutputFormat::GrayCodedSprite,
-            "zigzag+graycoded" => OutputFormat::ZigZagGrayCodedSprite,
+        let format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
+            "linear" => SpriteOutputFormat::LinearEncodedSprite,
+            "graycoded" => SpriteOutputFormat::GrayCodedSprite,
+            "zigzag+graycoded" => SpriteOutputFormat::ZigZagGrayCodedSprite,
             _ => unimplemented!()
-        }
+        };
+        OutputFormat::Sprite(format)
     }
     else if let Some(tile_matches) = matches.subcommand_matches("tile") {
         dbg!(OutputFormat::TileEncoded {
@@ -625,7 +626,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         palette,
         output_mode.into(),
         transformations,
-        &output_format,
+        output_format,
         crop_if_too_large
     )?;
 
@@ -634,24 +635,25 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
         let sub_sprite = sub_sprite.unwrap();
         match &conversion {
-            Output::LinearEncodedSprite {
+            Output::Sprite( 
+                SpriteOutput::LinearEncodedSprite {
                 data,
                 bytes_width,
                 height,
                 palette
-            }
-            | Output::GrayCodedSprite {
-                data,
-                bytes_width,
-                height,
-                palette
-            }
-            | Output::ZigZagGrayCodedSprite {
-                data,
-                bytes_width,
-                height,
-                palette
-            } => {
+                }
+                | SpriteOutput::GrayCodedSprite {
+                    data,
+                    bytes_width,
+                    height,
+                    palette
+                }
+                | SpriteOutput::ZigZagGrayCodedSprite {
+                    data,
+                    bytes_width,
+                    height,
+                    palette
+                }) => {
                 // Save the palette
                 do_export_palette!(sub_sprite, palette);
 
@@ -1088,8 +1090,28 @@ pub fn build_args_parser() -> clap::Command {
                             Arg::new("SPRITE_FNAME")
                             .long("output")
                             .short('o')
-                            .help("Filename to generate")
+                            .help("Filename where the sprite is stored")
                             .required(true)
+                        )
+
+                        .arg(
+                            Arg::new("MASK_FNAME")
+                            .long("mask")
+                            .short('m')
+                            .help("Filename where the mask is stored")
+                            .requires("MASK_INK")
+                            .requires("REPLACEMENT_INK")
+                        )
+
+                        .arg(
+                            Arg::new("MASK_INK")
+                            .long("mask-ink")
+                            .help("Ink that represents the mask in the input image")
+                        )
+                        .arg(
+                            Arg::new("REPLACEMENT_INK")
+                            .long("replacement-ink")
+                            .help("Ink that relace the mask ink in the sprite data")
                         )
                     ))
 

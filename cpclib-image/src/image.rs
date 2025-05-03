@@ -261,6 +261,41 @@ impl ColorMatrix {
         }
     }
 
+
+    /// The matrix represents both the mask (with an unexpected color), and the sprite (<ith the expected color).
+    /// This method returns two matrices:
+    /// - The mask where bright white stands for pixels of the sprite and black stands for the pixels of the background
+    /// - The sprite where the background is replaced by a selected ink (Ideally the one that will be considered as being pen 0)
+    pub fn extract_mask_and_sprite(&self, mask_ink: impl Into<Ink>, replacement_ink: impl Into<Ink>) -> (Self, Self) {
+
+        let mask_ink = mask_ink.into();
+        let replacement_ink = replacement_ink.into();
+
+        let mask_data = self.data
+            .iter()
+            .map(|row| 
+
+                row.iter().map(|&ink| if ink == mask_ink {
+                    Ink::BLACK
+                } else {
+                    Ink::BRIGHT_WHITE
+                }).collect_vec()
+            ).collect_vec();
+
+        let sprite_data = self.data
+            .iter()
+            .map(|row|
+                row.iter().map(|&ink| if ink == mask_ink {
+                    replacement_ink
+                } else {
+                    ink
+                }).collect_vec()
+            ).collect_vec();
+
+        (ColorMatrix{data: mask_data}, ColorMatrix{data:sprite_data})
+
+    }
+
     pub fn empty() -> Self {
         Self { data: Vec::new() }
     }
