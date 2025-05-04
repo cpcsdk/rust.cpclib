@@ -22,7 +22,10 @@ use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
-use cpclib_runner::runner::tracker::at3::extra::{SongToAkg, SongToAkm, SongToAky, SongToEvents, SongToRaw, SongToSoundEffects, SongToVgm, SongToWav, SongToYm};
+use cpclib_runner::runner::tracker::at3::extra::{
+    SongToAkg, SongToAkm, SongToAky, SongToEvents, SongToRaw, SongToSoundEffects, SongToVgm,
+    SongToWav, SongToYm
+};
 use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
@@ -35,7 +38,7 @@ use crate::runners::assembler::Assembler;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::hideur::HIDEUR_CMD;
-use crate::runners::tracker::{Tracker, SongConverter};
+use crate::runners::tracker::{SongConverter, Tracker};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InnerTask {
@@ -326,34 +329,59 @@ impl<'de> Deserialize<'de> for InnerTask {
                     Ok(InnerTask::Tracker(Tracker::new_chipnsfx_default(), std))
                 }
                 else if is_song2akm_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_akm_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_akm_default(),
+                        std
+                    ))
                 }
-
                 else if is_song2aky_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_aky_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_aky_default(),
+                        std
+                    ))
                 }
                 else if is_song2akg_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_akg_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_akg_default(),
+                        std
+                    ))
                 }
                 else if is_song2events_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_events_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_events_default(),
+                        std
+                    ))
                 }
                 else if is_song2raw_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_raw_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_raw_default(),
+                        std
+                    ))
                 }
                 else if is_song2soundeffects_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_sound_effects_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_sound_effects_default(),
+                        std
+                    ))
                 }
                 else if is_song2vgm_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_vgm_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_vgm_default(),
+                        std
+                    ))
                 }
                 else if is_song2wav_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_wav_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_wav_default(),
+                        std
+                    ))
                 }
                 else if is_song2ym_cmd(code) {
-                    Ok(InnerTask::SongConverter(SongConverter::new_song_to_ym_default(), std))
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_song_to_ym_default(),
+                        std
+                    ))
                 }
-
                 else if is_crunch_cmd(code) {
                     Ok(InnerTask::Crunch(std))
                 }
@@ -373,10 +401,16 @@ impl<'de> Deserialize<'de> for InnerTask {
                     Ok(InnerTask::Emulator(Emulator::new_winape_default(), std))
                 }
                 else if is_cpcemupower_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_cpcemupower_default(), std))
+                    Ok(InnerTask::Emulator(
+                        Emulator::new_cpcemupower_default(),
+                        std
+                    ))
                 }
                 else if is_capriceforever_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_capriceforever_default(), std))
+                    Ok(InnerTask::Emulator(
+                        Emulator::new_capriceforever_default(),
+                        std
+                    ))
                 }
                 else if is_emuctrl_cmd(code) {
                     Ok(InnerTask::Emulator(Emulator::new_facade(), std))

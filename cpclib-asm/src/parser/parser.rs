@@ -5514,7 +5514,11 @@ fn parse_snaset(
 
         let flag = parse_flag::<_, ()>(&mut flagname.as_bytes()).map_err(|_e| {
             input.reset(&input_start);
-            ErrMode::Backtrack(Z80ParserError::from_input(input).add_context(input, &input_start, "Wrong flag"))
+            ErrMode::Backtrack(Z80ParserError::from_input(input).add_context(
+                input,
+                &input_start,
+                "Wrong flag"
+            ))
         })?;
         Ok(LocatedTokenInner::SnaSet(flag, value))
     }

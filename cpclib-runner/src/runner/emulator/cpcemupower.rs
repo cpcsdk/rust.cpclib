@@ -1,4 +1,5 @@
-const URL: &str = "https://www.cpc-power.com/cpcarchives/download/Emulateurs/20210531_CPCEPower_SDL_Release.zip";
+const URL: &str =
+    "https://www.cpc-power.com/cpcarchives/download/Emulateurs/20210531_CPCEPower_SDL_Release.zip";
 
 use std::sync::OnceLock;
 
@@ -30,11 +31,11 @@ impl ExecutableInformation for CpcEmuPowerVersion {
     fn target_os_exec_fname(&self) -> &'static str {
         match self {
             Self::R20210531 => {
-                #[cfg(target_os="windows")]
+                #[cfg(target_os = "windows")]
                 return "CPCEPower_SDL_x64.exe";
-                #[cfg(target_os="linux")]
+                #[cfg(target_os = "linux")]
                 return "CPCEPower_SDL_Linux_x64";
-                #[cfg(target_os="macosx")]
+                #[cfg(target_os = "macosx")]
                 return "CPCEPower_SDL_MacOS";
             }
         }
@@ -61,25 +62,23 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         ArchiveFormat::Zip
     }
 
-    /*
-    fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
-        let owned_original = match self {
-            CpcEmuPowerVersion::R20210531 => {
-                "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()
-            },
-        };
-        let owned_result = self.target_os_exec_fname().to_owned();
-
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-            Box::new(move |d: &DelegateApplicationDescription<E>| {
-                std::fs::rename(
-                    d.cache_folder().join(&owned_original),
-                    d.cache_folder().join(&owned_result)
-                )
-                .map_err(|e| e.to_string())
-            });
-
-        Some(post_install.into())
-    }
-    */
+    // fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
+    // let owned_original = match self {
+    // CpcEmuPowerVersion::R20210531 => {
+    // "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()
+    // },
+    // };
+    // let owned_result = self.target_os_exec_fname().to_owned();
+    //
+    // let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+    // Box::new(move |d: &DelegateApplicationDescription<E>| {
+    // std::fs::rename(
+    // d.cache_folder().join(&owned_original),
+    // d.cache_folder().join(&owned_result)
+    // )
+    // .map_err(|e| e.to_string())
+    // });
+    //
+    // Some(post_install.into())
+    // }
 }

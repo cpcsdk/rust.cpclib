@@ -14,10 +14,10 @@ use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp::{self, OcpPal};
-use cpclib::{sna::*, Ink};
+use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use cpclib::{sna, ExtendedDsk};
+use cpclib::{sna, ExtendedDsk, Ink};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -25,17 +25,15 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-
-
 pub fn clap_parse_ink(arg: &str) -> Result<Ink, String> {
     let nb = clap_parse_any_positive_number(arg)?;
     if nb > 27 {
         Err(format!("{nb} is not a valid ink value"))
-    } else {
+    }
+    else {
         Ok(nb.into())
     }
 }
-
 
 #[macro_export]
 macro_rules! specify_palette {
@@ -508,12 +506,21 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 
         // eventually handle sprite masking
         if sprite_matches.contains_id("MASK_FNAME") {
-            OutputFormat::MaskedSprite { 
-                sprite_format, 
-                mask_ink: sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap().into(), 
-                replacement_ink: sprite_matches.get_one::<Ink>("REPLACEMENT_INK").cloned().unwrap().into(), 
+            OutputFormat::MaskedSprite {
+                sprite_format,
+                mask_ink: sprite_matches
+                    .get_one::<Ink>("MASK_INK")
+                    .cloned()
+                    .unwrap()
+                    .into(),
+                replacement_ink: sprite_matches
+                    .get_one::<Ink>("REPLACEMENT_INK")
+                    .cloned()
+                    .unwrap()
+                    .into()
             }
-        } else {
+        }
+        else {
             OutputFormat::Sprite(sprite_format)
         }
     }
@@ -660,15 +667,15 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
         // handle the sprite stuff
         match &conversion {
-            Output::Sprite(sprite)  |
-            Output::SpriteAndMask { sprite, ..} => {
+            Output::Sprite(sprite) | Output::SpriteAndMask { sprite, .. } => {
                 let palette = sprite.palette();
                 // Save the binary data of the palette if any
                 do_export_palette!(sub_sprite, palette);
 
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.get_one::<String>("SPRITE_FNAME").unwrap();
-                sprite.save_sprite(sprite_fname)
+                sprite
+                    .save_sprite(sprite_fname)
                     .expect("Unable to create the sprite file");
 
                 sub_sprite
@@ -680,7 +687,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                             .file_stem()
                             .unwrap()
                             .replace(".", "_");
-                        writeln!(&mut file, "{}_WIDTH equ {}", fname, sprite.bytes_width()).unwrap();
+                        writeln!(&mut file, "{}_WIDTH equ {}", fname, sprite.bytes_width())
+                            .unwrap();
                         writeln!(&mut file, "{}_HEIGHT equ {}", fname, sprite.height()).unwrap();
                     });
             },
@@ -688,7 +696,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         }
 
         // handle the additional mask stuff
-        if let Output::SpriteAndMask {mask , ..} = &conversion {
+        if let Output::SpriteAndMask { mask, .. } = &conversion {
             let mask_fname = sub_sprite.get_one::<String>("MASK_FNAME").unwrap();
             mask.save_sprite(mask_fname)
                 .expect("Unable to create the mask file");

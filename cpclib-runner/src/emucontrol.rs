@@ -473,15 +473,25 @@ impl EmulatorConf {
 
         if let Some(drive_a) = &self.drive_a {
             match emu {
-                Emulator::Ace(_) |  Emulator::Cpcec(_) => args.push(drive_a.to_string()),
+                Emulator::Ace(_) | Emulator::Cpcec(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
-                Emulator::Winape(_) | Emulator::Amspirit(_)  => args.push(emu.wine_compatible_fname(drive_a)?.to_string()),
-                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk0={}", emu.wine_compatible_fname(drive_a)?.to_string())),
-                Emulator::CapriceForever(_) => args.push(format!("/DriveA={}", emu.wine_compatible_fname(drive_a)?.to_string()))
+                Emulator::Winape(_) | Emulator::Amspirit(_) => {
+                    args.push(emu.wine_compatible_fname(drive_a)?.to_string())
+                },
+                Emulator::CpcEmuPower(cpc_emu_power_version) => {
+                    args.push(format!(
+                        "--dsk0={}",
+                        emu.wine_compatible_fname(drive_a)?.to_string()
+                    ))
+                },
+                Emulator::CapriceForever(_) => {
+                    args.push(format!(
+                        "/DriveA={}",
+                        emu.wine_compatible_fname(drive_a)?.to_string()
+                    ))
+                },
             }
         }
-
-
 
         if let Some(drive_b) = &self.drive_b {
             match emu {
@@ -490,11 +500,15 @@ impl EmulatorConf {
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::CpcEmuPower(cpc_emu_power_version) =>args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?.to_string())),
+                Emulator::CpcEmuPower(cpc_emu_power_version) => {
+                    args.push(format!(
+                        "--dsk1={}",
+                        emu.wine_compatible_fname(drive_b)?.to_string()
+                    ))
+                },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={}", drive_b))
             }
         }
-    
 
         if let Some(sna) = &self.snapshot {
             match emu {
@@ -502,19 +516,19 @@ impl EmulatorConf {
                 Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(sna.to_string()),
                 Emulator::Winape(winape_version) => {
-                                            let fname = emu.wine_compatible_fname(sna)?;
-                                            args.push(format!("/SN:{fname}"));
-                                        },
+                    let fname = emu.wine_compatible_fname(sna)?;
+                    args.push(format!("/SN:{fname}"));
+                },
                 Emulator::Amspirit(v) => {
-                                            let fname = emu.wine_compatible_fname(sna)?;
-                                            args.push(format!("--file={}", fname));
-                                        }
+                    let fname = emu.wine_compatible_fname(sna)?;
+                    args.push(format!("--file={}", fname));
+                },
                 Emulator::CpcEmuPower(v) => {
-                                args.push(format!("--sna={}", sna));
-                            },
+                    args.push(format!("--sna={}", sna));
+                },
                 Emulator::CapriceForever(v) => {
                     args.push(format!("/SNA=\"{}\"", sna));
-                },
+                }
             }
         }
 
@@ -536,7 +550,7 @@ impl EmulatorConf {
                 Emulator::Amspirit(_) => todo!(),
                 Emulator::SugarBoxV2(_) => todo!(),
                 Emulator::CpcEmuPower(cpc_emu_power_version) => todo!(),
-                Emulator::CapriceForever(caprice_forever_version) => todo!(),
+                Emulator::CapriceForever(caprice_forever_version) => todo!()
             }
         }
 
@@ -593,25 +607,23 @@ impl EmulatorConf {
         if let Some(run) = &self.auto_run {
             match emu {
                 Emulator::Ace(_) => {
-                                args.push("-autoRunFile".to_owned());
-                                args.push(run.clone())
-                            },
+                    args.push("-autoRunFile".to_owned());
+                    args.push(run.clone())
+                },
                 Emulator::Winape(_) => {
-                                args.push(format!("/A:{run}"));
-                            },
+                    args.push(format!("/A:{run}"));
+                },
                 Emulator::Cpcec(_) => {
-                                // is it automatic ?
-                            },
+                    // is it automatic ?
+                },
                 Emulator::Amspirit(_) => {
-                                args.push(format!("--run={run}"));
-                            },
+                    args.push(format!("--run={run}"));
+                },
                 Emulator::SugarBoxV2(_) => unimplemented!(),
-                Emulator::CpcEmuPower(_) => {
-                                args.push(format!("--auto=RUN\"{}", run))
-                            }
+                Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{}", run)),
                 Emulator::CapriceForever(v) => {
                     args.push(format!("/Command=RUN\"\"{}", run));
-                },
+                }
             }
         }
 
@@ -718,9 +730,9 @@ struct CpcecUsedEmulator {}
 struct WinapeUsedEmulator {}
 struct AmspiritUsedEmulator {}
 struct SugarBoxV2UsedEmulator {}
-struct CpcEmuPowerUsedEmulator{}
+struct CpcEmuPowerUsedEmulator {}
 
-struct CapriceForeverUsedEmulator{}
+struct CapriceForeverUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -766,7 +778,7 @@ impl UsedEmulator for WinapeUsedEmulator {}
 impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
 impl UsedEmulator for CpcEmuPowerUsedEmulator {}
-impl UsedEmulator for CapriceForeverUsedEmulator{}
+impl UsedEmulator for CapriceForeverUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: EmuWindow,
@@ -835,8 +847,6 @@ impl From<RobotImpl<CpcEmuPowerUsedEmulator>> for Robot {
     }
 }
 
-
-
 impl From<RobotImpl<CapriceForeverUsedEmulator>> for Robot {
     fn from(value: RobotImpl<CapriceForeverUsedEmulator>) -> Self {
         Self::CapriceForever(value)
@@ -863,7 +873,6 @@ pub enum OrgamsRobotAction<'a, 'b> {
 }
 
 impl<'a, 'b> OrgamsRobotAction<'a, 'b> {
-
     pub fn new_edit(src: &'a str) -> Self {
         Self::LoadOrImportAndEdit { src }
     }
@@ -873,21 +882,22 @@ impl<'a, 'b> OrgamsRobotAction<'a, 'b> {
     }
 
     pub fn new_save_sources(src: &'a str, tgt: &'b str) -> Result<Self, String> {
-        if ! (tgt.ends_with(".o") || tgt.ends_with(".O")) {
+        if !(tgt.ends_with(".o") || tgt.ends_with(".O")) {
             Err(format!("{tgt} is not a binary orgams file format"))
-        } else {
+        }
+        else {
             Ok(Self::LoadOrImportAndSave { src, tgt })
         }
     }
 
     pub fn new_export_sources(src: &'a str, tgt: &'b str) -> Result<Self, String> {
-        if ! (src.ends_with(".o") || src.ends_with(".O")) {
+        if !(src.ends_with(".o") || src.ends_with(".O")) {
             Err(format!("{src} is not a binary orgams file format"))
-        } else {
+        }
+        else {
             Ok(Self::LoadOrImportAndSave { src, tgt })
         }
     }
-
 
     pub fn new_save_binary(src: &'a str, tgt: Option<&'b str>) -> Self {
         Self::LoadOrImportAndAssembleAndSave { src, tgt }
@@ -928,14 +938,22 @@ impl OrgamsRobotAction<'_, '_> {
 
     pub fn save_orgams_binary_source(&self) -> Option<&str> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } if tgt.ends_with(".o") || tgt.ends_with(".O") => Some(tgt),
+            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. }
+                if tgt.ends_with(".o") || tgt.ends_with(".O") =>
+            {
+                Some(tgt)
+            },
             _ => None
         }
     }
 
     pub fn save_orgams_ascii_source(&self) -> Option<&str> {
         match self {
-            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. } if !(tgt.ends_with(".o") || tgt.ends_with(".O")) => Some(tgt),
+            OrgamsRobotAction::LoadOrImportAndSave { tgt, .. }
+                if !(tgt.ends_with(".o") || tgt.ends_with(".O")) =>
+            {
+                Some(tgt)
+            },
             _ => None
         }
     }
@@ -948,7 +966,11 @@ impl OrgamsRobotAction<'_, '_> {
     }
 
     pub fn request_assembling(&self) -> bool {
-        matches!(self, OrgamsRobotAction::LoadOrImportAndAssembleAndSave { ..} | OrgamsRobotAction::LoadOrImportAndAssembleJump { .. })
+        matches!(
+            self,
+            OrgamsRobotAction::LoadOrImportAndAssembleAndSave { .. }
+                | OrgamsRobotAction::LoadOrImportAndAssembleJump { .. }
+        )
     }
 }
 
@@ -978,23 +1000,23 @@ impl Robot {
     pub fn new(emu: &Emulator, window: EmuWindow, eventsManager: WindowEventsManager) -> Self {
         match emu {
             Emulator::Ace(_) => {
-                        RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::Cpcec(_) => {
-                        RobotImpl::<CpcecUsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<CpcecUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::Winape(_) => {
-                        RobotImpl::<WinapeUsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<WinapeUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::Amspirit(_) => {
-                        RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::SugarBoxV2(_) => {
-                        RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::CpcEmuPower(_) => {
-                        RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
-                    },
+                RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::CapriceForever(caprice_forever_version) => {
                 RobotImpl::<CapriceForeverUsedEmulator>::from((window, eventsManager, emu)).into()
             },
@@ -1062,7 +1084,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
         .map_err(|screen| (format!("Error while loading {}", src), screen));
 
-
         // if file has been loaded, handle next action
         if res.is_ok() {
             // need to update res
@@ -1079,8 +1100,9 @@ impl<E: UsedEmulator> RobotImpl<E> {
                 else if let Some(dst) = dbg!(action.save_orgams_ascii_source()) {
                     dbg!("export file");
 
-                    self.orgams_export_source(dst)
-                        .map_err(|screen| (format!("Error while exporting source to {dst}"), screen))
+                    self.orgams_export_source(dst).map_err(|screen| {
+                        (format!("Error while exporting source to {dst}"), screen)
+                    })
                 }
                 else {
                     dbg!("Assemble file");
@@ -1168,7 +1190,6 @@ impl<E: UsedEmulator> RobotImpl<E> {
 
         std::thread::sleep(Duration::from_millis(1000 / 2));
         self.type_char('W');
-
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
         self.orgams_wait_save()
@@ -1511,7 +1532,7 @@ impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
 
 pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
     dbg!(&cli);
-    
+
     if cli.clear_cache {
         clear_base_cache_folder()
             .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
@@ -1537,7 +1558,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         Emu::Caprice => Emulator::CapriceForever(Default::default()),
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
-        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
+        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default())
     };
 
     {
@@ -1726,7 +1747,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     #[cfg(windows)]
     std::thread::sleep(Duration::from_millis(1000 * 3));
 
-
     dbg!(&cli.command);
     let res = match cli.command {
         Commands::Orgams(OrgamsCli {
@@ -1783,7 +1803,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             Ok(())
         }
     };
-
 
     dbg!(&res);
 

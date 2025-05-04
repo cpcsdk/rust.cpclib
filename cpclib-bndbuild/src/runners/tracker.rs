@@ -27,12 +27,8 @@ impl Tracker {
     }
 }
 
-
-
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SongConverter(cpclib_runner::runner::tracker::SongConverter);
-
 
 macro_rules!  generate_song_handler{
     ($($name: ident, $fun: ident)*) => {
@@ -53,20 +49,15 @@ impl SongConverter {
         }
     }
 
-
-
-
-    generate_song_handler!{
+    generate_song_handler! {
         SongToAkg, new_song_to_akg_default
         SongToAkm, new_song_to_akm_default
         SongToAky, new_song_to_aky_default
         SongToEvents, new_song_to_events_default
         SongToRaw, new_song_to_raw_default
         SongToSoundEffects, new_song_to_sound_effects_default
-        SongToVgm, new_song_to_vgm_default 
+        SongToVgm, new_song_to_vgm_default
         SongToWav, new_song_to_wav_default
         SongToYm, new_song_to_ym_default
     }
-
 }
-

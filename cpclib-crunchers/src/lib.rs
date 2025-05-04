@@ -62,7 +62,7 @@ impl CompressMethod {
                 config.simplified_prob_update = true;
                 let level = 9;
                 Ok(upkr::pack(data, level, &config, None))
-            }
+            },
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Zx0 => Ok(zx0::compress(data))
         }

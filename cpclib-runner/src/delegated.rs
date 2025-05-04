@@ -303,9 +303,7 @@ pub trait GithubCompiledApplication: ExecutableInformation + GithubInformation +
     }
 }
 
-pub trait InternetStaticCompiledApplication:
-    StaticInformation + ExecutableInformation
-{
+pub trait InternetStaticCompiledApplication: StaticInformation + ExecutableInformation {
     fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         DelegateApplicationDescription::builder()
             .download_fn_url(self.target_os_url_generator())

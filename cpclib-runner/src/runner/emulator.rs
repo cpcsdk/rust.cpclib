@@ -2,9 +2,9 @@ pub mod ace;
 pub mod amspirit;
 pub mod caprice_forever;
 pub mod cpcec;
+pub mod cpcemupower;
 pub mod sugarbox;
 pub mod winape;
-pub mod cpcemupower;
 
 use std::path::absolute;
 
@@ -80,7 +80,7 @@ impl Emulator {
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
-            Emulator::CpcEmuPower(cpc_emu_power_version) => CPCEMUPOWER_CMD,
+            Emulator::CpcEmuPower(cpc_emu_power_version) => CPCEMUPOWER_CMD
         }
     }
 
@@ -93,7 +93,9 @@ impl Emulator {
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
             Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower"),
-            Emulator::CapriceForever(caprice_forever_version) => window_name.starts_with("CaPriCe Forever"),
+            Emulator::CapriceForever(caprice_forever_version) => {
+                window_name.starts_with("CaPriCe Forever")
+            },
         }
     }
 
@@ -142,7 +144,7 @@ impl Emulator {
             Emulator::Amspirit(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),
             Emulator::CpcEmuPower(v) => v.configuration(),
-            Emulator::CapriceForever(v) => v.configuration(),
+            Emulator::CapriceForever(v) => v.configuration()
         }
     }
 }

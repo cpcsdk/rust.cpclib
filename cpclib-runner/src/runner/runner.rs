@@ -146,11 +146,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let itr = itr.iter().map(|s| s.as_ref()).collect_vec();
-/*/
-        for a in &itr {
-            eprintln!(">> {a}");
-        }
-*/
+        // /
+        // for a in &itr {
+        // eprintln!(">> {a}");
+        // }
         // WARNING
         // Deactivated because if makes fail normal progam on Linux
         // however, it was maybe mandatory for Windows
@@ -176,9 +175,6 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         for arg in &itr[1..] {
             cmd.arg(arg);
         }
-
-
-
 
         let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
 

@@ -17,11 +17,15 @@ impl Emulator {
     }
 
     pub fn new_cpcemupower_default() -> Self {
-        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CpcEmuPower(Default::default()))
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CpcEmuPower(
+            Default::default()
+        ))
     }
 
     pub fn new_capriceforever_default() -> Self {
-        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CapriceForever(Default::default()))
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CapriceForever(
+            Default::default()
+        ))
     }
 
     pub fn new_winape_default() -> Self {

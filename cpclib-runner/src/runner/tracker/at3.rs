@@ -60,13 +60,11 @@ impl ExecutableInformation for At3Version {
 
 impl InternetStaticCompiledApplication for At3Version {}
 
-
 pub mod extra {
     use std::ops::Deref;
 
-    use crate::runner::extra::ExtraTool;
-
     use super::At3Version;
+    use crate::runner::extra::ExtraTool;
 
     macro_rules!  generate_song_handler {
         ($($name: ident)*) => {
@@ -101,6 +99,5 @@ pub mod extra {
         };
     }
 
-    generate_song_handler!{SongToAkg  SongToAkm  SongToAky  SongToEvents  SongToRaw  SongToSoundEffects  SongToVgm  SongToWav  SongToYm}
-
+    generate_song_handler! {SongToAkg  SongToAkm  SongToAky  SongToEvents  SongToRaw  SongToSoundEffects  SongToVgm  SongToWav  SongToYm}
 }

@@ -1,4 +1,3 @@
-
 use std::sync::OnceLock;
 
 use cpclib_common::event::EventObserver;
@@ -29,11 +28,11 @@ impl ExecutableInformation for CapriceForeverVersion {
     fn target_os_exec_fname(&self) -> &'static str {
         match self {
             Self::V25_3 => {
-                #[cfg(target_os="windows")]
+                #[cfg(target_os = "windows")]
                 return "Caprice64.exe";
-                #[cfg(target_os="linux")]
+                #[cfg(target_os = "linux")]
                 unreachable!();
-                #[cfg(target_os="macosx")]
+                #[cfg(target_os = "macosx")]
                 unreachable!();
             }
         }
@@ -60,25 +59,23 @@ impl DownloadableInformation for CapriceForeverVersion {
         ArchiveFormat::SevenZ
     }
 
-    /*
-    fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
-        let owned_original = match self {
-            CapriceForeverVersion::R20210531 => {
-                "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()
-            },
-        };
-        let owned_result = self.target_os_exec_fname().to_owned();
-
-        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-            Box::new(move |d: &DelegateApplicationDescription<E>| {
-                std::fs::rename(
-                    d.cache_folder().join(&owned_original),
-                    d.cache_folder().join(&owned_result)
-                )
-                .map_err(|e| e.to_string())
-            });
-
-        Some(post_install.into())
-    }
-    */
+    // fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
+    // let owned_original = match self {
+    // CapriceForeverVersion::R20210531 => {
+    // "CPC_AMSpiriT_RC_v1.01_Win_x64/Amspirit v1.01_RC_x64.exe".to_owned()
+    // },
+    // };
+    // let owned_result = self.target_os_exec_fname().to_owned();
+    //
+    // let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+    // Box::new(move |d: &DelegateApplicationDescription<E>| {
+    // std::fs::rename(
+    // d.cache_folder().join(&owned_original),
+    // d.cache_folder().join(&owned_result)
+    // )
+    // .map_err(|e| e.to_string())
+    // });
+    //
+    // Some(post_install.into())
+    // }
 }

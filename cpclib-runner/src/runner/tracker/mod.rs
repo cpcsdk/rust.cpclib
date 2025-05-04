@@ -1,4 +1,5 @@
-use at3::{extra::*, At3Version, AT_CMD};
+use at3::extra::*;
+use at3::{At3Version, AT_CMD};
 use chipnsfx::{ChipnsfxVersion, CHIPNSFX_CMD};
 use cpclib_common::event::EventObserver;
 
@@ -39,9 +40,8 @@ pub enum SongConverter {
     SongToSoundEffects(SongToSoundEffects),
     SongToVgm(SongToVgm),
     SongToWav(SongToWav),
-    SongToYm(SongToYm),
+    SongToYm(SongToYm)
 }
-
 
 impl SongConverter {
     pub fn get_command(&self) -> &str {
@@ -54,7 +54,7 @@ impl SongConverter {
             Self::SongToSoundEffects(_) => SongToSoundEffects::CMD,
             Self::SongToVgm(_) => SongToVgm::CMD,
             Self::SongToWav(_) => SongToWav::CMD,
-            Self::SongToYm(_) => SongToYm::CMD,
+            Self::SongToYm(_) => SongToYm::CMD
         }
     }
 
@@ -68,11 +68,10 @@ impl SongConverter {
             Self::SongToSoundEffects(v) => v.configuration(),
             Self::SongToVgm(v) => v.configuration(),
             Self::SongToWav(v) => v.configuration(),
-            Self::SongToYm(v) => v.configuration(),
+            Self::SongToYm(v) => v.configuration()
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

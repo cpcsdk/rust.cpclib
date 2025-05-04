@@ -1,7 +1,8 @@
 use std::str::FromStr;
 
 use camino::Utf8PathBuf;
-use winnow::{error::ContextError, Parser};
+use winnow::error::ContextError;
+use winnow::Parser;
 
 use crate::parse_value;
 
@@ -20,7 +21,6 @@ pub fn utf8pathbuf_value_parser(must_exist: bool) -> impl Fn(&str) -> Result<Utf
         }
     }
 }
-
 
 pub fn clap_parse_any_positive_number(arg: &str) -> Result<u32, String> {
     parse_value::<_, ContextError>

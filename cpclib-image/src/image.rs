@@ -200,7 +200,6 @@ impl ColorMatrix {
     pub const INK_MASK_BACKGROUND: Ink = Ink::BRIGHTWHITE;
     pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
 
-
     pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
         let pixel_height = {
             let mut height = 0x4000 / bytes_width;
@@ -265,13 +264,15 @@ impl ColorMatrix {
         }
     }
 
-
     /// The matrix represents both the mask (with an unexpected color), and the sprite (<ith the expected color).
     /// This method returns two matrices:
     /// - The mask where bright white stands for pixels of the sprite and black stands for the pixels of the background
     /// - The sprite where the background is replaced by a selected ink (Ideally the one that will be considered as being pen 0)
-    pub fn extract_mask_and_sprite(&self, mask_ink: impl Into<Ink>, replacement_ink: impl Into<Ink>) -> (Self, Self) {
-
+    pub fn extract_mask_and_sprite(
+        &self,
+        mask_ink: impl Into<Ink>,
+        replacement_ink: impl Into<Ink>
+    ) -> (Self, Self) {
         let mask_ink = mask_ink.into();
         let replacement_ink = replacement_ink.into();
 
@@ -282,34 +283,31 @@ impl ColorMatrix {
         sprite_data.replace_ink(mask_ink, replacement_ink);
 
         (mask_data, sprite_data)
-
     }
 
     /// Destroy the image to build the mask according to the background ink
     pub fn convert_to_mask(&mut self, mask: Ink) {
-        self.data
-            .iter_mut()
-            .for_each(|row|
-                row.iter_mut()
-                .for_each(|ink| *ink = if *ink == mask {
+        self.data.iter_mut().for_each(|row| {
+            row.iter_mut().for_each(|ink| {
+                *ink = if *ink == mask {
                     Self::INK_MASK_BACKGROUND
-                } else {
+                }
+                else {
                     Self::INK_MASK_FOREGROUND
                 }
-            )
-        );     
+            })
+        });
     }
 
     /// Exchange all the occurrences of `from` Ink with `to` ink
     pub fn replace_ink(&mut self, from: Ink, to: Ink) {
-        self.data
-            .iter_mut()
-            .for_each(|row|
-                row.iter_mut()
-                .for_each(|ink| if *ink == from {
+        self.data.iter_mut().for_each(|row| {
+            row.iter_mut().for_each(|ink| {
+                if *ink == from {
                     *ink = to;
+                }
             })
-        );
+        });
     }
 
     pub fn empty() -> Self {

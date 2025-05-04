@@ -659,51 +659,46 @@ pub const INKS: [Ink; NB_INKS as usize] = [
     Ink { value: 26 }
 ];
 
-
 impl Ink {
-    pub const BLACK: Ink =  Self { value: 0 };
-    pub const BLUE: Ink =  Self { value: 1 };
-    pub const BRIGHTBLUE: Ink =  Self { value: 2 };
-    pub const RED: Ink =  Self { value: 3 };
-    pub const MAGENTA: Ink =  Self { value: 4 };
-    pub const MAUVE: Ink =  Self { value: 5 };
-    pub const BRIGHTRED: Ink =  Self { value: 6 };
-    pub const PURPLE: Ink =  Self { value: 7 };
-    pub const BRIGHTMAGENTA: Ink =  Self { value: 8 };
-    pub const GREEN: Ink =  Self { value: 9 };
-    pub const CYAN: Ink =  Self { value: 10 };
-    pub const SKYBLUE: Ink =  Self { value: 11 };
-    pub const YELLOW: Ink =  Self { value: 12 };
-    pub const WHITE: Ink =  Self { value: 13 };
-    pub const PASTELBLUE: Ink =  Self { value: 14 };
-    pub const ORANGE: Ink =  Self { value: 15 };
-    pub const PINK: Ink =  Self { value: 16 };
-    pub const PASTELMAGENTA: Ink =  Self { value: 17 };
-    pub const BRIGHTGREEN: Ink =  Self { value: 18 };
-    pub const SEAGREEN: Ink =  Self { value: 19 };
-    pub const BRIGHTCYAN: Ink =  Self { value: 20 };
-    pub const LIME: Ink =  Self { value: 21 };
-    pub const PASTELGREEN: Ink =  Self { value: 22 };
-    pub const PASTELCYAN: Ink =  Self { value: 23 };
-    pub const BRIGHTYELLOW: Ink =  Self { value: 24 };
-    pub const PASTELYELLOW: Ink =  Self { value: 25 };
-    pub const BRIGHTWHITE : Ink = Self { value: 26 };
-
+    pub const BLACK: Ink = Self { value: 0 };
+    pub const BLUE: Ink = Self { value: 1 };
+    pub const BRIGHTBLUE: Ink = Self { value: 2 };
+    pub const BRIGHTCYAN: Ink = Self { value: 20 };
+    pub const BRIGHTGREEN: Ink = Self { value: 18 };
+    pub const BRIGHTMAGENTA: Ink = Self { value: 8 };
+    pub const BRIGHTRED: Ink = Self { value: 6 };
+    pub const BRIGHTWHITE: Ink = Self { value: 26 };
+    pub const BRIGHTYELLOW: Ink = Self { value: 24 };
     pub const BRIGHT_BLUE: Ink = Self::BRIGHTBLUE;
-    pub const BRIGHT_RED: Ink = Self::BRIGHTRED;
-    pub const PASTEL_BLUE: Ink = Self::PASTELBLUE;
-    pub const PASTEL_MAGENTA: Ink = Self::PASTELMAGENTA;
+    pub const BRIGHT_CYAN: Ink = Self::BRIGHTCYAN;
     pub const BRIGHT_GREEN: Ink = Self::BRIGHTGREEN;
-    pub const SEA_GREEN: Ink = Self::SEAGREEN;
-    pub const BRIGHT_CYAN : Ink = Self::BRIGHTCYAN;
-    pub const PASTEL_GREEN: Ink = Self::PASTELGREEN;
-    pub const PASTEL_CYAN: Ink = Self::PASTELCYAN;
-    pub const BRIGHT_YELLOW: Ink = Self::BRIGHTYELLOW;
-    pub const PASTEL_YELLOW: Ink = Self::PASTELYELLOW;
+    pub const BRIGHT_RED: Ink = Self::BRIGHTRED;
     pub const BRIGHT_WHITE: Ink = Self::BRIGHTWHITE;
-
-
-
+    pub const BRIGHT_YELLOW: Ink = Self::BRIGHTYELLOW;
+    pub const CYAN: Ink = Self { value: 10 };
+    pub const GREEN: Ink = Self { value: 9 };
+    pub const LIME: Ink = Self { value: 21 };
+    pub const MAGENTA: Ink = Self { value: 4 };
+    pub const MAUVE: Ink = Self { value: 5 };
+    pub const ORANGE: Ink = Self { value: 15 };
+    pub const PASTELBLUE: Ink = Self { value: 14 };
+    pub const PASTELCYAN: Ink = Self { value: 23 };
+    pub const PASTELGREEN: Ink = Self { value: 22 };
+    pub const PASTELMAGENTA: Ink = Self { value: 17 };
+    pub const PASTELYELLOW: Ink = Self { value: 25 };
+    pub const PASTEL_BLUE: Ink = Self::PASTELBLUE;
+    pub const PASTEL_CYAN: Ink = Self::PASTELCYAN;
+    pub const PASTEL_GREEN: Ink = Self::PASTELGREEN;
+    pub const PASTEL_MAGENTA: Ink = Self::PASTELMAGENTA;
+    pub const PASTEL_YELLOW: Ink = Self::PASTELYELLOW;
+    pub const PINK: Ink = Self { value: 16 };
+    pub const PURPLE: Ink = Self { value: 7 };
+    pub const RED: Ink = Self { value: 3 };
+    pub const SEAGREEN: Ink = Self { value: 19 };
+    pub const SEA_GREEN: Ink = Self::SEAGREEN;
+    pub const SKYBLUE: Ink = Self { value: 11 };
+    pub const WHITE: Ink = Self { value: 13 };
+    pub const YELLOW: Ink = Self { value: 12 };
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize, PartialOrd, Ord)]

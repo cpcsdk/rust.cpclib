@@ -146,7 +146,7 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
         Cruncher::Lzsa2 => CompressMethod::Lzsa(LzsaVersion::V1, None),
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
         Cruncher::Zx0 => CompressMethod::Zx0,
-        Cruncher::Upkr => CompressMethod::Upkr,
+        Cruncher::Upkr => CompressMethod::Upkr
     };
 
     let crunched = cruncher
