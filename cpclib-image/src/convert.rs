@@ -1359,7 +1359,7 @@ impl ImageConverter {
         output: OutputFormat,
         crop_if_too_large: bool
     ) -> anyhow::Result<Output> {
-        let mut converter = ImageConverter {
+        let converter = ImageConverter {
             palette: palette.clone(),
             mode,
             transformations: transformations.clone(),
@@ -1387,7 +1387,7 @@ impl ImageConverter {
                 sprite_output_format.clone(),
                 crop_if_too_large
             )
-            .map(|sprite| Output::Sprite(sprite))
+            .map(Output::Sprite)
         }
         else if let OutputFormat::MaskedSprite {
             sprite_format,
@@ -1395,7 +1395,7 @@ impl ImageConverter {
             replacement_ink
         } = &output
         {
-            let mut sprite_transformations =
+            let sprite_transformations =
                 transformations.clone().replace(*mask_ink, *replacement_ink);
             let sprite = Self::convert_to_sprite(
                 input_file,
@@ -1406,7 +1406,7 @@ impl ImageConverter {
                 crop_if_too_large
             )?;
 
-            let mut mask_transformations = transformations
+            let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
             let mask = Self::convert_to_sprite(
@@ -1469,7 +1469,7 @@ impl ImageConverter {
         match output {
             OutputFormat::Sprite(SpriteOutputFormat::LinearEncodedSprite) => {
                 self.linearize_sprite(sprite)
-                    .map(|sprite| Output::Sprite(sprite))
+                    .map(Output::Sprite)
             },
             OutputFormat::CPCMemory {
                 ref output_dimension,

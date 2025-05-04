@@ -1,9 +1,8 @@
 use std::sync::OnceLock;
 
-use cpclib_common::event::EventObserver;
 
 use crate::delegated::{
-    ArchiveFormat, DelegateApplicationDescription, DownloadableInformation, ExecutableInformation,
+    ArchiveFormat, DownloadableInformation, ExecutableInformation,
     InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation
 };
 use crate::runner::runner::RunInDir;

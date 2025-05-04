@@ -511,13 +511,11 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                 mask_ink: sprite_matches
                     .get_one::<Ink>("MASK_INK")
                     .cloned()
-                    .unwrap()
-                    .into(),
+                    .unwrap(),
                 replacement_ink: sprite_matches
                     .get_one::<Ink>("REPLACEMENT_INK")
                     .cloned()
                     .unwrap()
-                    .into()
             }
         }
         else {

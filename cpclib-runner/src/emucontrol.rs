@@ -481,13 +481,13 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(cpc_emu_power_version) => {
                     args.push(format!(
                         "--dsk0={}",
-                        emu.wine_compatible_fname(drive_a)?.to_string()
+                        emu.wine_compatible_fname(drive_a)?
                     ))
                 },
                 Emulator::CapriceForever(_) => {
                     args.push(format!(
                         "/DriveA={}",
-                        emu.wine_compatible_fname(drive_a)?.to_string()
+                        emu.wine_compatible_fname(drive_a)?
                     ))
                 },
             }
@@ -503,7 +503,7 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(cpc_emu_power_version) => {
                     args.push(format!(
                         "--dsk1={}",
-                        emu.wine_compatible_fname(drive_b)?.to_string()
+                        emu.wine_compatible_fname(drive_b)?
                     ))
                 },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={}", drive_b))
@@ -533,11 +533,8 @@ impl EmulatorConf {
         }
 
         if let Some(crtc) = &self.crtc {
-            match emu {
-                Emulator::CpcEmuPower(_) => {
-                    args.push(format!("--crtc={}", crtc));
-                },
-                _ => {}
+            if let Emulator::CpcEmuPower(_) = emu {
+                args.push(format!("--crtc={}", crtc));
             }
         }
 

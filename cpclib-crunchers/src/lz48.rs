@@ -90,7 +90,7 @@ pub fn lz48_encode_legacy(data: &[u8]) -> Vec<u8> {
 
     while current < length {
         let mut maxlength = 0;
-        let mut startscan = if current < 255 { 0 } else { current - 255 };
+        let mut startscan = current.saturating_sub(255);
 
         let mut maxoffset = 0;
 
