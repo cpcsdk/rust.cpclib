@@ -4468,7 +4468,10 @@ impl Env {
                     }
                 ) => {
                     if (prev_addr.offset_in_cpc() + *prev_size as u32 == curr_addr.offset_in_cpc())
-                        && std::ptr::eq(prev_span.complete_source().as_ptr(), curr_span.complete_source().as_ptr())
+                        && std::ptr::eq(
+                            prev_span.complete_source().as_ptr(),
+                            curr_span.complete_source().as_ptr()
+                        )
                     {
                         let new_size = *prev_size + *curr_size;
 

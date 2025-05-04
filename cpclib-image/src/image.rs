@@ -286,7 +286,7 @@ impl ColorMatrix {
     }
 
     /// Destroy the image to build the mask according to the background ink
-    pub fn convert_to_mask(&mut self, mask: Ink)  -> &mut Self{
+    pub fn convert_to_mask(&mut self, mask: Ink) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 *ink = if *ink == mask {
@@ -301,7 +301,7 @@ impl ColorMatrix {
     }
 
     /// Exchange all the occurrences of `from` Ink with `to` ink
-    pub fn replace_ink(&mut self, from: Ink, to: Ink) -> &mut Self{
+    pub fn replace_ink(&mut self, from: Ink, to: Ink) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 if *ink == from {
@@ -998,6 +998,14 @@ impl Sprite {
         }
     }
 
+    pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette) -> Self {
+        let pens = bytes
+            .chunks(bytes_width)
+            .map(|chunk| pixels::bytes_to_pens(bytes, mode).collect_vec())
+            .collect_vec();
+        Self::from_pens(&pens, mode, Some(palette))
+    }
+
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
     pub fn to_color_matrix(&self) -> Option<ColorMatrix> {
@@ -1132,6 +1140,10 @@ impl Sprite {
     where F: Fn(&Vec<u8>) -> Vec<u8> {
         let mut transformed = self.data.iter().map(f).collect::<Vec<_>>();
         ::std::mem::swap(&mut transformed, &mut self.data);
+    }
+
+    pub fn as_image(&self) -> im::ImageBuffer<im::Rgba<u8>, Vec<u8>> {
+        self.to_color_matrix().unwrap().as_image()
     }
 }
 
@@ -1280,14 +1292,10 @@ impl MultiModeSprite {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
-    use crate::ga::Ink;
-
     use super::ColorMatrix;
-
+    use crate::ga::Ink;
 
     #[test]
     fn test_masking() {
@@ -1298,8 +1306,7 @@ mod tests {
         let bg_ = Ink::RED;
         let rep = Ink::BLACK;
 
-
-        let sprite_with_mask = ColorMatrix{
+        let sprite_with_mask = ColorMatrix {
             data: vec![
                 vec![bg_, fg2, fg3, fg4],
                 vec![bg_, bg_, fg1, fg2],
@@ -1309,11 +1316,7 @@ mod tests {
             ]
         };
 
-
         let (mask, sprite) = sprite_with_mask.extract_mask_and_sprite(bg_, rep);
-
-
-
 
         assert_eq!(
             sprite.data,
@@ -1331,9 +1334,24 @@ mod tests {
             vec![
                 vec![Ink::BRIGHT_WHITE, Ink::BLACK, Ink::BLACK, Ink::BLACK],
                 vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK, Ink::BLACK],
-                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK],
-                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK],
-                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE],
+                vec![
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BLACK
+                ],
+                vec![
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BLACK
+                ],
+                vec![
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE,
+                    Ink::BRIGHT_WHITE
+                ],
             ]
         );
 
@@ -1342,6 +1360,5 @@ mod tests {
 
         assert_eq!(mask, mask2);
         assert_eq!(sprite, sprite2);
-
     }
 }

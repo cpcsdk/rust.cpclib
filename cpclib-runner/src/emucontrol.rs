@@ -479,16 +479,10 @@ impl EmulatorConf {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
                 },
                 Emulator::CpcEmuPower(cpc_emu_power_version) => {
-                    args.push(format!(
-                        "--dsk0={}",
-                        emu.wine_compatible_fname(drive_a)?
-                    ))
+                    args.push(format!("--dsk0={}", emu.wine_compatible_fname(drive_a)?))
                 },
                 Emulator::CapriceForever(_) => {
-                    args.push(format!(
-                        "/DriveA={}",
-                        emu.wine_compatible_fname(drive_a)?
-                    ))
+                    args.push(format!("/DriveA={}", emu.wine_compatible_fname(drive_a)?))
                 },
             }
         }
@@ -501,10 +495,7 @@ impl EmulatorConf {
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::CpcEmuPower(cpc_emu_power_version) => {
-                    args.push(format!(
-                        "--dsk1={}",
-                        emu.wine_compatible_fname(drive_b)?
-                    ))
+                    args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
                 },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={}", drive_b))
             }

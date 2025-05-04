@@ -548,31 +548,17 @@ impl DisplayAddress {
     }
 }
 
-#[derive(Clone, Debug)]
-#[allow(missing_docs)]
-pub enum SpriteOutputFormat {
-    /// Mode specific bytes are stored consecutively in a linear way (line 0, line 1, ... line n)
-    /// To be converted on the fly as a specific TileEncoded scheme
-    LinearEncodedSprite,
-
-    /// Mode specific bytes are stored in a gray code line order char per char
-    GrayCodedSprite,
-
-    /// Left to right / RightToLeft + raycode
-    ZigZagGrayCodedSprite
-}
-
 /// Specify the output format to be used
 /// TODO - add additional output format (for example zigzag sprites that can be usefull or sprite display routines)
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub enum OutputFormat {
     MaskedSprite {
-        sprite_format: SpriteOutputFormat,
+        sprite_format: SpriteEncoding,
         mask_ink: Ink,
         replacement_ink: Ink
     },
-    Sprite(SpriteOutputFormat),
+    Sprite(SpriteEncoding),
 
     /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
     LinearEncodedChuncky,
@@ -627,15 +613,15 @@ impl OutputFormat {
 
     /// Generate output format for a linear sprite
     pub fn create_linear_encoded_sprite() -> Self {
-        Self::Sprite(SpriteOutputFormat::LinearEncodedSprite)
+        Self::Sprite(SpriteEncoding::Linear)
     }
 
     pub fn create_graycode_encoded_sprite() -> Self {
-        Self::Sprite(SpriteOutputFormat::GrayCodedSprite)
+        Self::Sprite(SpriteEncoding::GrayCoded)
     }
 
     pub fn create_zigzag_graycode_encoded_sprite() -> Self {
-        Self::Sprite(SpriteOutputFormat::ZigZagGrayCodedSprite)
+        Self::Sprite(SpriteEncoding::ZigZagGrayCoded)
     }
 
     /// Generate output format for an overscan screen
@@ -1006,27 +992,22 @@ impl TileVerticalCapture {
     }
 }
 
-pub enum SpriteOutput {
-    LinearEncodedSprite {
-        data: Vec<u8>,
-        palette: Palette,
-        bytes_width: usize,
-        height: usize
-    },
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub enum SpriteEncoding {
+    Linear,
+    GrayCoded,
+    ZigZag,
+    ZigZagGrayCoded
+}
 
-    GrayCodedSprite {
-        data: Vec<u8>,
-        palette: Palette,
-        bytes_width: usize,
-        height: usize
-    },
-
-    ZigZagGrayCodedSprite {
-        data: Vec<u8>,
-        palette: Palette,
-        bytes_width: usize,
-        height: usize
-    }
+#[derive(Clone)]
+pub struct SpriteOutput {
+    data: Vec<u8>,
+    palette: Palette,
+    mode: Mode,
+    bytes_width: usize,
+    height: usize,
+    encoding: SpriteEncoding
 }
 
 impl AsRef<[u8]> for SpriteOutput {
@@ -1036,36 +1017,38 @@ impl AsRef<[u8]> for SpriteOutput {
 }
 
 impl SpriteOutput {
-    pub fn data(&self) -> &[u8] {
-        match self {
-            SpriteOutput::LinearEncodedSprite { data, .. } => data,
-            SpriteOutput::GrayCodedSprite { data, .. } => data,
-            SpriteOutput::ZigZagGrayCodedSprite { data, .. } => data
+    pub fn with_encoding(&self, encoding: SpriteEncoding) -> Self {
+        if encoding != self.encoding {
+            unimplemented!("Encoding conversion has not yet been used and is not coded. A leftRightTopBottom iterator is probably expected to ease conversion.")
         }
+        else {
+            self.clone()
+        }
+    }
+
+    pub fn as_sprite(&self) -> Sprite {
+        Sprite::from_bytes(
+            &self.data,
+            self.bytes_width(),
+            self.mode.clone(),
+            self.palette.clone()
+        )
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
 
     pub fn palette(&self) -> &Palette {
-        match self {
-            SpriteOutput::LinearEncodedSprite { palette, .. } => palette,
-            SpriteOutput::GrayCodedSprite { palette, .. } => palette,
-            SpriteOutput::ZigZagGrayCodedSprite { palette, .. } => palette
-        }
+        &self.palette
     }
 
     pub fn bytes_width(&self) -> usize {
-        match self {
-            SpriteOutput::LinearEncodedSprite { bytes_width, .. } => *bytes_width,
-            SpriteOutput::GrayCodedSprite { bytes_width, .. } => *bytes_width,
-            SpriteOutput::ZigZagGrayCodedSprite { bytes_width, .. } => *bytes_width
-        }
+        self.bytes_width
     }
 
     pub fn height(&self) -> usize {
-        match self {
-            SpriteOutput::LinearEncodedSprite { height, .. } => *height,
-            SpriteOutput::GrayCodedSprite { height, .. } => *height,
-            SpriteOutput::ZigZagGrayCodedSprite { height, .. } => *height
-        }
+        self.height
     }
 
     pub fn save_sprite<P: AsRef<Utf8Path>>(&self, fname: P) -> std::io::Result<()> {
@@ -1116,13 +1099,20 @@ pub enum Output {
     }
 }
 
-impl Debug for SpriteOutput {
+impl Debug for SpriteEncoding {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::LinearEncodedSprite { .. } => writeln!(fmt, "LinearEncodedSprite"),
-            Self::GrayCodedSprite { .. } => writeln!(fmt, "GrayCodedSprite"),
-            Self::ZigZagGrayCodedSprite { .. } => writeln!(fmt, "ZigZagGrayCodedSprite")
+            Self::Linear => writeln!(fmt, "Linear"),
+            Self::GrayCoded => writeln!(fmt, "GrayCoded"),
+            Self::ZigZag => writeln!(fmt, "ZigZag"),
+            Self::ZigZagGrayCoded => writeln!(fmt, "ZigZagGrayCoded")
         }
+    }
+}
+
+impl Debug for SpriteOutput {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        writeln!(fmt, "{:?}Sprite", self.encoding)
     }
 }
 
@@ -1239,16 +1229,16 @@ impl ImageConverter {
         palette: Option<Palette>,
         mode: Mode,
         transformations: TransformationsList,
-        output: SpriteOutputFormat,
+        encoding: SpriteEncoding,
         crop_if_too_large: bool
     ) -> anyhow::Result<SpriteOutput> {
-        match &output {
-            SpriteOutputFormat::LinearEncodedSprite => {
+        match &encoding {
+            SpriteEncoding::Linear => {
                 let mut converter = ImageConverter {
                     palette: palette.clone(),
                     mode,
                     transformations: transformations.clone(),
-                    output: OutputFormat::Sprite(output),
+                    output: OutputFormat::Sprite(encoding),
                     crop_if_too_large
                 };
 
@@ -1258,96 +1248,90 @@ impl ImageConverter {
                     .map(|output| output.sprite().unwrap())
             },
 
-            SpriteOutputFormat::ZigZagGrayCodedSprite => {
-                let graycoded = Self::convert_impl(
+            SpriteEncoding::ZigZagGrayCoded => {
+                let SpriteOutput {
+                    data,
+                    palette,
+                    bytes_width,
+                    height,
+                    encoding,
+                    mode
+                } = Self::convert_impl(
                     input_file,
                     palette,
                     mode,
                     transformations,
-                    OutputFormat::Sprite(SpriteOutputFormat::GrayCodedSprite),
+                    OutputFormat::Sprite(SpriteEncoding::GrayCoded),
                     crop_if_too_large
                 )?
                 .sprite()
                 .unwrap();
 
-                match graycoded {
-                    SpriteOutput::GrayCodedSprite {
-                        data,
-                        palette,
-                        bytes_width,
-                        height
-                    } => {
-                        let mut new_data = Vec::new();
-                        new_data.reserve_exact(data.len());
+                assert_eq!(encoding, SpriteEncoding::GrayCoded);
 
-                        for j in 0..height {
-                            let mut current_line =
-                                data[j * bytes_width..(j + 1) * bytes_width].to_vec();
+                let mut new_data = Vec::new();
+                new_data.reserve_exact(data.len());
 
-                            if j % 2 == 1 {
-                                current_line.reverse();
-                            }
+                for j in 0..height {
+                    let mut current_line = data[j * bytes_width..(j + 1) * bytes_width].to_vec();
 
-                            new_data.extend(current_line);
-                        }
+                    if j % 2 == 1 {
+                        current_line.reverse();
+                    }
 
-                        Ok(SpriteOutput::ZigZagGrayCodedSprite {
-                            data: new_data,
-                            palette,
-                            bytes_width,
-                            height
-                        })
-                    },
-                    _ => unreachable!()
+                    new_data.extend(current_line);
                 }
+
+                Ok(SpriteOutput {
+                    data: new_data,
+                    palette,
+                    bytes_width,
+                    height,
+                    encoding: SpriteEncoding::ZigZagGrayCoded,
+                    mode
+                })
             },
 
-            SpriteOutputFormat::GrayCodedSprite => {
+            SpriteEncoding::GrayCoded => {
                 // get the linear version
                 let linear = Self::convert_impl(
                     input_file,
                     palette,
                     mode,
                     transformations,
-                    OutputFormat::Sprite(SpriteOutputFormat::LinearEncodedSprite),
+                    OutputFormat::Sprite(SpriteEncoding::Linear),
                     crop_if_too_large
                 )?
                 .sprite()
                 .unwrap();
 
-                match linear {
-                    SpriteOutput::LinearEncodedSprite {
-                        data,
-                        palette,
-                        bytes_width,
-                        height
-                    } => {
-                        assert_eq!(height % 8, 0);
+                assert_eq!(linear.encoding, SpriteEncoding::Linear);
 
-                        let nb_chars = height / 8;
-                        let mut new_data = Vec::new();
-                        for char_idx in 0..nb_chars {
-                            for line_idx in
-                                GrayCodeLineCounter::GRAYCODE_INDEX_TO_SCREEN_INDEX.iter()
-                            {
-                                let line_idx = *line_idx as usize;
-                                let start = line_idx + 8 * char_idx;
-                                new_data.extend_from_slice(
-                                    &data[start * bytes_width..(start + 1) * bytes_width]
-                                );
-                            }
-                        }
+                assert_eq!(linear.height() % 8, 0);
 
-                        Ok(SpriteOutput::GrayCodedSprite {
-                            data: new_data,
-                            palette,
-                            bytes_width,
-                            height
-                        })
-                    },
-                    _ => unreachable!()
+                let nb_chars = linear.height() / 8;
+                let mut new_data = Vec::new();
+                for char_idx in 0..nb_chars {
+                    for line_idx in GrayCodeLineCounter::GRAYCODE_INDEX_TO_SCREEN_INDEX.iter() {
+                        let line_idx = *line_idx as usize;
+                        let start = line_idx + 8 * char_idx;
+                        new_data.extend_from_slice(
+                            &linear.data()
+                                [start * linear.bytes_width()..(start + 1) * linear.bytes_width()]
+                        );
+                    }
                 }
-            }
+
+                Ok(SpriteOutput {
+                    encoding: SpriteEncoding::GrayCoded,
+                    mode: linear.mode,
+                    data: new_data,
+                    palette: linear.palette,
+                    bytes_width: linear.bytes_width,
+                    height: linear.height
+                })
+            },
+            SpriteEncoding::ZigZag => unimplemented!()
         }
     }
 
@@ -1424,6 +1408,14 @@ impl ImageConverter {
                 crop_if_too_large
             )?;
 
+            // Just for debug stuff
+            if true {
+                let mask_img = mask.as_sprite().as_image();
+                let sprite_img = sprite.as_sprite().as_image();
+                mask_img.save_with_format("/tmp/mask.png", image::ImageFormat::Png);
+                sprite_img.save_with_format("/tmp/sprite.png", image::ImageFormat::Png);
+            }
+
             Ok(Output::SpriteAndMask { sprite, mask })
         }
         else {
@@ -1467,9 +1459,8 @@ impl ImageConverter {
         let output = self.output.clone();
 
         match output {
-            OutputFormat::Sprite(SpriteOutputFormat::LinearEncodedSprite) => {
-                self.linearize_sprite(sprite)
-                    .map(Output::Sprite)
+            OutputFormat::Sprite(SpriteEncoding::Linear) => {
+                self.linearize_sprite(sprite).map(Output::Sprite)
             },
             OutputFormat::CPCMemory {
                 ref output_dimension,
@@ -1502,7 +1493,9 @@ impl ImageConverter {
     /// Produce the linearized version of the sprite.
     /// TODO add size constraints to keep a small part of the sprite
     fn linearize_sprite(&mut self, sprite: &Sprite) -> anyhow::Result<SpriteOutput> {
-        Ok(SpriteOutput::LinearEncodedSprite {
+        Ok(SpriteOutput {
+            encoding: SpriteEncoding::Linear,
+            mode: sprite.mode.unwrap(),
             data: sprite.to_linear_vec(),
             palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
             bytes_width: sprite.bytes_width() as _,
@@ -1764,5 +1757,34 @@ mod tests {
 
         address.move_to_next_word();
         assert_eq!(address.address(), 0x4002);
+    }
+
+    #[test]
+    fn test_masking() {
+        let fg1 = Ink::BLUE;
+        let fg2 = Ink::SKY_BLUE;
+        let fg3 = Ink::PASTEL_BLUE;
+        let fg4 = Ink::BRIGHT_BLUE;
+        let bg_ = Ink::RED;
+        let rep = Ink::BLACK;
+
+        let sprite_with_mask = ColorMatrix::from(vec![
+            vec![bg_, fg2, fg3, fg4],
+            vec![bg_, bg_, fg1, fg2],
+            vec![bg_, bg_, bg_, fg3],
+            vec![bg_, bg_, bg_, fg4],
+            vec![bg_, bg_, bg_, bg_],
+        ]);
+
+        let transformation_sprite = Transformation::ReplaceInk { from: bg_, to: rep };
+        let transformation_mask = Transformation::MaskFromBackgroundInk(bg_);
+
+        let sprite = transformation_sprite.apply(&sprite_with_mask);
+        let mask = transformation_mask.apply(&sprite_with_mask);
+
+        let (mask2, sprite2) = sprite_with_mask.extract_mask_and_sprite(bg_, rep);
+
+        assert_eq!(mask, mask2);
+        assert_eq!(sprite, sprite2);
     }
 }

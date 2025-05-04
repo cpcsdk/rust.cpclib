@@ -3,7 +3,6 @@ const URL: &str =
 
 use std::sync::OnceLock;
 
-
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation,
     InternetStaticCompiledApplication, MutiplatformUrls, StaticInformation

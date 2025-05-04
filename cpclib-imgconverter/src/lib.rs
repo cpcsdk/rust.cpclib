@@ -498,9 +498,10 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Get the format for the sprite encoding
         let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
-            "linear" => SpriteOutputFormat::LinearEncodedSprite,
-            "graycoded" => SpriteOutputFormat::GrayCodedSprite,
-            "zigzag+graycoded" => SpriteOutputFormat::ZigZagGrayCodedSprite,
+            "linear" => SpriteEncoding::Linear,
+            "graycoded" => SpriteEncoding::GrayCoded,
+            "zigazag" => SpriteEncoding::ZigZag,
+            "zigzag+graycoded" => SpriteEncoding::ZigZagGrayCoded,
             _ => unimplemented!()
         };
 
@@ -508,10 +509,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         if sprite_matches.contains_id("MASK_FNAME") {
             OutputFormat::MaskedSprite {
                 sprite_format,
-                mask_ink: sprite_matches
-                    .get_one::<Ink>("MASK_INK")
-                    .cloned()
-                    .unwrap(),
+                mask_ink: sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap(),
                 replacement_ink: sprite_matches
                     .get_one::<Ink>("REPLACEMENT_INK")
                     .cloned()

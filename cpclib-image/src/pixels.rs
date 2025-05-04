@@ -10,6 +10,18 @@ pub fn byte_to_pens(byte: u8, mode: Mode) -> Box<dyn Iterator<Item = Pen>> {
     }
 }
 
+pub fn bytes_to_pens<'bytes>(
+    bytes: &'bytes [u8],
+    mode: Mode
+) -> Box<dyn Iterator<Item = Pen> + 'bytes> {
+    Box::new(
+        bytes
+            .iter()
+            .map(move |&byte| byte_to_pens(byte, mode))
+            .flatten()
+    )
+}
+
 pub fn pens_to_vec(pens: &[Pen], mode: Mode) -> Vec<u8> {
     match mode {
         Mode::Zero => mode0::pens_to_vec(pens),
@@ -363,6 +375,8 @@ pub mod mode1 {
 pub mod mode0 {
     // use contracts::{ensures, requires};
 
+    use cpclib_common::itertools::Itertools;
+
     use crate::ga::Pen;
 
     /// Pixel ordering in a byte
@@ -492,15 +506,7 @@ pub mod mode0 {
 
     /// Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {
-        let mut res = Vec::with_capacity(bytes.len() * 2);
-
-        for &byte in bytes {
-            let [pen1, pen2] = byte_to_pens(byte);
-            res.push(pen1);
-            res.push(pen2);
-        }
-
-        res
+        super::bytes_to_pens(bytes, crate::image::Mode::Zero).collect_vec()
     }
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3
