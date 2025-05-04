@@ -697,6 +697,7 @@ impl Ink {
     pub const SEAGREEN: Ink = Self { value: 19 };
     pub const SEA_GREEN: Ink = Self::SEAGREEN;
     pub const SKYBLUE: Ink = Self { value: 11 };
+    pub const SKY_BLUE : Ink = Self::SKYBLUE;
     pub const WHITE: Ink = Self { value: 13 };
     pub const YELLOW: Ink = Self { value: 12 };
 }

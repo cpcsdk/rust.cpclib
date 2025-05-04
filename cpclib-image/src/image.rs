@@ -172,7 +172,7 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
 /// A ColorMatrix represents an image through a list of Inks.
 /// It has no real meaning in CPC world but can be used for image transformaton
 /// There is no mode information
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ColorMatrix {
     /// List of inks
     data: Vec<Vec<Ink>>
@@ -286,7 +286,7 @@ impl ColorMatrix {
     }
 
     /// Destroy the image to build the mask according to the background ink
-    pub fn convert_to_mask(&mut self, mask: Ink) {
+    pub fn convert_to_mask(&mut self, mask: Ink)  -> &mut Self{
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 *ink = if *ink == mask {
@@ -297,10 +297,11 @@ impl ColorMatrix {
                 }
             })
         });
+        self
     }
 
     /// Exchange all the occurrences of `from` Ink with `to` ink
-    pub fn replace_ink(&mut self, from: Ink, to: Ink) {
+    pub fn replace_ink(&mut self, from: Ink, to: Ink) -> &mut Self{
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 if *ink == from {
@@ -308,6 +309,7 @@ impl ColorMatrix {
                 }
             })
         });
+        self
     }
 
     pub fn empty() -> Self {
@@ -1275,5 +1277,71 @@ impl MultiModeSprite {
             mode: modes,
             data: lines
         }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use crate::ga::Ink;
+
+    use super::ColorMatrix;
+
+
+    #[test]
+    fn test_masking() {
+        let fg1 = Ink::BLUE;
+        let fg2 = Ink::SKY_BLUE;
+        let fg3 = Ink::PASTEL_BLUE;
+        let fg4 = Ink::BRIGHT_BLUE;
+        let bg_ = Ink::RED;
+        let rep = Ink::BLACK;
+
+
+        let sprite_with_mask = ColorMatrix{
+            data: vec![
+                vec![bg_, fg2, fg3, fg4],
+                vec![bg_, bg_, fg1, fg2],
+                vec![bg_, bg_, bg_, fg3],
+                vec![bg_, bg_, bg_, fg4],
+                vec![bg_, bg_, bg_, bg_],
+            ]
+        };
+
+
+        let (mask, sprite) = sprite_with_mask.extract_mask_and_sprite(bg_, rep);
+
+
+
+
+        assert_eq!(
+            sprite.data,
+            vec![
+                vec![rep, fg2, fg3, fg4],
+                vec![rep, rep, fg1, fg2],
+                vec![rep, rep, rep, fg3],
+                vec![rep, rep, rep, fg4],
+                vec![rep, rep, rep, rep],
+            ]
+        );
+
+        assert_eq!(
+            mask.data,
+            vec![
+                vec![Ink::BRIGHT_WHITE, Ink::BLACK, Ink::BLACK, Ink::BLACK],
+                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK, Ink::BLACK],
+                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK],
+                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BLACK],
+                vec![Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE, Ink::BRIGHT_WHITE],
+            ]
+        );
+
+        let mask2 = sprite_with_mask.clone().convert_to_mask(bg_).clone();
+        let sprite2 = sprite_with_mask.clone().replace_ink(bg_, rep).clone();
+
+        assert_eq!(mask, mask2);
+        assert_eq!(sprite, sprite2);
+
     }
 }
