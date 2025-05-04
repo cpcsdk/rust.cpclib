@@ -1,6 +1,9 @@
 use std::str::FromStr;
 
 use camino::Utf8PathBuf;
+use winnow::{error::ContextError, Parser};
+
+use crate::parse_value;
 
 pub fn utf8pathbuf_value_parser(must_exist: bool) -> impl Fn(&str) -> Result<Utf8PathBuf, String> {
     move |p: &str| {
@@ -16,4 +19,11 @@ pub fn utf8pathbuf_value_parser(must_exist: bool) -> impl Fn(&str) -> Result<Utf
             Err(_) => Err(format!("{} is not a valid filename.", p))
         }
     }
+}
+
+
+pub fn clap_parse_any_positive_number(arg: &str) -> Result<u32, String> {
+    parse_value::<_, ContextError>
+        .parse(arg.as_bytes())
+        .map_err(|e| format!("Error when parsingthe number. {e}"))
 }

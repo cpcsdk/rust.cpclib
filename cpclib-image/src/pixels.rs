@@ -272,7 +272,7 @@ pub mod mode1 {
     pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
         if pens.len() % 4 != 0 {
             eprintln!(
-                "{} pens provided, but only {} handled",
+                "{} pens provided, but only {} handled. Add additional pixels to image if needed",
                 pens.len(),
                 (pens.len() / 4) * 4
             );

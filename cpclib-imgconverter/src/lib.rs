@@ -7,14 +7,14 @@ use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{assemble, assemble_to_amsdos_file};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib::common::clap;
+use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp::{self, OcpPal};
-use cpclib::sna::*;
+use cpclib::{sna::*, Ink};
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 use cpclib::{sna, ExtendedDsk};
@@ -24,6 +24,18 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
+
+
+
+pub fn clap_parse_ink(arg: &str) -> Result<Ink, String> {
+    let nb = clap_parse_any_positive_number(arg)?;
+    if nb > 27 {
+        Err(format!("{nb} is not a valid ink value"))
+    } else {
+        Ok(nb.into())
+    }
+}
+
 
 #[macro_export]
 macro_rules! specify_palette {
@@ -486,13 +498,24 @@ fn parse_int(repr: &str) -> usize {
 #[allow(clippy::if_same_then_else)] // false positive
 fn get_output_format(matches: &ArgMatches) -> OutputFormat {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
-        let format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
+        // Get the format for the sprite encoding
+        let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
             "linear" => SpriteOutputFormat::LinearEncodedSprite,
             "graycoded" => SpriteOutputFormat::GrayCodedSprite,
             "zigzag+graycoded" => SpriteOutputFormat::ZigZagGrayCodedSprite,
             _ => unimplemented!()
         };
-        OutputFormat::Sprite(format)
+
+        // eventually handle sprite masking
+        if sprite_matches.contains_id("MASK_FNAME") {
+            OutputFormat::MaskedSprite { 
+                sprite_format, 
+                mask_ink: sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap().into(), 
+                replacement_ink: sprite_matches.get_one::<Ink>("REPLACEMENT_INK").cloned().unwrap().into(), 
+            }
+        } else {
+            OutputFormat::Sprite(sprite_format)
+        }
     }
     else if let Some(tile_matches) = matches.subcommand_matches("tile") {
         dbg!(OutputFormat::TileEncoded {
@@ -634,36 +657,20 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         // TODO share code with the tile branch
 
         let sub_sprite = sub_sprite.unwrap();
+
+        // handle the sprite stuff
         match &conversion {
-            Output::Sprite( 
-                SpriteOutput::LinearEncodedSprite {
-                data,
-                bytes_width,
-                height,
-                palette
-                }
-                | SpriteOutput::GrayCodedSprite {
-                    data,
-                    bytes_width,
-                    height,
-                    palette
-                }
-                | SpriteOutput::ZigZagGrayCodedSprite {
-                    data,
-                    bytes_width,
-                    height,
-                    palette
-                }) => {
-                // Save the palette
+            Output::Sprite(sprite)  |
+            Output::SpriteAndMask { sprite, ..} => {
+                let palette = sprite.palette();
+                // Save the binary data of the palette if any
                 do_export_palette!(sub_sprite, palette);
 
                 // Save the binary data of the sprite
                 let sprite_fname = sub_sprite.get_one::<String>("SPRITE_FNAME").unwrap();
-                let mut file =
-                    File::create(sprite_fname).expect("Unable to create the sprite file");
-                file.write_all(data).unwrap();
+                sprite.save_sprite(sprite_fname)
+                    .expect("Unable to create the sprite file");
 
-                // Save the binary data of the palette if any
                 sub_sprite
                     .get_one::<String>("CONFIGURATION")
                     .map(|conf_fname: &String| {
@@ -673,11 +680,18 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                             .file_stem()
                             .unwrap()
                             .replace(".", "_");
-                        writeln!(&mut file, "{}_WIDTH equ {}", fname, bytes_width).unwrap();
-                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, height).unwrap();
+                        writeln!(&mut file, "{}_WIDTH equ {}", fname, sprite.bytes_width()).unwrap();
+                        writeln!(&mut file, "{}_HEIGHT equ {}", fname, sprite.height()).unwrap();
                     });
             },
-            _ => unreachable!()
+            _ => unreachable!("{:?} not handled", conversion)
+        }
+
+        // handle the additional mask stuff
+        if let Output::SpriteAndMask {mask , ..} = &conversion {
+            let mask_fname = sub_sprite.get_one::<String>("MASK_FNAME").unwrap();
+            mask.save_sprite(mask_fname)
+                .expect("Unable to create the mask file");
         }
     }
     else if let Some(sub_tile) = sub_tile {
@@ -1107,11 +1121,13 @@ pub fn build_args_parser() -> clap::Command {
                             Arg::new("MASK_INK")
                             .long("mask-ink")
                             .help("Ink that represents the mask in the input image")
+                            .value_parser(clap_parse_ink)
                         )
                         .arg(
                             Arg::new("REPLACEMENT_INK")
                             .long("replacement-ink")
                             .help("Ink that relace the mask ink in the sprite data")
+                            .value_parser(clap_parse_ink)
                         )
                     ))
 

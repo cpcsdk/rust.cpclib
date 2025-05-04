@@ -197,6 +197,10 @@ pub enum ColorConversionStrategy {
 }
 
 impl ColorMatrix {
+    pub const INK_MASK_BACKGROUND: Ink = Ink::BRIGHTWHITE;
+    pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
+
+
     pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
         let pixel_height = {
             let mut height = 0x4000 / bytes_width;
@@ -271,29 +275,41 @@ impl ColorMatrix {
         let mask_ink = mask_ink.into();
         let replacement_ink = replacement_ink.into();
 
-        let mask_data = self.data
-            .iter()
-            .map(|row| 
+        let mut mask_data = self.clone();
+        mask_data.convert_to_mask(mask_ink);
 
-                row.iter().map(|&ink| if ink == mask_ink {
-                    Ink::BLACK
+        let mut sprite_data = self.clone();
+        sprite_data.replace_ink(mask_ink, replacement_ink);
+
+        (mask_data, sprite_data)
+
+    }
+
+    /// Destroy the image to build the mask according to the background ink
+    pub fn convert_to_mask(&mut self, mask: Ink) {
+        self.data
+            .iter_mut()
+            .for_each(|row|
+                row.iter_mut()
+                .for_each(|ink| *ink = if *ink == mask {
+                    Self::INK_MASK_BACKGROUND
                 } else {
-                    Ink::BRIGHT_WHITE
-                }).collect_vec()
-            ).collect_vec();
+                    Self::INK_MASK_FOREGROUND
+                }
+            )
+        );     
+    }
 
-        let sprite_data = self.data
-            .iter()
-            .map(|row|
-                row.iter().map(|&ink| if ink == mask_ink {
-                    replacement_ink
-                } else {
-                    ink
-                }).collect_vec()
-            ).collect_vec();
-
-        (ColorMatrix{data: mask_data}, ColorMatrix{data:sprite_data})
-
+    /// Exchange all the occurrences of `from` Ink with `to` ink
+    pub fn replace_ink(&mut self, from: Ink, to: Ink) {
+        self.data
+            .iter_mut()
+            .for_each(|row|
+                row.iter_mut()
+                .for_each(|ink| if *ink == from {
+                    *ink = to;
+            })
+        );
     }
 
     pub fn empty() -> Self {

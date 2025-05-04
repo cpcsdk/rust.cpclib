@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::fs::File;
+use std::io::Write;
 
 use cpclib_common::bitfield::{BitRange, BitRangeMut};
 use cpclib_common::camino::Utf8Path;
@@ -74,7 +76,14 @@ pub enum Transformation {
         position: TransformationPosition,
         /// The amount of columns to add
         amount: u16
-    }
+    },
+
+    /// Replace one Ink by another one
+    ReplaceInk{from: Ink, to: Ink},
+
+    /// Create a mask from the background Ink MaskFromBackgroundInk
+    MaskFromBackgroundInk(Ink)
+
 }
 
 impl Transformation {
@@ -92,84 +101,89 @@ impl Transformation {
     pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
         match self {
             Transformation::SkipOddPixels => {
-                let mut res = matrix.clone();
-                res.remove_odd_columns();
-                res
-            },
-
+                        let mut res = matrix.clone();
+                        res.remove_odd_columns();
+                        res
+                    },
             Transformation::SkipLeftPixelColumns(amount) => {
-                matrix.window(
-                    *amount as _,
-                    0,
-                    matrix.width().saturating_sub(*amount as _) as _,
-                    matrix.height() as _
-                )
-            },
-
+                        matrix.window(
+                            *amount as _,
+                            0,
+                            matrix.width().saturating_sub(*amount as _) as _,
+                            matrix.height() as _
+                        )
+                    },
             Transformation::SkipTopPixelLines(amount) => {
-                matrix.window(
-                    0 as _,
-                    *amount as _,
-                    matrix.width() as _,
-                    matrix.height().saturating_sub(*amount as _) as _
-                )
-            },
-
+                        matrix.window(
+                            0 as _,
+                            *amount as _,
+                            matrix.width() as _,
+                            matrix.height().saturating_sub(*amount as _) as _
+                        )
+                    },
             Transformation::KeepLeftPixelColumns(usize) => {
-                matrix.window(0, 0, *usize as _, matrix.height() as _)
-            },
-
+                        matrix.window(0, 0, *usize as _, matrix.height() as _)
+                    },
             Transformation::KeepTopPixelLines(usize) => {
-                matrix.window(0, 0, matrix.width() as _, *usize as _)
-            },
-
+                        matrix.window(0, 0, matrix.width() as _, *usize as _)
+                    },
             Transformation::BlankLines {
-                pattern,
-                position,
-                amount
-            } => {
-                // Build the line according to the background pattern
-                let line = {
-                    let mut lines = Vec::new();
-                    for idx in 0..(matrix.width() as usize) {
-                        lines.push(pattern[idx % pattern.len()]);
+                        pattern,
+                        position,
+                        amount
+                    } => {
+                        // Build the line according to the background pattern
+                        let line = {
+                            let mut lines = Vec::new();
+                            for idx in 0..(matrix.width() as usize) {
+                                lines.push(pattern[idx % pattern.len()]);
+                            }
+                            lines
+                        };
+
+                        // Get the real position (will not change over the additions)
+                        let position = position.absolute_position(matrix.height() as _).unwrap();
+
+                        // Modify the image
+                        let mut res = matrix.clone();
+                        (0..*amount).for_each(|_| {
+                            res.add_line(position, &line);
+                        });
+                        res
+                    },
+            Transformation::BlankColumns {
+                        pattern,
+                        position,
+                        amount
+                    } => {
+                        let column = {
+                            let mut column = Vec::new();
+                            for idx in 0..(matrix.height() as usize) {
+                                column.push(pattern[idx % pattern.len()])
+                            }
+                            column
+                        };
+
+                        let position = position.absolute_position(matrix.width() as _).unwrap();
+
+                        let mut res = matrix.clone();
+                        (0..*amount).for_each(|_| {
+                            res.add_column(position, &column);
+                        });
+
+                        res
                     }
-                    lines
-                };
 
-                // Get the real position (will not change over the additions)
-                let position = position.absolute_position(matrix.height() as _).unwrap();
-
-                // Modify the image
+            Transformation::ReplaceInk { from, to } => {
                 let mut res = matrix.clone();
-                (0..*amount).for_each(|_| {
-                    res.add_line(position, &line);
-                });
+                res.replace_ink(*from, *to);
                 res
             },
-
-            Transformation::BlankColumns {
-                pattern,
-                position,
-                amount
-            } => {
-                let column = {
-                    let mut column = Vec::new();
-                    for idx in 0..(matrix.height() as usize) {
-                        column.push(pattern[idx % pattern.len()])
-                    }
-                    column
-                };
-
-                let position = position.absolute_position(matrix.width() as _).unwrap();
-
+            Transformation::MaskFromBackgroundInk(ink) => {
                 let mut res = matrix.clone();
-                (0..*amount).for_each(|_| {
-                    res.add_column(position, &column);
-                });
-
+                res.convert_to_mask(*ink);
                 res
-            }
+            },
         }
     }
 
@@ -246,13 +260,25 @@ impl TransformationsList {
         self
     }
 
+    pub fn replace(mut self, from: Ink, to: Ink) -> Self {
+        self.transformations
+            .push(Transformation::ReplaceInk {from, to});
+        self
+    }
+
+    pub fn build_mask_from_background_ink(mut self, background: Ink) -> Self {
+        self.transformations
+            .push(Transformation::MaskFromBackgroundInk(background));
+        self
+    }
+
     /// Apply ALL the transformation (in order of addition)
     pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
-        let mut result = Some(matrix.clone());
+        let mut result = matrix.clone();
         for transformation in &self.transformations {
-            result = Some(transformation.apply(&result.unwrap()))
+            result = transformation.apply(&result);
         }
-        result.unwrap()
+        result
     }
 }
 
@@ -543,6 +569,11 @@ pub enum SpriteOutputFormat {
 #[allow(missing_docs)]
 pub enum OutputFormat {
 
+    MaskedSprite {
+        sprite_format: SpriteOutputFormat,
+        mask_ink: Ink,
+        replacement_ink: Ink
+    },
     Sprite(SpriteOutputFormat),
 
     /// Chuncky output where each pixel is encoded in one byte (and is supposed to be vertically duplicated)
@@ -1000,6 +1031,51 @@ pub enum SpriteOutput {
     },
 }
 
+impl AsRef<[u8]> for SpriteOutput {
+    fn as_ref(&self) -> &[u8] {
+        self.data()
+    }
+}
+
+impl SpriteOutput {
+    pub fn data(&self) -> &[u8] {
+        match self {
+            SpriteOutput::LinearEncodedSprite {data, ..} => data,
+            SpriteOutput::GrayCodedSprite {data , ..} => data,
+            SpriteOutput::ZigZagGrayCodedSprite {data, ..} => data,
+        }
+    }
+
+    pub fn palette(&self) -> &Palette {
+        match self {
+            SpriteOutput::LinearEncodedSprite {palette, ..} => palette,
+            SpriteOutput::GrayCodedSprite {palette , ..} => palette,
+            SpriteOutput::ZigZagGrayCodedSprite {palette, ..} => palette,
+        }
+    }
+
+    pub fn bytes_width(&self) -> usize {
+        match self {
+            SpriteOutput::LinearEncodedSprite {bytes_width, ..} => *bytes_width,
+            SpriteOutput::GrayCodedSprite {bytes_width , ..} => *bytes_width,
+            SpriteOutput::ZigZagGrayCodedSprite {bytes_width, ..} => *bytes_width,
+        }
+    }
+
+    pub fn height(&self) -> usize {
+        match self {
+            SpriteOutput::LinearEncodedSprite {height, ..} => *height,
+            SpriteOutput::GrayCodedSprite {height , ..} => *height,
+            SpriteOutput::ZigZagGrayCodedSprite {height, ..} => *height,
+        }
+    }
+
+    pub fn save_sprite<P: AsRef<Utf8Path>>(&self, fname: P) -> std::io::Result<()> {
+        let  fname = fname.as_ref();
+        let mut file = File::create(fname)?;
+        file.write_all(self.data())
+    }
+}
 
 /// Embeds the conversion output
 /// There must be one implementation per OuputFormat
@@ -1302,7 +1378,33 @@ impl ImageConverter {
         else if let OutputFormat::Sprite(sprite_output_format) = &output {
             Self::convert_to_sprite(input_file, palette, mode, transformations, sprite_output_format.clone(), crop_if_too_large)
                 .map(|sprite| Output::Sprite(sprite))
-        } else {
+        } 
+        else if let OutputFormat::MaskedSprite { sprite_format, mask_ink , replacement_ink } = &output {
+            let mut sprite_transformations = transformations.clone()
+                .replace(*mask_ink, *replacement_ink);
+            let sprite = Self::convert_to_sprite(
+                input_file, 
+                palette, 
+                mode, 
+                sprite_transformations, 
+                sprite_format.clone(), 
+                crop_if_too_large)?;
+
+
+            let mut mask_transformations = transformations.clone()
+                .build_mask_from_background_ink(*mask_ink);
+            let mask = Self::convert_to_sprite(
+                input_file, 
+                Some(vec![ColorMatrix::INK_MASK_FOREGROUND, ColorMatrix::INK_MASK_BACKGROUND].into()),  // we want and 0 ; or byte where we plot
+                mode, 
+                mask_transformations, 
+                sprite_format.clone(), 
+                crop_if_too_large)?;
+            
+
+            Ok(Output::SpriteAndMask { sprite, mask})
+        }
+        else {
             unimplemented!("Unimplemented conversion for {:?}", output)
         }
 
