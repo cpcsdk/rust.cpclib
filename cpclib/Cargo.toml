@@ -28,6 +28,7 @@ cpclib-disc.workspace = true
 cpclib-macros.workspace = true
 cpclib-common.workspace = true
 cpclib-image.workspace = true
+cpclib-sprite-compiler.workspace = true
 
 anyhow.workspace = true
 arrayref.workspace = true

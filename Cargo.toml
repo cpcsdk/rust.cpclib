@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "cpclib",
   "cpclib-asm",
   "cpclib-basic",
   "cpclib-basm",
@@ -9,14 +10,17 @@ members = [
   "cpclib-common",
   "cpclib-cpr",
   "cpclib-cprcli", 
+   "cpclib-crunch",
   "cpclib-crunchers",
   "cpclib-disc",
-  "cpclib-emucontrol", 
+  "cpclib-emucontrol",
+  "cpclib-files",
   "cpclib-image",
   "cpclib-imgconverter",
   "cpclib-macros",
   "cpclib-runner", 
   "cpclib-sna",
+  "cpclib-sprite-compiler", 
   "cpclib-tokens",
   "cpclib-visual-basm",
   "cpclib-visual-bndbuild",
@@ -24,7 +28,6 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu",
-  "cpclib", "cpclib-crunch", "cpclib-files", 
   #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
@@ -59,6 +62,7 @@ cpclib-imgconverter = { version = "0.9.0", path = "cpclib-imgconverter", default
 cpclib-macros = { version = "0.9.0", path = "cpclib-macros", default-features = false }
 cpclib-runner = { version = "0.7.0", path = "cpclib-runner", default-features = false }
 cpclib-sna = { version = "0.9.0", path = "cpclib-sna", default-features = false }
+cpclib-sprite-compiler = { version = "0.1.0", path = "cpclib-sprite-compiler", default-features = false }
 cpclib-tokens = { version = "0.9.0", path = "cpclib-tokens", default-features = false }
 cpclib-xfer = { version = "0.9.0", path = "cpclib-xfer", default-features = false }
 cpclib-xfertool = { version = "0.9.0", path = "cpclib-xfertool", default-features = false }
@@ -70,6 +74,7 @@ as-slice = "0.2.1"
 bitfield = "0.14.0"
 bitflags = "2.9.0"
 bitvec = "1.0.1"
+bon = "3.6.3"
 built = { version = "0.7.7", features = ["chrono"] }
 camino = "1.1.9"
 camino-tempfile = "1.1.1"
@@ -190,7 +195,8 @@ cpclib-files = { path = "./cpclib-files/" }
 cpclib-image = { path = "./cpclib-image/" }
 cpclib-imgconverter = { path = "./cpclib-imgconverter/" }
 cpclib-macros = { path = "./cpclib-macros/" }
-cpclib-sna = { path = "./cpclib-sna/" }                         #
+cpclib-sna = { path = "./cpclib-sna/" }
+cpclib-sprite-compiler = { path = "./cpclib-sprite-compiler/" }
 cpclib-tokens = { path = "./cpclib-tokens/" }
 cpclib-visual-bndbuild = { path = "./cpclib-visual-bndbuild/" }
 cpclib-wasm = { path = "./cpclib-wasm" }

@@ -9,7 +9,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
 
-use crate::ga::*;
+use crate::{ga::*, pixels::bytes_to_pens};
 use crate::pixels;
 
 /// Screen mode
@@ -199,6 +199,7 @@ pub enum ColorConversionStrategy {
 impl ColorMatrix {
     pub const INK_MASK_BACKGROUND: Ink = Ink::BRIGHTWHITE;
     pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
+    pub const INK_NOT_USED_IN_MASK: Ink = Ink::RED;
 
     pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
         let pixel_height = {
@@ -1001,8 +1002,10 @@ impl Sprite {
     pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette) -> Self {
         let pens = bytes
             .chunks(bytes_width)
-            .map(|chunk| pixels::bytes_to_pens(bytes, mode).collect_vec())
+            .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect_vec())
             .collect_vec();
+
+
         Self::from_pens(&pens, mode, Some(palette))
     }
 
@@ -1029,6 +1032,12 @@ impl Sprite {
                             vec![*p.get(&pens[0]), *p.get(&pens[1])]
                         })
                         .collect::<Vec<Ink>>()
+                },
+
+                Some(mode) => {
+                    bytes_to_pens(line, mode)
+                        .map(|pen| *p.get(&pen))
+                        .collect_vec()
                 },
 
                 _ => unimplemented!()

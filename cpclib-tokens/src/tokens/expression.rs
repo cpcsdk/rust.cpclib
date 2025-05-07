@@ -893,6 +893,11 @@ impl Expr {
             std::mem::swap(&mut new, s);
         }
     }
+
+
+    pub fn neg(self) -> Self {
+        Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

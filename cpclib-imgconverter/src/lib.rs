@@ -5,7 +5,7 @@ use anyhow::{self, Error};
 use camino_tempfile as tempfile;
 use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
 use cpclib::asm::preamble::defb_elements;
-use cpclib::asm::{assemble, assemble_to_amsdos_file};
+use cpclib::asm::{assemble, assemble_to_amsdos_file, ListingExt};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
@@ -692,10 +692,35 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         }
 
         // handle the additional mask stuff
-        if let Output::SpriteAndMask { mask, .. } = &conversion {
-            let mask_fname = sub_sprite.get_one::<String>("MASK_FNAME").unwrap();
-            mask.save_sprite(mask_fname)
-                .expect("Unable to create the mask file");
+        if let Output::SpriteAndMask { mask, sprite } = &conversion {
+            if let Some(mask_fname) = sub_sprite.get_one::<String>("MASK_FNAME") {
+                mask.save_sprite(mask_fname)
+                    .expect("Unable to create the mask file");
+            }
+
+            if let Some(code_fname) = sub_sprite.get_one::<String>("SPRITE_ASM") {
+                assert_eq!(mask.encoding(), SpriteEncoding::Linear, "Need to implement the other cases when needed");
+
+                let r1 = sub_sprite.get_one::<u8>("R1")
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        if matches.get_flag("OVERSCAN") || matches.get_flag("FULLSCREEN") {
+                            96/2
+                        } else {
+                            80/2
+                        }
+                    });
+                let label = matches.get_one::<String>("SPRITE_ASM_LABEL")
+                    .cloned()
+                    .unwrap_or_else(||{
+                        code_fname
+                            .replace('.', "_")
+                    });
+                let code = cpclib::sprite_compiler::linear_sprite_compiler(
+                    &label, sprite, mask, r1);
+                code.save(code_fname).expect("Unable to save generated code");
+
+            }
         }
     }
     else if let Some(sub_tile) = sub_tile {
@@ -1041,6 +1066,7 @@ pub fn build_args_parser() -> clap::Command {
                                 .long("r1")
                                 .alias("horizontal-displayed-character-number")
                                 .alias("width")
+                                .alias("R1")
                                 .value_parser(clap::value_parser!(u8))
                         )
                         .arg(
@@ -1109,7 +1135,34 @@ pub fn build_args_parser() -> clap::Command {
                             .long("output")
                             .short('o')
                             .help("Filename where the sprite is stored")
-                            .required(true)
+                            .required_unless_present("SPRITE_ASM")
+                        )
+
+                        .arg(Arg::new("R1")
+                                .help("Screen width in number of chars")
+                                .long("r1")
+                                .alias("horizontal-displayed-character-number")
+                                .alias("width")
+                                .alias("R1")
+                                .value_parser(clap::value_parser!(u8))
+                                .requires("SPRITE_ASM")
+                        )
+
+                        .arg(
+                            Arg::new("SPRITE_ASM")
+                            .long("code")
+                            .short('c')
+                            .help("Filename where to store the Z80 display code")
+                            .required_unless_present("SPRITE_FNAME")
+                            .requires("MASK_INK")
+                            .requires("REPLACEMENT_INK")
+                        )
+
+                        .arg(
+                            Arg::new("SPRITE_ASM_LABEL")
+                            .long("label")
+                            .short('l')
+                            .help("Label for the generated asm code")
                         )
 
                         .arg(

@@ -1035,6 +1035,9 @@ impl SpriteOutput {
         )
     }
 
+    pub fn encoding(&self) -> SpriteEncoding {
+        self.encoding.clone()
+    }
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -1343,7 +1346,7 @@ impl ImageConverter {
         output: OutputFormat,
         crop_if_too_large: bool
     ) -> anyhow::Result<Output> {
-        let converter = ImageConverter {
+        let mut converter = ImageConverter {
             palette: palette.clone(),
             mode,
             transformations: transformations.clone(),
@@ -1393,13 +1396,13 @@ impl ImageConverter {
             let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
+            let mut mask_palette = vec![ColorMatrix::INK_NOT_USED_IN_MASK; 16];
+            mask_palette[0] = ColorMatrix::INK_MASK_FOREGROUND; // at the position with all bits reset
+            mask_palette[mode.max_colors()-1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
                 Some(
-                    vec![
-                        ColorMatrix::INK_MASK_FOREGROUND,
-                        ColorMatrix::INK_MASK_BACKGROUND,
-                    ]
+                    mask_palette
                     .into()
                 ), // we want and 0 ; or byte where we plot
                 mode,
@@ -1419,7 +1422,8 @@ impl ImageConverter {
             Ok(Output::SpriteAndMask { sprite, mask })
         }
         else {
-            unimplemented!("Unimplemented conversion for {:?}", output)
+            let sprite = converter.load_sprite(input_file);
+            converter.apply_sprite_conversion(&sprite)
         }
     }
 

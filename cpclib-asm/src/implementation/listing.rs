@@ -189,3 +189,49 @@ impl ListingFromStr for Listing {
         crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())
     }
 }
+
+
+
+
+#[derive(Default)]
+pub enum ListingSelectorStrategy {
+    #[default]
+    Speed,
+    Size
+}
+#[derive(Default)]
+pub struct ListingSelector {
+    choices: Vec<Listing>,
+    strategy: ListingSelectorStrategy
+}
+
+impl ListingSelector {
+    pub fn add(mut self, lst: Listing) -> Self {
+        self.choices.push(lst);
+        self
+    }
+
+    pub fn select(mut self) -> Listing {
+        let key_fn: Box<dyn Fn(&Listing) -> (usize, usize)> = match self.strategy {
+            ListingSelectorStrategy::Speed => {
+                Box::new(|l: &Listing| (
+                    l.estimated_duration().unwrap(), 
+                    l.number_of_bytes().unwrap()
+                ))
+            },
+            ListingSelectorStrategy::Size => {
+                Box::new(|l: &Listing| (
+                    l.number_of_bytes().unwrap(),
+                    l.estimated_duration().unwrap()
+                ))
+            },
+        };
+
+        self.choices.sort_by_cached_key(key_fn);
+        self.choices
+            .into_iter()
+            .next()
+            .unwrap()
+
+    }
+}

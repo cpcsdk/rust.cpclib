@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use cpclib_common::smallvec::SmallVec;
+use cpclib_common::smol_str::SmolStr;
 
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
@@ -755,7 +756,10 @@ impl ListingElement for Token {
     }
 
     fn repeat_counter_step(&self) -> Option<&Self::Expr> {
-        todo!()
+        match self {
+            Self::Repeat(_, _, _, step) => step.as_ref(),
+            _ => unreachable!()
+        }
     }
 
     fn assembler_control_command(&self) -> &Self::AssemblerControlCommand {
@@ -781,14 +785,14 @@ pub type Listing = BaseListing<Token>;
 // Set of methods that do not have additional dependencies
 impl Listing {
     /// Add a new label to the listing
-    pub fn add_label(&mut self, label: &str) {
+    pub fn add_label<S: Into<SmolStr>>(&mut self, label: S) {
         self.listing_mut().push(Token::Label(label.into()));
     }
 
     /// Add a new comment to the listing
-    pub fn add_comment(&mut self, comment: &str) {
+    pub fn add_comment<S: Into<String>>(&mut self, comment: S) {
         self.listing_mut()
-            .push(Token::Comment(String::from(comment)));
+            .push(Token::Comment(comment.into()));
     }
 
     /// Add a list of bytes to the listing

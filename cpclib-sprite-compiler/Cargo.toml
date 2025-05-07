@@ -1,0 +1,20 @@
+[package]
+name = "cpclib-sprite-compiler"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[dependencies]
+
+cpclib-image.workspace = true
+cpclib-asm.workspace = true
+bon.workspace = true
+itertools.workspace = true
+smol_str.workspace = true
+
+[lints]
+workspace = true

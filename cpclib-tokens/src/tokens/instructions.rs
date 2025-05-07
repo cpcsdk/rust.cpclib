@@ -414,6 +414,34 @@ pub enum TestKind {
     LabelNused(SmolStr)
 }
 
+
+impl TestKind {
+    pub fn iftrue<E: Into<Expr>>(e: E) -> Self {
+        Self::True(e.into())
+    }
+
+    pub fn iffalse<E: Into<Expr>>(e: E) -> Self {
+        Self::False(e.into())
+    }
+
+
+    pub fn ifndef<S: Into<SmolStr>>(l: S) -> Self {
+        TestKind::LabelDoesNotExist(l.into())
+    }
+
+    pub fn ifdef<S: Into<SmolStr>>(l: S) -> Self {
+        TestKind::LabelExists(l.into())
+    }
+
+    pub fn ifnused<S: Into<SmolStr>>(l: S) -> Self {
+        TestKind::LabelNused(l.into())
+    }
+
+    pub fn ifused<S: Into<SmolStr>>(l: S) -> Self {
+        TestKind::LabelUsed(l.into())
+    }
+}
+
 pub trait TestKindElement {
     type Expr: ExprElement;
 

@@ -25,8 +25,7 @@ utf8-chars.workspace = true
 xcap.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
-
-bon = "2.3"
+bon.workspace = true
 directories = "5.0.1"
 flate2 = "1.1.0"
 glob.workspace = true

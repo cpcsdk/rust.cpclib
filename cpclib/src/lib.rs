@@ -48,7 +48,8 @@ pub use cpclib_xfer as xfer;
 pub use {
     cpclib_asm as asm, cpclib_basic as basic, cpclib_common as common,
     cpclib_crunchers as crunchers, cpclib_disc as disc, cpclib_image as image, cpclib_sna as sna,
-    cpclib_z80emu as z80emu
+    cpclib_z80emu as z80emu,
+    cpclib_sprite_compiler as sprite_compiler
 };
 
 /// Disk (edsk) manipulation. WIP

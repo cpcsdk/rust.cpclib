@@ -204,6 +204,12 @@ impl TokenExt for Token {
             | Token::Equ { .. }
             | Token::Protect(..) => 0,
 
+
+            Token::Repeat(Expr::Value(count), lst , _ , _ ) if *count >= 0 => {
+                let lst_count = lst.estimated_duration()?;
+                lst_count * (*count as usize)
+            }
+
             // Here, there is a strong limitation => it will works only if no symbols are used
             Token::Defw(_) | Token::Defb(_) | Token::Defs(_) => {
                 self.disassemble_data()
