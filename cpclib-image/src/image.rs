@@ -108,15 +108,24 @@ fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
 }
 
 /// Encode the raw array of Pens in an array of CPC bytes encoded for the right screen mode
-fn encode(pens: &[Vec<Pen>], mode: Mode) -> Vec<Vec<u8>> {
+fn encode(pens: &[Vec<Pen>], mode: Mode, missing_pen: Option<Pen>) -> Vec<Vec<u8>> {
     let mut rows = Vec::new();
     for input_row in pens.iter() {
         let row = {
-            match mode {
-                Mode::Zero => pixels::mode0::pens_to_vec(input_row),
-                Mode::One => pixels::mode1::pens_to_vec(input_row),
-                Mode::Two => pixels::mode2::pens_to_vec(input_row),
-                _ => panic!("Unimplemented yet ...")
+            if let Some(replacement) = missing_pen {
+                match mode {
+                    Mode::Zero => pixels::mode0::pens_to_vec_with_replacement(input_row,replacement),
+                    Mode::One => pixels::mode1::pens_to_vec_with_replacement(input_row, replacement),
+                    Mode::Two => pixels::mode2::pens_to_vec_with_replacement(input_row, replacement),
+                    _ => panic!("Unimplemented yet ...")
+                }
+            } else {
+                match mode {
+                    Mode::Zero => pixels::mode0::pens_to_vec_with_crop(input_row),
+                    Mode::One => pixels::mode1::pens_to_vec_with_crop(input_row),
+                    Mode::Two => pixels::mode2::pens_to_vec_with_crop(input_row),
+                    _ => panic!("Unimplemented yet ...")
+                }
             }
         };
         rows.push(row);
@@ -591,7 +600,7 @@ impl ColorMatrix {
     }
 
     /// Convert the matrix as a sprite, given the right mode and an optional palette
-    pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>) -> Sprite {
+    pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>, missing_pen: Option<Pen>) -> Sprite {
         // Extract the palette is not provided as an argument
         let palette = palette.unwrap_or_else(|| self.extract_palette(mode));
 
@@ -602,7 +611,7 @@ impl ColorMatrix {
         Sprite {
             mode: Some(mode),
             palette: Some(palette),
-            data: encode(&pens, mode)
+            data: encode(&pens, mode, missing_pen)
         }
     }
 
@@ -610,7 +619,8 @@ impl ColorMatrix {
     pub fn as_mode1_sprite_with_different_inks_per_line(
         &self,
         palette: &[(Ink, Ink, Ink, Ink)],
-        dummy_palette: &Palette
+        dummy_palette: &Palette,
+        missing_pen: Option<Pen>
     ) -> Sprite {
         // Build the matrix of pens
         let mut data: Vec<Vec<Pen>> = Vec::new();
@@ -653,7 +663,7 @@ impl ColorMatrix {
             data.push(pens);
         }
 
-        let encoded_pixels = encode(&data, Mode::One);
+        let encoded_pixels = encode(&data, Mode::One, missing_pen);
 
         // Convert the matrix of pens as a sprite
         Sprite {
@@ -836,10 +846,10 @@ impl ColorMatrixList {
     }
 
     /// Convert each matrice as a sprite using the same conversion method
-    pub fn as_sprites(&self, mode: Mode, palette: Option<Palette>) -> SpriteList {
+    pub fn as_sprites(&self, mode: Mode, palette: Option<Palette>, missing_pen: Option<Pen>) -> SpriteList {
         self.to_vec()
             .iter()
-            .map(|matrix| matrix.as_sprite(mode, palette.clone()))
+            .map(|matrix| matrix.as_sprite(mode, palette.clone(), missing_pen))
             .collect::<Vec<Sprite>>()
             .into()
     }
@@ -1126,21 +1136,23 @@ impl Sprite {
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>
+        palette: Option<Palette>,
+        missing_pen: Option<Pen>
     ) -> Self {
         // Get the list of Inks that represent the image
         let matrix = ColorMatrix::convert(img, conversion);
-        matrix.as_sprite(mode, palette)
+        matrix.as_sprite(mode, palette, missing_pen)
     }
 
     pub fn convert_from_fname<P: AsRef<Utf8Path>>(
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>
+        palette: Option<Palette>,
+        missing_pen: Option<Pen>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
-        Ok(Self::convert(&img.to_rgb8(), mode, conversion, palette))
+        Ok(Self::convert(&img.to_rgb8(), mode, conversion, palette, missing_pen))
     }
 
     /// Apply a transformation function on each line

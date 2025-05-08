@@ -24,9 +24,9 @@ pub fn bytes_to_pens<'bytes>(
 
 pub fn pens_to_vec(pens: &[Pen], mode: Mode) -> Vec<u8> {
     match mode {
-        Mode::Zero => mode0::pens_to_vec(pens),
-        Mode::One => mode1::pens_to_vec(pens),
-        Mode::Two => mode2::pens_to_vec(pens),
+        Mode::Zero => mode0::pens_to_vec_with_crop(pens),
+        Mode::One => mode1::pens_to_vec_with_crop(pens),
+        Mode::Two => mode2::pens_to_vec_with_crop(pens),
         _ => unimplemented!()
     }
 }
@@ -117,13 +117,7 @@ pub mod mode2 {
     }
 
     /// Convert a vector of pens into a vector of bytes
-    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
-        let pens = if pens.len() % 8 == 0 {
-            &pens[..(pens.len() / 8) * 8]
-        }
-        else {
-            pens
-        };
+    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
 
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 8) {
@@ -141,6 +135,35 @@ pub mod mode2 {
 
         res
     }
+
+    /// Convert a vector of pens into a vector of bytes
+    pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
+        let get_pen = |at| {
+            pens.get(at)
+                .cloned()
+                .unwrap_or(replacement)
+        };
+
+        let mut res = Vec::new();
+        let mut idx = 0;
+        while (idx < pens.len()) {
+            res.push(pens_to_byte(
+                get_pen(idx * 8),
+                get_pen(idx * 8 + 1),
+                get_pen(idx * 8 + 2),
+                get_pen(idx * 8 + 3),
+                get_pen(idx * 8 + 4),
+                get_pen(idx * 8 + 5),
+                get_pen(idx * 8 + 6),
+                get_pen(idx * 8 + 7)
+            ));
+
+            idx += 8;
+        }
+
+        res
+    }
+
 
     pub fn pens_to_byte(
         pen0: Pen,
@@ -280,15 +303,9 @@ pub mod mode1 {
             + pen_to_pixel_byte(pen3, PixelPosition::Fourth)
     }
 
-    /// Convert a vector of pens into a vector of bytes
-    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
-        if pens.len() % 4 != 0 {
-            eprintln!(
-                "{} pens provided, but only {} handled. Add additional pixels to image if needed",
-                pens.len(),
-                (pens.len() / 4) * 4
-            );
-        };
+    /// Convert a vector of pens into a vector of bytes.
+    /// Crop extra pens that do not enter in a byte
+    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
 
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 4) {
@@ -302,6 +319,32 @@ pub mod mode1 {
 
         res
     }
+
+    pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
+        
+        let get_pen = |at: usize| {
+            pens.get(at)
+                .cloned()
+                .unwrap_or(replacement)
+        };
+
+        let mut res = Vec::new();
+        let mut idx = 0;
+        while idx < pens.len() {
+            res.push(pens_to_byte(
+                get_pen(idx * 4 + 0),
+                get_pen(idx * 4 + 1),
+                get_pen(idx * 4 + 2),
+                get_pen(idx * 4 + 3)
+            ));
+
+
+            idx += 4;
+        }
+
+        res
+    }
+
 
     // Initial python code to backport
     // def get_mode1_pixel0_byte_encoded(pen):
@@ -489,8 +532,20 @@ pub mod mode0 {
     }
 
     /// Convert a vector of pens into a vector of bytes.
-    /// In case of an odd number of pens, the last one is forced to be 0
-    pub fn pens_to_vec(pens: &[Pen]) -> Vec<u8> {
+    /// In case of an odd number of pens, the last one is lost
+    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
+        let mut res = Vec::with_capacity(pens.len());
+        for idx in 0..(pens.len() / 2) {
+            res.push(pens_to_byte(pens[idx * 2 + 0], pens[idx * 2 + 1]));
+        }
+
+        res
+    }
+
+
+        /// Convert a vector of pens into a vector of bytes.
+    /// In case of an odd number of pens, the missing ones are forced
+    pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
         let mut res = Vec::with_capacity(pens.len());
         for idx in 0..(pens.len() / 2) {
             res.push(pens_to_byte(pens[idx * 2 + 0], pens[idx * 2 + 1]));
@@ -498,11 +553,13 @@ pub mod mode0 {
 
         // last pen is 0 if needed
         if pens.len() % 2 == 1 {
-            res.push(pens_to_byte(pens[pens.len() - 1], 0.into()));
+            res.push(pens_to_byte(pens[pens.len() - 1], replacement));
         }
 
         res
     }
+
+
 
     /// Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {

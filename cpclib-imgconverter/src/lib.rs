@@ -14,7 +14,7 @@ use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp::{self, OcpPal};
-use cpclib::sna::*;
+use cpclib::{sna::*, Pen};
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 use cpclib::{sna, ExtendedDsk, Ink};
@@ -645,6 +645,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let sub_exec = matches.subcommand_matches("exec");
     let sub_scr = matches.subcommand_matches("scr");
 
+
+    let missing_pen = matches.get_one::<u8>("MISSING_PEN").map(|v| Pen::from(*v));
+
     let crop_if_too_large = matches.get_flag("CROP_IF_TOO_LARGE");
     let output_format = get_output_format(matches);
     let conversion = ImageConverter::convert(
@@ -653,7 +656,8 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         output_mode.into(),
         transformations,
         output_format,
-        crop_if_too_large
+        crop_if_too_large,
+        missing_pen
     )?;
 
     if sub_sprite.is_some() {
@@ -954,6 +958,12 @@ pub fn build_args_parser() -> clap::Command {
                         .value_name("MODE")
                         .default_value("0")
                         .value_parser(["0", "1", "2"])
+                )
+                .arg(
+                    Arg::new("MISSING_PEN")
+                        .long("missing-pen")
+                        .help("Pen to use when the byte is too small")
+                        .value_parser(value_parser!(u8))
                 )
                 .arg(
                     Arg::new("CROP_IF_TOO_LARGE")

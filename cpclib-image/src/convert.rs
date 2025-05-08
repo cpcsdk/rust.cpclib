@@ -1212,7 +1212,8 @@ impl ImageConverter {
         mode: Mode,
         transformations: TransformationsList,
         output: OutputFormat,
-        crop_if_too_large: bool
+        crop_if_too_large: bool,
+        missing_pen: Option<Pen>
     ) -> anyhow::Result<Output>
     where
         P: AsRef<Utf8Path>
@@ -1223,7 +1224,8 @@ impl ImageConverter {
             mode,
             transformations,
             output,
-            crop_if_too_large
+            crop_if_too_large,
+            missing_pen
         )
     }
 
@@ -1233,7 +1235,8 @@ impl ImageConverter {
         mode: Mode,
         transformations: TransformationsList,
         encoding: SpriteEncoding,
-        crop_if_too_large: bool
+        crop_if_too_large: bool,
+        missing_pen: Option<Pen>
     ) -> anyhow::Result<SpriteOutput> {
         match &encoding {
             SpriteEncoding::Linear => {
@@ -1245,7 +1248,7 @@ impl ImageConverter {
                     crop_if_too_large
                 };
 
-                let sprite = converter.load_sprite(input_file);
+                let sprite = converter.load_sprite(input_file, missing_pen);
                 converter
                     .apply_sprite_conversion(&sprite)
                     .map(|output| output.sprite().unwrap())
@@ -1265,7 +1268,8 @@ impl ImageConverter {
                     mode,
                     transformations,
                     OutputFormat::Sprite(SpriteEncoding::GrayCoded),
-                    crop_if_too_large
+                    crop_if_too_large,
+                    missing_pen
                 )?
                 .sprite()
                 .unwrap();
@@ -1303,7 +1307,8 @@ impl ImageConverter {
                     mode,
                     transformations,
                     OutputFormat::Sprite(SpriteEncoding::Linear),
-                    crop_if_too_large
+                    crop_if_too_large,
+                    missing_pen
                 )?
                 .sprite()
                 .unwrap();
@@ -1344,7 +1349,8 @@ impl ImageConverter {
         mode: Mode,
         transformations: TransformationsList,
         output: OutputFormat,
-        crop_if_too_large: bool
+        crop_if_too_large: bool,
+        missing_pen: Option<Pen>
     ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: palette.clone(),
@@ -1357,7 +1363,7 @@ impl ImageConverter {
         if let OutputFormat::LinearEncodedChuncky = &output {
             let mut matrix = converter.load_color_matrix(input_file);
             matrix.double_horizontally();
-            let sprite = matrix.as_sprite(mode, None);
+            let sprite = matrix.as_sprite(mode, None, None);
             Ok(Output::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
                 palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
@@ -1372,7 +1378,8 @@ impl ImageConverter {
                 mode,
                 transformations,
                 sprite_output_format.clone(),
-                crop_if_too_large
+                crop_if_too_large,
+                missing_pen
             )
             .map(Output::Sprite)
         }
@@ -1390,7 +1397,8 @@ impl ImageConverter {
                 mode,
                 sprite_transformations,
                 sprite_format.clone(),
-                crop_if_too_large
+                crop_if_too_large,
+                missing_pen
             )?;
 
             let mask_transformations = transformations
@@ -1408,7 +1416,8 @@ impl ImageConverter {
                 mode,
                 mask_transformations,
                 sprite_format.clone(),
-                crop_if_too_large
+                crop_if_too_large,
+                missing_pen
             )?;
 
             // Just for debug stuff
@@ -1422,7 +1431,7 @@ impl ImageConverter {
             Ok(Output::SpriteAndMask { sprite, mask })
         }
         else {
-            let sprite = converter.load_sprite(input_file);
+            let sprite = converter.load_sprite(input_file, missing_pen);
             converter.apply_sprite_conversion(&sprite)
         }
     }
@@ -1443,9 +1452,9 @@ impl ImageConverter {
     /// Load the initial image
     /// TODO make compatibility tests are alike
     /// TODO propagate errors when needed
-    fn load_sprite(&mut self, input_file: &Utf8Path) -> Sprite {
+    fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite {
         let matrix = self.load_color_matrix(input_file);
-        let sprite = matrix.as_sprite(self.mode, self.palette.clone());
+        let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
         self.palette = sprite.palette();
 
         sprite
