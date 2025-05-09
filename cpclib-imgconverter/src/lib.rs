@@ -500,7 +500,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
             "linear" => SpriteEncoding::Linear,
             "graycoded" => SpriteEncoding::GrayCoded,
-            "zigazag" => SpriteEncoding::ZigZag,
+            "zigazag" => SpriteEncoding::LeftToRightToLeft,
             "zigzag+graycoded" => SpriteEncoding::ZigZagGrayCoded,
             _ => unimplemented!()
         };
@@ -714,14 +714,23 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                             80/2
                         }
                     });
-                let label = matches.get_one::<String>("SPRITE_ASM_LABEL")
+                let label = sub_sprite.get_one::<String>("SPRITE_ASM_LABEL")
                     .cloned()
                     .unwrap_or_else(||{
                         code_fname
                             .replace('.', "_")
                     });
-                let code = cpclib::sprite_compiler::linear_sprite_compiler(
-                    &label, sprite, mask, r1);
+
+                // generate the code
+                let code = match sub_sprite.get_one::<String>("SPRITE_ASM_KIND").unwrap().as_str() {
+                    "masked" => cpclib::sprite_compiler::standard_sprite_compiler(
+                        &label, sprite, mask, r1),
+                    "backup+masked" => cpclib::sprite_compiler::standard_sprite_with_background_backup_and_restore_compiler(
+                        &label, sprite, mask, r1),
+                    rest => unreachable!("{rest} unhandled")
+                };
+                
+                
                 code.save(code_fname).expect("Unable to save generated code");
 
             }
@@ -1166,6 +1175,16 @@ pub fn build_args_parser() -> clap::Command {
                             .requires("MASK_INK")
                             .requires("REPLACEMENT_INK")
                         )
+
+                        .arg(
+                            Arg::new("SPRITE_ASM_KIND")
+                            .long("kind")
+                            .help("The kind of code to generate")
+                            .requires("SPRITE_ASM")
+                            .value_parser(["masked", "backup+masked"])
+                            .default_value("masked")
+                        )
+
 
                         .arg(
                             Arg::new("SPRITE_ASM_LABEL")

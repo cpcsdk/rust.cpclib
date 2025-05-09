@@ -2,7 +2,7 @@
 
 use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::write, ops::{Deref, DerefMut}};
 
-use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register16, Register8, TestKind};
+use cpclib_asm::{dec_e, dec_l, inc_e, inc_l, ld_a_mem_hl, ld_mem_hl_d, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register16, Register8, TestKind};
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use bon::Builder;
 use smol_str::SmolStr;
@@ -17,6 +17,22 @@ pub enum RoutineAction {
     RestoreBackground
 }   
 
+
+impl RoutineAction {
+
+    pub fn save_background(&self) -> bool {
+        matches!(self, RoutineAction::SaveBackgroundAndDrawPixelMaskedSprite)
+    }
+
+    pub fn build_register_store(&self) -> RegistersStore {
+        let regs: &[Register8] = match self {
+            RoutineAction::DrawPixelMaskedSprite => &[Register8::D, Register8::E, Register8::B, Register8::C],
+            RoutineAction::SaveBackgroundAndDrawPixelMaskedSprite => &[Register8::B, Register8::C],
+            RoutineAction::RestoreBackground => &[],
+        };
+        RegistersStore::new(regs)
+    }
+}
 
 #[derive(Default)]
 pub struct RegistersStore {
@@ -103,26 +119,32 @@ pub struct Compiler {
 
     /// The listing of the final code
     #[builder(default)]
-    lst: Listing,
+    display_lst: Listing,
+
+    #[builder(default)]
+    restore_lst: Listing,
 
     /// Utility to handle line changes
     bc26: Bc26,
 
     #[builder(default)]
-    regs: RegistersStore
+    regs: RegistersStore,
+
+    #[builder(default)]
+    action: RoutineAction
 }
 
 
 impl Deref for Compiler {
     type Target = Listing;
     fn deref(&self) -> &Self::Target {
-        &self.lst
+        &self.display_lst
     }
 }
 
 impl DerefMut for Compiler {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.lst
+        &mut self.display_lst
     }
 }
 
@@ -155,16 +177,13 @@ impl Compiler {
 
 
         let stats = Self::build_stats(spr, msk);
-        dbg!(&stats);
-
         let mut retained = stats.into_iter()
                 .filter(|(k,v)| *v > 3)
                 .sorted_by_key(|(k,v)| *v)
                 .collect_vec();
-        dbg!(&retained);
 
         // prefetch registers with most used values
-        self.regs = RegistersStore::new(&[Register8::D, Register8::E, Register8::B, Register8::C]);
+        self.regs = self.action.build_register_store();
         while let Some((v, _)) = retained.pop() && self.regs.has_available_regs() {
             let r = self.regs.next_available_regs().unwrap();
             self.regs.set(r, v);
@@ -182,10 +201,13 @@ impl Compiler {
         }
 
         self.emit_footer();
-        self.lst
+        self.display_lst
     } 
 
     fn emit_line(&mut self, line_idx: usize, line: impl Iterator<Item=(u8, u8)>, mut write_cursor: u16) -> u16 {
+        //let mut restore_data = Vec::new();
+        //let mut restore_address = None;
+
         let mut nb_moves = 0;
         self.emit_line_header(line_idx);
 
@@ -195,7 +217,12 @@ impl Compiler {
         let nb_steps = line.len() as u16;
         for (read_idx, (pixs, mask)) in line.into_iter().enumerate() {
 
-            let read_cursor = read_idx as u16;
+            // handle zig-zag stuff
+            let read_cursor = if line_idx%2 ==0 {
+                read_idx as u16
+            } else {
+                nb_steps - read_idx as u16 - 1
+            };
             let will_write_on_screen = mask != 0xff;
 
             // we need to lazily  move the write buffer when some modifications have to be done
@@ -211,7 +238,6 @@ impl Compiler {
                     1 => inc_l().into(),
                     -1 => dec_l().into(),
                     local_moves => {
-                        dbg!(local_moves);
                         let choice1: Listing = ListingBuilder::default()
                         .repeat(
                             local_moves.abs(), 
@@ -238,15 +264,74 @@ impl Compiler {
                     .extend(chosen); // inject the fastest one
 
                 write_cursor = read_cursor;
+
+
+                if self.action.save_background() {
+                    // backup the new address
+                   
+                    match local_moves {
+                        0 => {},
+                        1  => {
+                            // nothing to do in the current listing
+                            self.restore_lst.add(inc_e());
+                        },
+                        -1 => {
+                            self.restore_lst.add(dec_e());
+                        },
+                        _ => {
+                            lst = lst
+                                    .comment("Save screen address")
+                                    .ex_hl_de()
+                                    .ld_mem_hl_e()
+                                    .inc_hl() // TODO use incl when possible
+                                    .ld_mem_hl_d()
+                                    .inc_hl() // TODO use inc l when possible
+                                    .ex_hl_de();
+
+                            self.restore_lst.inject_listing(
+                                &ListingBuilder::default()
+                                    .comment("Retreive screen address")
+                                    .ld_e_mem_hl()
+                                    .inc_hl()
+                                    .ld_d_mem_hl()
+                                    .inc_hl()
+                                    .build()  
+                            );
+                        }
+                    }
+                }
             }
 
             // properly handle the byte
             match mask {
                 0x00 => {
-                    // no background pixels are kept
-                    lst = lst
-                        .comment("No masking here")
-                        .ld_mem_hl_expr(pixs);
+                    if self.action.save_background() {
+                        lst = lst
+                            .comment("No masking, but need to save the background")
+                            .ld_a_mem_hl()
+                            .ld_mem_de_a()
+                            .inc_de();
+
+                        self.restore_lst.inject_listing(
+                            &ListingBuilder::default()
+                                .comment("Read and write byte")
+                                .ld_a_mem_hl()
+                                .inc_hl()
+                                .ld_mem_de_a()
+                                .build()
+                        );
+                    } else {
+                        // no background pixels are kept
+                        lst = lst
+                            .comment("No masking here");
+                    }
+
+                    if let Some(reg) = self.regs.register_for(pixs) {
+                        lst = lst.ld_mem_hl_r8(reg);
+                    } else {
+                        lst = lst.ld_mem_hl_expr(pixs);
+                    }
+
                 },
 
                 0xff => {
@@ -351,7 +436,7 @@ impl Compiler {
         if let Some(label) = self.header_label.take() {
             self.add_label(label);
         }
-        self.lst.inject_listing(&self.regs.listing());
+        self.display_lst.inject_listing(&self.regs.listing());
 
     }
 
@@ -457,18 +542,36 @@ impl Bc26 {
 
 }
 
-/// Dummy display routine
+/// Dummy display routine.
+/// 
+/// Display from left to right then right to left and so on ...
+/// Prefetch most important bytes in registers (but do not update them)
 /// 
 /// ; Input: HL = drawing address
-/// ; ld (hl), val
-pub fn linear_sprite_compiler(label: &str, spr: &SpriteOutput, msk: &SpriteOutput, r1: u8) -> Listing {
-    let spr = spr.with_encoding(SpriteEncoding::Linear);
-    let msk = msk.with_encoding(SpriteEncoding::Linear);
+pub fn standard_sprite_compiler(label: &str, spr: &SpriteOutput, msk: &SpriteOutput, r1: u8) -> Listing {
+    let spr = spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    let msk = msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
 
     let comp = Compiler::builder()
-            .header_comment("Linear sprite display routine. There is no register optimisation yet. so execution time is not good")
+            .header_comment("Linear sprite display routine. HL contains screen address")
             .header_label(label)
             .bc26(Bc26::new_universal_16k(r1))
+            .build();
+    comp.compile(&spr, &msk)
+}
+
+
+pub fn standard_sprite_with_background_backup_and_restore_compiler(label: &str, spr: &SpriteOutput, msk: &SpriteOutput, r1: u8) -> Listing {
+    let spr = spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    let msk = msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
+
+    todo!("XXX Nothing is finished here. Cannot be used without fixes. Restore code is not stored  BTW");
+
+    let comp = Compiler::builder()
+            .header_comment("Linear sprite display routine. HL contains screen address and DE contains save_buffer_address")
+            .header_label(label)
+            .bc26(Bc26::new_universal_16k(r1))
+            .action(RoutineAction::SaveBackgroundAndDrawPixelMaskedSprite)
             .build();
     comp.compile(&spr, &msk)
 }

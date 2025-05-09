@@ -996,7 +996,7 @@ impl TileVerticalCapture {
 pub enum SpriteEncoding {
     Linear,
     GrayCoded,
-    ZigZag,
+    LeftToRightToLeft,
     ZigZagGrayCoded
 }
 
@@ -1018,12 +1018,32 @@ impl AsRef<[u8]> for SpriteOutput {
 
 impl SpriteOutput {
     pub fn with_encoding(&self, encoding: SpriteEncoding) -> Self {
-        if encoding != self.encoding {
-            unimplemented!("Encoding conversion has not yet been used and is not coded. A leftRightTopBottom iterator is probably expected to ease conversion.")
+        if encoding == self.encoding {
+            return self.clone();
         }
-        else {
-            self.clone()
+
+        if (encoding == SpriteEncoding::LeftToRightToLeft && self.encoding == SpriteEncoding::Linear) ||
+           (self.encoding == SpriteEncoding::LeftToRightToLeft && encoding == SpriteEncoding::Linear)
+         {
+            let mut res = self.clone();
+            let width = res.bytes_width();
+            res.data = res.data.into_iter()
+                .chunks(width)
+                .into_iter()
+                .enumerate()
+                .map(|(idx, row)| {
+                    let mut row = row.collect_vec();
+                    if idx%2 != 0{
+                        row.reverse();
+                    } 
+                    row
+                })
+                .flatten()
+                .collect_vec();
+            return res;
         }
+
+        unimplemented!("Encoding conversion has not yet been used and is not coded. A leftRightTopBottom iterator is probably expected to ease conversion.")
     }
 
     pub fn as_sprite(&self) -> Sprite {
@@ -1107,7 +1127,7 @@ impl Debug for SpriteEncoding {
         match self {
             Self::Linear => writeln!(fmt, "Linear"),
             Self::GrayCoded => writeln!(fmt, "GrayCoded"),
-            Self::ZigZag => writeln!(fmt, "ZigZag"),
+            Self::LeftToRightToLeft => writeln!(fmt, "ZigZag"),
             Self::ZigZagGrayCoded => writeln!(fmt, "ZigZagGrayCoded")
         }
     }
@@ -1339,7 +1359,7 @@ impl ImageConverter {
                     height: linear.height
                 })
             },
-            SpriteEncoding::ZigZag => unimplemented!()
+            SpriteEncoding::LeftToRightToLeft => unimplemented!()
         }
     }
 

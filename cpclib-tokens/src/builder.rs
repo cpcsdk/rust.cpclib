@@ -444,6 +444,43 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     )
 }
 
+
+pub fn ld_mem_bc_a() -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld, 
+        DataAccess::MemoryRegister16(Register16::Bc), 
+        DataAccess::Register8(Register8::A))
+}
+
+
+pub fn ld_mem_de_a() -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld, 
+        DataAccess::MemoryRegister16(Register16::Bc), 
+        DataAccess::Register8(Register8::A))
+}
+
+
+
+pub fn ld_a_mem_bc() -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld, 
+        DataAccess::Register8(Register8::A),
+        DataAccess::MemoryRegister16(Register16::Bc)
+    )
+}
+
+pub fn ld_a_mem_de() -> Token {
+    token_for_opcode_two_args(
+        Mnemonic::Ld, 
+        DataAccess::Register8(Register8::A),
+        DataAccess::MemoryRegister16(Register16::De)
+    )
+}
+
+
+
+
 macro_rules! ld_r16_expr {
     ($($reg:ident)*) => {$(
         paste::paste! {
@@ -544,7 +581,7 @@ macro_rules! ld_mem_hl_r8 {
     ($($reg:ident)*) => {$(
         paste::paste! {
             pub fn [<ld_mem_hl_ $reg:lower>]() -> Token {
-                ld_mem_hl_register8(Register8::$reg)
+                ld_mem_hl_r8(Register8::$reg)
             }
 
             pub fn [<ld_ $reg:lower _mem_hl>]() -> Token {
@@ -566,7 +603,7 @@ ld_mem_hl_r8! {
 
 
 
-pub fn ld_mem_hl_register8(reg: Register8) -> Token {
+pub fn ld_mem_hl_r8(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
         DataAccess::MemoryRegister16(Register16::Hl),
@@ -740,6 +777,50 @@ macro_rules! ld_r8_expr_builder {
 }
 
 
+macro_rules! ld_r16_expr_builder {
+    ($($reg:ident)*) => {$(
+        paste::paste! {
+            /// Generate the opcode LD $reg, expr
+            pub fn [<ld_ $reg:lower _expr>]<E: Into<Expr>>(mut self, expr: E) -> Self {
+                self.lst.add([<ld_ $reg:lower _expr>](expr));
+                self
+            }
+
+
+            pub fn [<inc_ $reg:lower>](mut self) -> Self {
+                self.lst.add([<inc_ $reg:lower>]());
+                self
+            }
+
+            pub fn [<dec_ $reg:lower>](mut self) -> Self {
+                self.lst.add([<dec_ $reg:lower>]());
+                self
+            }
+
+        }
+    )*}
+}
+
+
+macro_rules! ld_mem_r16_builder {
+    ($($reg:ident)*) => {$(
+        paste::paste! {
+
+            pub fn [<ld_mem_ $reg:lower _a>](mut self) -> Self {
+                self.lst.add([<ld_mem_ $reg:lower _a>]());
+                self
+            }
+
+            pub fn [<ld_a_ mem_ $reg:lower>](mut self) -> Self {
+                self.lst.add([<ld_a_mem_ $reg:lower>]());
+                self
+            }
+        }
+    )*}
+}
+
+
+
 macro_rules! ld_r8_r8_builder {
     ($($reg1:ident,$reg2:ident)*) => {$(
         paste::paste! {
@@ -757,7 +838,7 @@ macro_rules! ld_mem_hl_r8_builder {
     ($($reg:ident)*) => {$(
         paste::paste! {
             pub fn [<ld_mem_hl_ $reg:lower>](mut self) -> Self {
-                self.lst.add(ld_mem_hl_register8(Register8::$reg));
+                self.lst.add(ld_mem_hl_r8(Register8::$reg));
                 self
             }
 
@@ -802,6 +883,8 @@ macro_rules! math_op_r8_builder {
 impl ListingBuilder {
 
     ld_r8_expr_builder!{a b c d e h l}
+    ld_r16_expr_builder!{af bc de hl}
+    ld_mem_r16_builder!{bc de}
     ld_mem_hl_r8_builder!{A B C D E H L}
     no_arg_builder!{exx nop ldi ldd ldir lddr neg exa ex_hl_de halt di ei ind indr outd outdr outi outir ret}
 
@@ -817,6 +900,11 @@ impl ListingBuilder {
 
     pub fn ld_mem_hl_expr<E: Into<Expr>>(mut self, e: E) -> Self {
         self.lst.add(ld_mem_hl_expr(e));
+        self
+    }
+
+    pub fn ld_mem_hl_r8<R: Into<Register8>>(mut self, r: R) -> Self {
+        self.lst.add(ld_mem_hl_r8(r.into()));
         self
     }
 
