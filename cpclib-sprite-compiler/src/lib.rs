@@ -2,7 +2,7 @@
 
 use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::write, ops::{Deref, DerefMut}};
 
-use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register8, TestKind};
+use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register16, Register8, TestKind};
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use bon::Builder;
 use smol_str::SmolStr;
@@ -34,9 +34,23 @@ impl RegistersStore {
 
     pub fn listing(&self) -> Listing {
         let mut lst = ListingBuilder::default();
-        for (r, v) in self.regs.iter() {
-            lst = lst.ld_r8_expr(*r, *v);
+
+        let mut available_registers = self.regs.keys().collect_vec();
+        while let Some(first) = available_registers.pop() {
+            // if possible build a 16 bits number
+            let second = first.neighbourg().unwrap();
+            if let Some(idx) = available_registers.iter().position(|v| **v == second) {
+                let second = available_registers.swap_remove(idx);
+                let complete = first.complete();
+                let value = self.value_for_r16(complete).unwrap();
+                lst = lst.ld_r16_expr(complete, value);
+            } else {
+                // otherwise fallback on a 8bits one
+                let value = self.value_for_r8(*first).unwrap();
+                lst = lst.ld_r8_expr(*first, value);
+            }
         }
+
         lst.build()
     }
 
@@ -44,6 +58,20 @@ impl RegistersStore {
         self.regs.iter()
             .find(|(r, v)| **v == val)
             .map(|(r, v)| r.clone())
+    }
+
+    pub fn value_for_r8(&self, r: Register8) -> Option<u8> {
+        self.regs.get(&r).cloned()
+    }
+
+    pub fn value_for_r16(&self, r: Register16) -> Option<u16> {
+        let low = self.value_for_r8(r.low().unwrap());
+        let high = self.value_for_r8(r.high().unwrap());
+        if let (Some(low), Some(high)) = (low, high) {
+            Some(low as u16 + (high as u16)*256)
+        } else {
+            None
+        }
     }
 
     pub fn set(&mut self, r: Register8, v: u8) -> &mut Self {

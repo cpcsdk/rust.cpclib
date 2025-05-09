@@ -417,6 +417,14 @@ pub fn ld_r8_expr<R: Into<Register8>, E: Into<Expr>>(r: R, e: E) -> Token{
     )
 }
 
+pub fn ld_r16_expr<R: Into<Register16>, E: Into<Expr>>(r: R, e: E) -> Token{
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        r.into().into(),
+        e.into().into()
+    )
+}
+
 /// I have clear doubt that  this exists really
 #[allow(missing_docs)]
 pub fn ld_l_mem_ix(expr: Expr) -> Token {
@@ -816,6 +824,14 @@ impl ListingBuilder {
         self.lst.add(ld_r8_expr(r, e));
         self
     }
+
+
+    pub fn ld_r16_expr<R: Into<Register16>, E: Into<Expr>>(mut self, r: R, e: E) -> Self {
+        self.lst.add(ld_r16_expr(r, e));
+        self
+    }
+
+
     math_op_r8_builder! { A B C D E H L}
 
     pub fn call<S: Into<SmolStr>>(mut self, label: S) -> Self {
