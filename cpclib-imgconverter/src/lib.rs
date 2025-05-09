@@ -1161,7 +1161,6 @@ pub fn build_args_parser() -> clap::Command {
                         .arg(
                             Arg::new("SPRITE_ASM")
                             .long("code")
-                            .short('c')
                             .help("Filename where to store the Z80 display code")
                             .required_unless_present("SPRITE_FNAME")
                             .requires("MASK_INK")
