@@ -1,6 +1,8 @@
-use std::{fmt::write, ops::{Deref, DerefMut}};
+#![feature(let_chains)]
 
-use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, TestKind};
+use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, fmt::write, ops::{Deref, DerefMut}};
+
+use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register8, TestKind};
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use bon::Builder;
 use smol_str::SmolStr;
@@ -14,6 +16,51 @@ pub enum RoutineAction {
     SaveBackgroundAndDrawPixelMaskedSprite,
     RestoreBackground
 }   
+
+
+#[derive(Default)]
+pub struct RegistersStore {
+    regs: HashMap<Register8, u8>,
+    available_regs: Vec<Register8>
+}
+
+impl RegistersStore {
+    pub fn new(regs: &[Register8]) -> Self {
+        Self {
+            regs: Default::default(),
+            available_regs: regs.to_vec()
+        }
+    }
+
+    pub fn listing(&self) -> Listing {
+        let mut lst = ListingBuilder::default();
+        for (r, v) in self.regs.iter() {
+            lst = lst.ld_r8_expr(*r, *v);
+        }
+        lst.build()
+    }
+
+    pub fn register_for(&self, val: u8) -> Option<Register8> {
+        self.regs.iter()
+            .find(|(r, v)| **v == val)
+            .map(|(r, v)| r.clone())
+    }
+
+    pub fn set(&mut self, r: Register8, v: u8) -> &mut Self {
+        assert!(!self.available_regs.contains(&r));
+        self.regs.insert(r, v);
+        self
+    }
+
+    pub fn next_available_regs(&mut self) -> Option<Register8> {
+        self.available_regs.pop()
+    }
+
+    pub fn has_available_regs(&self) -> bool {
+        !self.available_regs.is_empty()
+    }
+}
+
 
 
 #[derive(Builder)]
@@ -31,7 +78,10 @@ pub struct Compiler {
     lst: Listing,
 
     /// Utility to handle line changes
-    bc26: Bc26
+    bc26: Bc26,
+
+    #[builder(default)]
+    regs: RegistersStore
 }
 
 
@@ -49,10 +99,45 @@ impl DerefMut for Compiler {
 }
 
 impl Compiler {
+    pub fn build_stats(spr: &SpriteOutput, msk: &SpriteOutput) -> BTreeMap<u8, usize> {
+        let mut set: BTreeMap<u8, usize> = Default::default();
+        for b in spr.data().iter().zip(msk.data().iter())
+            .filter_map(|(&b, &m)| if m!= 0xff && m!= 0x00 {
+                Some(b)
+            } else {
+                None
+            }) {
+            if set.contains_key(&b) {
+                *set.get_mut(&b).unwrap() += 1;
+            } else {
+                set.insert(b, 1);
+            }
+        }
+
+        set
+
+    }
+
     pub fn compile(mut self, spr: &SpriteOutput, msk: &SpriteOutput) -> Listing {
         assert_eq!(spr.bytes_width(), msk.bytes_width());
         assert_eq!(spr.height(), msk.height());
         assert_eq!(spr.encoding(), msk.encoding());
+
+
+        let stats = Self::build_stats(spr, msk);
+        dbg!(&stats);
+
+        let mut retained = stats.into_iter().filter(|(k,v)| *v > 3)
+                .sorted_by_key(|(k,v)| *v)
+                .collect_vec();
+        dbg!(&retained);
+
+        // prefetch registers with most used values
+        self.regs = RegistersStore::new(&[Register8::D, Register8::E, Register8::B, Register8::C]);
+        while let Some((v, _)) = retained.pop() && self.regs.has_available_regs() {
+            let r = self.regs.next_available_regs().unwrap();
+            self.regs.set(r, v);
+        }
 
         let width = spr.bytes_width();
 
@@ -139,6 +224,7 @@ impl Compiler {
                 },
 
                 mask => {
+
                     // masking is necessary
                     let comment = if pixs != 0 {
                         "Masked byte"
@@ -154,20 +240,27 @@ impl Compiler {
 
                     // request additional bits
                     match pixs {
-                        0 => {},
-                        1 => {lst = lst.inc_a();}
-                        val => {lst = lst.or_expr(pixs);}
+                        0 => {}, // nothing to draw
+                        1 => {lst = lst.inc_a();} // faster/maller than OR 1
+                        val => {
+                            if let Some(reg) = self.regs.register_for(val) {
+                                lst = lst.or_r8(reg);
+                            } else {
+                                lst = lst.or_expr(pixs);
+                            }
+                        }
                     }
 
                     // save
                     lst = lst.ld_mem_hl_a();
 
-                    if nb_steps-1 == read_cursor {
-                        lst = lst.comment("End of line");
-                    }  
                 },
 
             };
+
+            if nb_steps-1 == read_cursor {
+                lst = lst.comment("End of line");
+            }  
         }
 
         self.inject_listing(&lst.build());
@@ -222,6 +315,8 @@ impl Compiler {
         if let Some(label) = self.header_label.take() {
             self.add_label(label);
         }
+        self.lst.inject_listing(&self.regs.listing());
+
     }
 
     fn emit_footer(&mut self) {

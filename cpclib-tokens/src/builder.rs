@@ -409,6 +409,14 @@ macro_rules! inc_r16 {
 }
 inc_r16! {Af Bc De Hl}
 
+pub fn ld_r8_expr<R: Into<Register8>, E: Into<Expr>>(r: R, e: E) -> Token{
+    token_for_opcode_two_args(
+        Mnemonic::Ld,
+        r.into().into(),
+        e.into().into()
+    )
+}
+
 /// I have clear doubt that  this exists really
 #[allow(missing_docs)]
 pub fn ld_l_mem_ix(expr: Expr) -> Token {
@@ -804,6 +812,10 @@ impl ListingBuilder {
         self
     }
 
+    pub fn ld_r8_expr<R: Into<Register8>, E: Into<Expr>>(mut self, r: R, e: E) -> Self {
+        self.lst.add(ld_r8_expr(r, e));
+        self
+    }
     math_op_r8_builder! { A B C D E H L}
 
     pub fn call<S: Into<SmolStr>>(mut self, label: S) -> Self {
@@ -829,6 +841,19 @@ impl ListingBuilder {
     pub fn and_expr<E: Into<Expr>>(mut self, expr: E) -> Self {
         let e = expr.into();
         self.lst.add(token_for_opcode_one_arg(Mnemonic::And, e.into()));
+        self
+    }
+
+    pub fn or_r8(mut self, r: Register8) -> Self {
+        self.lst.add(token_for_opcode_one_arg(Mnemonic::Or, r.into()));
+        self
+    }
+    pub fn xor_r8(mut self, r: Register8) -> Self {
+        self.lst.add(token_for_opcode_one_arg(Mnemonic::Xor, r.into()));
+        self
+    }
+    pub fn and_r8(mut self, r: Register8) -> Self {
+        self.lst.add(token_for_opcode_one_arg(Mnemonic::And, r.into()));
         self
     }
 
