@@ -103,10 +103,12 @@ impl Compiler {
         let mut set: BTreeMap<u8, usize> = Default::default();
         for b in spr.data().iter().zip(msk.data().iter())
             .filter_map(|(&b, &m)| if m!= 0xff && m!= 0x00 {
-                Some(b)
+                Some([b, m])
             } else {
                 None
-            }) {
+            })
+            .flatten()
+             {
             if set.contains_key(&b) {
                 *set.get_mut(&b).unwrap() += 1;
             } else {
@@ -127,7 +129,8 @@ impl Compiler {
         let stats = Self::build_stats(spr, msk);
         dbg!(&stats);
 
-        let mut retained = stats.into_iter().filter(|(k,v)| *v > 3)
+        let mut retained = stats.into_iter()
+                .filter(|(k,v)| *v > 3)
                 .sorted_by_key(|(k,v)| *v)
                 .collect_vec();
         dbg!(&retained);
@@ -235,8 +238,13 @@ impl Compiler {
                     // mask screen byte
                     lst = lst
                         .comment(comment)
-                        .ld_a_mem_hl()
-                        .and_expr(mask);
+                        .ld_a_mem_hl();
+
+                    if let Some(reg) = self.regs.register_for(mask) {
+                        lst = lst.and_r8(reg);
+                    } else {
+                        lst = lst.and_expr(mask);
+                    }
 
                     // request additional bits
                     match pixs {
