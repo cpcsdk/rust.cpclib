@@ -1,10 +1,20 @@
-use std::ops::{Deref, DerefMut};
+use std::{fmt::write, ops::{Deref, DerefMut}};
 
-use cpclib_asm::{inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, TestKind};
+use cpclib_asm::{dec_l, inc_l, BaseListing, Expr, IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, TestKind};
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use bon::Builder;
 use smol_str::SmolStr;
 use itertools::Itertools;
+
+/// The action handled by the code
+#[derive(Default)]
+pub enum RoutineAction {
+    #[default]
+    DrawPixelMaskedSprite,
+    SaveBackgroundAndDrawPixelMaskedSprite,
+    RestoreBackground
+}   
+
 
 #[derive(Builder)]
 //#[builder(start_fn = with_header)]
@@ -16,9 +26,11 @@ pub struct Compiler {
    // #[builder(start_fn)]
     header_label: Option<SmolStr>,
 
+    /// The listing of the final code
     #[builder(default)]
     lst: Listing,
 
+    /// Utility to handle line changes
     bc26: Bc26
 }
 
@@ -44,79 +56,72 @@ impl Compiler {
 
         let width = spr.bytes_width();
 
-
-
-
-
-
-
         self.emit_header();
-        let mut previous_moves = 0;
+        let mut write_cursor = 0;
         for (idx, line) in spr.data().iter().cloned().zip(msk.data().iter().cloned())
             .chunks(width)
             .into_iter()
             .enumerate() {
-            previous_moves = self.emit_line(idx, line, previous_moves)
+            write_cursor = self.emit_line(idx, line, write_cursor)
         }
 
         self.emit_footer();
         self.lst
     } 
 
-    fn emit_line(&mut self, idx: usize, line: impl Iterator<Item=(u8, u8)>, previous_moves: u16) -> u16 {
+    fn emit_line(&mut self, line_idx: usize, line: impl Iterator<Item=(u8, u8)>, mut write_cursor: u16) -> u16 {
         let mut nb_moves = 0;
-        self.emit_line_header(idx, previous_moves);
+        self.emit_line_header(line_idx);
 
         let mut lst = ListingBuilder::default();
-        let mut not_drawned_count = 0;
-        let mut drawned_but_not_moved = false;
 
         let line = line.collect_vec();
-        let nb_steps = line.len();
-        for (step, (pixs, mask)) in line.into_iter().enumerate() {
+        let nb_steps = line.len() as u16;
+        for (read_idx, (pixs, mask)) in line.into_iter().enumerate() {
 
+            let read_cursor = read_idx as u16;
+            let will_write_on_screen = mask != 0xff;
 
-            // we need to lazyly  move the write buffer when some modifications have to be done
-            if mask != 0xff && (not_drawned_count > 0 || drawned_but_not_moved) {
+            // we need to lazily  move the write buffer when some modifications have to be done
+            if will_write_on_screen {
                 assert!(self.use_8bits_addresses_handling());
 
                 // get the number of displacement since last screen update
-                let local_moves = not_drawned_count + if drawned_but_not_moved {
-                    1
-                } else {
-                    0
-                };
+                let local_moves = (read_cursor as i32) - (write_cursor as i32);
 
                 // select the fastest way to do it
-                let chosen: Listing = if local_moves == 1 {
-                    inc_l().into()
-                } else {
-                    let choice1: Listing = ListingBuilder::default()
-                        .repeat(local_moves, inc_l())
+                let chosen: Listing = match local_moves {
+                    0 => Listing::new(),
+                    1 => inc_l().into(),
+                    -1 => dec_l().into(),
+                    local_moves => {
+                        dbg!(local_moves);
+                        let choice1: Listing = ListingBuilder::default()
+                        .repeat(
+                            local_moves.abs(), 
+                            if local_moves > 0 {inc_l()} else {dec_l()}
+                        )
                         .build();
-                    let choice2: Listing = ListingBuilder::default()
-                        .ld_a_expr(local_moves)
-                        .add_l()
-                        .ld_l_a()
-                        .build();
+                        let choice2: Listing = ListingBuilder::default()
+                            .ld_a_expr(local_moves)
+                            .add_l()
+                            .ld_l_a()
+                            .build();
 
-                    ListingSelector::default()
-                        .add(choice1)
-                        .add(choice2)
-                        .select()
+                        ListingSelector::default()
+                            .add(choice1)
+                            .add(choice2)
+                            .select()
+                    }
                 };
                 
+                               
                 // add it to the generated code
                 lst = lst
                     .comment(format!("Move of {} bytes", local_moves))
                     .extend(chosen); // inject the fastest one
 
-                // store the real number of move (to go back to the beginning of the line)
-                nb_moves += local_moves;
-
-                // rest the counters
-                not_drawned_count = 0;
-                drawned_but_not_moved = false;
+                write_cursor = read_cursor;
             }
 
             // properly handle the byte
@@ -126,14 +131,11 @@ impl Compiler {
                     lst = lst
                         .comment("No masking here")
                         .ld_mem_hl_expr(pixs);
-                    drawned_but_not_moved = true;
-                    
                 },
 
                 0xff => {
                     // all background pixels are kept
                     lst = lst.comment("Nothing shown here");
-                    not_drawned_count += 1;
                 },
 
                 mask => {
@@ -151,19 +153,18 @@ impl Compiler {
                         .and_expr(mask);
 
                     // request additional bits
-                    lst = if pixs != 0 {
-                        lst.or_expr(pixs)
-                    } else {
-                        lst
-                    };
+                    match pixs {
+                        0 => {},
+                        1 => {lst = lst.inc_a();}
+                        val => {lst = lst.or_expr(pixs);}
+                    }
 
                     // save
                     lst = lst.ld_mem_hl_a();
 
-                    if nb_steps-1 == step {
+                    if nb_steps-1 == read_cursor {
                         lst = lst.comment("End of line");
                     }  
-                    drawned_but_not_moved = true;
                 },
 
             };
@@ -172,16 +173,14 @@ impl Compiler {
         self.inject_listing(&lst.build());
 
         self.emit_line_footer();
-        nb_moves as _
+        write_cursor
     }
 
-    fn emit_line_header(&mut self, idx: usize, steps:u16) {
-        self.add_comment(format!("Handle line {idx}"));
+    fn emit_line_header(&mut self, idx: usize) {
+        self.add_comment(format!("> Handle line {idx}"));
         if idx == 0 {
             self.add_comment("  HL already contains the destination address");
         } else {
-            eprintln!("TODO do not call enymore move_to start_line => it is better to know the current x position and lazily move");
-            self.emit_move_to_line_start(steps);
             self.emit_compute_next_line_address();
         }
 
@@ -190,7 +189,7 @@ impl Compiler {
     fn emit_line_footer(&mut self) {
 
     }
-
+/* 
     fn emit_move_to_line_start(&mut self, step: u16) {
         let lst = if self.use_8bits_addresses_handling() {
             ListingBuilder::default()
@@ -205,7 +204,7 @@ impl Compiler {
 
         self.inject_listing(&lst);
     }
-
+*/
     pub fn use_8bits_addresses_handling(&self) -> bool {
         self.bc26.use_8bits_addresses_handling().unwrap()
     }

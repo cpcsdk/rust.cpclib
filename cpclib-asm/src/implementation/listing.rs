@@ -214,10 +214,11 @@ impl ListingSelector {
     pub fn select(mut self) -> Listing {
         let key_fn: Box<dyn Fn(&Listing) -> (usize, usize)> = match self.strategy {
             ListingSelectorStrategy::Speed => {
-                Box::new(|l: &Listing| (
+                Box::new(|l: &Listing| {
+                    (
                     l.estimated_duration().unwrap(), 
                     l.number_of_bytes().unwrap()
-                ))
+                )})
             },
             ListingSelectorStrategy::Size => {
                 Box::new(|l: &Listing| (
