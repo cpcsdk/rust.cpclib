@@ -261,48 +261,58 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
         // loop over all the files to add them
         for fname in sub.get_many::<Utf8PathBuf>("INPUT_FILES").unwrap() {
-            let ams_file = match AmsdosFile::open_valid(fname) {
-                Ok(mut ams_file) => {
-                    let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
+           if sub.get_flag("ASCII") {
+                let (ams_file, ams_filename) = AmsdosFile::open_valid_ascii(fname)
+                    .expect("Error when reading the ascii file");
+                disc.add_ascii_file(&ams_file, dbg!(&ams_filename), head, is_system, is_read_only, behavior)
+                    .unwrap();
+            } else {
+                let ams_file = match AmsdosFile::open_valid(fname) {
+                    Ok(mut ams_file) => {
+                        let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
 
-                    if amsdos_fname.is_err() || !amsdos_fname.unwrap().is_valid() {
-                        // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
-                        // then we try to replace it by the file name
-                        eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
+                        if amsdos_fname.is_err() || !amsdos_fname.unwrap().is_valid() {
+                            // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
+                            // then we try to replace it by the file name
+                            eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
 
-                        let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
-                        let mut pc_fname = pc_fname.split(".");
-                        let mut header = ams_file.header().expect("Need to handle ASCII files");
-                        let new_amsdos_fname = AmsdosFileName::new_correct_case(
-                            0,
-                            pc_fname.next().unwrap(),
-                            pc_fname.next().unwrap_or_default()
-                        )?;
-                        assert!(pc_fname.next().is_none());
+                            let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
+                            let mut pc_fname = pc_fname.split(".");
+                            let mut header = ams_file.header().expect("Need to handle ASCII files");
+                            let new_amsdos_fname = AmsdosFileName::new_correct_case(
+                                0,
+                                pc_fname.next().unwrap(),
+                                pc_fname.next().unwrap_or_default()
+                            )?;
+                            assert!(pc_fname.next().is_none());
 
-                        header.set_amsdos_filename(&new_amsdos_fname);
-                        header.update_checksum();
+                            header.set_amsdos_filename(&new_amsdos_fname);
+                            header.update_checksum();
 
-                        // replace the header with the modified filename
-                        let content = ams_file.content();
-                        ams_file = AmsdosFile::from_header_and_buffer(header, content)?;
+                            // replace the header with the modified filename
+                            let content = ams_file.content();
+                            ams_file = AmsdosFile::from_header_and_buffer(header, content)?;
+                        }
+
+                        assert!(
+                            ams_file.amsdos_filename().unwrap()?.is_valid(),
+                            "Invalid amsdos filename ! {:?}",
+                            ams_file.amsdos_filename().unwrap()
+                        );
+                        println!("{:?} added", ams_file.amsdos_filename());
+                        ams_file
+                    },
+                    Err(e) => {
+                        panic!("Unable to load {fname}: {e:?}");
                     }
+                };
+            
+                disc.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
+                    .unwrap();
+            }
 
-                    assert!(
-                        ams_file.amsdos_filename().unwrap()?.is_valid(),
-                        "Invalid amsdos filename ! {:?}",
-                        ams_file.amsdos_filename().unwrap()
-                    );
-                    println!("{:?} added", ams_file.amsdos_filename());
-                    ams_file
-                },
-                Err(e) => {
-                    panic!("Unable to load {fname}: {e:?}");
-                }
-            };
 
-            disc.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
-                .unwrap();
+
         }
 
         // Save the dsk on disc
@@ -438,6 +448,13 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                                 .action(ArgAction::Append)
                                 .required(true)
                                 .value_parser(clap::value_parser!(Utf8PathBuf))
+                            )
+                            .arg(
+                                Arg::new("ASCII")
+                                    .help("Completly ignore header aspect. If it is present it will be an amsdos file. If it is absent, it will be an ascii file.")
+                                    .action(ArgAction::SetTrue)
+                                    .long("ascii")
+                                    .short('a')
                             )
                             .arg(
                                 Arg::new("SYSTEM")

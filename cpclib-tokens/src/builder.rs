@@ -1,7 +1,5 @@
 #![allow(missing_docs)]
 
-
-
 use cpclib_common::smol_str::SmolStr;
 use paste;
 
@@ -29,7 +27,6 @@ pub fn ind() -> Token {
     token_for_opcode_no_arg(Mnemonic::Ind)
 }
 
-
 pub fn indr() -> Token {
     token_for_opcode_no_arg(Mnemonic::Indr)
 }
@@ -42,27 +39,21 @@ pub fn inir() -> Token {
     token_for_opcode_no_arg(Mnemonic::Inir)
 }
 
-
 pub fn outd() -> Token {
     token_for_opcode_no_arg(Mnemonic::Outd)
 }
-
 
 pub fn outdr() -> Token {
     token_for_opcode_no_arg(Mnemonic::Otdr)
 }
 
-
 pub fn outi() -> Token {
     token_for_opcode_no_arg(Mnemonic::Outi)
 }
 
-
 pub fn outir() -> Token {
     token_for_opcode_no_arg(Mnemonic::Otir)
 }
-
-
 
 pub fn neg() -> Token {
     token_for_opcode_no_arg(Mnemonic::Neg)
@@ -109,9 +100,7 @@ pub fn comment<S: AsRef<str>>(label: S) -> Token {
 }
 
 pub fn r#if(cond: TestKind, lst: Listing) -> Token {
-   IfBuilder::default()
-    .condition(cond, lst)
-    .build()
+    IfBuilder::default().condition(cond, lst).build()
 }
 
 /// Generate defs directive
@@ -409,20 +398,12 @@ macro_rules! inc_r16 {
 }
 inc_r16! {Af Bc De Hl}
 
-pub fn ld_r8_expr<R: Into<Register8>, E: Into<Expr>>(r: R, e: E) -> Token{
-    token_for_opcode_two_args(
-        Mnemonic::Ld,
-        r.into().into(),
-        e.into().into()
-    )
+pub fn ld_r8_expr<R: Into<Register8>, E: Into<Expr>>(r: R, e: E) -> Token {
+    token_for_opcode_two_args(Mnemonic::Ld, r.into().into(), e.into().into())
 }
 
-pub fn ld_r16_expr<R: Into<Register16>, E: Into<Expr>>(r: R, e: E) -> Token{
-    token_for_opcode_two_args(
-        Mnemonic::Ld,
-        r.into().into(),
-        e.into().into()
-    )
+pub fn ld_r16_expr<R: Into<Register16>, E: Into<Expr>>(r: R, e: E) -> Token {
+    token_for_opcode_two_args(Mnemonic::Ld, r.into().into(), e.into().into())
 }
 
 /// I have clear doubt that  this exists really
@@ -444,27 +425,25 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
     )
 }
 
-
 pub fn ld_mem_bc_a() -> Token {
     token_for_opcode_two_args(
-        Mnemonic::Ld, 
-        DataAccess::MemoryRegister16(Register16::Bc), 
-        DataAccess::Register8(Register8::A))
+        Mnemonic::Ld,
+        DataAccess::MemoryRegister16(Register16::Bc),
+        DataAccess::Register8(Register8::A)
+    )
 }
-
 
 pub fn ld_mem_de_a() -> Token {
     token_for_opcode_two_args(
-        Mnemonic::Ld, 
-        DataAccess::MemoryRegister16(Register16::Bc), 
-        DataAccess::Register8(Register8::A))
+        Mnemonic::Ld,
+        DataAccess::MemoryRegister16(Register16::Bc),
+        DataAccess::Register8(Register8::A)
+    )
 }
-
-
 
 pub fn ld_a_mem_bc() -> Token {
     token_for_opcode_two_args(
-        Mnemonic::Ld, 
+        Mnemonic::Ld,
         DataAccess::Register8(Register8::A),
         DataAccess::MemoryRegister16(Register16::Bc)
     )
@@ -472,14 +451,11 @@ pub fn ld_a_mem_bc() -> Token {
 
 pub fn ld_a_mem_de() -> Token {
     token_for_opcode_two_args(
-        Mnemonic::Ld, 
+        Mnemonic::Ld,
         DataAccess::Register8(Register8::A),
         DataAccess::MemoryRegister16(Register16::De)
     )
 }
-
-
-
 
 macro_rules! ld_r16_expr {
     ($($reg:ident)*) => {$(
@@ -555,8 +531,6 @@ ld_r8_r8! {
     L,A L,B L,C L,D L,E L,H L,L
 }
 
-
-
 #[allow(missing_docs)]
 pub fn ld_mem_expr_a<E: Into<Expr>>(e: E) -> Token {
     token_for_opcode_two_args(
@@ -575,7 +549,6 @@ pub fn ld_mem_hl_expr<E: Into<Expr>>(e: E) -> Token {
         e.into()
     )
 }
-
 
 macro_rules! ld_mem_hl_r8 {
     ($($reg:ident)*) => {$(
@@ -601,8 +574,6 @@ ld_mem_hl_r8! {
     L
 }
 
-
-
 pub fn ld_mem_hl_r8(reg: Register8) -> Token {
     token_for_opcode_two_args(
         Mnemonic::Ld,
@@ -618,8 +589,6 @@ pub fn ld_register8_mem_hl(reg: Register8) -> Token {
         DataAccess::MemoryRegister16(Register16::Hl)
     )
 }
-
-
 
 #[allow(missing_docs)]
 pub fn ldi() -> Token {
@@ -721,7 +690,6 @@ pub fn section(section: &str) -> Token {
     Token::Section(section.into())
 }
 
-
 #[derive(Default)]
 pub struct IfBuilder {
     conditions: Vec<(TestKind, Listing)>,
@@ -746,12 +714,10 @@ impl IfBuilder {
     }
 }
 
-
 #[derive(Default)]
 pub struct ListingBuilder {
     lst: Listing
 }
-
 
 macro_rules! ld_r8_expr_builder {
     ($($reg:ident)*) => {$(
@@ -775,7 +741,6 @@ macro_rules! ld_r8_expr_builder {
         }
     )*}
 }
-
 
 macro_rules! ld_r16_expr_builder {
     ($($reg:ident)*) => {$(
@@ -801,7 +766,6 @@ macro_rules! ld_r16_expr_builder {
     )*}
 }
 
-
 macro_rules! ld_mem_r16_builder {
     ($($reg:ident)*) => {$(
         paste::paste! {
@@ -819,8 +783,6 @@ macro_rules! ld_mem_r16_builder {
     )*}
 }
 
-
-
 macro_rules! ld_r8_r8_builder {
     ($($reg1:ident,$reg2:ident)*) => {$(
         paste::paste! {
@@ -832,7 +794,6 @@ macro_rules! ld_r8_r8_builder {
         }
     )*}
 }
-
 
 macro_rules! ld_mem_hl_r8_builder {
     ($($reg:ident)*) => {$(
@@ -849,7 +810,6 @@ macro_rules! ld_mem_hl_r8_builder {
         }
     )*}
 }
-
 
 macro_rules! no_arg_builder {
     ($($op:ident)*) => {
@@ -879,14 +839,16 @@ macro_rules! math_op_r8_builder {
     )*}
 }
 
-
 impl ListingBuilder {
+    ld_r8_expr_builder! {a b c d e h l}
 
-    ld_r8_expr_builder!{a b c d e h l}
-    ld_r16_expr_builder!{af bc de hl}
-    ld_mem_r16_builder!{bc de}
-    ld_mem_hl_r8_builder!{A B C D E H L}
-    no_arg_builder!{exx nop ldi ldd ldir lddr neg exa ex_hl_de halt di ei ind indr outd outdr outi outir ret}
+    ld_r16_expr_builder! {af bc de hl}
+
+    ld_mem_r16_builder! {bc de}
+
+    ld_mem_hl_r8_builder! {A B C D E H L}
+
+    no_arg_builder! {exx nop ldi ldd ldir lddr neg exa ex_hl_de halt di ei ind indr outd outdr outi outir ret}
 
     ld_r8_r8_builder! {
         A,A A,B A,C A,D A,E A,H A,L
@@ -897,6 +859,8 @@ impl ListingBuilder {
         H,A H,B H,C H,D H,E H,H H,L
         L,A L,B L,C L,D L,E L,H L,L
     }
+
+    math_op_r8_builder! { A B C D E H L}
 
     pub fn ld_mem_hl_expr<E: Into<Expr>>(mut self, e: E) -> Self {
         self.lst.add(ld_mem_hl_expr(e));
@@ -913,14 +877,10 @@ impl ListingBuilder {
         self
     }
 
-
     pub fn ld_r16_expr<R: Into<Register16>, E: Into<Expr>>(mut self, r: R, e: E) -> Self {
         self.lst.add(ld_r16_expr(r, e));
         self
     }
-
-
-    math_op_r8_builder! { A B C D E H L}
 
     pub fn call<S: Into<SmolStr>>(mut self, label: S) -> Self {
         self.call_expr(Expr::Label(label.into()))
@@ -931,33 +891,42 @@ impl ListingBuilder {
         self
     }
 
-
     pub fn or_expr<E: Into<Expr>>(mut self, expr: E) -> Self {
         let e = expr.into();
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::Or, e.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::Or, e.into()));
         self
     }
+
     pub fn xor_expr<E: Into<Expr>>(mut self, expr: E) -> Self {
         let e = expr.into();
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::Xor, e.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::Xor, e.into()));
         self
     }
+
     pub fn and_expr<E: Into<Expr>>(mut self, expr: E) -> Self {
         let e = expr.into();
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::And, e.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::And, e.into()));
         self
     }
 
     pub fn or_r8(mut self, r: Register8) -> Self {
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::Or, r.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::Or, r.into()));
         self
     }
+
     pub fn xor_r8(mut self, r: Register8) -> Self {
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::Xor, r.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::Xor, r.into()));
         self
     }
+
     pub fn and_r8(mut self, r: Register8) -> Self {
-        self.lst.add(token_for_opcode_one_arg(Mnemonic::And, r.into()));
+        self.lst
+            .add(token_for_opcode_one_arg(Mnemonic::And, r.into()));
         self
     }
 
@@ -971,17 +940,10 @@ impl ListingBuilder {
         self
     }
 
-
-
     /// Add a repeating code THAT DOES NOT use the counter
     pub fn repeat<L: Into<Listing>>(mut self, count: i32, code: L) -> Self {
         let test = Expr::Value(count);
-        let rpt = Token::Repeat(
-            test,
-            code.into(),
-            None,
-            None
-        );
+        let rpt = Token::Repeat(test, code.into(), None, None);
         self.lst.add(rpt);
         self
     }
@@ -990,9 +952,6 @@ impl ListingBuilder {
         self.lst
     }
 }
-
-
-
 
 /// Code function that generate Listing instead of Tokens
 pub mod routines {

@@ -1022,20 +1022,24 @@ impl SpriteOutput {
             return self.clone();
         }
 
-        if (encoding == SpriteEncoding::LeftToRightToLeft && self.encoding == SpriteEncoding::Linear) ||
-           (self.encoding == SpriteEncoding::LeftToRightToLeft && encoding == SpriteEncoding::Linear)
-         {
+        if (encoding == SpriteEncoding::LeftToRightToLeft
+            && self.encoding == SpriteEncoding::Linear)
+            || (self.encoding == SpriteEncoding::LeftToRightToLeft
+                && encoding == SpriteEncoding::Linear)
+        {
             let mut res = self.clone();
             let width = res.bytes_width();
-            res.data = res.data.into_iter()
+            res.data = res
+                .data
+                .into_iter()
                 .chunks(width)
                 .into_iter()
                 .enumerate()
                 .map(|(idx, row)| {
                     let mut row = row.collect_vec();
-                    if idx%2 != 0{
+                    if idx % 2 != 0 {
                         row.reverse();
-                    } 
+                    }
                     row
                 })
                 .flatten()
@@ -1058,6 +1062,7 @@ impl SpriteOutput {
     pub fn encoding(&self) -> SpriteEncoding {
         self.encoding.clone()
     }
+
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -1426,13 +1431,10 @@ impl ImageConverter {
                 .build_mask_from_background_ink(*mask_ink);
             let mut mask_palette = vec![ColorMatrix::INK_NOT_USED_IN_MASK; 16];
             mask_palette[0] = ColorMatrix::INK_MASK_FOREGROUND; // at the position with all bits reset
-            mask_palette[mode.max_colors()-1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
+            mask_palette[mode.max_colors() - 1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
-                Some(
-                    mask_palette
-                    .into()
-                ), // we want and 0 ; or byte where we plot
+                Some(mask_palette.into()), // we want and 0 ; or byte where we plot
                 mode,
                 mask_transformations,
                 sprite_format.clone(),

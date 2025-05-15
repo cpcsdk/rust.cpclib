@@ -190,9 +190,6 @@ impl ListingFromStr for Listing {
     }
 }
 
-
-
-
 #[derive(Default)]
 pub enum ListingSelectorStrategy {
     #[default]
@@ -216,23 +213,22 @@ impl ListingSelector {
             ListingSelectorStrategy::Speed => {
                 Box::new(|l: &Listing| {
                     (
-                    l.estimated_duration().unwrap(), 
-                    l.number_of_bytes().unwrap()
-                )})
+                        l.estimated_duration().unwrap(),
+                        l.number_of_bytes().unwrap()
+                    )
+                })
             },
             ListingSelectorStrategy::Size => {
-                Box::new(|l: &Listing| (
-                    l.number_of_bytes().unwrap(),
-                    l.estimated_duration().unwrap()
-                ))
+                Box::new(|l: &Listing| {
+                    (
+                        l.number_of_bytes().unwrap(),
+                        l.estimated_duration().unwrap()
+                    )
+                })
             },
         };
 
         self.choices.sort_by_cached_key(key_fn);
-        self.choices
-            .into_iter()
-            .next()
-            .unwrap()
-
+        self.choices.into_iter().next().unwrap()
     }
 }

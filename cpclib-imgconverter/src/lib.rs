@@ -14,10 +14,10 @@ use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::Palette;
 use cpclib::image::ocp::{self, OcpPal};
-use cpclib::{sna::*, Pen};
+use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use cpclib::{sna, ExtendedDsk, Ink};
+use cpclib::{sna, ExtendedDsk, Ink, Pen};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -645,7 +645,6 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     let sub_exec = matches.subcommand_matches("exec");
     let sub_scr = matches.subcommand_matches("scr");
 
-
     let missing_pen = matches.get_one::<u8>("MISSING_PEN").map(|v| Pen::from(*v));
 
     let crop_if_too_large = matches.get_flag("CROP_IF_TOO_LARGE");
@@ -703,23 +702,24 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             }
 
             if let Some(code_fname) = sub_sprite.get_one::<String>("SPRITE_ASM") {
-                assert_eq!(mask.encoding(), SpriteEncoding::Linear, "Need to implement the other cases when needed");
+                assert_eq!(
+                    mask.encoding(),
+                    SpriteEncoding::Linear,
+                    "Need to implement the other cases when needed"
+                );
 
-                let r1 = sub_sprite.get_one::<u8>("R1")
+                let r1 = sub_sprite.get_one::<u8>("R1").cloned().unwrap_or_else(|| {
+                    if matches.get_flag("OVERSCAN") || matches.get_flag("FULLSCREEN") {
+                        96 / 2
+                    }
+                    else {
+                        80 / 2
+                    }
+                });
+                let label = sub_sprite
+                    .get_one::<String>("SPRITE_ASM_LABEL")
                     .cloned()
-                    .unwrap_or_else(|| {
-                        if matches.get_flag("OVERSCAN") || matches.get_flag("FULLSCREEN") {
-                            96/2
-                        } else {
-                            80/2
-                        }
-                    });
-                let label = sub_sprite.get_one::<String>("SPRITE_ASM_LABEL")
-                    .cloned()
-                    .unwrap_or_else(||{
-                        code_fname
-                            .replace('.', "_")
-                    });
+                    .unwrap_or_else(|| code_fname.replace('.', "_"));
 
                 // generate the code
                 let code = match sub_sprite.get_one::<String>("SPRITE_ASM_KIND").unwrap().as_str() {
@@ -729,10 +729,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                         &label, sprite, mask, r1),
                     rest => unreachable!("{rest} unhandled")
                 };
-                
-                
-                code.save(code_fname).expect("Unable to save generated code");
 
+                code.save(code_fname)
+                    .expect("Unable to save generated code");
             }
         }
     }

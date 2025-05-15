@@ -9,8 +9,9 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use {anyhow, image as im};
 
-use crate::{ga::*, pixels::bytes_to_pens};
+use crate::ga::*;
 use crate::pixels;
+use crate::pixels::bytes_to_pens;
 
 /// Screen mode
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -114,12 +115,19 @@ fn encode(pens: &[Vec<Pen>], mode: Mode, missing_pen: Option<Pen>) -> Vec<Vec<u8
         let row = {
             if let Some(replacement) = missing_pen {
                 match mode {
-                    Mode::Zero => pixels::mode0::pens_to_vec_with_replacement(input_row,replacement),
-                    Mode::One => pixels::mode1::pens_to_vec_with_replacement(input_row, replacement),
-                    Mode::Two => pixels::mode2::pens_to_vec_with_replacement(input_row, replacement),
+                    Mode::Zero => {
+                        pixels::mode0::pens_to_vec_with_replacement(input_row, replacement)
+                    },
+                    Mode::One => {
+                        pixels::mode1::pens_to_vec_with_replacement(input_row, replacement)
+                    },
+                    Mode::Two => {
+                        pixels::mode2::pens_to_vec_with_replacement(input_row, replacement)
+                    },
                     _ => panic!("Unimplemented yet ...")
                 }
-            } else {
+            }
+            else {
                 match mode {
                     Mode::Zero => pixels::mode0::pens_to_vec_with_crop(input_row),
                     Mode::One => pixels::mode1::pens_to_vec_with_crop(input_row),
@@ -600,7 +608,12 @@ impl ColorMatrix {
     }
 
     /// Convert the matrix as a sprite, given the right mode and an optional palette
-    pub fn as_sprite(&self, mode: Mode, palette: Option<Palette>, missing_pen: Option<Pen>) -> Sprite {
+    pub fn as_sprite(
+        &self,
+        mode: Mode,
+        palette: Option<Palette>,
+        missing_pen: Option<Pen>
+    ) -> Sprite {
         // Extract the palette is not provided as an argument
         let palette = palette.unwrap_or_else(|| self.extract_palette(mode));
 
@@ -846,7 +859,12 @@ impl ColorMatrixList {
     }
 
     /// Convert each matrice as a sprite using the same conversion method
-    pub fn as_sprites(&self, mode: Mode, palette: Option<Palette>, missing_pen: Option<Pen>) -> SpriteList {
+    pub fn as_sprites(
+        &self,
+        mode: Mode,
+        palette: Option<Palette>,
+        missing_pen: Option<Pen>
+    ) -> SpriteList {
         self.to_vec()
             .iter()
             .map(|matrix| matrix.as_sprite(mode, palette.clone(), missing_pen))
@@ -1015,7 +1033,6 @@ impl Sprite {
             .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect_vec())
             .collect_vec();
 
-
         Self::from_pens(&pens, mode, Some(palette))
     }
 
@@ -1152,7 +1169,13 @@ impl Sprite {
         missing_pen: Option<Pen>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
-        Ok(Self::convert(&img.to_rgb8(), mode, conversion, palette, missing_pen))
+        Ok(Self::convert(
+            &img.to_rgb8(),
+            mode,
+            conversion,
+            palette,
+            missing_pen
+        ))
     }
 
     /// Apply a transformation function on each line

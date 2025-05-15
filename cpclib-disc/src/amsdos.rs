@@ -1106,12 +1106,19 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     pub fn add_file(
         &mut self,
         file: &AmsdosFile,
+        ascii_file_name: Option<&AmsdosFileName>,
         is_system: bool,
         is_read_only: bool,
         behavior: AmsdosAddBehavior
     ) -> Result<(), AmsdosError> {
+        // get the filename from the header or separatly for an ascii file
+        let filename = if let Some(fname) = ascii_file_name {
+            fname.clone()
+        } else {
+            file.amsdos_filename().unwrap()?
+        };
+
         // handle the case where a file is already present
-        let filename = file.amsdos_filename().unwrap()?;
         if let Some(_file) = self.get_file(filename) {
             match behavior {
                 AmsdosAddBehavior::FailIfPresent => {
@@ -1862,6 +1869,19 @@ impl AmsdosFile {
 
         Ok(Self::from_buffer(&content))
     }
+
+    pub fn open_valid_ascii<P: AsRef<Utf8Path>>(path: P) -> Result<(Self, AmsdosFileName), AmsdosError> {
+        let p = path.as_ref();
+        let mut f = File::open(p)?;
+        let mut content = Vec::new();
+        f.read_to_end(&mut content)?;
+
+        let extension = p.extension().unwrap_or("");
+        let filename = p.file_stem().unwrap_or("");
+        let filename = AmsdosFileName::new_incorrect_case(0, filename, extension)?;
+        Ok((Self::ascii_file_from_buffer_with_name(&filename, &content), filename))
+    }
+
 
     pub fn amsdos_filename(&self) -> Option<Result<AmsdosFileName, AmsdosError>> {
         match self.header() {

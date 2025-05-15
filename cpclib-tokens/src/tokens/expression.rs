@@ -894,7 +894,6 @@ impl Expr {
         }
     }
 
-
     pub fn neg(self) -> Self {
         Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self))
     }

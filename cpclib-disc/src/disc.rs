@@ -77,7 +77,32 @@ pub trait Disc {
 
         let mut manager = AmsdosManagerMut::new_from_disc(self, head);
 
-        manager.add_file(file, system, read_only, behavior)?;
+        manager.add_file(file, None, system, read_only, behavior)?;
+
+        Ok(())
+    }
+
+    fn add_ascii_file<H: Into<Head>>(
+        &mut self,
+        file: &AmsdosFile,
+        fname: &AmsdosFileName,
+        head: H,
+        system: bool,
+        read_only: bool,
+        behavior: AmsdosAddBehavior
+    ) -> Result<(), AmsdosError>
+    where
+        Self: Sized
+    {
+        if !fname.is_valid() {
+            return Err(AmsdosError::WrongFileName {
+                msg: fname.filename()
+            });
+        }
+
+        let mut manager = AmsdosManagerMut::new_from_disc(self, head);
+
+        manager.add_file(file, Some(fname), system, read_only, behavior)?;
 
         Ok(())
     }

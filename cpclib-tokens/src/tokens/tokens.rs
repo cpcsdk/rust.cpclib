@@ -791,8 +791,7 @@ impl Listing {
 
     /// Add a new comment to the listing
     pub fn add_comment<S: Into<String>>(&mut self, comment: S) {
-        self.listing_mut()
-            .push(Token::Comment(comment.into()));
+        self.listing_mut().push(Token::Comment(comment.into()));
     }
 
     /// Add a list of bytes to the listing

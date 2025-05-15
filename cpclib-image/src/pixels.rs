@@ -118,7 +118,6 @@ pub mod mode2 {
 
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
-
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 8) {
             res.push(pens_to_byte(
@@ -138,11 +137,7 @@ pub mod mode2 {
 
     /// Convert a vector of pens into a vector of bytes
     pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
-        let get_pen = |at| {
-            pens.get(at)
-                .cloned()
-                .unwrap_or(replacement)
-        };
+        let get_pen = |at| pens.get(at).cloned().unwrap_or(replacement);
 
         let mut res = Vec::new();
         let mut idx = 0;
@@ -163,7 +158,6 @@ pub mod mode2 {
 
         res
     }
-
 
     pub fn pens_to_byte(
         pen0: Pen,
@@ -306,7 +300,6 @@ pub mod mode1 {
     /// Convert a vector of pens into a vector of bytes.
     /// Crop extra pens that do not enter in a byte
     pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
-
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 4) {
             res.push(pens_to_byte(
@@ -321,12 +314,7 @@ pub mod mode1 {
     }
 
     pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
-        
-        let get_pen = |at: usize| {
-            pens.get(at)
-                .cloned()
-                .unwrap_or(replacement)
-        };
+        let get_pen = |at: usize| pens.get(at).cloned().unwrap_or(replacement);
 
         let mut res = Vec::new();
         let mut idx = 0;
@@ -338,13 +326,11 @@ pub mod mode1 {
                 get_pen(idx * 4 + 3)
             ));
 
-
             idx += 4;
         }
 
         res
     }
-
 
     // Initial python code to backport
     // def get_mode1_pixel0_byte_encoded(pen):
@@ -542,8 +528,7 @@ pub mod mode0 {
         res
     }
 
-
-        /// Convert a vector of pens into a vector of bytes.
+    /// Convert a vector of pens into a vector of bytes.
     /// In case of an odd number of pens, the missing ones are forced
     pub fn pens_to_vec_with_replacement(pens: &[Pen], replacement: Pen) -> Vec<u8> {
         let mut res = Vec::with_capacity(pens.len());
@@ -558,8 +543,6 @@ pub mod mode0 {
 
         res
     }
-
-
 
     /// Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {

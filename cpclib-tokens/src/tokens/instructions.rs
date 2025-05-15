@@ -414,7 +414,6 @@ pub enum TestKind {
     LabelNused(SmolStr)
 }
 
-
 impl TestKind {
     pub fn iftrue<E: Into<Expr>>(e: E) -> Self {
         Self::True(e.into())
@@ -423,7 +422,6 @@ impl TestKind {
     pub fn iffalse<E: Into<Expr>>(e: E) -> Self {
         Self::False(e.into())
     }
-
 
     pub fn ifndef<S: Into<SmolStr>>(l: S) -> Self {
         TestKind::LabelDoesNotExist(l.into())
