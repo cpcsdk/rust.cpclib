@@ -45,6 +45,7 @@ mod tests {
         manager2
             .add_file(
                 &file2,
+                None,
                 false,
                 false,
                 AmsdosAddBehavior::ReplaceAndEraseIfPresent
@@ -226,6 +227,7 @@ mod tests {
             manager
                 .add_file(
                     file.as_ref().unwrap(),
+                    None,
                     false,
                     false,
                     AmsdosAddBehavior::ReplaceAndEraseIfPresent
