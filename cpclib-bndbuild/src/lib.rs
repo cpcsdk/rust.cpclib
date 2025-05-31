@@ -1,4 +1,4 @@
-#![feature(cfg_match)]
+#![feature(cfg_select)]
 #![feature(os_str_display)]
 #![feature(closure_lifetime_binder)]
 

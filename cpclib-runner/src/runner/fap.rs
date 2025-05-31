@@ -16,7 +16,7 @@ impl FAPVersion {
     }
 }
 
-cfg_match! {
+cfg_select! {
     target_os = "linux" =>
     {
         impl FAPVersion {

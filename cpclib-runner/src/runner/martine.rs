@@ -15,7 +15,7 @@ impl MartineVersion {
     }
 }
 
-cfg_match! {
+cfg_select! {
     target_os = "linux" =>
     {
         impl MartineVersion {
