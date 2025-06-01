@@ -41,7 +41,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
         info.project()
     ));
 
-    // obtain the base dowload page
+    // obtain the base download page
     let mut content = cpclib_download(&url)?;
     let mut html = String::new();
     content
@@ -49,16 +49,21 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
         .map_err(|e| e.to_string())?;
     let document = Html::parse_document(&html);
 
-    let selector = Selector::parse("a")
+    let selector = Selector::parse("a.Link--primary.Link")
         .map_err(|e| e.to_string())
         .map_err(|e| e.to_string())?;
 
+    // search for the title link such as
+    // <a href="/EdouardBERGE/rasm/releases/tag/v2.3.6" data-view-component="true" class="Link--primary Link">Rasm 2.3.6 - Beacon 2025</a>
     for link in document.select(&selector) {
-        let content = link.inner_html();
-        let href = link.attr("href").unwrap();
-        if content.contains(info.version_name()) && !href.contains("/tree/") {
-            return Ok(format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/"));
+        if let Some(href)  = link.attr("href") {
+
+            let content = link.inner_html();
+            if content.contains(info.version_name()) && href.contains("/tag/") {
+                return Ok(format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/"));
+            }
         }
+
     }
 
     Err(format!("No download link found for {info}"))
