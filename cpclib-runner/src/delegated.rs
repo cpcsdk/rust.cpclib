@@ -41,7 +41,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
         info.project()
     ));
 
-    // obtain the base download page
+    // obtain the base dowload page
     let mut content = cpclib_download(&url)?;
     let mut html = String::new();
     content

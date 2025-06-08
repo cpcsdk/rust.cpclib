@@ -137,7 +137,10 @@ pub struct Compiler {
     regs: RegistersStore,
 
     #[builder(default)]
-    action: RoutineAction
+    action: RoutineAction,
+
+    #[builder(skip)]
+    nb_lines_to_pass: usize
 }
 
 impl Deref for Compiler {
@@ -252,6 +255,8 @@ impl Compiler {
             // we need to lazily  move the write buffer when some modifications have to be done
             if will_write_on_screen {
                 assert!(self.use_8bits_addresses_handling());
+
+                self.flushing_pending_next_line_computations();
 
                 // get the number of displacement since last screen update
                 let local_moves = (read_cursor as i32) - (write_cursor as i32);
@@ -418,7 +423,7 @@ impl Compiler {
             self.add_comment("  HL already contains the destination address");
         }
         else {
-            self.emit_compute_next_line_address();
+            self.request_next_line_computation();
         }
     }
 
@@ -440,6 +445,17 @@ impl Compiler {
     // }
     pub fn use_8bits_addresses_handling(&self) -> bool {
         self.bc26.use_8bits_addresses_handling().unwrap()
+    }
+
+    fn request_next_line_computation(&mut self) {
+        self.nb_lines_to_pass += 1;
+    }
+
+    fn flushing_pending_next_line_computations(&mut self) {
+        for _ in 0..self.nb_lines_to_pass {
+            self.emit_compute_next_line_address();
+        }
+        self.nb_lines_to_pass = 0;
     }
 
     fn emit_compute_next_line_address(&mut self) {
@@ -528,6 +544,7 @@ impl Bc26 {
     fn c000_routine_label(r1: u8) -> String {
         format!("c000_bc26_r1_{}", r1)
     }
+
 
     fn universal_routine(r1: u8) -> Listing {
         let label = Self::universal_routine_label(r1);
