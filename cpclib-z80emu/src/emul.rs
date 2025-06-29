@@ -29,7 +29,7 @@ impl Z80 {
                 lst.listing().iter().map(|token| self.execute(token)).sum()
             },
 
-            _ => panic!("{:?} is not yet handled", opcode)
+            _ => panic!("{opcode:?} is not yet handled")
         }
     }
 
@@ -73,7 +73,7 @@ impl Z80 {
                             self.get_register_16_mut(arg1.unwrap()).sub(val);
                         }
                     },
-                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+                    _ => panic!("Untreated case {mnemonic} {arg1:?} {arg2:?}")
                 }
             },
 
@@ -255,7 +255,7 @@ impl Z80 {
                         self.write_memory_byte(address, value as _);
                     },
 
-                    _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+                    _ => panic!("Untreated case {mnemonic} {arg1:?} {arg2:?}")
                 }
             },
 
@@ -263,7 +263,7 @@ impl Z80 {
                 // nothing to do
             },
 
-            _ => panic!("Untreated case {} {:?} {:?}", mnemonic, arg1, arg2)
+            _ => panic!("Untreated case {mnemonic} {arg1:?} {arg2:?}")
         }
 
         duration

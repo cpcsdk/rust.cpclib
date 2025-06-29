@@ -19,7 +19,7 @@ fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize
         .enumerate()
         .map(|(i, bytes)| {
             let bytes = bytes.collect_vec();
-            let hex = bytes.iter().map(|byte| format!("{:02X}", byte)).join(" ");
+            let hex = bytes.iter().map(|byte| format!("{byte:02X}")).join(" ");
 
             let addr = DATA_WIDTH * i + (from);
 
@@ -39,7 +39,7 @@ fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize
                 })
                 .collect::<String>();
 
-            format!("{:04X}: {:48}|{:16}|", addr, hex, chars)
+            format!("{addr:04X}: {hex:48}|{chars:16}|")
         })
         .join("\n")
 }
@@ -50,7 +50,7 @@ fn diff_lines(first: &str, second: &str) -> String {
         .zip(second.lines())
         .map(|(line1, line2)| {
             if line1 != line2 {
-                format!("{}\t{}", line1, line2)
+                format!("{line1}\t{line2}")
             }
             else {
                 "...".to_string()
@@ -66,10 +66,10 @@ fn compare_lines(first: &str, second: &str) -> String {
         .zip(second.lines())
         .map(|(line1, line2)| {
             if line1 != line2 {
-                format!("NOK\t{}\t{}", line1, line2).red()
+                format!("NOK\t{line1}\t{line2}").red()
             }
             else {
-                format!(" OK\t{}\t{}", line1, line2).blue()
+                format!(" OK\t{line1}\t{line2}").blue()
             }
         })
         .join("\n")
@@ -92,10 +92,10 @@ impl Command {
             let info1 = info.to_string();
             let info2 = info2.to_string();
             let summary = compare_lines(&info1, &info2);
-            println!("{}", summary);
+            println!("{summary}");
         }
         else {
-            println!("{}", info);
+            println!("{info}");
         }
     }
 
@@ -111,10 +111,10 @@ impl Command {
                 let mem2 = mem_to_string(bank2, None, None);
 
                 let summary = diff_lines(&mem, &mem2);
-                println!("{}", summary);
+                println!("{summary}");
             }
             else {
-                println!("{}", mem);
+                println!("{mem}");
             }
         }
     }

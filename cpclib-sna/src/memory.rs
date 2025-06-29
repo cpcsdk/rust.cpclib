@@ -50,7 +50,7 @@ impl std::fmt::Debug for SnapshotMemory {
             SnapshotMemory::FiveHundredTwelveKb(_) => "512kb",
             SnapshotMemory::FiveHundredSeventySixKb(_) => "576kb"
         };
-        write!(f, "SnapshotMemory ({})", code)
+        write!(f, "SnapshotMemory ({code})")
     }
 }
 

@@ -54,13 +54,13 @@ impl DynamicUrlInformation for AceVersion {
 
                 let macos = map
                     .get("All versions")
-                    .map(|url| format!("{}/{}", ACE_URL, url));
+                    .map(|url| format!("{ACE_URL}/{url}"));
                 let windows = map
                     .get("x64 (64 bits)")
-                    .map(|url| format!("{}/{}", ACE_URL, url));
+                    .map(|url| format!("{ACE_URL}/{url}"));
                 let linux = map
                     .get("Ubuntu 24.04 LTS (AVX2)")
-                    .map(|url| format!("{}/{}", ACE_URL, url));
+                    .map(|url| format!("{ACE_URL}/{url}"));
 
                 Ok(MutiplatformUrls {
                     linux,

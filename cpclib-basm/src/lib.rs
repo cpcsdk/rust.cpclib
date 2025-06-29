@@ -83,27 +83,27 @@ pub enum BasmError {
 impl Display for BasmError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BasmError::AmsdosError(e) => write!(f, "AmsdosError {}", e),
-            BasmError::Io { io, ctx } => write!(f, "IO Error when {}: {}", ctx, io),
-            BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{}", error),
+            BasmError::AmsdosError(e) => write!(f, "AmsdosError {e}"),
+            BasmError::Io { io, ctx } => write!(f, "IO Error when {ctx}: {io}"),
+            BasmError::AssemblerError { error } => write!(f, "Assembling error:\n{error}"),
             BasmError::InvalidAmsdosFilename { filename } => {
-                write!(f, "Invalid Amsdos filename: {}", filename)
+                write!(f, "Invalid Amsdos filename: {filename}")
             },
             BasmError::NotAValidDirectory { path } => {
-                write!(f, "{} is not a valid directory.", path)
+                write!(f, "{path} is not a valid directory.")
             },
-            BasmError::NotAValidFile { file } => write!(f, "{} is not a valid file.", file),
+            BasmError::NotAValidFile { file } => write!(f, "{file} is not a valid file."),
 
             BasmError::ListingGeneration { msg } => {
-                write!(f, "Error when generating the symbol table: {}", msg)
+                write!(f, "Error when generating the symbol table: {msg}")
             },
 
             BasmError::InvalidSymbolFile { msg } => {
-                write!(f, "Error when reading the symbol table: {}", msg)
+                write!(f, "Error when reading the symbol table: {msg}")
             },
 
             BasmError::InvalidArgument(msg) => {
-                write!(f, "Invalid argument: {}", msg)
+                write!(f, "Invalid argument: {msg}")
             },
             BasmError::ErrorWithListing {
                 box error,
@@ -176,7 +176,7 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
     else if let Some(code) = matches.get_one::<String>("INLINE") {
         (
             builder.set_context_name("INLINED CODE"),
-            format!(" {}", code)
+            format!(" {code}")
         )
     }
     else {
@@ -315,7 +315,7 @@ pub fn assemble(
             let span = Z80Span::new_extra(value, &ctx);
             let value = alt((string_expr, parse_value))
                 .parse(span.into())
-                .map_err(|_e| BasmError::InvalidArgument(format!(" unable to parse the constant definition.\nBe sure numbers are properly encoded or strings have quote escaped when launched from a shell.\n{}",  definition)))?;
+                .map_err(|_e| BasmError::InvalidArgument(format!(" unable to parse the constant definition.\nBe sure numbers are properly encoded or strings have quote escaped when launched from a shell.\n{definition}")))?;
 
             let value = value.eval()?;
             assemble_options
@@ -323,7 +323,7 @@ pub fn assemble(
                 .assign_symbol_to_value(symbol, value.clone())
                 .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
 
-            o.emit_stdout(&format!("Assigned {} to {}", value, symbol));
+            o.emit_stdout(&format!("Assigned {value} to {symbol}"));
         }
     }
 
@@ -335,7 +335,7 @@ pub fn assemble(
             let file = File::create(dest).map_err(|e| {
                 BasmError::Io {
                     io: e,
-                    ctx: format!("creating {}", dest)
+                    ctx: format!("creating {dest}")
                 }
             })?;
             assemble_options.write_listing_output(file);
@@ -397,7 +397,7 @@ pub fn assemble(
             let mut f = File::create(dest).map_err(|e| {
                 BasmError::Io {
                     io: e,
-                    ctx: format!("creating {}", dest)
+                    ctx: format!("creating {dest}")
                 }
             })?;
             env.generate_symbols_output(&mut f, kind)
@@ -437,7 +437,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         env.save_sna(pc_filename.clone()).map_err(|e| {
             BasmError::Io {
                 io: e,
-                ctx: format!("saving \"{}\"", pc_filename)
+                ctx: format!("saving \"{pc_filename}\"")
             }
         })?;
 
@@ -548,7 +548,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 // BUG here we are not able to handle ASCII files. will do it only if needed
                 let disc_filename = any_fname.image_filename().unwrap();
                 let mut disc = open_disc(disc_filename, false).map_err(|msg| {
-                    AssemblerError::AlreadyRenderedError(format!("Disc error: {}", msg))
+                    AssemblerError::AlreadyRenderedError(format!("Disc error: {msg}"))
                 })?;
 
                 let head = Head::A;
@@ -578,21 +578,21 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                 let mut f = File::create(pc_filename).map_err(|e| {
                     BasmError::Io {
                         io: e,
-                        ctx: format!("creating \"{}\"", pc_filename)
+                        ctx: format!("creating \"{pc_filename}\"")
                     }
                 })?;
                 if !header.is_empty() {
                     f.write_all(&header).map_err(|e| {
                         BasmError::Io {
                             io: e,
-                            ctx: format!("saving \"{}\"", pc_filename)
+                            ctx: format!("saving \"{pc_filename}\"")
                         }
                     })?;
                 }
                 f.write_all(&binary).map_err(|e| {
                     BasmError::Io {
                         io: e,
-                        ctx: format!("saving \"{}\"", pc_filename)
+                        ctx: format!("saving \"{pc_filename}\"")
                     }
                 })?;
             }
@@ -611,7 +611,7 @@ pub fn process(
     if matches.get_flag("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
         for fname in EmbeddedFiles::iter() {
-            o.emit_stdout(&format!("{}", fname))
+            o.emit_stdout(&format!("{fname}"))
         }
         std::process::exit(0);
     }

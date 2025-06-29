@@ -124,7 +124,7 @@ impl Display for Constraint {
             Constraint::Hostname(c) => format!("hostname({})", c.0),
             Constraint::LogicalExpression(c) => format!("{c}")
         };
-        write!(f, "{}", text)
+        write!(f, "{text}")
     }
 }
 

@@ -9,11 +9,11 @@ pub trait EventObserver: Debug + Sync + Send {
 
 impl EventObserver for () {
     fn emit_stdout(&self, s: &str) {
-        println!("{}", s)
+        println!("{s}")
     }
 
     fn emit_stderr(&self, s: &str) {
-        eprintln!("{}", s)
+        eprintln!("{s}")
     }
 }
 

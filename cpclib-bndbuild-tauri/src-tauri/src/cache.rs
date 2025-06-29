@@ -79,7 +79,7 @@ impl BndBuilderObserver for TauriBndBuilderObserver {
                     .notification()
                     .builder()
                     .title("BNDBuild - Rule failed")
-                    .body(format!("{} failed", utf8_path))
+                    .body(format!("{utf8_path} failed"))
                     .show()
                     .unwrap()
             },
@@ -238,7 +238,7 @@ impl CachedBndBuilder {
                 return Err(format!("{:?} does not exists", resource_path.to_str()));
             }
             let resource_path = std::path::absolute(&resource_path)
-                .map_err(|e| format!("Unable to absolutize {:?}. {}", resource_path, e))?;
+                .map_err(|e| format!("Unable to absolutize {resource_path:?}. {e}"))?;
 
             resource_path.to_string_lossy().into_owned()
         };
@@ -302,7 +302,7 @@ impl CachedBndBuilder {
                         drop(line);
                     },
                     CommandEvent::Error(e) => {
-                        return Err(format!("Error with graphviz conversion. {}", e));
+                        return Err(format!("Error with graphviz conversion. {e}"));
                     },
                     CommandEvent::Terminated(terminated_payload) => break,
                     _ => todo!()

@@ -275,25 +275,25 @@ impl AmsdosFileName {
         // TODO check the user validity
         if filename.len() > 8 {
             return Err(AmsdosError::WrongFileName {
-                msg: format!("{} should use at most 8 chars", filename)
+                msg: format!("{filename} should use at most 8 chars")
             });
         }
 
         if extension.len() > 3 {
             return Err(AmsdosError::WrongFileName {
-                msg: format!("{} should use at most 3 chars", extension)
+                msg: format!("{extension} should use at most 3 chars")
             });
         }
 
         if !filename.eq_ignore_ascii_case(filename) {
             return Err(AmsdosError::WrongFileName {
-                msg: format!("{} contains non ascii characters", filename)
+                msg: format!("{filename} contains non ascii characters")
             });
         }
 
         if !extension.eq_ignore_ascii_case(extension) {
             return Err(AmsdosError::WrongFileName {
-                msg: format!("{} contains non ascii characters", extension)
+                msg: format!("{extension} contains non ascii characters")
             });
         }
 
@@ -380,8 +380,7 @@ impl TryFrom<u8> for AmsdosFileType {
             2 => Ok(AmsdosFileType::Binary),
             _ => {
                 Err(AmsdosError::Various(format!(
-                    "{} is not a valid file type",
-                    val
+                    "{val} is not a valid file type"
                 )))
             },
         }
@@ -395,7 +394,7 @@ impl std::fmt::Debug for AmsdosFileType {
             AmsdosFileType::Protected => "Protected",
             AmsdosFileType::Binary => "Binary"
         };
-        write!(f, "{}", repr)
+        write!(f, "{repr}")
     }
 }
 /// Encode the index of a bloc
@@ -494,7 +493,7 @@ impl std::fmt::Display for AmsdosEntry {
         let fname = self.amsdos_filename().filename_with_user();
         let size = self.used_space();
 
-        write!(f, "{} {}K", fname, size)
+        write!(f, "{fname} {size}K")
     }
 }
 
@@ -681,7 +680,7 @@ pub struct AmsdosEntries {
 impl std::fmt::Debug for AmsdosEntries {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for entry in self.used_entries() {
-            write!(f, "{:?}", entry)?;
+            write!(f, "{entry:?}")?;
         }
         Ok(())
     }
@@ -1113,7 +1112,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     ) -> Result<(), AmsdosError> {
         // get the filename from the header or separatly for an ascii file
         let filename = if let Some(fname) = ascii_file_name {
-            fname.clone()
+            *fname
         }
         else {
             file.amsdos_filename().unwrap()?
@@ -1123,7 +1122,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         if let Some(_file) = self.get_file(filename) {
             match behavior {
                 AmsdosAddBehavior::FailIfPresent => {
-                    return Err(AmsdosError::FileAlreadyExists(format!("{:?}", filename)));
+                    return Err(AmsdosError::FileAlreadyExists(format!("{filename:?}")));
                 },
                 AmsdosAddBehavior::ReplaceIfPresent => {
                     self.erase_file(filename, false)?;
@@ -1261,7 +1260,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
     ) -> Result<(), AmsdosError> {
         let entries = self
             .entries_for(filename)
-            .ok_or_else(|| AmsdosError::FileDoesNotExist(format!("{:?}", filename)))?;
+            .ok_or_else(|| AmsdosError::FileDoesNotExist(format!("{filename:?}")))?;
 
         if clear_sectors {
             entries.iter().flat_map(|e| e.used_blocs()).for_each(|b| {
@@ -1289,7 +1288,7 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
                 });
                 Ok(())
             },
-            None => Err(AmsdosError::FileDoesNotExist(format!("{:?}", source)))
+            None => Err(AmsdosError::FileDoesNotExist(format!("{source:?}")))
         }
     }
 
@@ -1951,7 +1950,7 @@ impl AmsdosFile {
 
         let folder = folder.as_ref();
         let fname = self.amsdos_filename().unwrap().unwrap().filename();
-        println!("Will write in {}", fname);
+        println!("Will write in {fname}");
         let mut file = File::create(folder.join(fname))?;
         file.write_all(self.content())?;
         Ok(())

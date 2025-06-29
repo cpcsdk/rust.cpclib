@@ -29,7 +29,7 @@ impl Parse for AssemblyMacroInput {
             let content = std::fs::read_to_string(&fname).map_err(|e| {
                 syn::Error::new(
                     proc_macro2::Span::call_site(),
-                    format!("Unable to load {}.\n{}", fname, e)
+                    format!("Unable to load {fname}.\n{e}")
                 )
             })?;
 
@@ -64,7 +64,7 @@ pub fn parse_z80(tokens: TokenStream) -> TokenStream {
             stream.into()
         },
         Err(e) => {
-            panic!("[ERROR] {:?}", e);
+            panic!("[ERROR] {e:?}");
         }
     }
 }
@@ -91,12 +91,12 @@ pub fn assemble(tokens: TokenStream) -> TokenStream {
                 },
 
                 Err(e) => {
-                    panic!("Unable to assemble the provided code. {:?}", e);
+                    panic!("Unable to assemble the provided code. {e:?}");
                 }
             }
         },
         Err(e) => {
-            panic!("[ERROR] {:?}", e);
+            panic!("[ERROR] {e:?}");
         }
     }
 }

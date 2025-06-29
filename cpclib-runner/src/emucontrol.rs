@@ -308,7 +308,7 @@ impl WindowEventsManager {
                 let (extra2, c) = c.enigo();
                 if let Some(extra2) = extra2 {
                     if extra2 != extra {
-                        eprintln!("{:?} requires a different modifier than {:?}", c, extra);
+                        eprintln!("{c:?} requires a different modifier than {extra:?}");
                     }
                 }
 
@@ -430,7 +430,7 @@ pub fn merge_rasm_debug<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Result<Strin
     let mut content = String::new();
     for (i, fname) in from.iter().enumerate() {
         std::fs::File::open(fname.as_ref())?.read_to_string(&mut content);
-        if i != from.len() - 1 && content.chars().last().unwrap() != ';' {
+        if i != from.len() - 1 && !content.ends_with(';') {
             content.push(';')
         }
     }
@@ -533,7 +533,7 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(cpc_emu_power_version) => {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
                 },
-                Emulator::CapriceForever(_) => args.push(format!("/DriveB={}", drive_b))
+                Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}"))
             }
         }
 
@@ -548,20 +548,20 @@ impl EmulatorConf {
                 },
                 Emulator::Amspirit(v) => {
                     let fname = emu.wine_compatible_fname(sna)?;
-                    args.push(format!("--file={}", fname));
+                    args.push(format!("--file={fname}"));
                 },
                 Emulator::CpcEmuPower(v) => {
-                    args.push(format!("--sna={}", sna));
+                    args.push(format!("--sna={sna}"));
                 },
                 Emulator::CapriceForever(v) => {
-                    args.push(format!("/SNA=\"{}\"", sna));
+                    args.push(format!("/SNA=\"{sna}\""));
                 }
             }
         }
 
         if let Some(crtc) = &self.crtc {
             if let Emulator::CpcEmuPower(_) = emu {
-                args.push(format!("--crtc={}", crtc));
+                args.push(format!("--crtc={crtc}"));
             }
         }
 
@@ -643,9 +643,9 @@ impl EmulatorConf {
                     args.push(format!("--run={run}"));
                 },
                 Emulator::SugarBoxV2(_) => unimplemented!(),
-                Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{}", run)),
+                Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{run}")),
                 Emulator::CapriceForever(v) => {
-                    args.push(format!("/Command=RUN\"\"{}", run));
+                    args.push(format!("/Command=RUN\"\"{run}"));
                 }
             }
         }
@@ -1105,7 +1105,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
             // here we need to import
             self.orgams_import(src)
         }
-        .map_err(|screen| (format!("Error while loading {}", src), screen));
+        .map_err(|screen| (format!("Error while loading {src}"), screen));
 
         // if file has been loaded, handle next action
         if res.is_ok() {
@@ -1159,7 +1159,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
             };
             screen.save(&path).unwrap();
             open(&path).unwrap();
-            format!("An error occurred.\n{msg}\nLook at {}.", path)
+            format!("An error occurred.\n{msg}\nLook at {path}.")
         })
     }
 
@@ -1558,7 +1558,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
     if cli.clear_cache {
         clear_base_cache_folder()
-            .map_err(|e| format!("Unable to clear the cache folder. {}", e))?;
+            .map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
     }
 
     let builder = EmulatorConf::builder()
@@ -1651,7 +1651,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
                 if !exists && !remove {
                     let src = format!("roms://{rom}");
-                    println!("Install {} in {}", src, dst);
+                    println!("Install {src} in {dst}");
                     let data =
                         EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
                     std::fs::write(&dst, data.data).unwrap();

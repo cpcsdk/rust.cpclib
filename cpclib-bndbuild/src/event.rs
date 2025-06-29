@@ -362,7 +362,7 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             BndBuilderEvent::StopRule(_) => {},
             BndBuilderEvent::FailedRule(_) => todo!(),
             BndBuilderEvent::StartTask(r, t) => {
-                println!("\t$ {}", t);
+                println!("\t$ {t}");
             },
             BndBuilderEvent::StopTask(r, t, d) => {
                 println!(

@@ -158,9 +158,9 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         let app = itr[0];
 
         let cwd = std::env::current_dir()
-            .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
+            .map_err(|e| format!("Unable to get the current working directory {e}."))?;
         let cwd = std::fs::canonicalize(cwd)
-            .map_err(|e| format!("Unable to get the current working directory {}.", e))?;
+            .map_err(|e| format!("Unable to get the current working directory {e}."))?;
 
         let mut cmd = std::process::Command::new(app);
 

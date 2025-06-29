@@ -333,7 +333,7 @@ impl BndBuilderCommand {
                 rule.dependencies().iter().map(|f| f.to_string()).join(" "),
             ));
             if let Some(help) = rule.help() {
-                observers.emit_stdout(&format!("\t{}\n", help));
+                observers.emit_stdout(&format!("\t{help}\n"));
             }
         }
     }
@@ -536,7 +536,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
                 .tempfile()
-                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {}", e)))?;
+                .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {e}")))?;
             let tmp_exec = tmp_exec_path.as_file_mut();
 
             self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
@@ -759,8 +759,7 @@ impl BndBuilderApp {
                     {
                         if EXPECTED_FILENAMES.iter().any(|end| fname.ends_with(*end)) {
                             error_msg.push_str(&format!(
-                                "\nHave you forgotten to do \"-f {}\" ?",
-                                fname
+                                "\nHave you forgotten to do \"-f {fname}\" ?"
                             ));
                         }
                     }

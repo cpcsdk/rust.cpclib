@@ -393,7 +393,7 @@ impl FromStr for SnapshotFlag {
                 Ok(indexed_flag)
             }
             else {
-                Err(format!("Wrong index size {:?}", indexed_flag))
+                Err(format!("Wrong index size {indexed_flag:?}"))
             }
         }
         else {
@@ -467,7 +467,7 @@ impl FromStr for SnapshotFlag {
                 "INT_REQ" => Ok(SnapshotFlag::INT_REQ),
 
                 "GA_PAL" | "CRTC_REG" | "PSG_REG" | "GA_MULTIMODE" => {
-                    Err(format!("{} requires an indice", s))
+                    Err(format!("{s} requires an indice"))
                 },
                 _ => Err(String::from("Unable to convert string to a flag"))
             }
@@ -489,12 +489,12 @@ pub enum FlagValue {
 impl fmt::Display for FlagValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            FlagValue::Byte(ref val) => write!(f, "0x{:.2x}", val),
-            FlagValue::Word(ref val) => write!(f, "0x{:.4x}", val),
+            FlagValue::Byte(ref val) => write!(f, "0x{val:.2x}"),
+            FlagValue::Word(ref val) => write!(f, "0x{val:.4x}"),
             FlagValue::Array(ref array) => {
                 write!(f, "[")
                     .and_then(|_x| {
-                        write!(f, "{}", &array.iter().map(|b| format!("{}", b)).join(", "))
+                        write!(f, "{}", &array.iter().map(|b| format!("{b}")).join(", "))
                     })
                     .and_then(|_x| write!(f, "]"))
             },

@@ -40,7 +40,7 @@ pub fn execute_dummy_listing(lst: &Listing) -> Result<ListingExecution, String> 
             if old_pc != new_pc {
                 // execution flow is broken / it is not compatible with our case
                 if new_pc != old_pc + token.number_of_bytes().unwrap() as u16 {
-                    return Err(format!("{} does not allow a sequential execution", token));
+                    return Err(format!("{token} does not allow a sequential execution"));
                 }
                 // break the loop if we need to go to the next instruction
                 else {

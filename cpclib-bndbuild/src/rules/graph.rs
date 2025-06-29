@@ -54,7 +54,7 @@ impl<'r> Graph<'r> {
         let layers = self.get_layered_dependencies_for(&p);
 
         for layer in layers {
-            println!("{:?}", layer)
+            println!("{layer:?}")
         }
     }
 

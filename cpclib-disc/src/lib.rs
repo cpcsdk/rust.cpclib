@@ -59,7 +59,7 @@ custom_error! {pub DskManagerError
 impl From<AmsdosError> for DskManagerError {
     fn from(value: AmsdosError) -> Self {
         DskManagerError::AnyError {
-            msg: format!("Amsdos error: {}", value)
+            msg: format!("Amsdos error: {value}")
         }
     }
 }
@@ -97,7 +97,7 @@ pub fn open_disc<P: AsRef<Utf8Path>>(
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
-            return Err(format!("{} does not exists", path));
+            return Err(format!("{path} does not exists"));
         }
         else {
             return Ok(new_disc(Some(path)));
@@ -180,7 +180,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             // TODO manage files instead of entries
             println!("Dsk {} -- {} files", dsk_fname, entries.len());
             for entry in &entries {
-                println!("{}", entry);
+                println!("{entry}");
             }
         } else {
             panic!("Error - missing argument");

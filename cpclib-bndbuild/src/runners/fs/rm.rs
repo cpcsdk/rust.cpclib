@@ -55,13 +55,11 @@ impl<E: EventObserver> Runner for RmRunner<E> {
 
             match res {
                 Ok(_) => {
-                    o.emit_stdout(&format!("\t{} removed\n", fname /* .display() */));
+                    o.emit_stdout(&format!("\t{fname} removed\n" /* .display() */));
                 },
                 Err(e) => {
                     errors.push_str(&format!(
-                        "Unable to remove {}. {}.\n",
-                        fname, // .display()
-                        e
+                        "Unable to remove {fname}. {e}.\n"
                     ))
                 }
             };

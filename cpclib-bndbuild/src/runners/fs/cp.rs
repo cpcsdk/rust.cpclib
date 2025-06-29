@@ -57,7 +57,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
 
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
             std::fs::copy(from, to).map_err(|e| {
-                error.push_str(&format!("Error when copying {} to {}. {}.\n", from, to, e))
+                error.push_str(&format!("Error when copying {from} to {to}. {e}.\n"))
             })
         };
 
@@ -85,7 +85,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
             _ => {
                 let dest = dest.unwrap();
                 if !dest.is_dir() {
-                    errors.push_str(&format!("{} must be a directory.", dest))
+                    errors.push_str(&format!("{dest} must be a directory."))
                 }
                 else {
                     let files = &files[..files.len() - 1];

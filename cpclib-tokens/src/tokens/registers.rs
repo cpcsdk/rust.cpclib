@@ -18,7 +18,7 @@ impl fmt::Display for Register16 {
             Register16::Hl => "HL",
             Register16::Sp => "SP"
         };
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
@@ -100,7 +100,7 @@ impl fmt::Display for IndexRegister16 {
             IndexRegister16::Ix => "IX",
             IndexRegister16::Iy => "IY"
         };
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
@@ -183,7 +183,7 @@ impl fmt::Display for Register8 {
             Register8::H => "H",
             Register8::L => "L"
         };
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
@@ -205,7 +205,7 @@ impl fmt::Display for IndexRegister8 {
             IndexRegister8::Iyh => "IYH",
             IndexRegister8::Iyl => "IYL"
         };
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
@@ -266,6 +266,6 @@ impl fmt::Display for FlagTest {
             FlagTest::P => "P",
             FlagTest::M => "M"
         };
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }

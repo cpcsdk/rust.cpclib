@@ -42,7 +42,7 @@ fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> Stri
         .enumerate()
         .map(|(i, bytes)| {
             let bytes = bytes.collect_vec();
-            let hex = bytes.iter().map(|byte| format!("{:02X}", byte)).join(" ");
+            let hex = bytes.iter().map(|byte| format!("{byte:02X}")).join(" ");
 
             let addr = DATA_WIDTH * i + (from) as usize;
 
@@ -62,7 +62,7 @@ fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> Stri
                 })
                 .collect::<String>();
 
-            format!("{:04X}: {:48}|{:16}|", addr, hex, chars)
+            format!("{addr:04X}: {hex:48}|{chars:16}|")
         })
         .join("\n")
 }
@@ -73,7 +73,7 @@ fn diff_lines(first: &str, second: &str) -> String {
         .zip(second.lines())
         .map(|(line1, line2)| {
             if line1 != line2 {
-                format!("{}\t{}", line1, line2)
+                format!("{line1}\t{line2}")
             }
             else {
                 "...".to_string()
@@ -93,7 +93,7 @@ impl Command {
                 Snapshot::load(path)
                     .map(|s| sna2.replace((fname.clone(), s)))
                     .map_err(|e| {
-                        eprintln!("Error while loading {}. {}", path, e);
+                        eprintln!("Error while loading {path}. {e}");
                     });
             },
             Command::Memory(from, amount) => {
@@ -108,10 +108,10 @@ impl Command {
                     sna2.unwrap_memory_chunks();
                     let mem2 = mem_to_string(sna2, from, amount);
                     let diff = diff_lines(&mem, &mem2);
-                    write!(output, "{}", diff);
+                    write!(output, "{diff}");
                 }
                 else {
-                    write!(output, "{}", mem);
+                    write!(output, "{mem}");
                 }
 
                 minus::page_all(output).unwrap();
@@ -335,10 +335,10 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
         let fname1 = Utf8Path::new(fname).file_name().unwrap();
         let prompt = if let Some((fname2, _)) = &sna2 {
             let fname2 = Utf8Path::new(fname2).file_name().unwrap();
-            format!("{} vs {} > ", fname1, fname2)
+            format!("{fname1} vs {fname2} > ")
         }
         else {
-            format!("{} > ", fname1)
+            format!("{fname1} > ")
         };
 
         let readline = rl.readline(&prompt);
@@ -375,7 +375,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
             Err(ReadlineError::Interrupted) => break,
             Err(ReadlineError::Eof) => break,
             Err(err) => {
-                println!("Error: {:?}", err);
+                println!("Error: {err:?}");
                 break;
             }
         }

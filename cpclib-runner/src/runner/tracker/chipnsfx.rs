@@ -46,7 +46,7 @@ impl DownloadableInformation for ChipnsfxVersion {
 impl ExecutableInformation for ChipnsfxVersion {
     fn target_os_folder(&self) -> &'static str {
         static FOLDER: OnceLock<String> = OnceLock::new();
-        FOLDER.get_or_init(|| format!("chipnsfx_{}", self)).as_str()
+        FOLDER.get_or_init(|| format!("chipnsfx_{self}")).as_str()
     }
 
     fn target_os_exec_fname(&self) -> &'static str {

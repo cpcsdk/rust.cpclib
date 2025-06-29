@@ -290,32 +290,28 @@ pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
 
     if !path.is_dir() {
         return Err(BndBuilderError::AnyError(format!(
-            "{} is not a valid directory",
-            path
+            "{path} is not a valid directory"
         )));
     }
 
     let bndbuild_yml = path.join("bndbuild.yml");
     if bndbuild_yml.exists() {
         return Err(BndBuilderError::AnyError(format!(
-            "{} already exists",
-            bndbuild_yml
+            "{bndbuild_yml} already exists"
         )));
     }
 
     let main_asm = path.join("main.asm");
     if main_asm.exists() {
         return Err(BndBuilderError::AnyError(format!(
-            "{} already exists",
-            main_asm
+            "{main_asm} already exists"
         )));
     }
 
     let data_asm = path.join("data.asm");
     if main_asm.exists() {
         return Err(BndBuilderError::AnyError(format!(
-            "{} already exists",
-            data_asm
+            "{data_asm} already exists"
         )));
     }
 

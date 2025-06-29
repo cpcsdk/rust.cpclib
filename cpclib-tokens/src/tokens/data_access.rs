@@ -90,21 +90,21 @@ impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref delta) => {
-                write!(f, "({} {} {})", reg, op, delta)
+                write!(f, "({reg} {op} {delta})")
             },
-            DataAccess::IndexRegister16(ref reg) => write!(f, "{}", reg),
-            DataAccess::Register16(ref reg) => write!(f, "{}", reg),
-            DataAccess::IndexRegister8(ref reg) => write!(f, "{}", reg),
-            DataAccess::Register8(ref reg) => write!(f, "{}", reg),
-            DataAccess::MemoryRegister16(ref reg) => write!(f, "({})", reg),
-            DataAccess::MemoryIndexRegister16(ref reg) => write!(f, "({})", reg),
+            DataAccess::IndexRegister16(ref reg) => write!(f, "{reg}"),
+            DataAccess::Register16(ref reg) => write!(f, "{reg}"),
+            DataAccess::IndexRegister8(ref reg) => write!(f, "{reg}"),
+            DataAccess::Register8(ref reg) => write!(f, "{reg}"),
+            DataAccess::MemoryRegister16(ref reg) => write!(f, "({reg})"),
+            DataAccess::MemoryIndexRegister16(ref reg) => write!(f, "({reg})"),
             DataAccess::Expression(ref exp) => write!(f, "{}", exp.to_simplified_string()),
             DataAccess::Memory(ref exp) => write!(f, "({})", exp.to_simplified_string()),
-            DataAccess::FlagTest(ref test) => write!(f, "{}", test),
+            DataAccess::FlagTest(ref test) => write!(f, "{test}"),
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
             DataAccess::PortC => write!(f, "(C)"),
-            DataAccess::PortN(n) => write!(f, "({})", n)
+            DataAccess::PortN(n) => write!(f, "({n})")
         }
     }
 }

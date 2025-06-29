@@ -18,7 +18,7 @@ pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         .map(|idx| {
             let info = cfg
                 .track_information_for_track(*idx.0, idx.1)
-                .unwrap_or_else(|| panic!("Unable to acquire information for track {:?}", idx));
+                .unwrap_or_else(|| panic!("Unable to acquire information for track {idx:?}"));
             let sectors_size = info.sector_size as usize * info.number_of_sectors();
             let header_size = 256;
             ((sectors_size + header_size) / 256) as u8
@@ -46,8 +46,7 @@ pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
             .get_track_information_mut(head, track_idx)
             .unwrap_or_else(|| {
                 panic!(
-                    "Unable to acquire track {} on head {:?} on the dsk",
-                    track_idx, head
+                    "Unable to acquire track {track_idx} on head {head:?} on the dsk"
                 )
             });
         let track_model = cfg.track_information_for_track(head, track_idx).unwrap();

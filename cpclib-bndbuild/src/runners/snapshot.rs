@@ -51,7 +51,7 @@ impl<E: EventObserver> Runner for SnapshotRunner<E> {
         }
         let matches = matches.unwrap();
 
-        cpclib_sna::process(&matches, o).map_err(|e| format!("{:?}", e))
+        cpclib_sna::process(&matches, o).map_err(|e| format!("{e:?}"))
     }
 
     fn get_command(&self) -> &str {

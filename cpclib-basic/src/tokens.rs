@@ -402,7 +402,7 @@ impl fmt::Display for BasicTokenNoPrefix {
             _ => {
                 let c = (*self as u8) as char;
                 match c {
-                    ' '..='z' => write!(f, "{}", c),
+                    ' '..='z' => write!(f, "{c}"),
 
                     _ => unimplemented!("{:?}", self)
                 }
@@ -504,7 +504,7 @@ impl fmt::Display for BasicTokenPrefixed {
             Self::Abs => "ABS",
             _ => unimplemented!("{}", self)
         };
-        write!(f, "{}", tag)
+        write!(f, "{tag}")
     }
 }
 
@@ -535,7 +535,7 @@ pub enum BasicValue {
 #[allow(missing_docs)]
 impl BasicValue {
     pub fn new_integer(word: i16) -> Self {
-        let word: u16 = unsafe { std::mem::transmute(word) };
+        let word: u16 = unsafe { i16::cast_unsigned(word) };
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 
@@ -567,11 +567,11 @@ impl BasicValue {
     }
 
     pub fn int_hexdecimal_representation(&self) -> Option<String> {
-        self.as_integer().map(|i| format!("&{:X}", i))
+        self.as_integer().map(|i| format!("&{i:X}"))
     }
 
     pub fn int_decimal_representation(&self) -> Option<String> {
-        self.as_integer().map(|i| format!("{}", i))
+        self.as_integer().map(|i| format!("{i}"))
     }
 }
 
@@ -596,13 +596,13 @@ impl fmt::Display for BasicToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BasicToken::SimpleToken(ref tok) => {
-                write!(f, "{}", tok)?;
+                write!(f, "{tok}")?;
             },
             BasicToken::PrefixedToken(ref tok) => {
-                write!(f, "{}", tok)?;
+                write!(f, "{tok}")?;
             },
             BasicToken::Comment(ref tok, ref comment) => {
-                write!(f, "{}", tok)?;
+                write!(f, "{tok}")?;
                 write!(f, "{},", String::from_utf8(comment.to_vec()).unwrap())?;
             },
             BasicToken::Constant(ref kind, ref constant) => {
@@ -615,7 +615,7 @@ impl fmt::Display for BasicToken {
                     },
                     _ => unimplemented!("{:?}", kind)
                 };
-                write!(f, "{}", repr)?;
+                write!(f, "{repr}")?;
             },
             _ => unimplemented!("{:?}", self)
         }

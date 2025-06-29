@@ -17,8 +17,7 @@ pub fn bytes_to_pens<'bytes>(
     Box::new(
         bytes
             .iter()
-            .map(move |&byte| byte_to_pens(byte, mode))
-            .flatten()
+            .flat_map(move |&byte| byte_to_pens(byte, mode))
     )
 }
 
@@ -141,7 +140,7 @@ pub mod mode2 {
 
         let mut res = Vec::new();
         let mut idx = 0;
-        while (idx < pens.len()) {
+        while idx < pens.len() {
             res.push(pens_to_byte(
                 get_pen(idx * 8),
                 get_pen(idx * 8 + 1),

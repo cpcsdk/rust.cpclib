@@ -48,7 +48,7 @@ impl fmt::Display for BasicLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.line_number)?;
         for token in self.tokens().iter() {
-            write!(f, "{}", token)?;
+            write!(f, "{token}")?;
         }
         Ok(())
     }
@@ -147,7 +147,7 @@ pub struct BasicProgram {
 impl fmt::Display for BasicProgram {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for line in &self.lines {
-            writeln!(f, "{}", line)?;
+            writeln!(f, "{line}")?;
         }
         Ok(())
     }
@@ -167,7 +167,7 @@ impl BasicProgram {
             Ok((prog, _)) => Ok(prog),
             Err(e) => {
                 Err(BasicError::ParseError {
-                    msg: format!("Error while parsing the Basic content: {}", e)
+                    msg: format!("Error while parsing the Basic content: {e}")
                 })
             },
 
@@ -317,7 +317,7 @@ impl BasicProgram {
         let mut sna = Snapshot::new_6128()?;
         sna.unwrap_memory_chunks();
         sna.add_data(&bytes, 0x170)
-            .map_err(|e| format!("{:?}", e))?;
+            .map_err(|e| format!("{e:?}"))?;
         Ok(sna)
     }
 }

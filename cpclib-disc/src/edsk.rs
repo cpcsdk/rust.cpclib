@@ -400,8 +400,7 @@ impl TrackInformation {
         let recording_mode = buffer[0x13].into();
 
         println!(
-            "Track {} Head {} sector_size {} nb_sectors {} gap length {:x}, filler_byte {:x}",
-            track_number, head_number, sector_size, number_of_sectors, gap3_length, filler_byte
+            "Track {track_number} Head {head_number} sector_size {sector_size} nb_sectors {number_of_sectors} gap length {gap3_length:x}, filler_byte {filler_byte:x}"
         );
         let sector_information_list =
             SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
@@ -424,8 +423,7 @@ impl TrackInformation {
         assert_eq!(
             track_info.real_track_size(),
             track_info.compute_track_size() as u16,
-            "Wrong track_info {:?}",
-            track_info
+            "Wrong track_info {track_info:?}"
         );
         track_info
     }
@@ -519,7 +517,7 @@ impl TrackInformation {
         // buffer.resize(buffer.len() + missing_bytes as usize, 0);
         // }
         // Add padding
-        assert!(buffer.len() % 256 == 0);
+        assert!(buffer.len().is_multiple_of(256));
     }
 
     /// TODO remove this method or set it private
@@ -534,13 +532,13 @@ impl TrackInformation {
     /// Track size has it should be written in the DSK
     pub fn compute_track_size(&self) -> usize {
         let size = self.total_size();
-        if size % 256 == 0 {
+        if size.is_multiple_of(256) {
             size
         }
         else {
             let mut s = size;
             // TODO implement an efficient version
-            while s % 256 != 0 {
+            while !s.is_multiple_of(256) {
                 s += 1;
             }
             s
@@ -919,7 +917,7 @@ impl TrackInformationList {
                     list.push(TrackInformation::from_buffer(track_buffer));
                 }
                 else {
-                    eprintln!("Track {} is unformatted", track_number);
+                    eprintln!("Track {track_number} is unformatted");
                     list.push(TrackInformation::unformatted());
                 }
                 consummed_bytes += current_track_size;
@@ -1217,8 +1215,7 @@ impl Disc for ExtendedDsk {
         let head = head.into();
         let sector = self.sector_mut(head, track, sector_id).ok_or_else(|| {
             format!(
-                "Head {:?} track {} sector 0x{:X} missing",
-                head, track, sector_id,
+                "Head {head:?} track {track} sector 0x{sector_id:X} missing",
             )
         }).unwrap()/*?*/;
         sector.set_values(bytes)?;

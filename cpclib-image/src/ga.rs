@@ -108,7 +108,7 @@ impl Display for InkComponentQuantity {
             InkComponentQuantity::Full => 255
         };
 
-        write!(f, "{:3}", code)
+        write!(f, "{code:3}")
     }
 }
 
@@ -346,7 +346,7 @@ impl Display for InkComponent {
             InkComponent::Blue => "blue"
         };
 
-        write!(f, "{}", code)
+        write!(f, "{code}")
     }
 }
 
@@ -479,7 +479,7 @@ impl Ink {
             10 => 24,
             3 => 25,
             11 => 26,
-            _ => panic!("{} bad value", col)
+            _ => panic!("{col} bad value")
         }
         .into()
     }
@@ -574,7 +574,7 @@ impl From<String> for Ink {
 
             "GRAY" | "GREY" => "WHITE".into(),
 
-            _ => panic!("{} color does not exist", item)
+            _ => panic!("{item} color does not exist")
         }
     }
 }
@@ -618,7 +618,7 @@ impl Display for Ink {
             _ => panic!()
         };
 
-        write!(f, "{}", repr)
+        write!(f, "{repr}")
     }
 }
 
@@ -1065,7 +1065,7 @@ impl Palette {
     pub fn get(&self, pen: &Pen) -> &Ink {
         match self.values.get(pen) {
             Some(ink) => ink,
-            None => panic!("Wrong pen {:?}", pen)
+            None => panic!("Wrong pen {pen:?}")
         }
     }
 

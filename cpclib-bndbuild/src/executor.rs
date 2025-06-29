@@ -174,7 +174,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
     }
     .or_else(|e| {
         if task.ignore_errors() {
-            observer.emit_stdout(&format!("[Error ignored] {}\n", e));
+            observer.emit_stdout(&format!("[Error ignored] {e}\n"));
             Ok(())
         }
         else {

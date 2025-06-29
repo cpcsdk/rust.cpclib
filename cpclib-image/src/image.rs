@@ -33,7 +33,7 @@ impl From<u8> for Mode {
             1 => Mode::One,
             2 => Mode::Two,
             3 => Mode::Three,
-            _ => panic!("{} is not a valid mode.", val)
+            _ => panic!("{val} is not a valid mode.")
         }
     }
 }
@@ -63,7 +63,7 @@ impl Mode {
     }
 
     pub fn nb_bytes_for_pixels_width(self, width: usize) -> usize {
-        let extra = if 0 != width % self.nb_pixels_per_byte() {
+        let extra = if !width.is_multiple_of(self.nb_pixels_per_byte()) {
             1
         }
         else {
@@ -176,8 +176,7 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
             .map(|ink| {
                 p.get_pen_for_ink(*ink).unwrap_or_else(|| {
                     panic!(
-                        "Unable to find a correspondance for ink {:?} in given palette {:?}",
-                        ink, p
+                        "Unable to find a correspondance for ink {ink:?} in given palette {p:?}"
                     )
                 })
             })
@@ -221,7 +220,7 @@ impl ColorMatrix {
     pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
         let pixel_height = {
             let mut height = 0x4000 / bytes_width;
-            while height % 8 != 0 {
+            while !height.is_multiple_of(8) {
                 height -= 1;
             }
             height
@@ -447,7 +446,7 @@ impl ColorMatrix {
         for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
             if idx >= mode.max_colors() {
                 // do we really want to fail ? maybe we can have special modes to handle there
-                panic!("[ERROR] your picture uses more than 16 different colors. Palette: {:?}. Wrong ink: {:?}", p, color);
+                panic!("[ERROR] your picture uses more than 16 different colors. Palette: {p:?}. Wrong ink: {color:?}");
             }
             p.set(Pen::from(idx as u8), *color);
         }
@@ -516,7 +515,7 @@ impl ColorMatrix {
     }
 
     pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
-        let img = im::open(fname).with_context(|| format!("{} does not exists.", fname))?;
+        let img = im::open(fname).with_context(|| format!("{fname} does not exists."))?;
         Ok(Self::convert(&img.to_rgb8(), conversion))
     }
 
@@ -949,7 +948,7 @@ impl ColorMatrixList {
         match hor_conf {
             HorizontalCrop::Left(HorizontalCropConstraint::CompleteByteForMode(ref mode))
             | HorizontalCrop::Both(HorizontalCropConstraint::CompleteByteForMode(ref mode), _) => {
-                while start_x % mode.nb_pixels_per_byte() != 0 {
+                while !start_x.is_multiple_of(mode.nb_pixels_per_byte()) {
                     start_x -= 1;
                 }
             },
@@ -960,7 +959,7 @@ impl ColorMatrixList {
         match hor_conf {
             HorizontalCrop::Right(HorizontalCropConstraint::CompleteByteForMode(ref mode))
             | HorizontalCrop::Both(_, HorizontalCropConstraint::CompleteByteForMode(ref mode)) => {
-                while (stop_x + 1) % mode.nb_pixels_per_byte() != 0 {
+                while !(stop_x + 1).is_multiple_of(mode.nb_pixels_per_byte()) {
                     stop_x += 1;
                 }
             },

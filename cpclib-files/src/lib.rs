@@ -254,7 +254,7 @@ impl FileAndSupport {
         match &self.support {
             StorageSupport::Disc(disc_filename) => {
                 let mut disc = open_disc(disc_filename, false)
-                    .map_err(|msg| format!("Disc error: {}", msg))?;
+                    .map_err(|msg| format!("Disc error: {msg}"))?;
 
                 let head = Head::A;
                 let system = false;
@@ -294,7 +294,7 @@ impl FileAndSupport {
                 };
 
                 std::fs::write(&fname, content)
-                    .map_err(|e| format!("Error while saving \"{}\". {}", fname, e))?;
+                    .map_err(|e| format!("Error while saving \"{fname}\". {e}"))?;
             }
         }
 

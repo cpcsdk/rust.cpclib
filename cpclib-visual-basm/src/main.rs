@@ -12,13 +12,13 @@ fn main() {
             Ok((_env, warnings)) => {
                 let warnings = warnings
                     .iter()
-                    .map(|w| format!("{}", w))
+                    .map(|w| format!("{w}"))
                     .collect::<Vec<_>>();
 
-                eprintln!("{:?}", warnings);
+                eprintln!("{warnings:?}");
             },
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
             }
         }
     })

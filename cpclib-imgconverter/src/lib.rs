@@ -214,13 +214,13 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
         let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
         let pal = OcpPal::from_buffer(data);
-        return Ok(Some(pal.palette(0).clone()));
+        Ok(Some(pal.palette(0).clone()))
     }
     else {
         let mut one_pen_set = false;
         let mut palette = Palette::empty();
         for i in 0..16 {
-            let key = format!("PEN{}", i);
+            let key = format!("PEN{i}");
             if matches.contains_id(&key) {
                 one_pen_set = true;
                 palette.set(i, *matches.get_one::<u8>(&key).unwrap())
@@ -228,10 +228,10 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
         }
 
         if one_pen_set {
-            return Ok(Some(palette));
+            Ok(Some(palette))
         }
         else {
-            return Ok(None);
+            Ok(None)
         }
     }
 }
@@ -433,12 +433,12 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
         ld sp, $
         ei
 
-        ld bc, 0x7f00 + 0x{:x}
+        ld bc, 0x7f00 + 0x{code_mode:x}
         out (c), c
 
         ld bc, 0xbc00 + 1
         out (c), c
-        ld bc, 0xbd00 + {}
+        ld bc, 0xbd00 + {crtc_width}
         out (c), c
 
         ld bc, 0xbc00 + 2
@@ -448,7 +448,7 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
 
         ld bc, 0xbc00 + 12
         out (c), c
-        ld bc, 0xbd00 + {}
+        ld bc, 0xbd00 + {r12}
         out (c), c
 
         ld bc, 0xbc00 + 13
@@ -466,7 +466,7 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
         ld bc, 0xbd00 + 38
         out (c), c
 
-        {}
+        {palette_code}
 
 frame_loop
         ld b, 0xf5
@@ -479,8 +479,7 @@ vsync_loop
 
 
         jp frame_loop
-    ",
-        code_mode, crtc_width, r12, palette_code
+    "
     )
 }
 
@@ -490,7 +489,7 @@ fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
 
 fn parse_int(repr: &str) -> usize {
     repr.parse::<usize>()
-        .unwrap_or_else(|_| panic!("Error when converting {} as integer", repr))
+        .unwrap_or_else(|_| panic!("Error when converting {repr} as integer"))
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
@@ -755,9 +754,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 let base = tile_fname.with_extension("").to_string();
                 let extension = tile_fname.extension().unwrap_or("");
                 for (i, data) in tile_set.iter().enumerate() {
-                    let current_filename = format!("{}_{:03}.{}", base, i, extension);
+                    let current_filename = format!("{base}_{i:03}.{extension}");
                     let mut file = File::create(current_filename.clone())
-                        .unwrap_or_else(|_| panic!("Unable to build {}", current_filename));
+                        .unwrap_or_else(|_| panic!("Unable to build {current_filename}"));
                     file.write_all(data).unwrap();
                 }
             },
@@ -953,7 +952,7 @@ pub fn build_args_parser() -> clap::Command {
                                   Ok(p)
                               }
                               else {
-                                  Err(format!("{} does not exists!", source))
+                                  Err(format!("{source} does not exists!"))
                               }
                             })
                    )
@@ -1044,7 +1043,7 @@ pub fn build_args_parser() -> clap::Command {
                                             Ok(sna.to_owned())
                                         }
                                         else {
-                                            Err(format!("{} has not a snapshot extension.", sna))
+                                            Err(format!("{sna} has not a snapshot extension."))
                                         }
                                     })
                             )
@@ -1062,7 +1061,7 @@ pub fn build_args_parser() -> clap::Command {
                                     Ok(dsk.to_owned())
                                 }
                                 else {
-                                    Err(format!("{} has not a dsk extention.", dsk))
+                                    Err(format!("{dsk} has not a dsk extention."))
                                 }
                             })
                         )
@@ -1115,13 +1114,13 @@ pub fn build_args_parser() -> clap::Command {
                                 let fname = Utf8PathBuf::from(fname);
                                 if let Some(ext) = fname.extension() {
                                     if ext.len() > 3 {
-                                        return Err(format!("{} is not a valid amsdos extension.", ext));
+                                        return Err(format!("{ext} is not a valid amsdos extension."));
                                     }
                                 }
 
                                 if let Some(stem) = fname.file_stem() {
                                     if stem.len() > 8 {
-                                        return Err(format!("{} is not a valid amsdos file stem.", stem))
+                                        return Err(format!("{stem} is not a valid amsdos file stem."))
                                     }
                                 }
 
@@ -1342,8 +1341,7 @@ pub fn process(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
                     }) => {
                         if let Err(e) = convert(matches) {
                             return Err(Error::msg(format!(
-                                "[ERROR] Unable to convert the image {}",
-                                e
+                                "[ERROR] Unable to convert the image {e}"
                             )));
                         }
                     },

@@ -42,7 +42,7 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
     let s = s.as_ref();
     let mut bytes = s.as_bstr();
     parse_value::<_, ContextError>(&mut bytes)
-        .map_err(|e| format!("Unable to parse {}. {}", s, e))
+        .map_err(|e| format!("Unable to parse {s}. {e}"))
         .map_err(SnapshotError::AnyError)
 }
 
@@ -437,7 +437,7 @@ impl Snapshot {
 impl Snapshot {
     pub fn log<S: std::fmt::Display>(&self, msg: S) {
         if self.debug {
-            println!("> {}", msg);
+            println!("> {msg}");
         }
     }
 
@@ -537,7 +537,7 @@ impl Snapshot {
                 panic!("V1 or V2 snapshots cannot code more than 128kb of memory");
             }
             if memory_size != 0 && memory_size != 64 && memory_size != 128 {
-                panic!("Memory of {}kb", memory_size);
+                panic!("Memory of {memory_size}kb");
             }
 
             // specify the right memory size ...
@@ -779,8 +779,7 @@ impl Snapshot {
         let size = data.len();
 
         self.log(format!(
-            "Add {} in 0x{:x} (0x{:x} bytes)",
-            fname, address, size
+            "Add {fname} in 0x{address:x} (0x{size:x} bytes)"
         ));
         self.add_data(&data, address)
     }
@@ -809,7 +808,7 @@ impl Snapshot {
             for (idx, byte) in data.iter().enumerate() {
                 let current_pos = address + idx;
                 if *self.memory_already_written.get(current_pos).unwrap() {
-                    eprintln!("[WARNING] Replace memory in 0x{:x}", current_pos);
+                    eprintln!("[WARNING] Replace memory in 0x{current_pos:x}");
                 }
                 self.memory.memory_mut()[current_pos] = *byte;
                 self.memory_already_written.set(current_pos, true);

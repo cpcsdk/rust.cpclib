@@ -192,7 +192,7 @@ pub fn process(matches: &ArgMatches) {
 
     // check if first bytes need to be removed
     let input_bytes = if let Some(skip) = matches.get_one::<usize>("SKIP") {
-        eprintln!("; Skip {} bytes", skip);
+        eprintln!("; Skip {skip} bytes");
         &input_bytes[*skip..]
     }
     else {
@@ -295,7 +295,7 @@ pub fn process(matches: &ArgMatches) {
     // get extra labels
     for address in collect_addresses_from_expressions(&listing) {
         let entry = labels.entry(address);
-        entry.or_insert(Cow::Owned(format!("label_{:.4x}", address)));
+        entry.or_insert(Cow::Owned(format!("label_{address:.4x}")));
     }
     listing.inject_labels(labels);
     inject_labels_into_expressions(&mut listing);

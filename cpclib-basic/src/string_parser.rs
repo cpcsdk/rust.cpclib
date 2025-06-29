@@ -46,7 +46,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 match char {
                     ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
                     '\n' | '\r' => {},
-                    _ => panic!("char '{}' is unhandled", char)
+                    _ => panic!("char '{char}' is unhandled")
                 }
             }
             acc

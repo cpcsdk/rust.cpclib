@@ -155,7 +155,7 @@ impl Display for LabelPrefix {
             Self::Page => "{page}",
             Self::Pageset => "{pageset}"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -198,7 +198,7 @@ impl Display for ExprFormat {
 
             _ => unreachable!()
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -206,18 +206,18 @@ impl ExprFormat {
     /// Generate the string representation of the given value
     pub fn string_representation(&self, val: i32) -> String {
         match self {
-            Self::Hex(None) => format!("0x{:x}", val),
-            Self::Bin(None) => format!("0b{:b}", val),
+            Self::Hex(None) => format!("0x{val:x}"),
+            Self::Bin(None) => format!("0b{val:b}"),
 
-            Self::Int => format!("{}", val),
+            Self::Int => format!("{val}"),
 
-            Self::Hex(Some(2)) => format!("0x{:0>2x}", val),
-            Self::Hex(Some(4)) => format!("0x{:0>4x}", val),
-            Self::Hex(Some(8)) => format!("0x{:0>8x}", val),
+            Self::Hex(Some(2)) => format!("0x{val:0>2x}"),
+            Self::Hex(Some(4)) => format!("0x{val:0>4x}"),
+            Self::Hex(Some(8)) => format!("0x{val:0>8x}"),
 
-            Self::Bin(Some(8)) => format!("0b{:0>8b}", val),
-            Self::Bin(Some(16)) => format!("0b{:0>16b}", val),
-            Self::Bin(Some(32)) => format!("0b{:0>32b}", val),
+            Self::Bin(Some(8)) => format!("0b{val:0>8b}"),
+            Self::Bin(Some(16)) => format!("0b{val:0>16b}"),
+            Self::Bin(Some(32)) => format!("0b{val:0>32b}"),
 
             _ => unreachable!()
         }
@@ -244,8 +244,8 @@ impl FormattedExpr {
 impl Display for FormattedExpr {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Raw(expr) => write!(formatter, "{}", expr),
-            Self::Formatted(format, expr) => write!(formatter, "{}{}", format, expr)
+            Self::Raw(expr) => write!(formatter, "{expr}"),
+            Self::Formatted(format, expr) => write!(formatter, "{format}{expr}")
         }
     }
 }
@@ -303,7 +303,7 @@ impl Display for UnaryFunction {
             UnaryFunction::Exp => "exp",
             UnaryFunction::Sqrt => "sqrt"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -321,7 +321,7 @@ impl Display for UnaryOperation {
             UnaryOperation::Not => "!",
             UnaryOperation::BinaryNot => "~"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -332,7 +332,7 @@ impl Display for BinaryFunction {
             BinaryFunction::Max => "max",
             BinaryFunction::Pow => "pow"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -348,7 +348,7 @@ impl Display for UnaryTokenOperation {
             UnaryTokenOperation::Duration => "DURATION",
             UnaryTokenOperation::Opcode => "OPCODE"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -405,7 +405,7 @@ impl Display for BinaryOperation {
             StrictlyGreater => ">",
             StrictlyLower => "<"
         };
-        write!(format, "{}", repr)
+        write!(format, "{repr}")
     }
 }
 
@@ -775,22 +775,22 @@ impl Display for Expr {
         match self {
             Rnd => write!(format, "RND()"),
             // Should not be displayed often
-            RelativeDelta(delta) => write!(format, "$ + {} + 2", delta),
+            RelativeDelta(delta) => write!(format, "$ + {delta} + 2"),
 
-            Value(val) => write!(format, "0x{:x}", val),
-            Float(val) => write!(format, "{}", val),
-            Char(c) => write!(format, "'{}'", c),
+            Value(val) => write!(format, "0x{val:x}"),
+            Float(val) => write!(format, "{val}"),
+            Char(c) => write!(format, "'{c}'"),
             Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
-            String(ref string) => write!(format, "\"{}\"", string),
+            String(ref string) => write!(format, "\"{string}\""),
             List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).join(",")),
-            Label(ref label) => write!(format, "{}", label),
-            PrefixedLabel(prefix, label) => write!(format, "{}{}", prefix, label),
+            Label(ref label) => write!(format, "{label}"),
+            PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
 
-            UnaryFunction(func, arg) => write!(format, "{}({})", func, arg),
+            UnaryFunction(func, arg) => write!(format, "{func}({arg})"),
 
-            BinaryFunction(func, arg1, arg2) => write!(format, "{}({}, {})", func, arg1, arg2),
+            BinaryFunction(func, arg1, arg2) => write!(format, "{func}({arg1}, {arg2})"),
 
-            Paren(ref expr) => write!(format, "({})", expr),
+            Paren(ref expr) => write!(format, "({expr})"),
 
             AnyFunction(name, args) => {
                 write!(
@@ -801,9 +801,9 @@ impl Display for Expr {
                 )
             },
 
-            UnaryOperation(op, exp) => write!(format, "{}{}", op, exp),
-            UnaryTokenOperation(op, tok) => write!(format, "{}({})", op, tok),
-            BinaryOperation(op, exp1, exp2) => write!(format, "({} {} {})", exp1, op, exp2)
+            UnaryOperation(op, exp) => write!(format, "{op}{exp}"),
+            UnaryTokenOperation(op, tok) => write!(format, "{op}({tok})"),
+            BinaryOperation(op, exp1, exp2) => write!(format, "({exp1} {op} {exp2})")
         }
     }
 }
@@ -889,7 +889,7 @@ impl Expr {
     pub fn do_apply_macro_labels_modification(s: &mut std::string::String, seed: usize) {
         assert!(!s.is_empty());
         if s.starts_with('@') {
-            let mut new = format!("__macro__{}__{}", seed, s);
+            let mut new = format!("__macro__{seed}__{s}");
             std::mem::swap(&mut new, s);
         }
     }
@@ -1051,8 +1051,7 @@ impl ExprResult {
             ExprResult::String(s) => Ok(s.borrow()),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to convert {} as an string",
-                    self
+                    "Try to convert {self} as an string"
                 )))
             },
         }
@@ -1066,8 +1065,7 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to convert {} as an int",
-                    self
+                    "Try to convert {self} as an int"
                 )))
             },
         }
@@ -1081,8 +1079,7 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok(if *b { 1_f64 } else { 0 as f64 }),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to convert {} as a float",
-                    self
+                    "Try to convert {self} as a float"
                 )))
             },
         }
@@ -1096,8 +1093,7 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok(if *b { 'T' } else { 'F' }),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to convert {} as a char",
-                    self
+                    "Try to convert {self} as a char"
                 )))
             },
         }
@@ -1111,8 +1107,7 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok(*b),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to convert {} as a bool",
-                    self
+                    "Try to convert {self} as a bool"
                 )))
             },
         }
@@ -1125,8 +1120,7 @@ impl ExprResult {
             ExprResult::Float(f) => Ok(Self::from(if *f == 0.0 { 1.0 } else { 0.0 })),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "NOT is not an operation for {}",
-                    self
+                    "NOT is not an operation for {self}"
                 )))
             },
         }
@@ -1248,8 +1242,7 @@ impl ExprResult {
             ExprResult::Value(v) => Ok((*v).into()),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to apply floor to {}",
-                    self
+                    "Try to apply floor to {self}"
                 )))
             },
         }
@@ -1261,8 +1254,7 @@ impl ExprResult {
             ExprResult::Value(v) => Ok((*v).into()),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to apply ceil to {}",
-                    self
+                    "Try to apply ceil to {self}"
                 )))
             },
         }
@@ -1274,8 +1266,7 @@ impl ExprResult {
             ExprResult::Value(_v) => Ok(0.into()),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to apply frac to {}",
-                    self
+                    "Try to apply frac to {self}"
                 )))
             },
         }
@@ -1306,7 +1297,7 @@ impl ExprResult {
             ExprResult::Float(f) => Ok(f.abs().into()),
             ExprResult::Value(v) => Ok(v.abs().into()),
             ExprResult::Bool(_b) => Ok(self.clone()),
-            _ => Err(ExpressionTypeError(format!("Try to apply abs to {}", self)))
+            _ => Err(ExpressionTypeError(format!("Try to apply abs to {self}")))
         }
     }
 
@@ -1337,8 +1328,7 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok((!*b).into()),
             _ => {
                 Err(ExpressionTypeError(format!(
-                    "Try to apply floor to {}",
-                    self
+                    "Try to apply floor to {self}"
                 )))
             },
         }
@@ -1353,7 +1343,7 @@ impl std::ops::Neg for ExprResult {
             ExprResult::Float(f) => Ok(f.neg().into()),
             ExprResult::Value(i) => Ok(i.neg().into()),
             ExprResult::Bool(b) => Ok((!b).into()),
-            _ => Err(ExpressionTypeError(format!("Try to substract {}", self)))
+            _ => Err(ExpressionTypeError(format!("Try to substract {self}")))
         }
     }
 }
@@ -1404,8 +1394,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
 
             (any, _) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible addition between {} and {}",
-                    any, rhs
+                    "Impossible addition between {any} and {rhs}"
                 )))
             },
         }
@@ -1450,8 +1439,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
 
             (any, rhs) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible substraction between {} and {}",
-                    any, rhs
+                    "Impossible substraction between {any} and {rhs}"
                 )))
             },
         }
@@ -1480,8 +1468,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
 
             (..) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible multiplication between {} and {}",
-                    self, rhs
+                    "Impossible multiplication between {self} and {rhs}"
                 )))
             },
         }
@@ -1508,8 +1495,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
             },
             (..) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible division between {} and {}",
-                    self, rhs
+                    "Impossible division between {self} and {rhs}"
                 )))
             },
         }
@@ -1537,8 +1523,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
             },
             (..) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible reminder between {} and {}",
-                    self, rhs
+                    "Impossible reminder between {self} and {rhs}"
                 )))
             },
         }
@@ -1635,15 +1620,15 @@ impl std::fmt::Display for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprResult::Float(f2) => write!(f, "{}", f2.into_inner()),
-            ExprResult::Value(v) => write!(f, "{}", v),
+            ExprResult::Value(v) => write!(f, "{v}"),
             ExprResult::Char(v) => write!(f, "'{}'", *v as char),
-            ExprResult::Bool(b) => write!(f, "{}", b),
-            ExprResult::String(v) => write!(f, "\"{}\"", v),
+            ExprResult::Bool(b) => write!(f, "{b}"),
+            ExprResult::String(v) => write!(f, "\"{v}\""),
             ExprResult::List(v) => {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{}", item)).join(",")
+                    v.iter().map(|item| format!("{item}")).join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1652,7 +1637,7 @@ impl std::fmt::Display for ExprResult {
                     "matrix({})",
                     self.matrix_rows()
                         .iter()
-                        .map(|row| format!("{}", row))
+                        .map(|row| format!("{row}"))
                         .join(",")
                 )
             }
@@ -1664,15 +1649,15 @@ impl std::fmt::LowerHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
-            ExprResult::Value(v) => write!(f, "{:x}", v),
-            ExprResult::Char(v) => write!(f, "{:x}", v),
+            ExprResult::Value(v) => write!(f, "{v:x}"),
+            ExprResult::Char(v) => write!(f, "{v:x}"),
             ExprResult::Bool(v) => write!(f, "{:x}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
             ExprResult::List(v) => {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{:x}", item)).join(",")
+                    v.iter().map(|item| format!("{item:x}")).join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1681,7 +1666,7 @@ impl std::fmt::LowerHex for ExprResult {
                     "matrix({})",
                     self.matrix_rows()
                         .iter()
-                        .map(|row| format!("{:x}", row))
+                        .map(|row| format!("{row:x}"))
                         .join(",")
                 )
             }
@@ -1693,7 +1678,7 @@ impl std::fmt::UpperHex for ExprResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ExprResult::Float(_f2) => write!(f, "????"),
-            ExprResult::Value(v) => write!(f, "{:X}", v),
+            ExprResult::Value(v) => write!(f, "{v:X}"),
             ExprResult::Char(v) => write!(f, "{:X}", *v),
             ExprResult::Bool(v) => write!(f, "{:X}", *v as u8),
             ExprResult::String(_v) => write!(f, "STRING REPRESENTATION ISSUE"),
@@ -1701,7 +1686,7 @@ impl std::fmt::UpperHex for ExprResult {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{:X}", item)).join(",")
+                    v.iter().map(|item| format!("{item:X}")).join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1710,7 +1695,7 @@ impl std::fmt::UpperHex for ExprResult {
                     "matrix({})",
                     self.matrix_rows()
                         .iter()
-                        .map(|row| format!("{:X}", row))
+                        .map(|row| format!("{row:X}"))
                         .join(",")
                 )
             }

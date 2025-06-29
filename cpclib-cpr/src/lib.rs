@@ -287,7 +287,7 @@ impl Display for CprInfo<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Cartridge with {} banks", self.cpr.banks().len())?;
         for (idx, bank) in self.banks.iter().enumerate() {
-            writeln!(f, "# Bank {idx}\n{}", bank)?;
+            writeln!(f, "# Bank {idx}\n{bank}")?;
         }
         Ok(())
     }

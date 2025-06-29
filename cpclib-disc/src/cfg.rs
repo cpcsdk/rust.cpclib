@@ -69,7 +69,7 @@ impl FromStr for DiscConfig {
             Ok(res) => Ok(res),
             Err(error) => {
                 Err(DiscConfigError::ParseError {
-                    msg: format!("{:?}", error)
+                    msg: format!("{error:?}")
                 })
             },
         }
@@ -103,7 +103,7 @@ impl fmt::Display for DiscConfig {
         writeln!(f, "NbHead = {}", self.nb_heads)?;
 
         for track_group in &self.track_groups {
-            write!(f, "\n{}", track_group)?;
+            write!(f, "\n{track_group}")?;
         }
 
         Ok(())
@@ -189,23 +189,23 @@ impl fmt::Display for TrackGroup {
             Head::B => "-B",
             Head::Unspecified => ""
         };
-        let tracks_info = self.tracks.iter().map(|t| format!("{}", t)).join(",");
+        let tracks_info = self.tracks.iter().map(|t| format!("{t}")).join(",");
         let sector_id = self
             .sector_id
             .iter()
-            .map(|t| format!("0x{:x}", t))
+            .map(|t| format!("0x{t:x}"))
             .join(",");
         let sector_id_head = self
             .sector_id_head
             .iter()
-            .map(|t| format!("{}", t))
+            .map(|t| format!("{t}"))
             .join(",");
 
-        writeln!(f, "[Track{}:{}]", head_info, tracks_info)?;
+        writeln!(f, "[Track{head_info}:{tracks_info}]")?;
         writeln!(f, "SectorSize = {}", self.sector_size)?;
         writeln!(f, "Gap3 = 0x{:x}", self.gap3)?;
-        writeln!(f, "SectorID = {}", sector_id)?;
-        writeln!(f, "SectorIDHead = {}", sector_id_head)?;
+        writeln!(f, "SectorID = {sector_id}")?;
+        writeln!(f, "SectorIDHead = {sector_id_head}")?;
 
         Ok(())
     }

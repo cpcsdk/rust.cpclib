@@ -60,7 +60,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
             let content = link.inner_html();
             if content.contains(info.version_name()) && href.contains("/tag/") {
                 return Ok(
-                    format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/")
+                    format!("https://github.com{href}").replace("/tag/", "/expanded_assets/")
                 );
             }
         }
@@ -492,7 +492,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
         let resp = self
             .download(o)
-            .map_err(|e| format!("Unable to download the expected file. {}", e))?;
+            .map_err(|e| format!("Unable to download the expected file. {e}"))?;
         let mut input = resp.into_reader();
 
         // uncompress it
@@ -541,12 +541,12 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
             o.emit_stdout(">> Compile program\n");
 
             let cwd = std::env::current_dir()
-                .map_err(|e| format!("Unable to get the current working directory {}.\n", e))?;
+                .map_err(|e| format!("Unable to get the current working directory {e}.\n"))?;
             std::env::set_current_dir(&dest)
-                .map_err(|e| format!("Unable to set the current working directory {}.\n", e))?;
+                .map_err(|e| format!("Unable to set the current working directory {e}.\n"))?;
             let res = compile(&dest, o);
             std::env::set_current_dir(&cwd)
-                .map_err(|e| format!("Unable to set the current working directory {}.\n", e))?;
+                .map_err(|e| format!("Unable to set the current working directory {e}.\n"))?;
             res
         }
         else {
@@ -564,7 +564,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
 
     fn download(&self, o: &E) -> Result<Response, String> {
         let url = self.download_fn_url.deref()()?;
-        o.emit_stdout(&format!(">> Download file {}\n", url));
+        o.emit_stdout(&format!(">> Download file {url}\n"));
         ureq::get(&url).call().map_err(|e| e.to_string())
     }
 }

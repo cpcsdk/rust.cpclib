@@ -110,8 +110,7 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
             if fname.exists() {
                 if !matches.get_flag("ignore") {
                     errors.push_str(&format!(
-                        "{} already exists. Use --ignore to not crash.\n",
-                        fname,
+                        "{fname} already exists. Use --ignore to not crash.\n",
                     ));
                 }
             }
@@ -125,9 +124,9 @@ impl<E: EventObserver> Runner for MkdirRunner<E> {
 
                 match res {
                     Ok(_) => {
-                        o.emit_stdout(&format!("\t{} created", fname));
+                        o.emit_stdout(&format!("\t{fname} created"));
                     },
-                    Err(e) => errors.push_str(&format!("Unable to create {}. {}.\n", fname, e))
+                    Err(e) => errors.push_str(&format!("Unable to create {fname}. {e}.\n"))
                 };
             }
         }

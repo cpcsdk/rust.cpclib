@@ -68,7 +68,7 @@ fn main() {
 
         let missing = to_keep.sub(&available);
         if !missing.is_empty() {
-            eprintln!("These banks are not available {:?}", missing);
+            eprintln!("These banks are not available {missing:?}");
         }
 
         let to_remove = available.sub(&to_keep);

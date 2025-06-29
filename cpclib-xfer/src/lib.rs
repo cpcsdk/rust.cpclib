@@ -205,8 +205,7 @@ impl CpcXfer {
 
         if m4_path.len() > 255 {
             panic!(
-                "{} path is too long (should be limited to 255 chars)",
-                m4_path
+                "{m4_path} path is too long (should be limited to 255 chars)"
             );
         }
         let _file_contents = fs::read(local_fname).expect("Unable to read PC file");
@@ -263,7 +262,7 @@ impl CpcXfer {
 
         sna.save(&temp_path, SnapshotVersion::V2).map_err(|e| {
             XferError::InternalError {
-                reason: format!("Unable to save the snapshot. {}", e)
+                reason: format!("Unable to save the snapshot. {e}")
             }
         })?;
         self.upload_and_run(&temp_path, None)?;

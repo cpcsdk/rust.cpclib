@@ -8,7 +8,7 @@ fn main() {
     match inner_main() {
         Ok(_) => {},
         Err(e) => {
-            eprintln!("Failure\n{}", e);
+            eprintln!("Failure\n{e}");
             std::process::exit(-1);
         }
     }

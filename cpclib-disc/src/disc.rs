@@ -119,7 +119,7 @@ pub trait Disc {
 
         if !filename.is_valid() {
             Err(AmsdosError::WrongFileName {
-                msg: format!("{:?}", filename)
+                msg: format!("{filename:?}")
             })
         }
         else {

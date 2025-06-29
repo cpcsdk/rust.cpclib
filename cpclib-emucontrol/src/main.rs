@@ -10,7 +10,7 @@ fn main() {
     match res {
         Ok(_) => println!("No error occurred."),
         Err(e) => {
-            eprintln!("An error occurred. {}", e);
+            eprintln!("An error occurred. {e}");
             exit(-1);
         }
     }

@@ -479,7 +479,7 @@ impl BndBuildApp {
                                 self.hovered_target = Some(tgt.into());
                             }
                             button.context_menu(|ui| {
-                                if tgt.exists() && ui.button(format!("Open \"{}\"", tgt)).clicked()
+                                if tgt.exists() && ui.button(format!("Open \"{tgt}\"")).clicked()
                                 {
                                     match open::that(tgt) {
                                         Ok(_) => {},
@@ -619,7 +619,7 @@ impl eframe::App for BndBuildApp {
                 },
                 Err(err) => {
                     // self.build_error = Some(err. ().to_string());
-                    panic!("{:?}", err);
+                    panic!("{err:?}");
                 }
             }
 
@@ -655,7 +655,7 @@ impl eframe::App for BndBuildApp {
                     .unwrap_or(false)
                 {
                     self.watch_logs
-                        .push_str(&format!("{} needs to be rebuilt", watched));
+                        .push_str(&format!("{watched} needs to be rebuilt"));
                     if self.requested_target.is_some() {
                         self.watch_logs.push_str(&format!(
                             "Build delayed in favor of {}",

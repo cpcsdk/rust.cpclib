@@ -14,10 +14,10 @@ pub fn utf8pathbuf_value_parser(must_exist: bool) -> impl Fn(&str) -> Result<Utf
                     Ok(p)
                 }
                 else {
-                    Err(format!("{} does not exists", p))
+                    Err(format!("{p} does not exists"))
                 }
             },
-            Err(_) => Err(format!("{} is not a valid filename.", p))
+            Err(_) => Err(format!("{p} is not a valid filename."))
         }
     }
 }

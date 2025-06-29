@@ -1,12 +1,11 @@
 #![feature(let_chains)]
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fmt::write;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 
 use bon::Builder;
 use cpclib_asm::{
-    dec_e, dec_l, inc_e, inc_l, ld_a_mem_hl, ld_mem_hl_d, BaseListing, Expr, IfBuilder, Listing,
+    dec_e, dec_l, inc_e, inc_l, IfBuilder, Listing,
     ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register16, Register8, TestKind
 };
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
@@ -80,7 +79,7 @@ impl RegistersStore {
         self.regs
             .iter()
             .find(|(r, v)| **v == val)
-            .map(|(r, v)| r.clone())
+            .map(|(r, v)| *r)
     }
 
     pub fn value_for_r8(&self, r: Register8) -> Option<u8> {
@@ -174,11 +173,10 @@ impl Compiler {
             })
             .flatten()
         {
-            if set.contains_key(&b) {
+            if let std::collections::btree_map::Entry::Vacant(e) = set.entry(b) {
+                e.insert(1);
+            } else {
                 *set.get_mut(&b).unwrap() += 1;
-            }
-            else {
-                set.insert(b, 1);
             }
         }
 
@@ -235,7 +233,7 @@ impl Compiler {
         // let mut restore_data = Vec::new();
         // let mut restore_address = None;
 
-        let mut nb_moves = 0;
+        let nb_moves = 0;
         self.emit_line_header(line_idx);
 
         let mut lst = ListingBuilder::default();
@@ -244,7 +242,7 @@ impl Compiler {
         let nb_steps = line.len() as u16;
         for (read_idx, (pixs, mask)) in line.into_iter().enumerate() {
             // handle zig-zag stuff
-            let read_cursor = if line_idx % 2 == 0 {
+            let read_cursor = if line_idx.is_multiple_of(2) {
                 read_idx as u16
             }
             else {
@@ -288,7 +286,7 @@ impl Compiler {
 
                 // add it to the generated code
                 lst = lst
-                    .comment(format!("Move of {} bytes", local_moves))
+                    .comment(format!("Move of {local_moves} bytes"))
                     .extend(chosen); // inject the fastest one
 
                 write_cursor = read_cursor;
@@ -557,11 +555,11 @@ impl Bc26 {
     }
 
     fn universal_routine_label(r1: u8) -> String {
-        format!("universal_bc26_r1_{}", r1)
+        format!("universal_bc26_r1_{r1}")
     }
 
     fn c000_routine_label(r1: u8) -> String {
-        format!("c000_bc26_r1_{}", r1)
+        format!("c000_bc26_r1_{r1}")
     }
 
     fn universal_routine_1line(r1: u8) -> Listing {

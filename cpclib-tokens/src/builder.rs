@@ -882,7 +882,7 @@ impl ListingBuilder {
         self
     }
 
-    pub fn call<S: Into<SmolStr>>(mut self, label: S) -> Self {
+    pub fn call<S: Into<SmolStr>>(self, label: S) -> Self {
         self.call_expr(Expr::Label(label.into()))
     }
 

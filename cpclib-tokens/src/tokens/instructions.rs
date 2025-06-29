@@ -979,7 +979,7 @@ impl fmt::Display for Token {
 
         let data_access_list_to_string = |data: &Vec<DataAccess>| {
             data.iter()
-                .map(|d| format!("{}", d))
+                .map(|d| format!("{d}"))
                 .collect::<Vec<_>>()
                 .join(",")
         };
@@ -1050,12 +1050,12 @@ impl fmt::Display for Token {
                 let mut first = true;
                 for (test, code) in tests {
                     let test_part = match test {
-                        TestKind::True(e) => format!("IF {}", e),
-                        TestKind::False(e) => format!("IFNOT {}", e),
-                        TestKind::LabelExists(l) => format!("IFDEF {}", l),
-                        TestKind::LabelDoesNotExist(l) => format!("IFNDEF {}", l),
-                        TestKind::LabelUsed(l) => format!("IFUSED {}", l),
-                        TestKind::LabelNused(l) => format!("IFNUSED {}", l),
+                        TestKind::True(e) => format!("IF {e}"),
+                        TestKind::False(e) => format!("IFNOT {e}"),
+                        TestKind::LabelExists(l) => format!("IFDEF {l}"),
+                        TestKind::LabelDoesNotExist(l) => format!("IFNDEF {l}"),
+                        TestKind::LabelUsed(l) => format!("IFUSED {l}"),
+                        TestKind::LabelNused(l) => format!("IFNUSED {l}"),
                     };
 
                     let code_part = get_code_string(code);
@@ -1106,7 +1106,7 @@ impl fmt::Display for Token {
                         }
                     };
 
-                     write!(f, "{} {}", directive, fname)?;
+                     write!(f, "{directive} {fname}")?;
                      if offset.is_some() {
                          write!(f, ", {}", offset.as_ref().unwrap())?;
 
@@ -1135,7 +1135,7 @@ impl fmt::Display for Token {
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
  
             Token::Label(ref string)
-                => write!(f, "{}", string),
+                => write!(f, "{string}"),
 
 
             Token::MacroCall(ref name, ref args)
@@ -1149,7 +1149,7 @@ impl fmt::Display for Token {
                     } else {
                         args
                     };
-                    write!(f, "{} {}", name, args)?;
+                    write!(f, "{name} {args}")?;
                     Ok(())
             },
 
@@ -1164,34 +1164,34 @@ impl fmt::Display for Token {
 
                 // TODO remove this one / it is not coherent as we have the PortC
             Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2), None) if &Mnemonic::Out == mne
-                => write!(f, "{} (C), {}", mne, arg2),
+                => write!(f, "{mne} (C), {arg2}"),
             Token::OpCode(ref mne, None, None, None)
-                => write!(f, "{}", mne),
+                => write!(f, "{mne}"),
             Token::OpCode(ref mne, Some(ref arg1), None, None)
-                => write!(f, "{} {}", mne, arg1),
+                => write!(f, "{mne} {arg1}"),
             Token::OpCode(ref mne, None, Some(ref arg2), None) // JP/JR without flags
-               => write!(f, "{} {}", mne, arg2),
+               => write!(f, "{mne} {arg2}"),
             Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), None)
-                => write!(f, "{} {}, {}", mne, arg1, arg2),
+                => write!(f, "{mne} {arg1}, {arg2}"),
 
             Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), Some(arg3))
-                => write!(f, "{} {}, {}, {}", mne, arg1, arg2, arg3),    
+                => write!(f, "{mne} {arg1}, {arg2}, {arg3}"),    
 
             Token::Org{val1, val2:None}
-                => write!(f, "ORG {}", val1),
+                => write!(f, "ORG {val1}"),
             Token::Org{val1, val2: Some(ref expr2)}
-                => write!(f, "ORG {}, {}", val1, expr2),
+                => write!(f, "ORG {val1}, {expr2}"),
 
 
             Token::Print(ref exp)
                 => write!(f, "PRINT {}", exp.iter().map(|e|e.to_string()).join(",")),
 
             Token::Protect(ref exp1, ref exp2)
-                => write!(f, "PROTECT {}, {}", exp1, exp2),
+                => write!(f, "PROTECT {exp1}, {exp2}"),
 
             Token::Repeat(ref exp, ref code, ref label, ref start) => {
                 
-                write!(f, "REPEAT {}", exp)?;
+                write!(f, "REPEAT {exp}")?;
                 if label.is_some() {
                     write!(f, " {}", label.as_ref().unwrap())?;
                 }
@@ -1201,7 +1201,7 @@ impl fmt::Display for Token {
                 writeln!(f)?;
 
                 for token in code.iter() {
-                    writeln!(f, "\t{}", token)?;
+                    writeln!(f, "\t{token}")?;
                 }
                 write!(f, "\tENDREPEAT")
             },
@@ -1214,10 +1214,10 @@ impl fmt::Display for Token {
                 => {
                     match ticker {
                         StableTickerAction::Start(ref label) => {
-                            write!(f, "STABLETICKER START, {}", label)
+                            write!(f, "STABLETICKER START, {label}")
                         },
                         StableTickerAction::Stop(Some(ref label)) => {
-                            write!(f, "STABLETICKER STOP, {}", label)
+                            write!(f, "STABLETICKER STOP, {label}")
                         },
                         StableTickerAction::Stop(None) => {
                             write!(f, "STABLETICKER STOP")

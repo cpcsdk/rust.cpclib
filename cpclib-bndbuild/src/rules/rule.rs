@@ -70,15 +70,15 @@ impl Display for Rule {
         }
 
         if let Some(phony) = &self.phony {
-            writeln!(f, "  phony: {}", phony)?;
+            writeln!(f, "  phony: {phony}")?;
         }
 
         if let Some(help) = &self.help {
-            writeln!(f, "  help: {}", help)?;
+            writeln!(f, "  help: {help}")?;
         }
 
         if let Some(constraint) = &self.constraint {
-            writeln!(f, "  constraint: {}", constraint)?;
+            writeln!(f, "  constraint: {constraint}")?;
         }
 
         if self.commands.len() == 1 {

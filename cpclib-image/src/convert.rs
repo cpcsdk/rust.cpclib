@@ -1035,14 +1035,13 @@ impl SpriteOutput {
                 .chunks(width)
                 .into_iter()
                 .enumerate()
-                .map(|(idx, row)| {
+                .flat_map(|(idx, row)| {
                     let mut row = row.collect_vec();
-                    if idx % 2 != 0 {
+                    if !idx.is_multiple_of(2) {
                         row.reverse();
                     }
                     row
                 })
-                .flatten()
                 .collect_vec();
             return res;
         }
@@ -1054,13 +1053,13 @@ impl SpriteOutput {
         Sprite::from_bytes(
             &self.data,
             self.bytes_width(),
-            self.mode.clone(),
+            self.mode,
             self.palette.clone()
         )
     }
 
     pub fn encoding(&self) -> SpriteEncoding {
-        self.encoding.clone()
+        self.encoding
     }
 
     pub fn data(&self) -> &[u8] {
@@ -1166,7 +1165,7 @@ impl Debug for Output {
                 )
             },
             Output::SpriteAndMask { sprite, mask } => writeln!(fmt, "SpriteAndMask"),
-            Output::Sprite(sprite_output) => writeln!(fmt, "{:?}", sprite_output)
+            Output::Sprite(sprite_output) => writeln!(fmt, "{sprite_output:?}")
         }
     }
 }
@@ -1402,7 +1401,7 @@ impl ImageConverter {
                 palette,
                 mode,
                 transformations,
-                sprite_output_format.clone(),
+                *sprite_output_format,
                 crop_if_too_large,
                 missing_pen
             )
@@ -1421,7 +1420,7 @@ impl ImageConverter {
                 palette,
                 mode,
                 sprite_transformations,
-                sprite_format.clone(),
+                *sprite_format,
                 crop_if_too_large,
                 missing_pen
             )?;
@@ -1437,7 +1436,7 @@ impl ImageConverter {
                 Some(mask_palette.into()), // we want and 0 ; or byte where we plot
                 mode,
                 mask_transformations,
-                sprite_format.clone(),
+                *sprite_format,
                 crop_if_too_large,
                 missing_pen
             )?;
@@ -1484,7 +1483,7 @@ impl ImageConverter {
 
     fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix {
         let img = im::open(input_file)
-            .unwrap_or_else(|_| panic!("Unable to convert {:?} properly.", input_file));
+            .unwrap_or_else(|_| panic!("Unable to convert {input_file:?} properly."));
         let mat = ColorMatrix::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(&mat)
     }

@@ -64,7 +64,7 @@ impl Rules {
         let mut rules = self
             .rules
             .iter()
-            .filter(|r| r.targets().iter().any(|tgt2| tgt2 == &tgt))
+            .filter(|r| r.targets().iter().any(|tgt2| tgt2 == tgt))
             .collect_vec();
 
         if rules.is_empty() {
@@ -104,7 +104,7 @@ impl Rules {
                     let other_rule_idx = node2tracked_idx.get(p).unwrap();
                     let other_rule = &self.rules[*other_rule_idx];
                     return Err(BndBuilderError::DependencyError(
-                        format! {"{} has already a rule to build it:\n{:?}", p, other_rule}
+                        format! {"{p} has already a rule to build it:\n{other_rule:?}"}
                     ));
                 }
                 else {
@@ -114,7 +114,7 @@ impl Rules {
                 // link the target to the dependencies
                 for p2 in rule.dependencies().iter() {
                     g.depend_on(p, p2).map_err(|_e| {
-                        BndBuilderError::DependencyError(format!("{} and {}", p, p2))
+                        BndBuilderError::DependencyError(format!("{p} and {p2}"))
                     })?;
                 }
             }
@@ -231,7 +231,7 @@ impl Rules {
                 };
 
                 for dep in deps {
-                    let dep = format!("\"{}\"", dep);
+                    let dep = format!("\"{dep}\"");
                     all_deps.insert(dep.clone());
 
                     if let Some(rule_id) = rule_id.as_mut() {
@@ -240,7 +240,7 @@ impl Rules {
                 }
 
                 for tgt in tgts {
-                    let tgt = format!("\"{}\"", tgt);
+                    let tgt = format!("\"{tgt}\"");
                     all_tgts.insert(tgt.clone());
 
                     rule_id
