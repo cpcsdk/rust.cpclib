@@ -1114,7 +1114,8 @@ impl<'dsk, D: Disc> AmsdosManagerMut<'dsk, D> {
         // get the filename from the header or separatly for an ascii file
         let filename = if let Some(fname) = ascii_file_name {
             fname.clone()
-        } else {
+        }
+        else {
             file.amsdos_filename().unwrap()?
         };
 
@@ -1870,7 +1871,9 @@ impl AmsdosFile {
         Ok(Self::from_buffer(&content))
     }
 
-    pub fn open_valid_ascii<P: AsRef<Utf8Path>>(path: P) -> Result<(Self, AmsdosFileName), AmsdosError> {
+    pub fn open_valid_ascii<P: AsRef<Utf8Path>>(
+        path: P
+    ) -> Result<(Self, AmsdosFileName), AmsdosError> {
         let p = path.as_ref();
         let mut f = File::open(p)?;
         let mut content = Vec::new();
@@ -1879,9 +1882,11 @@ impl AmsdosFile {
         let extension = p.extension().unwrap_or("");
         let filename = p.file_stem().unwrap_or("");
         let filename = AmsdosFileName::new_incorrect_case(0, filename, extension)?;
-        Ok((Self::ascii_file_from_buffer_with_name(&filename, &content), filename))
+        Ok((
+            Self::ascii_file_from_buffer_with_name(&filename, &content),
+            filename
+        ))
     }
-
 
     pub fn amsdos_filename(&self) -> Option<Result<AmsdosFileName, AmsdosError>> {
         match self.header() {

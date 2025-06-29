@@ -1016,6 +1016,22 @@ where
                         let fname =
                             get_filename_to_read(&fname, env.options().parse_options(), Some(env))?;
 
+                        // Add a warning when incbin is used on a possible assembly file
+                        if let Some(extension) = fname.extension() {
+                            match extension.to_ascii_uppercase().as_str() {
+                                "ASM" | "Z80" => {
+                                    let warning = format!(
+                                        "{} seems to be a source code and not a binary file.",
+                                        &fname
+                                    );
+                                    env.add_warning(dbg!(AssemblerWarning::AssemblingError {
+                                        msg: warning
+                                    }));
+                                },
+                                _ => {}
+                            }
+                        }
+
                         // get the data for the given file
                         let data = if !contents.contains_key(&fname) {
                             // need to load the file

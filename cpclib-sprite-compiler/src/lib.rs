@@ -452,18 +452,16 @@ impl Compiler {
     }
 
     fn flushing_pending_next_line_computations(&mut self) {
-        /* no found yet why it does not work in my test program :( ...
-        let nb_chars = self.nb_lines_to_pass/8;
-        let nb_lines = self.nb_lines_to_pass%8;
-
-        if nb_chars > 0 {
-            //TODO optimize that better if it happens in a sprite, there is no need to have a loop
-            let lst = self.bc26.routine_8lines().unwrap();
-            self.inject_listing(&lst);
-        }
-
-        */
-
+        // no found yet why it does not work in my test program :( ...
+        // let nb_chars = self.nb_lines_to_pass/8;
+        // let nb_lines = self.nb_lines_to_pass%8;
+        //
+        // if nb_chars > 0 {
+        // TODO optimize that better if it happens in a sprite, there is no need to have a loop
+        // let lst = self.bc26.routine_8lines().unwrap();
+        // self.inject_listing(&lst);
+        // }
+        //
 
         let nb_lines = self.nb_lines_to_pass;
         for _ in 0..nb_lines {
@@ -536,7 +534,7 @@ impl Bc26 {
     pub fn routine_8lines(&self) -> Option<Listing> {
         match self {
             Bc26::Compute16KbC000 { r1 } => Some(Self::c000_routine_8lines(*r1)),
-            Bc26::Compute16KbUniversal { r1 } => Some(Self::universal_routine_8lines(*r1)),
+            Bc26::Compute16KbUniversal { r1 } => Some(Self::universal_routine_8lines(*r1))
         }
     }
 
@@ -566,7 +564,6 @@ impl Bc26 {
         format!("c000_bc26_r1_{}", r1)
     }
 
-
     fn universal_routine_1line(r1: u8) -> Listing {
         let label = Self::universal_routine_label(r1);
         Listing::from_str(&format!(
@@ -584,8 +581,9 @@ impl Bc26 {
 
     fn universal_routine_8lines(r1: u8) -> Listing {
         if r1 == 32 {
-            Listing::from_str(&format!("ld a,{} : add l : ld l,a", r1*2)).unwrap()
-        } else {
+            Listing::from_str(&format!("ld a,{} : add l : ld l,a", r1 * 2)).unwrap()
+        }
+        else {
             unimplemented!()
         }
     }

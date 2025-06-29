@@ -261,12 +261,20 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
         // loop over all the files to add them
         for fname in sub.get_many::<Utf8PathBuf>("INPUT_FILES").unwrap() {
-           if sub.get_flag("ASCII") {
-                let (ams_file, ams_filename) = AmsdosFile::open_valid_ascii(fname)
-                    .expect("Error when reading the ascii file");
-                disc.add_ascii_file(&ams_file, dbg!(&ams_filename), head, is_system, is_read_only, behavior)
-                    .unwrap();
-            } else {
+            if sub.get_flag("ASCII") {
+                let (ams_file, ams_filename) =
+                    AmsdosFile::open_valid_ascii(fname).expect("Error when reading the ascii file");
+                disc.add_ascii_file(
+                    &ams_file,
+                    dbg!(&ams_filename),
+                    head,
+                    is_system,
+                    is_read_only,
+                    behavior
+                )
+                .unwrap();
+            }
+            else {
                 let ams_file = match AmsdosFile::open_valid(fname) {
                     Ok(mut ams_file) => {
                         let amsdos_fname = ams_file.amsdos_filename().expect("There is a bug here");
@@ -306,13 +314,10 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                         panic!("Unable to load {fname}: {e:?}");
                     }
                 };
-            
+
                 disc.add_amsdos_file(&ams_file, head, is_system, is_read_only, behavior)
                     .unwrap();
             }
-
-
-
         }
 
         // Save the dsk on disc

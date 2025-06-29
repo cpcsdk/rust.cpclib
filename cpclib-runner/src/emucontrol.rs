@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::io::Read;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -422,6 +423,41 @@ impl WindowEventsManager {
     // }
 }
 
+/// It seems ACE-DL is not able to read several rasm debug file. Only the latest one is taken into account.
+/// So here we merge them
+pub fn merge_rasm_debug<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Result<String> {
+    // collect all of them
+    let mut content = String::new();
+    for (i, fname) in from.iter().enumerate() {
+        std::fs::File::open(fname.as_ref())?.read_to_string(&mut content);
+        if i != from.len() - 1 && content.chars().last().unwrap() != ';' {
+            content.push(';')
+        }
+    }
+
+    // filter duplicates
+    // TODO no semantic of the file is used so it will fail with the presence of any ';'
+    let mut content = content.split(';').sorted().unique().join(";");
+    content.push(';');
+
+    Ok(content)
+}
+
+/// Marge all .rasm files in a temporary file
+pub fn merge_rasm_debug_to_tmp<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Result<Utf8PathBuf> {
+    let content = merge_rasm_debug(from)?;
+
+    let tempfile = camino_tempfile::Builder::new()
+        .suffix("_merged.rasm")
+        .tempfile()
+        .unwrap();
+    let path = tempfile.into_temp_path();
+    let path = path.keep().unwrap();
+    std::fs::write(&path, content)?;
+
+    Ok(path)
+}
+
 /// Read a rasm debug file and convert it in winape sym string
 pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
     let content = std::fs::read_to_string(src)?;
@@ -545,9 +581,8 @@ impl EmulatorConf {
         if !self.debug_files.is_empty() {
             match emu {
                 Emulator::Ace(_) => {
-                    for fname in &self.debug_files {
-                        args.push(fname.to_string());
-                    }
+                    let fname = merge_rasm_debug_to_tmp(&self.debug_files[..]).unwrap();
+                    args.push(fname.to_string());
                 },
                 Emulator::Winape(_) => {
                     eprintln!("Breapoints are currently ignored. TODO convert them in the appropriate format");

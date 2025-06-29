@@ -56,14 +56,14 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
     // search for the title link such as
     // <a href="/EdouardBERGE/rasm/releases/tag/v2.3.6" data-view-component="true" class="Link--primary Link">Rasm 2.3.6 - Beacon 2025</a>
     for link in document.select(&selector) {
-        if let Some(href)  = link.attr("href") {
-
+        if let Some(href) = link.attr("href") {
             let content = link.inner_html();
             if content.contains(info.version_name()) && href.contains("/tag/") {
-                return Ok(format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/"));
+                return Ok(
+                    format!("https://github.com{}", href).replace("/tag/", "/expanded_assets/")
+                );
             }
         }
-
     }
 
     Err(format!("No download link found for {info}"))
