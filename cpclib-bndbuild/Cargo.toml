@@ -43,7 +43,7 @@ lazy-regex = "3.4.1"
 minijinja = { version = "2.8.0", features = ["loader"] }
 paste.workspace = true
 self_cell = "1.1.0"
-self_update.workspace = true
+self_update = {workspace = true, optional = true}
 serde_yaml = "0.9.34"
 serde.workspace = true
 shlex.workspace = true
@@ -70,13 +70,14 @@ path = "src/main.rs"
 
 [features]
 default = ["sna-interactive","colored_errors"]
-indicatif = ["cpclib-basm/indicatif"]
-rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
-hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
-sna-interactive = ["cpclib-sna/interactive"]
+
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
-
+hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
+indicatif = ["cpclib-basm/indicatif"]
+rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
+sna-interactive = ["cpclib-sna/interactive"]
+self-update =["self_update"]
 
 [profile.release]
 debug = 1

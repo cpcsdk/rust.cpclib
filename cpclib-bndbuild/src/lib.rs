@@ -1,5 +1,4 @@
 #![feature(cfg_select)]
-#![feature(os_str_display)]
 #![feature(closure_lifetime_binder)]
 
 use std::env::current_dir;
@@ -139,6 +138,21 @@ pub fn build_args_parser() -> clap::Command {
         .version(built_info::PKG_VERSION)
         .disable_help_flag(true)
         .disable_version_flag(true)
+        ;
+
+    #[cfg(feature = "self-update")]
+    let cmd = cmd.arg(
+            Arg::new("update")
+                .long("update")
+                .short('u')
+                .num_args(0..=1)
+                .value_parser(updatable_list.iter().chain(&["self", "all", "installed"]).collect_vec())
+                .help("Update (or install) bndbuild or a given embedded application if provided. There are specific cases: if `all` is provided, it update all applications and bndbuild itself, if `installed` is provided it update only installed applications, if `self` is provide, it updates bndbuild itself.")
+                .exclusive(true)
+        );
+        
+
+    let cmd = cmd
         .arg(
             Arg::new("help")
                 .long("help")
@@ -150,16 +164,6 @@ pub fn build_args_parser() -> clap::Command {
                 .num_args(0..=1)
                 .help("Show the help of the given subcommand CMD.")
         )
-        .arg(
-            Arg::new("update")
-                .long("update")
-                .short('u')
-                .num_args(0..=1)
-                .value_parser(updatable_list.iter().chain(&["self", "all", "installed"]).collect_vec())
-                .help("Update (or install) bndbuild or a given embedded application if provided. There are specific cases: if `all` is provided, it update all applications and bndbuild itself, if `installed` is provided it update only installed applications, if `self` is provide, it updates bndbuild itself.")
-                .exclusive(true)
-        )
-        
         .arg(
             Arg::new("direct")
             .action(ArgAction::SetTrue)
@@ -408,12 +412,14 @@ pub enum BndBuilderError {
     UnknownTarget(String),
     #[error("{0}")]
     AnyError(String),
+    #[cfg(feature = "self-update")]
     #[error("Self-update error: {0}")]
     SelfUpdateError(self_update::errors::Error),
     #[error("Udate error: {0}")]
     UpdateError(String)
 }
 
+#[cfg(feature = "self-update")]
 impl From<self_update::errors::Error> for BndBuilderError {
     fn from(value: self_update::errors::Error) -> Self {
         Self::SelfUpdateError(value)

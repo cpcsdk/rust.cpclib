@@ -483,6 +483,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         ));
     }
 
+    
     fn execute_update(
         observers: &dyn BndBuilderObserver,
         cmd: Option<&str>
@@ -516,6 +517,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             }
         };
 
+        #[cfg(feature = "self-update")]
         let update_self = || -> Result<(), BndBuilderError> {
             observers.emit_stdout("> Update bndbuild\n");
             let (asset_url, asset_name) = if cfg!(target_os = "windows") {
@@ -545,6 +547,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         };
 
         let update_all = |can_install| -> Result<(), BndBuilderError> {
+            #[cfg(feature = "self-update")]
             update_self()?;
             for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| {
                 if *clearable {
@@ -561,14 +564,21 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
 
         if let Some(cmd) = cmd {
             match cmd {
+                #[cfg(feature = "self-update")]
                 "self" => update_self(),
+                #[cfg(not(feature = "self-update"))]
+                "self" => unimplemented!("This feature has not been activated"),
                 "all" => update_all(true),
                 "installed" => update_all(false),
                 cmd => update_command(cmd, true)
             }
         }
         else {
-            update_self()
+            #[cfg(feature = "self-update")]
+            let res = update_self();
+            #[cfg(not(feature = "self-update"))]
+            let res = unimplemented!("This feature has not been activated");
+            res
         }
     }
 
