@@ -6,7 +6,7 @@ use std::string::ToString;
 
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::itertools::{zip, Itertools};
+use cpclib_common::itertools::{Itertools, zip};
 use delegate::delegate;
 use getset::Getters;
 

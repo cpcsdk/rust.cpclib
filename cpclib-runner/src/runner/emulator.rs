@@ -10,9 +10,9 @@ use std::path::absolute;
 
 pub use ace::*;
 pub use amspirit::*;
-use caprice_forever::{CapriceForeverVersion, CAPRICEFOREVER_CMD};
+use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
 pub use cpcec::*;
-use cpcemupower::{CpcEmuPowerVersion, CPCEMUPOWER_CMD};
+use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
 pub use sugarbox::*;
@@ -153,7 +153,7 @@ impl Emulator {
 mod test {
     use super::{SugarBoxV2Version, WinapeVersion};
     use crate::delegated::{
-        cpclib_download, DynamicUrlInformation, GithubInformation, StaticInformation
+        DynamicUrlInformation, GithubInformation, StaticInformation, cpclib_download
     };
     use crate::runner::emulator::{AceVersion, AmspiritVersion};
 

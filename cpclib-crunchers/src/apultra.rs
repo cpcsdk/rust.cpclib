@@ -1,4 +1,4 @@
-extern "C" {
+unsafe extern "C" {
     fn APULTRA_crunch(
         data: *const libc::c_uchar,
         len: libc::c_int,
@@ -24,7 +24,7 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
         let mut dataout: *mut libc::c_uchar = std::ptr::null_mut();
         let mut lenout: libc::c_int = 0;
 
-        let _res = APULTRA_crunch(data, len, &mut dataout, &mut lenout);
+        let _res = unsafe { APULTRA_crunch(data, len, &mut dataout, &mut lenout) };
 
         // copy the crunched C bytes in a rsut struct
         let crunched = {

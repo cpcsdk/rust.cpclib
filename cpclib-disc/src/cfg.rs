@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools;
-use cpclib_common::winnow::ascii::{line_ending, space0, Caseless};
+use cpclib_common::winnow::ascii::{Caseless, line_ending, space0};
 use cpclib_common::winnow::combinator::{
     alt, delimited, opt, preceded, repeat, separated, terminated
 };
@@ -190,16 +190,8 @@ impl fmt::Display for TrackGroup {
             Head::Unspecified => ""
         };
         let tracks_info = self.tracks.iter().map(|t| format!("{t}")).join(",");
-        let sector_id = self
-            .sector_id
-            .iter()
-            .map(|t| format!("0x{t:x}"))
-            .join(",");
-        let sector_id_head = self
-            .sector_id_head
-            .iter()
-            .map(|t| format!("{t}"))
-            .join(",");
+        let sector_id = self.sector_id.iter().map(|t| format!("0x{t:x}")).join(",");
+        let sector_id_head = self.sector_id_head.iter().map(|t| format!("{t}")).join(",");
 
         writeln!(f, "[Track{head_info}:{tracks_info}]")?;
         writeln!(f, "SectorSize = {}", self.sector_size)?;

@@ -12,7 +12,7 @@
 )]
 #![deny(clippy::pedantic)]
 
-use cpclib_disc::{dsk_manager_build_arg_parser, dsk_manager_handle, DskManagerError};
+use cpclib_disc::{DskManagerError, dsk_manager_build_arg_parser, dsk_manager_handle};
 
 // Still everything to do
 #[allow(clippy::too_many_lines)]

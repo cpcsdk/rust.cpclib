@@ -61,7 +61,7 @@ pub fn str_to_amscii(s: &str, charset: Charset) -> Result<Vec<u8>, String> {
 mod test {
     use itertools::Itertools;
 
-    use crate::chars::{char_to_amscii, str_to_amscii, Charset};
+    use crate::chars::{Charset, char_to_amscii, str_to_amscii};
 
     #[test]
     fn test_english_code() {

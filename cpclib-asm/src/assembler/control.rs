@@ -1,6 +1,6 @@
 use cpclib_tokens::{Expr, ExprElement, FormattedExpr};
 
-use super::{visit_assert, Env};
+use super::{Env, visit_assert};
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
 

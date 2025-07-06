@@ -11,8 +11,8 @@ use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use either::Either;
 
-use super::embedded::EmbeddedFiles;
 use super::Env;
+use super::embedded::EmbeddedFiles;
 use crate::error::AssemblerError;
 use crate::preamble::ParserOptions;
 use crate::progress::Progress;

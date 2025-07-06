@@ -3,9 +3,9 @@ use std::io::Write;
 
 use anyhow::{self, Error};
 use camino_tempfile as tempfile;
-use clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use cpclib::asm::preamble::defb_elements;
-use cpclib::asm::{assemble, assemble_to_amsdos_file, ListingExt};
+use cpclib::asm::{ListingExt, assemble, assemble_to_amsdos_file};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
@@ -17,7 +17,7 @@ use cpclib::image::ocp::{self, OcpPal};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
-use cpclib::{sna, ExtendedDsk, Ink, Pen};
+use cpclib::{ExtendedDsk, Ink, Pen, sna};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -333,9 +333,10 @@ fn palette_code(pal: &Palette) -> String {
     // TODO create the linker
 
     for idx in 0..(16 / 2) {
-        asm += &format!("\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n", 
-            pal[2*idx].gate_array(), 
-            pal[2*idx + 1].gate_array()
+        asm += &format!(
+            "\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n",
+            pal[2 * idx].gate_array(),
+            pal[2 * idx + 1].gate_array()
         )
     }
 
@@ -1112,17 +1113,15 @@ pub fn build_args_parser() -> clap::Command {
                             .required(true)
                             .value_parser(|fname: &str|{
                                 let fname = Utf8PathBuf::from(fname);
-                                if let Some(ext) = fname.extension() {
-                                    if ext.len() > 3 {
+                                if let Some(ext) = fname.extension()
+                                    && ext.len() > 3 {
                                         return Err(format!("{ext} is not a valid amsdos extension."));
                                     }
-                                }
 
-                                if let Some(stem) = fname.file_stem() {
-                                    if stem.len() > 8 {
+                                if let Some(stem) = fname.file_stem()
+                                    && stem.len() > 8 {
                                         return Err(format!("{stem} is not a valid amsdos file stem."))
                                     }
-                                }
 
                                 Ok(fname)
                             })

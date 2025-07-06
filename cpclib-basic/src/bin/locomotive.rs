@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use cpclib_basic::{binary_parser, BasicProgram};
+use cpclib_basic::{BasicProgram, binary_parser};
 use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap::*;

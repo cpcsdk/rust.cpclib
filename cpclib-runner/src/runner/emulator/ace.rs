@@ -5,8 +5,8 @@ use directories::BaseDirs;
 use scraper::{Html, Selector};
 
 use crate::delegated::{
-    cpclib_download, ArchiveFormat, DownloadableInformation, DynamicUrlInformation,
-    ExecutableInformation, InternetDynamicCompiledApplication, MutiplatformUrls
+    ArchiveFormat, DownloadableInformation, DynamicUrlInformation, ExecutableInformation,
+    InternetDynamicCompiledApplication, MutiplatformUrls, cpclib_download
 };
 
 pub const ACE_CMD: &str = "ace";

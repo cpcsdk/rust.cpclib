@@ -6,8 +6,8 @@ pub mod tokens;
 
 use std::fmt::{self};
 
-use cpclib_common::winnow::ascii::space0;
 use cpclib_common::winnow::Parser;
+use cpclib_common::winnow::ascii::space0;
 use cpclib_sna::Snapshot;
 use string_parser::parse_basic_program;
 use thiserror::Error;
@@ -295,10 +295,14 @@ impl BasicProgram {
 
     pub fn hide_lines(&mut self, lines: &[u16]) -> Result<(), BasicError> {
         match lines.len() {
-			0 => Ok(()),
-			1 => self.hide_line(BasicProgramLineIdx::Number(lines[0])),
-			_ => unimplemented!("The current version is only able to hide one line. I can still implement multiline version if needed")
-		}
+            0 => Ok(()),
+            1 => self.hide_line(BasicProgramLineIdx::Number(lines[0])),
+            _ => {
+                unimplemented!(
+                    "The current version is only able to hide one line. I can still implement multiline version if needed"
+                )
+            },
+        }
     }
 
     /// Generate the byte stream for the given program
@@ -316,8 +320,7 @@ impl BasicProgram {
         let bytes = self.as_bytes();
         let mut sna = Snapshot::new_6128()?;
         sna.unwrap_memory_chunks();
-        sna.add_data(&bytes, 0x170)
-            .map_err(|e| format!("{e:?}"))?;
+        sna.add_data(&bytes, 0x170).map_err(|e| format!("{e:?}"))?;
         Ok(sna)
     }
 }

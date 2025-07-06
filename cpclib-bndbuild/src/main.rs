@@ -1,8 +1,8 @@
 use std::process::exit;
 
+use cpclib_bndbuild::BndBuilderError;
 use cpclib_bndbuild::app::BndBuilderApp;
 use cpclib_bndbuild::event::BndBuilderObserverRc;
-use cpclib_bndbuild::BndBuilderError;
 
 fn main() {
     match inner_main() {

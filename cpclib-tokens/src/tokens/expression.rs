@@ -7,8 +7,8 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
 
-use crate::tokens::Token;
 use crate::ListingElement;
+use crate::tokens::Token;
 
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -759,8 +759,8 @@ impl Expr {
 
         let exp = if exp.starts_with('(') && exp.ends_with(')') {
             let exp = exp.strip_prefix('(').unwrap_or(exp);
-            let exp = exp.strip_suffix(')').unwrap_or(exp);
-            exp
+
+            exp.strip_suffix(')').unwrap_or(exp)
         }
         else {
             exp
@@ -781,16 +781,16 @@ impl Display for Expr {
             Float(val) => write!(format, "{val}"),
             Char(c) => write!(format, "'{c}'"),
             Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
-            String(ref string) => write!(format, "\"{string}\""),
+            String(string) => write!(format, "\"{string}\""),
             List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).join(",")),
-            Label(ref label) => write!(format, "{label}"),
+            Label(label) => write!(format, "{label}"),
             PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
 
             UnaryFunction(func, arg) => write!(format, "{func}({arg})"),
 
             BinaryFunction(func, arg1, arg2) => write!(format, "{func}({arg1}, {arg2})"),
 
-            Paren(ref expr) => write!(format, "({expr})"),
+            Paren(expr) => write!(format, "({expr})"),
 
             AnyFunction(name, args) => {
                 write!(
@@ -813,33 +813,33 @@ impl Display for Expr {
 // use self::Expr::*;
 // match *self {
 // Value(val) => write!(format, "{}", val),
-// String(ref string) => write!(format, "\"{}\"", string),
-// Label(ref label) => write!(format, "{}", label),
-// Duration(ref token) => write!(format, "DURATION({:?})", token),
-// OpCode(ref token) => write!(format, "OPCODE({:?})", token),
+// String( string) => write!(format, "\"{}\"", string),
+// Label( label) => write!(format, "{}", label),
+// Duration( token) => write!(format, "DURATION({:?})", token),
+// OpCode( token) => write!(format, "OPCODE({:?})", token),
 //
-// Add(ref left, ref right) => write!(format, "({:?} + {:?})", left, right),
-// Sub(ref left, ref right) => write!(format, "({:?} - {:?})", left, right),
-// Mul(ref left, ref right) => write!(format, "({:?} * {:?})", left, right),
-// Mod(ref left, ref right) => write!(format, "({:?} % {:?})", left, right),
-// Div(ref left, ref right) => write!(format, "({:?} / {:?})", left, right),
+// Add( left,  right) => write!(format, "({:?} + {:?})", left, right),
+// Sub( left,  right) => write!(format, "({:?} - {:?})", left, right),
+// Mul( left,  right) => write!(format, "({:?} * {:?})", left, right),
+// Mod( left,  right) => write!(format, "({:?} % {:?})", left, right),
+// Div( left,  right) => write!(format, "({:?} / {:?})", left, right),
 //
-// BinaryAnd(ref left, ref right) => write!(format, "({:?} & {:?})", left, right),
-// BinaryOr(ref left, ref right) => write!(format, "({:?} | {:?})", left, right),
-// BinaryXor(ref left, ref right) => write!(format, "({:?} ^ {:?})", left, right),
+// BinaryAnd( left,  right) => write!(format, "({:?} & {:?})", left, right),
+// BinaryOr( left,  right) => write!(format, "({:?} | {:?})", left, right),
+// BinaryXor( left,  right) => write!(format, "({:?} ^ {:?})", left, right),
 //
-// Neg(ref e) => write!(format, "Neg({:?})", e),
+// Neg( e) => write!(format, "Neg({:?})", e),
 //
-// Paren(ref expr) => write!(format, "[{:?}]", expr),
+// Paren( expr) => write!(format, "[{:?}]", expr),
 //
-// Equal(ref left, ref right) => write!(format, "{:?} == {:?}", left, right),
-// GreaterOrEqual(ref left, ref right) => write!(format, "{:?} >= {:?}", left, right),
-// StrictlyGreater(ref left, ref right) => write!(format, "{:?} > {:?}", left, right),
-// StrictlyLower(ref left, ref right) => write!(format, "{:?} < {:?}", left, right),
-// LowerOrEqual(ref left, ref right) => write!(format, "{:?} <= {:?}", left, right),
+// Equal( left,  right) => write!(format, "{:?} == {:?}", left, right),
+// GreaterOrEqual( left,  right) => write!(format, "{:?} >= {:?}", left, right),
+// StrictlyGreater( left,  right) => write!(format, "{:?} > {:?}", left, right),
+// StrictlyLower( left,  right) => write!(format, "{:?} < {:?}", left, right),
+// LowerOrEqual( left,  right) => write!(format, "{:?} <= {:?}", left, right),
 //
-// High(ref inner) => write!(format, "HI({:?})", inner),
-// Low(ref inner) => write!(format, "LO({:?})", inner),
+// High( inner) => write!(format, "HI({:?})", inner),
+// Low( inner) => write!(format, "LO({:?})", inner),
 // }
 // }
 // }
@@ -1240,11 +1240,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.floor().into()),
             ExprResult::Value(v) => Ok((*v).into()),
-            _ => {
-                Err(ExpressionTypeError(format!(
-                    "Try to apply floor to {self}"
-                )))
-            },
+            _ => Err(ExpressionTypeError(format!("Try to apply floor to {self}")))
         }
     }
 
@@ -1252,11 +1248,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.ceil().into()),
             ExprResult::Value(v) => Ok((*v).into()),
-            _ => {
-                Err(ExpressionTypeError(format!(
-                    "Try to apply ceil to {self}"
-                )))
-            },
+            _ => Err(ExpressionTypeError(format!("Try to apply ceil to {self}")))
         }
     }
 
@@ -1264,11 +1256,7 @@ impl ExprResult {
         match self {
             ExprResult::Float(f) => Ok(f.fract().into()),
             ExprResult::Value(_v) => Ok(0.into()),
-            _ => {
-                Err(ExpressionTypeError(format!(
-                    "Try to apply frac to {self}"
-                )))
-            },
+            _ => Err(ExpressionTypeError(format!("Try to apply frac to {self}")))
         }
     }
 
@@ -1326,11 +1314,7 @@ impl ExprResult {
             },
             ExprResult::Value(i) => Ok((!*i).into()),
             ExprResult::Bool(b) => Ok((!*b).into()),
-            _ => {
-                Err(ExpressionTypeError(format!(
-                    "Try to apply floor to {self}"
-                )))
-            },
+            _ => Err(ExpressionTypeError(format!("Try to apply floor to {self}")))
         }
     }
 }
@@ -1625,11 +1609,7 @@ impl std::fmt::Display for ExprResult {
             ExprResult::Bool(b) => write!(f, "{b}"),
             ExprResult::String(v) => write!(f, "\"{v}\""),
             ExprResult::List(v) => {
-                write!(
-                    f,
-                    "[{}]",
-                    v.iter().map(|item| format!("{item}")).join(",")
-                )
+                write!(f, "[{}]", v.iter().map(|item| format!("{item}")).join(","))
             },
             ExprResult::Matrix { .. } => {
                 write!(

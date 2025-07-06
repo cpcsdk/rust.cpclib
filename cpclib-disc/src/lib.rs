@@ -187,7 +187,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
         }
     }
     else if let Some(sub) = matches.subcommand_matches("put") {
-        use cpclib_tokens::{builder, Listing};
+        use cpclib_tokens::{Listing, builder};
 
         // Add files in a sectorial way
         let mut track =

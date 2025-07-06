@@ -7,9 +7,9 @@ use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, Source, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
+use crate::Env;
 use crate::error::AssemblerError;
 use crate::preamble::{Z80ParserError, Z80Span};
-use crate::Env;
 
 /// To be implemented for each element that can be expended based on some patterns (i.e. macros, structs)
 pub trait Expandable {
@@ -110,8 +110,8 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
         //        assert_eq!(args.len(), self.nb_args());
         let listing = self.r#macro.code();
         let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
-                                                                                         // build the needed datastructures for replacement
-                                                                                         // let (patterns, replacements) =
+        // build the needed datastructures for replacement
+        // let (patterns, replacements) =
         {
             // let capacity = all_expanded.len();
             // let mut patterns = Vec::with_capacity(capacity);

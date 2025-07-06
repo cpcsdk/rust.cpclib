@@ -7,8 +7,8 @@ use cpclib_common::winnow::{BStr, Stateful};
 use cpclib_tokens::symbols::{Source, Symbol};
 use line_span::LineSpanExt;
 
-use super::context::ParserContext;
 use super::ParsingState;
+use super::context::ParserContext;
 
 // This type is only handled by the parser
 pub type InnerZ80Span = Stateful<

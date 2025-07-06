@@ -17,7 +17,7 @@ impl Z80 {
             .unwrap();
 
         match opcode {
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
+            Token::OpCode(mnemonic, arg1, arg2, arg3) => {
                 self.execute_opcode(*mnemonic, arg1.as_ref(), arg2.as_ref(), arg3.as_ref())
             },
 
@@ -191,7 +191,7 @@ impl Z80 {
                 };
                 if match arg1 {
                     None => true,
-                    Some(DataAccess::FlagTest(ref flag)) => self.is_flag_active(flag),
+                    Some(DataAccess::FlagTest(flag)) => self.is_flag_active(flag),
                     _ => unreachable!()
                 } {
                     inc_duration();
@@ -215,7 +215,7 @@ impl Z80 {
                         self.pc_mut().set(value);
                     },
 
-                    (Some(DataAccess::FlagTest(ref flag)), _) => {
+                    (Some(DataAccess::FlagTest(flag)), _) => {
                         if self.is_flag_active(flag) {
                             // BUGGY when label are used
                             // it would be better to ensure there are never labels in the stream of opcodes
@@ -291,7 +291,7 @@ impl Z80 {
     /// TODO better emulation to never return None
     fn get_value(&mut self, access: &DataAccess) -> Option<u16> {
         match access {
-            DataAccess::Memory(ref exp) => {
+            DataAccess::Memory(exp) => {
                 self.eval_expr(exp)
                     .map(|address| u16::from(self.read_memory_byte(address)))
             },
@@ -302,12 +302,12 @@ impl Z80 {
             DataAccess::IndexRegister8(_) | &DataAccess::Register8(_) => {
                 Some(self.get_register_8(access).value().into())
             },
-            DataAccess::MemoryRegister16(ref reg) => {
+            DataAccess::MemoryRegister16(reg) => {
                 Some(u16::from(self.read_memory_byte(
                     self.get_register_16(&DataAccess::Register16(*reg)).value()
                 )))
             },
-            DataAccess::Expression(ref expr) => self.eval_expr(expr),
+            DataAccess::Expression(expr) => self.eval_expr(expr),
             DataAccess::FlagTest(_) => panic!(),
             _ => unimplemented!()
         }
@@ -321,13 +321,13 @@ impl Z80 {
     /// Returns the register encoded by the DataAccess
     fn get_register_16(&self, reg: &DataAccess) -> &crate::z80::Register16 {
         match reg {
-            DataAccess::IndexRegister16(ref reg) => {
+            DataAccess::IndexRegister16(reg) => {
                 match reg {
                     IndexRegister16::Ix => self.ix(),
                     IndexRegister16::Iy => self.iy()
                 }
             },
-            DataAccess::Register16(ref reg) => {
+            DataAccess::Register16(reg) => {
                 match reg {
                     tokens::Register16::Af => self.af(),
                     tokens::Register16::Bc => self.bc(),
@@ -342,13 +342,13 @@ impl Z80 {
 
     fn get_register_16_mut(&mut self, reg: &DataAccess) -> &mut crate::z80::Register16 {
         match reg {
-            DataAccess::IndexRegister16(ref reg) => {
+            DataAccess::IndexRegister16(reg) => {
                 match reg {
                     IndexRegister16::Ix => self.ix_mut(),
                     IndexRegister16::Iy => self.iy_mut()
                 }
             },
-            DataAccess::Register16(ref reg) => {
+            DataAccess::Register16(reg) => {
                 match reg {
                     tokens::Register16::Af => self.af_mut(),
                     tokens::Register16::Bc => self.bc_mut(),
@@ -363,7 +363,7 @@ impl Z80 {
 
     fn get_register_8(&self, reg: &DataAccess) -> &crate::z80::Register8 {
         match reg {
-            DataAccess::Register8(ref reg) => {
+            DataAccess::Register8(reg) => {
                 match reg {
                     tokens::Register8::A => self.a(),
                     tokens::Register8::B => self.b(),
@@ -375,7 +375,7 @@ impl Z80 {
                 }
             },
 
-            DataAccess::IndexRegister8(ref reg) => {
+            DataAccess::IndexRegister8(reg) => {
                 match reg {
                     IndexRegister8::Ixl => self.ixl(),
                     IndexRegister8::Ixh => self.ixh(),
@@ -390,7 +390,7 @@ impl Z80 {
     // Mutable version to be synced with the immutable one
     fn get_register_8_mut(&mut self, reg: &DataAccess) -> &mut crate::z80::Register8 {
         match reg {
-            DataAccess::Register8(ref reg) => {
+            DataAccess::Register8(reg) => {
                 match reg {
                     tokens::Register8::A => self.a_mut(),
                     tokens::Register8::B => self.b_mut(),
@@ -402,7 +402,7 @@ impl Z80 {
                 }
             },
 
-            DataAccess::IndexRegister8(ref reg) => {
+            DataAccess::IndexRegister8(reg) => {
                 match reg {
                     IndexRegister8::Ixl => self.ixl_mut(),
                     IndexRegister8::Ixh => self.ixh_mut(),

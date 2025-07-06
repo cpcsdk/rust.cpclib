@@ -27,14 +27,7 @@ fn mem_to_string(bank: &CartridgeBank, from: Option<usize>, amount: Option<usize
                 .iter()
                 .map(|byte| {
                     char::from_u32(*byte as u32)
-                        .map(|c| {
-                            if !(' '..='~').contains(&c) {
-                                '.'
-                            }
-                            else {
-                                c
-                            }
-                        })
+                        .map(|c| if !(' '..='~').contains(&c) { '.' } else { c })
                         .unwrap_or('.')
                 })
                 .collect::<String>();

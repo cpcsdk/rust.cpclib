@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use clap::Parser;
-use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
+use cpclib_runner::emucontrol::{EmuCli, handle_arguments};
 
 fn main() {
     let cli = EmuCli::parse();

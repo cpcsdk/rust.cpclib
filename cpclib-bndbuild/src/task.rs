@@ -8,10 +8,10 @@ use camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
-use cpclib_runner::runner::assembler::{RasmVersion, RASM_CMD, SJASMPLUS_CMD, VASM_CMD};
+use cpclib_runner::runner::assembler::{RASM_CMD, RasmVersion, SJASMPLUS_CMD, VASM_CMD};
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
-use cpclib_runner::runner::disassembler::disark::{DisarkVersion, DISARK_CMD};
 use cpclib_runner::runner::disassembler::ExternDisassembler;
+use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
 use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::{
@@ -22,11 +22,11 @@ use cpclib_runner::runner::fap::FAP_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
+use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::at3::extra::{
     SongToAkg, SongToAkm, SongToAky, SongToEvents, SongToRaw, SongToSoundEffects, SongToVgm,
     SongToWav, SongToYm
 };
-use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
 use serde::de::{Error, Visitor};
@@ -103,7 +103,8 @@ impl Task {
     }
 
     fn next_id() -> usize {
-        static mut COUNTER: AtomicUsize = AtomicUsize::new(1);
+        static COUNTER: AtomicUsize = AtomicUsize::new(1);
+
         unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
     }
 
@@ -744,77 +745,95 @@ mod test {
     fn test_automatic_arguments() {
         // no replacement expected
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, None)
-            .is_ok()));
+        assert!(dbg!(
+            no_args.replace_automatic_variables(None, None).is_ok()
+        ));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), None)
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), None)
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, Some("b".into()))
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(None, Some("b".into()))
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "a b");
 
         let mut no_args = StandardTaskArguments::new("a b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), Some("b".into()))
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), Some("b".into()))
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "a b");
 
         // tgt replacement expected
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, None)
-            .is_err()));
+        assert!(dbg!(
+            no_args.replace_automatic_variables(None, None).is_err()
+        ));
         assert_eq!(no_args.args, "$@ b");
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), None)
-            .is_err()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), None)
+                .is_err()
+        ));
         assert_eq!(no_args.args, "$@ b");
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, Some("b".into()))
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(None, Some("b".into()))
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "b b");
 
         let mut no_args = StandardTaskArguments::new("$@ b");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), Some("b".into()))
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), Some("b".into()))
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "b b");
 
         // tgt and dep replacements expected
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, None)
-            .is_err()));
+        assert!(dbg!(
+            no_args.replace_automatic_variables(None, None).is_err()
+        ));
         assert_eq!(no_args.args, "$@ $<");
 
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), None)
-            .is_err()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), None)
+                .is_err()
+        ));
         assert_eq!(no_args.args, "$@ $<");
 
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(None, Some("b".into()))
-            .is_err()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(None, Some("b".into()))
+                .is_err()
+        ));
         assert_eq!(no_args.args, "$@ $<");
 
         let mut no_args = StandardTaskArguments::new("$@ $<");
-        assert!(dbg!(no_args
-            .replace_automatic_variables(Some("a".into()), Some("b".into()))
-            .is_ok()));
+        assert!(dbg!(
+            no_args
+                .replace_automatic_variables(Some("a".into()), Some("b".into()))
+                .is_ok()
+        ));
         assert_eq!(no_args.args, "b a");
 
         // duplicated $ change nothing

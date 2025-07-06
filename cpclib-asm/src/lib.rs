@@ -41,7 +41,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_disc::amsdos::*;
 use cpclib_sna::Snapshot;
-use enumflags2::{bitflags, BitFlags};
+use enumflags2::{BitFlags, bitflags};
 use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 pub use preamble::*;
@@ -255,7 +255,7 @@ where
 {
     let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)
         .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
-    Ok((env.produced_bytes(), env.symbols().as_ref().clone()))
+    Ok((env.produced_bytes(), env.symbols().into()))
 }
 
 /// Build the code and store it inside a file supposed to be injected in a dsk
@@ -332,13 +332,15 @@ Truc
     #[test]
     fn test_size() {
         let mut env = Default::default();
-        dbg!(assemble_call_jr_or_jp(
-            Mnemonic::Jp,
-            None,
-            &DataAccess::Expression(Expr::Value(0)),
-            &mut env
-        )
-        .unwrap());
+        dbg!(
+            assemble_call_jr_or_jp(
+                Mnemonic::Jp,
+                None,
+                &DataAccess::Expression(Expr::Value(0)),
+                &mut env
+            )
+            .unwrap()
+        );
         assert_eq!(
             Token::OpCode(
                 Mnemonic::Jp,

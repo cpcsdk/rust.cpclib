@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::error::AssemblerError;
-use cpclib_basm::{build_args_parser, process, BasmError};
+use cpclib_basm::{BasmError, build_args_parser, process};
 use cpclib_common::itertools::Itertools;
 use pretty_assertions::assert_eq;
 use regex::Regex;

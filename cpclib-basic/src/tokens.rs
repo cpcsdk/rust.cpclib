@@ -553,7 +553,7 @@ impl BasicValue {
 
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
-            Self::Integer(ref low, ref high) => vec![*low, *high],
+            Self::Integer(low, high) => vec![*low, *high],
             _ => unimplemented!()
         }
     }
@@ -561,7 +561,7 @@ impl BasicValue {
     /// Return the integer value when it is an integer
     pub fn as_integer(&self) -> Option<u16> {
         match self {
-            Self::Integer(ref low, ref high) => Some(u16::from(*low) + 256 * u16::from(*high)),
+            Self::Integer(low, high) => Some(u16::from(*low) + 256 * u16::from(*high)),
             _ => None
         }
     }
@@ -595,17 +595,17 @@ pub enum BasicToken {
 impl fmt::Display for BasicToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BasicToken::SimpleToken(ref tok) => {
+            BasicToken::SimpleToken(tok) => {
                 write!(f, "{tok}")?;
             },
-            BasicToken::PrefixedToken(ref tok) => {
+            BasicToken::PrefixedToken(tok) => {
                 write!(f, "{tok}")?;
             },
-            BasicToken::Comment(ref tok, ref comment) => {
+            BasicToken::Comment(tok, comment) => {
                 write!(f, "{tok}")?;
                 write!(f, "{},", String::from_utf8(comment.to_vec()).unwrap())?;
             },
-            BasicToken::Constant(ref kind, ref constant) => {
+            BasicToken::Constant(kind, constant) => {
                 let repr = match kind {
                     BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
                         constant.int_hexdecimal_representation().unwrap()
@@ -628,29 +628,29 @@ impl fmt::Display for BasicToken {
 impl BasicToken {
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
-            BasicToken::SimpleToken(ref tok) => vec![tok.value()],
+            BasicToken::SimpleToken(tok) => vec![tok.value()],
 
-            BasicToken::PrefixedToken(ref tok) => {
+            BasicToken::PrefixedToken(tok) => {
                 vec![
                     BasicTokenNoPrefix::AdditionalTokenMarker.value(),
                     tok.value(),
                 ]
             },
 
-            BasicToken::Rsx(ref _name) => {
+            BasicToken::Rsx(_name) => {
                 let encoded_name = self.rsx_encoded_name().unwrap();
                 let mut data = vec![BasicTokenNoPrefix::Pipe.value(), encoded_name.len() as u8];
                 data.extend_from_slice(&encoded_name);
                 data
             },
 
-            BasicToken::Constant(ref kind, ref constant) => {
+            BasicToken::Constant(kind, constant) => {
                 let mut data = vec![kind.value()];
                 data.extend_from_slice(&constant.as_bytes());
                 data
             },
 
-            BasicToken::Comment(ref comment_type, ref comment) => {
+            BasicToken::Comment(comment_type, comment) => {
                 let mut data = vec![comment_type.value()];
                 data.extend_from_slice(comment);
                 data
@@ -663,14 +663,14 @@ impl BasicToken {
     /// Returns the encoded version of the rsx name (bit 7 to 1 of last char)
     pub fn rsx_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
-            BasicToken::Rsx(ref name) => Some(Self::encode_string(name)),
+            BasicToken::Rsx(name) => Some(Self::encode_string(name)),
             _ => None
         }
     }
 
     pub fn variable_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
-            BasicToken::Variable(ref name, _) => Some(Self::encode_string(name)),
+            BasicToken::Variable(name, _) => Some(Self::encode_string(name)),
             _ => None
         }
     }

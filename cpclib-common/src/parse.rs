@@ -61,14 +61,7 @@ where
             // we parse for hexdecimal then guess the encoding
             let digits = opt(hex_digits_and_sep()).parse_next(input)?;
             let suffix = opt(alt((b'h', b'H')))
-                .verify(|s| {
-                    if digits.is_none() {
-                        s.is_some()
-                    }
-                    else {
-                        true
-                    }
-                })
+                .verify(|s| if digits.is_none() { s.is_some() } else { true })
                 .parse_next(input)?;
 
             if suffix.is_some() {

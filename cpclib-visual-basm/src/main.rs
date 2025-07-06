@@ -10,10 +10,7 @@ fn main() {
 
         match process(matches, Arc::new(())) {
             Ok((_env, warnings)) => {
-                let warnings = warnings
-                    .iter()
-                    .map(|w| format!("{w}"))
-                    .collect::<Vec<_>>();
+                let warnings = warnings.iter().map(|w| format!("{w}")).collect::<Vec<_>>();
 
                 eprintln!("{warnings:?}");
             },

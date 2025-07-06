@@ -95,32 +95,32 @@ impl SnapshotMemory {
     /// Read only access to the memory
     pub fn memory(&self) -> &[u8] {
         match self {
-            SnapshotMemory::Empty(ref mem) => mem.deref(),
-            SnapshotMemory::SixtyFourKb(ref mem) => mem.deref(),
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => mem.deref(),
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => mem.deref(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mem) => mem.deref(),
-            SnapshotMemory::ThreeHundredTwentyKb(ref mem) => mem.deref(),
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => mem.deref(),
-            SnapshotMemory::FourHundredFortyHeightKb(ref mem) => mem.deref(),
-            SnapshotMemory::FiveHundredTwelveKb(ref mem) => mem.deref(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mem) => mem.deref()
+            SnapshotMemory::Empty(mem) => mem.deref(),
+            SnapshotMemory::SixtyFourKb(mem) => mem.deref(),
+            SnapshotMemory::OneHundredTwentyHeightKb(mem) => mem.deref(),
+            SnapshotMemory::OneHundredNinetyTwoKb(mem) => mem.deref(),
+            SnapshotMemory::TwoHundredFiftySixKb(mem) => mem.deref(),
+            SnapshotMemory::ThreeHundredTwentyKb(mem) => mem.deref(),
+            SnapshotMemory::ThreeHundredHeightyFourKb(mem) => mem.deref(),
+            SnapshotMemory::FourHundredFortyHeightKb(mem) => mem.deref(),
+            SnapshotMemory::FiveHundredTwelveKb(mem) => mem.deref(),
+            SnapshotMemory::FiveHundredSeventySixKb(mem) => mem.deref()
         }
     }
 
     /// Reda write access to the memory
     pub fn memory_mut(&mut self) -> &mut [u8] {
         match self {
-            SnapshotMemory::Empty(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::SixtyFourKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::TwoHundredFiftySixKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::ThreeHundredTwentyKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FourHundredFortyHeightKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FiveHundredTwelveKb(ref mut mem) => mem.deref_mut(),
-            SnapshotMemory::FiveHundredSeventySixKb(ref mut mem) => mem.deref_mut()
+            SnapshotMemory::Empty(mem) => mem.deref_mut(),
+            SnapshotMemory::SixtyFourKb(mem) => mem.deref_mut(),
+            SnapshotMemory::OneHundredTwentyHeightKb(mem) => mem.deref_mut(),
+            SnapshotMemory::OneHundredNinetyTwoKb(mem) => mem.deref_mut(),
+            SnapshotMemory::TwoHundredFiftySixKb(mem) => mem.deref_mut(),
+            SnapshotMemory::ThreeHundredTwentyKb(mem) => mem.deref_mut(),
+            SnapshotMemory::ThreeHundredHeightyFourKb(mem) => mem.deref_mut(),
+            SnapshotMemory::FourHundredFortyHeightKb(mem) => mem.deref_mut(),
+            SnapshotMemory::FiveHundredTwelveKb(mem) => mem.deref_mut(),
+            SnapshotMemory::FiveHundredSeventySixKb(mem) => mem.deref_mut()
         }
     }
 
@@ -135,43 +135,43 @@ impl SnapshotMemory {
     /// Produce a novel memory that is bigger
     pub fn increased_size(&self) -> Self {
         match self {
-            SnapshotMemory::Empty(ref _mem) => Self::default_64(),
-            SnapshotMemory::SixtyFourKb(ref mem) => {
+            SnapshotMemory::Empty(_mem) => Self::default_64(),
+            SnapshotMemory::SixtyFourKb(mem) => {
                 let mut new = Self::default_128();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::OneHundredTwentyHeightKb(ref mem) => {
+            SnapshotMemory::OneHundredTwentyHeightKb(mem) => {
                 let mut new = Self::default_192();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::OneHundredNinetyTwoKb(ref mem) => {
+            SnapshotMemory::OneHundredNinetyTwoKb(mem) => {
                 let mut new = Self::default_256();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::TwoHundredFiftySixKb(ref mem) => {
+            SnapshotMemory::TwoHundredFiftySixKb(mem) => {
                 let mut new = Self::default_320();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::ThreeHundredTwentyKb(ref mem) => {
+            SnapshotMemory::ThreeHundredTwentyKb(mem) => {
                 let mut new = Self::default_384();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::ThreeHundredHeightyFourKb(ref mem) => {
+            SnapshotMemory::ThreeHundredHeightyFourKb(mem) => {
                 let mut new = Self::default_448();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::FourHundredFortyHeightKb(ref mem) => {
+            SnapshotMemory::FourHundredFortyHeightKb(mem) => {
                 let mut new = Self::default_512();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new
             },
-            SnapshotMemory::FiveHundredTwelveKb(ref mem) => {
+            SnapshotMemory::FiveHundredTwelveKb(mem) => {
                 let mut new = Self::default_576();
                 new.memory_mut()[0..self.len()].copy_from_slice(mem.deref());
                 new

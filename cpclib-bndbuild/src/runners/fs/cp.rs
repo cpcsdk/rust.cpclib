@@ -56,9 +56,8 @@ impl<E: EventObserver> Runner for CpRunner<E> {
         let dest = files.last();
 
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
-            std::fs::copy(from, to).map_err(|e| {
-                error.push_str(&format!("Error when copying {from} to {to}. {e}.\n"))
-            })
+            std::fs::copy(from, to)
+                .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
         };
 
         match files.len() {
@@ -114,8 +113,8 @@ impl<E: EventObserver> Runner for CpRunner<E> {
 mod test {
     use std::io::Write;
 
-    use crate::runners::fs::cp::CpRunner;
     use crate::runners::Runner;
+    use crate::runners::fs::cp::CpRunner;
 
     #[test]
 

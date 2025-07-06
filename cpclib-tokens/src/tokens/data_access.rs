@@ -89,18 +89,18 @@ impl From<FlagTest> for DataAccess {
 impl fmt::Display for DataAccess {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DataAccess::IndexRegister16WithIndex(ref reg, ref op, ref delta) => {
+            DataAccess::IndexRegister16WithIndex(reg, op, delta) => {
                 write!(f, "({reg} {op} {delta})")
             },
-            DataAccess::IndexRegister16(ref reg) => write!(f, "{reg}"),
-            DataAccess::Register16(ref reg) => write!(f, "{reg}"),
-            DataAccess::IndexRegister8(ref reg) => write!(f, "{reg}"),
-            DataAccess::Register8(ref reg) => write!(f, "{reg}"),
-            DataAccess::MemoryRegister16(ref reg) => write!(f, "({reg})"),
-            DataAccess::MemoryIndexRegister16(ref reg) => write!(f, "({reg})"),
-            DataAccess::Expression(ref exp) => write!(f, "{}", exp.to_simplified_string()),
-            DataAccess::Memory(ref exp) => write!(f, "({})", exp.to_simplified_string()),
-            DataAccess::FlagTest(ref test) => write!(f, "{test}"),
+            DataAccess::IndexRegister16(reg) => write!(f, "{reg}"),
+            DataAccess::Register16(reg) => write!(f, "{reg}"),
+            DataAccess::IndexRegister8(reg) => write!(f, "{reg}"),
+            DataAccess::Register8(reg) => write!(f, "{reg}"),
+            DataAccess::MemoryRegister16(reg) => write!(f, "({reg})"),
+            DataAccess::MemoryIndexRegister16(reg) => write!(f, "({reg})"),
+            DataAccess::Expression(exp) => write!(f, "{}", exp.to_simplified_string()),
+            DataAccess::Memory(exp) => write!(f, "({})", exp.to_simplified_string()),
+            DataAccess::FlagTest(test) => write!(f, "{test}"),
             DataAccess::SpecialRegisterI => write!(f, "I"),
             DataAccess::SpecialRegisterR => write!(f, "R"),
             DataAccess::PortC => write!(f, "(C)"),
@@ -302,16 +302,16 @@ macro_rules! data_access_impl_most_methods {
 
     fn get_register16(&self) -> Option<Register16> {
         match self {
-            Self::Register16(ref reg, ..) => Some(*reg),
-            Self::MemoryRegister16(ref reg, ..) => Some(*reg),
+            Self::Register16( reg, ..) => Some(*reg),
+            Self::MemoryRegister16( reg, ..) => Some(*reg),
             _ => None
         }
     }
 
     fn get_indexregister16(&self) -> Option<IndexRegister16> {
         match self {
-            Self::IndexRegister16(ref reg, ..) => Some(*reg),
-            Self::MemoryIndexRegister16(ref reg, ..) => Some(*reg),
+            Self::IndexRegister16( reg, ..) => Some(*reg),
+            Self::MemoryIndexRegister16( reg, ..) => Some(*reg),
             Self::IndexRegister16WithIndex(reg, ..) => Some(*reg),
             _ => None
         }
@@ -320,14 +320,14 @@ macro_rules! data_access_impl_most_methods {
 
     fn get_register8(&self) -> Option<Register8> {
         match self {
-            Self::Register8(ref reg, ..) => Some(*reg),
+            Self::Register8( reg, ..) => Some(*reg),
             _ => None
         }
     }
 
     fn get_indexregister8(&self) -> Option<IndexRegister8> {
         match self {
-            Self::IndexRegister8(ref reg, ..) => Some(*reg),
+            Self::IndexRegister8( reg, ..) => Some(*reg),
             _ => None
         }
     }
@@ -380,16 +380,16 @@ impl DataAccessElem for DataAccess {
 
     fn to_data_access_for_low_register(&self) -> Option<Self> {
         match self {
-            Self::IndexRegister16(ref reg, ..) => Some(reg.low().into()),
-            Self::Register16(ref reg, ..) => Some(reg.low().unwrap().into()),
+            Self::IndexRegister16(reg, ..) => Some(reg.low().into()),
+            Self::Register16(reg, ..) => Some(reg.low().unwrap().into()),
             _ => None
         }
     }
 
     fn to_data_access_for_high_register(&self) -> Option<Self> {
         match self {
-            Self::IndexRegister16(ref reg, ..) => Some(reg.high().into()),
-            Self::Register16(ref reg, ..) => Some(reg.high().unwrap().into()),
+            Self::IndexRegister16(reg, ..) => Some(reg.high().into()),
+            Self::Register16(reg, ..) => Some(reg.high().unwrap().into()),
             _ => None
         }
     }
@@ -423,7 +423,7 @@ impl DataAccessElem for DataAccess {
 impl DataAccess {
     fn expression_mut(&mut self) -> Option<&mut Expr> {
         match self {
-            DataAccess::Expression(ref mut exp) => Some(exp),
+            DataAccess::Expression(exp) => Some(exp),
             _ => None
         }
     }

@@ -17,16 +17,16 @@ use cpclib_tokens::{
 };
 use ouroboros::*;
 
+use super::AssemblerWarning;
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
-use super::AssemblerWarning;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Cruncher;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
 use crate::progress::{self, Progress};
-use crate::{parse_z80_with_context_builder, r#macro, AssemblerError, Env, LocatedToken, Visited};
+use crate::{AssemblerError, Env, LocatedToken, Visited, r#macro, parse_z80_with_context_builder};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -936,17 +936,17 @@ where
                     },
 
                     Some(ProcessedTokenState::Confined(SimpleListingState {
-                        ref mut processed_tokens,
+                        processed_tokens,
                         span
                     })) => env.visit_confined(processed_tokens, span.as_ref()),
                     Some(ProcessedTokenState::CrunchedSection {
                         listing:
                             SimpleListingState {
-                                ref mut processed_tokens,
+                                processed_tokens,
                                 span
                             },
-                        ref mut previous_bytes,
-                        ref mut previous_compressed_bytes
+                        previous_bytes,
+                        previous_compressed_bytes
                     }) => {
                         env.visit_crunched_section(
                             self.token.crunched_section_kind(),
@@ -1128,7 +1128,7 @@ where
                         env.visit_incbin(data.borrow())
                     },
 
-                    Some(ProcessedTokenState::Include(ref mut state)) => {
+                    Some(ProcessedTokenState::Include(state)) => {
                         let fname = env.build_fname(self.token.include_fname())?;
 
                         state.handle(
@@ -1184,16 +1184,18 @@ where
                                 visit_processed_tokens::<'_, LocatedToken>(tokens, env)
                             })
                             .map_err(|e| {
+                                let location = env
+                                    .symbols()
+                                    .any_value(name)
+                                    .unwrap()
+                                    .unwrap()
+                                    .location()
+                                    .cloned();
+
                                 let e = AssemblerError::MacroError {
                                     name: name.into(),
                                     root: Box::new(e),
-                                    location: env
-                                        .symbols()
-                                        .value(name)
-                                        .unwrap()
-                                        .unwrap()
-                                        .location()
-                                        .cloned()
+                                    location
                                 };
                                 let caller_span = self.possible_span();
                                 match caller_span {
@@ -1266,7 +1268,7 @@ where
                         span
                     })) => env.visit_rorg(self.token.rorg_expr(), processed_tokens, span.as_ref()),
 
-                    Some(ProcessedTokenState::Switch(ref mut state)) => {
+                    Some(ProcessedTokenState::Switch(state)) => {
                         let value = env.resolve_expr_must_never_fail(self.token.switch_expr())?;
                         let mut met = false;
                         let mut broken = false;
@@ -1292,7 +1294,7 @@ where
 
                         // execute default if any
                         if !met || !broken {
-                            if let Some(ref mut default) = state.default {
+                            if let Some(default) = &mut state.default {
                                 visit_processed_tokens(&mut default.processed_tokens, env)?;
                             }
                         }

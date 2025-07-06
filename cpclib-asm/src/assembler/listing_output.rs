@@ -5,8 +5,8 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
 use cpclib_tokens::ExprResult;
+use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
 
 use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
 /// Generate an output listing.

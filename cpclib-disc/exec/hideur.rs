@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(clippy::cast_possible_truncation)]
 
-use cpclib_disc::hideur::{hideur_build_arg_parser, hideur_handle, HideurError};
+use cpclib_disc::hideur::{HideurError, hideur_build_arg_parser, hideur_handle};
 
 /// Convert a string to its unsigned 32 bits representation (to access to extra memory)
 /// TODO share implementation

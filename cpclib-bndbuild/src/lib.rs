@@ -15,16 +15,16 @@ use lazy_regex::regex_captures;
 use task::FAP_CMDS;
 use task::{
     ACE_CMDS, AMSPIRIT_CMDS, AT_CMDS, BASM_CMDS, BDASM_CMDS, BNDBUILD_CMDS, CAPRICEFOREVER_CMDS,
-    CHIPNSFX_CMDS, CONVGENERIC_CMDS, CPCEC_CMDS, CPCEMUPOWER_CMDS, CP_CMDS, DISARK_CMDS, DISC_CMDS,
+    CHIPNSFX_CMDS, CONVGENERIC_CMDS, CP_CMDS, CPCEC_CMDS, CPCEMUPOWER_CMDS, DISARK_CMDS, DISC_CMDS,
     ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, HIDEUR_CMDS, HSPC_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS,
     MARTINE_CMDS, ORGAMS_CMDS, RASM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SONG2AKM_CMDS, SUGARBOX_CMDS,
     UZ80_CMDS, VASM_CMDS, WINAPE_CMDS, XFER_CMDS
 };
 use thiserror::Error;
 
+pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
-pub use crate::BndBuilder;
 
 pub mod app;
 pub mod builder;
@@ -102,14 +102,7 @@ pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>) {
         let mut clearable = Vec::with_capacity(
             all_applications
                 .iter()
-                .map(|l| {
-                    if l.1 {
-                        l.0.len()
-                    }
-                    else {
-                        0
-                    }
-                })
+                .map(|l| if l.1 { l.0.len() } else { 0 })
                 .sum()
         );
         for l in all_applications.iter() {
@@ -150,7 +143,6 @@ pub fn build_args_parser() -> clap::Command {
                 .help("Update (or install) bndbuild or a given embedded application if provided. There are specific cases: if `all` is provided, it update all applications and bndbuild itself, if `installed` is provided it update only installed applications, if `self` is provide, it updates bndbuild itself.")
                 .exclusive(true)
         );
-        
 
     let cmd = cmd
         .arg(
@@ -371,14 +363,7 @@ fn expand_glob(p: &str) -> Vec<String> {
                         })
                         .collect_vec()
                 })
-                .map(|v| {
-                    if v.is_empty() {
-                        vec![p.clone()]
-                    }
-                    else {
-                        v
-                    }
-                })
+                .map(|v| if v.is_empty() { vec![p.clone()] } else { v })
                 .unwrap_or(vec![p])
         })
         .collect_vec()

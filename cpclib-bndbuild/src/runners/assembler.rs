@@ -3,11 +3,11 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use clap::{Arg, ArgAction, Command, CommandFactory, Parser};
-use cpclib_asm::orgams::convert_from_to;
 use cpclib_asm::EnvEventObserver;
+use cpclib_asm::orgams::convert_from_to;
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
-use cpclib_runner::emucontrol::{handle_arguments, EmuCli};
+use cpclib_runner::emucontrol::{EmuCli, handle_arguments};
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::assembler::ExternAssembler;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;

@@ -4,10 +4,10 @@ pub mod uz80;
 pub mod vasm;
 
 use cpclib_common::event::EventObserver;
-pub use rasm::{RasmVersion, RASM_CMD};
-pub use sjasmplus::{SjasmplusVersion, SJASMPLUS_CMD};
-use uz80::{Uz80Version, UZ80_CMD};
-pub use vasm::{VasmVersion, VASM_CMD};
+pub use rasm::{RASM_CMD, RasmVersion};
+pub use sjasmplus::{SJASMPLUS_CMD, SjasmplusVersion};
+use uz80::{UZ80_CMD, Uz80Version};
+pub use vasm::{VASM_CMD, VasmVersion};
 
 use crate::delegated::{
     DelegateApplicationDescription, GithubCompilableApplication, InternetStaticCompiledApplication
@@ -43,7 +43,7 @@ impl ExternAssembler {
 #[cfg(test)]
 mod test {
     use super::RasmVersion;
-    use crate::delegated::{cpclib_download, GithubInformation, StaticInformation};
+    use crate::delegated::{GithubInformation, StaticInformation, cpclib_download};
     use crate::runner::assembler::{SjasmplusVersion, VasmVersion};
 
     #[test]

@@ -4,7 +4,7 @@ pub mod parser;
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::{clap, utf8pathbuf_value_parser};
-use cpclib_xfer::{send_and_run_file, CpcXfer};
+use cpclib_xfer::{CpcXfer, send_and_run_file};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -119,7 +119,9 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
             match std::env::var("CPCIP") {
                 Ok(cpcaddr) => cpcaddr,
                 Err(_) => {
-                    return Err(anyhow::Error::msg("You should provide the CPCADDR argument or set the CPCIP environmeent variable"));
+                    return Err(anyhow::Error::msg(
+                        "You should provide the CPCADDR argument or set the CPCIP environmeent variable"
+                    ));
                 }
             }
         },

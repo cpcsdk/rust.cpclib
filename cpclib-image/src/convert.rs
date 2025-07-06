@@ -1046,7 +1046,9 @@ impl SpriteOutput {
             return res;
         }
 
-        unimplemented!("Encoding conversion has not yet been used and is not coded. A leftRightTopBottom iterator is probably expected to ease conversion.")
+        unimplemented!(
+            "Encoding conversion has not yet been used and is not coded. A leftRightTopBottom iterator is probably expected to ease conversion."
+        )
     }
 
     pub fn as_sprite(&self) -> Sprite {
@@ -1149,11 +1151,11 @@ impl Debug for Output {
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             Output::CPCMemoryStandard(..) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             Output::CPCMemoryOverscan(..) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            Output::CPCSplittingMemory(ref vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
+            Output::CPCSplittingMemory(vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
             Output::TilesList {
-                ref tile_height,
-                ref tile_width,
-                ref list,
+                tile_height,
+                tile_width,
+                list,
                 ..
             } => {
                 writeln!(
@@ -1175,7 +1177,7 @@ impl Output {
     /// Returns the bank that contains the first half of the screen
     pub fn overscan_screen1(&self) -> Option<&[u8; 0x4000]> {
         match self {
-            Self::CPCMemoryOverscan(ref s1, ..) => Some(s1),
+            Self::CPCMemoryOverscan(s1, ..) => Some(s1),
             _ => None
         }
     }
@@ -1192,7 +1194,7 @@ impl Output {
     /// Returns the bank that contains the second half of the screen
     pub fn overscan_screen2(&self) -> Option<&[u8; 0x4000]> {
         match self {
-            Self::CPCMemoryOverscan(_, ref s1, _) => Some(s1),
+            Self::CPCMemoryOverscan(_, s1, _) => Some(s1),
             _ => None
         }
     }
@@ -1200,7 +1202,7 @@ impl Output {
     /// Returns the list of tiles
     pub fn tiles_list(&self) -> Option<&[Vec<u8>]> {
         match self {
-            Self::TilesList { ref list, .. } => Some(list),
+            Self::TilesList { list, .. } => Some(list),
             _ => None
         }
     }

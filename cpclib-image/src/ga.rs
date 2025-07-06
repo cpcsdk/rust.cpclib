@@ -865,7 +865,7 @@ where
 /// `palette![1, 2, 3]`
 #[macro_export]
 macro_rules! palette {
-    ( $( $x:expr ),* ) => {
+    ( $( $x:expr_2021 ),* ) => {
         {
             use cpclib_image as cpc;
             use cpc::ga;
@@ -1050,14 +1050,7 @@ impl Palette {
         self.values
             .iter()
             .sorted_by(|a, b| Ord::cmp(&a.0.number(), &b.0.number()))
-            .filter_map(|(&p, _)| {
-                if p.number() == 16 {
-                    None
-                }
-                else {
-                    Some(p)
-                }
-            })
+            .filter_map(|(&p, _)| if p.number() == 16 { None } else { Some(p) })
             .collect::<Vec<Pen>>()
     }
 
@@ -1100,8 +1093,8 @@ impl Palette {
         let ink: Ink = expected.into();
         self.values
             .iter()
-            .filter(|(&p, _)| p.number() != 16)
-            .filter(|(&p, &i)| i == ink)
+            .filter(|&(&p, _)| p.number() != 16)
+            .filter(|&(&p_, &i)| i == ink)
             .min()
             .map(|(p, _i)| *p)
     }
@@ -1273,7 +1266,7 @@ mod tests {
             .iter()
             .cartesian_product(RGB_RATIOS)
             .cartesian_product(RGB_RATIOS)
-            .map(|t| (*t.0 .0, *t.0 .1, *t.1))
+            .map(|t| (*t.0.0, *t.0.1, *t.1))
             .map(Ink::from);
         let rgb_palette = Palette::from(rgb_palette);
     }

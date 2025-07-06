@@ -175,9 +175,7 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
         line.iter()
             .map(|ink| {
                 p.get_pen_for_ink(*ink).unwrap_or_else(|| {
-                    panic!(
-                        "Unable to find a correspondance for ink {ink:?} in given palette {p:?}"
-                    )
+                    panic!("Unable to find a correspondance for ink {ink:?} in given palette {p:?}")
                 })
             })
             .collect::<Vec<Pen>>()
@@ -446,7 +444,9 @@ impl ColorMatrix {
         for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
             if idx >= mode.max_colors() {
                 // do we really want to fail ? maybe we can have special modes to handle there
-                panic!("[ERROR] your picture uses more than 16 different colors. Palette: {p:?}. Wrong ink: {color:?}");
+                panic!(
+                    "[ERROR] your picture uses more than 16 different colors. Palette: {p:?}. Wrong ink: {color:?}"
+                );
             }
             p.set(Pen::from(idx as u8), *color);
         }

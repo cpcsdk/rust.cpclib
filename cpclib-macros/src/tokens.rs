@@ -1,8 +1,8 @@
+use cpclib_asm::BinaryOperation;
 use cpclib_asm::preamble::{
-    BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register16, Register8,
+    BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register8, Register16,
     StableTickerAction, Token, UnaryFunction
 };
-use cpclib_asm::BinaryOperation;
 use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;
 use quote::TokenStreamExt;

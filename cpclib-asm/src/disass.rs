@@ -1837,7 +1837,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
             // Current mnemonic is nop
             [0, rest @ ..] => continue_disassembling(nop(), rest),
 
-            [ref prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xFD || *prefix == 0xDD => {
+            [prefix, 0xCB, param, opcode, rest @ ..] if *prefix == 0xFD || *prefix == 0xDD => {
                 let token = disassemble_with_one_argument(
                     *opcode,
                     *param,
@@ -1852,7 +1852,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
                 continue_disassembling(token, rest)
             },
 
-            [prefix, ref opcode, rest @ ..]
+            [prefix, opcode, rest @ ..]
                 if *prefix == 0xCB || *prefix == 0xED || *prefix == 0xDD || *prefix == 0xFD =>
             {
                 let (token, rest) = disassemble_with_potential_argument(
@@ -1870,7 +1870,7 @@ pub fn disassemble<'a>(mut bytes: &'a [u8]) -> Listing {
                 continue_disassembling(token, rest)
             },
 
-            [ref opcode, rest @ ..] => {
+            [opcode, rest @ ..] => {
                 let (token, rest) = disassemble_with_potential_argument(*opcode, &TABINSTR, rest)
                     .unwrap_or_else(|_| (defb(*opcode), rest));
                 continue_disassembling(token, rest)

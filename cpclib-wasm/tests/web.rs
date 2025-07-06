@@ -80,9 +80,9 @@ fn basic_parse_success_two_lines() {
 #[wasm_bindgen_test]
 // this test is a copy past of generate_loop4000.rs
 fn manually_generated_snapshot() {
-    use cpclib_asm::assembler::visit_tokens_all_passes_with_options;
-    use cpclib_asm::preamble::{parse_z80_with_context_builder, ParserContextBuilder};
     use cpclib_asm::AssemblingOptions;
+    use cpclib_asm::assembler::visit_tokens_all_passes_with_options;
+    use cpclib_asm::preamble::{ParserContextBuilder, parse_z80_with_context_builder};
     use cpclib_sna::{Snapshot, SnapshotFlag};
 
     let asm = "

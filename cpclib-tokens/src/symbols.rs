@@ -6,15 +6,15 @@ use std::sync::LazyLock;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator};
-use cpclib_common::smallvec::{smallvec, SmallVec};
+use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::strsim;
 use delegate::delegate;
-use evalexpr::{build_operator_tree, ContextWithMutableVariables, HashMapContext};
+use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
 use regex::Regex;
 
 use crate::tokens::expression::LabelPrefix;
-use crate::{expression, AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token};
+use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token, expression};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhysicalAddress {
@@ -698,7 +698,7 @@ pub trait SymbolsTableTrait {
         Symbol: From<S>,
         S: AsRef<str>;
 
-    fn value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
+    fn any_value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
@@ -996,7 +996,7 @@ impl SymbolsTable {
         for model in replace.iter() {
             let local_expr = &model[1..model.len() - 1]; // remove {}
 
-            let local_value = match self.value::<&str>(local_expr)?.map(|vl| vl.value()) {
+            let local_value = match self.any_value::<&str>(local_expr)?.map(|vl| vl.value()) {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
@@ -1008,7 +1008,7 @@ impl SymbolsTable {
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
                         let variable_value = self
-                            .value::<&str>(variable)?
+                            .any_value::<&str>(variable)?
                             .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?;
                         context
                             .set_value(variable.to_owned(), variable_value.clone().into())
@@ -1125,14 +1125,10 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(self.value(symbol)?.and_then(|v| v.integer()).or({
-            if self.dummy {
-                Some(1i32)
-            }
-            else {
-                None
-            }
-        }))
+        Ok(self
+            .any_value(symbol)?
+            .and_then(|v| v.integer())
+            .or({ if self.dummy { Some(1i32) } else { None } }))
     }
 
     #[inline]
@@ -1173,7 +1169,7 @@ impl SymbolsTableTrait for SymbolsTable {
 
     /// Returns the Value at the given key
     #[inline]
-    fn value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
+    fn any_value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1189,17 +1185,10 @@ impl SymbolsTableTrait for SymbolsTable {
         S: AsRef<str>
     {
         Ok(self
-            .value(symbol)?
+            .any_value(symbol)?
             .map(|v| v.counter())
             .map(|v| v.unwrap())
-            .or({
-                if self.dummy {
-                    Some(1i32)
-                }
-                else {
-                    None
-                }
-            }))
+            .or({ if self.dummy { Some(1i32) } else { None } }))
     }
 
     #[inline]
@@ -1208,7 +1197,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(self.value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
+        Ok(self.any_value(symbol)?.map(|v| v.r#macro()).unwrap_or(None))
     }
 
     #[inline]
@@ -1217,7 +1206,10 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(self.value(symbol)?.map(|v| v.r#struct()).unwrap_or(None))
+        Ok(self
+            .any_value(symbol)?
+            .map(|v| v.r#struct())
+            .unwrap_or(None))
     }
 
     #[inline]
@@ -1226,7 +1218,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(self.value(symbol)?.map(|v| v.address()).unwrap_or(None))
+        Ok(self.any_value(symbol)?.map(|v| v.address()).unwrap_or(None))
     }
 
     /// Remove the given symbol name from the table. (used by undef)
@@ -1383,7 +1375,7 @@ impl SymbolsTable {
     /// Return the current addres if it is known or return an error
     #[inline]
     pub fn current_address(&self) -> Result<u16, SymbolError> {
-        match self.value("$")? {
+        match self.any_value("$")? {
             Some(address) => Ok(address.integer().unwrap() as u16),
             None => Err(SymbolError::UnknownAssemblingAddress)
         }
@@ -1601,7 +1593,7 @@ impl SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        Ok(match self.value(symbol)?.map(|v| v.value()) {
+        Ok(match self.any_value(symbol)?.map(|v| v.value()) {
             Some(Value::Expr(_)) => "number",
             Some(Value::Address(_)) => "address",
             Some(Value::Macro(_)) => "macro",
@@ -1634,6 +1626,18 @@ impl Default for SymbolsTableCaseDependent {
 impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
     fn as_ref(&self) -> &SymbolsTable {
         &self.table
+    }
+}
+
+impl From<SymbolsTableCaseDependent> for SymbolsTable {
+    fn from(val: SymbolsTableCaseDependent) -> Self {
+        val.table
+    }
+}
+
+impl From<&SymbolsTableCaseDependent> for SymbolsTable {
+    fn from(val: &SymbolsTableCaseDependent) -> Self {
+        val.table.clone()
     }
 }
 
@@ -1881,12 +1885,13 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
+    fn any_value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
     {
-        self.table.value::<Symbol>(self.normalize_symbol(symbol))
+        self.table
+            .any_value::<Symbol>(self.normalize_symbol(symbol))
     }
 
     #[inline]

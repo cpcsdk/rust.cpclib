@@ -1,5 +1,5 @@
 use cpclib_common::event::EventObserver;
-use disark::{DisarkVersion, DISARK_CMD};
+use disark::{DISARK_CMD, DisarkVersion};
 
 use crate::delegated::{DelegateApplicationDescription, InternetStaticCompiledApplication};
 
@@ -26,7 +26,7 @@ impl ExternDisassembler {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{cpclib_download, StaticInformation};
+    use crate::delegated::{StaticInformation, cpclib_download};
     use crate::runner::disassembler::disark::DisarkVersion;
 
     #[test]

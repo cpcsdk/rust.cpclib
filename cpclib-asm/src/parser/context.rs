@@ -10,9 +10,9 @@ use either::Either;
 use regex::Regex;
 
 use super::line_col::LineColLookup;
+use crate::LocatedToken;
 use crate::error::AssemblerError;
 use crate::preamble::*;
-use crate::LocatedToken;
 
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -297,7 +297,7 @@ impl ParserOptions {
                 let local_symbol = &model[1..model.len() - 1]; // remove {}
                 let local_value = match env
                     .symbols()
-                    .value(local_symbol)
+                    .any_value(local_symbol)
                     .map(|vl| vl.map(|vl| vl.value()))
                 {
                     Ok(Some(Value::String(s))) => s.to_string(),
@@ -310,7 +310,7 @@ impl ParserOptions {
                         return Err(Either::Left(AssemblerError::UnknownSymbol {
                             symbol: model.into(),
                             closest: env.symbols().closest_symbol(model, SymbolFor::Any).unwrap()
-                        }))
+                        }));
                     },
                     Err(e) => return Err(Either::Left(e.into()))
                 };

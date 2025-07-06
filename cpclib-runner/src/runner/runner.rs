@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use std::process::{Child, Stdio};
 use std::thread;
 
-use clap::builder::styling::AnsiColor;
 use clap::builder::Styles;
+use clap::builder::styling::AnsiColor;
 use clap::{ArgMatches, Command, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
 use transparent::{CommandExt, TransparentChild, TransparentRunner};

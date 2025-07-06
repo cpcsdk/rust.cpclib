@@ -14,7 +14,7 @@ use super::report::SavedFile;
 use super::save_command::SaveCommand;
 use super::string::PreprocessedFormattedString;
 use super::{Env, EnvEventObserver};
-use crate::error::{build_simple_error_message, AssemblerError};
+use crate::error::{AssemblerError, build_simple_error_message};
 use crate::preamble::Z80Span;
 
 trait DelayedCommand {}

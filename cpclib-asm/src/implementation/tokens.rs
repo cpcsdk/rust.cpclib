@@ -6,7 +6,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
-use crate::assembler::{assemble_defs_item, Env, Visited};
+use crate::assembler::{Env, Visited, assemble_defs_item};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
@@ -121,7 +121,7 @@ impl TokenExt for Token {
     /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
     fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
-        if let Token::Repeat(ref expr, ref tokens, ref _counter_label, ref _counter_start) = self {
+        if let Token::Repeat(expr, tokens, _counter_label, _counter_start) = self {
             let count: Result<ExprResult, AssemblerError> = expr.resolve(env);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
@@ -154,7 +154,7 @@ impl TokenExt for Token {
             for token in lst.listing() {
                 match token {
                     Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
-                        return Err(format!("{} as not been disassembled", token))
+                        return Err(format!("{} as not been disassembled", token));
                     },
                     _ => {}
                 }
@@ -164,7 +164,7 @@ impl TokenExt for Token {
         };
 
         match self {
-            Token::Defs(ref l) => {
+            Token::Defs(l) => {
                 l.iter()
                     .map(|(e, f)| {
                         assemble_defs_item(e, f.as_ref(), &mut Env::default())
@@ -216,7 +216,7 @@ impl TokenExt for Token {
                     .and_then(|lst| lst.estimated_duration())?
             },
 
-            Token::OpCode(ref mnemonic, ref arg1, ref arg2, ref _arg3) => {
+            Token::OpCode(mnemonic, arg1, arg2, _arg3) => {
                 match mnemonic {
                     &Mnemonic::Add => {
                         match arg1 {
@@ -344,7 +344,7 @@ impl TokenExt for Token {
                             },
 
                             // Dest in 8bits reg
-                            Some(DataAccess::Register8(ref _dst)) => {
+                            Some(DataAccess::Register8(_dst)) => {
                                 match arg2 {
                                     Some(DataAccess::Register8(_)) => 1,
                                     Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
@@ -361,7 +361,7 @@ impl TokenExt for Token {
                             },
 
                             // Dest in 16bits reg
-                            Some(DataAccess::Register16(ref dst)) => {
+                            Some(DataAccess::Register16(dst)) => {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 3,
                                     Some(DataAccess::Memory(_)) if dst == &Register16::Hl => 5,
@@ -478,7 +478,7 @@ impl TokenExt for Token {
                     file: file!(),
                     line: line!(),
                     msg: format!("Duration computation for {:?} not yet coded", self)
-                })
+                });
             },
         };
         Ok(duration)
@@ -541,13 +541,15 @@ mod tests {
 
     #[test]
     fn is_valid_nok() {
-        assert!(!Token::OpCode(
-            Mnemonic::Out,
-            Some(DataAccess::Register8(Register8::C)),
-            Some(DataAccess::Register8(Register8::A)),
-            None
-        )
-        .is_valid());
+        assert!(
+            !Token::OpCode(
+                Mnemonic::Out,
+                Some(DataAccess::Register8(Register8::C)),
+                Some(DataAccess::Register8(Register8::A)),
+                None
+            )
+            .is_valid()
+        );
     }
 
     #[cfg(test)]
@@ -748,9 +750,11 @@ mod tests {
                 2
             );
 
-            assert!(Token::Basic(None, None, "".to_owned())
-                .estimated_duration()
-                .is_err());
+            assert!(
+                Token::Basic(None, None, "".to_owned())
+                    .estimated_duration()
+                    .is_err()
+            );
         }
     }
 }

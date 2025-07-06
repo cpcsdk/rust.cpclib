@@ -8,9 +8,9 @@ use std::fmt::Debug;
 use std::mem::swap;
 
 use cpclib_asm::assembler::Env;
+use cpclib_common::num::One;
 use cpclib_common::num::integer::Integer;
 use cpclib_common::num::traits::{WrappingAdd, WrappingSub};
-use cpclib_common::num::One;
 
 use crate::preamble::*;
 

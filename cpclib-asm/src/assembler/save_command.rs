@@ -3,8 +3,8 @@ use cpclib_disc::disc::Disc;
 use cpclib_disc::hfe::Hfe;
 use cpclib_files::*;
 
-use super::report::SavedFile;
 use super::Env;
+use super::report::SavedFile;
 use crate::error::AssemblerError;
 use crate::progress::{self, Progress};
 

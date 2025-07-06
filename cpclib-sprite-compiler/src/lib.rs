@@ -5,8 +5,8 @@ use std::ops::{Deref, DerefMut};
 
 use bon::Builder;
 use cpclib_asm::{
-    dec_e, dec_l, inc_e, inc_l, IfBuilder, Listing,
-    ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register16, Register8, TestKind
+    IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register8,
+    Register16, TestKind, dec_e, dec_l, inc_e, inc_l
 };
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use itertools::Itertools;
@@ -76,10 +76,7 @@ impl RegistersStore {
     }
 
     pub fn register_for(&self, val: u8) -> Option<Register8> {
-        self.regs
-            .iter()
-            .find(|(r, v)| **v == val)
-            .map(|(r, v)| *r)
+        self.regs.iter().find(|(r, v)| **v == val).map(|(r, v)| *r)
     }
 
     pub fn value_for_r8(&self, r: Register8) -> Option<u8> {
@@ -175,7 +172,8 @@ impl Compiler {
         {
             if let std::collections::btree_map::Entry::Vacant(e) = set.entry(b) {
                 e.insert(1);
-            } else {
+            }
+            else {
                 *set.get_mut(&b).unwrap() += 1;
             }
         }
@@ -638,7 +636,9 @@ pub fn standard_sprite_with_background_backup_and_restore_compiler(
     let spr = spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
     let msk = msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
 
-    todo!("XXX Nothing is finished here. Cannot be used without fixes. Restore code is not stored  BTW");
+    todo!(
+        "XXX Nothing is finished here. Cannot be used without fixes. Restore code is not stored  BTW"
+    );
 
     let comp = Compiler::builder()
             .header_comment("Linear sprite display routine. HL contains screen address and DE contains save_buffer_address")

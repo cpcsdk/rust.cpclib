@@ -49,12 +49,7 @@ fn basm() -> i32 {
 #[cfg(target_arch = "wasm32")]
 fn main() -> Result<(), i32> {
     let code = basm();
-    if code != 0 {
-        Err(code)
-    }
-    else {
-        Ok(())
-    }
+    if code != 0 { Err(code) } else { Ok(()) }
 }
 
 #[cfg(not(target_arch = "wasm32"))]

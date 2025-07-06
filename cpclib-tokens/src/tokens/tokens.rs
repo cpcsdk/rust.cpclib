@@ -3,10 +3,10 @@ use std::borrow::Cow;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 
+use crate::DataAccess;
 use crate::tokens::expression::*;
 use crate::tokens::instructions::*;
 use crate::tokens::listing::*;
-use crate::DataAccess;
 
 #[macro_export]
 macro_rules! listing_element_impl_most_methods {
@@ -102,7 +102,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn mnemonic(&self) -> Option<&Mnemonic> {
             match self {
-                Self::OpCode(ref mnemonic, ..) => Some(mnemonic),
+                Self::OpCode(mnemonic, ..) => Some(mnemonic),
                 _ => None
             }
         }
@@ -110,7 +110,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn mnemonic_arg2(&self) -> Option<&Self::DataAccess> {
             match self {
-                Self::OpCode(_, _, ref arg2, _) => arg2.as_ref(),
+                Self::OpCode(_, _, arg2, _) => arg2.as_ref(),
                 _ => None
             }
         }
@@ -118,7 +118,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
             match self {
-                Self::OpCode(_, ref mut arg1, ..) => arg1.as_mut(),
+                Self::OpCode(_, arg1, ..) => arg1.as_mut(),
                 _ => None
             }
         }
@@ -142,7 +142,7 @@ macro_rules! listing_element_impl_most_methods {
         #[inline]
         fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
             match self {
-                Self::OpCode(_, _, ref mut arg2, _) => arg2.as_mut(),
+                Self::OpCode(_, _, arg2, _) => arg2.as_mut(),
                 _ => None
             }
         }
@@ -659,7 +659,7 @@ impl ListingElement for Token {
 
     fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
         match self {
-            Token::OpCode(_, ref arg1, ..) => arg1.as_ref(),
+            Token::OpCode(_, arg1, ..) => arg1.as_ref(),
             _ => None
         }
     }

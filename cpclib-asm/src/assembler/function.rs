@@ -17,7 +17,7 @@ use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
 };
 use super::processed_token::ProcessedToken;
-use super::{file, Env};
+use super::{Env, file};
 use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
@@ -560,7 +560,7 @@ impl HardCodedFunction {
                     _ => {
                         return Err(AssemblerError::AssemblingError {
                             msg: format!("{crunch_type} is not a valid crunch")
-                        })
+                        });
                     },
                 };
 
@@ -585,15 +585,17 @@ impl Function {
         args: &[S2],
         inner: Vec<ProcessedToken<'_, LocatedToken>>
     ) -> Result<Self, AssemblerError> {
-        if inner.is_empty() {
-            return Err(AssemblerError::FunctionWithEmptyBody(
-                name.as_ref().to_owned()
-            ));
+        unsafe {
+            if inner.is_empty() {
+                return Err(AssemblerError::FunctionWithEmptyBody(
+                    name.as_ref().to_owned()
+                ));
+            }
+
+            let inner = std::mem::transmute(inner);
+
+            Ok(Function::Located(AnyFunction::new(name, args, inner)))
         }
-
-        let inner = std::mem::transmute(inner);
-
-        Ok(Function::Located(AnyFunction::new(name, args, inner)))
     }
 
     pub unsafe fn new_standard<S1: AsRef<str>, S2: Borrow<str>>(
@@ -601,15 +603,17 @@ impl Function {
         args: &[S2],
         inner: Vec<ProcessedToken<'_, Token>>
     ) -> Result<Self, AssemblerError> {
-        if inner.is_empty() {
-            return Err(AssemblerError::FunctionWithEmptyBody(
-                name.as_ref().to_owned()
-            ));
+        unsafe {
+            if inner.is_empty() {
+                return Err(AssemblerError::FunctionWithEmptyBody(
+                    name.as_ref().to_owned()
+                ));
+            }
+
+            let inner = std::mem::transmute(inner);
+
+            Ok(Function::Standard(AnyFunction::new(name, args, inner)))
         }
-
-        let inner = std::mem::transmute(inner);
-
-        Ok(Function::Standard(AnyFunction::new(name, args, inner)))
     }
 
     /// Be sure the function lives shorter than inner
@@ -642,7 +646,7 @@ impl FunctionBuilder for ProcessedToken<'_, LocatedToken> {
     where
         Self: Sized
     {
-        Function::new_located(name, args, inner)
+        unsafe { Function::new_located(name, args, inner) }
     }
 }
 
@@ -655,7 +659,7 @@ impl FunctionBuilder for ProcessedToken<'_, Token> {
     where
         Self: Sized
     {
-        Function::new_standard(name, args, inner)
+        unsafe { Function::new_standard(name, args, inner) }
     }
 }
 

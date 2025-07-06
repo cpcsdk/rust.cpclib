@@ -17,13 +17,13 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use cpclib_common::clap::{value_parser, Arg, ArgAction, Command};
+use cpclib_common::clap::{Arg, ArgAction, Command, value_parser};
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simple_logger::{set_up_color_terminal, SimpleLogger};
+use simple_logger::{SimpleLogger, set_up_color_terminal};
 #[must_use]
 pub fn to_number<T>(repr: &str) -> T
 where
@@ -164,7 +164,9 @@ fn main() -> std::io::Result<()> {
 
         if catalog_fname.contains("dsk") {
             // Read a dsk file
-            error!("Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results.");
+            error!(
+                "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
+            );
             let mut dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
             let manager = AmsdosManagerNonMut::new_from_disc(&mut dsk, Head::A);
             manager.catalog()

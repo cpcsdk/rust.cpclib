@@ -20,20 +20,20 @@ use cpclib_sna::{
 };
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    data_access_impl_most_methods, data_access_is_any_indexregister16,
-    data_access_is_any_indexregister8, data_access_is_any_register16, data_access_is_any_register8,
-    listing_element_impl_most_methods, AssemblerControlCommand, AssemblerFlavor, BaseListing,
-    BinaryFunction, BinaryOperation, CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr,
-    ExprResult, FlagTest, FormattedExpr, IndexRegister16, IndexRegister8, LabelPrefix,
-    ListingElement, MacroParam, MacroParamElement, Mnemonic, Register16, Register8, SaveType,
-    StableTickerAction, TestKind, TestKindElement, ToSimpleToken, Token, UnaryFunction,
-    UnaryOperation, UnaryTokenOperation
+    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryFunction, BinaryOperation,
+    CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest,
+    FormattedExpr, IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam,
+    MacroParamElement, Mnemonic, Register8, Register16, SaveType, StableTickerAction, TestKind,
+    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation,
+    data_access_impl_most_methods, data_access_is_any_indexregister8,
+    data_access_is_any_indexregister16, data_access_is_any_register8,
+    data_access_is_any_register16, listing_element_impl_most_methods
 };
 use ouroboros::self_referencing;
 
 use super::{
-    build_span, my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete,
-    InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span
+    InnerZ80Span, ParserContext, SourceString, Z80ParserError, Z80Span, build_span,
+    my_many0_nocollect, parse_lines, parse_single_token, parse_z80_line_complete
 };
 use crate::assembler::Env;
 use crate::error::AssemblerError;
@@ -44,8 +44,8 @@ use crate::implementation::listing::ListingExt;
 use crate::implementation::tokens::TokenExt;
 use crate::preamble::parse_z80_str;
 use crate::{
-    ensure_orgams_type, resolve_impl, BinaryTransformation, ExprElement, ParserContextBuilder,
-    ParsingState, SymbolFor
+    BinaryTransformation, ExprElement, ParserContextBuilder, ParsingState, SymbolFor,
+    ensure_orgams_type, resolve_impl
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1542,9 +1542,9 @@ impl ListingElement for LocatedTokenInner {
             Self::Include(..) => todo!(),
             Self::Incbin {
                 fname,
-                ref offset,
-                ref length,
-                ref extended_offset,
+                offset,
+                length,
+                extended_offset,
                 off,
                 transformation
             } => {

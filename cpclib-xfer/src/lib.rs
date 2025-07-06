@@ -1,8 +1,8 @@
 use std::fs;
 
 use cpclib_common::camino::Utf8Path;
-use curl::easy::{Easy, Form};
 use curl::Error;
+use curl::easy::{Easy, Form};
 use custom_error::custom_error;
 use path_absolutize::*;
 use {cpclib_disc as disc, cpclib_sna as sna, path_absolutize};
@@ -204,9 +204,7 @@ impl CpcXfer {
         let local_fname = path.as_str();
 
         if m4_path.len() > 255 {
-            panic!(
-                "{m4_path} path is too long (should be limited to 255 chars)"
-            );
+            panic!("{m4_path} path is too long (should be limited to 255 chars)");
         }
         let _file_contents = fs::read(local_fname).expect("Unable to read PC file");
 
@@ -403,7 +401,9 @@ pub fn send_and_run_file<P: AsRef<Utf8Path>>(
         if extension == "sna" {
             let sna = sna::Snapshot::load(fname).expect("Error while loading snapshot");
             if sna.version_header() == 3 {
-                eprintln!("Need to downgrade SNA version. TODO check if it is sill necessary (I think not)");
+                eprintln!(
+                    "Need to downgrade SNA version. TODO check if it is sill necessary (I think not)"
+                );
                 let sna_fname = fname.file_name().unwrap();
                 sna.save(sna_fname, sna::SnapshotVersion::V2).unwrap();
                 xfer.upload_and_run(sna_fname, None)

@@ -30,7 +30,7 @@ use std::time::Instant;
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_common::chars::{char_to_amscii, Charset};
+use cpclib_common::chars::{Charset, char_to_amscii};
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
@@ -731,10 +731,12 @@ impl Env {
                 // here we weaken the test to allow multipass stuff
                 if !self.requested_additional_pass && !*self.request_additional_pass.read().unwrap()
                 {
-                    Err(AssemblerError::IncoherentCode{msg: format!(
-                        "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
-                        label, self.pass
-                    )})
+                    Err(AssemblerError::IncoherentCode {
+                        msg: format!(
+                            "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
+                            label, self.pass
+                        )
+                    })
                 }
                 else {
                     self.symbols_mut().set_symbol_to_value(label, value)?;
@@ -743,10 +745,12 @@ impl Env {
             },
             (false, AssemblingPass::ListingPass) => {
                 panic!();
-                Err(AssemblerError::IncoherentCode{msg: format!(
-                "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
-                label, self.pass
-            )})
+                Err(AssemblerError::IncoherentCode {
+                    msg: format!(
+                        "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
+                        label, self.pass
+                    )
+                })
             },
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut().set_symbol_to_value(label, value)?;
@@ -925,7 +929,7 @@ impl Env {
             let value = self
                 .options()
                 .symbols()
-                .value(symbol.clone())
+                .any_value(symbol.clone())
                 .unwrap()
                 .unwrap()
                 .clone();
@@ -1776,7 +1780,7 @@ impl Env {
 
                         // increase its size
                         match r#override {
-                            AssemblerError::OverrideMemory(_, ref mut size) => {
+                            AssemblerError::OverrideMemory(_, size) => {
                                 *size += 1;
                             },
                             _ => unreachable!()
@@ -2021,7 +2025,7 @@ impl Env {
                 if exp.is_label() {
                     let label = exp.label();
                     let symbols = self.symbols();
-                    let value: &Value = symbols.value(label)?.unwrap();
+                    let value: &Value = symbols.any_value(label)?.unwrap();
                     match value {
                         Value::Expr(expr_result) => (expr_result.int()? as _, 0),
                         Value::Address(physical_address) => {
@@ -2060,7 +2064,7 @@ impl Env {
                                     .to_memory()
                                     .page()
                             )
-                        })
+                        });
                     },
                 };
 
@@ -2195,8 +2199,8 @@ impl Env {
         if value > 0xFFFF {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
-                "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
-        )
+                    "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
+                )
             });
         }
 
@@ -2276,7 +2280,7 @@ impl Env {
                 kind: self.symbols().kind(label)?.into(),
                 here: self
                     .symbols()
-                    .value(label)
+                    .any_value(label)
                     .unwrap()
                     .unwrap()
                     .location()
@@ -2581,8 +2585,11 @@ impl Env {
             let section = section.read().unwrap();
 
             let warning = if section.mmr != self.ga_mmr {
-                Some(AssemblerError::AssemblingError{
-                    msg: format!("Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})", section.mmr, self.ga_mmr)
+                Some(AssemblerError::AssemblingError {
+                    msg: format!(
+                        "Gate Array configuration is not coherent with the section. We  manually set it (0x{:x} expected instead of 0x{:x})",
+                        section.mmr, self.ga_mmr
+                    )
                 })
             }
             else {
@@ -3008,7 +3015,7 @@ impl Env {
         let dsk_fname = dsk_fname.map(Utf8PathBuf::from);
 
         // Check filename validity
-        if let Some(&SaveType::Disc(disc)) = &save_type {
+        if let Some(SaveType::Disc(disc)) = &save_type {
             let dsk_fname = dsk_fname.as_ref().unwrap();
             let lower_fname = dsk_fname.as_str().to_ascii_lowercase();
             match disc {
@@ -3028,7 +3035,9 @@ impl Env {
 
                     #[cfg(not(feature = "hfe"))]
                     Err(AssemblerError::InvalidArgument {
-                        msg: format!("{dsk_fname} cannot be saved. No HFE support is included with this version of basm")
+                        msg: format!(
+                            "{dsk_fname} cannot be saved. No HFE support is included with this version of basm"
+                        )
                     })?
                 },
                 DiscType::Auto => {
@@ -3044,7 +3053,9 @@ impl Env {
                     #[cfg(not(feature = "hfe"))]
                     if lower_fname.ends_with(".hfe") {
                         Err(AssemblerError::InvalidArgument {
-                            msg: format!("{dsk_fname} cannot be saved. No HFE support is included with this version of basm")
+                            msg: format!(
+                                "{dsk_fname} cannot be saved. No HFE support is included with this version of basm"
+                            )
                         })?
                     }
                 }
@@ -3525,15 +3536,15 @@ macro_rules! visit_token_impl {
         $env.update_dollar();
         match &$token {
             $cls::Abyte(d, l) => $env.visit_abyte(d, l.as_ref()),
-            $cls::Align(ref boundary, ref fill) => $env.visit_align(boundary, fill.as_ref()),
-            $cls::Assert(ref exp, ref txt) => {
+            $cls::Align(boundary, fill) => $env.visit_align(boundary, fill.as_ref()),
+            $cls::Assert(exp, txt) => {
                 visit_assert(exp, txt.as_ref(), $env, $span)?;
                 Ok(())
             },
-            $cls::AssemblerControl(ref cmd) => $env.visit_assembler_control(cmd, $span),
+            $cls::AssemblerControl(cmd) => $env.visit_assembler_control(cmd, $span),
             $cls::Assign { label, expr, op } => $env.visit_assign(label, expr, op.as_ref()),
 
-            $cls::Basic(ref variables, ref hidden_lines, ref code) => {
+            $cls::Basic(variables, hidden_lines, code) => {
                 $env.visit_basic(
                     variables
                         .as_ref()
@@ -3542,8 +3553,8 @@ macro_rules! visit_token_impl {
                     code
                 )
             }, // TODO move in the processed tokens stuff
-            $cls::Bank(ref exp) => $env.visit_page_or_bank(exp.as_ref()),
-            $cls::Bankset(ref v) => $env.visit_pageset(v),
+            $cls::Bank(exp) => $env.visit_page_or_bank(exp.as_ref()),
+            $cls::Bankset(v) => $env.visit_pageset(v),
             $cls::Breakpoint {
                 address,
                 r#type,
@@ -3573,7 +3584,7 @@ macro_rules! visit_token_impl {
                 )
             },
             $cls::BuildCpr => $env.visit_buildcpr(),
-            $cls::BuildSna(ref v) => $env.visit_buildsna(v.as_ref()),
+            $cls::BuildSna(v) => $env.visit_buildsna(v.as_ref()),
 
             $cls::Charset(format) => $env.visit_charset(format),
 
@@ -3584,17 +3595,14 @@ macro_rules! visit_token_impl {
             $cls::Defs(l) => visit_defs(l, $env),
 
             $cls::End => visit_end($env),
-            $cls::Export(ref labels) => $env.visit_export(labels.as_slice()),
-            $cls::Equ {
-                ref label,
-                ref expr
-            } => $env.visit_equ(&label, expr),
+            $cls::Export(labels) => $env.visit_export(labels.as_slice()),
+            $cls::Equ { label, expr } => $env.visit_equ(&label, expr),
 
-            $cls::Fail(ref exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
+            $cls::Fail(exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
             $cls::Field { label, expr, .. } => $env.visit_field(label, expr),
 
-            $cls::Label(ref label) => $env.visit_label(label),
-            $cls::Limit(ref exp) => $env.visit_limit(exp),
+            $cls::Label(label) => $env.visit_label(label),
+            $cls::Limit(exp) => $env.visit_limit(exp),
             $cls::List => {
                 $env.output_trigger.as_mut().map(|l| {
                     l.on();
@@ -3602,16 +3610,16 @@ macro_rules! visit_token_impl {
                 Ok(())
             },
 
-            $cls::Map(ref exp) => $env.visit_map(exp),
-            $cls::MultiPush(ref regs) => $env.visit_multi_pushes(regs),
-            $cls::MultiPop(ref regs) => $env.visit_multi_pops(regs),
+            $cls::Map(exp) => $env.visit_map(exp),
+            $cls::MultiPush(regs) => $env.visit_multi_pushes(regs),
+            $cls::MultiPop(regs) => $env.visit_multi_pops(regs),
 
             $cls::Next {
                 label,
                 source,
                 expr
             } => $env.visit_next_and_co(label, source, expr.as_ref(), false),
-            $cls::NoExport(ref labels) => $env.visit_noexport(labels.as_slice()),
+            $cls::NoExport(labels) => $env.visit_noexport(labels.as_slice()),
             $cls::NoList => {
                 $env.output_trigger.as_mut().map(|l| {
                     l.off();
@@ -3620,7 +3628,7 @@ macro_rules! visit_token_impl {
             },
 
             $cls::Org { val1, val2 } => $env.visit_org(val1, val2.as_ref()),
-            $cls::OpCode(ref mnemonic, ref arg1, ref arg2, ref arg3) => {
+            $cls::OpCode(mnemonic, arg1, arg2, arg3) => {
                 visit_opcode(*mnemonic, &arg1, &arg2, &arg3, $env)?;
                 // Compute duration only if it is necessary
                 if !$env.stable_counters.is_empty() {
@@ -3634,16 +3642,16 @@ macro_rules! visit_token_impl {
                 $env.visit_pause($span);
                 Ok(())
             },
-            $cls::Protect(ref start, ref end) => $env.visit_protect(start, end),
-            $cls::Print(ref exp) => {
+            $cls::Protect(start, end) => $env.visit_protect(start, end),
+            $cls::Print(exp) => {
                 $env.visit_print(exp.as_ref(), $span);
                 Ok(())
             },
 
-            $cls::Range(ref name, ref start, ref stop) => $env.visit_range(name, start, stop),
+            $cls::Range(name, start, stop) => $env.visit_range(name, start, stop),
             $cls::Return(exp) => $env.visit_return(exp),
 
-            $cls::Rorg(ref _exp, ref _code) => panic!("Is delegated to ProcessedToken"),
+            $cls::Rorg(_exp, _code) => panic!("Is delegated to ProcessedToken"),
             $cls::Run(address, gate_array) => $env.visit_run(address, gate_array.as_ref()),
 
             $cls::SetN {
@@ -3652,7 +3660,7 @@ macro_rules! visit_token_impl {
                 expr
             } => $env.visit_next_and_co(label, source, expr.as_ref(), true),
             $cls::Save {
-                ref filename,
+                filename,
                 address,
                 size,
                 save_type,
@@ -3668,21 +3676,20 @@ macro_rules! visit_token_impl {
                     side.as_ref()
                 )
             },
-            $cls::Section(ref name) => $env.visit_section(name),
-            $cls::Skip(ref amount) => $env.visit_skip(amount),
-            $cls::SnaInit(ref fname) => $env.visit_snainit(fname),
-            $cls::SnaSet(ref flag, ref value) => $env.visit_snaset(flag, value),
-            $cls::StableTicker(ref ticker) => visit_stableticker(ticker, $env),
-            $cls::StartingIndex {
-                ref start,
-                ref step
-            } => $env.visit_starting_index(start.as_ref(), step.as_ref()),
+            $cls::Section(name) => $env.visit_section(name),
+            $cls::Skip(amount) => $env.visit_skip(amount),
+            $cls::SnaInit(fname) => $env.visit_snainit(fname),
+            $cls::SnaSet(flag, value) => $env.visit_snaset(flag, value),
+            $cls::StableTicker(ticker) => visit_stableticker(ticker, $env),
+            $cls::StartingIndex { start, step } => {
+                $env.visit_starting_index(start.as_ref(), step.as_ref())
+            },
             $cls::Str(l) => $env.visit_db_or_dw_or_str(DbLikeKind::Str, l.as_ref(), 0.into()),
-            $cls::Struct(ref name, ref content) => {
+            $cls::Struct(name, content) => {
                 $env.visit_struct_definition(name, content.as_slice(), $span)
             },
 
-            $cls::Undef(ref label) => $env.visit_undef(label),
+            $cls::Undef(label) => $env.visit_undef(label),
             $cls::WaitNops(count) => $env.visit_waitnops(count),
 
             $cls::Include(..)
@@ -3912,7 +3919,7 @@ impl Env {
                     _ => {
                         return Err(AssemblerError::AssemblingError {
                             msg: format!("REPEAT issue: {} is not a list", values)
-                        })
+                        });
                     },
                 }
             },
@@ -4509,15 +4516,15 @@ impl Env {
             if let Some(new_size) = new_size {
                 if let Some(new_span) = new_span {
                     if let AssemblerError::RelocatedWarning {
-                        warning: box AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size),
-                        ref mut span
+                        warning: box AssemblerWarning::OverrideMemory(_prev_addr, prev_size),
+                        span
                     } = &mut self.warnings[previous_warning_idx]
                     {
                         *prev_size = new_size;
                         *span = new_span;
                     }
                 }
-                else if let AssemblerWarning::OverrideMemory(_prev_addr, ref mut prev_size) =
+                else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                     &mut self.warnings[previous_warning_idx]
                 {
                     *prev_size = new_size;
@@ -4974,11 +4981,11 @@ pub fn visit_stableticker<S: AsRef<str>>(
     env: &mut Env
 ) -> Result<(), AssemblerError> {
     match ticker {
-        StableTickerAction::Start(ref name) => {
+        StableTickerAction::Start(name) => {
             env.stable_counters.add_counter(name)?;
             Ok(())
         },
-        StableTickerAction::Stop(ref stop) => {
+        StableTickerAction::Stop(stop) => {
             if let Some((label, count)) = stop
                 .as_ref()
                 .map(|stop| env.stable_counters.release_counter(stop.as_ref()))
@@ -5398,7 +5405,7 @@ where
                     "Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.",
                     val
                 )
-            })
+            });
         },
     };
 
@@ -5431,8 +5438,8 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         .int()?;
 
     let p = match val {
-        0x00          => 0b000,
-        0x08 | 1      => 0b001,
+        0x00 => 0b000,
+        0x08 | 1 => 0b001,
         0x10 | 2 | 10 => 0b010,
         0x18 | 3 | 18 => 0b011,
         0x20 | 4 | 20 => 0b100,
@@ -5441,8 +5448,11 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         0x38 | 7 | 38 => 0b111,
         _ => {
             return Err(AssemblerError::InvalidArgument {
-                msg: format!("RST cannot take {} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38.", val)
-            })
+                msg: format!(
+                    "RST cannot take {} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38.",
+                    val
+                )
+            });
         },
     };
 
@@ -5464,7 +5474,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         _ => {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!("IM cannot take {} as argument.", val)
-            })
+            });
         },
     };
 
@@ -5511,7 +5521,7 @@ where
                         "{}: wrong flag argument",
                         mne.to_string().to_ascii_uppercase()
                     )
-                })
+                });
             },
         }
     }
@@ -6729,8 +6739,8 @@ where
 fn assemble_ex_memsp<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
     let mut bytes = Bytes::new();
 
-    if let Some(ref reg) = arg1.get_indexregister16() {
-        bytes.push(indexed_register16_to_code(*reg));
+    if let Some(reg) = arg1.get_indexregister16() {
+        bytes.push(indexed_register16_to_code(reg));
     }
 
     bytes.push(0xE3);
@@ -7118,28 +7128,32 @@ mod test {
         let mut env = Env::default();
         env.start_new_pass();
 
-        assert!(visit_assert(
-            &Expr::BinaryOperation(
-                BinaryOperation::Equal,
-                Box::new(0i32.into()),
-                Box::new(0i32.into())
-            ),
-            None,
-            &mut env,
-            None
-        )
-        .unwrap());
-        assert!(!visit_assert(
-            &Expr::BinaryOperation(
-                BinaryOperation::Equal,
-                Box::new(1i32.into()),
-                Box::new(0i32.into())
-            ),
-            None,
-            &mut env,
-            None
-        )
-        .unwrap());
+        assert!(
+            visit_assert(
+                &Expr::BinaryOperation(
+                    BinaryOperation::Equal,
+                    Box::new(0i32.into()),
+                    Box::new(0i32.into())
+                ),
+                None,
+                &mut env,
+                None
+            )
+            .unwrap()
+        );
+        assert!(
+            !visit_assert(
+                &Expr::BinaryOperation(
+                    BinaryOperation::Equal,
+                    Box::new(1i32.into()),
+                    Box::new(0i32.into())
+                ),
+                None,
+                &mut env,
+                None
+            )
+            .unwrap()
+        );
     }
 
     #[test]

@@ -1,52 +1,54 @@
-use cpclib::common::clap::{self, value_parser, Arg, ArgAction, Command};
+use cpclib::common::clap::{self, Arg, ArgAction, Command, value_parser};
 use cpclib::disc::amsdos::AmsdosError;
 use cpclib::image::image::{ColorMatrix, Mode};
 use cpclib_imgconverter::{self, get_requested_palette};
 
 fn main() -> Result<(), AmsdosError> {
-    let cmd = cpclib_imgconverter::specify_palette!(clap::Command::new("cpc2png")
-        .about("Generate PNG from CPC files")
-        .subcommand_required(true)
-        .arg(
-            Arg::new("MODE")
-                .short('m')
-                .long("mode")
-                .help("Screen mode of the image to convert.")
-                .value_name("MODE")
-                .value_parser(0..=2)
-                .action(clap::ArgAction::Set)
-                .default_value("0")
-        )
-        .arg(
-            Arg::new("MODE0RATIO")
-                .long("mode0ratio")
-                .help("Horizontally double the pixels")
-                .action(ArgAction::SetTrue)
-        )
-        .subcommand(
-            Command::new("SPRITECMD")
-                .about("Load from a linear sprite data")
-                .name("sprite")
-                .arg(
-                    Arg::new("WIDTH")
-                        .long("width")
-                        .required(true)
-                        .help("Width of the sprite in pixels")
-                )
-        )
-        .subcommand(
-            Command::new("SCREENCMD")
-                .about("Load from a 16kb screen data")
-                .name("screen")
-                .arg(
-                    Arg::new("WIDTH")
-                        .long("width")
-                        .default_value("80")
-                        .help("Width of the screen in bytes")
-                )
-        )
-        .arg(Arg::new("INPUT").required(true))
-        .arg(Arg::new("OUTPUT").required(true)));
+    let cmd = cpclib_imgconverter::specify_palette!(
+        clap::Command::new("cpc2png")
+            .about("Generate PNG from CPC files")
+            .subcommand_required(true)
+            .arg(
+                Arg::new("MODE")
+                    .short('m')
+                    .long("mode")
+                    .help("Screen mode of the image to convert.")
+                    .value_name("MODE")
+                    .value_parser(0..=2)
+                    .action(clap::ArgAction::Set)
+                    .default_value("0")
+            )
+            .arg(
+                Arg::new("MODE0RATIO")
+                    .long("mode0ratio")
+                    .help("Horizontally double the pixels")
+                    .action(ArgAction::SetTrue)
+            )
+            .subcommand(
+                Command::new("SPRITECMD")
+                    .about("Load from a linear sprite data")
+                    .name("sprite")
+                    .arg(
+                        Arg::new("WIDTH")
+                            .long("width")
+                            .required(true)
+                            .help("Width of the sprite in pixels")
+                    )
+            )
+            .subcommand(
+                Command::new("SCREENCMD")
+                    .about("Load from a 16kb screen data")
+                    .name("screen")
+                    .arg(
+                        Arg::new("WIDTH")
+                            .long("width")
+                            .default_value("80")
+                            .help("Width of the screen in bytes")
+                    )
+            )
+            .arg(Arg::new("INPUT").required(true))
+            .arg(Arg::new("OUTPUT").required(true))
+    );
 
     let matches = cmd.get_matches();
     let palette = get_requested_palette(&matches)?.unwrap_or_default();

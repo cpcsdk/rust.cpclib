@@ -2,8 +2,8 @@ use clap::{Parser, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::CommandFactory;
-use cpclib_crunchers::lzsa::LzsaVersion;
 use cpclib_crunchers::CompressMethod;
+use cpclib_crunchers::lzsa::LzsaVersion;
 use cpclib_disc::amsdos::AmsdosAddBehavior;
 use cpclib_files::FileAndSupport;
 

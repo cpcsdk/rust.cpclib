@@ -7,13 +7,13 @@ use std::io::{Read, Write};
 #[cfg(feature = "cmdline")]
 use cpclib_common::camino::Utf8Path;
 #[cfg(feature = "cmdline")]
-use cpclib_common::clap::{value_parser, Arg, ArgAction, ArgMatches, Command};
+use cpclib_common::clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 #[cfg(feature = "cmdline")]
 use cpclib_common::parse_value;
 #[cfg(feature = "cmdline")]
-use cpclib_common::winnow::error::ContextError;
-#[cfg(feature = "cmdline")]
 use cpclib_common::winnow::Parser;
+#[cfg(feature = "cmdline")]
+use cpclib_common::winnow::error::ContextError;
 
 #[cfg(feature = "cmdline")]
 use crate::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosHeader};
@@ -143,7 +143,9 @@ pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
             };
 
             let filename = if filename.len() > 8 {
-                eprintln!("[Warning] Filename is too large and has been cropped. If it is not the expected behavior provide a file with the right filename");
+                eprintln!(
+                    "[Warning] Filename is too large and has been cropped. If it is not the expected behavior provide a file with the right filename"
+                );
                 filename[..8].to_owned()
             }
             else {
@@ -151,7 +153,9 @@ pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
             };
 
             let extension = if extension.len() > 3 {
-                eprintln!("[Warning] Extension is too large and has been cropped. If it is not the expected behavior provide a file with the right extension");
+                eprintln!(
+                    "[Warning] Extension is too large and has been cropped. If it is not the expected behavior provide a file with the right extension"
+                );
                 extension[..3].to_owned()
             }
             else {

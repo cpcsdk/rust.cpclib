@@ -3,8 +3,8 @@ use std::str::FromStr;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::{AceSymbol, AceSymbolChunk, AceSymbolType, RemuChunk, RemuEntry};
-use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 use cpclib_tokens::ExprResult;
+use cpclib_tokens::symbols::{Symbol, SymbolsTableTrait, Value};
 
 pub const NEVER_EXPORTED_SYMBOLS: &[&str] =
     &["$", "$$", "BASM_VERSION", "BASM", "BASM_FEATURE_HFE"];

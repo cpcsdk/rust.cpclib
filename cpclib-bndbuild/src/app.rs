@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
-use clap::{parser, ArgMatches};
-use clap_complete::{generate, Shell};
+use clap::{ArgMatches, parser};
+use clap_complete::{Shell, generate};
 use cpclib_basm::build_args_parser;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
@@ -27,12 +27,12 @@ use crate::runners::hideur::HideurRunner;
 use crate::runners::imgconverter::ImgConverterRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
-    is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
+    Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
     is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_winape_cmd,
-    is_xfer_cmd, Task
+    is_xfer_cmd
 };
 use crate::{
-    execute, init_project, BndBuilder, BndBuilderError, ALL_APPLICATIONS, EXPECTED_FILENAMES
+    ALL_APPLICATIONS, BndBuilder, BndBuilderError, EXPECTED_FILENAMES, execute, init_project
 };
 
 pub struct BndBuilderApp {
@@ -483,7 +483,6 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         ));
     }
 
-    
     fn execute_update(
         observers: &dyn BndBuilderObserver,
         cmd: Option<&str>
@@ -549,14 +548,13 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         let update_all = |can_install| -> Result<(), BndBuilderError> {
             #[cfg(feature = "self-update")]
             update_self()?;
-            for cmd in ALL_APPLICATIONS.iter().filter_map(|(cmd, clearable)| {
-                if *clearable {
-                    Some(cmd[0])
-                }
-                else {
-                    None
-                }
-            }) {
+            for cmd in
+                ALL_APPLICATIONS.iter().filter_map(
+                    |(cmd, clearable)| {
+                        if *clearable { Some(cmd[0]) } else { None }
+                    }
+                )
+            {
                 update_command(cmd, can_install)?;
             }
             Ok(())
@@ -766,12 +764,9 @@ impl BndBuilderApp {
                     if let Some(Some(fname)) = matches
                         .get_many::<String>("target")
                         .map(|s| s.into_iter().next())
+                        && EXPECTED_FILENAMES.iter().any(|end| fname.ends_with(*end))
                     {
-                        if EXPECTED_FILENAMES.iter().any(|end| fname.ends_with(*end)) {
-                            error_msg.push_str(&format!(
-                                "\nHave you forgotten to do \"-f {fname}\" ?"
-                            ));
-                        }
+                        error_msg.push_str(&format!("\nHave you forgotten to do \"-f {fname}\" ?"));
                     }
 
                     if matches

@@ -6,10 +6,10 @@ use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
 use super::{
-    inner_code, parse_factor, InnerZ80Span, LocatedExpr, LocatedToken, LocatedTokenInner,
-    Z80ParserError
+    InnerZ80Span, LocatedExpr, LocatedToken, LocatedTokenInner, Z80ParserError, inner_code,
+    parse_factor
 };
-use crate::preamble::{located_expr, my_space0, one_instruction_inner_code, MayHaveSpan};
+use crate::preamble::{MayHaveSpan, located_expr, my_space0, one_instruction_inner_code};
 
 pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
     b"BANK",
@@ -194,14 +194,14 @@ pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr,
 mod test {
     use std::ops::Deref;
 
-    use cpclib_common::winnow::error::{ErrMode, ParseError};
     use cpclib_common::winnow::ModalParser;
+    use cpclib_common::winnow::error::{ErrMode, ParseError};
 
     use crate::error::AssemblerError;
     use crate::preamble::{
+        InnerZ80Span, ParserContext, ParserContextBuilder, ParserOptions, Z80ParserError, Z80Span,
         parse_line_component, parse_orgams_expression, parse_orgams_factor,
-        parse_orgams_ordered_expression, parse_orgams_repeat, InnerZ80Span, ParserContext,
-        ParserContextBuilder, ParserOptions, Z80ParserError, Z80Span
+        parse_orgams_ordered_expression, parse_orgams_repeat
     };
 
     #[derive(Debug)]
@@ -308,10 +308,12 @@ mod test {
     fn orgams_test_repeat() {
         assert!(dbg!(parse_test(parse_orgams_repeat, "5 ** inc l")).is_ok());
 
-        assert!(dbg!(parse_test(
-            parse_orgams_repeat,
-            "256 ** BYTE ABS(SIN(#)/256)"
-        ))
-        .is_ok());
+        assert!(
+            dbg!(parse_test(
+                parse_orgams_repeat,
+                "256 ** BYTE ABS(SIN(#)/256)"
+            ))
+            .is_ok()
+        );
     }
 }

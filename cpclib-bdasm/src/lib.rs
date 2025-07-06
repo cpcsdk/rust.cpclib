@@ -6,14 +6,14 @@ use std::fs::File;
 use std::io::Read;
 
 use cpclib_asm::{
-    defb_elements, org, DataAccess, EnvOptions, Expr, ExprEvaluationExt, Listing, ListingExt,
-    Mnemonic, SymbolsTableTrait, Token, TokenExt, Value
+    DataAccess, EnvOptions, Expr, ExprEvaluationExt, Listing, ListingExt, Mnemonic,
+    SymbolsTableTrait, Token, TokenExt, Value, defb_elements, org
 };
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::clap::{self, Arg, ArgAction, ArgMatches, Command};
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::error::ParseError;
 use cpclib_common::winnow::Parser;
+use cpclib_common::winnow::error::ParseError;
 use cpclib_disc::amsdos::AmsdosHeader;
 
 pub mod built_info {

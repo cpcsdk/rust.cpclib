@@ -244,12 +244,14 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             Ok(res) => {
                 assert_eq!(res.to_string().to_uppercase(), DOUBLE_SIDED.to_uppercase());
 
-                assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
-                    .is_some());
-                assert!(res
-                    .track_information_for_track(cpclib::disc::edsk::Head::A, 200)
-                    .is_none());
+                assert!(
+                    res.track_information_for_track(cpclib::disc::edsk::Head::A, 0)
+                        .is_some()
+                );
+                assert!(
+                    res.track_information_for_track(cpclib::disc::edsk::Head::A, 200)
+                        .is_none()
+                );
 
                 for idx in res.track_idx_iterator() {
                     let _track = res
@@ -288,25 +290,31 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg"))
                 .unwrap();
 
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 79)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 80)
-            .is_none());
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 0)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 79)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 80)
+                .is_none()
+        );
 
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 0)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 79)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 80)
-            .is_none());
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 0)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 79)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 80)
+                .is_none()
+        );
 
         for idx in cfg.track_idx_iterator() {
             let _track = cfg
@@ -328,25 +336,31 @@ sectorIDHead = 0,0,0,0,0,0,0,0,0,0
             cpclib::disc::cfg::DiscConfig::from_str(include_str!("dsk/CreateDoubleSided_3_5i.cfg"))
                 .unwrap();
 
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 0)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 79)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::A, 80)
-            .is_none());
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 0)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 79)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::A, 80)
+                .is_none()
+        );
 
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 0)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 79)
-            .is_some());
-        assert!(cfg
-            .track_information_for_track(cpclib::disc::edsk::Head::B, 80)
-            .is_none());
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 0)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 79)
+                .is_some()
+        );
+        assert!(
+            cfg.track_information_for_track(cpclib::disc::edsk::Head::B, 80)
+                .is_none()
+        );
 
         for idx in cfg.track_idx_iterator() {
             let _track = cfg

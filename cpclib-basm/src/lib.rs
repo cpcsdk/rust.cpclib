@@ -8,20 +8,20 @@ use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
+use cpclib_asm::AssemblingOptionFlags;
 use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
-use cpclib_asm::progress::{normalize, Progress};
-use cpclib_asm::AssemblingOptionFlags;
+use cpclib_asm::progress::{Progress, normalize};
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
-use cpclib_common::winnow::combinator::alt;
 use cpclib_common::winnow::Parser;
+use cpclib_common::winnow::combinator::alt;
 use cpclib_disc::amsdos::{AmsdosError, AmsdosFile, AmsdosFileName, AmsdosHeader};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::Head;
@@ -174,10 +174,7 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         (builder, src)
     }
     else if let Some(code) = matches.get_one::<String>("INLINE") {
-        (
-            builder.set_context_name("INLINED CODE"),
-            format!(" {code}")
-        )
+        (builder.set_context_name("INLINED CODE"), format!(" {code}"))
     }
     else {
         return Err(BasmError::InvalidArgument(
@@ -355,28 +352,28 @@ pub fn assemble(
     let _ = env
         .handle_post_actions(listing)
         .map(|(remu, wabp)| -> Result<(), BasmError> {
-            if let Some(remu) = remu {
-                if let Some(fname) = matches.get_one::<String>("REMU_OUTPUT") {
-                    let content = remu.data();
-                    std::fs::write(fname, content).map_err(|e| {
-                        BasmError::Io {
-                            io: e,
-                            ctx: format!("Error while saving {fname}")
-                        }
-                    })?;
-                }
+            if let Some(remu) = remu
+                && let Some(fname) = matches.get_one::<String>("REMU_OUTPUT")
+            {
+                let content = remu.data();
+                std::fs::write(fname, content).map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("Error while saving {fname}")
+                    }
+                })?;
             }
 
-            if let Some(wabp) = wabp {
-                if let Some(fname) = matches.get_one::<String>("WABP_OUTPUT") {
-                    let content = wabp.data();
-                    std::fs::write(fname, content).map_err(|e| {
-                        BasmError::Io {
-                            io: e,
-                            ctx: format!("Error while saving {fname}")
-                        }
-                    })?;
-                }
+            if let Some(wabp) = wabp
+                && let Some(fname) = matches.get_one::<String>("WABP_OUTPUT")
+            {
+                let content = wabp.data();
+                std::fs::write(fname, content).map_err(|e| {
+                    BasmError::Io {
+                        io: e,
+                        ctx: format!("Error while saving {fname}")
+                    }
+                })?;
             }
 
             Ok(())

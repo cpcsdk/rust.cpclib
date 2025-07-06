@@ -1,5 +1,5 @@
-use cpclib_basic::string_parser::parse_variable;
 use cpclib_basic::BasicLine;
+use cpclib_basic::string_parser::parse_variable;
 
 pub fn test_parse(code: &str) -> BasicLine {
     cpclib_basic::string_parser::test_parse(parse_variable, code)

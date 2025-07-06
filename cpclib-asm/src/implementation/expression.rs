@@ -22,7 +22,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
                 return Err(AssemblerError::AlreadyRenderedError(format!(
                     "Incompatible type with orgams {:?}",
                     e
-                )))
+                )));
             },
         }
     }
@@ -323,11 +323,11 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
         }
         else if $self.is_label() {
             let label = $self.label();
-            match  $env.symbols().value(label)?.map(|vl| vl.value()) {
-                Some(cpclib_tokens::symbols::Value::Expr(ref val)) => Ok(val.clone().into()),
-                Some(cpclib_tokens::symbols::Value::Address(ref val)) => Ok(val.address().into()),
+            match  $env.symbols().any_value(label)?.map(|vl| vl.value()) {
+                Some(cpclib_tokens::symbols::Value::Expr( val)) => Ok(val.clone().into()),
+                Some(cpclib_tokens::symbols::Value::Address( val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len($env.symbols()).into()),
-                Some(cpclib_tokens::symbols::Value::String(ref val)) => Ok(val.into()),
+                Some(cpclib_tokens::symbols::Value::String( val)) => Ok(val.into()),
                 Some(e) => { Err(AssemblerError::WrongSymbolType {
                     symbol: label.into(),
                     isnot: "a value".into(),

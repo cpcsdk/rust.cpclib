@@ -2,7 +2,7 @@ use cpclib_asm::preamble::*;
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Result};
+use syn::{Result, parse_macro_input};
 mod tokens;
 
 /// Structure that contains the input of the macro.

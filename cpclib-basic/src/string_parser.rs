@@ -1,5 +1,5 @@
 use cpclib_common::itertools::Itertools;
-use cpclib_common::winnow::ascii::{line_ending, Caseless};
+use cpclib_common::winnow::ascii::{Caseless, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, eof, not, opt, preceded, repeat, terminated
 };
@@ -621,7 +621,7 @@ fn parse_any_string_function<'code>(
 
 macro_rules! generate_string_functions {
     (
-            $($name:ident: $code:expr),+
+            $($name:ident: $code:expr_2021),+
 
     )=> {
             $(paste! {
@@ -733,7 +733,7 @@ fn parse_any_numeric_function<'code>(
 macro_rules! generate_numeric_functions {
     ( $(
         $const:ty | $kind:ident => {
-            $($name:ident: $code:expr),+
+            $($name:ident: $code:expr_2021),+
         }
       )+
 

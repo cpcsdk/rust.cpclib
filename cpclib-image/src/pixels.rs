@@ -14,11 +14,7 @@ pub fn bytes_to_pens<'bytes>(
     bytes: &'bytes [u8],
     mode: Mode
 ) -> Box<dyn Iterator<Item = Pen> + 'bytes> {
-    Box::new(
-        bytes
-            .iter()
-            .flat_map(move |&byte| byte_to_pens(byte, mode))
-    )
+    Box::new(bytes.iter().flat_map(move |&byte| byte_to_pens(byte, mode)))
 }
 
 pub fn pens_to_vec(pens: &[Pen], mode: Mode) -> Vec<u8> {

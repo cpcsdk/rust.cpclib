@@ -11,8 +11,8 @@ use cpclib_tokens::{
 };
 
 use crate::{
-    parse_z80, LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan,
-    ParserContext, ParserContextBuilder, SourceString, TokenExt, Z80Span
+    LocatedDataAccess, LocatedExpr, LocatedMacroParam, LocatedTestKind, MayHaveSpan, ParserContext,
+    ParserContextBuilder, SourceString, TokenExt, Z80Span, parse_z80
 };
 
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
@@ -566,13 +566,13 @@ pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
 mod test {
     use std::ops::Deref;
 
-    use cpclib_common::winnow::error::ParseError;
     use cpclib_common::winnow::ModalParser;
+    use cpclib_common::winnow::error::ParseError;
     use cpclib_tokens::{DataAccess, Expr};
 
-    use super::{ctx_and_span, ToOrgams};
+    use super::{ToOrgams, ctx_and_span};
     use crate::{
-        located_expr, AssemblerError, InnerZ80Span, ParserContext, Z80ParserError, Z80Span
+        AssemblerError, InnerZ80Span, ParserContext, Z80ParserError, Z80Span, located_expr
     };
 
     #[derive(Debug)]

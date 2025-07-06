@@ -1,7 +1,7 @@
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::winnow::Parser;
 use cpclib_xfer::CpcXfer;
-use rustyline::completion::{extract_word, Completer, FilenameCompleter, Pair};
+use rustyline::completion::{Completer, FilenameCompleter, Pair, extract_word};
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hinter, HistoryHinter};
 use rustyline::{CompletionType, Config, Context, EditMode, Editor};
@@ -10,7 +10,7 @@ use subprocess::Exec;
 use term_grid::{Direction, Filling, Grid, GridOptions};
 use {rustyline, termize};
 
-use crate::parser::{parse_command, XferCommand};
+use crate::parser::{XferCommand, parse_command};
 
 /// Help to add autocompletion.
 /// Done currently with filname, will be done later with M4 file names

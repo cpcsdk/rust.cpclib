@@ -161,7 +161,7 @@ impl SnapshotFlag {
     pub fn offset(&self) -> usize {
         use self::SnapshotFlag::*;
         match self {
-            GA_PAL(ref idx) | CRTC_REG(ref idx) | PSG_REG(ref idx) | &GA_MULTIMODE(ref idx) => {
+            GA_PAL(idx) | CRTC_REG(idx) | PSG_REG(idx) | GA_MULTIMODE(idx) => {
                 self.base() + idx.unwrap_or(0) * self.elem_size()
             },
             _ => self.base()
@@ -170,20 +170,20 @@ impl SnapshotFlag {
 
     pub fn indice(&self) -> Option<usize> {
         match self {
-            Self::GA_PAL(ref idx)
-            | Self::CRTC_REG(ref idx)
-            | Self::PSG_REG(ref idx)
-            | &Self::GA_MULTIMODE(ref idx) => *idx,
+            Self::GA_PAL(idx)
+            | Self::CRTC_REG(idx)
+            | Self::PSG_REG(idx)
+            | Self::GA_MULTIMODE(idx) => *idx,
             _ => Some(0) // For standard stuff indice is considered to be 0
         }
     }
 
     pub fn set_indice(&mut self, indice: usize) -> Result<(), SnapshotError> {
         match self {
-            Self::GA_PAL(ref mut idx)
-            | Self::CRTC_REG(ref mut idx)
-            | Self::PSG_REG(ref mut idx)
-            | Self::GA_MULTIMODE(ref mut idx) => {
+            Self::GA_PAL(idx)
+            | Self::CRTC_REG(idx)
+            | Self::PSG_REG(idx)
+            | Self::GA_MULTIMODE(idx) => {
                 *idx = Some(indice);
                 Ok(())
             },
@@ -345,23 +345,31 @@ impl SnapshotFlag {
             PPI_CTL => "\t\tPPI: control port",
             PSG_SEL => "\t\tPSG: index of selected register",
             PSG_REG(_) => "\t\tPSG: register data (0..15)",
-            CPC_TYPE => "\tCPC type: \n\t\t\t0 = CPC464\n\t\t\t1 = CPC664\n\t\t\t2 = CPC6128\n\t\t\t3 = unknown\n\t\t\t4 = 6128 Plus\n\t\t\t5 = 464 Plus\n\t\t\t6 = GX4000",
+            CPC_TYPE => {
+                "\tCPC type: \n\t\t\t0 = CPC464\n\t\t\t1 = CPC664\n\t\t\t2 = CPC6128\n\t\t\t3 = unknown\n\t\t\t4 = 6128 Plus\n\t\t\t5 = 464 Plus\n\t\t\t6 = GX4000"
+            },
             INT_NUM => "\tinterrupt number (0..5)",
             GA_MULTIMODE(_) => "\t6 mode bytes (one for each halt)",
             FDD_MOTOR => "\tFDD motor drive state (0=off, 1=on)",
             FDD_TRACK => "\tFDD current physical track",
             PRNT_DATA => "\tPrinter Data/Strobe Register",
-            CRTC_TYPE => "\tCRTC type:\n\t\t\t0 = HD6845S/UM6845\n\t\t\t1 = UM6845R\n\t\t\t2 = MC6845\n\t\t\t3 = 6845 in CPC+ ASIC\n\t\t\t4 = 6845 in Pre-ASIC",
+            CRTC_TYPE => {
+                "\tCRTC type:\n\t\t\t0 = HD6845S/UM6845\n\t\t\t1 = UM6845R\n\t\t\t2 = MC6845\n\t\t\t3 = 6845 in CPC+ ASIC\n\t\t\t4 = 6845 in Pre-ASIC"
+            },
             CRTC_HCC => "\tCRTC horizontal character counter register",
             CRTC_CLC => "\tCRTC character-line counter register",
             CRTC_RLC => "\tCRTC raster-line counter register",
             CRTC_VAC => "\tCRTC vertical total adjust counter register",
             CRTC_VSWC => "\tCRTC horizontal sync width counter",
             CRTC_HSWC => "\tCRTC vertical sync width counter",
-            CRTC_STATE => "\tCRTC state flags. \n\t\t\t0 if '1'/'0' VSYNC active/inactive\n\t\t\t1 if '1'/'0' HSYNC active/inactive\n\t\t\t2-7 reserved\n\t\t\t7 if '1'/'0' Vert Total Adjust active/inactive\n\t\t\t8-15 reserved (0)",
+            CRTC_STATE => {
+                "\tCRTC state flags. \n\t\t\t0 if '1'/'0' VSYNC active/inactive\n\t\t\t1 if '1'/'0' HSYNC active/inactive\n\t\t\t2-7 reserved\n\t\t\t7 if '1'/'0' Vert Total Adjust active/inactive\n\t\t\t8-15 reserved (0)"
+            },
             GA_VSC => "\t\tGA vsync delay counter",
             GA_ISC => "\t\tGA interrupt scanline counter",
-            INT_REQ => "\t\tInterrupt request flag\n\t\t\t0=no interrupt requested\n\t\t\t1=interrupt requested",
+            INT_REQ => {
+                "\t\tInterrupt request flag\n\t\t\t0=no interrupt requested\n\t\t\t1=interrupt requested"
+            },
         }
     }
 }
@@ -488,10 +496,10 @@ pub enum FlagValue {
 
 impl fmt::Display for FlagValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            FlagValue::Byte(ref val) => write!(f, "0x{val:.2x}"),
-            FlagValue::Word(ref val) => write!(f, "0x{val:.4x}"),
-            FlagValue::Array(ref array) => {
+        match self {
+            FlagValue::Byte(val) => write!(f, "0x{val:.2x}"),
+            FlagValue::Word(val) => write!(f, "0x{val:.4x}"),
+            FlagValue::Array(array) => {
                 write!(f, "[")
                     .and_then(|_x| {
                         write!(f, "{}", &array.iter().map(|b| format!("{b}")).join(", "))

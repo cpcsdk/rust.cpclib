@@ -424,7 +424,7 @@ impl Into<u8> for &BlocIdx {
         match self {
             BlocIdx::Empty => 0,
             BlocIdx::Deleted => 0xE5,
-            BlocIdx::Index(ref val) => val.get()
+            BlocIdx::Index(val) => val.get()
         }
     }
 }
@@ -720,14 +720,7 @@ impl From<(u8, u8, AmsdosEntry)> for AmsdosCatalogEntry {
             blocs: e
                 .blocs
                 .iter()
-                .filter_map(|b| {
-                    if b.is_valid() {
-                        Some(*b)
-                    }
-                    else {
-                        None
-                    }
-                })
+                .filter_map(|b| if b.is_valid() { Some(*b) } else { None })
                 .collect()
         }
     }
@@ -940,7 +933,10 @@ impl AmsdosEntries {
     }
 
     /// Return all the entries that correspond to a given file
-    pub fn for_file(&self, filename: &AmsdosFileName) -> impl Iterator<Item = &AmsdosEntry> {
+    pub fn for_file(
+        &self,
+        filename: &AmsdosFileName
+    ) -> impl Iterator<Item = &AmsdosEntry> + use<'_> {
         let filename: AmsdosFileName = *filename;
         self.entries
             .iter()
@@ -954,7 +950,7 @@ impl AmsdosEntries {
 
     /// Returns the blocs that are not referenced in the catalog.
     /// Bloc used in erased files are returned (so they may be broken)
-    pub fn available_blocs(&self) -> impl Iterator<Item = BlocIdx> {
+    pub fn available_blocs(&self) -> impl Iterator<Item = BlocIdx> + use<> {
         // first 2 blocs are not available if we trust idsk. So  I do the same
 
         let used_blocs = self
@@ -1637,14 +1633,7 @@ impl AmsdosHeader {
     pub fn filename(&self) -> String {
         self.content[1..9]
             .iter()
-            .filter_map(|&c| {
-                if c == b' ' {
-                    None
-                }
-                else {
-                    Some(c as char)
-                }
-            })
+            .filter_map(|&c| if c == b' ' { None } else { Some(c as char) })
             .collect::<String>()
     }
 
@@ -1658,14 +1647,7 @@ impl AmsdosHeader {
     pub fn extension(&self) -> String {
         self.content[9..(9 + 3)]
             .iter()
-            .filter_map(|&c| {
-                if c == b' ' {
-                    None
-                }
-                else {
-                    Some(c as char)
-                }
-            })
+            .filter_map(|&c| if c == b' ' { None } else { Some(c as char) })
             .collect::<String>()
     }
 

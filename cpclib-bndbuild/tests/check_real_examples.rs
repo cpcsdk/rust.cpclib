@@ -1,5 +1,5 @@
-use assert_cmd::assert::Assert;
 use assert_cmd::Command;
+use assert_cmd::assert::Assert;
 use serial_test::serial;
 
 fn launch(folder: &str, tgt: &str) -> Assert {

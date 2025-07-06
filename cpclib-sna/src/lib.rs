@@ -1,5 +1,3 @@
-#![feature(slice_take)]
-
 use std::fs::File;
 use std::io::prelude::*;
 use std::ops::Deref;
@@ -778,9 +776,7 @@ impl Snapshot {
         let data: Vec<u8> = f.bytes().map(Result::unwrap).collect();
         let size = data.len();
 
-        self.log(format!(
-            "Add {fname} in 0x{address:x} (0x{size:x} bytes)"
-        ));
+        self.log(format!("Add {fname} in 0x{address:x} (0x{size:x} bytes)"));
         self.add_data(&data, address)
     }
 
@@ -801,7 +797,11 @@ impl Snapshot {
         }
         else {
             if address < 0x10000 && last_used_address >= 0x10000 {
-                eprintln!("[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).", address, (address + data.len()));
+                eprintln!(
+                    "[Warning] Start of file is in main memory (0x{:x}) and  end of file is in extra banks (0x{:x}).",
+                    address,
+                    (address + data.len())
+                );
             }
             // TODO add warning when writting in other banks
 
@@ -1124,7 +1124,7 @@ mod tests {
     use similar_asserts::assert_eq;
 
     use super::SnapshotMemory;
-    use crate::{Snapshot, BANK_SIZE};
+    use crate::{BANK_SIZE, Snapshot};
 
     #[test]
     fn test_resize() {

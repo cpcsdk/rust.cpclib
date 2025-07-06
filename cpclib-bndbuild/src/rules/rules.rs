@@ -113,9 +113,8 @@ impl Rules {
 
                 // link the target to the dependencies
                 for p2 in rule.dependencies().iter() {
-                    g.depend_on(p, p2).map_err(|_e| {
-                        BndBuilderError::DependencyError(format!("{p} and {p2}"))
-                    })?;
+                    g.depend_on(p, p2)
+                        .map_err(|_e| BndBuilderError::DependencyError(format!("{p} and {p2}")))?;
                 }
             }
         }

@@ -6,12 +6,12 @@ use std::io::Read;
 use std::ops::Deref;
 use std::time::{Duration, SystemTime};
 
-use cpclib_bndbuild::rules::Rule;
 use cpclib_bndbuild::BndBuilder;
+use cpclib_bndbuild::rules::Rule;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use eframe::egui::{self, RichText};
-use eframe::epaint::ahash::HashMap;
 use eframe::epaint::Color32;
+use eframe::epaint::ahash::HashMap;
 use egui_file::{self, FileDialog};
 use itertools::Itertools;
 
@@ -479,8 +479,7 @@ impl BndBuildApp {
                                 self.hovered_target = Some(tgt.into());
                             }
                             button.context_menu(|ui| {
-                                if tgt.exists() && ui.button(format!("Open \"{tgt}\"")).clicked()
-                                {
+                                if tgt.exists() && ui.button(format!("Open \"{tgt}\"")).clicked() {
                                     match open::that(tgt) {
                                         Ok(_) => {},
                                         Err(e) => {
@@ -647,24 +646,23 @@ impl eframe::App for BndBuildApp {
         }
         else {
             // handle watch if needed
-            if let Some(watched) = self.watched.as_ref() {
-                if self
+            if let Some(watched) = self.watched.as_ref()
+                && self
                     .builder_and_layers
                     .as_ref()
                     .map(|bnl| bnl.borrow_owner().outdated(watched).unwrap_or(false))
                     .unwrap_or(false)
-                {
-                    self.watch_logs
-                        .push_str(&format!("{watched} needs to be rebuilt"));
-                    if self.requested_target.is_some() {
-                        self.watch_logs.push_str(&format!(
-                            "Build delayed in favor of {}",
-                            self.requested_target.as_ref().unwrap()
-                        ));
-                    }
-                    else {
-                        self.requested_target = Some(watched.to_owned());
-                    }
+            {
+                self.watch_logs
+                    .push_str(&format!("{watched} needs to be rebuilt"));
+                if self.requested_target.is_some() {
+                    self.watch_logs.push_str(&format!(
+                        "Build delayed in favor of {}",
+                        self.requested_target.as_ref().unwrap()
+                    ));
+                }
+                else {
+                    self.requested_target = Some(watched.to_owned());
                 }
             }
         }

@@ -6,15 +6,15 @@ use std::sync::Arc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-use minijinja::{context, Environment, Error, ErrorKind};
+use minijinja::{Environment, Error, ErrorKind, context};
 
+use crate::BndBuilderError;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
     RuleTaskEventDispatcher
 };
 use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
-use crate::BndBuilderError;
 
 pub const EXPECTED_FILENAMES: &[&str] = &[
     "bndbuild.yml",

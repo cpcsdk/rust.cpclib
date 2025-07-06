@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::winnow::ascii::{alphanumeric1, space0, Caseless};
+use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, space0};
 use cpclib_common::winnow::combinator::{alt, delimited, repeat, separated, terminated};
 use cpclib_common::winnow::{ModalResult, Parser};
 use serde::{self, Deserialize, Deserializer};

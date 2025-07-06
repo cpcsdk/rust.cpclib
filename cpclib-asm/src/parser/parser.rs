@@ -15,7 +15,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::ascii::{alpha1, alphanumeric1, line_ending, space0, Caseless};
+use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending, space0};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
@@ -1705,7 +1705,7 @@ pub fn parse_assign_operator(
                 input,
                 &start,
                 "Wrong symbol"
-            )))
+            )));
         },
     };
 
@@ -6453,9 +6453,11 @@ mod test {
             eprintln!("Parse error: {}", e);
         }
         else {
-            assert!(unsafe { std::str::from_utf8_unchecked(span.0.as_bstr()) }
-                .trim_start()
-                .starts_with(next));
+            assert!(
+                unsafe { std::str::from_utf8_unchecked(span.0.as_bstr()) }
+                    .trim_start()
+                    .starts_with(next)
+            );
         }
 
         TestResultRest { ctx, span, res }
@@ -6711,22 +6713,28 @@ endif"
     fn test_parse_advanced_breakpoints() {
         assert!(dbg!(parse_test(parse_argname_to_assign("TYPE"), "TYPE=")).is_ok());
         assert!(dbg!(parse_test(parse_breakpoint_type_value, "mem")).is_ok());
-        assert!(dbg!(parse_test(
-            parse_argname_and_value("TYPE", &parse_breakpoint_type_value),
-            "TYPE=mem"
-        ))
-        .is_ok());
+        assert!(
+            dbg!(parse_test(
+                parse_argname_and_value("TYPE", &parse_breakpoint_type_value),
+                "TYPE=mem"
+            ))
+            .is_ok()
+        );
 
-        assert!(dbg!(parse_test(
-            parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value),
-            "TYPE=mem"
-        ))
-        .is_ok());
-        assert!(dbg!(parse_test(
-            parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value),
-            "TYPE = mem"
-        ))
-        .is_ok());
+        assert!(
+            dbg!(parse_test(
+                parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value),
+                "TYPE=mem"
+            ))
+            .is_ok()
+        );
+        assert!(
+            dbg!(parse_test(
+                parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value),
+                "TYPE = mem"
+            ))
+            .is_ok()
+        );
 
         assert!(dbg!(parse_test(parse_breakpoint_argument, "mem")).is_ok());
         assert!(dbg!(parse_test(parse_breakpoint_argument, "read")).is_ok());
@@ -6863,7 +6871,10 @@ endif"
 
     #[test]
     fn parser_regression2() {
-        let res = parse_test(parse_assert,"assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)");
+        let res = parse_test(
+            parse_assert,
+            "assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)"
+        );
         assert!(res.is_ok(), "{:?}", &res);
     }
 
@@ -7188,16 +7199,18 @@ endif"
         .res
         .unwrap();
 
-        assert!(res.0 .0.is_none());
-        assert!(res.0 .1.is_some());
-        assert!(res.2 .0.is_none());
-        assert!(res.2 .1.is_some());
+        assert!(res.0.0.is_none());
+        assert!(res.0.1.is_some());
+        assert!(res.2.0.is_none());
+        assert!(res.2.1.is_some());
 
-        assert!(dbg!(parse_test(
-            parse_line_component,
-            "notempty \"arg1\", \"arg2\""
-        ))
-        .is_ok());
+        assert!(
+            dbg!(parse_test(
+                parse_line_component,
+                "notempty \"arg1\", \"arg2\""
+            ))
+            .is_ok()
+        );
     }
 
     #[test]

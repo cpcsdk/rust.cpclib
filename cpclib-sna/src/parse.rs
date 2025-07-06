@@ -33,7 +33,6 @@ where
 pub fn parse_flag_value<I, Error: ParserError<I>>(input: &mut I) -> ModalResult<FlagValue>
 where
     I: Stream + StreamIsPartial + for<'a> Compare<&'a str> + Clone + UpdateSlice,
-
     <I as Stream>::Slice: AsBytes,
     <I as Stream>::Token: AsChar,
     <I as Stream>::Token: Clone,
@@ -69,9 +68,9 @@ where
 #[cfg(test)]
 mod tests {
 
+    use cpclib_common::winnow::BStr;
     use cpclib_common::winnow::error::ContextError;
     use cpclib_common::winnow::stream::AsBStr;
-    use cpclib_common::winnow::BStr;
 
     use super::*;
 

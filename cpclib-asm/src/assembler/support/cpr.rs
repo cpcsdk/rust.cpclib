@@ -3,9 +3,9 @@ use cpclib_common::riff::{RiffChunk, RiffCode};
 use cpclib_cpr::{CartridgeBank, Cpr};
 
 use super::banks::DecoratedPages;
+use crate::AssemblerError;
 use crate::page_info::PageInformation;
 use crate::support::banks::Bank;
-use crate::AssemblerError;
 
 /// A CPR contains several BANKS
 /// However we store PAGES to allow the user to use any ORG value.

@@ -253,8 +253,8 @@ impl FileAndSupport {
 
         match &self.support {
             StorageSupport::Disc(disc_filename) => {
-                let mut disc = open_disc(disc_filename, false)
-                    .map_err(|msg| format!("Disc error: {msg}"))?;
+                let mut disc =
+                    open_disc(disc_filename, false).map_err(|msg| format!("Disc error: {msg}"))?;
 
                 let head = Head::A;
                 let system = false;

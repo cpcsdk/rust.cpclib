@@ -43,32 +43,35 @@ mod tests {
         assert!(dsk.sector(0, 0, 0xC3).is_some());
         assert!(dsk.sector(0, 0, 0xC4).is_some());
 
-        assert!(dsk
-            .consecutive_sectors_read_bytes(
+        assert!(
+            dsk.consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
                 0
             )
-            .is_some());
+            .is_some()
+        );
 
-        assert!(dsk
-            .consecutive_sectors_read_bytes(
+        assert!(
+            dsk.consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
                 1
             )
-            .is_none());
+            .is_none()
+        );
 
-        assert!(dsk
-            .consecutive_sectors_read_bytes(
+        assert!(
+            dsk.consecutive_sectors_read_bytes(
                 0,    // track
                 0xC1, // sector
                 4,    // nb sector
                 2
             )
-            .is_none());
+            .is_none()
+        );
     }
 
     #[test]
@@ -471,10 +474,12 @@ mod tests {
 
         use cpclib::disc::amsdos::*;
         let amsdos = AmsdosManagerNonMut::new_from_disc(&dsk, cpclib::disc::edsk::Head::A);
-        let entries = dbg!(amsdos
-            .catalog()
-            .to_amsdos_catalog()
-            .sorted_physically_and_alphabetically());
+        let entries = dbg!(
+            amsdos
+                .catalog()
+                .to_amsdos_catalog()
+                .sorted_physically_and_alphabetically()
+        );
 
         assert_eq!(entries.len(), 45);
         let expected_values = [

@@ -987,13 +987,13 @@ impl fmt::Display for Token {
         #[remain::sorted]
         match self {
 
-            Token::Align(ref expr, None)
+            Token::Align( expr, None)
                 => write!(f, "ALIGN {}", expr.to_simplified_string()),
-            Token::Align(ref expr, Some(ref fill))
+            Token::Align( expr, Some( fill))
                 => write!(f, "ALIGN {}, {}", expr.to_simplified_string(), fill),
-            Token::Assert(ref expr, None)
+            Token::Assert( expr, None)
                 => write!(f, "ASSERT {}", expr.to_simplified_string()),
-            Token::Assert(ref expr, Some(ref text))
+            Token::Assert( expr, Some( text))
                 => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text.iter().map(|e|e.to_string()).join(",")),
 
             Token::Breakpoint{address, ..} => {
@@ -1004,23 +1004,23 @@ impl fmt::Display for Token {
                 unimplemented!();
                 Ok(())
             }
-            Token::Comment(ref string)
+            Token::Comment( string)
                  => write!(f, " ; {}", string.replace('\n',"\n;")),
  
-                 Token::Defb(ref exprs)
+                 Token::Defb( exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
-            Token::Defs(ref vals)
+            Token::Defs( vals)
                  => write!(f, "DEFS {}", vals.iter()
                     .map(|p| {
                         match &p.1 {
-                            Some(ref v) => format!("{}, {}", p.0.to_simplified_string(), v.to_simplified_string()),
+                            Some( v) => format!("{}, {}", p.0.to_simplified_string(), v.to_simplified_string()),
                             None => p.0.to_simplified_string()
                         }
                     })
                     .join(", ")
                 ),
 
-            Token::Defw(ref exprs)
+            Token::Defw( exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
  
             Token::Equ{label, expr}
@@ -1128,17 +1128,17 @@ impl fmt::Display for Token {
                  }
  
 
-                 Token::Include(ref fname, Some(module), once)
+                 Token::Include( fname, Some(module), once)
                  => write!(f, "INCLUDE {}\"{}\" namespace {}", fname, module.as_str(), if *once {"ONCE "} else {""}),
 
-                 Token::Include(ref fname, None, once)
+                 Token::Include( fname, None, once)
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
  
-            Token::Label(ref string)
+            Token::Label( string)
                 => write!(f, "{string}"),
 
 
-            Token::MacroCall(ref name, ref args)
+            Token::MacroCall( name,  args)
                 => {use cpclib_common::itertools::Itertools;
                     let args = args.clone()
                     .iter()
@@ -1153,43 +1153,43 @@ impl fmt::Display for Token {
                     Ok(())
             },
 
-            Token::MultiPop(ref regs) => {
+            Token::MultiPop( regs) => {
                 write!(f, "POP {}", data_access_list_to_string(regs))
             },
             
-            Token::MultiPush(ref regs) => {
+            Token::MultiPush( regs) => {
                 write!(f, "PUSH {}", data_access_list_to_string(regs))
             },
 
 
                 // TODO remove this one / it is not coherent as we have the PortC
-            Token::OpCode(ref mne, Some(DataAccess::Register8(_)), Some(ref arg2), None) if &Mnemonic::Out == mne
+            Token::OpCode( mne, Some(DataAccess::Register8(_)), Some( arg2), None) if &Mnemonic::Out == mne
                 => write!(f, "{mne} (C), {arg2}"),
-            Token::OpCode(ref mne, None, None, None)
+            Token::OpCode( mne, None, None, None)
                 => write!(f, "{mne}"),
-            Token::OpCode(ref mne, Some(ref arg1), None, None)
+            Token::OpCode( mne, Some( arg1), None, None)
                 => write!(f, "{mne} {arg1}"),
-            Token::OpCode(ref mne, None, Some(ref arg2), None) // JP/JR without flags
+            Token::OpCode( mne, None, Some( arg2), None) // JP/JR without flags
                => write!(f, "{mne} {arg2}"),
-            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), None)
+            Token::OpCode( mne, Some( arg1), Some( arg2), None)
                 => write!(f, "{mne} {arg1}, {arg2}"),
 
-            Token::OpCode(ref mne, Some(ref arg1), Some(ref arg2), Some(arg3))
+            Token::OpCode( mne, Some( arg1), Some( arg2), Some(arg3))
                 => write!(f, "{mne} {arg1}, {arg2}, {arg3}"),    
 
             Token::Org{val1, val2:None}
                 => write!(f, "ORG {val1}"),
-            Token::Org{val1, val2: Some(ref expr2)}
+            Token::Org{val1, val2: Some( expr2)}
                 => write!(f, "ORG {val1}, {expr2}"),
 
 
-            Token::Print(ref exp)
+            Token::Print( exp)
                 => write!(f, "PRINT {}", exp.iter().map(|e|e.to_string()).join(",")),
 
-            Token::Protect(ref exp1, ref exp2)
+            Token::Protect( exp1,  exp2)
                 => write!(f, "PROTECT {exp1}, {exp2}"),
 
-            Token::Repeat(ref exp, ref code, ref label, ref start) => {
+            Token::Repeat( exp,  code,  label,  start) => {
                 
                 write!(f, "REPEAT {exp}")?;
                 if label.is_some() {
@@ -1210,13 +1210,13 @@ impl fmt::Display for Token {
                 write!(f, "SECTION {sec}")
             }
 
-            Token::StableTicker(ref ticker)
+            Token::StableTicker( ticker)
                 => {
                     match ticker {
-                        StableTickerAction::Start(ref label) => {
+                        StableTickerAction::Start( label) => {
                             write!(f, "STABLETICKER START, {label}")
                         },
-                        StableTickerAction::Stop(Some(ref label)) => {
+                        StableTickerAction::Stop(Some( label)) => {
                             write!(f, "STABLETICKER STOP, {label}")
                         },
                         StableTickerAction::Stop(None) => {
@@ -1377,7 +1377,7 @@ impl Token {
     // a.iter_mut()
     // .for_each(|p| {
     // match &mut p.1 {
-    // Some(ref mut v) => {
+    // Some( mut v) => {
     // p.0.fix_local_macro_labels_with_seed(seed);
     // v.fix_local_macro_labels_with_seed(seed);
     // },
@@ -1484,7 +1484,7 @@ impl Token {
     // });
     // }
     //
-    // Self::Print(ref mut vec) => {
+    // Self::Print( mut vec) => {
     // vec.iter_mut().for_each(|e| e.fix_local_macro_labels_with_seed(seed))
     // }
     // _ => unimplemented!("{:?}", self),

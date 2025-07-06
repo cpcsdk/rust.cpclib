@@ -1,6 +1,6 @@
+use cpclib_crunchers::CompressMethod;
 use cpclib_crunchers::lzsa::LzsaMinMatch;
 use cpclib_crunchers::shrinkler::ShrinklerConfiguration;
-use cpclib_crunchers::CompressMethod;
 
 static DATA_TO_CRUNCH: &[u8] = "AAAAAAAAAAAAAAAAABNBNBNBNBAAAAAAAAACVCBCBCA".as_bytes();
 

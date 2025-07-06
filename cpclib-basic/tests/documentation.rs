@@ -2,7 +2,7 @@ use cpclib_basic::*;
 use paste::paste;
 
 macro_rules! generate_test_for {
-	( $($name:ident: $code: expr),+) => { $(
+	( $($name:ident: $code: expr_2021),+) => { $(
 		paste!{
 			#[test]
 			fn [< documentation_example_ $name:lower>] () {

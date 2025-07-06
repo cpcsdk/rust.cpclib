@@ -14,12 +14,12 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::{PhysicalAddress, Source, Symbol, SymbolError};
-use cpclib_tokens::{tokens, BinaryOperation, ExpressionTypeError};
+use cpclib_tokens::{BinaryOperation, ExpressionTypeError, tokens};
 
+use crate::Z80Span;
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::preamble::{LocatedListing, SourceString, Z80ParserError, Z80ParserErrorKind};
-use crate::Z80Span;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
@@ -457,12 +457,14 @@ impl AssemblerError {
                                 };
                                 let mut diagnostic = Diagnostic::error()
                                     .with_message("Syntax error")
-                                    .with_labels(vec![Label::new(
-                                        codespan_reporting::diagnostic::LabelStyle::Primary,
-                                        file_id,
-                                        sample_range
-                                    )
-                                    .with_message(ctx)]);
+                                    .with_labels(vec![
+                                        Label::new(
+                                            codespan_reporting::diagnostic::LabelStyle::Primary,
+                                            file_id,
+                                            sample_range
+                                        )
+                                        .with_message(ctx),
+                                    ]);
 
                                 if let Some(notes) = get_additional_notes(ctx) {
                                     diagnostic = diagnostic.with_notes(notes);
@@ -750,11 +752,11 @@ impl AssemblerError {
                             let msg = build_simple_error_message_with_message(
                                 "Forbidden output",
                                 &format!(
-                                "Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
-                                address,
-                                area.start(),
-                                area.end()
-                            ),
+                                    "Tentative to write in 0x{:X} in a protected area [0x{:X}:0x{:X}]",
+                                    address,
+                                    area.start(),
+                                    area.end()
+                                ),
                                 span
                             );
                             write!(f, "{}", msg)
@@ -896,14 +898,14 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
         )
     };
 
-    let diagnostic = Diagnostic::error()
-        .with_message(title)
-        .with_labels(vec![Label::new(
+    let diagnostic = Diagnostic::error().with_message(title).with_labels(vec![
+        Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,
             file,
             sample_range
         )
-        .with_message(message)]);
+        .with_message(message),
+    ]);
 
     let mut writer = buffer();
     let config = config();

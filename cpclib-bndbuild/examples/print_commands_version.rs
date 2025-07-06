@@ -1,5 +1,5 @@
-use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverRc};
 use cpclib_bndbuild::BndBuilder;
+use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverRc};
 
 const YAML_RULES: &str = "
 - targets: version

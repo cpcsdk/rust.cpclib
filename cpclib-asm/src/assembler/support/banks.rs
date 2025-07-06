@@ -44,27 +44,27 @@ impl Default for DecoratedPage {
 impl DecoratedPage {
     #[inline(always)]
     fn page(&self) -> &Page {
-        &self.0 .0
+        &self.0.0
     }
 
     #[inline(always)]
     fn page_information(&self) -> &PageInformation {
-        &self.0 .1
+        &self.0.1
     }
 
     #[inline(always)]
     fn written_bytes(&self) -> &BitVec {
-        &self.0 .2
+        &self.0.2
     }
 
     /// Set the byte and store the written address
     pub fn set_byte(&mut self, address: u16, byte: u8) {
-        self.0 .0[address as usize] = byte;
-        self.0 .2.set(address as _, true);
+        self.0.0[address as usize] = byte;
+        self.0.2.set(address as _, true);
     }
 
     pub fn get_byte(&self, address: u16) -> u8 {
-        self.0 .0[address as usize]
+        self.0.0[address as usize]
     }
 }
 

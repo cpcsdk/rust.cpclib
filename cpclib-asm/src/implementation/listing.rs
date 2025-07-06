@@ -5,11 +5,11 @@ use std::fmt;
 use cpclib_common::camino::Utf8Path;
 use cpclib_tokens::tokens::*;
 
+use crate::EnvOptions;
 use crate::error::*;
 use crate::implementation::expression::*;
 use crate::implementation::tokens::*;
 use crate::preamble::parse_z80_str;
-use crate::EnvOptions;
 
 /// Additional methods for the listings
 pub trait ListingExt {

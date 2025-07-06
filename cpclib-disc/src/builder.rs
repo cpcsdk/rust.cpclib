@@ -45,9 +45,7 @@ pub fn build_edsk_from_cfg(cfg: &DiscConfig) -> ExtendedDsk {
         let track_info = edsk
             .get_track_information_mut(head, track_idx)
             .unwrap_or_else(|| {
-                panic!(
-                    "Unable to acquire track {track_idx} on head {head:?} on the dsk"
-                )
+                panic!("Unable to acquire track {track_idx} on head {head:?} on the dsk")
             });
         let track_model = cfg.track_information_for_track(head, track_idx).unwrap();
 

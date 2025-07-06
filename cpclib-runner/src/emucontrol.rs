@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use bon::builder;
-use clap::{value_parser, ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum, value_parser};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
@@ -16,15 +16,15 @@ use delegate;
 use enigo::{Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
-use xcap::image::{open, ImageBuffer, Rgba};
+use xcap::image::{ImageBuffer, Rgba, open};
 
 use crate::ace_config::{AceConfig, AceConfigFlag};
-use crate::delegated::{clear_base_cache_folder, DelegatedRunner};
+use crate::delegated::{DelegatedRunner, clear_base_cache_folder};
 use crate::embedded::EmbeddedRoms;
 use crate::event::EventObserver;
+use crate::runner::Runner;
 use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
-use crate::runner::Runner;
 
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
@@ -306,10 +306,10 @@ impl WindowEventsManager {
         match self {
             Self::Enigo(enigo) => {
                 let (extra2, c) = c.enigo();
-                if let Some(extra2) = extra2 {
-                    if extra2 != extra {
-                        eprintln!("{c:?} requires a different modifier than {extra:?}");
-                    }
+                if let Some(extra2) = extra2
+                    && extra2 != extra
+                {
+                    eprintln!("{c:?} requires a different modifier than {extra:?}");
                 }
 
                 enigo.key(extra, enigo::Direction::Press).unwrap();
@@ -559,10 +559,10 @@ impl EmulatorConf {
             }
         }
 
-        if let Some(crtc) = &self.crtc {
-            if let Emulator::CpcEmuPower(_) = emu {
-                args.push(format!("--crtc={crtc}"));
-            }
+        if let Some(crtc) = &self.crtc
+            && let Emulator::CpcEmuPower(_) = emu
+        {
+            args.push(format!("--crtc={crtc}"));
         }
 
         // is it really usefull ? seems it is really done by playing with the conf files
@@ -585,7 +585,9 @@ impl EmulatorConf {
                     args.push(fname.to_string());
                 },
                 Emulator::Winape(_) => {
-                    eprintln!("Breapoints are currently ignored. TODO convert them in the appropriate format");
+                    eprintln!(
+                        "Breapoints are currently ignored. TODO convert them in the appropriate format"
+                    );
                     let mut sym_string = String::new();
                     for rasm_fname in &self.debug_files {
                         if !sym_string.is_empty() && !sym_string.ends_with('\n') {
@@ -597,34 +599,37 @@ impl EmulatorConf {
                     if !sym_string.is_empty() {
                         let tempfile = camino_tempfile::Builder::new()
                             .suffix(".winape.sym")
-                            .tempfile().unwrap();
+                            .tempfile()
+                            .unwrap();
                         let path = tempfile.into_temp_path();
                         let path = path.keep().unwrap();
                         std::fs::write(&path, sym_string).unwrap();
                         let fname = emu.wine_compatible_fname(&path)?;
                         args.push(format!("/SYM:{fname}"));
                     }
-
-
-                }
-                _ => eprintln!("Debug files are currently ignored. TODO convert them in the appropriate format")
+                },
+                _ => {
+                    eprintln!(
+                        "Debug files are currently ignored. TODO convert them in the appropriate format"
+                    )
+                },
             }
         }
 
-        if let Some(memory) = &self.memory {
-            if let Emulator::Cpcec(_) = emu {
-                let arg = match memory {
-                    64 => "-k0",
-                    128 => "-k1",
-                    192 => "-k2",
-                    320 => "-k3",
-                    576 => "-k4",
-                    1088 => "-k5",
-                    2112 => "-k6",
-                    _ => unimplemented!()
-                };
-                args.push(arg.to_owned());
-            }
+        if let Some(memory) = &self.memory
+            && let Emulator::Cpcec(_) = emu
+        {
+            let arg = match memory {
+                64 => "-k0",
+                128 => "-k1",
+                192 => "-k2",
+                320 => "-k3",
+                576 => "-k4",
+                1088 => "-k5",
+                2112 => "-k6",
+                _ => unimplemented!()
+            };
+            args.push(arg.to_owned());
         }
 
         if let Some(run) = &self.auto_run {
@@ -700,7 +705,7 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
     // change the display to get the window list of the framebuffer
     let backup_display = std::env::var("DISPLAY").unwrap();
 
-    std::env::set_var("DISPLAY", format!(":{}", &display));
+    unsafe { std::env::set_var("DISPLAY", format!(":{}", &display)) };
     let windows = wmctrl::get_windows();
 
     let mut windows = windows
@@ -1557,8 +1562,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     dbg!(&cli);
 
     if cli.clear_cache {
-        clear_base_cache_folder()
-            .map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
+        clear_base_cache_folder().map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
     }
 
     let builder = EmulatorConf::builder()

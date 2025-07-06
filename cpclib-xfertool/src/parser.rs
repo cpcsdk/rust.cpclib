@@ -1,6 +1,6 @@
 use std::str;
 
-use cpclib_common::winnow::ascii::{space0, space1, Caseless};
+use cpclib_common::winnow::ascii::{Caseless, space0, space1};
 use cpclib_common::winnow::combinator::{alt, preceded};
 use cpclib_common::winnow::token::{rest, take_till};
 use cpclib_common::winnow::{ModalResult, Parser};

@@ -2,8 +2,8 @@ use std::ops::Deref;
 
 use cpclib_sna::*;
 use js_sys::{Array, Uint8Array};
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{Blob, BlobPropertyBag, HtmlAnchorElement, Url};
 
 #[wasm_bindgen]

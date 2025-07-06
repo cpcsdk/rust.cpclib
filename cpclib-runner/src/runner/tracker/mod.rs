@@ -1,6 +1,6 @@
 use at3::extra::*;
-use at3::{At3Version, AT_CMD};
-use chipnsfx::{ChipnsfxVersion, CHIPNSFX_CMD};
+use at3::{AT_CMD, At3Version};
+use chipnsfx::{CHIPNSFX_CMD, ChipnsfxVersion};
 use cpclib_common::event::EventObserver;
 
 use crate::delegated::{DelegateApplicationDescription, InternetStaticCompiledApplication};
@@ -75,7 +75,7 @@ impl SongConverter {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{cpclib_download, StaticInformation};
+    use crate::delegated::{StaticInformation, cpclib_download};
     use crate::runner::tracker::at3::At3Version;
     use crate::runner::tracker::chipnsfx::ChipnsfxVersion;
 

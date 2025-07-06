@@ -57,11 +57,7 @@ impl<E: EventObserver> Runner for RmRunner<E> {
                 Ok(_) => {
                     o.emit_stdout(&format!("\t{fname} removed\n" /* .display() */));
                 },
-                Err(e) => {
-                    errors.push_str(&format!(
-                        "Unable to remove {fname}. {e}.\n"
-                    ))
-                }
+                Err(e) => errors.push_str(&format!("Unable to remove {fname}. {e}.\n"))
             };
         }
 

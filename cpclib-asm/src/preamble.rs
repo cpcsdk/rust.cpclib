@@ -11,4 +11,4 @@ pub use crate::implementation::instructions::*;
 pub use crate::implementation::listing::*;
 pub use crate::implementation::tokens::*;
 pub use crate::parser::*;
-pub use crate::{assemble, assemble_to_amsdos_file, AssemblingOptions};
+pub use crate::{AssemblingOptions, assemble, assemble_to_amsdos_file};

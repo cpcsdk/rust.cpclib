@@ -7,15 +7,15 @@ use cpclib_common::winnow::Parser;
 use cpclib_common::{parse_value, winnow};
 use line_span::LineSpanExt;
 use minus::{ExitStrategy, Pager};
-use rustyline::error::ReadlineError;
 use rustyline::Editor;
+use rustyline::error::ReadlineError;
 
-use crate::cli::winnow::ascii::{space1, Caseless};
+use crate::cli::winnow::ModalResult;
+use crate::cli::winnow::ascii::{Caseless, space1};
 use crate::cli::winnow::combinator::{alt, cut_err, delimited, opt, preceded};
 use crate::cli::winnow::error::{AddContext, ContextError, ParserError, StrContext};
 use crate::cli::winnow::stream::{AsBytes, AsChar, Compare, FindSlice, Stream, StreamIsPartial};
 use crate::cli::winnow::token::take_until;
-use crate::cli::winnow::ModalResult;
 use crate::*;
 
 type Source<'src> = winnow::stream::LocatingSlice<&'src [u8]>;
@@ -50,14 +50,7 @@ fn mem_to_string(sna: &Snapshot, from: Option<u32>, amount: Option<u32>) -> Stri
                 .iter()
                 .map(|byte| {
                     char::from_u32(*byte as u32)
-                        .map(|c| {
-                            if !(' '..='~').contains(&c) {
-                                '.'
-                            }
-                            else {
-                                c
-                            }
-                        })
+                        .map(|c| if !(' '..='~').contains(&c) { '.' } else { c })
                         .unwrap_or('.')
                 })
                 .collect::<String>();
@@ -131,8 +124,12 @@ impl Command {
             },
 
             Command::Help => {
-                println!("DISASSEMBLE [start [amount]]: Display memory from physical address start for amount bytes");
-                println!("MEMORY [start [amount]]: Display memory from physical address start for amount bytes");
+                println!(
+                    "DISASSEMBLE [start [amount]]: Display memory from physical address start for amount bytes"
+                );
+                println!(
+                    "MEMORY [start [amount]]: Display memory from physical address start for amount bytes"
+                );
                 println!("LOAD2 \"fname\": Load the second snapshot fname");
             }
         }

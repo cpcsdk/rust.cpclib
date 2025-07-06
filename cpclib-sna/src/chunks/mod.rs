@@ -307,14 +307,14 @@ impl SnapshotChunk {
 
     pub fn memory_chunk(&self) -> Option<&MemoryChunk> {
         match self {
-            SnapshotChunk::Memory(ref mem) => Some(mem),
+            SnapshotChunk::Memory(mem) => Some(mem),
             _ => None
         }
     }
 
     pub fn ace_symbol_chunk(&self) -> Option<&AceSymbolChunk> {
         match self {
-            SnapshotChunk::AceSymbol(ref sym) => Some(sym),
+            SnapshotChunk::AceSymbol(sym) => Some(sym),
             _ => None
         }
     }
