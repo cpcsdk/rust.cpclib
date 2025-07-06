@@ -69,7 +69,7 @@ name = "bndbuild"
 path = "src/main.rs"
 
 [features]
-default = ["sna-interactive","colored_errors"]
+default = ["sna-interactive","colored_errors", "self-update"]
 
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]

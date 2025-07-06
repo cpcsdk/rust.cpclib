@@ -695,7 +695,7 @@ impl BndBuilderApp {
             else if matches.get_flag("init") {
                 return Ok(BndBuilderCommandInner::Init);
             }
-            else if matches.contains_id("update") {
+            else if cfg!(feature="self-update") && matches.contains_id("update") {
                 if let Some(update) = matches.get_one::<String>("update") {
                     return Ok(BndBuilderCommandInner::Update(Some(update.to_owned())));
                 }
