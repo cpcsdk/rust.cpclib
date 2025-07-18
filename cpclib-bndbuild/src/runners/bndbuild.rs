@@ -48,7 +48,7 @@ impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
             .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
             .map_err(|e| e.to_string())?;
 
-        { Ok(Some(args)) }
+        Ok(Some(args))
     }
 }
 
