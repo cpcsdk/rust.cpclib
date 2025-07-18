@@ -5,10 +5,9 @@
 
  Several demos have been released using this toolchain. However they may not build with the very last version due to its evolution.
 
- - 4deKades (2025) <https://www.pouet.net/prod.php?which=103970>, <https://github.com/rgiot/demo.revision2025.4deKades>
- - J'AI PÉ-TÉLÉCRAN (2024) <https://www.pouet.net/prod.php?which=96575>, <https://github.com/rgiot/demo.revision2024.etchy>
- - Come Join Us (2024) <https://www.pouet.net/prod.php?which=96537>
- - Can Robots Take Control? (2021) <https://www.pouet.net/prod.php?which=88554>
+ -  J'AI PÉ-TÉLÉCRAN (2024) <https://www.pouet.net/prod.php?which=96575>, <https://github.com/rgiot/demo.revision2024.etchy>
+ -  Come Join Us (2024) <https://www.pouet.net/prod.php?which=96537>
+ -  Can Robots Take Control? (2021) <https://www.pouet.net/prod.php?which=88554>
 
 It is also able to build the (potentially closed, with minimal modifications) sources of
 

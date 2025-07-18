@@ -1128,7 +1128,7 @@ impl SymbolsTableTrait for SymbolsTable {
         Ok(self
             .any_value(symbol)?
             .and_then(|v| v.integer())
-            .or({ if self.dummy { Some(1i32) } else { None } }))
+            .or(if self.dummy { Some(1i32) } else { None }))
     }
 
     #[inline]
@@ -1188,7 +1188,7 @@ impl SymbolsTableTrait for SymbolsTable {
             .any_value(symbol)?
             .map(|v| v.counter())
             .map(|v| v.unwrap())
-            .or({ if self.dummy { Some(1i32) } else { None } }))
+            .or(if self.dummy { Some(1i32) } else { None }))
     }
 
     #[inline]

@@ -2065,7 +2065,7 @@ impl Env {
                                     .page()
                             )
                         });
-                    },
+                    }
                 };
 
                 (current_address, page)
@@ -3920,7 +3920,7 @@ impl Env {
                         return Err(AssemblerError::AssemblingError {
                             msg: format!("REPEAT issue: {} is not a list", values)
                         });
-                    },
+                    }
                 }
             },
         }
@@ -5406,7 +5406,7 @@ where
                     val
                 )
             });
-        },
+        }
     };
 
     let flag = arg1.get_flag_test().unwrap();
@@ -5453,7 +5453,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
                     val
                 )
             });
-        },
+        }
     };
 
     bytes.push(0b11000111 | (p << 3));
@@ -5475,7 +5475,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
             return Err(AssemblerError::InvalidArgument {
                 msg: format!("IM cannot take {} as argument.", val)
             });
-        },
+        }
     };
 
     bytes.push(0xED);
@@ -5522,7 +5522,7 @@ where
                         mne.to_string().to_ascii_uppercase()
                     )
                 });
-            },
+            }
         }
     }
     else {

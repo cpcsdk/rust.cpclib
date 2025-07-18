@@ -23,7 +23,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
                     "Incompatible type with orgams {:?}",
                     e
                 )));
-            },
+            }
         }
     }
     else {

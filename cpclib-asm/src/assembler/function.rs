@@ -561,7 +561,7 @@ impl HardCodedFunction {
                         return Err(AssemblerError::AssemblingError {
                             msg: format!("{crunch_type} is not a valid crunch")
                         });
-                    },
+                    }
                 };
 
                 let data = params[0]

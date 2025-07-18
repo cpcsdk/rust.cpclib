@@ -301,7 +301,7 @@ impl BasicProgram {
                 unimplemented!(
                     "The current version is only able to hide one line. I can still implement multiline version if needed"
                 )
-            },
+            }
         }
     }
 

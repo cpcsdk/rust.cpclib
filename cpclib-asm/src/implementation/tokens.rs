@@ -479,7 +479,7 @@ impl TokenExt for Token {
                     line: line!(),
                     msg: format!("Duration computation for {:?} not yet coded", self)
                 });
-            },
+            }
         };
         Ok(duration)
     }

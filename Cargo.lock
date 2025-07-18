@@ -1500,7 +1500,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -5776,9 +5776,9 @@ checksum = "03087c2bad5e1034e8cace5926dec053fb3790248370865f5117a7d0213354c8"
 
 [[package]]
 name = "lexopt"
-version = "0.3.1"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fa0e2a1fcbe2f6be6c42e342259976206b383122fc152e872795338b5a3f3a7"
+checksum = "478ee9e62aaeaf5b140bd4138753d1f109765488581444218d3ddda43234f3e8"
 
 [[package]]
 name = "libappindicator"
@@ -9616,7 +9616,7 @@ dependencies = [
  "tauri-runtime",
  "tauri-runtime-wry",
  "tauri-utils",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "tokio",
  "tray-icon",
  "url",
@@ -9669,7 +9669,7 @@ dependencies = [
  "sha2",
  "syn 2.0.99",
  "tauri-utils",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "time",
  "url",
  "uuid",
@@ -9721,7 +9721,7 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "tauri-plugin-fs",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "url",
 ]
 
@@ -9742,7 +9742,7 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "tauri-utils",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "toml 0.8.19",
  "url",
  "uuid",
@@ -9766,7 +9766,7 @@ dependencies = [
  "swift-rs",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "time",
 ]
 
@@ -9784,7 +9784,7 @@ dependencies = [
  "serde_repr",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "time",
  "url",
 ]
@@ -9805,7 +9805,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "url",
  "windows 0.58.0",
  "zbus 4.4.0",
@@ -9824,7 +9824,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin-fs",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -9844,7 +9844,7 @@ dependencies = [
  "shared_child",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "tokio",
 ]
 
@@ -9859,7 +9859,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "tokio",
  "tracing",
 ]
@@ -9876,7 +9876,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -9893,7 +9893,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tauri-utils",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "url",
  "windows 0.58.0",
 ]
@@ -9953,7 +9953,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "swift-rs",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "toml 0.8.19",
  "url",
  "urlpattern",
@@ -10099,11 +10099,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.12"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
 dependencies = [
- "thiserror-impl 2.0.12",
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -10119,9 +10119,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.12"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2 1.0.94",
  "quote 1.0.39",
@@ -10604,14 +10604,13 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "upkr"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2172e0ddb0eedac5beca061e50450657b688c5f389f9ee89510f7d707c964c39"
+version = "0.2.2"
+source = "git+https://github.com/exoticorn/upkr.git#0c5ba4e32c2aa3f51152749e33331d216d1a6d1d"
 dependencies = [
  "anyhow",
  "cdivsufsort",
  "lexopt",
- "thiserror 2.0.12",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -12213,7 +12212,7 @@ dependencies = [
  "sha2",
  "soup3",
  "tao-macros",
- "thiserror 2.0.12",
+ "thiserror 2.0.11",
  "url",
  "webkit2gtk",
  "webkit2gtk-sys",

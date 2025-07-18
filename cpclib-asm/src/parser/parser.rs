@@ -1706,7 +1706,7 @@ pub fn parse_assign_operator(
                 &start,
                 "Wrong symbol"
             )));
-        },
+        }
     };
 
     Ok(oper)

@@ -612,7 +612,7 @@ impl EmulatorConf {
                     eprintln!(
                         "Debug files are currently ignored. TODO convert them in the appropriate format"
                     )
-                },
+                }
             }
         }
 
