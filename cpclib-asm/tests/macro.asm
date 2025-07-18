@@ -7,4 +7,10 @@
 		ld {acc}.high, a
 	mend
 
+	macro noarg
+		; I do nothing
+	endm
+
 	addx bc, hl
+
+	noarg (void)
