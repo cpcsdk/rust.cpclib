@@ -2,7 +2,7 @@
 ;  Speed-optimized LZSA2 decompressor by spke & uniabis (216 bytes)
 ;
 
-	DEFINE	UNROLL_LONG_MATCHES						; uncomment for faster decompression of very compressible data (+38 bytes)
+;	DEFINE	UNROLL_LONG_MATCHES						; uncomment for faster decompression of very compressible data (+38 bytes)
 ;	DEFINE	BACKWARD_DECOMPRESS						; uncomment for data compressed with option -b
 
 	IFNDEF	BACKWARD_DECOMPRESS
