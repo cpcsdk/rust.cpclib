@@ -10975,7 +10975,8 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 [[package]]
 name = "upkr"
 version = "0.2.3"
-source = "git+https://github.com/exoticorn/upkr.git#a9e56d9d50d1f64cab7590f2c584a12b173e7715"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2172e0ddb0eedac5beca061e50450657b688c5f389f9ee89510f7d707c964c39"
 dependencies = [
  "anyhow",
  "cdivsufsort",

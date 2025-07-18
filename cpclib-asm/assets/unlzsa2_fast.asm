@@ -2,7 +2,7 @@
 ;  Speed-optimized LZSA2 decompressor by spke & uniabis (216 bytes)
 ;
 
-	DEFINE	UNROLL_LONG_MATCHES						; uncomment for faster decompression of very compressible data (+38 bytes)
+;	DEFINE	UNROLL_LONG_MATCHES						; uncomment for faster decompression of very compressible data (+38 bytes)
 ;	DEFINE	BACKWARD_DECOMPRESS						; uncomment for data compressed with option -b
 
 	IFNDEF	BACKWARD_DECOMPRESS
@@ -51,24 +51,24 @@ macro DecompressLZSA2
 		; B is assumed to be 0
 		ld b,0 : scf : exa : jr .ReadToken
 
-.ManyLiterals:	ld a,18 : add (hl) : NEXT_HL : jr nc,.CopyLiterals
-		ld c,(hl) : NEXT_HL
+.ManyLiterals:	ld a,18 : add (hl) : NEXT_HL() : jr nc,.CopyLiterals
+		ld c,(hl) : NEXT_HL()
 		ld a,b : ld b,(hl)
 		jr .NEXTHLuseBC
 
 
-.MoreLiterals:	ld b,(hl) : NEXT_HL
+.MoreLiterals:	ld b,(hl) : NEXT_HL()
 		scf : exa : jr nc,.noUpdatemoar
 
 			ld a,(hl) : or #F0 : exa
-			ld a,(hl) : NEXT_HL : or #0F
+			ld a,(hl) : NEXT_HL() : or #0F
 			rrca : rrca : rrca : rrca
 
 .noUpdatemoar	;sub #F0-3 : cp 15+3 : jr z,ManyLiterals
 		inc a : jr z,.ManyLiterals : sub #F0-3+1
 
 .CopyLiterals:	ld c,a : ld a,b : ld b,0
-		COPYBC
+		COPYBC()
 		push de : or a : jp p,.CASE0xx ;: jr CASE1xx
 
 		cp %11000000 : jr c,.CASE10x
@@ -83,7 +83,7 @@ macro DecompressLZSA2
 
 		; if "LL" of the byte token is equal to 0,
 		; there are no literals to copy
-.NoLiterals:	or (hl) : NEXT_HL
+.NoLiterals:	or (hl) : NEXT_HL()
 		push de : jp m,.CASE1xx
 
 		; short (5 or 9 bit long) offsets
@@ -92,7 +92,7 @@ macro DecompressLZSA2
 		; "01x": the case of the 9-bit offset
 .CASE01x:	cp %01100000 : rl d
 
-.ReadOffsetE	ld e,(hl) : NEXT_HL
+.ReadOffsetE	ld e,(hl) : NEXT_HL()
 
 .SaveOffset:	LD ix,de
 
@@ -101,9 +101,9 @@ macro DecompressLZSA2
 .CopyMatch:	ld c,a
 ;.useC
 		ex (sp),hl						; BC = len, DE = offset, HL = dest, SP ->[dest,src]
-		ADD_OFFSET						; BC = len, DE = dest, HL = dest-offset, SP->[src]
-		COPY1
-		COPYBC
+		ADD_OFFSET()						; BC = len, DE = dest, HL = dest-offset, SP->[src]
+		COPY1()
+		COPYBC()
 .popSrc		pop hl
 
 		; compressed data stream contains records
@@ -113,8 +113,9 @@ macro DecompressLZSA2
 		rrca : rrca : rrca
 
 		ld c,a : ld a,(hl)					; token is re-read for further processing
-.NEXTHLuseBC	NEXT_HL
-		COPYBC
+.NEXTHLuseBC:
+		NEXT_HL()
+		COPYBC()
 
 		; the token and literals are followed by the offset
 		push de : or a : jp p,.CASE0xx
@@ -125,7 +126,7 @@ macro DecompressLZSA2
 .CASE10x:	ld c,a : exa : jr nc,.noUpdatecase10x
 
 			ld a,(hl) : or #F0 : exa
-			ld a,(hl) : NEXT_HL : or #0F
+			ld a,(hl) : NEXT_HL() : or #0F
 			rrca : rrca : rrca : rrca
 
 .noUpdatecase10x	ld d,a : ld a,c
@@ -134,7 +135,7 @@ macro DecompressLZSA2
 
 		
 		; "110": 16-bit offset
-.CASE110:	ld d,(hl) : NEXT_HL : jr .ReadOffsetE
+.CASE110:	ld d,(hl) : NEXT_HL() : jr .ReadOffsetE
 
 
 
@@ -143,7 +144,7 @@ macro DecompressLZSA2
 .CASE00x:	ld c,a : exa : jr nc,.noUpdatecase00x
 
 			ld a,(hl) : or #F0 : exa
-			ld a,(hl) : NEXT_HL : or #0F
+			ld a,(hl) : NEXT_HL() : or #0F
 			rrca : rrca : rrca : rrca
 
 .noUpdatecase00x	ld e,a : ld a,c
@@ -153,18 +154,18 @@ macro DecompressLZSA2
 .LongerMatch:	scf : exa : jr nc,.noUpdatelongermatch
 
 			ld a,(hl) : or #F0 : exa
-			ld a,(hl) : NEXT_HL : or #0F
+			ld a,(hl) : NEXT_HL() : or #0F
 			rrca : rrca : rrca : rrca
 
 .noUpdatelongermatch	sub #F0-9 : cp 15+9 : jr c,.CopyMatch
 
 
-.LongMatch:	add (hl) : NEXT_HL : jr c,.VeryLongMatch
+.LongMatch:	add (hl) : NEXT_HL() : jr c,.VeryLongMatch
 
 		ld c,a
 .useC		ex (sp),hl
-		ADD_OFFSET
-		COPY1
+		ADD_OFFSET()
+		COPY1()
 
 		; this is an unrolled equivalent of LDIR
 		xor a : sub c
@@ -172,13 +173,13 @@ macro DecompressLZSA2
 		ld (.jrOffset),a : jr nz,$+2
 .jrOffset	EQU $-1
 .fastLDIR	repeat 32
-		COPY1
+		COPY1()
 		rend
 		jp pe,.fastLDIR
 		jp .popSrc
 
-.VeryLongMatch:	ld c,(hl) : NEXT_HL
-		ld b,(hl) : NEXT_HL : jr nz,.useC
+.VeryLongMatch:	ld c,(hl) : NEXT_HL()
+		ld b,(hl) : NEXT_HL() : jr nz,.useC
 		pop de : ret
 
 mend
