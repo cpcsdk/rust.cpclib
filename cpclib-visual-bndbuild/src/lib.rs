@@ -165,7 +165,7 @@ impl<'builder> From<&'builder BndBuilder> for UpToDate<'builder> {
     fn from(builder: &'builder BndBuilder) -> Self {
         let mut map = HashMap::default();
         for rule in builder.rules().iter() {
-            map.insert(rule, rule.is_up_to_date());
+            map.insert(rule, rule.is_up_to_date::<Utf8PathBuf>(None));
         }
         UpToDate(map)
     }

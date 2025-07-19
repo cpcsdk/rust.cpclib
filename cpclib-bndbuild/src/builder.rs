@@ -287,9 +287,9 @@ impl BndBuilder {
                 return Err(BndBuilderError::DisabledTarget(p.to_string()));
             }
 
-            let done = rule.is_up_to_date();
+            let done = rule.is_up_to_date(Some(p));
             if done {
-                self.emit_stdout("Rule {p} already exists\n");
+                self.emit_stdout(&format!("Rule {p} already exists\n"));
                 // nothing to do
             }
             else {

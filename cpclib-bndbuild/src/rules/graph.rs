@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 
+use camino::Utf8PathBuf;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use topologic::AcyclicDependencyGraph;
@@ -80,11 +81,11 @@ impl<'r> Graph<'r> {
                             false
                         }
                         else {
-                            !r.is_up_to_date()
+                            !r.is_up_to_date::<Utf8PathBuf>(None)
                         }
                     }
                     else {
-                        !r.is_up_to_date()
+                        !r.is_up_to_date::<Utf8PathBuf>(None)
                     }
                 },
 

@@ -27,10 +27,10 @@ rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
 bon.workspace = true
 directories = "5.0.1"
-flate2 = "1.1.0"
+flate2 = "1.1.2"
 glob.workspace = true
 tar = "0.4.44"
-rust-ini = "0.21.1"
+rust-ini = "0.21.2"
 scraper = "0.20.0"
 transparent.workspace = true
 xz2 = "0.1.7"

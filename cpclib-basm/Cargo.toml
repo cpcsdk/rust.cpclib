@@ -19,7 +19,7 @@ cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
-rust-ini = "0.21.1"
+rust-ini = "0.21.2"
 const_format.workspace = true
 #diff = "0.1.13"
 time.workspace = true

@@ -68,30 +68,30 @@ cpclib-xfer = { version = "0.9.0", path = "cpclib-xfer", default-features = fals
 cpclib-xfertool = { version = "0.9.0", path = "cpclib-xfertool", default-features = false }
 cpclib-z80emu = { version = "0.9.0", path = "cpclib-z80emu", default-features = false }
 
-anyhow = "1.0.97"
+anyhow = "1.0.98"
 arrayref = "0.3.9"
 as-slice = "0.2.1"
 bitfield = "0.14.0"
-bitflags = "2.9.0"
+bitflags = "2.9.1"
 bitvec = "1.0.1"
-bon = "3.6.3"
+bon = "3.6.5"
 built = { version = "0.7.7", features = ["chrono"] }
-camino = "1.1.9"
-camino-tempfile = "1.1.1"
-cc = "1.2.16"
-cfg-if = "1.0.0"
+camino = "1.1.10"
+camino-tempfile = "1.4.1"
+cc = "1.2.30"
+cfg-if = "1.0.1"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
 choice_nocase = "0.2.0"
-clap = { version="4.5.31", features=["color", "derive"]}
+clap = { version="4.5.41", features=["color", "derive"]}
 codespan-reporting = "0.11.1"
 #contracts = "0.6.3"
 const_format = {version="0.2.34", features = ["fmt"]}
-crossbeam-channel = "0.5.14"
-curl = "0.4.47"
+crossbeam-channel = "0.5.15"
+curl = "0.4.48"
 custom_error = "1.9.2"
 dbg = "1.0.4"
-delegate = "0.13.2"
-either = "1.14.0"
+delegate = "0.13.4"
+either = "1.15.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
 enigo = "0.3"
 enumn = "0.1.14"
@@ -99,7 +99,7 @@ env_logger = "0.11"
 evalexpr = "11.3.1"
 exitcode = "1.1.2"
 gag = "1.0.0"
-getset = "0.1.5"
+getset = "0.1.6"
 gif = "0.12" # XXX may be compatible with gif-dispose
 gif-dispose = "4.0.1"
 glob = "0.3.2"
@@ -107,11 +107,11 @@ globset = "0.4.16"
 hashbag = "0.1.12"
 hotwatch = { version = "0.5.0" }
 hxcfe = "0.1.5"
-image = "0.25.5"
+image = "0.25.6"
 indicatif = "0.17.11"
 itertools = "0.12.1"
-libc = "0.2.170"
-log = "0.4.26"
+libc = "0.2.174"
+log = "0.4.27"
 minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.3"
@@ -119,43 +119,43 @@ num-bigint = "0.4.6"
 nutype = "0.5.1"
 ordered-float = "4.6.0"
 ouroboros = "0.18.5"
-parking_lot = "0.12.3"
+parking_lot = "0.12.4"
 paste = "1.0.15"
 path-absolutize = "3.1.1"
 pretty_assertions = "1.4.1"
-proc-macro2 = "1.0.94"
-quote = "1.0.39"
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
 #ratatui = "0.28.1"
 rayon = "1.10.0"
 regex = "1.11.1"
 remain = "0.2.15"
 ureq = "2.12.1"
 resolve-path = "0.1.0"
-rust-embed = { version = "8.6.0", features = ["compression"] }
+rust-embed = { version = "8.7.2", features = ["compression"] }
 rustyline = { version = "14.0.0" }
 rustyline-derive = { version = "0.10.0" }
-self_cell = "1.1.0"
+self_cell = "1.2.0"
 self_update = "0.41.0"
 semver = "1.0.26"
-serde = { version = "1.0.218", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }
 serial_test = "3.2.0"
 sevenz-rust = "0.6.1"
 shlex = "1.3.0"
 similar-asserts = "1.7.0"
 simple_logger = { version = "4.3.3" }
-smallvec = "1.14.0"
+smallvec = "1.15.1"
 smol_str = "0.2.2"
 strsim = "0.11.1"
 strum = { version = "0.26", features = ["derive"] }
 subprocess = { version = "0.2.9" }
 substring = "1.4.5"
-syn = "2.0.99"
+syn = "2.0.104"
 term_grid = { version = "0.2.0" }
 termize = { version = "0.1.1" }
 test-generator = "0.3.1"
 thiserror = "1.0"
-time = "0.3.38"
-transparent = "0.4.0"
+time = "0.3.41"
+transparent = "0.4.2"
 utf8-chars = "3.0.5"
 velcro = "0.5.4"
 winnow = { version = "0.6.26", features = ["simd"] }

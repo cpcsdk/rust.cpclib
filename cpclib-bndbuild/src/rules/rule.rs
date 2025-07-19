@@ -286,15 +286,37 @@ impl Rule {
         }
     }
 
-    pub fn is_up_to_date(&self) -> bool {
-        // No need to try if phony or if one file is missing
-        if self.is_phony() || self.targets.iter().any(|p| !p.exists()) {
+    pub fn is_up_to_date<P: AsRef<Utf8Path>>(&self, for_target: Option<P>) -> bool {
+
+        // phony rules are never up to date
+        if self.is_phony() {
             return false;
+        }
+
+        if let Some(target) = &for_target {
+            // check if the expected target is up to date
+            let target = target.as_ref();
+            if !target.exists() {
+                return false;
+            }
+        } else {
+            // check if any target needs to be built
+            if self.targets.iter().any(|p| !p.exists()) {
+                return false;
+            }
         }
 
         let oldest_target = self
             .targets
             .iter()
+            .filter(|p| {
+                if let Some(target) = &for_target {
+                    let target = target.as_ref();
+                    target == p.as_path()
+                } else {
+                    true
+                }
+            })
             .filter(|p| p.exists())
             .map(|p| p.metadata().unwrap().modified().unwrap())
             .min();
