@@ -692,23 +692,42 @@ fn parse_macro_inner(
     name: InnerZ80Span
 ) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
+        #[derive(Clone, Copy, Debug)]
+        enum CommaOrParenthesis {
+            Comma,
+            Parenthesis
+        };
+
+        let comma_or_parenthesis = opt(alt((
+            parse_comma.value(CommaOrParenthesis::Comma),
+            '('.value(CommaOrParenthesis::Parenthesis)
+        )))
+        .parse_next(input)?;
+
         // macro arguments
-        let arguments = preceded(
-            opt(parse_comma), // comma after macro name is not mandatory
-            separated::<_, _, Vec<&[u8]>, _, _, _, _>(
-                0..,
-                // parse_label(false)
-                delimited(
-                    my_space0,
-                    take_till(1.., |c| {
-                        c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' '
-                    }),
-                    my_space0
-                ),
-                parse_comma
-            )
+        let arguments = separated::<_, _, Vec<&[u8]>, _, _, _, _>(
+            0..,
+            // parse_label(false)
+            delimited(
+                my_space0,
+                take_till(1.., |c| {
+                    c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ' || c == b')'
+                }),
+                my_space0
+            ),
+            parse_comma
         )
         .parse_next(input)?;
+
+        if let Some(CommaOrParenthesis::Parenthesis) = comma_or_parenthesis {
+            let _ = cut_err(
+                (my_space0, ')', my_space0)
+                    .value(())
+                    .context("`)` expected`")
+            )
+            .parse_next(input)?;
+        }
+
         let arguments = arguments
             .into_iter()
             .map(|span| (*input).update_slice(span))
