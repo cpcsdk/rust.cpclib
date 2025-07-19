@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-bdasm"
-version = "0.9.0"
+version = "0.10.0"
 description = "Z80 disassembler. Still contains some bugs."
 
 authors.workspace = true

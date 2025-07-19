@@ -1834,7 +1834,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2100,7 +2100,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -2132,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-asm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "aho-corasick",
  "arrayref",
@@ -2176,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basic"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "built",
  "cfg-if",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "build-deps",
  "built",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bdasm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "built",
  "const_format",
@@ -2227,7 +2227,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-common"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bitfield",
  "bitflags 2.9.1",
@@ -2317,14 +2317,14 @@ dependencies = [
 
 [[package]]
 name = "cpclib-cpr"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "cpclib-common",
 ]
 
 [[package]]
 name = "cpclib-cprcli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "colored",
  "cpclib-common",
@@ -2345,7 +2345,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-crunchers"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "built",
  "cc",
@@ -2357,7 +2357,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-disc"
-version = "0.9.2"
+version = "0.10.0"
 dependencies = [
  "arrayref",
  "built",
@@ -2402,7 +2402,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-image"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "as-slice",
@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-imgconverter"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "built",
@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-macros"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
@@ -2439,7 +2439,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-runner"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bon",
  "camino-tempfile",
@@ -2469,7 +2469,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sna"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "built",
  "camino-tempfile",
@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-tokens"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "beef",
  "built",
@@ -2518,7 +2518,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-visual-bndbuild"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "built",
  "camino",
@@ -2537,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "console_error_panic_hook",
  "cpclib-asm",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfer"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "arrayref",
  "built",
@@ -2572,7 +2572,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfertool"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -2603,7 +2603,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-z80emu"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "cfg-if",
  "cpclib-asm",
@@ -2781,7 +2781,7 @@ dependencies = [
  "dtoa-short",
  "itoa",
  "matches",
- "phf 0.10.1",
+ "phf 0.8.0",
  "proc-macro2 1.0.95",
  "quote 1.0.40",
  "smallvec",
@@ -2797,7 +2797,7 @@ dependencies = [
  "cssparser-macros",
  "dtoa-short",
  "itoa",
- "phf 0.11.3",
+ "phf 0.8.0",
  "smallvec",
 ]
 
@@ -5186,7 +5186,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -5954,7 +5954,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.2",
 ]
 
 [[package]]
@@ -6630,7 +6630,7 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fcc7c92f190c97f79b4a332f5e81dcf68c8420af2045c936c9be0bc9de6f63b5"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2 1.0.95",
  "quote 1.0.40",
  "syn 1.0.109",
@@ -6742,7 +6742,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2 1.0.95",
  "quote 1.0.40",
  "syn 2.0.104",
@@ -7503,7 +7503,9 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3dfb61232e34fcb633f43d12c58f83c1df82962dcdfa565a4e866ffc17dafe12"
 dependencies = [
+ "phf_macros 0.8.0",
  "phf_shared 0.8.0",
+ "proc-macro-hack",
 ]
 
 [[package]]
@@ -7512,9 +7514,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fabbf1ead8a5bcbc20f5f8b939ee3f5b0f6f281b6ad3468b84656b658b455259"
 dependencies = [
- "phf_macros 0.10.0",
  "phf_shared 0.10.0",
- "proc-macro-hack",
 ]
 
 [[package]]
@@ -7589,12 +7589,12 @@ dependencies = [
 
 [[package]]
 name = "phf_macros"
-version = "0.10.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58fdf3184dd560f160dd73922bea2d5cd6e8f064bf4b13110abd81b03697b4e0"
+checksum = "7f6fde18ff429ffc8fe78e2bf7f8b7a5a5a6e2a8b58bc5a9ac69198bbda9189c"
 dependencies = [
- "phf_generator 0.10.0",
- "phf_shared 0.10.0",
+ "phf_generator 0.8.0",
+ "phf_shared 0.8.0",
  "proc-macro-hack",
  "proc-macro2 1.0.95",
  "quote 1.0.40",
@@ -11189,7 +11189,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "visual-basm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "built",
  "claui",
@@ -11932,7 +11932,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

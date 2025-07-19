@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-sna"
-version = "0.9.0"
+version = "0.10.0"
 description = "cpclib libraries related to snapshots"
 
 authors.workspace = true
