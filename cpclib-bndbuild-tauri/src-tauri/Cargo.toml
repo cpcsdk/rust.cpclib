@@ -4,8 +4,13 @@ cargo-features = ["profile-rustflags", "trim-paths"]
 name = "cpclib-bndbuild-tauri"
 version = "0.1.0"
 description = "Tauri GUI of bndbuild"
-authors = ["you"]
-edition = "2021"
+
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
