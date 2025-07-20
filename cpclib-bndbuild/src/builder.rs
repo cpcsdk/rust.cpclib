@@ -304,9 +304,6 @@ impl BndBuilder {
                         }
                     })?;
                 }
-
-
-
             }
 
             // check if all the targets have been created

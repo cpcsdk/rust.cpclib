@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -45,7 +45,7 @@ pub struct BndBuilderApp {
 pub enum WatchState {
     NoWatch,
     WatchFirstRound,
-    WatchNextRounds{last_build: Instant},
+    WatchNextRounds{last_build: SystemTime},
 }
 
 impl WatchState {
@@ -61,7 +61,7 @@ impl WatchState {
         }
     }
 
-    pub fn last_build(&self) -> Option<&Instant> {
+    pub fn last_build(&self) -> Option<&SystemTime> {
         match self {
             Self::WatchNextRounds{last_build} => Some(last_build),
             _ => None
@@ -257,7 +257,7 @@ impl BndBuilderCommand {
         let tgt = &targets[current_step];
 
         // execute if needed
-        let last_build = if dbg!(builder.outdated(&watch, tgt))? {
+        let last_build = if builder.outdated(&watch, tgt)? {
             builder.execute(tgt).map_err(|e| {
                 if targets_provided {
                     e
@@ -268,7 +268,7 @@ impl BndBuilderCommand {
                     }
                 }
             })?;
-            Some(Instant::now())
+            Some(SystemTime::now())
         } else {
             None
         };
@@ -291,7 +291,14 @@ impl BndBuilderCommand {
             Ok(Some(BndBuilderCommand {
                 inner: BndBuilderCommandInner::Build {
                     targets: init_targets,
-                    watch: WatchState::WatchNextRounds{last_build: last_build.unwrap_or_else(|| watch.last_build().cloned().unwrap())},
+                    watch: WatchState::WatchNextRounds{last_build: last_build.unwrap_or_else(|| 
+                            watch.last_build().cloned()
+                                .unwrap_or_else(|| {
+                                    // if it fails it is because the file exists
+                                    tgt.metadata().unwrap()
+                                        .modified().unwrap()
+                                })
+                        )},
                     current_step,
                     builder
                 },

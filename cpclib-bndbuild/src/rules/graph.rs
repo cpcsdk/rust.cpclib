@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashSet}, time::{Instant, SystemTime}};
+use std::{collections::{BTreeMap, HashSet}, time::{SystemTime}};
 
 use camino::Utf8PathBuf;
 use cpclib_asm::file;
@@ -105,7 +105,7 @@ impl<'r> Graph<'r> {
                         if let Some(last_build) = watch.last_build() {
                             let file_modification= p.metadata().unwrap().modified().unwrap();
                             let file_modification = file_modification.elapsed().unwrap();
-                            let last_build = last_build.elapsed();
+                            let last_build = last_build.elapsed().unwrap();
                             last_build > file_modification
                         } else {
                             false

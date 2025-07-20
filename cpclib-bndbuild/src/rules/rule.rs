@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::time::Instant;
+use std::time::SystemTime;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
@@ -287,7 +287,7 @@ impl Rule {
         }
     }
 
-    pub fn is_up_to_date<P: AsRef<Utf8Path>>(&self, last_build: Option<Instant>, for_target: Option<P>) -> bool {
+    pub fn is_up_to_date<P: AsRef<Utf8Path>>(&self, last_build: Option<SystemTime>, for_target: Option<P>) -> bool {
 
         // phony rules are never up to date
         if self.is_phony() && last_build.is_none() {
