@@ -257,7 +257,7 @@ impl BndBuilderCommand {
         let tgt = &targets[current_step];
 
         // execute if needed
-        let last_build = if builder.outdated(&watch, tgt)? {
+        let last_build = if dbg!(builder.outdated(&watch, tgt))? {
             builder.execute(tgt).map_err(|e| {
                 if targets_provided {
                     e

@@ -294,6 +294,7 @@ impl BndBuilder {
                 // nothing to do
             }
             else {
+                // execute all the tasks for this rule
                 for task in rule.commands() {
                     let task_observer = this.task_observer(p, task);
                     crate::execute(task, &task_observer).map_err(|e| {
@@ -303,6 +304,17 @@ impl BndBuilder {
                         }
                     })?;
                 }
+
+
+
+            }
+
+            // check if all the targets have been created
+            let wrong_files = rule.targets().iter()
+                .filter(|t| !t.exists())
+                .join(" ");
+            if !wrong_files.is_empty() {
+                self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));
             }
         }
         else if !p.exists() {
