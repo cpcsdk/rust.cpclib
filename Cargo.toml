@@ -32,6 +32,33 @@ members = [
   #  "cpclib-xferfs",
 ]
 
+default-members = [
+  "cpclib",
+  "cpclib-asm",
+  "cpclib-basic",
+  "cpclib-basm",
+  "cpclib-bdasm",
+  "cpclib-bndbuild",
+  "cpclib-common",
+  "cpclib-cpr",
+  "cpclib-cprcli", 
+   "cpclib-crunch",
+  "cpclib-crunchers",
+  "cpclib-disc",
+  "cpclib-emucontrol",
+  "cpclib-files",
+  "cpclib-image",
+  "cpclib-imgconverter",
+  "cpclib-macros",
+  "cpclib-runner", 
+  "cpclib-sna",
+  "cpclib-sprite-compiler", 
+  "cpclib-tokens",
+  "cpclib-wasm", 
+  "cpclib-xfer",
+  "cpclib-xfertool",
+]
+
 resolver = "2"
 
 [workspace.package]
