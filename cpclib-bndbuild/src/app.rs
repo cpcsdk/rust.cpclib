@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::process::{Command, Stdio};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -40,6 +41,34 @@ pub struct BndBuilderApp {
     observers: Arc<ListOfBndBuilderObserverRc>
 }
 
+#[derive(Debug, Clone)]
+pub enum WatchState {
+    NoWatch,
+    WatchFirstRound,
+    WatchNextRounds{last_build: Instant},
+}
+
+impl WatchState {
+    pub fn request_watch(&self) -> bool {
+        !matches!(self, WatchState::NoWatch)
+    }
+
+    pub fn disable_phony(&self) -> bool {
+        match self {
+            Self::NoWatch => false,
+            Self::WatchFirstRound => false,
+            Self::WatchNextRounds{..} => true
+        }
+    }
+
+    pub fn last_build(&self) -> Option<&Instant> {
+        match self {
+            Self::WatchNextRounds{last_build} => Some(last_build),
+            _ => None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum BndBuilderCommandInner {
     /// Print the help of the given command
@@ -68,7 +97,7 @@ pub enum BndBuilderCommandInner {
     /// Build the corresponding targets
     Build {
         targets: Option<Vec<Utf8PathBuf>>,
-        watch: bool,
+        watch: WatchState,
         current_step: usize,
         builder: BndBuilder
     },
@@ -202,11 +231,12 @@ impl BndBuilderCommand {
     /// TODO wire parallal execution
     fn execute_build(
         init_targets: Option<Vec<Utf8PathBuf>>,
-        watch: bool,
+        watch: WatchState,
         mut current_step: usize,
         builder: BndBuilder,
         observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
+
         let targets_provided = init_targets.is_some();
 
         // get the list of targets
@@ -227,7 +257,7 @@ impl BndBuilderCommand {
         let tgt = &targets[current_step];
 
         // execute if needed
-        if builder.outdated(tgt)? {
+        let last_build = if builder.outdated(&watch, tgt)? {
             builder.execute(tgt).map_err(|e| {
                 if targets_provided {
                     e
@@ -238,7 +268,10 @@ impl BndBuilderCommand {
                     }
                 }
             })?;
-        }
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         // set up the next step if any
         let over = init_targets.as_ref().map(|v| v.len() - 1).unwrap_or(0) == current_step;
@@ -250,14 +283,15 @@ impl BndBuilderCommand {
             current_step += 1;
         }
 
-        if over && !watch {
+        if over && !watch.request_watch() {
             Ok(None)
         }
         else {
+            std::thread::sleep(Duration::from_millis(2000)); // duration to wait
             Ok(Some(BndBuilderCommand {
                 inner: BndBuilderCommandInner::Build {
                     targets: init_targets,
-                    watch,
+                    watch: WatchState::WatchNextRounds{last_build: last_build.unwrap_or_else(|| watch.last_build().cloned().unwrap())},
                     current_step,
                     builder
                 },
@@ -834,7 +868,7 @@ impl BndBuilderApp {
 
                 Ok(BndBuilderCommandInner::Build {
                     targets,
-                    watch: watch_requested,
+                    watch: if watch_requested {WatchState::WatchFirstRound} else {WatchState::NoWatch},
                     current_step: 0,
                     builder
                 })

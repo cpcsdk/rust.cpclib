@@ -8,6 +8,7 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{Environment, Error, ErrorKind, context};
 
+use crate::app::WatchState;
 use crate::BndBuilderError;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
@@ -287,7 +288,7 @@ impl BndBuilder {
                 return Err(BndBuilderError::DisabledTarget(p.to_string()));
             }
 
-            let done = rule.is_up_to_date(Some(p));
+            let done = rule.is_up_to_date(None, Some(p));
             if done {
                 self.emit_stdout(&format!("Rule {p} already exists\n"));
                 // nothing to do
@@ -322,8 +323,8 @@ impl BndBuilder {
 
 impl BndBuilder {
     #[inline]
-    pub fn outdated<P: AsRef<Utf8Path>>(&self, target: P) -> Result<bool, BndBuilderError> {
-        self.inner.borrow_dependent().outdated(target, true)
+    pub fn outdated<P: AsRef<Utf8Path>>(&self, watch: &WatchState, target: P) -> Result<bool, BndBuilderError> {
+        self.inner.borrow_dependent().outdated(target, watch,true)
     }
 
     #[inline]

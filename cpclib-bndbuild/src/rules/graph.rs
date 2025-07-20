@@ -1,12 +1,13 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{collections::{BTreeMap, HashSet}, time::{Instant, SystemTime}};
 
 use camino::Utf8PathBuf;
+use cpclib_asm::file;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use topologic::AcyclicDependencyGraph;
 
 use super::{Rule, Rules};
-use crate::BndBuilderError;
+use crate::{app::WatchState, BndBuilderError};
 
 #[derive(Clone)]
 pub struct Graph<'r> {
@@ -62,11 +63,14 @@ impl<'r> Graph<'r> {
     pub fn outdated<P: AsRef<Utf8Path>>(
         &self,
         p: P,
+        watch: &WatchState,
         skip_rules_without_commands: bool
     ) -> Result<bool, BndBuilderError> {
+
+
         let p = p.as_ref();
         // a phony rule is always outdated
-        if self.rule(p)?.is_phony() {
+        if !watch.disable_phony() && self.rule(p)?.is_phony() {
             return Ok(true);
         }
 
@@ -77,15 +81,19 @@ impl<'r> Graph<'r> {
             let res = match self.rule(p) {
                 Ok(r) => {
                     if skip_rules_without_commands {
-                        if r.is_phony() {
-                            false
+                        if  r.is_phony() {
+                            match watch {
+                                WatchState::NoWatch => false,
+                                WatchState::WatchFirstRound => { false  }, 
+                                WatchState::WatchNextRounds { last_build } => { false  }
+                            }
                         }
                         else {
-                            !r.is_up_to_date::<Utf8PathBuf>(None)
+                            !r.is_up_to_date::<Utf8PathBuf>(watch.last_build().cloned(), None)
                         }
                     }
                     else {
-                        !r.is_up_to_date::<Utf8PathBuf>(None)
+                        !r.is_up_to_date::<Utf8PathBuf>(watch.last_build().cloned(),None)
                     }
                 },
 
@@ -94,7 +102,14 @@ impl<'r> Graph<'r> {
                         return Err(BndBuilderError::UnknownTarget(msg));
                     }
                     else {
-                        false
+                        if let Some(last_build) = watch.last_build() {
+                            let file_modification= p.metadata().unwrap().modified().unwrap();
+                            let file_modification = file_modification.elapsed().unwrap();
+                            let last_build = last_build.elapsed();
+                            last_build > file_modification
+                        } else {
+                            false
+                        }
                     }
                 },
                 _ => todo!()
