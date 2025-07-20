@@ -45,7 +45,7 @@ pub struct BndBuilderApp {
 pub enum WatchState {
     NoWatch,
     WatchFirstRound,
-    WatchNextRounds{last_build: SystemTime},
+    WatchNextRounds { last_build: SystemTime }
 }
 
 impl WatchState {
@@ -57,13 +57,13 @@ impl WatchState {
         match self {
             Self::NoWatch => false,
             Self::WatchFirstRound => false,
-            Self::WatchNextRounds{..} => true
+            Self::WatchNextRounds { .. } => true
         }
     }
 
     pub fn last_build(&self) -> Option<&SystemTime> {
         match self {
-            Self::WatchNextRounds{last_build} => Some(last_build),
+            Self::WatchNextRounds { last_build } => Some(last_build),
             _ => None
         }
     }
@@ -236,7 +236,6 @@ impl BndBuilderCommand {
         builder: BndBuilder,
         observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
-
         let targets_provided = init_targets.is_some();
 
         // get the list of targets
@@ -269,7 +268,8 @@ impl BndBuilderCommand {
                 }
             })?;
             Some(SystemTime::now())
-        } else {
+        }
+        else {
             None
         };
 
@@ -291,14 +291,14 @@ impl BndBuilderCommand {
             Ok(Some(BndBuilderCommand {
                 inner: BndBuilderCommandInner::Build {
                     targets: init_targets,
-                    watch: WatchState::WatchNextRounds{last_build: last_build.unwrap_or_else(|| 
-                            watch.last_build().cloned()
-                                .unwrap_or_else(|| {
-                                    // if it fails it is because the file exists
-                                    tgt.metadata().unwrap()
-                                        .modified().unwrap()
-                                })
-                        )},
+                    watch: WatchState::WatchNextRounds {
+                        last_build: last_build.unwrap_or_else(|| {
+                            watch.last_build().cloned().unwrap_or_else(|| {
+                                // if it fails it is because the file exists
+                                tgt.metadata().unwrap().modified().unwrap()
+                            })
+                        })
+                    },
                     current_step,
                     builder
                 },
@@ -875,7 +875,12 @@ impl BndBuilderApp {
 
                 Ok(BndBuilderCommandInner::Build {
                     targets,
-                    watch: if watch_requested {WatchState::WatchFirstRound} else {WatchState::NoWatch},
+                    watch: if watch_requested {
+                        WatchState::WatchFirstRound
+                    }
+                    else {
+                        WatchState::NoWatch
+                    },
                     current_step: 0,
                     builder
                 })

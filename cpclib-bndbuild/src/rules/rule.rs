@@ -287,8 +287,11 @@ impl Rule {
         }
     }
 
-    pub fn is_up_to_date<P: AsRef<Utf8Path>>(&self, last_build: Option<SystemTime>, for_target: Option<P>) -> bool {
-
+    pub fn is_up_to_date<P: AsRef<Utf8Path>>(
+        &self,
+        last_build: Option<SystemTime>,
+        for_target: Option<P>
+    ) -> bool {
         // phony rules are never up to date
         if self.is_phony() && last_build.is_none() {
             return false;
@@ -300,7 +303,8 @@ impl Rule {
             if !target.exists() {
                 return false;
             }
-        } else {
+        }
+        else {
             // check if any target needs to be built
             if self.targets.iter().any(|p| !p.exists()) {
                 return false;
@@ -314,7 +318,8 @@ impl Rule {
                 if let Some(target) = &for_target {
                     let target = target.as_ref();
                     target == p.as_path()
-                } else {
+                }
+                else {
                     true
                 }
             })

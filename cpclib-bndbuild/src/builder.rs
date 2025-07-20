@@ -8,8 +8,8 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{Environment, Error, ErrorKind, context};
 
-use crate::app::WatchState;
 use crate::BndBuilderError;
+use crate::app::WatchState;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
     RuleTaskEventDispatcher
@@ -290,7 +290,7 @@ impl BndBuilder {
 
             let done = rule.is_up_to_date(None, Some(p));
             if done {
-                self.emit_stdout(&format!("Rule {p} already exists\n"));
+                self.emit_stdout(format!("Rule {p} already exists\n"));
                 // nothing to do
             }
             else {
@@ -307,9 +307,7 @@ impl BndBuilder {
             }
 
             // check if all the targets have been created
-            let wrong_files = rule.targets().iter()
-                .filter(|t| !t.exists())
-                .join(" ");
+            let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
             if !wrong_files.is_empty() {
                 self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));
             }
@@ -332,8 +330,12 @@ impl BndBuilder {
 
 impl BndBuilder {
     #[inline]
-    pub fn outdated<P: AsRef<Utf8Path>>(&self, watch: &WatchState, target: P) -> Result<bool, BndBuilderError> {
-        self.inner.borrow_dependent().outdated(target, watch,true)
+    pub fn outdated<P: AsRef<Utf8Path>>(
+        &self,
+        watch: &WatchState,
+        target: P
+    ) -> Result<bool, BndBuilderError> {
+        self.inner.borrow_dependent().outdated(target, watch, true)
     }
 
     #[inline]

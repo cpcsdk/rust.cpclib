@@ -1,13 +1,13 @@
-use std::{collections::{BTreeMap, HashSet}, time::{SystemTime}};
+use std::collections::{BTreeMap, HashSet};
 
 use camino::Utf8PathBuf;
-use cpclib_asm::file;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use topologic::AcyclicDependencyGraph;
 
 use super::{Rule, Rules};
-use crate::{app::WatchState, BndBuilderError};
+use crate::BndBuilderError;
+use crate::app::WatchState;
 
 #[derive(Clone)]
 pub struct Graph<'r> {
@@ -66,8 +66,6 @@ impl<'r> Graph<'r> {
         watch: &WatchState,
         skip_rules_without_commands: bool
     ) -> Result<bool, BndBuilderError> {
-
-
         let p = p.as_ref();
         // a phony rule is always outdated
         if !watch.disable_phony() && self.rule(p)?.is_phony() {
@@ -81,11 +79,11 @@ impl<'r> Graph<'r> {
             let res = match self.rule(p) {
                 Ok(r) => {
                     if skip_rules_without_commands {
-                        if  r.is_phony() {
+                        if r.is_phony() {
                             match watch {
                                 WatchState::NoWatch => false,
-                                WatchState::WatchFirstRound => { false  }, 
-                                WatchState::WatchNextRounds { last_build } => { false  }
+                                WatchState::WatchFirstRound => false,
+                                WatchState::WatchNextRounds { last_build } => false
                             }
                         }
                         else {
@@ -93,7 +91,7 @@ impl<'r> Graph<'r> {
                         }
                     }
                     else {
-                        !r.is_up_to_date::<Utf8PathBuf>(watch.last_build().cloned(),None)
+                        !r.is_up_to_date::<Utf8PathBuf>(watch.last_build().cloned(), None)
                     }
                 },
 
@@ -101,15 +99,14 @@ impl<'r> Graph<'r> {
                     if !p.exists() {
                         return Err(BndBuilderError::UnknownTarget(msg));
                     }
+                    else if let Some(last_build) = watch.last_build() {
+                        let file_modification = p.metadata().unwrap().modified().unwrap();
+                        let file_modification = file_modification.elapsed().unwrap();
+                        let last_build = last_build.elapsed().unwrap();
+                        last_build > file_modification
+                    }
                     else {
-                        if let Some(last_build) = watch.last_build() {
-                            let file_modification= p.metadata().unwrap().modified().unwrap();
-                            let file_modification = file_modification.elapsed().unwrap();
-                            let last_build = last_build.elapsed().unwrap();
-                            last_build > file_modification
-                        } else {
-                            false
-                        }
+                        false
                     }
                 },
                 _ => todo!()
