@@ -302,8 +302,8 @@ impl BndBuilder {
                 other_paths.as_ref()
                     .map(|ps| {
                         ps.iter().for_each(|p| {
-                            state.task_count += 1;
-                            self.start_rule(p, state.task_count, state.nb_deps);
+                                state.task_count += 1;
+                                self.start_rule(p, state.task_count, state.nb_deps);
                         });
                     });
                 let res = self.execute_rule(&paths[0], state);
