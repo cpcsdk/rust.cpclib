@@ -3,11 +3,10 @@ use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
-
+use std::collections::HashMap;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{Environment, Error, ErrorKind, context};
-
 use crate::BndBuilderError;
 use crate::app::WatchState;
 use crate::event::{
@@ -257,14 +256,66 @@ impl BndBuilder {
         Ok(())
     }
 
-    fn execute_layer(
-        &self,
+    fn execute_layer<'a>(
+        &'a self,
         layer: HashSet<&Utf8Path>,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
-        layer
+
+        // Store the files without rules. They are most probably existing files
+        let mut without_rule = Vec::new();
+
+        //group the paths per rule
+        let mut grouped: HashMap<&Rule, Vec<&Utf8Path>> = HashMap::default();
+        for p in layer.into_iter() {
+            if let Some(r) = self.get_rule(p) {
+                let mut entry = grouped.entry(r).or_default();
+                entry.push(p);
+            } else {
+                without_rule.push(p);
+            }
+
+        }
+        // count the files that are not produced
+        for p in without_rule.into_iter() {
+            state.task_count += 1;
+            self.start_rule(p, state.task_count, state.nb_deps);
+            if !p.exists() {
+                return Err(BndBuilderError::ExecuteError {
+                    fname: p.to_string(),
+                    msg: "no rule to build it".to_owned()
+                });
+            }
+            self.stop_rule(p);
+        };
+
+        // execute only one task per group but still count the others
+        grouped
             .into_iter()
-            .map(|p| self.execute_rule(p, state))
+            .map(|(r, paths)| {
+                let other_paths = if paths.len() > 1 {
+                    Some(&paths[1..])
+                } else {
+                    None
+                };
+
+                other_paths.as_ref()
+                    .map(|ps| {
+                        ps.iter().for_each(|p| {
+                            state.task_count += 1;
+                            self.start_rule(p, state.task_count, state.nb_deps);
+                        });
+                    });
+                let res = self.execute_rule(&paths[0], state);
+                if res.is_ok() {
+                    other_paths.map(|ps| {
+                        ps.iter().for_each(|p| {
+                            self.stop_rule(p)
+                    });
+                    });
+                }
+                res
+            })
             .collect::<Result<Vec<()>, BndBuilderError>>()?;
         Ok(())
     }
