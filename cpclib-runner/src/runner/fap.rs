@@ -22,9 +22,9 @@ impl FAPVersion {
 
 impl FAPVersion {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        let url = match self {
-            FAPVersion::V1_0_2  => DOWNLOAD_URL_V1_0_2,
-            FAPVersion::V1_0_0  => DOWNLOAD_URL_V1_0
+        let (url, folder) = match self {
+            FAPVersion::V1_0_2  => (DOWNLOAD_URL_V1_0_2, "fap1.0.2"),
+            FAPVersion::V1_0_0  => (DOWNLOAD_URL_V1_0, "fap1.0.0")
         };
 
         #[cfg(target_os = "linux")]
@@ -34,7 +34,7 @@ impl FAPVersion {
         
         DelegateApplicationDescription::builder()
                     .download_fn_url(url) // we assume a modern CPU
-                    .folder("Build")
+                    .folder(folder)
                     .archive_format(ArchiveFormat::Zip)
                     .exec_fname(exec)
                     .build()
