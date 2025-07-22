@@ -186,6 +186,13 @@ pub fn build_args_parser() -> clap::Command {
                 .conflicts_with("dot")
         )
         .arg(
+            Arg::new("numbered")
+            .long("numbered")
+            .help("number the lines when showing them")
+            .action(ArgAction::SetTrue)
+            .requires("show")
+        )
+        .arg(
             Arg::new("file")
                 .short('f')
                 .long("file")

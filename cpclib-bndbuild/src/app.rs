@@ -90,8 +90,8 @@ pub enum BndBuilderCommandInner {
         fname: Utf8PathBuf,
         builder: BndBuilder
     },
-    /// Show the content of the file after interpolation
-    Show(String),
+    /// Show the content of the file after interpolation. Eventulaly number the lines
+    Show(String, bool),
     /// List the potential targets
     List(BndBuilder),
     /// Build the corresponding targets
@@ -207,8 +207,8 @@ impl BndBuilderCommand {
                 Self::execute_add_task(task, dependencies, kind, builder, fname, observers)?;
                 Ok(None)
             },
-            BndBuilderCommandInner::Show(content) => {
-                Self::execute_show(content, &observers);
+            BndBuilderCommandInner::Show(content, numbered) => {
+                Self::execute_show(content, numbered, &observers);
                 Ok(None)
             },
             BndBuilderCommandInner::List(builder) => {
@@ -379,8 +379,16 @@ impl BndBuilderCommand {
         }
     }
 
-    fn execute_show<S: AsRef<str>>(content: S, observers: &dyn BndBuilderObserver) {
-        observers.emit_stdout(content.as_ref());
+    fn execute_show<S: AsRef<str>>(content: S, numbered: bool, observers: &dyn BndBuilderObserver) {
+        if numbered {
+            let content = content.as_ref();
+            for (idx, line) in content.lines().enumerate() {
+                observers.emit_stdout(&format!("{idx:03} {line}\n"));
+            }
+
+        } else {
+            observers.emit_stdout(content.as_ref());
+        }
     }
 
     fn execute_add_task<S: AsRef<str>, O: BndBuilderObserver>(
@@ -824,7 +832,7 @@ impl BndBuilderApp {
             let content = self.get_buildfile_content(fname)?;
 
             if matches.get_flag("show") {
-                return Ok(BndBuilderCommandInner::Show(content));
+                return Ok(BndBuilderCommandInner::Show(content, matches.get_flag("numbered")));
             }
 
             let mut builder = BndBuilder::from_string(content)?;
