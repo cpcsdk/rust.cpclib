@@ -170,11 +170,7 @@ impl BndBuilder {
         }
         #[cfg(target_os="linux")]
         fn basm_escape_path(path: String) -> Result<String, Error> {
-            path
-        }
-        #[cfg(target_os="linux")]
-        fn basm_escape_path(path: String) -> Result<String, Error> {
-            path
+            Ok(path)
         }
         #[cfg(target_os="windows")]
         fn basm_escape_path(path: String) -> Result<String, Error> {
