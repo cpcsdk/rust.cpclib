@@ -383,6 +383,7 @@ impl BndBuilderCommand {
         if numbered {
             let content = content.as_ref();
             for (idx, line) in content.lines().enumerate() {
+                let idx = idx+1;
                 observers.emit_stdout(&format!("{idx:03} {line}\n"));
             }
 

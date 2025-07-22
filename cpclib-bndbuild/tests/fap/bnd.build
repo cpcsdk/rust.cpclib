@@ -1,46 +1,68 @@
 #!/usr/bin/env -S bndbuild -f
 
-#         Name of the selected music                             Size of the buffer provided by cruncher
-{%- set selected_music = "\\\"FenyxKell - Bobline.fap\\\"" -%}{%- set buff_size = "&b42"-%}
-{%- set selected_music = "\\\"Targhan - A Harmless Grenade.fap\\\"" -%}{%- set buff_size = "&b42"-%}
-{%- set selected_music = "\\\"Targhan - Hocus Pocus.fap\\\"" -%}{%- set buff_size = "&c48"-%}
-{%- set selected_music = "\\\"Tom&Jerry - Boules Et Bits (Extended).fap\\\"" -%}{%- set buff_size = "&b42"-%}
-{%- set selected_music = "\\\"Tom&Jerry - From Scratch - Part 1.fap\\\"" -%}{%- set buff_size = "&a64"-%}
-{%- set selected_music = "\\\"UltraSyd - Fractal.fap\\\"" -%}{%- set buff_size = "&b42"-%}
+# `bndbuild ace` plays the first music
+# `bndbuild ace -DMUSIC_IDX=n`plays the nth music (starts with 0)
+
+# The list of musics and their buffer size
+# TODO find a way to automatically get the buffer size
+{%- 
+  set MUSICS = [
+    ("FenyxKell - Bobline", "&b42"),
+    ("Targhan - A Harmless Grenade", "&b42"),
+    ("Targhan - Hocus Pocus", "&c48"),
+    ("Tom&Jerry - Boules Et Bits (Extended)", "&c48"),
+    ("Tom&Jerry - From Scratch - Part 1", "&a64"),
+    ("UltraSyd - Fractal", "0xb42")
+  ]
+-%}
+
+# handle the music selection
+
+{% if MUSIC_IDX %}
+  {% set PARAMS=MUSIC_IDX|int%}
+{% else %}
+  {% set PARAMS=3%}
+{% endif %}
 
 
-{%- set player_binaries = ["Build/fap-play.bin", "Build/fap-init.bin"] -%}
+# get the appropriate value of the selected music
+{%- set selected_music = MUSICS[PARAMS][0] + ".fap" -%}
+{%- set buff_size = MUSICS[PARAMS][1]-%}
 
-{%- macro fap_rule(ym_file, opt=None) %}
-{% set fap_file = ym_file | replace('.ym', '.fap') %}
+{%- macro fap_rule(file, opt=None) %}
+{% set ym_file = file + ".ym" %}
+{% set fap_file = file + ".fap" %}
 - dep: "\"ym/{{ym_file}}\""
   tgt: "\"{{fap_file}}\""
   cmd: fap "ym/{{ym_file}}" "{{fap_file}}" {%if opt %}{{opt}}{% endif %}
 {% endmacro -%}
 
+{% for (music, size) in MUSICS %}
+{{fap_rule(music)}}
+{% endfor %}
 
-{{fap_rule("FenyxKell - Bobline.ym")}}
-{{fap_rule("Targhan - A Harmless Grenade.ym")}}
-{{fap_rule("Targhan - Hocus Pocus.ym")}}
-{{fap_rule("Tom&Jerry - Boules Et Bits (Extended).ym")}}
-{{fap_rule("Tom&Jerry - From Scratch - Part 1.ym")}}
-{{fap_rule("UltraSyd - Fractal.ym")}}
-
-
-
-- tgt: {{player_binaries |join(" ")}}
-  dep: player/*.asm
-  cmd: rasm player/FapMain.asm 
-
+# build the sna test music
+# it uses 
+#  - the converted fap file
+#  - the init and play binary code provided by FAP automatically downloaded by bndbuild
+#  - the sour of the test program
 - tgt: test.sna
-  dep: "{{selected_music}} {{player_binaries |join(" ")}}"
-  cmd: 'basm test.asm --snapshot -o test.sna -DMUSIC="{{selected_music}}" -DBuffSize={{buff_size}}'
+  dep: "\"{{selected_music}}\" test.asm" 
+  cmd: |
+    basm test.asm --snapshot -o test.sna 
+    -DFAP_INIT_PATH="\"{{FAP_INIT_PATH|basm_escape_path}}\""
+    -DFAP_PLAY_PATH="\"{{FAP_PLAY_PATH|basm_escape_path}}\""
+    -DMUSIC="\"{{selected_music}}\"" 
+    -DBuffSize="{{buff_size}}" 
 
 - tgt: ace
   dep: test.sna
   cmd: ace test.sna
 
-
 - tgt: clean
   phony: true
-  cmd: -rm *.fap Build/*
+  cmd: -rm *.fap
+
+- tgt: distclean
+  dep: clean
+  cmd: -rm test.sna

@@ -1,13 +1,11 @@
     ORG	#3000      
     RUN	$
 
-    ;BuffSize	equ #B42		; Size of replay buffer given by the cruncher.
-    PlayerSize	equ 609			; Size of the FAP player code
 
     FapInit	equ #C000       	; Address of the player initialization code.
     FapBuff	equ #4000       	; Address of the decrunch buffers (low order byte MUST BE 0).
     FapPlay	equ FapBuff+BuffSize  	; Address of the player code. Right after the decrunch buffer.
-    FapData	equ FapPlay+PlayerSize	; Address of the music data. Right after the player routine.
+    ; FapData is automatically computed by the assembler
 
     ;
     ; You known the story ;)
@@ -23,8 +21,10 @@
     ld	bc, FapPlay     ; Address of the player binary.
     ld	de, ReturnAddr  ; Address to jump after playing a song frame.
     ld	hl, FapData     ; Address of song data.
+    di
     call    FapInit
-
+    ei
+    
     ;
     ; Main loop
     ;
@@ -52,6 +52,9 @@ RestoreSp = $+1
     ;
     ; Load files
     ;
-    org	FapInit: incbin "Build/fap-init.bin"
-    org	FapPlay: incbin "Build/fap-play.bin"
-    org	FapData: incbin MUSIC
+    org	FapInit: incbin FAP_INIT_PATH
+    org	FapPlay: incbin FAP_PLAY_PATH
+    PlayerSize	equ $ - FapPlay
+
+
+    FapData: incbin MUSIC

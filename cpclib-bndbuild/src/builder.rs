@@ -168,6 +168,18 @@ impl BndBuilder {
         fn error(error: String) -> Result<String, Error> {
             Err(Error::new(ErrorKind::InvalidOperation, error))
         }
+        #[cfg(target_os="linux")]
+        fn basm_escape_path(path: String) -> Result<String, Error> {
+            path
+        }
+        #[cfg(target_os="linux")]
+        fn basm_escape_path(path: String) -> Result<String, Error> {
+            path
+        }
+        #[cfg(target_os="windows")]
+        fn basm_escape_path(path: String) -> Result<String, Error> {
+            Ok(path.replace("\\", "\\\\\\\\"))
+        }
 
         pub fn path_loader<'x, P: AsRef<std::path::Path> + 'x>(
             dir: P
@@ -191,11 +203,28 @@ impl BndBuilder {
 
         env.set_loader(path_loader(std::env::current_dir().unwrap()));
         env.add_function("fail", error);
+        env.add_function("basm_escape_path", basm_escape_path);
+        env.add_filter("basm_escape_path", basm_escape_path);
+
+        // Automatic feeding of FAP related environement variables
+        #[cfg(feature="fap")]
+        {
+            use cpclib_runner::runner::fap::FAPVersion;
+
+            let fap = FAPVersion::default(); // TODO allow to handle various versions
+            env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str()); 
+            env.add_global("FAP_INIT_PATH", fap.fap_init_path::<()>().as_str());
+        };
+
+        
+        // Feed user related variables
         for (key, value) in definitions {
             let key = key.as_ref();
             let value = value.as_ref();
             env.add_global(key, value);
         }
+
+        // generate the template
         env.render_str(&content, context!())
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))
     }
