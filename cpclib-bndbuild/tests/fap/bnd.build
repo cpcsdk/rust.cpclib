@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bndbuild -f
 
 # `bndbuild ace` plays the first music
-# `bndbuild ace -DMUSIC_IDX=n`plays the nth music (starts with 0)
+# `bndbuild ace -DMUSIC_IDX=n` plays the nth music (starts with 0)
 
 # The list of musics and their buffer size
 # TODO find a way to automatically get the buffer size
