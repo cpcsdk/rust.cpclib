@@ -7,6 +7,7 @@ pub mod disassembler;
 pub mod emulator;
 #[cfg(feature = "fap")]
 pub mod fap;
+pub mod grafx2;
 
 pub mod hspcompiler;
 pub mod impdisc;

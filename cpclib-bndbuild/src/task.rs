@@ -19,6 +19,7 @@ use cpclib_runner::runner::emulator::{
 };
 #[cfg(feature = "fap")]
 use cpclib_runner::runner::fap::FAP_CMD;
+use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
@@ -54,6 +55,7 @@ pub enum InnerTask {
     Extern(StandardTaskArguments),
     #[cfg(feature = "fap")]
     Fap(StandardTaskArguments),
+    Grafx2(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     HspCompiler(StandardTaskArguments),
     ImgConverter(StandardTaskArguments),
@@ -189,6 +191,7 @@ pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 #[cfg(feature = "fap")]
 pub const FAP_CMDS: &[&str] = &[FAP_CMD];
+pub const GRAFX2_CMDS:& [&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
@@ -223,6 +226,7 @@ impl Display for InnerTask {
             Self::Extern(s) => (EXTERN_CMDS[0], s),
             #[cfg(feature = "fap")]
             Self::Fap(s) => (FAP_CMDS[0], s),
+            Self::Grafx2(s) => (GRAFX2_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
             Self::HspCompiler(s) => (HSPC_CMDS[0], s),
             Self::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
@@ -270,6 +274,7 @@ is_some_cmd!(
     capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
     disark, disc,
     echo, emuctrl, r#extern,
+    grafx2,
     hideur,hspc,
     img2cpc, impdisc,
     martine, mkdir,
@@ -427,6 +432,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                         Disassembler::Extern(ExternDisassembler::Disark(DisarkVersion::default())),
                         std
                     ))
+                }
+                else if is_grafx2_cmd(code) {
+                    Ok(InnerTask::Grafx2(std))
                 }
                 else if is_fap_cmd(code) {
                     #[cfg(feature = "fap")]
@@ -591,6 +599,7 @@ impl InnerTask {
             | InnerTask::ImpDsk(t)
             | InnerTask::Echo(t)
             | InnerTask::Extern(t)
+            | InnerTask::Grafx2(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
@@ -619,6 +628,7 @@ impl InnerTask {
             | InnerTask::Echo(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Extern(t)
+            | InnerTask::Grafx2(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
@@ -662,8 +672,9 @@ impl InnerTask {
             InnerTask::Echo(_) => true,
             InnerTask::Emulator(..) => true,
             InnerTask::Extern(_) => false,
+            InnerTask::Grafx2(_) => true,
             #[cfg(feature = "fap")]
-            InnerTask::Fap(..) => true,
+            InnerTask::Fap(..) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,
             InnerTask::ImgConverter(_) => false,

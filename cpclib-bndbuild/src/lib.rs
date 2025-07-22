@@ -22,6 +22,7 @@ use task::{
 };
 use thiserror::Error;
 
+use crate::task::GRAFX2_CMDS;
 pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
@@ -76,6 +77,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (EXTERN_CMDS, false),
     #[cfg(feature = "fap")]
     (FAP_CMDS, true),
+    (GRAFX2_CMDS, true),
     (HIDEUR_CMDS, false),
     (HSPC_CMDS, true),
     (IMG2CPC_CMDS, false),

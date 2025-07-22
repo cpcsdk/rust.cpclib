@@ -8,6 +8,7 @@ use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 #[cfg(feature = "fap")]
 use cpclib_runner::runner::fap::FAPVersion;
+use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
@@ -59,6 +60,8 @@ impl InnerTask {
                     _ => None
                 }
             },
+
+            InnerTask::Grafx2(_) => Some(Grafx2Version::default().configuration()),
 
             #[cfg(feature = "fap")]
             InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
@@ -164,6 +167,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             )
             .run(task.args(), observer)
         },
+        InnerTask::Grafx2(_) => {
+            DelegatedRunner::<E>::new(
+                task.configuration().unwrap(),
+                Grafx2Version::default().get_command().to_owned()
+            )
+            .run(task.args(), observer)
+        }
         InnerTask::Convgeneric(standard_task_arguments) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
