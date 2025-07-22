@@ -148,7 +148,7 @@ fn parse_constraint(input: &mut &str) -> ModalResult<Constraint> {
 fn parse_negated_constraint(input: &mut &str) -> ModalResult<LogicalExpression> {
     delimited(
         (Caseless("not("), space0),
-        parse_positive_constraint,
+        parse_constraint,
         (space0, ')', space0)
     )
     .map(|c| LogicalExpression::Not(Box::new(c)))
@@ -293,5 +293,10 @@ mod test {
         let s = "NOT(OR(HOSTNAME(ELIOT1), HOSTNAME(ELIOT2)))".to_owned();
         let c = parse_logical_constraint.parse(&s).unwrap();
         assert!(c.corresponds());
+
+        let s = "NOT(NOT(OR(HOSTNAME(ELIOT1), HOSTNAME(ELIOT2))))".to_owned();
+        let c = parse_logical_constraint.parse(&s).unwrap();
+        assert!(!c.corresponds());
+
     }
 }

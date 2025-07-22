@@ -364,16 +364,19 @@ impl BndBuilder {
         self.start_rule(p, state.task_count, state.nb_deps);
 
         if let Some(rule) = this.rule(p) {
-            if !rule.is_enabled() {
-                return Err(BndBuilderError::DisabledTarget(p.to_string()));
-            }
+            let (disabled, done) = if !rule.is_enabled() {
+                //return Err(BndBuilderError::DisabledTarget(p.to_string())); // Finally we ignore it
+                self.emit_stderr(&format!("The target {} is disabled and ignored.", p)); 
+                (true, true)
+            } else {
+                let done =  rule.is_up_to_date(None, Some(p));
+                if done {
+                    self.emit_stdout(format!("Rule {p} already exists\n"));
+                }
+                (false, done)
+            };
 
-            let done = rule.is_up_to_date(None, Some(p));
-            if done {
-                self.emit_stdout(format!("Rule {p} already exists\n"));
-                // nothing to do
-            }
-            else {
+            if ! done {
                 // execute all the tasks for this rule
                 for task in rule.commands() {
                     let task_observer = this.task_observer(p, task);
@@ -387,9 +390,11 @@ impl BndBuilder {
             }
 
             // check if all the targets have been created
-            let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
-            if !wrong_files.is_empty() {
-                self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));
+            if ! disabled {
+                let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
+                if !wrong_files.is_empty() {
+                    self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));
+                }
             }
         }
         else if !p.exists() {
