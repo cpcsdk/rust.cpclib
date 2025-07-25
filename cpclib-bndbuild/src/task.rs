@@ -719,9 +719,11 @@ impl StandardTaskArguments {
         let initial = self.args.clone();
 
         if let Some(first_dep) = first_dep {
-            self.args = RE_FIRST_DEP
-                .replace_all(&self.args, first_dep.as_str())
-                .into_owned();
+            #[cfg(not(target_os = "windows"))]
+            let first_dep = first_dep.as_str();
+            #[cfg(target_os = "windows")]
+            let first_dep = first_dep.as_str().replace("\\", "\\\\");
+            self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep).into_owned();
         }
         else if RE_FIRST_DEP.is_match(&self.args).unwrap() {
             self.args = initial;
@@ -732,9 +734,12 @@ impl StandardTaskArguments {
         }
 
         if let Some(first_tgt) = first_tgt {
-            self.args = RE_FIRST_TGT
-                .replace_all(&self.args, first_tgt.as_str())
-                .into_owned();
+            #[cfg(not(target_os = "windows"))]
+            let first_tgt = first_tgt.as_str();
+            #[cfg(target_os = "windows")]
+            let first_tgt = first_tgt.as_str().replace("\\", "\\\\");
+
+            self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt).into_owned();
         }
         else if RE_FIRST_TGT.is_match(&self.args).unwrap() {
             self.args = initial;
