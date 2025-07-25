@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Result};
-use std::ops::Add;
+use std::ops::{Add, Deref};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::num::Integer;
@@ -962,10 +962,15 @@ impl Palette {
         self.contains_pen(Pen::from(16))
     }
 
-    /// Provides the next unused pen if there is one
+    /// Provides the next unused pen if there is one. a 16 palette mode is considered
     pub fn next_unused_pen(&self) -> Option<Pen> {
-        for i in 0..16 {
-            let pen = i.into();
+        self.next_unused_pen_for_mode(Mode::Zero)
+    }
+
+    /// Provides the next unused pen, if there is one, for the requested mode
+    pub fn next_unused_pen_for_mode(&self, mode: Mode) -> Option<Pen> {
+        for i in 0..(mode.max_colors() as i32) {
+            let pen = Pen::from(i);
             if !self.contains_pen(pen) {
                 return Some(pen);
             }
@@ -1213,6 +1218,78 @@ impl From<Palette> for Vec<u8> {
 #[allow(missing_docs)]
 impl Palette {
     pub fn to_vec(&self) -> Vec<u8> {
+        self.into()
+    }
+}
+
+
+/// Represents a palette that can be read-only by construction or updatable
+#[derive(Clone, Debug)]
+pub struct LockablePalette{
+    pal: Palette,
+    locked: bool
+}
+
+impl Into<Palette> for LockablePalette {
+    fn into(self) -> Palette {
+        self.pal
+    }
+}
+
+impl Into<Palette> for &LockablePalette {
+    fn into(self) -> Palette {
+        self.pal.clone()
+    }
+}
+
+impl Deref for LockablePalette {
+    type Target = Palette;
+    fn deref(&self) -> &Self::Target {
+        self.as_palette()
+    }
+}
+
+impl LockablePalette {
+    /// Build a read-only palette
+    pub fn locked(pal: Palette) -> Self {
+        Self{pal, locked: true}
+    }
+
+    /// Build a modifiable possibly non-empty palette
+    pub fn unlocked(pal: Palette) -> Self {
+        Self{pal, locked: false}
+    }
+
+    /// Build a modifable empty palette
+    pub fn empty() -> Self {
+        Self::unlocked(Palette::empty())
+    }
+
+    #[inline]
+    pub fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    #[inline]
+    pub fn is_unlocked(&self) -> bool {
+        !self.is_locked()
+    }
+
+    /// Get the modifiable version of the palette if unlocked
+    pub fn as_palette_mut(&mut self) -> Option<&mut Palette> {
+        if self.is_unlocked() {
+            Some(&mut self.pal)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_palette(&self) -> &Palette {
+        &self.pal
+    }
+
+    #[inline]
+    pub fn into_palette(&self) -> Palette {
         self.into()
     }
 }

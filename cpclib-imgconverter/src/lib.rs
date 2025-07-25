@@ -12,7 +12,7 @@ use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
-use cpclib::image::ga::Palette;
+use cpclib::image::ga::{LockablePalette, Palette};
 use cpclib::image::ocp::{self, OcpPal};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
@@ -197,10 +197,19 @@ macro_rules! specify_palette {
                 .conflicts_with("OCP_PAL")
                 .value_parser(value_parser!(u8))
         )
+        .arg(
+            Arg::new("UNLOCK_PENS")
+                .long("unlock-pens")
+                .required(false)
+                .conflicts_with("OCP_PAL")
+                .conflicts_with("PENS") // TODO make it work with PENS too
+                .help("When some pens are manually provided, allows to also use the other ones by automatically assign them missing inks. By default, this is forbidden.")
+                .action(ArgAction::SetTrue)
+        )
     };
 }
 
-pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, AmsdosError> {
+pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, AmsdosError> {
     if matches.contains_id("PENS") {
         let numbers = matches
             .get_one::<String>("PENS")
@@ -208,13 +217,13 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
             .split(",")
             .map(|ink| ink.parse::<u8>().unwrap())
             .collect::<Vec<_>>();
-        Ok(Some(numbers.into()))
+        Ok(LockablePalette::unlocked(numbers.into()))
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
         let pal = OcpPal::from_buffer(data);
-        Ok(Some(pal.palette(0).clone()))
+        Ok(LockablePalette::unlocked(pal.palette(0).clone()))
     }
     else {
         let mut one_pen_set = false;
@@ -226,12 +235,10 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<Option<Palette>, Am
                 palette.set(i, *matches.get_one::<u8>(&key).unwrap())
             }
         }
-
-        if one_pen_set {
-            Ok(Some(palette))
-        }
-        else {
-            Ok(None)
+        if matches.get_flag("UNLOCK_PENS") || !one_pen_set {
+            Ok(LockablePalette::unlocked(palette))
+        } else {
+            Ok(LockablePalette::locked(palette))
         }
     }
 }

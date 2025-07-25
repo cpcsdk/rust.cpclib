@@ -51,7 +51,7 @@ fn main() -> Result<(), AmsdosError> {
     );
 
     let matches = cmd.get_matches();
-    let palette = get_requested_palette(&matches)?.unwrap_or_default();
+    let palette = get_requested_palette(&matches)?;
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;

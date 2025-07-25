@@ -1,6 +1,6 @@
 #![allow(clippy::needless_range_loop)]
 
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::format};
 
 use anyhow::Context;
 use cpclib_common::camino::Utf8Path;
@@ -440,17 +440,34 @@ impl ColorMatrix {
 
     /// Returns the palette used (as soon as there is less than the maximum number of inks fr the requested mode)
     pub fn extract_palette(&self, mode: Mode) -> Palette {
-        let mut p = Palette::empty();
-        for (idx, color) in self.data.iter().flatten().unique().sorted().enumerate() {
-            if idx >= mode.max_colors() {
-                // do we really want to fail ? maybe we can have special modes to handle there
-                panic!(
-                    "[ERROR] your picture uses more than 16 different colors. Palette: {p:?}. Wrong ink: {color:?}"
-                );
+        self.extract_palette_with_hint(mode, LockablePalette::empty())
+            .unwrap()
+    }
+
+    /// Return the palette used. The final palette is based on the hint one
+    pub fn extract_palette_with_hint(&self, mode: Mode, mut hint: LockablePalette) -> Result<Palette, String> {
+        for (idx, &ink) in self.data.iter().flatten().unique().sorted().enumerate() {
+            if !hint.contains_ink(ink) {
+                // here the palette does not contain the ink, so we have to add it
+                if hint.is_locked() {
+                    return Err(format!("Palette is locked, it is not possible to add ink {ink}"));
+                }
+
+                let target_pen = hint.next_unused_pen_for_mode(mode);
+                if let Some(target_pen) = target_pen {
+                    hint.as_palette_mut()
+                        .unwrap()
+                        .set(target_pen, ink);
+
+                } else {
+                    return Err(format!("Palette is full, it is not possible to add extra ink {ink}"))
+                }
+            } else {
+                // the ink is already there, nothing has to be done
             }
-            p.set(Pen::from(idx as u8), *color);
         }
-        p
+        
+        Ok(hint.into())
     }
 
     /// Modify the image in order to keep the right amount of inks
@@ -610,11 +627,15 @@ impl ColorMatrix {
     pub fn as_sprite(
         &self,
         mode: Mode,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         missing_pen: Option<Pen>
     ) -> Sprite {
         // Extract the palette is not provided as an argument
-        let palette = palette.unwrap_or_else(|| self.extract_palette(mode));
+        let palette = if palette.is_locked() {
+            palette.into_palette()
+        } else {
+            self.extract_palette_with_hint(mode, palette).unwrap()
+        };
 
         // Really make the conversion
         let pens = inks_to_pens(&self.data, &palette);
@@ -861,7 +882,7 @@ impl ColorMatrixList {
     pub fn as_sprites(
         &self,
         mode: Mode,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         missing_pen: Option<Pen>
     ) -> SpriteList {
         self.to_vec()
@@ -1006,7 +1027,7 @@ impl std::ops::Deref for SpriteList {
 pub struct Sprite {
     /// Optional screen mode of the sprite
     pub(crate) mode: Option<Mode>,
-    /// Optinal palete of the sprite
+    /// Optionnal palete of the sprite
     pub(crate) palette: Option<Palette>,
     /// Content of the sprite
     pub(crate) data: Vec<Vec<u8>>
@@ -1152,7 +1173,7 @@ impl Sprite {
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         missing_pen: Option<Pen>
     ) -> Self {
         // Get the list of Inks that represent the image
@@ -1164,7 +1185,7 @@ impl Sprite {
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         missing_pen: Option<Pen>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;

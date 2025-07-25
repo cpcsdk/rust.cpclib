@@ -1214,7 +1214,7 @@ pub struct ImageConverter {
     // TODO add a crop area to not keep the complete image
     // cropArea: Option<???>
     /// A palette can be specified
-    palette: Option<Palette>,
+    palette: LockablePalette,
 
     /// Screen mode
     mode: Mode,
@@ -1234,7 +1234,7 @@ impl ImageConverter {
     /// Create the object that will be used to make the conversion
     pub fn convert<P>(
         input_file: P,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         mode: Mode,
         transformations: TransformationsList,
         output: OutputFormat,
@@ -1257,7 +1257,7 @@ impl ImageConverter {
 
     fn convert_to_sprite(
         input_file: &Utf8Path,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         mode: Mode,
         transformations: TransformationsList,
         encoding: SpriteEncoding,
@@ -1371,7 +1371,7 @@ impl ImageConverter {
 
     fn convert_impl(
         input_file: &Utf8Path,
-        palette: Option<Palette>,
+        palette: LockablePalette,
         mode: Mode,
         transformations: TransformationsList,
         output: OutputFormat,
@@ -1389,7 +1389,7 @@ impl ImageConverter {
         if let OutputFormat::LinearEncodedChuncky = &output {
             let mut matrix = converter.load_color_matrix(input_file);
             matrix.double_horizontally();
-            let sprite = matrix.as_sprite(mode, None, None);
+            let sprite = matrix.as_sprite(mode, LockablePalette::empty(), None);
             Ok(Output::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
                 palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
@@ -1435,7 +1435,7 @@ impl ImageConverter {
             mask_palette[mode.max_colors() - 1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
-                Some(mask_palette.into()), // we want and 0 ; or byte where we plot
+                LockablePalette::locked(mask_palette.into()), // we want and 0 ; or byte where we plot
                 mode,
                 mask_transformations,
                 *sprite_format,
@@ -1462,7 +1462,7 @@ impl ImageConverter {
     /// Makes the conversion of the provided sprite to the expected format
     pub fn import(sprite: &Sprite, output: OutputFormat) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
-            palette: None,
+            palette: LockablePalette::empty(),
             mode: Mode::Zero, // TODO make the mode an optional argument,
             output,
             transformations: TransformationsList::default(),
@@ -1478,7 +1478,9 @@ impl ImageConverter {
     fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
-        self.palette = sprite.palette();
+        self.palette = LockablePalette::locked(
+            sprite.palette()
+                .unwrap());
 
         sprite
     }
