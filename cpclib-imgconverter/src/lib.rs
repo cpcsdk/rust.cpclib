@@ -237,7 +237,8 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
         }
         if matches.get_flag("UNLOCK_PENS") || !one_pen_set {
             Ok(LockablePalette::unlocked(palette))
-        } else {
+        }
+        else {
             Ok(LockablePalette::locked(palette))
         }
     }

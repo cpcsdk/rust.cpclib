@@ -173,7 +173,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 Grafx2Version::default().get_command().to_owned()
             )
             .run(task.args(), observer)
-        }
+        },
         InnerTask::Convgeneric(standard_task_arguments) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),

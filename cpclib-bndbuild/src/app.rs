@@ -383,11 +383,11 @@ impl BndBuilderCommand {
         if numbered {
             let content = content.as_ref();
             for (idx, line) in content.lines().enumerate() {
-                let idx = idx+1;
+                let idx = idx + 1;
                 observers.emit_stdout(&format!("{idx:03} {line}\n"));
             }
-
-        } else {
+        }
+        else {
             observers.emit_stdout(content.as_ref());
         }
     }
@@ -833,7 +833,10 @@ impl BndBuilderApp {
             let content = self.get_buildfile_content(fname)?;
 
             if matches.get_flag("show") {
-                return Ok(BndBuilderCommandInner::Show(content, matches.get_flag("numbered")));
+                return Ok(BndBuilderCommandInner::Show(
+                    content,
+                    matches.get_flag("numbered")
+                ));
             }
 
             let mut builder = BndBuilder::from_string(content)?;

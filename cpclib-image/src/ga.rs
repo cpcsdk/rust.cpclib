@@ -1222,10 +1222,9 @@ impl Palette {
     }
 }
 
-
 /// Represents a palette that can be read-only by construction or updatable
 #[derive(Clone, Debug)]
-pub struct LockablePalette{
+pub struct LockablePalette {
     pal: Palette,
     locked: bool
 }
@@ -1244,6 +1243,7 @@ impl Into<Palette> for &LockablePalette {
 
 impl Deref for LockablePalette {
     type Target = Palette;
+
     fn deref(&self) -> &Self::Target {
         self.as_palette()
     }
@@ -1252,12 +1252,12 @@ impl Deref for LockablePalette {
 impl LockablePalette {
     /// Build a read-only palette
     pub fn locked(pal: Palette) -> Self {
-        Self{pal, locked: true}
+        Self { pal, locked: true }
     }
 
     /// Build a modifiable possibly non-empty palette
     pub fn unlocked(pal: Palette) -> Self {
-        Self{pal, locked: false}
+        Self { pal, locked: false }
     }
 
     /// Build a modifable empty palette
@@ -1279,7 +1279,8 @@ impl LockablePalette {
     pub fn as_palette_mut(&mut self) -> Option<&mut Palette> {
         if self.is_unlocked() {
             Some(&mut self.pal)
-        } else {
+        }
+        else {
             None
         }
     }

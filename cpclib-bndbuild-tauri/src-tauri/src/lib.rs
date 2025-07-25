@@ -15,7 +15,7 @@ use camino::Utf8PathBuf;
 use cpclib_bndbuild::app::{BndBuilderCommand, BndBuilderCommandInner};
 use cpclib_bndbuild::cpclib_common::itertools::Itertools;
 use cpclib_bndbuild::event::BndBuilderObserved;
-use cpclib_bndbuild::{commands_list, ALL_APPLICATIONS};
+use cpclib_bndbuild::{ALL_APPLICATIONS, commands_list};
 use serde::Serialize;
 use tauri::menu::{
     AboutMetadataBuilder, MenuBuilder, MenuEvent, MenuId, MenuItemBuilder, SubmenuBuilder

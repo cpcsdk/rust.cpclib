@@ -1,6 +1,7 @@
 #![allow(clippy::needless_range_loop)]
 
-use std::{collections::HashSet, fmt::format};
+use std::collections::HashSet;
+use std::fmt::format;
 
 use anyhow::Context;
 use cpclib_common::camino::Utf8Path;
@@ -445,28 +446,35 @@ impl ColorMatrix {
     }
 
     /// Return the palette used. The final palette is based on the hint one
-    pub fn extract_palette_with_hint(&self, mode: Mode, mut hint: LockablePalette) -> Result<Palette, String> {
+    pub fn extract_palette_with_hint(
+        &self,
+        mode: Mode,
+        mut hint: LockablePalette
+    ) -> Result<Palette, String> {
         for (idx, &ink) in self.data.iter().flatten().unique().sorted().enumerate() {
             if !hint.contains_ink(ink) {
                 // here the palette does not contain the ink, so we have to add it
                 if hint.is_locked() {
-                    return Err(format!("Palette is locked, it is not possible to add ink {ink}"));
+                    return Err(format!(
+                        "Palette is locked, it is not possible to add ink {ink}"
+                    ));
                 }
 
                 let target_pen = hint.next_unused_pen_for_mode(mode);
                 if let Some(target_pen) = target_pen {
-                    hint.as_palette_mut()
-                        .unwrap()
-                        .set(target_pen, ink);
-
-                } else {
-                    return Err(format!("Palette is full, it is not possible to add extra ink {ink}"))
+                    hint.as_palette_mut().unwrap().set(target_pen, ink);
                 }
-            } else {
+                else {
+                    return Err(format!(
+                        "Palette is full, it is not possible to add extra ink {ink}"
+                    ));
+                }
+            }
+            else {
                 // the ink is already there, nothing has to be done
             }
         }
-        
+
         Ok(hint.into())
     }
 
@@ -633,7 +641,8 @@ impl ColorMatrix {
         // Extract the palette is not provided as an argument
         let palette = if palette.is_locked() {
             palette.into_palette()
-        } else {
+        }
+        else {
             self.extract_palette_with_hint(mode, palette).unwrap()
         };
 

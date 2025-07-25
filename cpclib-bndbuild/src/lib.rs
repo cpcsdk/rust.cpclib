@@ -22,10 +22,10 @@ use task::{
 };
 use thiserror::Error;
 
-use crate::task::GRAFX2_CMDS;
 pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
+use crate::task::GRAFX2_CMDS;
 
 pub mod app;
 pub mod builder;

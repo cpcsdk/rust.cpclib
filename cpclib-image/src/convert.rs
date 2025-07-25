@@ -1435,7 +1435,7 @@ impl ImageConverter {
             mask_palette[mode.max_colors() - 1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
-                LockablePalette::locked(mask_palette.into()), // we want and 0 ; or byte where we plot
+                LockablePalette::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
                 mode,
                 mask_transformations,
                 *sprite_format,
@@ -1478,9 +1478,7 @@ impl ImageConverter {
     fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
-        self.palette = LockablePalette::locked(
-            sprite.palette()
-                .unwrap());
+        self.palette = LockablePalette::locked(sprite.palette().unwrap());
 
         sprite
     }

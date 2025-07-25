@@ -297,6 +297,5 @@ mod test {
         let s = "NOT(NOT(OR(HOSTNAME(ELIOT1), HOSTNAME(ELIOT2))))".to_owned();
         let c = parse_logical_constraint.parse(&s).unwrap();
         assert!(!c.corresponds());
-
     }
 }

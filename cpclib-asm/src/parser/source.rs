@@ -43,7 +43,6 @@ impl AsRef<str> for Z80Span {
     }
 }
 
-
 impl<'a> From<&'a Z80Span> for &'a str {
     fn from(val: &'a Z80Span) -> Self {
         AsRef::as_ref(val)

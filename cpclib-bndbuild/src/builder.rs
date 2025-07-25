@@ -1,12 +1,13 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
-use std::collections::HashMap;
+
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::{Environment, Error, ErrorKind, context};
+
 use crate::BndBuilderError;
 use crate::app::WatchState;
 use crate::event::{
@@ -168,11 +169,11 @@ impl BndBuilder {
         fn error(error: String) -> Result<String, Error> {
             Err(Error::new(ErrorKind::InvalidOperation, error))
         }
-        #[cfg(target_os="linux")]
+        #[cfg(target_os = "linux")]
         fn basm_escape_path(path: String) -> Result<String, Error> {
             Ok(path)
         }
-        #[cfg(target_os="windows")]
+        #[cfg(target_os = "windows")]
         fn basm_escape_path(path: String) -> Result<String, Error> {
             Ok(path.replace("\\", "\\\\\\\\"))
         }
@@ -203,16 +204,15 @@ impl BndBuilder {
         env.add_filter("basm_escape_path", basm_escape_path);
 
         // Automatic feeding of FAP related environement variables
-        #[cfg(feature="fap")]
+        #[cfg(feature = "fap")]
         {
             use cpclib_runner::runner::fap::FAPVersion;
 
             let fap = FAPVersion::default(); // TODO allow to handle various versions
-            env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str()); 
+            env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str());
             env.add_global("FAP_INIT_PATH", fap.fap_init_path::<()>().as_str());
         };
 
-        
         // Feed user related variables
         for (key, value) in definitions {
             let key = key.as_ref();
@@ -286,20 +286,19 @@ impl BndBuilder {
         layer: HashSet<&Utf8Path>,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
-
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
 
-        //group the paths per rule
+        // group the paths per rule
         let mut grouped: HashMap<&Rule, Vec<&Utf8Path>> = HashMap::default();
         for p in layer.into_iter() {
             if let Some(r) = self.get_rule(p) {
                 let mut entry = grouped.entry(r).or_default();
                 entry.push(p);
-            } else {
+            }
+            else {
                 without_rule.push(p);
             }
-
         }
         // count the files that are not produced
         for p in without_rule.into_iter() {
@@ -312,7 +311,7 @@ impl BndBuilder {
                 });
             }
             self.stop_rule(p);
-        };
+        }
 
         // execute only one task per group but still count the others
         grouped
@@ -320,23 +319,21 @@ impl BndBuilder {
             .map(|(r, paths)| {
                 let other_paths = if paths.len() > 1 {
                     Some(&paths[1..])
-                } else {
+                }
+                else {
                     None
                 };
 
-                other_paths.as_ref()
-                    .map(|ps| {
-                        ps.iter().for_each(|p| {
-                                state.task_count += 1;
-                                self.start_rule(p, state.task_count, state.nb_deps);
-                        });
+                other_paths.as_ref().map(|ps| {
+                    ps.iter().for_each(|p| {
+                        state.task_count += 1;
+                        self.start_rule(p, state.task_count, state.nb_deps);
                     });
+                });
                 let res = self.execute_rule(&paths[0], state);
                 if res.is_ok() {
                     other_paths.map(|ps| {
-                        ps.iter().for_each(|p| {
-                            self.stop_rule(p)
-                    });
+                        ps.iter().for_each(|p| self.stop_rule(p));
                     });
                 }
                 res
@@ -361,18 +358,19 @@ impl BndBuilder {
 
         if let Some(rule) = this.rule(p) {
             let (disabled, done) = if !rule.is_enabled() {
-                //return Err(BndBuilderError::DisabledTarget(p.to_string())); // Finally we ignore it
-                self.emit_stderr(&format!("The target {} is disabled and ignored.", p)); 
+                // return Err(BndBuilderError::DisabledTarget(p.to_string())); // Finally we ignore it
+                self.emit_stderr(&format!("The target {} is disabled and ignored.", p));
                 (true, true)
-            } else {
-                let done =  rule.is_up_to_date(None, Some(p));
+            }
+            else {
+                let done = rule.is_up_to_date(None, Some(p));
                 if done {
                     self.emit_stdout(format!("Rule {p} already exists\n"));
                 }
                 (false, done)
             };
 
-            if ! done {
+            if !done {
                 // execute all the tasks for this rule
                 for task in rule.commands() {
                     let task_observer = this.task_observer(p, task);
@@ -386,7 +384,7 @@ impl BndBuilder {
             }
 
             // check if all the targets have been created
-            if ! disabled {
+            if !disabled {
                 let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
                 if !wrong_files.is_empty() {
                     self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));

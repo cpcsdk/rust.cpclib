@@ -9,7 +9,7 @@ pub const DOWNLOAD_URL_V2_9_WINDOWS: &str = "https://pulkomandy.tk/projects/Graf
 #[derive(Default)]
 pub enum Grafx2Version {
     #[default]
-    V2_9,
+    V2_9
 }
 
 impl Grafx2Version {
@@ -21,7 +21,7 @@ impl Grafx2Version {
 impl Grafx2Version {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         let url = match self {
-            Grafx2Version::V2_9  => DOWNLOAD_URL_V2_9_WINDOWS,
+            Grafx2Version::V2_9 => DOWNLOAD_URL_V2_9_WINDOWS
         };
 
         let folder = match self {
@@ -29,14 +29,12 @@ impl Grafx2Version {
         };
 
         let exec = "bin/grafx2-sdl.exe";
-        
+
         DelegateApplicationDescription::builder()
-                    .download_fn_url(url) // we assume a modern CPU
-                    .folder(folder)
-                    .archive_format(ArchiveFormat::Zip)
-                    .exec_fname(exec)
-                    .build()
+            .download_fn_url(url) // we assume a modern CPU
+            .folder(folder)
+            .archive_format(ArchiveFormat::Zip)
+            .exec_fname(exec)
+            .build()
     }
 }
-
-
