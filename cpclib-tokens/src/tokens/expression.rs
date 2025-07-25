@@ -1347,11 +1347,11 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
         match (self, rhs) {
             (any, ExprResult::Bool(_)) => {
                 let b = rhs.as_type(&any)?;
-                any.sub(b)
+                any.add(b)
             },
             (ExprResult::Bool(_), any) => {
                 let b = rhs.as_type(any)?;
-                b.sub(any)
+                b.add(any)
             },
 
             (ExprResult::Float(f1), ExprResult::Float(f2)) => {
@@ -1369,6 +1369,16 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             (ExprResult::String(s), _) if s.len() == 1 => {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
             },
+
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.add(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
             (ExprResult::Char(c), _) => ExprResult::Value(c as _) + rhs.clone(),
 
             (any, ExprResult::String(s)) if s.len() == 1 => {
@@ -1378,7 +1388,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
 
             (any, _) => {
                 Err(ExpressionTypeError(format!(
-                    "Impossible addition between {any} and {rhs}"
+                    "Impossible addition between {any} and {rhs}. Fill an issue if you need it <https://github.com/cpcsdk/rust.cpclib/issues>"
                 )))
             },
         }
@@ -1421,6 +1431,15 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Sub<T> for ExprResult {
             },
             (any, ExprResult::Char(c)) => any - ExprResult::Value(*c as _),
 
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.sub(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
             (any, rhs) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible substraction between {any} and {rhs}"
@@ -1450,6 +1469,15 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
             (ExprResult::Value(v1), ExprResult::Char(v2))
             | (ExprResult::Char(v2), ExprResult::Value(v1)) => Ok((*v1 * (*v2 as i32)).into()),
 
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.clone().mul(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible multiplication between {self} and {rhs}"
@@ -1477,6 +1505,16 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
             (ExprResult::Value(_), ExprResult::Value(_)) => {
                 Ok((self.float()? / rhs.float()?).into())
             },
+
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.clone().div(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible division between {self} and {rhs}"
@@ -1505,6 +1543,16 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
                 // XXX is it the expected behavior ? (I used this formula only for ORGAMS compatibilyt. It is maybe an error)
                 Ok(((*v1 as u32 % *v2 as u32) as i32).into())
             },
+
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.clone().rem(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
             (..) => {
                 Err(ExpressionTypeError(format!(
                     "Impossible reminder between {self} and {rhs}"
@@ -1534,7 +1582,17 @@ impl std::ops::BitAnd for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitand(self, rhs: Self) -> Self::Output {
-        Ok((self.int()? & rhs.int()?).into())
+        match (self, rhs) {
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.add(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+            (myself, rhs) => Ok((myself.int()? & rhs.int()?).into())
+        }
     }
 }
 
@@ -1542,7 +1600,18 @@ impl std::ops::BitOr for ExprResult {
     type Output = Result<Self, ExpressionTypeError>;
 
     fn bitor(self, rhs: Self) -> Self::Output {
-        Ok((self.int()? | rhs.int()?).into())
+        match (self, rhs) {
+            (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
+                let l3 = l1
+                    .into_iter()
+                    .zip(l2.iter())
+                    .map(|(a, b)| a.add(b))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ExprResult::List(l3))
+            },
+
+            (myself, rhs) => Ok((myself.int()? | rhs.int()?).into())
+        }
     }
 }
 
