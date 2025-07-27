@@ -19,6 +19,7 @@ use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending,
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
+use cpclib_common::winnow::combinator::cond;
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
@@ -3496,27 +3497,40 @@ pub fn parse_ld_fake(
 
         let _ = parse_comma(input)?;
 
+
+
         // TODO - add https://z00m128.github.io/sjasmplus/documentation.html#s_fake_instructions
-        let src = if dst.is_register16() {
-            alt((
-                terminated(
-                    alt((parse_register16, parse_indexregister16)),
-                    not(alt((Caseless(".low"), Caseless(".high"))))
-                ),
-                parse_hl_address,
-                parse_indexregister_with_index
-            ))
-            .parse_next(input)?
-        }
-        else
-        // mem-like
-        {
-            terminated(
-                parse_register16,
-                not(alt((Caseless(".low"), Caseless(".high"))))
-            )
-            .parse_next(input)?
+
+        let src = if dst.is_register_hl() {
+            opt(parse_register_sp)
+                .parse_next(input)?
+        } else {
+            None
         };
+
+        let src = if let Some(src) = src {
+            src
+        } else if dst.is_register16() {
+                alt((
+                    terminated(
+                        alt((parse_register16, parse_indexregister16)),
+                        not(alt((Caseless(".low"), Caseless(".high"))))
+                    ),
+                    parse_hl_address,
+                    parse_indexregister_with_index,
+                ))
+                .parse_next(input)?
+            }
+            else
+            // mem-like
+            {
+                terminated(
+                    parse_register16,
+                    not(alt((Caseless(".low"), Caseless(".high"))))
+                )
+                .parse_next(input)?
+            }
+        ;
 
         let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
 
@@ -4005,7 +4019,7 @@ pub fn parse_macro_or_struct_call_inner(
         if has_parenthesis {
             (my_space0, ')', my_space0).parse_next(input)?;
         }
-        
+
         if args.len() == 1 && args.first().unwrap().0.is_empty() {
             panic!();
         }

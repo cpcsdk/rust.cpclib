@@ -6072,8 +6072,25 @@ where
         }
         else if arg2.is_register16() {
             let src = arg2.get_register16().unwrap();
-            // Fake instruction splitted in 2 bits operations
-            {
+
+            if src.is_sp() {
+                bytes.extend(
+                    assemble_ld(
+                        &DataAccess::Register16(Register16::Hl),
+                        &DataAccess::Expression(Expr::Value(0)).into(),
+                        env
+                    )?
+                );
+                bytes.extend(
+                    assemble_add_or_adc(
+                        Mnemonic::Add, 
+                        Some(&DataAccess::Register16(Register16::Hl)), 
+                        &DataAccess::Register16(Register16::Sp), 
+                        env
+                    )?
+                );
+            }
+            else {
                 let bytes_high = assemble_ld(
                     &DataAccess::Register8(dst.high().unwrap()),
                     &DataAccess::Register8(src.high().unwrap()),
@@ -6313,8 +6330,12 @@ where
     }
 
     // handle fake instructions
+    // TODO I bet there are duplicated code to be removed here
     if bytes.is_empty() {
-        if arg1.is_register16() && arg2.is_register16() {
+        if arg1.is_register_hl() && arg2.is_register_sp() {
+
+        }
+        else if arg1.is_register16() && arg2.is_register16() {
             let dst = arg1.get_register16().unwrap();
             let src = arg2.get_register16().unwrap();
             {

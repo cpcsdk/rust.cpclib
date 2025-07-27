@@ -44,3 +44,5 @@
 	RST NZ,#38
 	RST C,#38
 	RST NC,#38
+
+	ld hl, sp

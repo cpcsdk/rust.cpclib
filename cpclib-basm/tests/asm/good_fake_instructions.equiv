@@ -45,3 +45,5 @@
 	JR NZ,$+1
 	JR C,$+1
 	JR NC,$+1
+
+	LD HL,0 : ADD HL,SP
