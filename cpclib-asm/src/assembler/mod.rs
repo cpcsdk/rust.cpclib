@@ -657,9 +657,10 @@ impl Env {
             Err(e) => {
                 // if we have no more remaining passes, we fail !
                 if let Some(commands) = self.assembling_control_current_output_commands.last()
-                    && !commands.has_remaining_passes() {
-                        return Err(e);
-                    }
+                    && !commands.has_remaining_passes()
+                {
+                    return Err(e);
+                }
 
                 if self.pass.is_first_pass() {
                     *self.can_skip_next_passes.write().unwrap() = false;
@@ -1179,13 +1180,15 @@ impl Env {
                 eprint!("{info}");
 
                 if let Some(chunk) = winape_chunk.as_mut()
-                    && let Some(brk) = brk.winape() {
-                        chunk.add_breakpoint(brk);
-                    }
+                    && let Some(brk) = brk.winape()
+                {
+                    chunk.add_breakpoint(brk);
+                }
                 if let Some(chunk) = ace_chunk.as_mut()
-                    && let Some(brk) = brk.ace() {
-                        chunk.add_breakpoint(brk);
-                    }
+                    && let Some(brk) = brk.ace()
+                {
+                    chunk.add_breakpoint(brk);
+                }
 
                 if let Some(chunk) = remu.as_mut() {
                     chunk.add_entry(&brk.remu().into());
@@ -1516,9 +1519,10 @@ impl Env {
     /// . Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
         if let Some(cpr) = &self.cpr
-            && cpr.is_empty() {
-                return;
-            }
+            && cpr.is_empty()
+        {
+            return;
+        }
 
         let code_addr = self.logical_to_physical_address(self.logical_code_address());
         let output_addr = self.logical_to_physical_address(self.logical_output_address());
@@ -1663,19 +1667,20 @@ impl Env {
         };
 
         if self.free_banks.selected_index.is_none()
-            && let Some(section) = &self.current_section {
-                let section = section.read().unwrap();
-                if !section.contains(physical_output_address.address()) {
-                    return Err(AssemblerError::AssemblingError {
-                        msg: format!(
-                            "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
-                            physical_output_address.address(),
-                            section.start,
-                            section.stop
-                        )
-                    });
-                }
+            && let Some(section) = &self.current_section
+        {
+            let section = section.read().unwrap();
+            if !section.contains(physical_output_address.address()) {
+                return Err(AssemblerError::AssemblingError {
+                    msg: format!(
+                        "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
+                        physical_output_address.address(),
+                        section.start,
+                        section.stop
+                    )
+                });
             }
+        }
 
         match self.output_kind() {
             OutputKind::Snapshot => {
@@ -2546,7 +2551,8 @@ impl Env {
         }
         else {
             self.logical_code_address()
-        }).is_multiple_of(boundary)
+        })
+        .is_multiple_of(boundary)
         {
             self.output_byte(fill)?;
         }
@@ -2843,9 +2849,7 @@ impl Env {
         // page < 0 ||
         page >= 8 {
             return Err(AssemblerError::InvalidArgument {
-                msg: format!(
-                    "{page} is invalid. BANKSET only accept values from 0 to 7"
-                )
+                msg: format!("{page} is invalid. BANKSET only accept values from 0 to 7")
             });
         }
 
@@ -2982,14 +2986,15 @@ impl Env {
 
         if let Some(from) = &from
             && let Some(size) = &size
-                && 0x10000 - *from < *size {
-                    return Err(AssemblerError::AssemblingError {
-                        msg: format!(
-                            "Cannot SAVE {amsdos_fname} as the address+size ({}) is out of bounds.",
-                            *from + *size
-                        )
-                    });
-                }
+            && 0x10000 - *from < *size
+        {
+            return Err(AssemblerError::AssemblingError {
+                msg: format!(
+                    "Cannot SAVE {amsdos_fname} as the address+size ({}) is out of bounds.",
+                    *from + *size
+                )
+            });
+        }
 
         let amsdos_fname = self.build_fname(amsdos_fname)?;
         let any_fname: AnyFileNameOwned = match dsk_fname {
@@ -4216,18 +4221,19 @@ impl Env {
             .map(|counter| format!("{{{counter}}}"));
         let counter_name = counter_name.as_deref();
         if let Some(counter_name) = counter_name
-            && self.symbols().contains_symbol(counter_name)? {
-                return Err(AssemblerError::RepeatIssue {
-                    error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                        AssemblerError::AssemblingError {
-                            msg: format!("Counter {counter_name} already exists")
-                        }
-                    )))
-                    .into(),
-                    span: span.cloned(),
-                    repetition: 0
-                });
-            }
+            && self.symbols().contains_symbol(counter_name)?
+        {
+            return Err(AssemblerError::RepeatIssue {
+                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+                    AssemblerError::AssemblingError {
+                        msg: format!("Counter {counter_name} already exists")
+                    }
+                )))
+                .into(),
+                span: span.cloned(),
+                repetition: 0
+            });
+        }
 
         // get the first value
         let mut counter_value = counter_start
@@ -4283,14 +4289,16 @@ impl Env {
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
             if self.pass.is_listing_pass()
-                && let Some(trigger) = self.output_trigger.as_mut() {
-                    trigger.repeat_iteration(counter_name, counter_value.as_ref())
-                }
+                && let Some(trigger) = self.output_trigger.as_mut()
+            {
+                trigger.repeat_iteration(counter_name, counter_value.as_ref())
+            }
         }
         else if self.pass.is_listing_pass()
-            && let Some(trigger) = self.output_trigger.as_mut() {
-                trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
-            }
+            && let Some(trigger) = self.output_trigger.as_mut()
+        {
+            trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
+        }
 
         if let Some(counter_value) = &counter_value {
             self.symbols_mut().push_counter_value(counter_value.clone());
@@ -5337,9 +5345,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
             let delta = (address - i32::from(root)) - opcode_delta;
             if !(-128..=127).contains(&delta) {
                 Err(AssemblerError::InvalidArgument {
-                    msg: format!(
-                        "Address 0x{address:x} relative to 0x{root:x} is too far {delta}"
-                    )
+                    msg: format!("Address 0x{address:x} relative to 0x{root:x} is too far {delta}")
                 })
             }
             else {
@@ -6057,21 +6063,17 @@ where
             let src = arg2.get_register16().unwrap();
 
             if src.is_sp() {
-                bytes.extend(
-                    assemble_ld(
-                        &DataAccess::Register16(Register16::Hl),
-                        &DataAccess::Expression(Expr::Value(0)),
-                        env
-                    )?
-                );
-                bytes.extend(
-                    assemble_add_or_adc(
-                        Mnemonic::Add, 
-                        Some(&DataAccess::Register16(Register16::Hl)), 
-                        &DataAccess::Register16(Register16::Sp), 
-                        env
-                    )?
-                );
+                bytes.extend(assemble_ld(
+                    &DataAccess::Register16(Register16::Hl),
+                    &DataAccess::Expression(Expr::Value(0)),
+                    env
+                )?);
+                bytes.extend(assemble_add_or_adc(
+                    Mnemonic::Add,
+                    Some(&DataAccess::Register16(Register16::Hl)),
+                    &DataAccess::Register16(Register16::Sp),
+                    env
+                )?);
             }
             else {
                 let bytes_high = assemble_ld(
@@ -6316,7 +6318,6 @@ where
     // TODO I bet there are duplicated code to be removed here
     if bytes.is_empty() {
         if arg1.is_register_hl() && arg2.is_register_sp() {
-
         }
         else if arg1.is_register16() && arg2.is_register16() {
             let dst = arg1.get_register16().unwrap();

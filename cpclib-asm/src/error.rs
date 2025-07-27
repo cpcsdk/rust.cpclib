@@ -522,9 +522,7 @@ impl AssemblerError {
                         format!("on right operand of {oper}: {error}.")
                     },
                     ExpressionError::LeftAndRightError(oper, error1, error2) => {
-                        format!(
-                            "on left and right operand of {oper}: {error1} / {error2}"
-                        )
+                        format!("on left and right operand of {oper}: {error1} / {error2}")
                     },
                     ExpressionError::OwnError(error) => {
                         format!("{error}")
@@ -848,10 +846,7 @@ impl AssemblerError {
                 write!(f, "There is no bytes to crunch")
             },
             AssemblerError::MMRError { value } => {
-                write!(
-                    f,
-                    "{value} is invalid. We expect values from 0xC0 to 0xc7."
-                )
+                write!(f, "{value} is invalid. We expect values from 0xC0 to 0xc7.")
             },
             AssemblerError::RelocatedWarning { warning, span } => {
                 let msg =

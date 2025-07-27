@@ -111,11 +111,12 @@ impl ListingExt for Listing {
         // inject labels at the appropriate address if any
         while current_idx < self.len() && !labels.is_empty() {
             if let Some(current_address) = &current_address
-                && let Some(new_label) = labels.remove(current_address) {
-                    self.listing_mut()
-                        .insert(current_idx, label(new_label.borrow()));
-                    nb_labels_added += 1;
-                }
+                && let Some(new_label) = labels.remove(current_address)
+            {
+                self.listing_mut()
+                    .insert(current_idx, label(new_label.borrow()));
+                nb_labels_added += 1;
+            }
 
             let current_instruction = &self.listing()[current_idx];
 

@@ -113,9 +113,7 @@ impl PrintCommand {
                         ))
                     },
 
-                    (Some(prefix), None) => {
-                        writer.emit_stdout(&format!("{prefix} PRINT: {msg}\n"))
-                    },
+                    (Some(prefix), None) => writer.emit_stdout(&format!("{prefix} PRINT: {msg}\n")),
 
                     (None, Some(loc)) => {
                         writer.emit_stdout(&format!("{}:{}:{} PRINT: {}", loc.0, loc.1, loc.2, msg))

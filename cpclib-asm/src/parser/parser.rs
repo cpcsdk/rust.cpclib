@@ -711,7 +711,13 @@ fn parse_macro_inner(
             delimited(
                 my_space0,
                 take_till(1.., |c| {
-                    c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ' || c == b')' || c == b';'
+                    c == b'\n'
+                        || c == b'\r'
+                        || c == b':'
+                        || c == b','
+                        || c == b' '
+                        || c == b')'
+                        || c == b';'
                 }),
                 my_space0
             ),
@@ -3496,40 +3502,38 @@ pub fn parse_ld_fake(
 
         let _ = parse_comma(input)?;
 
-
-
         // TODO - add https://z00m128.github.io/sjasmplus/documentation.html#s_fake_instructions
 
         let src = if dst.is_register_hl() {
-            opt(parse_register_sp)
-                .parse_next(input)?
-        } else {
+            opt(parse_register_sp).parse_next(input)?
+        }
+        else {
             None
         };
 
         let src = if let Some(src) = src {
             src
-        } else if dst.is_register16() {
-                alt((
-                    terminated(
-                        alt((parse_register16, parse_indexregister16)),
-                        not(alt((Caseless(".low"), Caseless(".high"))))
-                    ),
-                    parse_hl_address,
-                    parse_indexregister_with_index,
-                ))
-                .parse_next(input)?
-            }
-            else
-            // mem-like
-            {
+        }
+        else if dst.is_register16() {
+            alt((
                 terminated(
-                    parse_register16,
+                    alt((parse_register16, parse_indexregister16)),
                     not(alt((Caseless(".low"), Caseless(".high"))))
-                )
-                .parse_next(input)?
-            }
-        ;
+                ),
+                parse_hl_address,
+                parse_indexregister_with_index
+            ))
+            .parse_next(input)?
+        }
+        else
+        // mem-like
+        {
+            terminated(
+                parse_register16,
+                not(alt((Caseless(".low"), Caseless(".high"))))
+            )
+            .parse_next(input)?
+        };
 
         let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
 
@@ -3986,8 +3990,16 @@ pub fn parse_macro_or_struct_call_inner(
         else {
             cut_err(
                 alt((
-                    delimited(my_space0, alt(("()".value(()), Caseless("(void)").value(()), parse_comment.value(()))), my_space0)
-                        .value(Default::default()),
+                    delimited(
+                        my_space0,
+                        alt((
+                            "()".value(()),
+                            Caseless("(void)").value(()),
+                            parse_comment.value(())
+                        )),
+                        my_space0
+                    )
+                    .value(Default::default()),
                     alt((
                         alt((Caseless("(void)"), "()")).value(Vec::new()),
                         separated(
@@ -6920,10 +6932,7 @@ endif"
         ld	c, a
 MEND";
 
-        let res = parse_test(
-            parse_macro,
-            code
-        );
+        let res = parse_test(parse_macro, code);
 
         assert!(dbg!(&res).is_ok());
         let res = res.as_ref().unwrap();
@@ -7225,7 +7234,6 @@ MEND";
                 .to_macro_param(),
             MacroParam::EvaluatedArgument("arg".into())
         );
-
     }
 
     #[test]

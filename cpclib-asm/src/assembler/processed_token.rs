@@ -372,9 +372,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
                 // Add an extra pass if the test differ
                 if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr)
-                    && *res != decision {
-                        request_additional_pass = true;
-                    }
+                    && *res != decision
+                {
+                    request_additional_pass = true;
+                }
 
                 // replace the previously stored value
                 self.if_token_adr_to_used_decision
@@ -392,9 +393,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
                 // Add an extra pass if the test differ
                 if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr)
-                    && *res != decision {
-                        request_additional_pass = true;
-                    }
+                    && *res != decision
+                {
+                    request_additional_pass = true;
+                }
 
                 // replace the previously stored value
                 self.if_token_adr_to_unused_decision
@@ -824,7 +826,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             };
 
             // Tokenize with the same parsing  parameters and context when possible
-            
+
             match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
@@ -1292,9 +1294,10 @@ where
 
                         // execute default if any
                         if (!met || !broken)
-                            && let Some(default) = &mut state.default {
-                                visit_processed_tokens(&mut default.processed_tokens, env)?;
-                            }
+                            && let Some(default) = &mut state.default
+                        {
+                            visit_processed_tokens(&mut default.processed_tokens, env)?;
+                        }
 
                         Ok(())
                     },

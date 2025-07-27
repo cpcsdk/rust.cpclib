@@ -272,9 +272,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::MemoryRegister16(Register16::Hl)) => 1,
                                     Some(DataAccess::IndexRegister16(_)) => 2,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -283,9 +281,7 @@ impl TokenExt for Token {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 3,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -301,9 +297,7 @@ impl TokenExt for Token {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 3,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -312,9 +306,7 @@ impl TokenExt for Token {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 2, // or 3
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -331,9 +323,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Register8(_)) => 2,
                                     Some(DataAccess::Expression(_)) => 3, // XXX Valid only for HL
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -347,9 +337,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Memory(_)) => 4,
                                     Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -361,9 +349,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Memory(_)) if dst == &Register16::Hl => 5,
                                     Some(DataAccess::Memory(_)) => 6,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -372,9 +358,7 @@ impl TokenExt for Token {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 4,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -386,9 +370,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Register16(_)) => 6,
                                     Some(DataAccess::IndexRegister16(_)) => 6,
                                     _ => {
-                                        panic!(
-                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
-                                        )
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
                                 }
                             },
@@ -457,9 +439,7 @@ impl TokenExt for Token {
                     },
 
                     _ => {
-                        panic!(
-                            "Duration not set for {mnemonic:?}, {arg1:?}, {arg2:?}"
-                        )
+                        panic!("Duration not set for {mnemonic:?}, {arg1:?}, {arg2:?}")
                     }
                 }
             },

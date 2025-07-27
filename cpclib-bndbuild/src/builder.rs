@@ -324,13 +324,18 @@ impl BndBuilder {
                     None
                 };
 
-                if let Some(ps) = other_paths.as_ref() { ps.iter().for_each(|p| {
+                if let Some(ps) = other_paths.as_ref() {
+                    ps.iter().for_each(|p| {
                         state.task_count += 1;
                         self.start_rule(p, state.task_count, state.nb_deps);
-                    }); }
+                    });
+                }
                 let res = self.execute_rule(paths[0], state);
                 if res.is_ok()
-                    && let Some(ps) = other_paths { ps.iter().for_each(|p| self.stop_rule(p)); }
+                    && let Some(ps) = other_paths
+                {
+                    ps.iter().for_each(|p| self.stop_rule(p));
+                }
                 res
             })
             .collect::<Result<Vec<()>, BndBuilderError>>()?;
