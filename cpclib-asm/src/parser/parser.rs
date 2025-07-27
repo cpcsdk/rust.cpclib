@@ -696,7 +696,7 @@ fn parse_macro_inner(
         enum CommaOrParenthesis {
             Comma,
             Parenthesis
-        };
+        }
 
         let comma_or_parenthesis = opt(alt((
             parse_comma.value(CommaOrParenthesis::Comma),
@@ -711,7 +711,7 @@ fn parse_macro_inner(
             delimited(
                 my_space0,
                 take_till(1.., |c| {
-                    c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ' || c == b')'
+                    c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' ' || c == b')' || c == b';'
                 }),
                 my_space0
             ),
@@ -3961,6 +3961,7 @@ pub fn parse_macro_or_struct_call_inner(
         .is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof::<_, Z80ParserError>.value(()),
+            parse_comment.value(()),
             '\n'.value(()),
             ':'.value(())
         )))
@@ -3972,7 +3973,7 @@ pub fn parse_macro_or_struct_call_inner(
         else {
             cut_err(
                 alt((
-                    delimited(my_space0, alt(("()", Caseless("(void)"))), my_space0)
+                    delimited(my_space0, alt(("()".value(()), Caseless("(void)").value(()), parse_comment.value(()))), my_space0)
                         .value(Default::default()),
                     alt((
                         alt((Caseless("(void)"), "()")).value(Vec::new()),
@@ -4004,7 +4005,7 @@ pub fn parse_macro_or_struct_call_inner(
         if has_parenthesis {
             (my_space0, ')', my_space0).parse_next(input)?;
         }
-
+        
         if args.len() == 1 && args.first().unwrap().0.is_empty() {
             panic!();
         }
@@ -6898,6 +6899,26 @@ endif"
     }
 
     #[test]
+    fn parser_macro_fap_bug1() {
+        let code = "MACRO   _UpdateNrCopySlot               ; 4 NOPS
+        ld	b, a
+        ld	a, c
+        sub	b
+        ld	c, a
+MEND";
+
+        let res = parse_test(
+            parse_macro,
+            code
+        );
+
+        assert!(dbg!(&res).is_ok());
+        let res = res.as_ref().unwrap();
+        let macro_args = dbg!(res.macro_definition_arguments());
+        assert_eq!(0, macro_args.len());
+    }
+
+    #[test]
     fn parser_sna() {
         let res = parse_test(parse_buildsna(false), "BUILDSNA");
         assert!(res.is_ok(), "{:?}", &res);
@@ -7191,6 +7212,7 @@ endif"
                 .to_macro_param(),
             MacroParam::EvaluatedArgument("arg".into())
         );
+
     }
 
     #[test]
@@ -7209,7 +7231,7 @@ endif"
 
     #[test]
     fn test_parse_macro_call() {
-        assert!(dbg!(parse_test(parse_line_component, "empty (void)")).is_ok());
+        assert!(dbg!(parse_test(parse_line_component, "empty     (void)")).is_ok());
 
         let res = dbg!(parse_test(
             (parse_line_component, ':', parse_line_component),

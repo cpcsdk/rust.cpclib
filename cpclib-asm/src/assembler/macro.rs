@@ -79,9 +79,10 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
                 name: r#macro.name().into(),
                 root: Box::new(AssemblerError::AssemblingError {
                     msg: format!(
-                        "{} arguments provided, but {} expected.",
+                        "{} arguments provided, but {} expected. [{}]",
                         args.len(),
-                        r#macro.nb_args()
+                        r#macro.nb_args(),
+                        r#macro.params().join(",")
                     )
                 }),
                 location: r#macro.source().cloned() // TODO set up the location
