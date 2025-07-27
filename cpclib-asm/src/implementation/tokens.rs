@@ -45,7 +45,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
             Ok(bytes.ok().unwrap().len())
         }
         else {
-            Err(format!("Unable to get the bytes of this token: {:?}", self))
+            Err(format!("Unable to get the bytes of this token: {self:?}"))
         }
     }
 
@@ -62,8 +62,8 @@ pub trait TokenExt: ListingElement + Debug + Visited {
             Ok(bytes.ok().unwrap().len())
         }
         else {
-            eprintln!("{:?}", bytes);
-            Err(format!("Unable to get the bytes of this token: {:?}", self))
+            eprintln!("{bytes:?}");
+            Err(format!("Unable to get the bytes of this token: {self:?}"))
         }
     }
 
@@ -154,7 +154,7 @@ impl TokenExt for Token {
             for token in lst.listing() {
                 match token {
                     Token::Defb(_) | Token::Defw(_) | Token::Defs(_) => {
-                        return Err(format!("{} as not been disassembled", token));
+                        return Err(format!("{token} as not been disassembled"));
                     },
                     _ => {}
                 }
@@ -168,7 +168,7 @@ impl TokenExt for Token {
                 l.iter()
                     .map(|(e, f)| {
                         assemble_defs_item(e, f.as_ref(), &mut Env::default())
-                            .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))
+                            .map_err(|err| format!("Unable to assemble {self}: {err:?}"))
                     })
                     .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {
                         acc.extend_from_slice(v.as_slice());
@@ -180,7 +180,7 @@ impl TokenExt for Token {
             Token::Defb(e) | Token::Defw(e) | Token::Str(e) => {
                 let mut env = Env::default();
                 env.visit_db_or_dw_or_str(self.into(), e, 0.into())
-                    .map_err(|err| format!("Unable to assemble {}: {:?}", self, err))?;
+                    .map_err(|err| format!("Unable to assemble {self}: {err:?}"))?;
                 wrap(&env.produced_bytes())
             },
 
@@ -229,7 +229,7 @@ impl TokenExt for Token {
                             },
                             Some(DataAccess::Register16(_)) => 4,
                             Some(DataAccess::IndexRegister16(_)) => 5,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -260,7 +260,7 @@ impl TokenExt for Token {
                         match arg1 {
                             Some(DataAccess::Register8(_)) => 1,
                             Some(DataAccess::Register16(_)) => 2,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -273,8 +273,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::IndexRegister16(_)) => 2,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -285,14 +284,13 @@ impl TokenExt for Token {
                                     Some(DataAccess::Expression(_)) => 3,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
                             },
 
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -304,8 +302,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Expression(_)) => 3,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -316,14 +313,13 @@ impl TokenExt for Token {
                                     Some(DataAccess::Expression(_)) => 2, // or 3
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
                             },
 
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -336,8 +332,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Expression(_)) => 3, // XXX Valid only for HL
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -353,8 +348,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -368,8 +362,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Memory(_)) => 6,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -380,8 +373,7 @@ impl TokenExt for Token {
                                     Some(DataAccess::Expression(_)) => 4,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
@@ -395,14 +387,13 @@ impl TokenExt for Token {
                                     Some(DataAccess::IndexRegister16(_)) => 6,
                                     _ => {
                                         panic!(
-                                            "Impossible case {:?}, {:?}, {:?}",
-                                            mnemonic, arg1, arg2
+                                            "Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}"
                                         )
                                     }
                                 }
                             },
 
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -416,7 +407,7 @@ impl TokenExt for Token {
                             Some(DataAccess::PortC) => 4, // XXX Not sure for out (c), 0
                             Some(DataAccess::Expression(_)) => 3,
                             Some(DataAccess::PortN(_)) => 3,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -426,7 +417,7 @@ impl TokenExt for Token {
                         match arg1 {
                             Some(DataAccess::Register16(_)) => 3,
                             Some(DataAccess::IndexRegister16(_)) => 4,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -434,7 +425,7 @@ impl TokenExt for Token {
                         match arg1 {
                             Some(DataAccess::Register16(_)) => 4,
                             Some(DataAccess::IndexRegister16(_)) => 5,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -443,14 +434,14 @@ impl TokenExt for Token {
                             Some(DataAccess::Register8(_)) => 2,
                             Some(DataAccess::MemoryRegister16(_)) => 3, // XXX only HL
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 7,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
                     &Mnemonic::Ret => {
                         match arg1 {
                             None => 3,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
@@ -461,14 +452,13 @@ impl TokenExt for Token {
                             Some(DataAccess::Expression(_)) => 2,
                             Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
-                            _ => panic!("Impossible case {:?}, {:?}, {:?}", mnemonic, arg1, arg2)
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
 
                     _ => {
                         panic!(
-                            "Duration not set for {:?}, {:?}, {:?}",
-                            mnemonic, arg1, arg2
+                            "Duration not set for {mnemonic:?}, {arg1:?}, {arg2:?}"
                         )
                     }
                 }
@@ -477,7 +467,7 @@ impl TokenExt for Token {
                 return Err(AssemblerError::BugInAssembler {
                     file: file!(),
                     line: line!(),
-                    msg: format!("Duration computation for {:?} not yet coded", self)
+                    msg: format!("Duration computation for {self:?} not yet coded")
                 });
             }
         };

@@ -1894,7 +1894,7 @@ pub fn disassemble_with_potential_argument<'stream>(
     // get the first argument if any
     let (representation, bytes) = if representation.contains("nnnn") {
         let word = bytes[0] as u16 + 256 * (bytes[1] as u16);
-        let representation = representation.replacen("nnnn", &format!("{:#03x}", word), 1);
+        let representation = representation.replacen("nnnn", &format!("{word:#03x}"), 1);
         (representation, &bytes[2..])
     }
     else if representation.contains("nn") {
@@ -1913,7 +1913,7 @@ pub fn disassemble_with_potential_argument<'stream>(
                 }
             }
             else {
-                representation.replacen("nn", &format!("{:#01x}", byte), 1)
+                representation.replacen("nn", &format!("{byte:#01x}"), 1)
             };
 
         (representation.to_owned(), &bytes[1..])
@@ -1925,7 +1925,7 @@ pub fn disassemble_with_potential_argument<'stream>(
     // get the second argument if any
     let (representation, bytes) = if representation.contains("nn") {
         let byte = bytes[0];
-        let representation = representation.replacen("nn", &format!("{:#01x}", byte), 1);
+        let representation = representation.replacen("nn", &format!("{byte:#01x}"), 1);
         (representation, &bytes[1..])
     }
     else {
@@ -1942,7 +1942,7 @@ pub fn disassemble_with_one_argument(
     lut: &[&'static str; 256]
 ) -> Result<Token, String> {
     let representation: &'static str = lut[opcode as usize];
-    let representation = representation.replacen("nn", &format!("{:#01x}", argument), 1);
+    let representation = representation.replacen("nn", &format!("{argument:#01x}"), 1);
     string_to_token(&representation)
 }
 

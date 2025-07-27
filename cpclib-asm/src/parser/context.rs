@@ -338,8 +338,8 @@ impl ParserOptions {
         does_not_exists.push(fname.as_str().to_owned());
 
         // otherwhise, try with the current directory of the environment
-        if let Some(env) = env.as_ref() {
-            if let Some(search) = env.get_current_working_directory() {
+        if let Some(env) = env.as_ref()
+            && let Some(search) = env.get_current_working_directory() {
                 let current_path = search.join(fname);
                 if current_path.is_file() {
                     return Ok(current_path.try_into().unwrap());
@@ -348,7 +348,6 @@ impl ParserOptions {
                     does_not_exists.push(current_path.to_string());
                 }
             }
-        }
 
         // otherwhise try with the folder set up at the beginning
         {
@@ -534,15 +533,15 @@ impl ParserContext {
                 .replace(LineColLookup::new(src));
         }
 
-        let res = self
+        
+
+        self
             .line_col_lut
             .read()
             .unwrap()
             .as_ref()
             .unwrap()
-            .get(offset);
-
-        res
+            .get(offset)
     }
 }
 // pub(crate) static DEFAULT_CTX: ParserContext = ParserContext {

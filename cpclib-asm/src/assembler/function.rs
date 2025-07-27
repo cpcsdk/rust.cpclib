@@ -381,15 +381,14 @@ impl HardCodedFunction {
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-        if let Some(nb) = self.nb_expected_params() {
-            if nb != params.len() {
+        if let Some(nb) = self.nb_expected_params()
+            && nb != params.len() {
                 return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                     self.name().into(),
                     nb,
                     params.len()
                 ));
             }
-        }
 
         match self {
             HardCodedFunction::Mode0ByteToPenAt => {

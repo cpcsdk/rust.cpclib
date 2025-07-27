@@ -1,7 +1,6 @@
 #![allow(clippy::needless_range_loop)]
 
 use std::collections::HashSet;
-use std::fmt::format;
 
 use anyhow::Context;
 use cpclib_common::camino::Utf8Path;

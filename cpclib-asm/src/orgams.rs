@@ -323,7 +323,7 @@ where
                 format!("ORG {}, {}", org1, org2.to_orgams_string()?)
             }
             else {
-                format!("ORG {}", org1)
+                format!("ORG {org1}")
             };
 
             Ok(repr.into())
@@ -346,7 +346,7 @@ where
                 unreachable!()
             };
 
-            Ok(format!("{} {}", mne, exprs).into())
+            Ok(format!("{mne} {exprs}").into())
         };
 
         let handle_run = |token: &T| -> Result<Cow<str>, ToOrgamsError> {
@@ -427,7 +427,7 @@ where
 
         let handle_incbin = |token: &T| -> Result<String, ToOrgamsError> {
             let fname = token.incbin_fname().string();
-            let repr = format!("LOAD \"{}\"", fname);
+            let repr = format!("LOAD \"{fname}\"");
 
             assert!(token.incbin_length().is_none());
             assert!(token.incbin_offset().is_none());
@@ -486,7 +486,7 @@ where
         {
             let first = repr.chars().next().unwrap();
             if first != ' ' && first != '\t' {
-                Cow::owned(format!("\t{}", repr))
+                Cow::owned(format!("\t{repr}"))
             }
             else {
                 repr
@@ -534,7 +534,7 @@ impl<T: ToOrgams> ToOrgams for &[T] {
 }
 
 pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
-    let lst = parse_z80(code).map_err(|e| ToOrgamsError(format!("Error while parsing. {}", e)))?;
+    let lst = parse_z80(code).map_err(|e| ToOrgamsError(format!("Error while parsing. {e}")))?;
     let lst = lst.as_slice();
     lst.to_orgams_string().map(|s| s.into_owned())
 }
@@ -542,8 +542,8 @@ pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
 pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
     let p = p.as_ref();
     let code = std::fs::read_to_string(p)
-        .map_err(|e| ToOrgamsError(format!("Error while reading {}. {}", p, e)))?;
-    convert_source(&code).map_err(|e| format!("Error while handling {}. {}", p, e).into())
+        .map_err(|e| ToOrgamsError(format!("Error while reading {p}. {e}")))?;
+    convert_source(&code).map_err(|e| format!("Error while handling {p}. {e}").into())
 }
 
 /// COnvert a basm txt source file as a orgams text source file.
@@ -559,7 +559,7 @@ pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     let tgt = tgt.as_ref();
     let orgams = convert_from(src)?;
     std::fs::write(tgt, orgams.as_bytes())
-        .map_err(|e| format!("Error while saving {}. {}", tgt, e).into())
+        .map_err(|e| format!("Error while saving {tgt}. {e}").into())
 }
 
 #[cfg(test)]

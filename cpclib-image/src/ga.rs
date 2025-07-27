@@ -1229,15 +1229,15 @@ pub struct LockablePalette {
     locked: bool
 }
 
-impl Into<Palette> for LockablePalette {
-    fn into(self) -> Palette {
-        self.pal
+impl From<LockablePalette> for Palette {
+    fn from(val: LockablePalette) -> Self {
+        val.pal
     }
 }
 
-impl Into<Palette> for &LockablePalette {
-    fn into(self) -> Palette {
-        self.pal.clone()
+impl From<&LockablePalette> for Palette {
+    fn from(val: &LockablePalette) -> Self {
+        val.pal.clone()
     }
 }
 

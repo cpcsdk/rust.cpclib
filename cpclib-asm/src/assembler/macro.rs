@@ -322,7 +322,7 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                                 None => {
                                     if c.is_empty() {
                                         return Err(AssemblerError::AssemblingError {
-                                            msg: format!("A value is expected for {} (no default value is provided)", name)
+                                            msg: format!("A value is expected for {name} (no default value is provided)")
                                         })
                                     } else {
                                         beef::lean::Cow::owned(c[0].to_string())
@@ -331,11 +331,11 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                             };
 
 
-                            Ok(format!(" {}{} {}", prefix, tok, elem))
+                            Ok(format!(" {prefix}{tok} {elem}"))
                         }
 
                         Token::MacroCall(r#macro, current_default_args) => {
-                            let mut call = format!(" {}{} ", prefix, r#macro);
+                            let mut call = format!(" {prefix}{macro} ");
 
                             let args: Vec<beef::lean::Cow<str>> = match provided_param {
                                 Some(provided_param2) => {
@@ -366,7 +366,7 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                                                         repr
                                                     }
                                                     else {
-                                                        beef::lean::Cow::owned(format!("[{}]", repr))
+                                                        beef::lean::Cow::owned(format!("[{repr}]"))
                                                     }
                                                 })
                                             })
@@ -400,7 +400,7 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                                                         repr
                                                     }
                                                     else {
-                                                        beef::lean::Cow::owned(format!("[{}]", repr))
+                                                        beef::lean::Cow::owned(format!("[{repr}]"))
                                                     }
                                                 })
                                             })

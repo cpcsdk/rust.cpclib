@@ -1471,7 +1471,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Mul<T> for ExprResult {
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
                 let l3 = l1
-                    .into_iter()
+                    .iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().mul(b))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1508,7 +1508,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Div<T> for ExprResult {
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
                 let l3 = l1
-                    .into_iter()
+                    .iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().div(b))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1546,7 +1546,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Rem<T> for ExprResult {
 
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
                 let l3 = l1
-                    .into_iter()
+                    .iter()
                     .zip(l2.iter())
                     .map(|(a, b)| a.clone().rem(b))
                     .collect::<Result<Vec<_>, _>>()?;

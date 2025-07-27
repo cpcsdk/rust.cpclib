@@ -342,7 +342,7 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
         // handle inner file
         EmbeddedFiles::get(fname_repr)
             .ok_or(AssemblerError::IOError {
-                msg: format!("Unable to open {:?}; it is not embedded.", fname_repr)
+                msg: format!("Unable to open {fname_repr:?}; it is not embedded.")
             })?
             .data
             .to_vec()
@@ -351,14 +351,14 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
         // handle real file
         let mut f = File::open(&fname).map_err(|e| {
             AssemblerError::IOError {
-                msg: format!("Unable to open {:?}. {}", fname, e)
+                msg: format!("Unable to open {fname:?}. {e}")
             }
         })?;
 
         let mut content = Vec::new();
         f.read_to_end(&mut content).map_err(|e| {
             AssemblerError::IOError {
-                msg: format!("Unable to read {:?}. {}", fname, e)
+                msg: format!("Unable to read {fname:?}. {e}")
             }
         })?;
 

@@ -213,7 +213,7 @@ fn main() -> std::io::Result<()> {
 
     if let Some(idx) = matches.get_one::<String>("ENTRY") {
         let idx = idx.parse::<u8>().unwrap();
-        info!("Manipulate entry {}", idx);
+        info!("Manipulate entry {idx}");
 
         let entry = catalog_content.get_entry_mut(idx as _);
 

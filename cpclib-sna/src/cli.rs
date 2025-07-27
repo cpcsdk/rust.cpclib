@@ -116,7 +116,7 @@ impl Command {
                 if let Some(v) = sna
                     .get_chunk("SYMB")
                     .map(|chunk| chunk.ace_symbol_chunk().unwrap())
-                    .map(|chunk| (chunk.get_symbols()))
+                    .map(|chunk| chunk.get_symbols())
                 {
                     v.into_iter()
                         .for_each(|s| println!("{} {:X}", s.name(), s.address()))

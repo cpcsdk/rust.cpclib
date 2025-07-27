@@ -19,7 +19,6 @@ use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending,
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
-use cpclib_common::winnow::combinator::cond;
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
@@ -114,7 +113,7 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
 
     fn assert(input: &InnerZ80Span, _message: &'static str) -> Self {
         #[cfg(debug_assertions)]
-        panic!("assert `{}` failed at {:#?}", _message, input);
+        panic!("assert `{_message}` failed at {input:#?}");
         #[cfg(not(debug_assertions))]
         #[allow(deprecated)]
         Self::from_error_kind(input, ErrorKind::Assert)
@@ -587,7 +586,7 @@ pub fn inner_code_with_state(
     move |input: &mut InnerZ80Span| {
         // dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state, only_one_instruction)
-            .map(|l| (Arc::<LocatedListing>::try_unwrap(l).unwrap()))
+            .map(|l| Arc::<LocatedListing>::try_unwrap(l).unwrap())
     }
 }
 
@@ -721,7 +720,7 @@ fn parse_macro_inner(
         .parse_next(input)?;
 
         if let Some(CommaOrParenthesis::Parenthesis) = comma_or_parenthesis {
-            let _ = cut_err(
+            cut_err(
                 (my_space0, ')', my_space0)
                     .value(())
                     .context("`)` expected`")

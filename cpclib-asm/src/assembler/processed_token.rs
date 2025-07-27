@@ -371,11 +371,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 let decision = env.symbols().is_used(label);
 
                 // Add an extra pass if the test differ
-                if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr) {
-                    if *res != decision {
+                if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr)
+                    && *res != decision {
                         request_additional_pass = true;
                     }
-                }
 
                 // replace the previously stored value
                 self.if_token_adr_to_used_decision
@@ -392,11 +391,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 let decision = !env.symbols().is_used(label);
 
                 // Add an extra pass if the test differ
-                if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr) {
-                    if *res != decision {
+                if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr)
+                    && *res != decision {
                         request_additional_pass = true;
                     }
-                }
 
                 // replace the previously stored value
                 self.if_token_adr_to_unused_decision
@@ -826,7 +824,8 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             };
 
             // Tokenize with the same parsing  parameters and context when possible
-            let listing = match self.token.possible_span() {
+            
+            match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
                     let ctx_builder = ParserContextBuilder::default() // nothing is specified
@@ -847,8 +846,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                     use crate::parse_z80_str;
                     parse_z80_str(&code)?
                 }
-            };
-            listing
+            }
         };
 
         let expand_state = ExpandStateTryBuilder {
@@ -1293,11 +1291,10 @@ where
                         }
 
                         // execute default if any
-                        if !met || !broken {
-                            if let Some(default) = &mut state.default {
+                        if (!met || !broken)
+                            && let Some(default) = &mut state.default {
                                 visit_processed_tokens(&mut default.processed_tokens, env)?;
                             }
-                        }
 
                         Ok(())
                     },

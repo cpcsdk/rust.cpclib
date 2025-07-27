@@ -37,7 +37,7 @@ pub fn list_set(
                 ));
             }
             let c = value.int()? as u8 as char;
-            let c = format!("{}", c);
+            let c = format!("{c}");
             let mut s = s.to_string();
             s.replace_range(index..index + 1, &c);
             Ok(ExprResult::String(fix_string(s)))
@@ -55,7 +55,7 @@ pub fn list_set(
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -85,7 +85,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::As
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -129,7 +129,7 @@ pub fn list_sublist(
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -143,7 +143,7 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -159,7 +159,7 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -182,7 +182,7 @@ pub fn list_extend(
                 _ => {
                     Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                         Box::new(AssemblerError::AssemblingError {
-                            msg: format!("{} is not a list", list2)
+                            msg: format!("{list2} is not a list")
                         })
                     )))
                 },
@@ -191,7 +191,7 @@ pub fn list_extend(
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list1)
+                    msg: format!("{list1} is not a list")
                 })
             )))
         },
@@ -207,7 +207,7 @@ pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -230,7 +230,7 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("{} is not a list", list)
+                    msg: format!("{list} is not a list")
                 })
             )))
         },
@@ -248,7 +248,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                     let v = v.int()?;
                     if !(0..=255).contains(&v) {
                         Err(AssemblerError::AssemblingError {
-                            msg: format!("{} at {} is not a valid byte value", v, idx)
+                            msg: format!("{v} at {idx} is not a valid byte value")
                         })
                     }
                     else {
@@ -330,7 +330,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("string_push called with wrong types {:?} {:?}", s1, s2)
+                    msg: format!("string_push called with wrong types {s1:?} {s2:?}")
                 })
             )))
         },

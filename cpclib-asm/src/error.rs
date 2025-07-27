@@ -416,7 +416,7 @@ impl AssemblerError {
                                     Z80ParserErrorKind::Context(ctx) => Cow::Owned(ctx.to_string()),
                                     Z80ParserErrorKind::Winnow => "Unknown error".into(),
                                     Z80ParserErrorKind::Char(c) => {
-                                        format!("Error with char '{}'", c).into()
+                                        format!("Error with char '{c}'").into()
                                     },
                                     _ => unreachable!()
                                 };
@@ -483,7 +483,7 @@ impl AssemblerError {
                     })
                     .unique()
                     .join("\n");
-                write!(f, "{}", str)
+                write!(f, "{str}")
             },
 
             AssemblerError::IncludedFileError { span, error } => {
@@ -494,7 +494,7 @@ impl AssemblerError {
                             msg,
                             span
                         );
-                        write!(f, "{}", msg)
+                        write!(f, "{msg}")
                     },
                     _ => {
                         let msg = build_simple_error_message(
@@ -502,7 +502,7 @@ impl AssemblerError {
                             span,
                             Severity::Error
                         );
-                        write!(f, "{}", msg)?;
+                        write!(f, "{msg}")?;
                         error.fmt(f)
                     }
                 }
@@ -511,62 +511,60 @@ impl AssemblerError {
             AssemblerError::OverrideMemory(address, count) => {
                 write!(f, "Override {} bytes at {}", *count, address)
             },
-            AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {}", msg),
+            AssemblerError::DisassemblerError { msg } => write!(f, "Disassembler error: {msg}"),
 
             AssemblerError::ExpressionError(e) => {
                 let msg = match e {
                     ExpressionError::LeftError(oper, error) => {
-                        format!("on left operand of {}: {}.", oper, error)
+                        format!("on left operand of {oper}: {error}.")
                     },
                     ExpressionError::RightError(oper, error) => {
-                        format!("on right operand of {}: {}.", oper, error)
+                        format!("on right operand of {oper}: {error}.")
                     },
                     ExpressionError::LeftAndRightError(oper, error1, error2) => {
                         format!(
-                            "on left and right operand of {}: {} / {}",
-                            oper, error1, error2
+                            "on left and right operand of {oper}: {error1} / {error2}"
                         )
                     },
                     ExpressionError::OwnError(error) => {
-                        format!("{}", error)
+                        format!("{error}")
                     },
                     ExpressionError::InvalidSize(expected, index) => {
-                        format!("{} index incompatible with size {}", index, expected)
+                        format!("{index} index incompatible with size {expected}")
                     }
                 };
-                write!(f, "Expression error {}", msg)
+                write!(f, "Expression error {msg}")
             },
             AssemblerError::CounterAlreadyExists { symbol } => {
-                write!(f, "A counter named `{}` already exists", symbol)
+                write!(f, "A counter named `{symbol}` already exists")
             },
             AssemblerError::SymbolAlreadyExists { symbol } => {
-                write!(f, "A symbol named `{}` already exists", symbol)
+                write!(f, "A symbol named `{symbol}` already exists")
             },
-            AssemblerError::IncoherentCode { msg } => write!(f, "Incoherent code: {}", msg),
+            AssemblerError::IncoherentCode { msg } => write!(f, "Incoherent code: {msg}"),
             AssemblerError::NoActiveCounter => write!(f, "No active counter"),
             AssemblerError::OutputExceedsLimits(address, limit) => {
-                write!(f, "Code at {} exceeds limits of 0x{:X}", address, limit)
+                write!(f, "Code at {address} exceeds limits of 0x{limit:X}")
             },
             AssemblerError::OutputAlreadyExceedsLimits(limit) => {
-                write!(f, "Code  already exceeds limits of 0x{:X}", limit)
+                write!(f, "Code  already exceeds limits of 0x{limit:X}")
             },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
             AssemblerError::AlreadyDefinedSymbol { symbol, kind, here } => {
                 if let Some(here) = here {
                     write!(
                         f,
-                        "Symbol \"{}\" already defined as a {} in {}",
-                        symbol, kind, here
+                        "Symbol \"{symbol}\" already defined as a {kind} in {here}"
                     )
                 }
                 else {
-                    write!(f, "Symbol \"{}\" already defined as a {}", symbol, kind)
+                    write!(f, "Symbol \"{symbol}\" already defined as a {kind}")
                 }
             },
 
             AssemblerError::MultipleErrors { errors } => {
                 for e in errors.iter().map(|e| e.to_string()).unique() {
-                    writeln!(f, "{}", e)?;
+                    writeln!(f, "{e}")?;
                 }
                 Ok(())
             },
@@ -583,29 +581,29 @@ impl AssemblerError {
                 )
             },
 
-            AssemblerError::ExpressionTypeError(e) => write!(f, "{}", e),
+            AssemblerError::ExpressionTypeError(e) => write!(f, "{e}"),
 
             AssemblerError::EmptyBinaryFile(_) => todo!(),
             AssemblerError::AmsdosError { error: e } => {
-                write!(f, "AMSDOS error: {}", e)
+                write!(f, "AMSDOS error: {e}")
             },
             AssemblerError::BugInAssembler { file, line, msg } => {
-                write!(f, "BUG in assembler {}:{} {}", file, line, msg)
+                write!(f, "BUG in assembler {file}:{line} {msg}")
             },
             AssemblerError::BugInParser {
                 error: _,
                 context: _
             } => todo!(),
 
-            AssemblerError::BasicError { error } => write!(f, "{}", error),
-            AssemblerError::AssemblingError { msg } => write!(f, "{}", msg),
-            AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {}", msg),
+            AssemblerError::BasicError { error } => write!(f, "{error}"),
+            AssemblerError::AssemblingError { msg } => write!(f, "{msg}"),
+            AssemblerError::InvalidArgument { msg } => write!(f, "Invalid argument: {msg}"),
             AssemblerError::AssertionFailed {
                 test,
                 msg,
                 guidance
             } => {
-                write!(f, "Assert error: {}\n{}\n{}", test, msg, guidance)
+                write!(f, "Assert error: {test}\n{msg}\n{guidance}")
             },
 
             AssemblerError::UnknownMacro { symbol, closest } => {
@@ -617,22 +615,21 @@ impl AssemblerError {
                 )
             },
             AssemblerError::FunctionWithoutReturn(name) => {
-                write!(f, "Function {} has no RETURN directive", name)
+                write!(f, "Function {name} has no RETURN directive")
             },
             AssemblerError::FunctionWithEmptyBody(name) => {
-                write!(f, "Function {} has no body", name)
+                write!(f, "Function {name} has no body")
             },
             AssemblerError::FunctionUnknown(name) => {
-                write!(f, "Function {} unknown", name)
+                write!(f, "Function {name} unknown")
             },
             AssemblerError::FunctionError(name, e) => {
-                write!(f, "Function {} error: {}", name, e)
+                write!(f, "Function {name} error: {e}")
             },
             AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
                 write!(
                     f,
-                    "Function {} called with {} parameters instead of {}",
-                    name, received, expected
+                    "Function {name} called with {received} parameters instead of {expected}"
                 )
             },
             AssemblerError::WrongNumberOfParameters {
@@ -648,22 +645,21 @@ impl AssemblerError {
                 if let Some(location) = location {
                     write!(
                         f,
-                        "Error in macro call {} (defined in {})\n{}",
-                        name, location, root
+                        "Error in macro call {name} (defined in {location})\n{root}"
                     )
                 }
                 else {
-                    write!(f, "Error in macro call: {}\n{}", name, root)
+                    write!(f, "Error in macro call: {name}\n{root}")
                 }
             },
             AssemblerError::WrongSymbolType {
                 symbol: s,
                 isnot: n
             } => {
-                write!(f, "Wrong symbol type: {} is not {}", s, n)
+                write!(f, "Wrong symbol type: {s} is not {n}")
             },
             AssemblerError::IOError { msg } => {
-                write!(f, "IO Error: {}", msg)
+                write!(f, "IO Error: {msg}")
             },
             AssemblerError::UnknownAssemblingAddress => todo!(),
             AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
@@ -672,7 +668,7 @@ impl AssemblerError {
                 pass: _,
                 error
             } => {
-                write!(f, "Unable to compute relative address {}", error)
+                write!(f, "Unable to compute relative address {error}")
             },
 
             // By construction contains only error with no span information
@@ -681,49 +677,49 @@ impl AssemblerError {
                     // Relocated error format may vary among errors
                     match error.deref() {
                         AssemblerError::RelocatedError { error, span: _ } => {
-                            write!(f, "{}", error)
+                            write!(f, "{error}")
                         },
 
                         AssemblerError::UnknownSymbol { symbol, closest } => {
                             let msg = match closest {
                                 Some(closest) => {
                                     build_simple_error_message_with_notes(
-                                        &format!("Unknown symbol: {}", symbol),
+                                        &format!("Unknown symbol: {symbol}"),
                                         vec![format!("Closest one is: {}", closest)],
                                         span
                                     )
                                 },
                                 None => {
                                     build_simple_error_message(
-                                        &format!("Unknown symbol: {}", symbol),
+                                        &format!("Unknown symbol: {symbol}"),
                                         span,
                                         Severity::Error
                                     )
                                 },
                             };
 
-                            write!(f, "{}", msg)
+                            write!(f, "{msg}")
                         },
 
                         AssemblerError::UnknownMacro { symbol, closest } => {
                             let msg = match closest {
                                 Some(closest) => {
                                     build_simple_error_message_with_notes(
-                                        &format!("Unknown macro: {}", symbol),
+                                        &format!("Unknown macro: {symbol}"),
                                         vec![format!("Closest one is: {}", closest)],
                                         span
                                     )
                                 },
                                 None => {
                                     build_simple_error_message(
-                                        &format!("Unknown macro: {}", symbol),
+                                        &format!("Unknown macro: {symbol}"),
                                         span,
                                         Severity::Error
                                     )
                                 },
                             };
 
-                            write!(f, "{}", msg)
+                            write!(f, "{msg}")
                         },
 
                         AssemblerError::MacroError {
@@ -732,20 +728,20 @@ impl AssemblerError {
                             root
                         } => {
                             let msg = if let Some(location) = location {
-                                format!("Error in macro call {} (defined in {})", name, location)
+                                format!("Error in macro call {name} (defined in {location})")
                             }
                             else {
-                                format!("Error in macro call {}", name)
+                                format!("Error in macro call {name}")
                             };
 
                             let msg = build_simple_error_message(&msg, span, Severity::Error);
-                            write!(f, "{}\n{}", msg, root)
+                            write!(f, "{msg}\n{root}")
                         },
 
                         AssemblerError::BasicError { error } => {
                             let msg =
                                 build_simple_error_message("BASIC error", span, Severity::Error);
-                            write!(f, "{}\n{}", msg, error)
+                            write!(f, "{msg}\n{error}")
                         },
 
                         AssemblerError::OutputProtected { area, address } => {
@@ -759,7 +755,7 @@ impl AssemblerError {
                                 ),
                                 span
                             );
-                            write!(f, "{}", msg)
+                            write!(f, "{msg}")
                         },
 
                         AssemblerError::CrunchedSectionError { error } => {
@@ -768,22 +764,22 @@ impl AssemblerError {
                                 span,
                                 Severity::Error
                             );
-                            write!(f, "{}", msg)?;
-                            write!(f, "{}", error)
+                            write!(f, "{msg}")?;
+                            write!(f, "{error}")
                         },
 
                         _ => {
                             let msg = build_simple_error_message(
-                                &format!("{}", error),
+                                &format!("{error}"),
                                 span,
                                 Severity::Error
                             );
-                            write!(f, "{}", msg)
+                            write!(f, "{msg}")
                         }
                     }
                 }
                 else {
-                    write!(f, "{}", error)
+                    write!(f, "{error}")
                 }
             },
             AssemblerError::ReadOnlySymbol(symb) => {
@@ -797,14 +793,14 @@ impl AssemblerError {
             } => {
                 if span.is_some() {
                     let msg = build_simple_error_message(
-                        &format!("REPEAT: error in loop {}", repetition),
+                        &format!("REPEAT: error in loop {repetition}"),
                         span.as_ref().unwrap(),
                         Severity::Error
                     );
-                    write!(f, "{}\n{}", msg, error)
+                    write!(f, "{msg}\n{error}")
                 }
                 else {
-                    write!(f, "Repeat issue\n{}", error)
+                    write!(f, "Repeat issue\n{error}")
                 }
             },
 
@@ -815,10 +811,10 @@ impl AssemblerError {
                         span.as_ref().unwrap(),
                         Severity::Error
                     );
-                    write!(f, "{}\n{}", msg, error)
+                    write!(f, "{msg}\n{error}")
                 }
                 else {
-                    write!(f, "FOR issue\n{}", error)
+                    write!(f, "FOR issue\n{error}")
                 }
             },
 
@@ -829,10 +825,10 @@ impl AssemblerError {
                         span.as_ref().unwrap(),
                         Severity::Error
                     );
-                    write!(f, "{}\n{}", msg, error)
+                    write!(f, "{msg}\n{error}")
                 }
                 else {
-                    write!(f, "WHILE issue\n{}", error)
+                    write!(f, "WHILE issue\n{error}")
                 }
             },
 
@@ -846,7 +842,7 @@ impl AssemblerError {
                 )
             },
             AssemblerError::InvalidSymbol(msg) => {
-                write!(f, "Invalid symbol \"{}\"", msg)
+                write!(f, "Invalid symbol \"{msg}\"")
             },
             AssemblerError::NoDataToCrunch => {
                 write!(f, "There is no bytes to crunch")
@@ -854,29 +850,28 @@ impl AssemblerError {
             AssemblerError::MMRError { value } => {
                 write!(
                     f,
-                    "{} is invalid. We expect values from 0xC0 to 0xc7.",
-                    value
+                    "{value} is invalid. We expect values from 0xC0 to 0xc7."
                 )
             },
             AssemblerError::RelocatedWarning { warning, span } => {
                 let msg =
-                    build_simple_error_message(&format!("{}", warning), span, Severity::Warning);
-                write!(f, "{}", msg)
+                    build_simple_error_message(&format!("{warning}"), span, Severity::Warning);
+                write!(f, "{msg}")
             },
             AssemblerError::RelocatedInfo { info, span } => {
-                let msg = build_simple_error_message(&format!("{}", info), span, Severity::Note);
-                write!(f, "{}", msg)
+                let msg = build_simple_error_message(&format!("{info}"), span, Severity::Note);
+                write!(f, "{msg}")
             },
-            AssemblerError::SnapshotError { error } => write!(f, "Snapshot error. {:#?}", error),
+            AssemblerError::SnapshotError { error } => write!(f, "Snapshot error. {error:#?}"),
             AssemblerError::CrunchedSectionError { error } => {
-                write!(f, "Error when crunching code {}", error)
+                write!(f, "Error when crunching code {error}")
             },
             AssemblerError::NotAllowed => write!(f, "Instruction not allowed in this context."),
-            AssemblerError::Fail { msg } => write!(f, "FAIL: {}", msg),
+            AssemblerError::Fail { msg } => write!(f, "FAIL: {msg}"),
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
             },
-            AssemblerError::AlreadyRenderedError(e) => write!(f, "{}", e)
+            AssemblerError::AlreadyRenderedError(e) => write!(f, "{e}")
         }
     }
 }

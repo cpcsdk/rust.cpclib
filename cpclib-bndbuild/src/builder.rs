@@ -281,8 +281,8 @@ impl BndBuilder {
         Ok(())
     }
 
-    fn execute_layer<'a>(
-        &'a self,
+    fn execute_layer(
+        &self,
         layer: HashSet<&Utf8Path>,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
@@ -293,7 +293,7 @@ impl BndBuilder {
         let mut grouped: HashMap<&Rule, Vec<&Utf8Path>> = HashMap::default();
         for p in layer.into_iter() {
             if let Some(r) = self.get_rule(p) {
-                let mut entry = grouped.entry(r).or_default();
+                let entry = grouped.entry(r).or_default();
                 entry.push(p);
             }
             else {
@@ -324,18 +324,13 @@ impl BndBuilder {
                     None
                 };
 
-                other_paths.as_ref().map(|ps| {
-                    ps.iter().for_each(|p| {
+                if let Some(ps) = other_paths.as_ref() { ps.iter().for_each(|p| {
                         state.task_count += 1;
                         self.start_rule(p, state.task_count, state.nb_deps);
-                    });
-                });
-                let res = self.execute_rule(&paths[0], state);
-                if res.is_ok() {
-                    other_paths.map(|ps| {
-                        ps.iter().for_each(|p| self.stop_rule(p));
-                    });
-                }
+                    }); }
+                let res = self.execute_rule(paths[0], state);
+                if res.is_ok()
+                    && let Some(ps) = other_paths { ps.iter().for_each(|p| self.stop_rule(p)); }
                 res
             })
             .collect::<Result<Vec<()>, BndBuilderError>>()?;
@@ -359,7 +354,7 @@ impl BndBuilder {
         if let Some(rule) = this.rule(p) {
             let (disabled, done) = if !rule.is_enabled() {
                 // return Err(BndBuilderError::DisabledTarget(p.to_string())); // Finally we ignore it
-                self.emit_stderr(&format!("The target {} is disabled and ignored.", p));
+                self.emit_stderr(format!("The target {p} is disabled and ignored."));
                 (true, true)
             }
             else {

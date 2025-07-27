@@ -172,7 +172,7 @@ fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
     //  if idx < -127 || idx > 128 {
     if !(-128..=127).contains(&idx) {
         // TODO raise a warning to get the line/file
-        eprintln!("Index error {}", idx);
+        eprintln!("Index error {idx}");
     }
     let val = (idx & 0xFF) as u8;
     add_byte(m, val);
@@ -221,7 +221,7 @@ impl fmt::Display for AssemblingPass {
             AssemblingPass::Finished => "Finished",
             AssemblingPass::ListingPass => "Listing"
         };
-        write!(f, "{}", content)
+        write!(f, "{content}")
     }
 }
 
@@ -656,11 +656,10 @@ impl Env {
             Ok(value) => Ok(value),
             Err(e) => {
                 // if we have no more remaining passes, we fail !
-                if let Some(commands) = self.assembling_control_current_output_commands.last() {
-                    if !commands.has_remaining_passes() {
+                if let Some(commands) = self.assembling_control_current_output_commands.last()
+                    && !commands.has_remaining_passes() {
                         return Err(e);
                     }
-                }
 
                 if self.pass.is_first_pass() {
                     *self.can_skip_next_passes.write().unwrap() = false;
@@ -848,7 +847,7 @@ impl Env {
     fn enter_namespace(&mut self, namespace: &str) -> Result<(), AssemblerError> {
         if namespace.contains(".") {
             return Err(AssemblerError::AssemblingError {
-                msg: format!("Invalid namespace \"{}\"", namespace)
+                msg: format!("Invalid namespace \"{namespace}\"")
             });
         }
         self.symbols_mut().enter_namespace(namespace);
@@ -1108,7 +1107,7 @@ impl Env {
             self.pass = AssemblingPass::ListingPass;
             self.start_new_pass();
             processed_token::visit_processed_tokens(&mut tokens, self)
-                .map_err(|e| eprintln!("{}", e))
+                .map_err(|e| eprintln!("{e}"))
                 .expect("No error can arise in listing output mode; there is a bug somewhere");
         }
 
@@ -1177,18 +1176,16 @@ impl Env {
                     }),
                     span: brk.span.as_ref().unwrap().clone()
                 };
-                eprint!("{}", info);
+                eprint!("{info}");
 
-                if let Some(chunk) = winape_chunk.as_mut() {
-                    if let Some(brk) = brk.winape() {
+                if let Some(chunk) = winape_chunk.as_mut()
+                    && let Some(brk) = brk.winape() {
                         chunk.add_breakpoint(brk);
                     }
-                }
-                if let Some(chunk) = ace_chunk.as_mut() {
-                    if let Some(brk) = brk.ace() {
+                if let Some(chunk) = ace_chunk.as_mut()
+                    && let Some(brk) = brk.ace() {
                         chunk.add_breakpoint(brk);
                     }
-                }
 
                 if let Some(chunk) = remu.as_mut() {
                     chunk.add_entry(&brk.remu().into());
@@ -1518,11 +1515,10 @@ impl Env {
 
     /// . Update the value of $ in the symbol table in order to take the current  output address
     pub fn update_dollar(&mut self) {
-        if let Some(cpr) = &self.cpr {
-            if cpr.is_empty() {
+        if let Some(cpr) = &self.cpr
+            && cpr.is_empty() {
                 return;
             }
-        }
 
         let code_addr = self.logical_to_physical_address(self.logical_code_address());
         let output_addr = self.logical_to_physical_address(self.logical_output_address());
@@ -1666,8 +1662,8 @@ impl Env {
             false
         };
 
-        if self.free_banks.selected_index.is_none() {
-            if let Some(section) = &self.current_section {
+        if self.free_banks.selected_index.is_none()
+            && let Some(section) = &self.current_section {
                 let section = section.read().unwrap();
                 if !section.contains(physical_output_address.address()) {
                     return Err(AssemblerError::AssemblingError {
@@ -1680,7 +1676,6 @@ impl Env {
                     });
                 }
             }
-        }
 
         match self.output_kind() {
             OutputKind::Snapshot => {
@@ -2411,7 +2406,7 @@ impl Env {
                     .set_show_lines(true)
                     .set_diff_only(true)
                     .format();
-                let msg = format!("Macro name `{name}` already exists. {}", diff);
+                let msg = format!("Macro name `{name}` already exists. {diff}");
                 return Err(AssemblerError::AlreadyRenderedError(msg));
             }
         }
@@ -2467,7 +2462,7 @@ impl Env {
 
         for (f, s) in r#struct.fields_size(self.symbols()) {
             self.symbols_mut()
-                .set_symbol_to_value(format!("{}.{}", name, f), ValueAndSource::new(index, span))?;
+                .set_symbol_to_value(format!("{name}.{f}"), ValueAndSource::new(index, span))?;
             index += s;
         }
 
@@ -2546,13 +2541,12 @@ impl Env {
 
         const OUTPUT_ALIGN: bool = false; // TODO programmaticall change it
 
-        while if OUTPUT_ALIGN {
+        while !(if OUTPUT_ALIGN {
             self.logical_output_address()
         }
         else {
             self.logical_code_address()
-        } % boundary
-            != 0
+        }).is_multiple_of(boundary)
         {
             self.output_byte(fill)?;
         }
@@ -2565,7 +2559,7 @@ impl Env {
             Some(section) => Ok(section.read().unwrap().clone()),
             None => {
                 Err(AssemblerError::AssemblingError {
-                    msg: format!("Section '{}' does not exists", name)
+                    msg: format!("Section '{name}' does not exists")
                 })
             },
         }
@@ -2576,7 +2570,7 @@ impl Env {
             Some(section) => section,
             None => {
                 return Err(AssemblerError::AssemblingError {
-                    msg: format!("Section '{}' does not exists", name)
+                    msg: format!("Section '{name}' does not exists")
                 });
             }
         };
@@ -2850,8 +2844,7 @@ impl Env {
         page >= 8 {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
-                    "{} is invalid. BANKSET only accept values from 0 to 7",
-                    page
+                    "{page} is invalid. BANKSET only accept values from 0 to 7"
                 )
             });
         }
@@ -2987,9 +2980,9 @@ impl Env {
             None => None
         };
 
-        if let Some(from) = &from {
-            if let Some(size) = &size {
-                if 0x10000 - *from < *size {
+        if let Some(from) = &from
+            && let Some(size) = &size
+                && 0x10000 - *from < *size {
                     return Err(AssemblerError::AssemblingError {
                         msg: format!(
                             "Cannot SAVE {amsdos_fname} as the address+size ({}) is out of bounds.",
@@ -2997,8 +2990,6 @@ impl Env {
                         )
                     });
                 }
-            }
-        }
 
         let amsdos_fname = self.build_fname(amsdos_fname)?;
         let any_fname: AnyFileNameOwned = match dsk_fname {
@@ -3129,14 +3120,13 @@ impl Env {
         if self.byte_written {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
-                    "Some bytes has already been produced; you cannot import the snapshot {}.",
-                    fname
+                    "Some bytes has already been produced; you cannot import the snapshot {fname}."
                 )
             });
         }
         self.sna.sna = Snapshot::load(fname).map_err(|e| {
             AssemblerError::AssemblingError {
-                msg: format!("Error while loading snapshot. {}", e)
+                msg: format!("Error while loading snapshot. {e}")
             }
         })?;
 
@@ -3867,13 +3857,13 @@ impl Env {
             ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder
     {
-        let counter_name = format!("{{{}}}", counter_name);
+        let counter_name = format!("{{{counter_name}}}");
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
             return Err(AssemblerError::RepeatIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
-                        msg: format!("Counter {} already exists", counter_name)
+                        msg: format!("Counter {counter_name} already exists")
                     }
                 )))
                 .into(),
@@ -3918,7 +3908,7 @@ impl Env {
                     },
                     _ => {
                         return Err(AssemblerError::AssemblingError {
-                            msg: format!("REPEAT issue: {} is not a list", values)
+                            msg: format!("REPEAT issue: {values} is not a list")
                         });
                     }
                 }
@@ -4011,7 +4001,7 @@ impl Env {
         confined_env.output_address = 0;
         // TODO: forbid a subset of instructions to ensure it works properly
         visit_processed_tokens(lst, &mut confined_env).map_err(|e| {
-            panic!("{:?}", e);
+            panic!("{e:?}");
             match span {
                 Some(span) => e.locate(span.clone()),
                 None => e
@@ -4065,7 +4055,7 @@ impl Env {
             ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder
     {
-        let counter_name = format!("{{{}}}", label);
+        let counter_name = format!("{{{label}}}");
         if self.symbols().contains_symbol(&counter_name)? {
             return Err(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
@@ -4223,14 +4213,14 @@ impl Env {
         // get the counter name of any
         let counter_name = counter_name
             .as_ref()
-            .map(|counter| format!("{{{}}}", counter));
+            .map(|counter| format!("{{{counter}}}"));
         let counter_name = counter_name.as_deref();
-        if let Some(counter_name) = counter_name {
-            if self.symbols().contains_symbol(counter_name)? {
+        if let Some(counter_name) = counter_name
+            && self.symbols().contains_symbol(counter_name)? {
                 return Err(AssemblerError::RepeatIssue {
                     error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                         AssemblerError::AssemblingError {
-                            msg: format!("Counter {} already exists", counter_name)
+                            msg: format!("Counter {counter_name} already exists")
                         }
                     )))
                     .into(),
@@ -4238,7 +4228,6 @@ impl Env {
                     repetition: 0
                 });
             }
-        }
 
         // get the first value
         let mut counter_value = counter_start
@@ -4293,17 +4282,15 @@ impl Env {
             self.symbols_mut()
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
-            if self.pass.is_listing_pass() {
-                if let Some(trigger) = self.output_trigger.as_mut() {
+            if self.pass.is_listing_pass()
+                && let Some(trigger) = self.output_trigger.as_mut() {
                     trigger.repeat_iteration(counter_name, counter_value.as_ref())
                 }
-            }
         }
-        else if self.pass.is_listing_pass() {
-            if let Some(trigger) = self.output_trigger.as_mut() {
+        else if self.pass.is_listing_pass()
+            && let Some(trigger) = self.output_trigger.as_mut() {
                 trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
             }
-        }
 
         if let Some(counter_value) = &counter_value {
             self.symbols_mut().push_counter_value(counter_value.clone());
@@ -4317,7 +4304,7 @@ impl Env {
             } = &e
             {
                 if let Some(counter_name) = counter_name {
-                    if counter_name == &format!("{{{}}}", symbol) {
+                    if counter_name == format!("{{{symbol}}}") {
                         AssemblerError::RelocatedError {
                             error: Box::new(AssemblerError::UnknownSymbol {
                                 closest: Some(counter_name.into()),
@@ -4385,13 +4372,13 @@ impl Env {
 
                 None => {
                     let d = self.resolve_expr_must_never_fail(exp).unwrap();
-                    format!("0x{:x}", d)
+                    format!("0x{d:x}")
                 }
             }
         }
         else {
             let d = self.resolve_expr_must_never_fail(exp).unwrap();
-            format!("0x{:x}", d)
+            format!("0x{d:x}")
         }
     }
 
@@ -5066,7 +5053,7 @@ pub fn assemble_align(
 
     // compute the number of 0 to put
     let mut until = current;
-    while until % expression != 0 {
+    while !until.is_multiple_of(expression) {
         until += 1;
     }
 
@@ -5251,7 +5238,7 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
             return Err(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
-                msg: format!("{} not treated", mnemonic)
+                msg: format!("{mnemonic} not treated")
             });
         }
     };
@@ -5351,8 +5338,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
             if !(-128..=127).contains(&delta) {
                 Err(AssemblerError::InvalidArgument {
                     msg: format!(
-                        "Address 0x{:x} relative to 0x{:x} is too far {}",
-                        address, root, delta
+                        "Address 0x{address:x} relative to 0x{root:x} is too far {delta}"
                     )
                 })
             }
@@ -5402,8 +5388,7 @@ where
         _ => {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
-                    "Conditionnal RST cannot take {} as argument. Expected values are 0x38|7|38.",
-                    val
+                    "Conditionnal RST cannot take {val} as argument. Expected values are 0x38|7|38."
                 )
             });
         }
@@ -5413,8 +5398,7 @@ where
     if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {
         return Err(AssemblerError::InvalidArgument {
             msg: format!(
-                "Conditionnal RST cannot take {} as flag. Expected values are C|NC|Z|NZ.",
-                flag
+                "Conditionnal RST cannot take {flag} as flag. Expected values are C|NC|Z|NZ."
             )
         });
     }
@@ -5449,8 +5433,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         _ => {
             return Err(AssemblerError::InvalidArgument {
                 msg: format!(
-                    "RST cannot take {} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38.",
-                    val
+                    "RST cannot take {val} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38."
                 )
             });
         }
@@ -5473,7 +5456,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         0x02 => 0x5E,
         _ => {
             return Err(AssemblerError::InvalidArgument {
-                msg: format!("IM cannot take {} as argument.", val)
+                msg: format!("IM cannot take {val} as argument.")
             });
         }
     };
@@ -5584,7 +5567,7 @@ where
         return Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("{}: parameter {:?} not treated", mne, arg2)
+            msg: format!("{mne}: parameter {arg2:?} not treated")
         });
     }
 
@@ -5882,7 +5865,7 @@ impl Env {
             }
             else {
                 return Err(AssemblerError::InvalidArgument {
-                    msg: format!("{} cannot take {} as argument", mne, target)
+                    msg: format!("{mne} cannot take {target} as argument")
                 });
             };
 
@@ -6042,7 +6025,7 @@ where
             return Err(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
-                msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)
+                msg: format!("LD: not properly implemented for '{arg1:?}, {arg2:?}'")
             });
         }
     }
@@ -6077,7 +6060,7 @@ where
                 bytes.extend(
                     assemble_ld(
                         &DataAccess::Register16(Register16::Hl),
-                        &DataAccess::Expression(Expr::Value(0)).into(),
+                        &DataAccess::Expression(Expr::Value(0)),
                         env
                     )?
                 );
@@ -6523,7 +6506,7 @@ where
         Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("LD: not properly implemented for '{:?}, {:?}'", arg1, arg2)
+            msg: format!("LD: not properly implemented for '{arg1:?}, {arg2:?}'")
         })
     }
     else {
@@ -6572,7 +6555,7 @@ where
         Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("IN: not properly implemented for '{:?}, {:?}'", arg1, arg2)
+            msg: format!("IN: not properly implemented for '{arg1:?}, {arg2:?}'")
         })
     }
     else {
@@ -6621,7 +6604,7 @@ where
         Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("OUT: not properly implemented for '{:?}, {:?}'", arg1, arg2)
+            msg: format!("OUT: not properly implemented for '{arg1:?}, {arg2:?}'")
         })
     }
     else {
@@ -6644,7 +6627,7 @@ fn assemble_pop<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
     }
     else {
         return Err(AssemblerError::InvalidArgument {
-            msg: format!("POP: not implemented for {:?}", arg1)
+            msg: format!("POP: not implemented for {arg1:?}")
         });
     }
 
@@ -6666,7 +6649,7 @@ fn assemble_push<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
     }
     else {
         return Err(AssemblerError::InvalidArgument {
-            msg: format!("PUSH: not implemented for {:?}", arg1)
+            msg: format!("PUSH: not implemented for {arg1:?}")
         });
     }
 
@@ -6906,7 +6889,7 @@ where
         Err(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
-            msg: format!("{:?} not implemented for {:?} {:?}", mnemonic, arg1, arg2)
+            msg: format!("{mnemonic:?} not implemented for {arg1:?} {arg2:?}")
         })
     }
     else {
@@ -6932,7 +6915,7 @@ where
             let bit = (env.resolve_expr_may_fail_in_first_pass(e)?.int()? & 0xFF) as u8;
             if bit > 7 {
                 return Err(AssemblerError::InvalidArgument {
-                    msg: format!("{}: {} is an invalid value", mnemonic, bit)
+                    msg: format!("{mnemonic}: {bit} is an invalid value")
                 });
             }
             bit
@@ -7041,7 +7024,7 @@ fn register16_to_code_with_af(reg: Register16) -> u8 {
         Register16::De => 0b01,
         Register16::Hl => 0b10,
         Register16::Af => 0b11,
-        _ => panic!("no mapping for {:?}", reg)
+        _ => panic!("no mapping for {reg:?}")
     }
 }
 
@@ -7051,7 +7034,7 @@ fn register16_to_code_with_sp(reg: Register16) -> u8 {
         Register16::De => 0b01,
         Register16::Hl => 0b10,
         Register16::Sp => 0b11,
-        _ => panic!("no mapping for {:?}", reg)
+        _ => panic!("no mapping for {reg:?}")
     }
 }
 
@@ -7069,7 +7052,7 @@ fn register16_to_code_with_indexed<D: DataAccessElem>(reg: &D) -> u8 {
         0b11
     }
     else {
-        panic!("no mapping for {:?}", reg)
+        panic!("no mapping for {reg:?}")
     }
 }
 

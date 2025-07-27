@@ -236,7 +236,7 @@ impl ListingOutput {
         };
 
         if let Some(line) = fname_handling {
-            writeln!(self.writer, "{}", line).unwrap();
+            writeln!(self.writer, "{line}").unwrap();
         }
 
         self.current_token_kind = match token.deref() {
@@ -268,7 +268,7 @@ impl ListingOutput {
             .iter()
             .chunks(self.bytes_per_line())
             .into_iter()
-            .map(|c| c.map(|b| format!("{:02X}", b)).join(" "))
+            .map(|c| c.map(|b| format!("{b:02X}")).join(" "))
             .collect_vec();
         let mut data_representation = data_representation.iter();
 
@@ -353,7 +353,7 @@ impl ListingOutput {
         if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
             for counter in self.counter_update.iter() {
                 self.writer
-                    .write(format!("{}\n", counter).as_bytes())
+                    .write(format!("{counter}\n").as_bytes())
                     .unwrap();
             }
             self.counter_update.clear();
@@ -391,7 +391,7 @@ impl ListingOutput {
 
                 if print {
                     self.current_fname = Some(fname.clone());
-                    Some(format!("Context: {}", fname))
+                    Some(format!("Context: {fname}"))
                 }
                 else {
                     None

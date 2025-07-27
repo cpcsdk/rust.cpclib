@@ -70,7 +70,7 @@ impl PrintCommand {
                     },
 
                     (Some(prefix), None) => {
-                        format!("{} PRINT: {}", prefix, msg)
+                        format!("{prefix} PRINT: {msg}")
                     },
 
                     (None, Some(loc)) => {
@@ -78,7 +78,7 @@ impl PrintCommand {
                     },
 
                     (None, None) => {
-                        format!("PRINT: {}", msg)
+                        format!("PRINT: {msg}")
                     }
                 };
 
@@ -114,14 +114,14 @@ impl PrintCommand {
                     },
 
                     (Some(prefix), None) => {
-                        writer.emit_stdout(&format!("{} PRINT: {}\n", prefix, msg))
+                        writer.emit_stdout(&format!("{prefix} PRINT: {msg}\n"))
                     },
 
                     (None, Some(loc)) => {
                         writer.emit_stdout(&format!("{}:{}:{} PRINT: {}", loc.0, loc.1, loc.2, msg))
                     },
 
-                    (None, None) => writer.emit_stdout(&format!("PRINT: {}", msg))
+                    (None, None) => writer.emit_stdout(&format!("PRINT: {msg}"))
                 };
 
                 Ok(())
@@ -218,7 +218,7 @@ impl BreakpointCommand {
                 format! {"PC=&{:X}@{}", brk.address, brk.page}
             },
             InnerBreakpointCommand::Advanced(brk) => {
-                format! {"{}", brk}
+                format! {"{brk}"}
             }
         }
     }

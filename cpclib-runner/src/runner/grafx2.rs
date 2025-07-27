@@ -1,4 +1,3 @@
-use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;

@@ -42,7 +42,7 @@ impl Display for Report<'_> {
                 .iter()
                 .map(|s| format!("Saved \"{}\" for {} bytes.\n", s.name, s.size))
                 .join("");
-            write!(f, "{}", saved)?;
+            write!(f, "{saved}")?;
         }
         write!(
             f,
@@ -53,7 +53,7 @@ impl Display for Report<'_> {
                 format!("{:.2}min", duration / 60.)
             }
             else {
-                format!("{:.2}s", duration)
+                format!("{duration:.2}s")
             }
         )
     }

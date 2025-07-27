@@ -20,8 +20,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
             ExprResult::String(s) => e,
             _ => {
                 return Err(AssemblerError::AlreadyRenderedError(format!(
-                    "Incompatible type with orgams {:?}",
-                    e
+                    "Incompatible type with orgams {e:?}"
                 )));
             }
         }
