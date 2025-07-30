@@ -1,13 +1,12 @@
 use std::fmt::{Debug, Display, Formatter, Result};
 
 use image as im;
-use serde::{Deserialize, Serialize};
+use nutype::nutype;
 
 use self::im::Pixel;
 
-
 /// Number of inks managed by the system. Do not take into account the few duplicates
-const NB_INKS: u8 = 27;
+const NB_INKS: u8 = 27 + 5;
 
 const INK0_RGB: im::Rgb<u8> = im::Rgb([0, 0, 0]);
 const INK1_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x00, 0x80]);
@@ -37,17 +36,16 @@ const INK24_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0x00]);
 const INK25_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0x80]);
 const INK26_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0xFF]);
 
-
 /// RGB color for each ink
-pub const INKS_RGB_VALUES: [im::Rgb<u8>; 27] = [
-    INK0_RGB, INK1_RGB, INK2_RGB, INK3_RGB, INK4_RGB, INK5_RGB, INK6_RGB, INK7_RGB, INK8_RGB, INK9_RGB, INK10_RGB, INK11_RGB, INK12_RGB, INK13_RGB, INK14_RGB,
-    INK15_RGB, INK16_RGB, INK17_RGB, INK18_RGB, INK19_RGB, INK20_RGB, INK21_RGB, INK22_RGB, INK23_RGB, INK24_RGB, INK25_RGB, INK26_RGB
+pub const INKS_RGB_VALUES: [im::Rgb<u8>; NB_INKS as usize] = [
+    INK0_RGB, INK1_RGB, INK2_RGB, INK3_RGB, INK4_RGB, INK5_RGB, INK6_RGB, INK7_RGB, INK8_RGB,
+    INK9_RGB, INK10_RGB, INK11_RGB, INK12_RGB, INK13_RGB, INK14_RGB, INK15_RGB, INK16_RGB,
+    INK17_RGB, INK18_RGB, INK19_RGB, INK20_RGB, INK21_RGB, INK22_RGB, INK23_RGB, INK24_RGB,
+    INK25_RGB, INK26_RGB, INK13_RGB, INK7_RGB, INK25_RGB, INK1_RGB, INK19_RGB // extra clones
 ];
 
-
-
 /// Ga value for each ink
-pub const INKS_GA_VALUE: [u8; 27] = [
+pub const INKS_GA_VALUE: [u8; NB_INKS as usize] = [
     0x54, // 0
     0x44, // 1
     0x55, // 2
@@ -74,19 +72,35 @@ pub const INKS_GA_VALUE: [u8; 27] = [
     0x5B, // 23
     0x4A, // 24
     0x43, // 25
-    0x4B  // 26
+    0x4B, // 26
+    0x41, // 27 => 13
+    0x48, // 28 => 7
+    0x49, // 29 => 25
+    0x50, // 30 => 1
+    0x51  // 31 => 19
 ];
 
-
-
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 /// Amstrad INK
-pub struct Ink {
-    /// Ink value
-    value: u8
-}
-
-
+#[nutype(
+    const_fn,
+    new_unchecked,
+    derive(
+        Clone,
+        Copy,
+        Ord,
+        PartialOrd,
+        Eq,
+        PartialEq,
+        Hash,
+        Serialize,
+        Deserialize,
+        AsRef,
+        Default
+    ),
+    default = 0,
+    validate(less_or_equal = 31, greater_or_equal = 0)
+)]
+pub struct Ink(u8);
 
 /// Describes the quantity for a given component
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -162,6 +176,7 @@ impl From<(InkComponent, InkComponentQuantity)> for Ink {
 }
 
 /// Build an ink from its RGB components
+/// Do not generate a duplicated ink
 impl
     From<(
         InkComponentQuantity,
@@ -351,41 +366,60 @@ impl Display for InkComponent {
 
 #[allow(missing_docs)]
 impl Ink {
+    /// Return the duplicated ink when it exists
+    pub fn duplicate(&self) -> Option<Ink> {
+        match self.into_inner() {
+            27 => Some(Ink::INKS[13]),
+            28 => Some(Ink::INKS[7]),
+            29 => Some(Ink::INKS[25]),
+            30 => Some(Ink::INKS[1]),
+            31 => Some(Ink::INKS[19]),
+
+            13 => Some(Ink::INKS[27]),
+            7 => Some(Ink::INKS[28]),
+            25 => Some(Ink::INKS[29]),
+            1 => Some(Ink::INKS[30]),
+            19 => Some(Ink::INKS[31]),
+
+            _ => None
+        }
+    }
+
     /// Get the RGB color value of the ink
-    pub fn color(self) -> im::Rgb<u8> {
-        INKS_RGB_VALUES[self.value as usize]
+    pub fn color(&self) -> im::Rgb<u8> {
+        INKS_RGB_VALUES[self.firmware_number() as usize]
     }
 
     /// Give the quantity of red for the given color
     /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn red_quantity(&self) -> InkComponentQuantity {
-        match self.value {
+        match self.as_ref() {
             0 | 1 | 2 | 9 | 10 | 11 | 18 | 19 | 20 => InkComponentQuantity::Zero,
             3 | 4 | 5 | 12 | 13 | 14 | 21 | 22 | 23 => InkComponentQuantity::Half,
             6 | 7 | 8 | 15 | 16 | 17 | 24 | 25 | 26 => InkComponentQuantity::Full,
-            _ => unreachable!()
+            _ => self.duplicate().unwrap().red_quantity()
         }
     }
 
     /// Give the quantit of blue for the given ink
     /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn blue_quantity(&self) -> InkComponentQuantity {
-        match self.value {
+        match self.as_ref() {
             0 | 3 | 6 | 9 | 12 | 15 | 18 | 21 | 24 => InkComponentQuantity::Zero,
             1 | 4 | 7 | 10 | 13 | 16 | 19 | 22 | 25 => InkComponentQuantity::Half,
             2 | 5 | 8 | 11 | 14 | 17 | 20 | 23 | 26 => InkComponentQuantity::Full,
-            _ => unreachable!()
+            _ => self.duplicate().unwrap().blue_quantity()
         }
     }
 
     /// Give the quantity of green for the given ink
     /// <http://cpc.sylvestre.org/technique/technique_coul1.html>
     pub fn green_quantity(&self) -> InkComponentQuantity {
-        match self.value {
+        match self.as_ref() {
             0..=8 => InkComponentQuantity::Zero,
             9..=17 => InkComponentQuantity::Half,
             18..=26 => InkComponentQuantity::Full,
-            _ => unreachable!()
+            _ => self.duplicate().unwrap().green_quantity()
         }
     }
 
@@ -410,9 +444,7 @@ impl Ink {
             InkComponent::Green => g = g.decrease(),
             InkComponent::Blue => b = b.decrease()
         };
-        let new_ink: Ink = (r, g, b).into();
-
-        self.value = new_ink.value;
+        *self = (r, g, b).into();
         self
     }
 
@@ -428,20 +460,33 @@ impl Ink {
             InkComponent::Green => g = g.increase(),
             InkComponent::Blue => b = b.increase()
         };
-        let new_ink: Ink = (r, g, b).into();
-
-        self.value = new_ink.value;
+        *self = (r, g, b).into();
         self
     }
 
+    pub fn is_duplicate(&self) -> bool {
+        self.number() > 26
+    }
+
     /// Get the ink number (firmware wise)
-    pub fn number(self) -> u8 {
-        self.value
+    /// Returns a number between 0 and 26
+    pub fn firmware_number(&self) -> u8 {
+        if self.is_duplicate() {
+            self.duplicate().unwrap().into_inner()
+        }
+        else {
+            self.into_inner()
+        }
     }
 
     /// Get the value required by the gate array the select the ink
-    pub fn gate_array(self) -> u8 {
-        INKS_GA_VALUE[self.value as usize]
+    pub fn gate_array_value(&self) -> u8 {
+        INKS_GA_VALUE[self.firmware_number() as usize]
+    }
+
+    /// Returns a number between 0 and 31
+    pub fn number(&self) -> u8 {
+        self.into_inner()
     }
 
     pub fn from_gate_array_color_number(col: u8) -> Ink {
@@ -492,7 +537,7 @@ impl From<Ink> for u8 {
 
 impl From<&Ink> for u8 {
     fn from(val: &Ink) -> Self {
-        val.gate_array()
+        val.gate_array_value()
     }
 }
 
@@ -532,7 +577,7 @@ macro_rules! impl_from_ink_integer {
       $(  impl From<$t> for Ink {
             fn from(item: $t) -> Self {
                 assert!(item < 32);
-                Self { value: item as _}
+                unsafe{Self::new_unchecked(item as _)}
             }
         } )*
     }
@@ -580,13 +625,13 @@ impl From<String> for Ink {
 
 impl Debug for Ink {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{} ({})", self, self.value)
+        write!(f, "{} ({})", self, self.as_ref())
     }
 }
 
 impl Display for Ink {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let repr = match self.value {
+        let repr = match self.as_ref() {
             0 => "BLACK",
             1 => "BLUE",
             2 => "BRIGHTBLUE",
@@ -627,89 +672,92 @@ impl<'a> From<&'a str> for Ink {
     }
 }
 
-
-
 impl Ink {
-    pub const BLACK: Ink = Self { value: 0 };
-    pub const BLUE: Ink = Self { value: 1 };
-    pub const BRIGHTBLUE: Ink = Self { value: 2 };
-    pub const BRIGHTCYAN: Ink = Self { value: 20 };
-    pub const BRIGHTGREEN: Ink = Self { value: 18 };
-    pub const BRIGHTMAGENTA: Ink = Self { value: 8 };
-    pub const BRIGHTRED: Ink = Self { value: 6 };
-    pub const BRIGHTWHITE: Ink = Self { value: 26 };
-    pub const BRIGHTYELLOW: Ink = Self { value: 24 };
+    pub const BLACK: Ink = Self::INKS[0];
+    pub const BLUE: Ink = Self::INKS[1];
+    pub const BRIGHTBLUE: Ink = Self::INKS[2];
+    pub const BRIGHTCYAN: Ink = Self::INKS[20];
+    pub const BRIGHTGREEN: Ink = Self::INKS[18];
+    pub const BRIGHTMAGENTA: Ink = Self::INKS[8];
+    pub const BRIGHTRED: Ink = Self::INKS[6];
+    pub const BRIGHTWHITE: Ink = Self::INKS[26];
+    pub const BRIGHTYELLOW: Ink = Self::INKS[24];
     pub const BRIGHT_BLUE: Ink = Self::BRIGHTBLUE;
     pub const BRIGHT_CYAN: Ink = Self::BRIGHTCYAN;
     pub const BRIGHT_GREEN: Ink = Self::BRIGHTGREEN;
     pub const BRIGHT_RED: Ink = Self::BRIGHTRED;
     pub const BRIGHT_WHITE: Ink = Self::BRIGHTWHITE;
     pub const BRIGHT_YELLOW: Ink = Self::BRIGHTYELLOW;
-    pub const CYAN: Ink = Self { value: 10 };
-    pub const GREEN: Ink = Self { value: 9 };
-    pub const LIME: Ink = Self { value: 21 };
-    pub const MAGENTA: Ink = Self { value: 4 };
-    pub const MAUVE: Ink = Self { value: 5 };
-    pub const ORANGE: Ink = Self { value: 15 };
-    pub const PASTELBLUE: Ink = Self { value: 14 };
-    pub const PASTELCYAN: Ink = Self { value: 23 };
-    pub const PASTELGREEN: Ink = Self { value: 22 };
-    pub const PASTELMAGENTA: Ink = Self { value: 17 };
-    pub const PASTELYELLOW: Ink = Self { value: 25 };
+    pub const CYAN: Ink = Self::INKS[10];
+    pub const GREEN: Ink = Self::INKS[9];
+    /// Available inks
+    pub const INKS: [Ink; NB_INKS as usize] = unsafe {
+        [
+            Ink::new_unchecked(0),
+            Ink::new_unchecked(1),
+            Ink::new_unchecked(2),
+            Ink::new_unchecked(3),
+            Ink::new_unchecked(4),
+            Ink::new_unchecked(5),
+            Ink::new_unchecked(6),
+            Ink::new_unchecked(7),
+            Ink::new_unchecked(8),
+            Ink::new_unchecked(9),
+            Ink::new_unchecked(10),
+            Ink::new_unchecked(11),
+            Ink::new_unchecked(12),
+            Ink::new_unchecked(13),
+            Ink::new_unchecked(14),
+            Ink::new_unchecked(15),
+            Ink::new_unchecked(16),
+            Ink::new_unchecked(17),
+            Ink::new_unchecked(18),
+            Ink::new_unchecked(19),
+            Ink::new_unchecked(20),
+            Ink::new_unchecked(21),
+            Ink::new_unchecked(22),
+            Ink::new_unchecked(23),
+            Ink::new_unchecked(24),
+            Ink::new_unchecked(25),
+            Ink::new_unchecked(26),
+            Ink::new_unchecked(27),
+            Ink::new_unchecked(28),
+            Ink::new_unchecked(29),
+            Ink::new_unchecked(30),
+            Ink::new_unchecked(31)
+        ]
+    };
+    pub const LIME: Ink = Self::INKS[21];
+    pub const MAGENTA: Ink = Self::INKS[4];
+    pub const MAUVE: Ink = Self::INKS[5];
+    pub const ORANGE: Ink = Self::INKS[15];
+    pub const PASTELBLUE: Ink = Self::INKS[14];
+    pub const PASTELCYAN: Ink = Self::INKS[23];
+    pub const PASTELGREEN: Ink = Self::INKS[22];
+    pub const PASTELMAGENTA: Ink = Self::INKS[17];
+    pub const PASTELYELLOW: Ink = Self::INKS[25];
     pub const PASTEL_BLUE: Ink = Self::PASTELBLUE;
     pub const PASTEL_CYAN: Ink = Self::PASTELCYAN;
     pub const PASTEL_GREEN: Ink = Self::PASTELGREEN;
     pub const PASTEL_MAGENTA: Ink = Self::PASTELMAGENTA;
     pub const PASTEL_YELLOW: Ink = Self::PASTELYELLOW;
-    pub const PINK: Ink = Self { value: 16 };
-    pub const PURPLE: Ink = Self { value: 7 };
-    pub const RED: Ink = Self { value: 3 };
-    pub const SEAGREEN: Ink = Self { value: 19 };
+    pub const PINK: Ink = Self::INKS[16];
+    pub const PURPLE: Ink = Self::INKS[7];
+    pub const RED: Ink = Self::INKS[3];
+    pub const SEAGREEN: Ink = Self::INKS[19];
     pub const SEA_GREEN: Ink = Self::SEAGREEN;
-    pub const SKYBLUE: Ink = Self { value: 11 };
+    pub const SKYBLUE: Ink = Self::INKS[11];
     pub const SKY_BLUE: Ink = Self::SKYBLUE;
-    pub const WHITE: Ink = Self { value: 13 };
-    pub const YELLOW: Ink = Self { value: 12 };
-
-	/// Available inks
-	pub const INKS: [Ink; NB_INKS as usize] = [
-		Ink { value: 0 },
-		Ink { value: 1 },
-		Ink { value: 2 },
-		Ink { value: 3 },
-		Ink { value: 4 },
-		Ink { value: 5 },
-		Ink { value: 6 },
-		Ink { value: 7 },
-		Ink { value: 8 },
-		Ink { value: 9 },
-		Ink { value: 10 },
-		Ink { value: 11 },
-		Ink { value: 12 },
-		Ink { value: 13 },
-		Ink { value: 14 },
-		Ink { value: 15 },
-		Ink { value: 16 },
-		Ink { value: 17 },
-		Ink { value: 18 },
-		Ink { value: 19 },
-		Ink { value: 20 },
-		Ink { value: 21 },
-		Ink { value: 22 },
-		Ink { value: 23 },
-		Ink { value: 24 },
-		Ink { value: 25 },
-		Ink { value: 26 }
-	];
+    pub const WHITE: Ink = Self::INKS[13];
+    pub const YELLOW: Ink = Self::INKS[12];
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use cpclib_common::itertools::Itertools;
 
-    use crate::{ga::{self, Ink, InkComponentQuantity, Palette}, ink::INK0_RGB};
+    use crate::ga::{self, Ink, InkComponentQuantity, Palette};
+    use crate::ink::INK0_RGB;
 
     #[test]
     fn test_ink() {
@@ -723,12 +771,11 @@ mod tests {
 
     #[test]
     fn test_into_ink() {
-        assert_eq!(Ink::from(5u8), Ink { value: 5 });
-        assert_eq!(Ink::from(5u64), Ink { value: 5 });
-        assert_eq!(Ink::from(5i64), Ink { value: 5 });
+        assert_eq!(Ink::from(5u8), Ink::INKS[5]);
+        assert_eq!(Ink::from(5u64), Ink::INKS[5]);
+        assert_eq!(Ink::from(5i64), Ink::INKS[5]);
     }
 
- 
     #[test]
     fn test_rgb() {
         const RGB_RATIOS: &[InkComponentQuantity] =

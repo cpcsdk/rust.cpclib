@@ -1,11 +1,11 @@
 #![feature(iter_next_chunk)]
 
-pub mod ink;
-pub mod pen;
-pub mod palette;
 pub mod ga;
 pub mod image;
+pub mod ink;
 pub mod ocp;
+pub mod palette;
+pub mod pen;
 pub mod pixels;
 pub mod screen;
 

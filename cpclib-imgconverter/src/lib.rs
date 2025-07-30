@@ -343,8 +343,8 @@ fn palette_code(pal: &Palette) -> String {
     for idx in 0..(16 / 2) {
         asm += &format!(
             "\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n",
-            pal[2 * idx].gate_array(),
-            pal[2 * idx + 1].gate_array()
+            pal[2 * idx].gate_array_value(),
+            pal[2 * idx + 1].gate_array_value()
         )
     }
 
@@ -428,7 +428,7 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
     for i in 0..16 {
         palette_code += &format!(
             "\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n",
-            palette.get(i.into()).gate_array()
+            palette.get(i.into()).gate_array_value()
         );
     }
 
@@ -911,7 +911,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
             for i in 0..16 {
                 sna.set_value(
                     SnapshotFlag::GA_PAL(Some(i)),
-                    u16::from(palette.get((i as i32).into()).gate_array())
+                    u16::from(palette.get((i as i32).into()).gate_array_value())
                 )
                 .unwrap();
             }

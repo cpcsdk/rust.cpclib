@@ -17,10 +17,11 @@ independent = true
 [dependencies]
 cpclib-common.workspace = true
 
-image.workspace = true
 anyhow.workspace = true
-gif.workspace = true
-gif-dispose.workspace = true
 as-slice.workspace = true
+gif-dispose.workspace = true
+gif.workspace = true
+image.workspace = true
+nutype = {workspace = true, features = ["serde", "new_unchecked"]}
 serde.workspace = true
 #arrays = "0.2.0"

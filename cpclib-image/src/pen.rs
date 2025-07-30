@@ -2,17 +2,12 @@ use std::fmt::Debug;
 use std::ops::Add;
 
 use cpclib_common::num::Integer;
-use image as im;
 use serde::{Deserialize, Serialize};
 
 use crate::image::Mode;
 
-
-
-
 /// Number of pens, including the border
 const NB_PENS: u8 = 16 + 1;
-
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize, PartialOrd, Ord)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
@@ -43,28 +38,27 @@ where i32: From<T>
 
 #[allow(missing_docs)]
 impl Pen {
-	pub const NB_PENS: u8 = NB_PENS;
-
-	/// Available pens
-	pub const PENS: [Pen; NB_PENS as usize] = [
-		Pen { value: 0 },
-		Pen { value: 1 },
-		Pen { value: 2 },
-		Pen { value: 3 },
-		Pen { value: 4 },
-		Pen { value: 5 },
-		Pen { value: 6 },
-		Pen { value: 7 },
-		Pen { value: 8 },
-		Pen { value: 9 },
-		Pen { value: 10 },
-		Pen { value: 11 },
-		Pen { value: 12 },
-		Pen { value: 13 },
-		Pen { value: 14 },
-		Pen { value: 15 },
-		Pen { value: 16 } // Border
-	];
+    pub const NB_PENS: u8 = NB_PENS;
+    /// Available pens
+    pub const PENS: [Pen; NB_PENS as usize] = [
+        Pen { value: 0 },
+        Pen { value: 1 },
+        Pen { value: 2 },
+        Pen { value: 3 },
+        Pen { value: 4 },
+        Pen { value: 5 },
+        Pen { value: 6 },
+        Pen { value: 7 },
+        Pen { value: 8 },
+        Pen { value: 9 },
+        Pen { value: 10 },
+        Pen { value: 11 },
+        Pen { value: 12 },
+        Pen { value: 13 },
+        Pen { value: 14 },
+        Pen { value: 15 },
+        Pen { value: 16 } // Border
+    ];
 
     /// Get the number of the pen
     pub fn number(self) -> u8 {
@@ -91,4 +85,3 @@ impl Add<i8> for Pen {
         }
     }
 }
-

@@ -11,9 +11,6 @@ use self::im::Pixel;
 use crate::ga::{Ink, InkComponent, InkComponentQuantity, Pen};
 use crate::image::Mode;
 
-
-
-
 /// The palette maps one Ink for each Pen
 pub struct Palette {
     /// Values for the palette. Some items may be absent
@@ -220,7 +217,7 @@ impl Palette {
     pub fn to_gate_array(&self) -> [u8; Pen::NB_PENS as usize] {
         let mut res = [0; Pen::NB_PENS as usize];
         for pen in 0..Pen::NB_PENS {
-            res[pen as usize] = self.get(&pen.into()).gate_array();
+            res[pen as usize] = self.get(&pen.into()).gate_array_value();
         }
         res
     }
@@ -228,7 +225,9 @@ impl Palette {
     pub fn to_gate_array_with_default(&self, default: Ink) -> [u8; Pen::NB_PENS as usize] {
         let mut res = [0; Pen::NB_PENS as usize];
         for pen in 0..Pen::NB_PENS {
-            res[pen as usize] = self.get_with_default(&pen.into(), &default).gate_array();
+            res[pen as usize] = self
+                .get_with_default(&pen.into(), &default)
+                .gate_array_value();
         }
         res
     }

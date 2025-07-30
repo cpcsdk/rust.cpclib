@@ -143,7 +143,7 @@ minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"
 num = "0.4.3"
 num-bigint = "0.4.6"
-nutype = "0.5.1"
+nutype = "0.6.2"
 ordered-float = "4.6.0"
 ouroboros = "0.18.5"
 parking_lot = "0.12.4"
