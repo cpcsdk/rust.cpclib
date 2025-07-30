@@ -617,8 +617,8 @@ impl ColorMatrix {
     }
 
     /// Convert the buffer as an image
-    pub fn as_image(&self) -> im::ImageBuffer<im::Rgba<u8>, Vec<u8>> {
-        let mut buffer: im::ImageBuffer<im::Rgba<u8>, Vec<u8>> =
+    pub fn as_image(&self) -> im::ImageBuffer<im::Rgb<u8>, Vec<u8>> {
+        let mut buffer: im::ImageBuffer<im::Rgb<u8>, Vec<u8>> =
             im::ImageBuffer::new(self.width(), self.height());
 
         for x in 0..(self.width()) {
@@ -1214,7 +1214,7 @@ impl Sprite {
         ::std::mem::swap(&mut transformed, &mut self.data);
     }
 
-    pub fn as_image(&self) -> im::ImageBuffer<im::Rgba<u8>, Vec<u8>> {
+    pub fn as_image(&self) -> im::ImageBuffer<im::Rgb<u8>, Vec<u8>> {
         self.to_color_matrix().unwrap().as_image()
     }
 }

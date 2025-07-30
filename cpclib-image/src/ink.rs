@@ -9,38 +9,37 @@ use self::im::Pixel;
 /// Number of inks managed by the system. Do not take into account the few duplicates
 const NB_INKS: u8 = 27;
 
-// TODO remove useless alpha component
-const INK0_RGB: im::Rgba<u8> = im::Rgba([0, 0, 0, 255]);
-const INK1_RGB: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0x80, 255]);
-const INK2_RGB: im::Rgba<u8> = im::Rgba([0x00, 0x00, 0xFF, 255]);
-const INK3_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0x00, 255]);
-const INK4_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0x80, 255]);
-const INK5_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x00, 0xFF, 255]);
-const INK6_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0x00, 255]);
-const INK7_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0x80, 255]);
-const INK8_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x00, 0xFF, 255]);
-const INK9_RGB: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0x00, 255]);
-const INK10_RGB: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0x80, 255]);
-const INK11_RGB: im::Rgba<u8> = im::Rgba([0x00, 0x80, 0xFF, 255]);
-const INK12_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0x00, 255]);
-const INK13_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0x80, 255]);
-const INK14_RGB: im::Rgba<u8> = im::Rgba([0x80, 0x80, 0xFF, 255]);
-const INK15_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0x00, 255]);
-const INK16_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0x80, 255]);
-const INK17_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0x80, 0xFF, 255]);
-const INK18_RGB: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0x00, 255]);
-const INK19_RGB: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0x80, 255]);
-const INK20_RGB: im::Rgba<u8> = im::Rgba([0x00, 0xFF, 0xFF, 255]);
-const INK21_RGB: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x00, 255]);
-const INK22_RGB: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0x80, 255]);
-const INK23_RGB: im::Rgba<u8> = im::Rgba([0x80, 0xFF, 0xFF, 255]);
-const INK24_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0x00, 255]);
-const INK25_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0x80, 255]);
-const INK26_RGB: im::Rgba<u8> = im::Rgba([0xFF, 0xFF, 0xFF, 255]);
+const INK0_RGB: im::Rgb<u8> = im::Rgb([0, 0, 0]);
+const INK1_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x00, 0x80]);
+const INK2_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x00, 0xFF]);
+const INK3_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x00, 0x00]);
+const INK4_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x00, 0x80]);
+const INK5_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x00, 0xFF]);
+const INK6_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x00, 0x00]);
+const INK7_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x00, 0x80]);
+const INK8_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x00, 0xFF]);
+const INK9_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x80, 0x00]);
+const INK10_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x80, 0x80]);
+const INK11_RGB: im::Rgb<u8> = im::Rgb([0x00, 0x80, 0xFF]);
+const INK12_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x80, 0x00]);
+const INK13_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x80, 0x80]);
+const INK14_RGB: im::Rgb<u8> = im::Rgb([0x80, 0x80, 0xFF]);
+const INK15_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x80, 0x00]);
+const INK16_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x80, 0x80]);
+const INK17_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0x80, 0xFF]);
+const INK18_RGB: im::Rgb<u8> = im::Rgb([0x00, 0xFF, 0x00]);
+const INK19_RGB: im::Rgb<u8> = im::Rgb([0x00, 0xFF, 0x80]);
+const INK20_RGB: im::Rgb<u8> = im::Rgb([0x00, 0xFF, 0xFF]);
+const INK21_RGB: im::Rgb<u8> = im::Rgb([0x80, 0xFF, 0x00]);
+const INK22_RGB: im::Rgb<u8> = im::Rgb([0x80, 0xFF, 0x80]);
+const INK23_RGB: im::Rgb<u8> = im::Rgb([0x80, 0xFF, 0xFF]);
+const INK24_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0x00]);
+const INK25_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0x80]);
+const INK26_RGB: im::Rgb<u8> = im::Rgb([0xFF, 0xFF, 0xFF]);
 
 
 /// RGB color for each ink
-pub const INKS_RGB_VALUES: [im::Rgba<u8>; 27] = [
+pub const INKS_RGB_VALUES: [im::Rgb<u8>; 27] = [
     INK0_RGB, INK1_RGB, INK2_RGB, INK3_RGB, INK4_RGB, INK5_RGB, INK6_RGB, INK7_RGB, INK8_RGB, INK9_RGB, INK10_RGB, INK11_RGB, INK12_RGB, INK13_RGB, INK14_RGB,
     INK15_RGB, INK16_RGB, INK17_RGB, INK18_RGB, INK19_RGB, INK20_RGB, INK21_RGB, INK22_RGB, INK23_RGB, INK24_RGB, INK25_RGB, INK26_RGB
 ];
@@ -353,7 +352,7 @@ impl Display for InkComponent {
 #[allow(missing_docs)]
 impl Ink {
     /// Get the RGB color value of the ink
-    pub fn color(self) -> im::Rgba<u8> {
+    pub fn color(self) -> im::Rgb<u8> {
         INKS_RGB_VALUES[self.value as usize]
     }
 
