@@ -1,5 +1,3 @@
-#![feature(slice_take)]
-
 pub mod chars;
 pub mod clap_extra;
 pub mod event;

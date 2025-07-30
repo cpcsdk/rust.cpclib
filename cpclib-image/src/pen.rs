@@ -2,19 +2,35 @@ use std::fmt::Debug;
 use std::ops::Add;
 
 use cpclib_common::num::Integer;
-use serde::{Deserialize, Serialize};
+use nutype::nutype;
 
 use crate::image::Mode;
 
 /// Number of pens, including the border
 const NB_PENS: u8 = 16 + 1;
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Serialize, Deserialize, PartialOrd, Ord)]
+#[nutype(
+    const_fn,
+    new_unchecked,
+    derive(
+        AsRef,
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        Deserialize,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd,
+        Serialize,
+    ),
+    default = 0,
+    validate(less_or_equal = 16, greater_or_equal = 0)
+)]
 /// Represents a Pen. There a 16 pens + the border in the Amstrad CPC
-pub struct Pen {
-    /// pen value
-    value: u8
-}
+pub struct Pen(u8);
 
 // Constructor of Pen from an integer
 impl<T: Integer> From<T> for Pen
@@ -22,7 +38,7 @@ where i32: From<T>
 {
     fn from(item: T) -> Self {
         let item: i32 = item.into();
-        Self { value: item as u8 }
+        Pen::PENS[item as usize]
     }
 }
 
@@ -40,39 +56,43 @@ where i32: From<T>
 impl Pen {
     pub const NB_PENS: u8 = NB_PENS;
     /// Available pens
-    pub const PENS: [Pen; NB_PENS as usize] = [
-        Pen { value: 0 },
-        Pen { value: 1 },
-        Pen { value: 2 },
-        Pen { value: 3 },
-        Pen { value: 4 },
-        Pen { value: 5 },
-        Pen { value: 6 },
-        Pen { value: 7 },
-        Pen { value: 8 },
-        Pen { value: 9 },
-        Pen { value: 10 },
-        Pen { value: 11 },
-        Pen { value: 12 },
-        Pen { value: 13 },
-        Pen { value: 14 },
-        Pen { value: 15 },
-        Pen { value: 16 } // Border
-    ];
+    pub const PENS: [Pen; NB_PENS as usize] = unsafe {
+        [
+            Pen::new_unchecked(0),
+            Pen::new_unchecked(1),
+            Pen::new_unchecked(2),
+            Pen::new_unchecked(3),
+            Pen::new_unchecked(4),
+            Pen::new_unchecked(5),
+            Pen::new_unchecked(6),
+            Pen::new_unchecked(7),
+            Pen::new_unchecked(8),
+            Pen::new_unchecked(9),
+            Pen::new_unchecked(10),
+            Pen::new_unchecked(11),
+            Pen::new_unchecked(12),
+            Pen::new_unchecked(13),
+            Pen::new_unchecked(14),
+            Pen::new_unchecked(15),
+            Pen::new_unchecked(16)
+        ]
+    };
 
     /// Get the number of the pen
-    pub fn number(self) -> u8 {
-        self.value
+    #[inline]
+    pub fn number(&self) -> u8 {
+        self.into_inner()
     }
 
     /// Change the value of the pen in order to not exceed the number of pens available in the
     /// given mode
     pub fn limit(&mut self, mode: Mode) {
-        self.value = match mode {
-            Mode::Zero => self.value,
-            Mode::Three | Mode::One => self.value & 3,
-            Mode::Two => self.value & 1
-        };
+        *self = match mode {
+            Mode::Zero => self.number(),
+            Mode::Three | Mode::One => self.number() & 3,
+            Mode::Two => self.number() & 1
+        }
+        .into();
     }
 }
 
@@ -80,8 +100,8 @@ impl Add<i8> for Pen {
     type Output = Self;
 
     fn add(self, delta: i8) -> Self {
-        Self {
-            value: (self.value as i8 + delta) as u8
-        }
+        let value = ((self.number() as i8 + 17 + delta) as u8) % 17;
+
+        unsafe { Self::new_unchecked(value) }
     }
 }
