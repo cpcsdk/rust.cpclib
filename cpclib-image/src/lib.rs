@@ -1,5 +1,8 @@
 #![feature(iter_next_chunk)]
 
+pub mod ink;
+pub mod pen;
+pub mod palette;
 pub mod ga;
 pub mod image;
 pub mod ocp;
