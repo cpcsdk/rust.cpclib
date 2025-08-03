@@ -22,7 +22,7 @@ impl Grafx2Version {
             #[cfg(target_os = "windows")]
             Grafx2Version::V2_9 => DOWNLOAD_URL_V2_9_WINDOWS,
             #[cfg(target_os = "linux")]
-            Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE,
+            Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE
         };
 
         let folder = match self {
@@ -45,25 +45,24 @@ impl Grafx2Version {
             .archive_format(archive_format)
             .exec_fname(exec);
 
-
         // On linux it is needed to add execution right to the downloaded appimage
         #[cfg(target_os = "linux")]
         let builder = {
-            use crate::delegated::PostInstall;
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                    use std::os::unix::fs::PermissionsExt;
 
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>= Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
-                use std::fs::Permissions;
-                use std::os::unix::fs::PermissionsExt;
-
-                let app_image = desc.exec_fname();
-                let mut perms = std::fs::metadata(&app_image).unwrap().permissions();
-                let mode = perms.mode() | 0o100; // Add execution mode
-                perms.set_mode(mode);
-                std::fs::set_permissions(&app_image, perms);
-                Ok(())
-            });
-            builder
-                .post_install(post_install)
+                    let app_image = desc.exec_fname();
+                    let mut perms = std::fs::metadata(&app_image).unwrap().permissions();
+                    let mode = perms.mode() | 0o100; // Add execution mode
+                    perms.set_mode(mode);
+                    std::fs::set_permissions(&app_image, perms);
+                    Ok(())
+                }
+            );
+            builder.post_install(post_install)
         };
 
         builder.build()

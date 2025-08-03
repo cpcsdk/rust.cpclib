@@ -394,7 +394,6 @@ pub struct PostInstall<E: EventObserver>(
     Rc<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
 );
 
-
 impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>>
     for PostInstall<E>
 {
@@ -402,9 +401,6 @@ impl<E: EventObserver> From<Box<dyn Fn(&DelegateApplicationDescription<E>) -> Re
         Self(Rc::new(value))
     }
 }
-
-
-
 
 impl<E: EventObserver> Deref for PostInstall<E> {
     type Target = Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>>;

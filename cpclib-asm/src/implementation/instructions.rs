@@ -16,7 +16,7 @@ impl Cruncher for CrunchType {
         }
 
         let method = match self {
-            CrunchType::LZ48 => Ok(CompressMethod::Lz48),
+            CrunchType::LZ48 => Ok::<CompressMethod, AssemblerError>(CompressMethod::Lz48),
             CrunchType::LZ49 => Ok(CompressMethod::Lz49),
 
             CrunchType::LZSA1 => {
@@ -31,16 +31,12 @@ impl Cruncher for CrunchType {
                     None
                 ))
             },
-
-            CrunchType::LZX7 => {
-                Err(AssemblerError::AssemblingError {
-                    msg: "LZX7 compression not implemented".to_owned()
-                })
-            },
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZ4 => Ok(CompressMethod::Lz4),
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZX0 => Ok(CompressMethod::Zx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            CrunchType::LZX7 => Ok(CompressMethod::Zx7),
             #[cfg(not(target_arch = "wasm32"))]
             CrunchType::LZEXO => Ok(CompressMethod::Exomizer),
             #[cfg(not(target_arch = "wasm32"))]

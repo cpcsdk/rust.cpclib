@@ -18,6 +18,8 @@ pub mod zx0;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shrinkler;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod zx7;
 
 pub mod lzsa;
 
@@ -36,7 +38,9 @@ pub enum CompressMethod {
     #[cfg(not(target_arch = "wasm32"))]
     Upkr,
     #[cfg(not(target_arch = "wasm32"))]
-    Zx0
+    Zx0,
+    #[cfg(not(target_arch = "wasm32"))]
+    Zx7
 }
 
 impl CompressMethod {
@@ -64,7 +68,9 @@ impl CompressMethod {
                 Ok(upkr::pack(data, level, &config, None))
             },
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Zx0 => Ok(zx0::compress(data))
+            CompressMethod::Zx0 => Ok(zx0::compress(data)),
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressMethod::Zx7 => Ok(zx7::compress(data))
         }
     }
 }

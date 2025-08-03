@@ -26,6 +26,11 @@ fn crunch_zx0() {
 }
 
 #[test]
+fn crunch_zx7() {
+    crunch_any(CompressMethod::Zx7)
+}
+
+#[test]
 fn crunch_shrinkler() {
     crunch_any(CompressMethod::Shrinkler(ShrinklerConfiguration {
         iterations: 10,

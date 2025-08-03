@@ -1,6 +1,6 @@
 use std::env;
 
-fn build() {
+fn build_others() {
     built::write_built_file().expect("Failed to acquire build-time information");
 
     // apultra crunch
@@ -40,6 +40,15 @@ fn build() {
         .shared_flag(true)
         .cargo_metadata(true)
         .compile("lz4");
+
+    // zx7 crunch
+    cc::Build::new()
+        .warnings(false)
+        .file("extra/zx7.c")
+        .opt_level(3)
+        .shared_flag(false)
+        .cargo_metadata(true)
+        .compile("zx7");
 }
 
 fn build_shrinkler() {
@@ -79,7 +88,7 @@ fn main() {
         .unwrap()
         .contains("wasm32")
     {
-        build();
+        build_others();
         build_shrinkler();
         build_lzsa();
     }
