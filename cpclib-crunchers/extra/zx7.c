@@ -178,6 +178,7 @@ Optimal* zx7_optimize(unsigned char *input_data, int input_size) {
     free(match_slots);
     free(min); // BASM
     free(max); // BASM
+    free(matches); // BASM
 
     return optimal;
 }
