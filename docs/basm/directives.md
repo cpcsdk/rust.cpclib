@@ -384,7 +384,7 @@ These string can do expansion of formulas embedded in {}.
 
 basm embeds some files in its executable, they are access under the name "inner://" :
 
-### LZAPU, LZ48, LZ49, LZEXO, LZSA1, LZSA2
+### LZAPU, LZ4, LZ48, LZ49, LZEXO, LZSA1, LZSA2, LZUPKR, LZSHRINKLER, LZX0
 
 Example:
 ```z80

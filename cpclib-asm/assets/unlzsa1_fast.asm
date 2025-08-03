@@ -103,7 +103,7 @@
 macro DecompressLZSA1
 		ld b,0 : jr @ReadToken
 
-@NoLiterals:	xor (hl) : NEXT_HL : jp m,@LongOffset
+@NoLiterals:	xor (hl) : NEXT_HL() : jp m,@LongOffset
 
 @ShortOffset:	push de : ld e,(hl) : ld d,#FF
 
@@ -112,10 +112,10 @@ macro DecompressLZSA1
 
 		; placed here this saves a JP per iteration
 @CopyMatch:	ld c,a
-.UseC		NEXT_HL : ex (sp),hl						; BC = len, DE = offset, HL = dest, SP ->[dest,src]
-		ADD_OFFSET							; BC = len, DE = dest, HL = dest-offset, SP->[src]
-		COPY1 : COPY1 : COPYBC						; BC = 0, DE = dest
-.popSrc		pop hl								; HL = src
+@CopyMatchUseC:		NEXT_HL() : ex (sp),hl						; BC = len, DE = offset, HL = dest, SP ->[dest,src]
+		ADD_OFFSET()							; BC = len, DE = dest, HL = dest-offset, SP->[src]
+		COPY1() : COPY1() : COPYBC()						; BC = 0, DE = dest
+.popSrc:		pop hl								; HL = src
 	
 @ReadToken:	; first a byte token "O|LLL|MMMM" is read from the stream,
 		; where LLL is the number of literals and MMMM is
@@ -125,58 +125,58 @@ macro DecompressLZSA1
 		cp #70 : jr z,@MoreLiterals					; LLL=7 means 7+ literals...
 		rrca : rrca : rrca : rrca : ld c,a				; LLL<7 means 0..6 literals...
 
-		ld a,(hl) : NEXT_HL
-		COPYBC
+		ld a,(hl) : NEXT_HL()
+		COPYBC()
 
 		; the top bit of token is set if the offset contains two bytes
 		and #8F : jp p,@ShortOffset
 
 @LongOffset:	; read second byte of the offset
-		push de : ld e,(hl) : NEXT_HL : ld d,(hl)
+		push de : ld e,(hl) : NEXT_HL() : ld d,(hl)
 		add -128+3 : cp 15+3 : jp c,@CopyMatch
 
 	IFNDEF	UNROLL_LONG_MATCHES
 
 		; MMMM=15 indicates a multi-byte number of literals
-@LongerMatch:	NEXT_HL : add (hl) : jr nc,@CopyMatch
+@LongerMatch:	NEXT_HL() : add (hl) : jr nc,@CopyMatch
 
 		; the codes are designed to overflow;
 		; the overflow value 1 means read 1 extra byte
 		; and overflow value 0 means read 2 extra bytes
-.code1		ld b,a : NEXT_HL : ld c,(hl) : jr nz,@CopyMatch.UseC
-.code0		NEXT_HL : ld b,(hl)
+@LongerMatchcode1:		ld b,a : NEXT_HL() : ld c,(hl) : jr nz,@CopyMatchUseC
+@LongerMatchcode0:		NEXT_HL() : ld b,(hl)
 
 		; the two-byte match length equal to zero
 		; designates the end-of-data marker
-		ld a,b : or c : jr nz,@CopyMatch.UseC
+		ld a,b : or c : jr nz,@CopyMatchUseC
 		pop de : ret
 
 	ELSE
 
 		; MMMM=15 indicates a multi-byte number of literals
-@LongerMatch:	NEXT_HL : add (hl) : jr c,@VeryLongMatch
+@LongerMatch:	NEXT_HL() : add (hl) : jr c,@VeryLongMatch
 
 		ld c,a
-.UseC		NEXT_HL : ex (sp),hl
-		ADD_OFFSET
-		COPY1 : COPY1
+@LongerMatchUseC:		NEXT_HL() : ex (sp),hl
+		ADD_OFFSET()
+		COPY1() : COPY1()
 
 		; this is an unrolled equivalent of LDIR
 		xor a : sub c
 		and 32-1 : add a
 		ld (.jrOffset),a : jr nz,$+2
-.jrOffset	EQU $-1
-.fastLDIR	repeat 32
-		COPY1
+@LongerMatchjrOffset:	EQU $-1
+@LongerMatchfastLDIR:	repeat 32
+		COPY1()
 		rend
-		jp pe,.fastLDIR
-		jp @CopyMatch.popSrc
+		jp pe,@LongerMatchfastLDIR
+		jp @CopyMatchpopSrc
 
 @VeryLongMatch:	; the codes are designed to overflow;
 		; the overflow value 1 means read 1 extra byte
 		; and overflow value 0 means read 2 extra bytes
-.code1		ld b,a : NEXT_HL : ld c,(hl) : jr nz,@LongerMatch.UseC
-.code0		NEXT_HL : ld b,(hl)
+@VeryLongMatchcode1:		ld b,a : NEXT_HL() : ld c,(hl) : jr nz,@LongerMatchUseC
+@VeryLongMatchcode0:		NEXT_HL() : ld b,(hl)
 
 		; the two-byte match length equal to zero
 		; designates the end-of-data marker
@@ -186,17 +186,17 @@ macro DecompressLZSA1
 	ENDIF
 
 @MoreLiterals:	; there are three possible situations here
-		xor (hl) : NEXT_HL : exa
+		xor (hl) : NEXT_HL() : exa
 		ld a,7 : add (hl) : jr c,@ManyLiterals
 
 @CopyLiterals:	ld c,a
-.UseC		NEXT_HL : COPYBC
+@CopyLiteralsUseC:		NEXT_HL() : COPYBC()
 
 		exa : jp p,@ShortOffset : jr @LongOffset
 
 @ManyLiterals:
-.code1		ld b,a : NEXT_HL : ld c,(hl) : jr nz,@CopyLiterals.UseC
-.code0		NEXT_HL : ld b,(hl) : jr @CopyLiterals.UseC
+@ManyLiteralscode1:		ld b,a : NEXT_HL() : ld c,(hl) : jr nz,@CopyLiteralsUseC
+@ManyLiteralscode0:		NEXT_HL() : ld b,(hl) : jr @CopyLiteralsUseC
 
 mend
 
