@@ -176,6 +176,8 @@ Optimal* zx7_optimize(unsigned char *input_data, int input_size) {
 
     /* save time by releasing the largest block only, the O.S. will clean everything else later */
     free(match_slots);
+    free(min); // BASM
+    free(max); // BASM
 
     return optimal;
 }
