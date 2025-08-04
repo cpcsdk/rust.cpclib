@@ -44,6 +44,14 @@ To sum up:
 #define MemRealloc realloc
 #define MemMalloc malloc
 #define MemMove memmove
+
+unsigned char* output_data;
+int output_index;
+int input_index;
+int bit_index;
+int bit_mask;
+int diff;
+int backtrack;
 // added for basm stop
 
 

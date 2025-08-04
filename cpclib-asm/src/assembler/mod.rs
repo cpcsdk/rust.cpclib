@@ -3237,7 +3237,7 @@ impl Env {
                 Vec::new()
             }
             else {
-                kind.crunch(&bytes).map_err(|e| {
+                kind.compress(&bytes).map_err(|e| {
                     match span {
                         Some(span) => {
                             AssemblerError::RelocatedError {
@@ -3247,7 +3247,7 @@ impl Env {
                         },
                         None => e
                     }
-                })?
+                })?.into() // TODO find a way to store the delta
             };
             previous_crunched_bytes.replace(crunched);
             previous_bytes.replace(bytes);

@@ -16,6 +16,7 @@ independent = true
 [dependencies]
 libc.workspace = true
 upkr = "0.2.3"
+zx0 = "1.0.0"
 
 [target.'cfg(not(target_arch="wasm32"))'.dependencies]
 cxx = "1.0"

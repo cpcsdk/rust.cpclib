@@ -2,16 +2,12 @@
 #![feature(assert_matches)]
 #![feature(specialization)]
 #![feature(exact_size_is_empty)]
-#![feature(exclusive_range_pattern)]
-#![feature(let_chains)]
 #![feature(box_patterns)]
 #![feature(box_into_inner)]
-#![feature(string_extend_from_within)]
 #![recursion_limit = "256"]
 #![feature(map_try_insert)]
 #![feature(get_mut_unchecked)]
 #![feature(stmt_expr_attributes)]
-#![feature(slice_take)]
 #![feature(write_all_vectored)]
 
 // mod rewrite;

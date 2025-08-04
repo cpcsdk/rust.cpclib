@@ -21,17 +21,6 @@ fn build_others() {
         .cargo_metadata(true)
         .compile("exomizer");
 
-    // zx0 crunch
-    cc::Build::new()
-        .warnings(false)
-        .file("extra/zx0/compress.c")
-        .file("extra/zx0/memory.c")
-        .file("extra/zx0/optimize.c")
-        .opt_level(3)
-        .shared_flag(false)
-        .cargo_metadata(true)
-        .compile("zx0");
-
     // lz4 crunch
     cc::Build::new()
         .warnings(false)
@@ -44,7 +33,7 @@ fn build_others() {
     // zx7 crunch
     cc::Build::new()
         .warnings(false)
-        .file("extra/zx7.c")
+        .file("extra/zx7/zx7.c")
         .opt_level(3)
         .shared_flag(false)
         .cargo_metadata(true)

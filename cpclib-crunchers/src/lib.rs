@@ -1,5 +1,7 @@
 #![feature(vec_into_raw_parts)]
 
+use std::ops::Deref;
+
 use lz49::lz49_encode_legacy;
 use lzsa::{LzsaMinMatch, LzsaVersion};
 #[cfg(not(target_arch = "wasm32"))]
@@ -43,20 +45,51 @@ pub enum CompressMethod {
     Zx7
 }
 
+pub struct CompressionResult {
+    /// The compressed stream
+    pub stream: Vec<u8>,
+    /// gap between compressed end and decompressed end
+    pub delta: Option<usize>
+}
+
+impl AsRef<[u8]> for CompressionResult {
+    fn as_ref(&self) -> &[u8] {
+        &self.stream
+    }
+}
+impl Deref for CompressionResult {
+    type Target = Vec<u8>;
+    fn deref(&self) -> &Self::Target {
+        &self.stream
+    }
+}
+impl From<Vec<u8>> for CompressionResult {
+    fn from(value: Vec<u8>) -> Self {
+        CompressionResult { stream: value, delta: None }
+    }
+}
+
+impl Into<Vec<u8>> for CompressionResult {
+    fn into(self) -> Vec<u8> {
+        self.stream
+    }
+}
+
 impl CompressMethod {
-    pub fn compress(&self, data: &[u8]) -> Result<Vec<u8>, ()> {
+    pub fn compress(&self, data: &[u8]) -> Result<CompressionResult, ()> {
         match self {
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Apultra => Ok(apultra::compress(data)),
+            CompressMethod::Apultra => Ok(apultra::compress(data).into()),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Exomizer => Ok(exomizer::compress(data)),
+            CompressMethod::Exomizer => Ok(exomizer::compress(data).into()),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Lz4 => Ok(lz4::compress(data)),
-            CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data)),
-            CompressMethod::Lz49 => Ok(lz49_encode_legacy(data)),
-            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, *minmatch),
+            CompressMethod::Lz4 => Ok(lz4::compress(data).into()),
+            CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data).into()),
+            CompressMethod::Lz49 => Ok(lz49_encode_legacy(data).into()),
+            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, *minmatch)
+                .map(|r| r.into()),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Shrinkler(conf) => Ok(conf.compress(data)),
+            CompressMethod::Shrinkler(conf) => Ok(conf.compress(data).into()),
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Upkr => {
                 let mut config = upkr::Config::default();
@@ -65,12 +98,12 @@ impl CompressMethod {
                 config.invert_bit_encoding = true;
                 config.simplified_prob_update = true;
                 let level = 9;
-                Ok(upkr::pack(data, level, &config, None))
+                Ok(upkr::pack(data, level, &config, None).into())
             },
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Zx0 => Ok(zx0::compress(data)),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressMethod::Zx7 => Ok(zx7::compress(data))
+            CompressMethod::Zx7 => Ok(zx7::compress(data).into())
         }
     }
 }

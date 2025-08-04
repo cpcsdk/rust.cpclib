@@ -23,7 +23,7 @@ use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::implementation::instructions::Cruncher;
+use crate::implementation::instructions::Compressor;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
 use crate::progress::{self, Progress};
 use crate::{AssemblerError, Env, LocatedToken, Visited, r#macro, parse_z80_with_context_builder};
@@ -1121,7 +1121,8 @@ where
                                 }
 
                                 let crunch_type = other.crunch_type().unwrap();
-                                Cow::Owned(crunch_type.crunch(data)?)
+                                let result = crunch_type.compress(data)?;
+                                Cow::Owned(result.into()) // TODO store the delta somewhere to allow a reuse
                             }
                         };
 

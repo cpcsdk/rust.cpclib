@@ -25,7 +25,7 @@ use crate::implementation::expression::ExprEvaluationExt;
 use crate::list::list_extend;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
-use crate::{Cruncher, Visited};
+use crate::{Compressor, Visited};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -570,7 +570,7 @@ impl HardCodedFunction {
                     .map(|item| item.int().map(|v| v as u8))
                     .collect::<Result<Vec<u8>, _>>()?;
 
-                let data = crunch_type.crunch(&data)?;
+                let data = crunch_type.compress(&data)?;
                 let data = ExprResult::from(data.as_slice());
                 Ok(data)
             }
