@@ -45,29 +45,29 @@ impl Compressor for CompressionType {
             CompressionType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::Upkr => Ok(CompressMethod::Upkr) /* #[cfg(target_arch = "wasm32")]
-                                                          * CrunchType::LZ4 => {
-                                                          * Err(AssemblerError::AssemblingError {
-                                                          * msg: "LZ4 compression not available".to_owned()
-                                                          * })
-                                                          * },
-                                                          * #[cfg(target_arch = "wasm32")]
-                                                          * CrunchType::LZX0 => {
-                                                          * Err(AssemblerError::AssemblingError {
-                                                          * msg: "LZX0 compression not available".to_owned()
-                                                          * })
-                                                          * },
-                                                          * #[cfg(target_arch = "wasm32")]
-                                                          * CrunchType::LZEXO => {
-                                                          * Err(AssemblerError::AssemblingError {
-                                                          * msg: "LZEXO compression not available".to_owned()
-                                                          * })
-                                                          * },
-                                                          * #[cfg(target_arch = "wasm32")]
-                                                          * CrunchType::LZAPU => {
-                                                          * Err(AssemblerError::AssemblingError {
-                                                          * msg: "LZAPU compression not available".to_owned()
-                                                          * })
-                                                          * }, */
+                                                               * CrunchType::LZ4 => {
+                                                               * Err(AssemblerError::AssemblingError {
+                                                               * msg: "LZ4 compression not available".to_owned()
+                                                               * })
+                                                               * },
+                                                               * #[cfg(target_arch = "wasm32")]
+                                                               * CrunchType::LZX0 => {
+                                                               * Err(AssemblerError::AssemblingError {
+                                                               * msg: "LZX0 compression not available".to_owned()
+                                                               * })
+                                                               * },
+                                                               * #[cfg(target_arch = "wasm32")]
+                                                               * CrunchType::LZEXO => {
+                                                               * Err(AssemblerError::AssemblingError {
+                                                               * msg: "LZEXO compression not available".to_owned()
+                                                               * })
+                                                               * },
+                                                               * #[cfg(target_arch = "wasm32")]
+                                                               * CrunchType::LZAPU => {
+                                                               * Err(AssemblerError::AssemblingError {
+                                                               * msg: "LZAPU compression not available".to_owned()
+                                                               * })
+                                                               * }, */
         }?;
 
         method.compress(raw).map_err(|_| {

@@ -15,7 +15,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending, space0};
+use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending, newline, space0};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
@@ -4367,6 +4367,9 @@ pub fn my_space1(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80Parse
         )
             .value(())
             .context(StrContext::Label("continuated line")),
+        (space0, '\\', space0)
+            .value(())
+            .context(StrContext::Label("new line request")),
         parse_multiline_comment.value(())
     ));
 
@@ -4390,6 +4393,14 @@ fn my_line_ending(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80Pars
 fn parse_comma(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     delimited(my_space0, ','.take(), my_space0)
+        .map(|s| cloned.update_slice(s))
+        .parse_next(input)
+}
+
+fn parse_comma_multiline(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    let cloned = *input;
+    (parse_comma, opt((newline, my_space0)))
+        .take()
         .map(|s| cloned.update_slice(s))
         .parse_next(input)
 }
@@ -5894,9 +5905,9 @@ pub fn parse_expr_bracketed_list(
     let input_offset = input.eof_offset();
 
     let list = delimited(
-        ("[", my_space0),
-        separated(0.., located_expr, parse_comma),
-        (my_space0, "]")
+        ("[", (my_space0, opt((line_ending, my_space0)))),
+        separated(0.., located_expr, parse_comma_multiline),
+        ((my_space0, opt((line_ending, my_space0))), "]")
     )
     .parse_next(input)?;
 
@@ -6818,6 +6829,43 @@ endif"
     #[test]
     fn test_parse_address() {
         let res = parse_test(parse_address, "(here)");
+        assert!(res.is_ok(), "{:?}", res);
+    }
+
+    #[test]
+    fn test_parse_list() {
+        let res = parse_test(parse_expr_bracketed_list, "[0, 1]");
+        assert!(res.is_ok(), "{:?}", res);
+
+        let res = parse_test(
+            parse_expr_bracketed_list,
+            "[0, \
+        1]"
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+        let res = parse_test(
+            parse_expr_bracketed_list,
+            "[0,
+        1]"
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+        let res = parse_test(
+            parse_expr_bracketed_list,
+            "[
+        0,
+        1]"
+        );
+        assert!(res.is_ok(), "{:?}", res);
+
+        let res = parse_test(
+            parse_expr_bracketed_list,
+            "[
+        0,
+        1
+        ]"
+        );
         assert!(res.is_ok(), "{:?}", res);
     }
 

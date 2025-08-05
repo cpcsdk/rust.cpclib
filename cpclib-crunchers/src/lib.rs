@@ -59,13 +59,17 @@ impl AsRef<[u8]> for CompressionResult {
 }
 impl Deref for CompressionResult {
     type Target = Vec<u8>;
+
     fn deref(&self) -> &Self::Target {
         &self.stream
     }
 }
 impl From<Vec<u8>> for CompressionResult {
     fn from(value: Vec<u8>) -> Self {
-        CompressionResult { stream: value, delta: None }
+        CompressionResult {
+            stream: value,
+            delta: None
+        }
     }
 }
 
@@ -86,8 +90,9 @@ impl CompressMethod {
             CompressMethod::Lz4 => Ok(lz4::compress(data).into()),
             CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data).into()),
             CompressMethod::Lz49 => Ok(lz49_encode_legacy(data).into()),
-            CompressMethod::Lzsa(version, minmatch) => lzsa::compress(data, *version, *minmatch)
-                .map(|r| r.into()),
+            CompressMethod::Lzsa(version, minmatch) => {
+                lzsa::compress(data, *version, *minmatch).map(|r| r.into())
+            },
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Shrinkler(conf) => Ok(conf.compress(data).into()),
             #[cfg(not(target_arch = "wasm32"))]
