@@ -208,17 +208,24 @@ pub trait MyDefault {
 pub enum AssemblingPass {
     Uninitialized,
     FirstPass,
-    SecondPass, // and subsequent
-    Finished,
+    SecondPass(usize), // and subsequent
+    Finished(usize),
     ListingPass // pass dedicated to the listing production
 }
+
+
+impl AssemblingPass {
+    // maximum number of passes to avoid to use all memory of the computer and make it freezes
+    const MAX_PASSES: usize = 10;
+}
+
 impl fmt::Display for AssemblingPass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let content = match self {
             AssemblingPass::Uninitialized => "Uninitialized",
             AssemblingPass::FirstPass => "1",
-            AssemblingPass::SecondPass => "2",
-            AssemblingPass::Finished => "Finished",
+            AssemblingPass::SecondPass(_) => "2",
+            AssemblingPass::Finished(_) => "Finished",
             AssemblingPass::ListingPass => "Listing"
         };
         write!(f, "{content}")
@@ -237,7 +244,7 @@ impl AssemblingPass {
 
     pub fn is_finished(self) -> bool {
         match self {
-            AssemblingPass::Finished => true,
+            AssemblingPass::Finished(_) => true,
             _ => false
         }
     }
@@ -251,7 +258,7 @@ impl AssemblingPass {
 
     pub fn is_second_pass(self) -> bool {
         match self {
-            AssemblingPass::SecondPass => true,
+            AssemblingPass::SecondPass(_) => true,
             _ => false
         }
     }
@@ -263,13 +270,25 @@ impl AssemblingPass {
         }
     }
 
+    pub fn nb_passes(&self) -> Option<usize> {
+        match self {
+            AssemblingPass::FirstPass => Some(1),
+            AssemblingPass::Finished(count) | AssemblingPass::SecondPass(count) => Some(*count),
+            _ => None
+        }
+    }
+
     fn next_pass(self) -> Self {
         match self {
             AssemblingPass::Uninitialized => AssemblingPass::FirstPass,
-            AssemblingPass::FirstPass => AssemblingPass::SecondPass,
-            AssemblingPass::SecondPass => AssemblingPass::Finished,
-            AssemblingPass::Finished | AssemblingPass::ListingPass => panic!()
+            AssemblingPass::FirstPass => AssemblingPass::SecondPass(2),
+            AssemblingPass::SecondPass(count) => AssemblingPass::Finished(count),
+            AssemblingPass::Finished(_) | AssemblingPass::ListingPass => panic!()
         }
+    }
+
+    pub fn nb_passes_exceeded(&self) -> bool {
+        self.nb_passes().unwrap_or(0) > Self::MAX_PASSES
     }
 }
 
@@ -727,7 +746,7 @@ impl Env {
                     symbol: label.to_string()
                 })
             },
-            (false, AssemblingPass::SecondPass) => {
+            (false, AssemblingPass::SecondPass(_)) => {
                 // here we weaken the test to allow multipass stuff
                 if !self.requested_additional_pass && !*self.request_additional_pass.read().unwrap()
                 {
@@ -756,7 +775,7 @@ impl Env {
                 self.symbols_mut().set_symbol_to_value(label, value)?;
                 Ok(())
             },
-            (true, AssemblingPass::SecondPass | AssemblingPass::ListingPass) => {
+            (true, AssemblingPass::SecondPass(_) | AssemblingPass::ListingPass) => {
                 self.symbols_mut().update_symbol_to_value(label, value)?;
                 Ok(())
             },
@@ -883,7 +902,7 @@ impl Env {
     pub fn with_table(symbols: &SymbolsTable) -> Self {
         let mut env = Self::new(Default::default());
         env.symbols.set_table(symbols.clone());
-        env.pass = AssemblingPass::SecondPass;
+        env.pass = AssemblingPass::SecondPass(1);
         env
     }
 
@@ -891,7 +910,7 @@ impl Env {
     pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Self {
         let mut env = Self::new(Default::default());
         env.symbols = symbols.clone();
-        env.pass = AssemblingPass::SecondPass;
+        env.pass = AssemblingPass::SecondPass(1);
         env
     }
 
@@ -940,7 +959,8 @@ impl Env {
 
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
-    pub(crate) fn start_new_pass(&mut self) {
+    pub(crate) fn start_new_pass(&mut self) -> Result<(), AssemblerError> {
+        dbg!(self.pass());
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
             self.handle_print();
@@ -961,19 +981,25 @@ impl Env {
                 if *self.request_additional_pass.read().unwrap() {
                     if self.pass.is_first_pass() {
                         can_change_request = false;
-                    }
-                    AssemblingPass::SecondPass
+                    } 
+
+                    AssemblingPass::SecondPass(self.pass().nb_passes().unwrap()+1)
                 }
                 else {
                     self.pass.next_pass()
                 }
             }
             else if !*self.request_additional_pass.read().unwrap() {
-                AssemblingPass::Finished
+                AssemblingPass::Finished(self.pass().nb_passes().unwrap())
             }
             else {
-                AssemblingPass::SecondPass
+                AssemblingPass::SecondPass(self.pass().nb_passes().unwrap() + 1)
             };
+        }
+
+
+        if self.pass().nb_passes_exceeded() {
+            return Err(AssemblerError::MaximumNumberOfPassesReached(self.pass().nb_passes().unwrap()));
         }
 
         if !self.pass.is_finished() || self.pass.is_listing_pass() {
@@ -1047,6 +1073,8 @@ impl Env {
             self.add_symbol_to_symbol_table("BASM", 1, None);
             self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", cfg!(feature = "hfe"), None);
         }
+
+        Ok(())
     }
 
     /// Handle the actions to do after assembling.
@@ -1106,7 +1134,7 @@ impl Env {
             let mut tokens = processed_token::build_processed_tokens_list(tokens, self)
                 .expect("No errors must occur here");
             self.pass = AssemblingPass::ListingPass;
-            self.start_new_pass();
+            self.start_new_pass()?;
             processed_token::visit_processed_tokens(&mut tokens, self)
                 .map_err(|e| eprintln!("{e}"))
                 .expect("No error can arise in listing output mode; there is a bug somewhere");
@@ -3435,7 +3463,9 @@ impl Env {
 // Functions related
 impl Env {
     pub fn visit_return<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), AssemblerError> {
-        debug_assert!(self.return_value.is_none());
+        if self.return_value.is_some() {
+            return dbg!(Err(AssemblerError::BugInAssembler { file: file!(), line: line!(), msg: "Return value is alread set up".to_owned() }));
+        }
         self.return_value = Some(self.resolve_expr_must_never_fail(e)?);
         Ok(())
     }
@@ -3455,6 +3485,21 @@ impl Env {
             Some(f) => Ok(f),
             None => self.user_defined_function(name)
         }
+    }
+
+
+    pub fn eval_any_function<'res>(
+        &'res mut self,
+        name: &'res str,
+        params: &[ExprResult]
+    ) -> Result<ExprResult, AssemblerError> {
+        let f = match HardCodedFunction::by_name(name) {
+            Some(f) => Ok(f),
+            None => self.user_defined_function(name)
+        }?;
+
+        let f: *const Function = f as *const _; // XXX remove the link with environment
+        unsafe{(*f).eval(self, params)}
     }
 }
 
@@ -3481,7 +3526,11 @@ where
         Err(e) => return Err((None, env, e))
     };
     loop {
-        env.start_new_pass();
+        let res = env.start_new_pass();
+        if let Err(e) = res {
+            return Err((Some(tokens), env, e));
+        }
+
         // println!("[pass] {:?}", env.pass);
 
         if env.pass.is_finished() {
@@ -3913,9 +3962,10 @@ impl Env {
                             )?;
                         }
                     },
+
                     _ => {
                         return Err(AssemblerError::AssemblingError {
-                            msg: format!("REPEAT issue: {values} is not a list")
+                            msg: format!("REPEAT issue: {values} is not a list or a matrix")
                         });
                     }
                 }
@@ -4761,8 +4811,8 @@ impl Env {
 
         let mask = kind.mask();
 
-        let output = |env: &mut Env, val: i32, mask: u16| -> Result<(), AssemblerError> {
-            let val = val + delta;
+        fn output(env: &mut Env, val: i32, delta: i32, mask: u16) -> Result<(), AssemblerError> {
+            let val: i32 = val + delta;
 
             if mask == 0xFF {
                 env.output_byte(val as u8)?;
@@ -4774,42 +4824,42 @@ impl Env {
                 env.output_byte(high)?;
             }
             Ok(())
-        };
+        }
 
-        let output_expr_result = |env: &mut Env, expr: ExprResult, mask: u16| {
+        fn output_expr_result(env: &mut Env, expr: &ExprResult, delta: i32, mask: u16)  -> Result<(), AssemblerError> {
             match &expr {
                 ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
-                    output(env, expr.int()?, mask)
+                    output(env, expr.int()?, delta, mask)
                 },
                 ExprResult::Char(c) => {
                     // XXX here it is problematci c shold be a char and not a byte
                     let c = env.charset_encoding.transform_char(*c as char);
-                    output(env, expr.int()?, mask)
+                    output(env, expr.int()?, delta, mask)
                 },
                 ExprResult::String(s) => {
                     let bytes = env.charset_encoding.transform_string(s);
 
                     for c in bytes {
-                        output(env, c as _, mask)?;
+                        output(env, c as _, delta, mask)?;
                     }
                     Ok(())
                 },
                 ExprResult::List(l) => {
                     for c in l {
-                        output(env, c.int()?, mask)?;
+                        output_expr_result(env, c, delta, mask)?;
                     }
                     Ok(())
                 },
                 ExprResult::Matrix { .. } => {
                     for row in expr.matrix_rows() {
                         for c in row.list_content() {
-                            output(env, c.int()?, mask)?;
+                            output_expr_result(env, c, delta, mask)?;
                         }
                     }
                     Ok(())
                 }
             }
-        };
+        }
 
         let backup_address = env.logical_output_address();
         for exp in exprs.iter() {
@@ -4817,19 +4867,19 @@ impl Env {
                 let s = exp.string();
                 let bytes = env.charset_encoding.transform_string(s);
                 for b in &bytes {
-                    output(env, *b as _, mask)?
+                    output(env, *b as _, delta, mask)?
                 }
                 env.update_dollar();
             }
             else if exp.is_char() {
                 let c = exp.char();
                 let b = env.charset_encoding.transform_char(c);
-                output(env, b as _, mask)?;
+                output(env, b as _, delta, mask)?;
                 env.update_dollar();
             }
             else {
                 let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-                output_expr_result(env, val, mask)?;
+                output_expr_result(env, &val, delta, mask)?;
                 env.update_dollar();
             }
         }
