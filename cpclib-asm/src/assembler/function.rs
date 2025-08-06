@@ -135,7 +135,7 @@ where
 {
     pub fn eval(
         &self,
-        init_env: &Env,
+        env: &mut Env,
         params: &[ExprResult]
     ) -> Result<ExprResult, AssemblerError> {
         if self.args.len() != params.len() {
@@ -145,10 +145,15 @@ where
                 params.len()
             ));
         }
+        // XXX we consumme TOO MUCH memory so this has bee ncancelled ATM
+        // an laternative would be to do that at the function root
+        /*
         // we copy the environement to be sure no bug can modify it
         // and to keep the symbol table fixed.
         // a better alternative would be to backup the symbol table
         let mut env = init_env.clone();
+        */
+        let symbols = env.symbols.clone();
 
         // set the parameters
         for param in self.args.iter().zip(params.iter()) {
@@ -164,9 +169,15 @@ where
         let mut inner = inner.iter().cloned().collect_vec(); // BUG: memory issue in case of error generated
         for token in inner.iter_mut() {
             token
-                .visited(&mut env)
+                .visited(env)
                 .map_err(|e| AssemblerError::FunctionError(self.name.clone(), Box::new(e)))?;
 
+
+            if let Some(return_value) = env.return_value.take() {
+                return Ok(return_value);
+            }
+
+                /*
             if env.return_value.is_some() {
                 let extra_print = &env.active_page_info().print_commands()
                     [init_env.active_page_info().print_commands().len()..];
@@ -186,8 +197,10 @@ where
 
                 return Ok(env.return_value.take().unwrap());
             }
+            */
         }
 
+        env.symbols = symbols; // restore symbols
         Err(AssemblerError::FunctionWithoutReturn(self.name.clone()))
     }
 }
@@ -660,7 +673,7 @@ impl Function {
 
     /// Be sure the function lives shorter than inner
 
-    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, env: &mut Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         match self {
             Self::Located(f) => f.eval(env, params),
             Self::Standard(f) => f.eval(env, params),

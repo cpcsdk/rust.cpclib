@@ -36,6 +36,9 @@ pub enum AssemblerError {
     /// Dirty trick to not play with memory
     AlreadyRenderedError(String),
 
+    /// The maximum number of passes has been reached
+    MaximumNumberOfPassesReached(usize),
+
     /// Parse of a located listing failed, but the error is in fact stored within the located listing object...
     LocatedListingError(std::sync::Arc<LocatedListing>),
 
@@ -578,6 +581,14 @@ impl AssemblerError {
                         .unwrap_or_default()
                 )
             },
+
+            AssemblerError::MaximumNumberOfPassesReached(count) => {
+                write!(
+                    f,
+                    "Maximum number of passes reached ({count})"
+                )
+            }
+            
 
             AssemblerError::ExpressionTypeError(e) => write!(f, "{e}"),
 

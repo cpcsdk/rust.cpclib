@@ -1072,6 +1072,7 @@ impl ExprResult {
             ExprResult::Char(i) => Ok(*i as i32),
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
             _ => {
+                panic!("TODO remove this forgotten panic");
                 Err(ExpressionTypeError(format!(
                     "Try to convert {self} as an int"
                 )))

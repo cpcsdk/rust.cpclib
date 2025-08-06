@@ -440,9 +440,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 params.push(v);
             }
 
-            let f = $env.any_function(d)?;
-            f.eval($env, &params)
-
+            $env.eval_any_function(d, &params)
 
         } else {
             unreachable!()
