@@ -317,13 +317,17 @@ impl ExpectedNbArgs {
     pub fn validate(&self, nb_args: usize, func_name: &str) -> Result<(), AssemblerError> {
         match self {
             ExpectedNbArgs::Unknown => Ok(()),
-            ExpectedNbArgs::Fixed(expected) => 
-                Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                    func_name.into(), 
-                    Either::Left(*expected), 
-                    nb_args
-                )
-            ),
+            ExpectedNbArgs::Fixed(expected) => {
+                if *expected != nb_args {
+                    Err(AssemblerError::FunctionWithWrongNumberOfArguments(
+                        func_name.into(), 
+                        Either::Left(*expected), 
+                        nb_args
+                    ))
+                } else {
+                    Ok(())
+                }
+            },
             ExpectedNbArgs::Variable(expected) => {
                 if expected.iter().any(|e| *e == nb_args) {
                     Ok(())

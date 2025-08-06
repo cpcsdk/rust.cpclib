@@ -625,9 +625,14 @@ impl AssemblerError {
                 write!(f, "Function {name} error: {e}")
             },
             AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
+
+                let expected = match expected {
+                    either::Either::Left(s) => format!("{s}"),
+                    either::Either::Right(s) => format!("one among {s:?}"),
+                };
                 write!(
                     f,
-                    "Function {name} called with {received} parameters instead of {expected:?}"
+                    "Function {name} called with {received} parameters instead of {expected}"
                 )
             },
             AssemblerError::WrongNumberOfParameters {
