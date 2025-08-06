@@ -247,7 +247,7 @@ pub enum AssemblerError {
     FunctionWithoutReturn(String),
     FunctionWithEmptyBody(String),
     FunctionUnknown(String),
-    FunctionWithWrongNumberOfArguments(String, usize, usize),
+    FunctionWithWrongNumberOfArguments(String, either::Either<usize, &'static[usize]>, usize),
     FunctionError(String, Box<AssemblerError>),
 
     ExpressionTypeError(ExpressionTypeError)
@@ -627,7 +627,7 @@ impl AssemblerError {
             AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
                 write!(
                     f,
-                    "Function {name} called with {received} parameters instead of {expected}"
+                    "Function {name} called with {received} parameters instead of {expected:?}"
                 )
             },
             AssemblerError::WrongNumberOfParameters {

@@ -8,6 +8,7 @@ use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token
 };
+use either::Either;
 
 use super::list::{
     list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,
@@ -23,6 +24,7 @@ use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::list::list_extend;
+use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
 use crate::{Compressor, Visited};
@@ -139,7 +141,7 @@ where
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
-                self.args.len(),
+                Either::Left(self.args.len()),
                 params.len()
             ));
         }
@@ -302,58 +304,93 @@ pub enum HardCodedFunction {
     BinaryTransform
 }
 
-impl HardCodedFunction {
-    pub fn nb_expected_params(&self) -> Option<usize> {
+
+pub enum ExpectedNbArgs {
+    Unknown,
+    Fixed(usize), // can be 0
+    Variable(&'static [usize])
+}
+
+
+impl ExpectedNbArgs {
+    /// Validate the number of arguments providated to a function
+    pub fn validate(&self, nb_args: usize, func_name: &str) -> Result<(), AssemblerError> {
         match self {
-            HardCodedFunction::Mode0ByteToPenAt => Some(2),
-            HardCodedFunction::Mode1ByteToPenAt => Some(2),
-            HardCodedFunction::Mode2ByteToPenAt => Some(2),
+            ExpectedNbArgs::Unknown => Ok(()),
+            ExpectedNbArgs::Fixed(expected) => 
+                Err(AssemblerError::FunctionWithWrongNumberOfArguments(
+                    func_name.into(), 
+                    Either::Left(*expected), 
+                    nb_args
+                )
+            ),
+            ExpectedNbArgs::Variable(expected) => {
+                if expected.iter().any(|e| *e == nb_args) {
+                    Ok(())
+                } else {
+                    Err(AssemblerError::FunctionWithWrongNumberOfArguments(
+                        func_name.into(), 
+                        Either::Right(*expected),
+                        nb_args
+                    ))
+                }
+            },
+        }
+    }
+}
 
-            HardCodedFunction::PenAtToMode0Byte => Some(2),
-            HardCodedFunction::PenAtToMode1Byte => Some(2),
-            HardCodedFunction::PenAtToMode2Byte => Some(2),
+impl HardCodedFunction {
+    pub fn expected_nb_args(&self) -> ExpectedNbArgs{
+        match self {
+            HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Mode1ByteToPenAt => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Mode2ByteToPenAt => ExpectedNbArgs::Fixed(2),
 
-            HardCodedFunction::PensToMode0Byte => Some(2),
-            HardCodedFunction::PensToMode1Byte => Some(4),
-            HardCodedFunction::PensToMode2Byte => Some(8),
+            HardCodedFunction::PenAtToMode0Byte => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::PenAtToMode1Byte => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::PenAtToMode2Byte => ExpectedNbArgs::Fixed(2),
 
-            HardCodedFunction::ListNew => Some(2),
-            HardCodedFunction::ListSet => Some(3),
-            HardCodedFunction::ListGet => Some(2),
-            HardCodedFunction::ListSublist => Some(3),
-            HardCodedFunction::ListLen => Some(1),
-            HardCodedFunction::ListSort => Some(1),
-            HardCodedFunction::ListArgsort => Some(1),
-            HardCodedFunction::ListPush => Some(2),
+            HardCodedFunction::PensToMode0Byte => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::PensToMode1Byte => ExpectedNbArgs::Fixed(4),
+            HardCodedFunction::PensToMode2Byte => ExpectedNbArgs::Fixed(8),
 
-            HardCodedFunction::StringNew => Some(2),
-            HardCodedFunction::StringPush => Some(2),
-            HardCodedFunction::StringFromList => Some(1),
-            HardCodedFunction::StringConcat => None,
+            HardCodedFunction::ListNew => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListGet => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListSublist => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
 
-            HardCodedFunction::Assemble => Some(1),
+            HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::StringConcat => ExpectedNbArgs::Unknown,
 
-            HardCodedFunction::MatrixNew => Some(3),
-            HardCodedFunction::MatrixSet => Some(4),
-            HardCodedFunction::MatrixCol => Some(2),
-            HardCodedFunction::MatrixRow => Some(2),
-            HardCodedFunction::MatrixGet => Some(3),
-            HardCodedFunction::MatrixSetRow => Some(3),
-            HardCodedFunction::MatrixSetCol => Some(3),
+            HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
 
-            HardCodedFunction::MatrixWidth => Some(1),
-            HardCodedFunction::MatrixHeight => Some(1),
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]), // 3 or 1, checked in the function
+            HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(4),
+            HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::MatrixRow => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixSetRow => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixSetCol => ExpectedNbArgs::Fixed(3),
 
-            HardCodedFunction::Load => Some(1),
+            HardCodedFunction::MatrixWidth => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::MatrixHeight => ExpectedNbArgs::Fixed(1),
 
-            HardCodedFunction::SectionStart => Some(1),
-            HardCodedFunction::SectionStop => Some(1),
-            HardCodedFunction::SectionLength => Some(1),
-            HardCodedFunction::SectionUsed => Some(1),
-            HardCodedFunction::SectionMmr => Some(1),
+            HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
 
-            HardCodedFunction::BinaryTransform => Some(2),
-            HardCodedFunction::ListExtend => Some(2)
+            HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
+
+            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2)
         }
     }
 
@@ -381,15 +418,11 @@ impl HardCodedFunction {
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-        if let Some(nb) = self.nb_expected_params()
-            && nb != params.len()
-        {
-            return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                self.name().into(),
-                nb,
-                params.len()
-            ));
-        }
+
+        let expected_nb_args = self.expected_nb_args();
+        let nb_args = params.len();
+
+        expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
             HardCodedFunction::Mode0ByteToPenAt => {
@@ -499,11 +532,16 @@ impl HardCodedFunction {
             HardCodedFunction::ListArgsort => list_argsort(&params[0]),
 
             HardCodedFunction::MatrixNew => {
-                Ok(matrix_new(
-                    params[0].int()? as _,
-                    params[1].int()? as _,
-                    params[2].clone()
-                ))
+                if nb_args == 3 {
+                    Ok(matrix_new(
+                        params[0].int()? as _,
+                        params[1].int()? as _,
+                        params[2].clone()
+                    ))
+                } else {
+                    debug_assert!(nb_args == 1);
+                    matrix_from_list(&params[0])
+                }
             },
             HardCodedFunction::MatrixSet => {
                 matrix_set(

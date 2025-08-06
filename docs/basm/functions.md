@@ -30,6 +30,8 @@
 
 # Matrix functions
 
+To be called on a matrix object or a list of list object (WIP).
+
  - `matrix_new`
  - `matrix_set`
  - `matrix_get`

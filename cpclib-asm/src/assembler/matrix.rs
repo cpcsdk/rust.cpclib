@@ -1,7 +1,9 @@
+use cpclib_common::itertools::Itertools;
 use cpclib_tokens::ExprResult;
 
 use crate::assembler::list::list_new;
 use crate::error::{AssemblerError, ExpressionError};
+use crate::list::list_get;
 
 /// Create a new matrix
 pub fn matrix_new(height: usize, width: usize, value: ExprResult) -> ExprResult {
@@ -11,6 +13,35 @@ pub fn matrix_new(height: usize, width: usize, value: ExprResult) -> ExprResult 
         height
     }
 }
+
+
+pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+
+    match expr {
+        ExprResult::List(l) => {
+            let height = l.len();
+
+            assert!(l.iter().all(|row| row.is_list())); // TODO generate an error message
+            let lengths = l.iter().map(|row| row.list_len()).collect_vec();
+            let width = lengths[0]; // TODO handle case of empty matrix
+            // TODO handle error properly
+            assert!(lengths.iter().all(|&len| len== width));
+
+            Ok(ExprResult::Matrix { width, height, content:l.clone() })
+        }
+
+        _ => {
+            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{expr} is not a a list")
+                })
+            )))
+        },
+    }
+
+
+}
+
 
 pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::AssemblerError> {
     match matrix {
@@ -186,6 +217,8 @@ pub fn matrix_get(
     x: usize
 ) -> Result<ExprResult, crate::AssemblerError> {
     match matrix {
+
+        // A matrix is explicitely coded, so lets use it directly
         ExprResult::Matrix { .. } => {
             if y >= matrix.matrix_height() {
                 return Err(AssemblerError::ExpressionError(
@@ -198,6 +231,18 @@ pub fn matrix_get(
                 ));
             }
             Ok(matrix.matrix_get(y, x).clone())
+        },
+
+        // Maybe there is a matrix coded as a list of list
+        // it is up to the responsability of the caller to respect that
+        ExprResult::List(l) => {
+            if y >= l.len() {
+                return Err(AssemblerError::ExpressionError(
+                    ExpressionError::InvalidSize(l.len(), y)
+                ))
+            }
+            let row = &l[y];
+            list_get(row, x)
         },
 
         _ => {
