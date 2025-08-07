@@ -571,7 +571,18 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        let symbol = self.extend_readable_symbol(symbol)?;
+        let symbol: Symbol = symbol.into();
+
+        // try to remove for the function first
+        if let Some(frame) = self.functions_stack.current_frame_mut() {
+            let res = frame.remove(&symbol);
+            if res.is_some() {
+                return Ok(res);
+            }
+        }
+
+        // then to the assembler
+        let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
         Ok(self.map.remove(&symbol))
     }
 
@@ -1284,6 +1295,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     {
         let normalized = self.normalize_symbol(symbol);
         let _ = self.table.current_pass_map.remove(&normalized);
+
         self.table.remove_symbol::<Symbol>(normalized)
     }
 
