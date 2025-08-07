@@ -14,9 +14,7 @@ pub fn matrix_new(height: usize, width: usize, value: ExprResult) -> ExprResult 
     }
 }
 
-
 pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
-
     match expr {
         ExprResult::List(l) => {
             let height = l.len();
@@ -25,10 +23,14 @@ pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, crate::Assemble
             let lengths = l.iter().map(|row| row.list_len()).collect_vec();
             let width = lengths[0]; // TODO handle case of empty matrix
             // TODO handle error properly
-            assert!(lengths.iter().all(|&len| len== width));
+            assert!(lengths.iter().all(|&len| len == width));
 
-            Ok(ExprResult::Matrix { width, height, content:l.clone() })
-        }
+            Ok(ExprResult::Matrix {
+                width,
+                height,
+                content: l.clone()
+            })
+        },
 
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
@@ -38,10 +40,7 @@ pub fn matrix_from_list(expr: &ExprResult) -> Result<ExprResult, crate::Assemble
             )))
         },
     }
-
-
 }
-
 
 pub fn matrix_col(matrix: &ExprResult, x: usize) -> Result<ExprResult, crate::AssemblerError> {
     match matrix {
@@ -217,7 +216,6 @@ pub fn matrix_get(
     x: usize
 ) -> Result<ExprResult, crate::AssemblerError> {
     match matrix {
-
         // A matrix is explicitely coded, so lets use it directly
         ExprResult::Matrix { .. } => {
             if y >= matrix.matrix_height() {
@@ -239,7 +237,7 @@ pub fn matrix_get(
             if y >= l.len() {
                 return Err(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), y)
-                ))
+                ));
             }
             let row = &l[y];
             list_get(row, x)

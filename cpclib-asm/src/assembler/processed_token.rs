@@ -793,8 +793,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             if r#macro.is_none() && r#struct.is_none() {
                 let e = AssemblerError::UnknownMacro {
                     symbol: name.into(),
-                    closest: env.symbols().closest_symbol(name, SymbolFor::Macro)?
-                    .map(|s| s.into())
+                    closest: env
+                        .symbols()
+                        .closest_symbol(name, SymbolFor::Macro)?
+                        .map(|s| s.into())
                 };
                 return match self.possible_span() {
                     Some(span) => {

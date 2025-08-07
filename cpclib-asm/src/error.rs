@@ -250,7 +250,7 @@ pub enum AssemblerError {
     FunctionWithoutReturn(String),
     FunctionWithEmptyBody(String),
     FunctionUnknown(String),
-    FunctionWithWrongNumberOfArguments(String, either::Either<usize, &'static[usize]>, usize),
+    FunctionWithWrongNumberOfArguments(String, either::Either<usize, &'static [usize]>, usize),
     FunctionError(String, Box<AssemblerError>),
 
     ExpressionTypeError(ExpressionTypeError)
@@ -583,12 +583,8 @@ impl AssemblerError {
             },
 
             AssemblerError::MaximumNumberOfPassesReached(count) => {
-                write!(
-                    f,
-                    "Maximum number of passes reached ({count})"
-                )
-            }
-            
+                write!(f, "Maximum number of passes reached ({count})")
+            },
 
             AssemblerError::ExpressionTypeError(e) => write!(f, "{e}"),
 
@@ -636,10 +632,9 @@ impl AssemblerError {
                 write!(f, "Function {name} error: {e}")
             },
             AssemblerError::FunctionWithWrongNumberOfArguments(name, expected, received) => {
-
                 let expected = match expected {
                     either::Either::Left(s) => format!("{s}"),
-                    either::Either::Right(s) => format!("one among {s:?}"),
+                    either::Either::Right(s) => format!("one among {s:?}")
                 };
                 write!(
                     f,

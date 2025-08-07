@@ -213,7 +213,6 @@ pub enum AssemblingPass {
     ListingPass // pass dedicated to the listing production
 }
 
-
 impl AssemblingPass {
     // maximum number of passes to avoid to use all memory of the computer and make it freezes
     const MAX_PASSES: usize = 10;
@@ -981,9 +980,9 @@ impl Env {
                 if *self.request_additional_pass.read().unwrap() {
                     if self.pass.is_first_pass() {
                         can_change_request = false;
-                    } 
+                    }
 
-                    AssemblingPass::SecondPass(self.pass().nb_passes().unwrap()+1)
+                    AssemblingPass::SecondPass(self.pass().nb_passes().unwrap() + 1)
                 }
                 else {
                     self.pass.next_pass()
@@ -997,9 +996,10 @@ impl Env {
             };
         }
 
-
         if self.pass().nb_passes_exceeded() {
-            return Err(AssemblerError::MaximumNumberOfPassesReached(self.pass().nb_passes().unwrap()));
+            return Err(AssemblerError::MaximumNumberOfPassesReached(
+                self.pass().nb_passes().unwrap()
+            ));
         }
 
         if !self.pass.is_finished() || self.pass.is_listing_pass() {
@@ -3465,7 +3465,11 @@ impl Env {
 impl Env {
     pub fn visit_return<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), AssemblerError> {
         if self.return_value.is_some() {
-            return dbg!(Err(AssemblerError::BugInAssembler { file: file!(), line: line!(), msg: "Return value is alread set up".to_owned() }));
+            return dbg!(Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: "Return value is alread set up".to_owned()
+            }));
         }
         self.return_value = Some(self.resolve_expr_must_never_fail(e)?);
         Ok(())
@@ -3488,7 +3492,6 @@ impl Env {
         }
     }
 
-
     pub fn eval_any_function<'res>(
         &'res mut self,
         name: &'res str,
@@ -3500,7 +3503,7 @@ impl Env {
         }?;
 
         let f: *const Function = f as *const _; // XXX remove the link with environment
-        unsafe{(*f).eval(self, params)}
+        unsafe { (*f).eval(self, params) }
     }
 }
 
@@ -4827,7 +4830,12 @@ impl Env {
             Ok(())
         }
 
-        fn output_expr_result(env: &mut Env, expr: &ExprResult, delta: i32, mask: u16)  -> Result<(), AssemblerError> {
+        fn output_expr_result(
+            env: &mut Env,
+            expr: &ExprResult,
+            delta: i32,
+            mask: u16
+        ) -> Result<(), AssemblerError> {
             match &expr {
                 ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
                     output(env, expr.int()?, delta, mask)

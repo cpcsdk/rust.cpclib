@@ -392,7 +392,6 @@ impl Symbol {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct ValueAndSource {
     value: Value,
@@ -467,4 +466,3 @@ impl Deref for ValueAndSource {
         &self.value
     }
 }
-

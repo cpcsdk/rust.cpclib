@@ -1036,7 +1036,7 @@ impl ExprResult {
     }
 
     pub fn is_matrix(&self) -> bool {
-        matches!(self, Self::Matrix {..})
+        matches!(self, Self::Matrix { .. })
     }
 
     pub fn as_type(&self, other: &Self) -> Result<Self, ExpressionTypeError> {
@@ -1076,7 +1076,7 @@ impl ExprResult {
                 Err(ExpressionTypeError(format!(
                     "Try to convert {self} as an int"
                 )))
-            },
+            }
         }
     }
 
@@ -1639,7 +1639,7 @@ impl std::cmp::PartialEq for ExprResult {
             (Self::Value(l0), Self::Value(r0)) => l0 == r0,
             (Self::String(l0), Self::String(r0)) => l0 == r0,
             (Self::List(l0), Self::List(r0)) => l0 == r0,
-            (Self::Matrix{content: l0, ..}, Self::Matrix{content: r0, ..}) => l0 == r0,
+            (Self::Matrix { content: l0, .. }, Self::Matrix { content: r0, .. }) => l0 == r0,
 
             (Self::String(s), Self::List(l)) | (Self::List(l), Self::String(s)) => {
                 let s = s.as_bytes();

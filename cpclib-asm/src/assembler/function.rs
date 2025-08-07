@@ -133,11 +133,7 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder + Clone
 {
-    pub fn eval(
-        &self,
-        env: &mut Env,
-        params: &[ExprResult]
-    ) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, env: &mut Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
         if self.args.len() != params.len() {
             return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
                 self.name.clone(),
@@ -145,63 +141,57 @@ where
                 params.len()
             ));
         }
-        // XXX we consumme TOO MUCH memory so this has bee ncancelled ATM
-        // an laternative would be to do that at the function root
-        /*
-        // we copy the environement to be sure no bug can modify it
-        // and to keep the symbol table fixed.
-        // a better alternative would be to backup the symbol table
-        let mut env = init_env.clone();
-        */
-        let symbols = env.symbols.clone();
 
-        // set the parameters
-        for param in self.args.iter().zip(params.iter()) {
-            // TODO modify the code according to the value
-            env.add_function_parameter_to_symbols_table(
-                format!("{{{}}}", param.0),
-                param.1.clone()
-            )
-            .unwrap();
-        }
-
-        let inner = self.inner.read().unwrap();
-        let mut inner = inner.iter().cloned().collect_vec(); // BUG: memory issue in case of error generated
-        for token in inner.iter_mut() {
-            token
-                .visited(env)
-                .map_err(|e| AssemblerError::FunctionError(self.name.clone(), Box::new(e)))?;
-
-
-            if let Some(return_value) = env.return_value.take() {
-                return Ok(return_value);
+        let mut true_eval = move |env: &mut Env| {
+            // set the parameters
+            for param in self.args.iter().zip(params.iter()) {
+                // TODO modify the code according to the value
+                env.add_function_parameter_to_symbols_table(
+                    format!("{{{}}}", param.0),
+                    param.1.clone()
+                )
+                .unwrap();
             }
 
-                /*
-            if env.return_value.is_some() {
-                let extra_print = &env.active_page_info().print_commands()
-                    [init_env.active_page_info().print_commands().len()..];
-                let extra_assert = &env.active_page_info().failed_assert_commands()
-                    [init_env.active_page_info().failed_assert_commands().len()..];
+            let inner = self.inner.read().unwrap();
+            let mut inner = inner.iter().cloned().collect_vec(); // BUG: memory issue in case of error generated
+            for token in inner.iter_mut() {
+                token
+                    .visited(env)
+                    .map_err(|e| AssemblerError::FunctionError(self.name.clone(), Box::new(e)))?;
 
-                init_env
-                    .extra_print_from_function
-                    .write()
-                    .unwrap()
-                    .extend_from_slice(extra_print);
-                init_env
-                    .extra_failed_assert_from_function
-                    .write()
-                    .unwrap()
-                    .extend_from_slice(extra_assert);
+                if let Some(return_value) = env.return_value.take() {
+                    return Ok(return_value);
+                }
 
-                return Ok(env.return_value.take().unwrap());
+                // if env.return_value.is_some() {
+                // let extra_print = &env.active_page_info().print_commands()
+                // [init_env.active_page_info().print_commands().len()..];
+                // let extra_assert = &env.active_page_info().failed_assert_commands()
+                // [init_env.active_page_info().failed_assert_commands().len()..];
+                //
+                // init_env
+                // .extra_print_from_function
+                // .write()
+                // .unwrap()
+                // .extend_from_slice(extra_print);
+                // init_env
+                // .extra_failed_assert_from_function
+                // .write()
+                // .unwrap()
+                // .extend_from_slice(extra_assert);
+                //
+                // return Ok(env.return_value.take().unwrap());
+                // }
             }
-            */
-        }
 
-        env.symbols = symbols; // restore symbols
-        Err(AssemblerError::FunctionWithoutReturn(self.name.clone()))
+            Err(AssemblerError::FunctionWithoutReturn(self.name.clone()))
+        };
+
+        env.symbols_mut().enter_function();
+        let res = true_eval(env);
+        env.symbols_mut().leave_function();
+        res
     }
 }
 
@@ -317,13 +307,11 @@ pub enum HardCodedFunction {
     BinaryTransform
 }
 
-
 pub enum ExpectedNbArgs {
     Unknown,
     Fixed(usize), // can be 0
     Variable(&'static [usize])
 }
-
 
 impl ExpectedNbArgs {
     /// Validate the number of arguments providated to a function
@@ -333,20 +321,22 @@ impl ExpectedNbArgs {
             ExpectedNbArgs::Fixed(expected) => {
                 if *expected != nb_args {
                     Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                        func_name.into(), 
-                        Either::Left(*expected), 
+                        func_name.into(),
+                        Either::Left(*expected),
                         nb_args
                     ))
-                } else {
+                }
+                else {
                     Ok(())
                 }
             },
             ExpectedNbArgs::Variable(expected) => {
                 if expected.iter().any(|e| *e == nb_args) {
                     Ok(())
-                } else {
+                }
+                else {
                     Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                        func_name.into(), 
+                        func_name.into(),
                         Either::Right(*expected),
                         nb_args
                     ))
@@ -357,7 +347,7 @@ impl ExpectedNbArgs {
 }
 
 impl HardCodedFunction {
-    pub fn expected_nb_args(&self) -> ExpectedNbArgs{
+    pub fn expected_nb_args(&self) -> ExpectedNbArgs {
         match self {
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Mode1ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -387,7 +377,7 @@ impl HardCodedFunction {
 
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
 
-            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]), // 3 or 1, checked in the function
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]), /* 3 or 1, checked in the function */
             HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(4),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::MatrixRow => ExpectedNbArgs::Fixed(2),
@@ -435,7 +425,6 @@ impl HardCodedFunction {
     }
 
     pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
-
         let expected_nb_args = self.expected_nb_args();
         let nb_args = params.len();
 
@@ -555,7 +544,8 @@ impl HardCodedFunction {
                         params[1].int()? as _,
                         params[2].clone()
                     ))
-                } else {
+                }
+                else {
                     debug_assert!(nb_args == 1);
                     matrix_from_list(&params[0])
                 }

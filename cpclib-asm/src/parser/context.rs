@@ -309,8 +309,11 @@ impl ParserOptions {
                     Ok(None) => {
                         return Err(Either::Left(AssemblerError::UnknownSymbol {
                             symbol: model.into(),
-                            closest: env.symbols().closest_symbol(model, SymbolFor::Any).unwrap()
-                            .map(|s| s.into())
+                            closest: env
+                                .symbols()
+                                .closest_symbol(model, SymbolFor::Any)
+                                .unwrap()
+                                .map(|s| s.into())
                         }));
                     },
                     Err(e) => return Err(Either::Left(e.into()))

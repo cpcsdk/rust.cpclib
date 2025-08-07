@@ -1,13 +1,19 @@
-use std::{collections::{HashMap, HashSet}, ops::{Deref, DerefMut}, sync::LazyLock};
+use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
+use std::sync::LazyLock;
 
-use cpclib_common::{itertools::Itertools, smallvec::{smallvec, SmallVec}, smol_str::{SmolStr, ToSmolStr}, strsim};
+use cpclib_common::itertools::Itertools;
+use cpclib_common::smallvec::{SmallVec, smallvec};
+use cpclib_common::smol_str::{SmolStr, ToSmolStr};
+use cpclib_common::strsim;
 use delegate::delegate;
-use evalexpr::{build_operator_tree, HashMapContext};
+use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
 use regex::Regex;
 
-use crate::{symbols::{Macro, PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource}, ExprResult, LabelPrefix};
-use evalexpr::ContextWithMutableVariables;
-
+use crate::symbols::{
+    Macro, PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource
+};
+use crate::{ExprResult, LabelPrefix};
 
 /// Public signature of symbols functions
 /// TODO add all the other methods
@@ -71,17 +77,68 @@ pub trait SymbolsTableTrait {
     fn leave_namespace(&mut self) -> Result<Symbol, SymbolError>;
 }
 
+#[derive(Debug, Clone, Default)]
+struct TableFrame(HashMap<Symbol, ValueAndSource>);
 
+impl Deref for TableFrame {
+    type Target = HashMap<Symbol, ValueAndSource>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for TableFrame {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Contains the variables and parameters for the successive calls
+/// of hand written functions.
+/// This allows to play properly with recursive ones
+#[derive(Debug, Clone, Default)]
+struct FunctionsStack(Vec<TableFrame>);
+
+impl FunctionsStack {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Create the frame for the current function
+    pub fn enter_function(&mut self) {
+        self.0.push(TableFrame::default());
+    }
+
+    /// Destroy the frame of the current function
+    pub fn leave_function(&mut self) -> TableFrame {
+        self.0.pop().unwrap() // must failed when called for nothing
+    }
+
+    /// Provide the frame for the current function call
+    pub fn current_frame(&self) -> Option<&TableFrame> {
+        self.0.last()
+    }
+
+    /// Mutably provide the frame for the current function call
+    pub fn current_frame_mut(&mut self) -> Option<&mut TableFrame> {
+        self.0.last_mut()
+    }
+}
 
 /// Handle Tree like maps.
 #[derive(Debug, Clone, Default)]
 struct ModuleSymbolTable {
-    current: HashMap<Symbol, ValueAndSource>,
+    current: TableFrame,
     children: HashMap<Symbol, ModuleSymbolTable>
 }
 
 impl Deref for ModuleSymbolTable {
-    type Target = HashMap<Symbol, ValueAndSource>;
+    type Target = TableFrame;
 
     fn deref(&self) -> &Self::Target {
         &self.current
@@ -157,6 +214,9 @@ pub struct SymbolsTable {
     /// Tree of symbols. The default one is the root. build and maintained all over assembling
     map: ModuleSymbolTable,
 
+    /// the frame specific to the call of user defined functions in order to make them reentrant
+    functions_stack: FunctionsStack,
+
     /// A kind of clone of map that contains only the information of the current pass
     current_pass_map: ModuleSymbolTable,
 
@@ -188,13 +248,22 @@ impl Default for SymbolsTable {
             seed_stack: Vec::new(),
             namespace_stack: Vec::new(),
             used_symbols: HashSet::new(),
-            counters: Default::default()
+            counters: Default::default(),
+            functions_stack: Default::default()
         }
     }
 }
 
 /// Local/global label handling code
 impl SymbolsTable {
+    pub fn enter_function(&mut self) {
+        self.functions_stack.enter_function();
+    }
+
+    pub fn leave_function(&mut self) {
+        self.functions_stack.leave_function();
+    }
+
     pub fn new_pass(&mut self) {
         self.current_pass_map = ModuleSymbolTable::default();
         self.current_pass_map.add_children("".to_owned().into());
@@ -437,7 +506,14 @@ impl SymbolsTableTrait for SymbolsTable {
         S: AsRef<str>
     {
         let symbol = self.extend_readable_symbol(symbol)?;
-        Ok(self.map.get(&symbol))
+        let frame = if let Some(frame) = self.functions_stack.current_frame() {
+            frame
+        }
+        else {
+            self.map.deref()
+        };
+
+        Ok(frame.get(&symbol))
     }
 
     #[inline]
@@ -666,8 +742,15 @@ impl SymbolsTable {
         self.current_address().map(|val| {
             let value = Value::Expr(val.into());
             let value: ValueAndSource = value.into();
-            self.map.insert(symbol.clone(), value.clone());
-            self.current_pass_map.insert(symbol, value);
+
+            let frame = if let Some(frame) = self.functions_stack.current_frame_mut() {
+                frame
+            }
+            else {
+                self.current_pass_map.insert(symbol.clone(), value.clone());
+                self.map.deref_mut()
+            };
+            frame.insert(symbol, value);
         })
     }
 
@@ -687,8 +770,16 @@ impl SymbolsTable {
         let symbol = self.inject_current_namespace::<Symbol>(symbol);
 
         let value = value.into();
-        self.current_pass_map.insert(symbol.clone(), value.clone());
-        Ok(self.map.insert(symbol, value))
+
+        let frame = if let Some(frame) = self.functions_stack.current_frame_mut() {
+            frame
+        }
+        else {
+            self.current_pass_map.insert(symbol.clone(), value.clone());
+            self.map.deref_mut()
+        };
+
+        Ok(frame.insert(symbol, value))
     }
 
     #[inline]
@@ -710,9 +801,15 @@ impl SymbolsTable {
 
         let value = value.into();
 
-        self.current_pass_map.insert(symbol.clone(), value.clone());
+        let frame = if let Some(frame) = self.functions_stack.current_frame_mut() {
+            frame
+        }
+        else {
+            self.current_pass_map.insert(symbol.clone(), value.clone());
+            self.map.deref_mut()
+        };
 
-        *(self.map.get_mut(symbol).unwrap()) = value;
+        *(frame.get_mut(symbol).unwrap()) = value;
 
         Ok(())
     }
@@ -777,8 +874,14 @@ impl SymbolsTable {
     pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError>
     where
         Symbol: From<S>,
-        S: AsRef<str>
+        S: AsRef<str> + Clone
     {
+        if let Some(frame) = self.functions_stack.current_frame() {
+            if frame.contains_key(&symbol.clone().into()) {
+                return Ok(true);
+            }
+        }
+
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols.iter().any(|symbol| self.map.contains_key(symbol)))
@@ -791,6 +894,8 @@ impl SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
+        // TODO check if there is something to do with functions symbols
+
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbols = self.get_potential_candidates(symbol);
         Ok(symbols
@@ -815,6 +920,14 @@ impl SymbolsTable {
         let iter = self.map.par_iter();
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.map.iter();
+
+        let iter: Box<dyn Iterator<Item = (&Symbol, &ValueAndSource)>> =
+            if let Some(frame) = self.functions_stack.current_frame() {
+                Box::new(frame.iter().chain(iter))
+            }
+            else {
+                Box::new(iter)
+            };
 
         Ok(iter
             .filter(|(_k, v)| {
@@ -914,6 +1027,8 @@ impl SymbolsTableCaseDependent {
             pub fn pop_seed(&mut self);
             pub fn pop_counter_value(&mut self);
             pub fn push_counter_value(&mut self, e: ExprResult);
+            pub fn enter_function(&mut self);
+            pub fn leave_function(&mut self);
         }
     }
 
