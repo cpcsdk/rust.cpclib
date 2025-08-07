@@ -794,6 +794,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 let e = AssemblerError::UnknownMacro {
                     symbol: name.into(),
                     closest: env.symbols().closest_symbol(name, SymbolFor::Macro)?
+                    .map(|s| s.into())
                 };
                 return match self.possible_span() {
                     Some(span) => {

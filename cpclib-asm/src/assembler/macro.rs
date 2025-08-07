@@ -4,7 +4,7 @@ use aho_corasick::{AhoCorasick, MatchKind};
 use compact_str::CompactString;
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::winnow::Parser;
-use cpclib_tokens::symbols::{Macro, Source, Struct};
+use cpclib_tokens::symbols::{Macro, SourceLocation, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
 use crate::Env;
@@ -97,7 +97,7 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
     }
 
     #[inline]
-    pub fn source(&self) -> Option<&Source> {
+    pub fn source(&self) -> Option<&SourceLocation> {
         self.r#macro.source()
     }
 
@@ -268,7 +268,7 @@ impl<P: MacroParamElement> StructWithArgs<P> {
         }
     }
 
-    pub fn source(&self) -> Option<&Source> {
+    pub fn source(&self) -> Option<&SourceLocation> {
         self.r#struct.source()
     }
 }

@@ -734,7 +734,7 @@ impl Env {
         &mut self,
         label: &str,
         value: E,
-        location: Option<Source>
+        location: Option<SourceLocation>
     ) -> Result<(), AssemblerError> {
         let already_present = self.symbols().contains_symbol(label)?;
         let value = value.into();
@@ -2451,7 +2451,7 @@ impl Env {
             });
         }
 
-        let location: Option<Source> = source.map(|s| s.into());
+        let location: Option<SourceLocation> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
         let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);
@@ -2910,6 +2910,7 @@ impl Env {
                     closest: self
                         .symbols()
                         .closest_symbol(label.as_str(), SymbolFor::Number)?
+                        .map(|s| s.into())
                 })
             },
         }

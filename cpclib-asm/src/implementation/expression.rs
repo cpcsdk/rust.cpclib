@@ -341,7 +341,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                     // here it is more problematic
                     AssemblerError::UnknownSymbol {
                         symbol: label.into(),
-                        closest:  $env.symbols().closest_symbol(label, SymbolFor::Number)?,
+                        closest:  $env.symbols().closest_symbol(label, SymbolFor::Number)?.map(|s| s.into()),
                     }
                 })
             }

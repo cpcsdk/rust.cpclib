@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::{AsBStr, LocatingSlice, Offset};
 use cpclib_common::winnow::{BStr, Stateful};
-use cpclib_tokens::symbols::{Source, Symbol};
+use cpclib_tokens::symbols::{SourceLocation, Symbol};
 use line_span::LineSpanExt;
 
 use super::ParsingState;
@@ -187,12 +187,12 @@ impl From<&Z80Span> for SmolStr {
     }
 }
 
-impl From<&Z80Span> for Source {
+impl From<&Z80Span> for SourceLocation {
     #[inline]
     fn from(val: &Z80Span) -> Self {
         let (line, column) = val.relative_line_and_column();
 
-        Source::new(
+        SourceLocation::new(
             val.context()
                 .current_filename
                 .as_ref()
