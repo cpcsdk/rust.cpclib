@@ -1,20 +1,12 @@
-use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
-use std::ops::{Deref, DerefMut};
-use std::sync::LazyLock;
+use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator};
-use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::strsim;
-use delegate::delegate;
-use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
-use regex::Regex;
 
 use crate::symbols::{PhysicalAddress, SymbolsTableTrait};
-use crate::tokens::expression::LabelPrefix;
 use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token, expression};
 
 #[derive(Debug, Clone)]

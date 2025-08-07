@@ -4,7 +4,6 @@ use std::sync::LazyLock;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
-use cpclib_common::smol_str::{SmolStr, ToSmolStr};
 use cpclib_common::strsim;
 use delegate::delegate;
 use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
@@ -512,14 +511,14 @@ impl SymbolsTableTrait for SymbolsTable {
         S: AsRef<str>
     {
         let symbol = self.extend_readable_symbol(symbol)?;
-        let frame = if let Some(frame) = self.functions_stack.current_frame() {
-            frame
+        let res = if let Some(frame) = self.functions_stack.current_frame() {
+            frame.get(&symbol).or_else(|| self.map.get(&symbol))
         }
         else {
-            self.map.deref()
+            self.map.get(&symbol)
         };
 
-        Ok(frame.get(&symbol))
+        Ok(res)
     }
 
     #[inline]
@@ -882,10 +881,10 @@ impl SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str> + Clone
     {
-        if let Some(frame) = self.functions_stack.current_frame() {
-            if frame.contains_key(&symbol.clone().into()) {
-                return Ok(true);
-            }
+        if let Some(frame) = self.functions_stack.current_frame()
+            && frame.contains_key(&symbol.clone().into())
+        {
+            return Ok(true);
         }
 
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
@@ -953,7 +952,7 @@ impl SymbolsTable {
             .map(move |symbol2| {
                 let symbol_upper = symbol.value().to_ascii_uppercase();
                 let symbol2_upper = symbol2.value().to_ascii_uppercase();
-                let levenshtein_distance = strsim::levenshtein(&symbol2.value(), &symbol.value())
+                let levenshtein_distance = strsim::levenshtein(symbol2.value(), symbol.value())
                     .min(strsim::levenshtein(&symbol2_upper, &symbol_upper));
                 let included = if symbol2_upper.contains(&symbol_upper) {
                     0
@@ -962,7 +961,7 @@ impl SymbolsTable {
                     1
                 };
 
-                ((included, levenshtein_distance), symbol2.value().clone())
+                ((included, levenshtein_distance), symbol2.value())
             })
             .min()
             .map(|(_distance, symbol2)| symbol2))

@@ -73,9 +73,9 @@ impl From<Vec<u8>> for CompressionResult {
     }
 }
 
-impl Into<Vec<u8>> for CompressionResult {
-    fn into(self) -> Vec<u8> {
-        self.stream
+impl From<CompressionResult> for Vec<u8> {
+    fn from(val: CompressionResult) -> Self {
+        val.stream
     }
 }
 

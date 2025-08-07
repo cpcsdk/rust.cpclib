@@ -142,7 +142,7 @@ where
             ));
         }
 
-        let mut true_eval = move |env: &mut Env| {
+        let true_eval = move |env: &mut Env| {
             // set the parameters
             for param in self.args.iter().zip(params.iter()) {
                 // TODO modify the code according to the value
@@ -331,7 +331,7 @@ impl ExpectedNbArgs {
                 }
             },
             ExpectedNbArgs::Variable(expected) => {
-                if expected.iter().any(|e| *e == nb_args) {
+                if expected.contains(&nb_args) {
                     Ok(())
                 }
                 else {
