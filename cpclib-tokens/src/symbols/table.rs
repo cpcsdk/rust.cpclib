@@ -479,10 +479,16 @@ impl SymbolsTableTrait for SymbolsTable {
             return Err(SymbolError::CannotModify(symbol));
         }
 
-        self.assignable.insert(symbol.clone());
+        let frame = if let Some(frame) = self.functions_stack.current_frame_mut() {
+            frame
+        }
+        else {
+            self.assignable.insert(symbol.clone());
+            self.current_pass_map.insert(symbol.clone(), value.clone());
+            self.map.deref_mut()
+        };
 
-        self.current_pass_map.insert(symbol.clone(), value.clone());
-        Ok(self.map.insert(symbol, value))
+        Ok(frame.insert(symbol, value))
     }
 
     #[inline]
