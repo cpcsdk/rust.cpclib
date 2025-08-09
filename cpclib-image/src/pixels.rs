@@ -221,10 +221,10 @@ pub mod mode1 {
 
     /// Return the 4 pens encoded by this byte from left to right
     pub fn byte_to_pens(b: u8) -> [Pen; 4] {
-        let pen1 = (BitMapping::FirstBit0, BitMapping::FirstBit1);
-        let pen2 = (BitMapping::SecondBit0, BitMapping::SecondBit1);
-        let pen3 = (BitMapping::ThirdBit0, BitMapping::ThirdBit1);
-        let pen4 = (BitMapping::FourthBit0, BitMapping::FourthBit1);
+        let pen1 = (BitMapping::FirstBit1, BitMapping::FirstBit0);
+        let pen2 = (BitMapping::SecondBit1, BitMapping::SecondBit0);
+        let pen3 = (BitMapping::ThirdBit1, BitMapping::ThirdBit0);
+        let pen4 = (BitMapping::FourthBit1, BitMapping::FourthBit0);
 
         let compute = |bits: (BitMapping, BitMapping)| -> Pen {
             let mut value = 0;
