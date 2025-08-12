@@ -1199,12 +1199,7 @@ impl Env {
         let pages_mmr = MMR_PAGES_SELECTION;
         for (activepage, _page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             for brk in self.sna.pages_info[activepage].collect_breakpoints() {
-                let info = AssemblerError::RelocatedInfo {
-                    info: Box::new(AssemblerError::AssemblingError {
-                        msg: format!("Add a breakpoint: {} ", brk.info_repr())
-                    }),
-                    span: brk.span.as_ref().unwrap().clone()
-                };
+                let info = &brk.info;
                 eprint!("{info}");
 
                 if let Some(chunk) = winape_chunk.as_mut()

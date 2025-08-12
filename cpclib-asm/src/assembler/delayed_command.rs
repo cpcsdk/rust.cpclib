@@ -206,12 +206,19 @@ impl PrintOrPauseCommand {
 #[derive(Debug, Clone)]
 pub struct BreakpointCommand {
     pub(crate) brk: InnerBreakpointCommand,
-    pub(crate) span: Option<Z80Span>
+    pub(crate) info: AssemblerError
 }
 
-impl BreakpointCommand {
-    pub fn info_repr(&self) -> String {
-        match &self.brk {
+
+#[derive(Debug, Clone)]
+pub enum InnerBreakpointCommand {
+    Simple(BreakPointCommandSimple),
+    Advanced(AdvancedRemuBreakPoint)
+}
+
+impl InnerBreakpointCommand {
+    fn info_repr(&self) -> String {
+        match self {
             InnerBreakpointCommand::Simple(brk) => {
                 format! {"PC=&{:X}@{}", brk.address, brk.page}
             },
@@ -221,13 +228,6 @@ impl BreakpointCommand {
         }
     }
 }
-
-#[derive(Debug, Clone)]
-pub enum InnerBreakpointCommand {
-    Simple(BreakPointCommandSimple),
-    Advanced(AdvancedRemuBreakPoint)
-}
-
 impl From<AdvancedRemuBreakPoint> for InnerBreakpointCommand {
     fn from(value: AdvancedRemuBreakPoint) -> Self {
         Self::Advanced(value)
@@ -248,9 +248,19 @@ pub struct BreakPointCommandSimple {
 
 impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointCommand {
     fn from(value: (T, Option<Z80Span>)) -> Self {
+        let brk = value.0.into();
+        let repr = brk.info_repr();
+        
+        let info = AssemblerError::RelocatedInfo {
+            info: Box::new(AssemblerError::AssemblingError {
+                msg: format!("Add a breakpoint: {} ", repr)
+            }),
+            span: value.1.unwrap()
+        }.render();
+
         Self {
-            brk: value.0.into(),
-            span: value.1
+            brk,
+            info
         }
     }
 }
