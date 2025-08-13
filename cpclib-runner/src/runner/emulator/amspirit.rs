@@ -48,7 +48,7 @@ impl StaticInformation for AmspiritVersion {
             Self::V2RC2 => {
                 static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URLS.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2025/08/CPC_AMSpiriT_v2.01b_Win_x64.7z"))
-            }
+            },
             Self::V2RC1 => {
                 static URLS1: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URLS1.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2025/07/CPC_AMSpiriT_v2_RC1_Win_x64.7z"))

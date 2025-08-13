@@ -209,7 +209,6 @@ pub struct BreakpointCommand {
     pub(crate) info: AssemblerError
 }
 
-
 #[derive(Debug, Clone)]
 pub enum InnerBreakpointCommand {
     Simple(BreakPointCommandSimple),
@@ -250,18 +249,16 @@ impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointC
     fn from(value: (T, Option<Z80Span>)) -> Self {
         let brk = value.0.into();
         let repr = brk.info_repr();
-        
+
         let info = AssemblerError::RelocatedInfo {
             info: Box::new(AssemblerError::AssemblingError {
                 msg: format!("Add a breakpoint: {} ", repr)
             }),
             span: value.1.unwrap()
-        }.render();
-
-        Self {
-            brk,
-            info
         }
+        .render();
+
+        Self { brk, info }
     }
 }
 
