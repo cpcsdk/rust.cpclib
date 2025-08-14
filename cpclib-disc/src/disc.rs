@@ -17,26 +17,23 @@ pub struct Sector<'d, D: Disc + Sized> {
     disc: &'d mut D
 }
 
-
-impl<'d, D:Disc> Deref for Sector<'d, D> {
+impl<'d, D: Disc> Deref for Sector<'d, D> {
     type Target = [u8];
+
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl<'d, D:Disc> Drop for Sector<'d, D> {
+impl<'d, D: Disc> Drop for Sector<'d, D> {
     fn drop(&mut self) {
-        self.disc.sector_write_bytes(
-            self.head, 
-            self.track, 
-            self.sector_id, 
-            &self.data
-        ).expect("There is a bug somwhere");
+        self.disc
+            .sector_write_bytes(self.head, self.track, self.sector_id, &self.data)
+            .expect("There is a bug somwhere");
     }
 }
 
-impl<'d, D:Disc> Sector<'d, D> {
+impl<'d, D: Disc> Sector<'d, D> {
     pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
         if data.len() < self.len() as usize {
             return Err(format!(
@@ -90,14 +87,16 @@ pub trait Disc {
         bytes: &[u8]
     ) -> Result<(), String>;
 
-
     /// The sector is modified right back in the dsk once it is dropped
     fn sector_mut<S: Into<Head>>(
         &mut self,
         head: S,
         track: u8,
         sector_id: u8
-    ) -> Option<Sector<'_, Self>> where Self: Sized{
+    ) -> Option<Sector<'_, Self>>
+    where
+        Self: Sized
+    {
         let head: Head = head.into();
         let data = self.sector_read_bytes(head, track, sector_id)?;
         Some(Sector {

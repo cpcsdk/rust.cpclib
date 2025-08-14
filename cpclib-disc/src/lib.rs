@@ -358,17 +358,15 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_build_arg_parser() -> Command {
-    #[cfg(feature="hfe")]
+    #[cfg(feature = "hfe")]
     let about = "Manipulate DSK or HFE files";
-    #[cfg(not(feature="hfe"))]
+    #[cfg(not(feature = "hfe"))]
     let about = "Manipulate DSK files";
 
-    #[cfg(feature="hfe")]
+    #[cfg(feature = "hfe")]
     let f_help = "DSK or HFE file to manipulate";
-    #[cfg(not(feature="hfe"))]
+    #[cfg(not(feature = "hfe"))]
     let f_help = "DSK file to manipulate";
-
-
 
     Command::new("disc_manager")
                        .about(about)

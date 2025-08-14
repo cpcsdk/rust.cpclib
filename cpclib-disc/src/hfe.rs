@@ -137,7 +137,6 @@ impl Disc for Hfe {
     fn nb_tracks_per_head(&self) -> u8 {
         self.img.nb_tracks_per_head() as _
     }
-
 }
 
 impl From<ExtendedDsk> for Hfe {
