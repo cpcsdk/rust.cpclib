@@ -71,6 +71,8 @@ pub trait Disc {
     fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8;
     fn nb_tracks_per_head(&self) -> u8;
 
+    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)>;
+
     fn sector_read_bytes<S: Into<Head>>(
         &self,
         head: S,
@@ -105,6 +107,40 @@ pub trait Disc {
             sector_id,
             disc: self
         })
+    }
+
+    /// Add the file in consecutive sectors
+    fn add_file_sequentially(
+        &mut self,
+        head: u8,
+        track: u8,
+        sector: u8,
+        buffer: &[u8]
+    ) -> Result<(u8, u8, u8), String>
+    where
+        Self: Sized
+    {
+        let mut pos = (head, track, sector);
+        let mut consummed = 0;
+        while consummed < buffer.len() {
+            {
+                let mut current_sector = self
+                    .sector_mut(pos.0, pos.1, pos.2)
+                    .ok_or_else(|| "Sector not found".to_owned())?;
+
+                let sector_size = current_sector.len();
+                let current_data = &buffer[consummed..consummed + sector_size];
+                current_sector.set_values(current_data)?;
+                consummed += sector_size;
+            }
+
+            let next_pos = self
+                .next_position(pos.0, pos.1, pos.2)
+                .ok_or_else(|| "No more position available".to_owned())?;
+            pos = next_pos;
+        }
+
+        Ok(pos)
     }
 
     /// Return the concatenated values of several consecutive sectors
@@ -246,5 +282,9 @@ impl<T: Disc> Disc for Box<T> {
     ) -> Result<(), String> {
         self.deref_mut()
             .sector_write_bytes(head, track, sector_id, bytes)
+    }
+
+    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+        self.deref().next_position(head, track, sector)
     }
 }

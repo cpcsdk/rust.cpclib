@@ -137,6 +137,10 @@ impl Disc for Hfe {
     fn nb_tracks_per_head(&self) -> u8 {
         self.img.nb_tracks_per_head() as _
     }
+
+    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+        unimplemented!()
+    }
 }
 
 impl From<ExtendedDsk> for Hfe {

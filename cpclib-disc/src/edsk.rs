@@ -2,11 +2,12 @@
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::iter::zip;
 use std::string::ToString;
 
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::itertools::{Itertools, zip};
+use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 use getset::Getters;
 
@@ -1001,7 +1002,7 @@ impl ExtendedDsk {
     }
 
     /// Add the file in consecutive sectors
-    pub fn add_file_sequentially(
+    pub fn edsk_add_file_sequentially(
         &mut self,
         head: u8,
         track: u8,
@@ -1027,31 +1028,6 @@ impl ExtendedDsk {
         }
 
         Ok(pos)
-    }
-
-    /// Compute the next sector position if possible
-    /// XXX check if Head should be the logic or physical one
-    /// XXX the two behaviors are mixed there ...
-    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
-        // Retrieve the current track and exit if does not exist
-        let current_track = self.get_track_information(
-            head, // Physical
-            track
-        )?;
-
-        // Return the next sector if exist
-        if let Some(next_sector) = current_track.next_sector_id(sector) {
-            return Some((head, track, next_sector));
-        }
-
-        // Search the next track
-        let next_track = self.track_list.next_track(current_track)?;
-
-        Some((
-            *next_track.head_number(), // XXX  logical
-            *next_track.track_number(),
-            next_track.min_sector()
-        ))
     }
 
     /// Write the dsk in the provided buffer
@@ -1240,5 +1216,30 @@ impl Disc for ExtendedDsk {
             self.track_list.list.len() / 2
         };
         (val & 0xFF) as u8
+    }
+
+    /// Compute the next sector position if possible
+    /// XXX check if Head should be the logic or physical one
+    /// XXX the two behaviors are mixed there ...
+    fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+        // Retrieve the current track and exit if does not exist
+        let current_track = self.get_track_information(
+            head, // Physical
+            track
+        )?;
+
+        // Return the next sector if exist
+        if let Some(next_sector) = current_track.next_sector_id(sector) {
+            return Some((head, track, next_sector));
+        }
+
+        // Search the next track
+        let next_track = self.track_list.next_track(current_track)?;
+
+        Some((
+            *next_track.head_number(), // XXX  logical
+            *next_track.track_number(),
+            next_track.min_sector()
+        ))
     }
 }

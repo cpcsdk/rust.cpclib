@@ -1,5 +1,4 @@
-//#![feature(register_attr)]
-//#![register_attr(get)]
+#![feature(impl_trait_in_bindings)]
 
 use std::collections::VecDeque;
 #[cfg(feature = "cmdline")]
@@ -21,8 +20,7 @@ use disc::Disc;
 
 #[cfg(feature = "cmdline")]
 use crate::amsdos::*;
-#[cfg(feature = "cmdline")]
-use crate::edsk::*;
+use crate::edsk::Head;
 
 /// Concerns all stuff related to Amsdos disc format
 pub mod amsdos;
@@ -46,6 +44,84 @@ use crate::edsk::ExtendedDsk;
 #[cfg(feature = "hfe")]
 use crate::hfe::Hfe;
 
+pub enum AnyDisc {
+    Edsk(ExtendedDsk),
+    #[cfg(feature = "hfe")]
+    Hfe(Hfe)
+}
+
+impl From<ExtendedDsk> for AnyDisc {
+    fn from(value: ExtendedDsk) -> Self {
+        Self::Edsk(value)
+    }
+}
+
+#[cfg(feature = "hfe")]
+impl From<Hfe> for AnyDisc {
+    fn from(value: Hfe) -> Self {
+        Self::Hfe(value)
+    }
+}
+
+impl Default for AnyDisc {
+    #[cfg(feature = "hfe")]
+    fn default() -> Self {
+        Hfe::default().into()
+    }
+
+    #[cfg(not(feature = "hfe"))]
+    fn default() -> Self {
+        ExtendedDsk::default().into()
+    }
+}
+
+impl Disc for AnyDisc {
+    delegate::delegate! {
+        to match self {
+            AnyDisc::Edsk(disc) => disc,
+            #[cfg(feature="hfe")]
+            AnyDisc::Hfe(disc) => disc,
+        } {
+            fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)>;
+            fn save<P>(&self, path: P) -> Result<(), String> where P: AsRef<Utf8Path> ;
+            fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8;
+            fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8;
+            fn nb_tracks_per_head(&self) -> u8;
+            fn sector_read_bytes<S: Into<Head>>(
+                &self,
+                head: S,
+                track: u8,
+                sector_id: u8
+            ) -> Option<Vec<u8>>;
+            fn sector_write_bytes<S: Into<Head>>(
+                &mut self,
+                head: S,
+                track: u8,
+                sector_id: u8,
+                bytes: &[u8]
+            ) -> Result<(), String>;
+        }
+    }
+
+    #[cfg(feature = "hfe")]
+    fn open<P>(path: P) -> Result<Self, String>
+    where
+        Self: Sized,
+        P: AsRef<Utf8Path>
+    {
+        Hfe::open(path).map(|d| d.into())
+    }
+
+    #[cfg(not(feature = "hfe"))]
+    fn open<P>(path: P) -> Result<Self, String>
+    where
+        Self: Sized,
+        P: AsRef<Utf8Path>
+    {
+        ExtendedDsk::open(path).map(|d| d.into())
+    }
+}
+
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
@@ -64,18 +140,13 @@ impl From<AmsdosError> for DskManagerError {
     }
 }
 
-#[cfg(feature = "hfe")]
-pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> Hfe {
-    Hfe::default()
+#[inline]
+pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> AnyDisc {
+    AnyDisc::default()
 }
 
-#[cfg(not(feature = "hfe"))]
-pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> ExtendedDsk {
-    ExtendedDsk::default()
-}
-
-#[cfg(feature = "hfe")]
-pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<Hfe, String> {
+#[inline]
+pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<AnyDisc, String> {
     let path = path.as_ref();
     if !path.exists() {
         if fail_if_missing {
@@ -86,27 +157,7 @@ pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<H
         }
     }
 
-    Hfe::open(path).map_err(|e| format!("Error while loading {e}"))
-}
-
-#[cfg(not(feature = "hfe"))]
-pub fn open_disc<P: AsRef<Utf8Path>>(
-    path: P,
-    fail_if_missing: bool
-) -> Result<ExtendedDsk, String> {
-    let path = path.as_ref();
-    if !path.exists() {
-        if fail_if_missing {
-            return Err(format!("{path} does not exists"));
-        }
-        else {
-            return Ok(new_disc(Some(path)));
-        }
-    }
-
-    ExtendedDsk::open(path)
-        .map_err(|e| format!("Error while loading {e}"))
-        .map(|dsk: ExtendedDsk| dsk)
+    AnyDisc::open(path).map_err(|e| format!("Error while loading {e}"))
 }
 
 #[cfg(feature = "cmdline")]
@@ -198,7 +249,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             u8::from_str(sub.get_one::<String>("SIDE").unwrap()).expect("Wrong track format");
         let _export = sub.get_one::<String>("Z80_EXPORT").unwrap();
 
-        let mut dsk = ExtendedDsk::open(dsk_fname)
+        let mut dsk = open_disc(dsk_fname, true)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
 
         let mut listing = Listing::new();
