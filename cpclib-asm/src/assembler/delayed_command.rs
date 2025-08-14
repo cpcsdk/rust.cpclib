@@ -278,7 +278,7 @@ impl BreakpointCommand {
     }
 
     // Convert when possible. ATTENTION, I have not implemented all the case
-    pub fn ace(&self) -> Option<AceBreakPoint> {
+    pub fn ace(&self) -> Option<AceBreakPoint<'_>> {
         match &self.brk {
             InnerBreakpointCommand::Simple(brk) => {
                 Some(AceBreakPoint::new_execution(

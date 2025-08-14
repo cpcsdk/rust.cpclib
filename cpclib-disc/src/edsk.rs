@@ -1012,7 +1012,7 @@ impl ExtendedDsk {
         let mut consummed = 0;
         while consummed < buffer.len() {
             let current_sector = self
-                .sector_mut(pos.0, pos.1, pos.2)
+                .edsk_sector_mut(pos.0, pos.1, pos.2)
                 .ok_or_else(|| "Sector not found".to_owned())?;
 
             let sector_size = current_sector.len() as usize;
@@ -1098,7 +1098,7 @@ impl ExtendedDsk {
     }
 
     /// Search and returns the appropriate mutable sector
-    pub fn sector_mut<S: Into<Head>>(
+    pub fn edsk_sector_mut<S: Into<Head>>(
         &mut self,
         head: S,
         track: u8,
@@ -1213,7 +1213,7 @@ impl Disc for ExtendedDsk {
         bytes: &[u8]
     ) -> Result<(), String> {
         let head = head.into();
-        let sector = self.sector_mut(head, track, sector_id).ok_or_else(|| {
+        let sector = self.edsk_sector_mut(head, track, sector_id).ok_or_else(|| {
             format!(
                 "Head {head:?} track {track} sector 0x{sector_id:X} missing",
             )

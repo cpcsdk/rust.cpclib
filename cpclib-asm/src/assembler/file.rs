@@ -96,7 +96,7 @@ impl AnyFileNameOwned {
         }
     }
 
-    pub fn as_any_filename(&self) -> AnyFileName {
+    pub fn as_any_filename(&self) -> AnyFileName<'_> {
         AnyFileName::from(self)
     }
 }
@@ -148,7 +148,7 @@ impl<'fname> AnyFileName<'fname> {
         }
     }
 
-    pub fn basm_fname(&self) -> Cow<str> {
+    pub fn basm_fname(&self) -> Cow<'_, str> {
         match self {
             AnyFileName::InImage { image, content } => {
                 Cow::Owned(format!("{}{}{}", image, Self::DSK_SEPARATOR, content))

@@ -169,7 +169,7 @@ where Self: Debug + Sized + Sync
     fn is_breakpoint(&self) -> bool;
     fn is_save(&self) -> bool;
 
-    fn to_token(&self) -> Cow<crate::Token>;
+    fn to_token(&self) -> Cow<'_, crate::Token>;
     fn starts_with_label(&self) -> bool {
         self.is_label() || self.is_assign() || self.is_equ() || self.is_set()
     }

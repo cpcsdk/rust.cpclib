@@ -796,7 +796,7 @@ impl Env {
 }
 /// Report handling
 impl Env {
-    pub fn report(&self, start: &Instant) -> Report {
+    pub fn report(&self, start: &Instant) -> Report<'_> {
         Report::from((self, start))
     }
 }

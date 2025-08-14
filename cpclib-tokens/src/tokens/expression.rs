@@ -134,7 +134,7 @@ pub trait ExprElement: Sized {
     fn is_context_independant(&self) -> bool;
     fn fix_relative_value(&mut self);
 
-    fn to_expr(&self) -> Cow<Expr>;
+    fn to_expr(&self) -> Cow<'_, Expr>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -444,7 +444,7 @@ impl ExprElement for Expr {
     type ResultExpr = Expr;
     type Token = Token;
 
-    fn to_expr(&self) -> Cow<Expr> {
+    fn to_expr(&self) -> Cow<'_, Expr> {
         Cow::Borrowed(self)
     }
 

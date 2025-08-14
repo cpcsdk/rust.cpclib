@@ -169,7 +169,7 @@ impl ModuleSymbolTable {
         self.children.get_mut(children)
     }
 
-    fn iter(&self) -> ModuleSymbolTableIterator {
+    fn iter(&self) -> ModuleSymbolTableIterator<'_> {
         ModuleSymbolTableIterator::new(self)
     }
 }

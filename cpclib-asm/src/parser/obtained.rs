@@ -109,7 +109,7 @@ impl ExprElement for LocatedExpr {
     type ResultExpr = Expr;
     type Token = LocatedToken;
 
-    fn to_expr(&self) -> Cow<Expr> {
+    fn to_expr(&self) -> Cow<'_, Expr> {
         let expr = match self {
             LocatedExpr::RelativeDelta(d, _) => Expr::RelativeDelta(*d),
             LocatedExpr::Value(v, _) => Expr::Value(*v),
@@ -688,7 +688,7 @@ impl DataAccessElem for LocatedDataAccess {
         }
     }
 
-    fn to_data_access(&self) -> Cow<DataAccess> {
+    fn to_data_access(&self) -> Cow<'_, DataAccess> {
         Cow::Owned(match self {
             LocatedDataAccess::IndexRegister16WithIndex(a, b, c, _) => {
                 DataAccess::IndexRegister16WithIndex(*a, *b, c.to_expr().into_owned())
@@ -741,7 +741,7 @@ impl MacroParamElement for LocatedMacroParam {
         matches!(self, LocatedMacroParam::List(..))
     }
 
-    fn single_argument(&self) -> beef::lean::Cow<str> {
+    fn single_argument(&self) -> beef::lean::Cow<'_, str> {
         match &self {
             LocatedMacroParam::Empty => beef::lean::Cow::borrowed(""),
             LocatedMacroParam::RawArgument(s) | LocatedMacroParam::EvaluatedArgument(s) => {
@@ -1259,7 +1259,7 @@ impl ListingElement for LocatedToken {
         fn org_second(&self) -> Option<&Self::Expr>;
     );
 
-    fn to_token(&self) -> Cow<cpclib_tokens::Token> {
+    fn to_token(&self) -> Cow<'_, cpclib_tokens::Token> {
         match &self.inner {
             either::Either::Left(inner) => inner.to_token(),
             either::Either::Right((_inner, _msg)) => {
@@ -1432,7 +1432,7 @@ impl ListingElement for LocatedTokenInner {
 
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved
-    fn to_token(&self) -> Cow<Token> {
+    fn to_token(&self) -> Cow<'_, Token> {
         match self {
             Self::OpCode(mne, arg1, arg2, arg3) => {
                 Cow::Owned(Token::OpCode(
@@ -1737,7 +1737,7 @@ impl std::fmt::Display for LocatedToken {
 }
 
 impl ToSimpleToken for LocatedToken {
-    fn as_simple_token(&self) -> Cow<Token> {
+    fn as_simple_token(&self) -> Cow<'_, Token> {
         self.to_token()
     }
 }

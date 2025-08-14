@@ -627,7 +627,7 @@ impl ListingElement for Token {
 
     //    type Listing = BaseListing<Token>;
 
-    fn to_token(&self) -> Cow<Token> {
+    fn to_token(&self) -> Cow<'_, Token> {
         Cow::Borrowed(self)
     }
 

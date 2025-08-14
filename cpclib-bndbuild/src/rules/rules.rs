@@ -88,7 +88,7 @@ impl Rules {
     }
 
     // TODO implement a version with less copy
-    pub fn to_deps(&self) -> Result<Graph, BndBuilderError> {
+    pub fn to_deps(&self) -> Result<Graph<'_>, BndBuilderError> {
         let mut g = AcyclicDependencyGraph::<&Utf8Path>::new();
         let mut node2tracked_idx: BTreeMap<&Utf8Path, usize> = BTreeMap::new();
 

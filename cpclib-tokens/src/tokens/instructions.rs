@@ -44,7 +44,7 @@ pub trait MacroParamElement: Clone + core::fmt::Debug {
         self.is_single() && self.single_argument().is_empty()
     }
 
-    fn single_argument(&self) -> beef::lean::Cow<str>;
+    fn single_argument(&self) -> beef::lean::Cow<'_, str>;
     fn list_argument(&self) -> &[Box<Self>];
 
     fn must_be_evaluated(&self) -> bool;
@@ -70,7 +70,7 @@ impl MacroParamElement for MacroParam {
         matches!(self, MacroParam::List(_))
     }
 
-    fn single_argument(&self) -> beef::lean::Cow<str> {
+    fn single_argument(&self) -> beef::lean::Cow<'_, str> {
         match self {
             MacroParam::RawArgument(s) | MacroParam::EvaluatedArgument(s) => {
                 beef::lean::Cow::borrowed(s)
@@ -525,11 +525,11 @@ pub enum CharsetFormat {
 
 pub trait ToSimpleToken {
     /// Convert the token in its simplest form
-    fn as_simple_token(&self) -> std::borrow::Cow<Token>;
+    fn as_simple_token(&self) -> std::borrow::Cow<'_, Token>;
 }
 
 impl ToSimpleToken for Token {
-    fn as_simple_token(&self) -> std::borrow::Cow<Token> {
+    fn as_simple_token(&self) -> std::borrow::Cow<'_, Token> {
         std::borrow::Cow::Borrowed(self)
     }
 }

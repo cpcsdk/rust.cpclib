@@ -141,7 +141,7 @@ impl BndBuilderObserverRc {
 }
 
 impl ListOfBndBuilderObserverRc {
-    pub fn iter(&self) -> ListOfBndBuilderObserverRcIter {
+    pub fn iter(&self) -> ListOfBndBuilderObserverRcIter<'_> {
         ListOfBndBuilderObserverRcIter { list: self, idx: 0 }
     }
 

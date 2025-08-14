@@ -162,7 +162,7 @@ pub trait DataAccessElem: Sized + Debug + Display {
     fn is_register8(&self) -> bool;
     fn to_data_access_for_high_register(&self) -> Option<Self>;
     fn to_data_access_for_low_register(&self) -> Option<Self>;
-    fn to_data_access(&self) -> Cow<DataAccess>;
+    fn to_data_access(&self) -> Cow<'_, DataAccess>;
 }
 
 #[macro_export]
@@ -415,7 +415,7 @@ impl DataAccessElem for DataAccess {
         }
     }
 
-    fn to_data_access(&self) -> Cow<DataAccess> {
+    fn to_data_access(&self) -> Cow<'_, DataAccess> {
         Cow::Borrowed(self)
     }
 }

@@ -212,7 +212,7 @@ impl AceSymbolChunk {
         symbs.for_each(|s| self.add_symbol(s));
     }
 
-    pub fn get_symbols(&self) -> Vec<AceSymbol> {
+    pub fn get_symbols(&self) -> Vec<AceSymbol<'_>> {
         let mut res = Vec::new();
 
         let mut idx = 0;

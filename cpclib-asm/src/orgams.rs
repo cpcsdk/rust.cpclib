@@ -47,12 +47,12 @@ impl From<&std::io::Error> for ToOrgamsError {
 
 /// Convert an item to the orgams format
 pub trait ToOrgams {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError>;
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError>;
 }
 
 macro_rules! macro_params_to_orgams {
     () => {
-        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
             let repr: String = if self.is_single() {
                 let arg = self.single_argument();
                 let (_ctx, mut code) = ctx_and_span(unsafe { std::mem::transmute(arg.deref()) });
@@ -80,26 +80,26 @@ impl ToOrgams for LocatedMacroParam {
 }
 
 impl ToOrgams for Mnemonic {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
         Ok(self.to_string().to_lowercase().into())
     }
 }
 
 impl ToOrgams for BinaryOperation {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
         Ok(self.to_string().to_uppercase().into())
     }
 }
 
 impl ToOrgams for UnaryOperation {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
         Ok(self.to_string().to_ascii_uppercase().into())
     }
 }
 
 macro_rules! expr_to_orgams {
     () => {
-        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
             let repr = match self {
                 Self::Value(v, ..) => {
                     if self.has_span() {
@@ -178,7 +178,7 @@ impl ToOrgams for Expr {
 
 macro_rules! test_kind_to_orgams {
     () => {
-        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
             if self.is_true_test() {
                 let expr = self.expr_unchecked();
                 Ok(format!("IF {}", expr.to_orgams_string()?).into())
@@ -208,7 +208,7 @@ impl ToOrgams for TestKind {
 
 macro_rules! data_access_to_orgams {
     () => {
-        fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+        fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
             let repr = if self.is_expression() {
                 let exp = self.get_expression().unwrap();
                 return exp.to_orgams_string();
@@ -254,7 +254,7 @@ where
     T::TestKind: ToOrgams,
     T::MacroParam: ToOrgams
 {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
         // we assume it is already a BASM format and not an ORGAMS format
         let handle_macro_definition = |token: &T| -> Cow<str> {
             let macro_name = token.macro_definition_name();
@@ -518,7 +518,7 @@ where
 // }
 
 impl<T: ToOrgams> ToOrgams for &[T] {
-    fn to_orgams_string(&self) -> Result<Cow<str>, ToOrgamsError> {
+    fn to_orgams_string(&self) -> Result<Cow<'_, str>, ToOrgamsError> {
         let mut content = String::with_capacity(self.len() * 10);
 
         for token in self.iter() {

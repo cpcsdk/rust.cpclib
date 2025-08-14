@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::camino::Utf8Path;
@@ -7,6 +8,60 @@ use crate::amsdos::{
     AmsdosManagerNonMut
 };
 use crate::edsk::Head;
+
+pub struct Sector<'d, D: Disc + Sized> {
+    data: Box<[u8]>,
+    head: Head,
+    track: u8,
+    sector_id: u8,
+    disc: &'d mut D
+}
+
+
+impl<'d, D:Disc> Deref for Sector<'d, D> {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<'d, D:Disc> Drop for Sector<'d, D> {
+    fn drop(&mut self) {
+        self.disc.sector_write_bytes(
+            self.head, 
+            self.track, 
+            self.sector_id, 
+            &self.data
+        ).expect("There is a bug somwhere");
+    }
+}
+
+impl<'d, D:Disc> Sector<'d, D> {
+    pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
+        if data.len() < self.len() as usize {
+            return Err(format!(
+                "You cannot insert {} bytes in a sector of size {}.",
+                data.len(),
+                self.len()
+            ));
+        }
+
+        if data.len() > self.len() as usize {
+            return Err(format!(
+                "Smaller data of {} bytes to put in a sector of size {}.",
+                data.len(),
+                self.len()
+            ));
+        }
+
+        self.data[..].clone_from_slice(data);
+        Ok(())
+    }
+
+    pub fn set_value(&mut self, idx: usize, value: u8) {
+        self.data[idx] = value;
+    }
+}
 
 pub trait Disc {
     fn open<P>(path: P) -> Result<Self, String>
@@ -34,6 +89,25 @@ pub trait Disc {
         sector_id: u8,
         bytes: &[u8]
     ) -> Result<(), String>;
+
+
+    /// The sector is modified right back in the dsk once it is dropped
+    fn sector_mut<S: Into<Head>>(
+        &mut self,
+        head: S,
+        track: u8,
+        sector_id: u8
+    ) -> Option<Sector<'_, Self>> where Self: Sized{
+        let head: Head = head.into();
+        let data = self.sector_read_bytes(head, track, sector_id)?;
+        Some(Sector {
+            data: data.into(),
+            head,
+            track,
+            sector_id,
+            disc: self
+        })
+    }
 
     /// Return the concatenated values of several consecutive sectors
     /// None if it tries to read an inexistant sector

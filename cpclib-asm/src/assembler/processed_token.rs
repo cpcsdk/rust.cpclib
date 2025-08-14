@@ -462,7 +462,7 @@ impl<T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
     for ProcessedToken<'_, T>
 where <T as ListingElement>::Expr: ExprEvaluationExt
 {
-    fn as_simple_token(&self) -> Cow<Token> {
+    fn as_simple_token(&self) -> Cow<'_, Token> {
         self.token.as_simple_token()
     }
 }

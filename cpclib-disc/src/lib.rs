@@ -118,7 +118,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
     // Manipulate the catalog of a disc
     if let Some(sub) = matches.subcommand_matches("catalog") {
-        let mut dsk = ExtendedDsk::open(dsk_fname)
+        let mut dsk = open_disc(dsk_fname, true)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
         eprintln!("WIP - We assume head 0 is chosen");
 
@@ -137,7 +137,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             }
 
             for idx in 0..4 {
-                let sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
+                let mut sector = dsk.sector_mut(0, 0, idx + 0xc1).expect("Wrong format");
                 let idx = idx as usize;
                 sector
                     .set_values(&bytes[idx * 512..(idx + 1) * 512])
@@ -358,13 +358,25 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
 
 #[cfg(feature = "cmdline")]
 pub fn dsk_manager_build_arg_parser() -> Command {
-    Command::new("dsk_manager")
-                       .about("Manipulate DSK files")
+    #[cfg(feature="hfe")]
+    let about = "Manipulate DSK or HFE files";
+    #[cfg(not(feature="hfe"))]
+    let about = "Manipulate DSK files";
+
+    #[cfg(feature="hfe")]
+    let f_help = "DSK or HFE file to manipulate";
+    #[cfg(not(feature="hfe"))]
+    let f_help = "DSK file to manipulate";
+
+
+
+    Command::new("disc_manager")
+                       .about(about)
                        .author("Krusty/Benediction")
                        .after_help("Pale buggy copy of an old Ramlaid's tool")
                        .arg(
                            Arg::new("DSK_FILE")
-                            .help("DSK file to manipulate")
+                            .help(f_help)
                             .required(true)
                             .index(1)
                        )
