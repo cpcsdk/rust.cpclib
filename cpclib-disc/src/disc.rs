@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use cpclib_common::camino::Utf8Path;
@@ -35,7 +34,7 @@ impl<'d, D: Disc> Drop for Sector<'d, D> {
 
 impl<'d, D: Disc> Sector<'d, D> {
     pub fn set_values(&mut self, data: &[u8]) -> Result<(), String> {
-        if data.len() < self.len() as usize {
+        if data.len() < self.len() {
             return Err(format!(
                 "You cannot insert {} bytes in a sector of size {}.",
                 data.len(),
@@ -43,7 +42,7 @@ impl<'d, D: Disc> Sector<'d, D> {
             ));
         }
 
-        if data.len() > self.len() as usize {
+        if data.len() > self.len() {
             return Err(format!(
                 "Smaller data of {} bytes to put in a sector of size {}.",
                 data.len(),
