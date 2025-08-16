@@ -1597,7 +1597,7 @@ impl Env {
         self.start_address()
     }
 
-    /// Output one byte either in the appropriate bank of the snapshot or in the termporary bank
+    /// Output one byte either in the appropriate bank of the snapshot or in the temporary bank
     /// return true if it raised an override warning
     pub fn output_byte(&mut self, v: u8) -> Result<bool, AssemblerError> {
         //   dbg!(self.logical_output_address(), self.output_address);

@@ -380,7 +380,17 @@ pub fn read_source<P: AsRef<Utf8Path>>(
     let fname = fname.as_ref();
 
     let (mut content, header_removed) = load_file(fname, options)?;
-    assert!(header_removed.is_none());
+    if let Some(header) = header_removed {
+            return Err(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!(
+                    "No header is expected here. There was one when reading {fname}.
+                    {header:?}
+                    ",
+                )
+            });
+    }
 
     let content = content.make_contiguous();
     // handle_source_encoding(fname.to_str().unwrap(), &content)
