@@ -4421,13 +4421,18 @@ pub fn parse_logical_operator(
     operator: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
-        let operand = alt((
-            parse_register8,
-            parse_indexregister8,
-            parse_hl_address,
-            parse_indexregister_with_index,
-            parse_expr
-        ))
+        // we optionaly allow a, as a first register
+        let operand = preceded(
+            opt((parse_register_a, my_space0, parse_comma, my_space0)),
+
+                alt((
+                parse_register8,
+                parse_indexregister8,
+                parse_hl_address,
+                parse_indexregister_with_index,
+                parse_expr
+            ))
+        )
         .context(StrContext::Label("Wrong logical operand"))
         .parse_next(input)?;
 
