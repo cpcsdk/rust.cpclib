@@ -87,6 +87,12 @@ If you know how to configure your IDE to statically verify your yaml files, here
 A jinja-like templating is used to generate the final yaml file : <https://docs.rs/minijinja/latest/minijinja/syntax/index.html>.
 So you can automatically generate rules with its macro system.
 
+## Preset variables
+
+- `FAP_INIT_PATH`: path to the assembled player initializer for fap
+- `FAP_PLAY_PATH`: path to the assembled player for fap
+- `AKG_PATH`: path the the AKG player
+
 
 ## Example
 

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::tracker::at3::At3Version;
 use minijinja::{Environment, Error, ErrorKind, context};
 
 use crate::BndBuilderError;
@@ -211,7 +212,16 @@ impl BndBuilder {
             let fap = FAPVersion::default(); // TODO allow to handle various versions
             env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str());
             env.add_global("FAP_INIT_PATH", fap.fap_init_path::<()>().as_str());
-        };
+        }
+
+        // Feed AT3 variables
+        {
+            let at = At3Version::default();
+            env.add_global("AKG_PLAYER_PATH",  at.akg_path::<()>().as_str());
+            env.add_global("AKM_PLAYER_PATH",  at.akm_path::<()>().as_str());
+            env.add_global("AKY_PLAYER_PATH",  at.aky_path::<()>().as_str());
+            env.add_global("AKY_STABLE_PLAYER_PATH",  at.aky_stable_path::<()>().as_str());
+        }
 
         // Feed user related variables
         for (key, value) in definitions {

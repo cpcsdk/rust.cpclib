@@ -67,7 +67,7 @@ use crate::section::Section;
 use crate::stable_ticker::*;
 use crate::{AssemblingOptions, MemoryPhysicalAddress};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum OutputKind {
     Snapshot,
     Cpr,
@@ -1971,23 +1971,25 @@ impl Env {
         code_adr: u16,
         output_adr: u16
     ) -> Result<(), AssemblerError> {
-        // TODO move following code in a new method
+        dbg!(&code_adr, &output_adr);
 
         // TODO Check overlapping region
-        {
-            let page_info = self.page_info_for_logical_address_mut(output_adr as _);
+        let mut page_info = {
+            let page_info = dbg!(self.page_info_for_logical_address_mut(output_adr as _));
             page_info.logical_outputadr = output_adr as _;
             page_info.logical_codeadr = code_adr as _;
             page_info.fail_next_write_if_zero = false;
-        }
+            page_info
+        };
 
         // Specify start address at first use
-        self.page_info_for_logical_address_mut(output_adr as _)
-            .startadr = match self.start_address() {
-            Some(val) => val.min(self.logical_output_address()),
-            None => self.logical_output_address()
-        }
-        .into();
+        let logical_output_address = page_info.logical_outputadr;
+        let start_address = match page_info.startadr {
+            Some(val) => val.min(logical_output_address),
+            None => logical_output_address
+        };
+        page_info.startadr = Some(start_address);
+
 
         self.output_address = output_adr as _;
         self.update_dollar();
@@ -2774,7 +2776,7 @@ impl Env {
     }
 
     /// The keyword is named BANK, but in fact, it is a PAGE ...
-    fn visit_page_or_bank<E: ExprEvaluationExt>(
+    fn visit_page_or_bank<E: ExprEvaluationExt + Debug>(
         &mut self,
         exp: Option<&E>
     ) -> Result<(), AssemblerError> {
@@ -2782,9 +2784,9 @@ impl Env {
             return Err(AssemblerError::NotAllowed);
         }
 
-        let output_kind = self.output_kind();
+        let output_kind = dbg!(self.output_kind());
 
-        match exp {
+        match dbg!(exp) {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
                 let exp = self.resolve_expr_must_never_fail(exp)?.int()?;
@@ -2824,6 +2826,7 @@ impl Env {
                     }
 
                     // we do not change the output address (there is no reason to do that)
+                    //dbg!(self.output_address);
                 }
             },
             None => {

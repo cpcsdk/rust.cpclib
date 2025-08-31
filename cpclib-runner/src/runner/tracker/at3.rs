@@ -1,6 +1,8 @@
 use std::fmt::Display;
 use std::sync::OnceLock;
 
+use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
+
 use crate::delegated::{
     DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication,
     MutiplatformUrls, StaticInformation
@@ -11,12 +13,14 @@ pub const AT_CMD: &str = "at3";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum At3Version {
     #[default]
+    V3_2_7,
     V3_2_3
 }
 
 impl Display for At3Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = match self {
+            At3Version::V3_2_7 => "v3.2.7",
             At3Version::V3_2_3 => "v3.2.3"
         };
 
@@ -26,15 +30,30 @@ impl Display for At3Version {
 
 impl StaticInformation for At3Version {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
-        static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
 
-        URL.get_or_init(|| {
-		MutiplatformUrls::builder()
-			.linux("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-linux64-3.2.3.zip")
-			.windows("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-windows-3.2.3.zip")
-			.macos("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-macos-3.2.3.zip")
-			.build()
-		})
+        match self {
+            At3Version::V3_2_7 => {
+                static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URL.get_or_init(|| {
+                MutiplatformUrls::builder()
+                    .linux("https://www.julien-nevo.com/arkostracker/release/3.2.7/linux64/ArkosTracker-linux64-3.2.7.zip")
+                    .windows("https://www.julien-nevo.com/arkostracker/release/3.2.7/windows/ArkosTracker-windows-3.2.7.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.2.7/macosx/ArkosTracker-macosx-3.2.7.zip")
+                    .build()
+                })
+            },
+            At3Version::V3_2_3 => {
+                static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URL.get_or_init(|| {
+                MutiplatformUrls::builder()
+                    .linux("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-linux64-3.2.3.zip")
+                    .windows("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-windows-3.2.3.zip")
+                    .macos("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-macos-3.2.3.zip")
+                    .build()
+                })
+            },
+        }
+
     }
 }
 
@@ -59,6 +78,49 @@ impl ExecutableInformation for At3Version {
 }
 
 impl InternetStaticCompiledApplication for At3Version {}
+
+
+impl At3Version {
+    pub fn akg_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAkg")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkg.asm")
+    }
+
+    pub fn akm_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAkm")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkm.asm")
+    }
+
+    pub fn aky_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAky.asm")
+    }
+
+    pub fn aky_stable_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkyStabilized_CPC.asm")
+    }
+}
 
 pub mod extra {
     use std::ops::Deref;

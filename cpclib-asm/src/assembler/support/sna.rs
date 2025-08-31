@@ -8,7 +8,7 @@ use crate::page_info::PageInformation;
 #[derive(Clone)]
 pub(crate) struct SnaAssembler {
     pub(crate) sna: Snapshot,
-    pub(crate) pages_info: Vec<PageInformation>,
+    pub pages_info: Vec<PageInformation>,
     pub written_bytes: BitVec
 }
 
@@ -52,6 +52,16 @@ impl SnaAssembler {
 
         debug_assert_eq!(nb_pages, self.pages_info.len());
         debug_assert_eq!(self.sna.nb_pages(), self.pages_info.len());
+    }
+
+    #[inline]
+    pub fn page_info_mut(&mut self, page: u8) -> &mut PageInformation {
+        &mut self.pages_info[page as usize]
+    }
+
+    #[inline]
+    pub fn page_info(& self, page: u8) -> &PageInformation {
+        & self.pages_info[page as usize]
     }
 }
 

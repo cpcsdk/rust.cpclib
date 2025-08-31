@@ -159,6 +159,7 @@ remain = "0.2.15"
 ureq = "2.12.1"
 resolve-path = "0.1.0"
 rust-embed = { version = "8.7.2", features = ["compression"] }
+rust-ini = "0.21.1"
 rustyline = { version = "14.0.0" }
 rustyline-derive = { version = "0.10.0" }
 self_cell = "1.2.0"
