@@ -60,6 +60,37 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         ArchiveFormat::Zip
     }
 
+     #[cfg(target_os = "linux")]
+     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
+        use cpclib_common::camino::Utf8PathBuf;
+        use ureq::post;
+
+        use crate::delegated::DelegateApplicationDescription;
+
+         let fname = self.target_os_exec_fname().to_owned();
+         let fname = Utf8PathBuf::from(fname);
+
+         let post_install : Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> = Box::new(move |d: &DelegateApplicationDescription<E>| {
+            use std::os::unix::fs::PermissionsExt;
+
+            let fname = d.cache_folder().join(&fname);
+
+            let mut perms = std::fs::metadata(&fname)
+                .map_err(|e| format!("Error when setting execution rights to {}. {}", &fname, e.to_string()))?
+                .permissions();
+
+            let mode = perms.mode() | 0o100; // Add execution mode
+            perms.set_mode(mode);
+            std::fs::set_permissions(&fname, perms)
+                .map_err(|e| e.to_string())?;
+
+            Ok(())
+
+         });
+
+         Some(post_install.into())
+     }
+
     // fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
     // let owned_original = match self {
     // CpcEmuPowerVersion::R20210531 => {
