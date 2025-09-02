@@ -381,15 +381,15 @@ pub fn read_source<P: AsRef<Utf8Path>>(
 
     let (mut content, header_removed) = load_file(fname, options)?;
     if let Some(header) = header_removed {
-            return Err(AssemblerError::BugInAssembler {
-                file: file!(),
-                line: line!(),
-                msg: format!(
-                    "No header is expected here. There was one when reading {fname}.
+        return Err(AssemblerError::BugInAssembler {
+            file: file!(),
+            line: line!(),
+            msg: format!(
+                "No header is expected here. There was one when reading {fname}.
                     {header:?}
                     ",
-                )
-            });
+            )
+        });
     }
 
     let content = content.make_contiguous();

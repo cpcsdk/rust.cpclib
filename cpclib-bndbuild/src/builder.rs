@@ -217,10 +217,13 @@ impl BndBuilder {
         // Feed AT3 variables
         {
             let at = At3Version::default();
-            env.add_global("AKG_PLAYER_PATH",  at.akg_path::<()>().as_str());
-            env.add_global("AKM_PLAYER_PATH",  at.akm_path::<()>().as_str());
-            env.add_global("AKY_PLAYER_PATH",  at.aky_path::<()>().as_str());
-            env.add_global("AKY_STABLE_PLAYER_PATH",  at.aky_stable_path::<()>().as_str());
+            env.add_global("AKG_PLAYER_PATH", at.akg_path::<()>().as_str());
+            env.add_global("AKM_PLAYER_PATH", at.akm_path::<()>().as_str());
+            env.add_global("AKY_PLAYER_PATH", at.aky_path::<()>().as_str());
+            env.add_global(
+                "AKY_STABLE_PLAYER_PATH",
+                at.aky_stable_path::<()>().as_str()
+            );
         }
 
         // Feed user related variables

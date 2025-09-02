@@ -1990,7 +1990,6 @@ impl Env {
         };
         page_info.startadr = Some(start_address);
 
-
         self.output_address = output_adr as _;
         self.update_dollar();
 
@@ -2826,7 +2825,7 @@ impl Env {
                     }
 
                     // we do not change the output address (there is no reason to do that)
-                    //dbg!(self.output_address);
+                    // dbg!(self.output_address);
                 }
             },
             None => {

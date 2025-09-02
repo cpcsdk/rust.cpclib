@@ -4424,8 +4424,7 @@ pub fn parse_logical_operator(
         // we optionaly allow a, as a first register
         let operand = preceded(
             opt((parse_register_a, my_space0, parse_comma, my_space0)),
-
-                alt((
+            alt((
                 parse_register8,
                 parse_indexregister8,
                 parse_hl_address,

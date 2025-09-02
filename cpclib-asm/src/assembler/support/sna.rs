@@ -60,8 +60,8 @@ impl SnaAssembler {
     }
 
     #[inline]
-    pub fn page_info(& self, page: u8) -> &PageInformation {
-        & self.pages_info[page as usize]
+    pub fn page_info(&self, page: u8) -> &PageInformation {
+        &self.pages_info[page as usize]
     }
 }
 

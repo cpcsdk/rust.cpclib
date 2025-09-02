@@ -1,7 +1,8 @@
 use std::fmt::Display;
 use std::sync::OnceLock;
 
-use cpclib_common::{camino::Utf8PathBuf, event::EventObserver};
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::event::EventObserver;
 
 use crate::delegated::{
     DownloadableInformation, ExecutableInformation, InternetStaticCompiledApplication,
@@ -30,7 +31,6 @@ impl Display for At3Version {
 
 impl StaticInformation for At3Version {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
-
         match self {
             At3Version::V3_2_7 => {
                 static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
@@ -51,9 +51,8 @@ impl StaticInformation for At3Version {
                     .macos("https://bitbucket.org/JulienNevo/arkostracker3/downloads/ArkosTracker-macos-3.2.3.zip")
                     .build()
                 })
-            },
+            }
         }
-
     }
 }
 
@@ -78,7 +77,6 @@ impl ExecutableInformation for At3Version {
 }
 
 impl InternetStaticCompiledApplication for At3Version {}
-
 
 impl At3Version {
     pub fn akg_path<E: EventObserver>(&self) -> Utf8PathBuf {
