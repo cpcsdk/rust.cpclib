@@ -65,7 +65,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
         use cpclib_common::camino::Utf8PathBuf;
-        use ureq::post;
+        
 
         use crate::delegated::DelegateApplicationDescription;
 
@@ -83,7 +83,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
                         format!(
                             "Error when setting execution rights to {}. {}",
                             &fname,
-                            e.to_string()
+                            e
                         )
                     })?
                     .permissions();

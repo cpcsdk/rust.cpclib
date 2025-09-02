@@ -1974,7 +1974,7 @@ impl Env {
         dbg!(&code_adr, &output_adr);
 
         // TODO Check overlapping region
-        let mut page_info = {
+        let page_info = {
             let page_info = dbg!(self.page_info_for_logical_address_mut(output_adr as _));
             page_info.logical_outputadr = output_adr as _;
             page_info.logical_codeadr = code_adr as _;
