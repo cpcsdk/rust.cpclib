@@ -576,7 +576,17 @@ macro_rules! impl_from_ink_integer {
     ( $($t: ty),* ) => {
       $(  impl From<$t> for Ink {
             fn from(item: $t) -> Self {
-                assert!(item < 32);
+
+                let item = if item < 32 {
+                    // Basic number provided
+                    item
+                } else {
+                    assert!((item as i64) < 256);
+                    // gate array number provided
+                    INKS_GA_VALUE.iter()
+                        .position(|&ink| ink == item as u8)
+                        .unwrap() as _
+                };
                 unsafe{Self::new_unchecked(item as _)}
             }
         } )*
@@ -590,35 +600,35 @@ impl From<String> for Ink {
         match item.to_uppercase().replace([' ', '_'], "").as_str() {
             "BLACK" => Self::BLACK,
             "BLUE" => Self::BLUE,
-            "BRIGHTBLUE" => Self::BRIGHTBLUE,
+            "BRIGHTBLUE" | "BRIGHT_BLUE" => Self::BRIGHTBLUE,
             "RED" => Self::RED,
             "MAGENTA" => Self::MAGENTA,
             "MAUVE" => Self::MAUVE,
             "BRIGHTRED" => Self::BRIGHTRED,
             "PURPLE" => Self::PURPLE,
-            "BRIGHTMAGENTA" => Self::BRIGHTMAGENTA,
+            "BRIGHTMAGENTA" | "BRIGHT_MAGENTA" => Self::BRIGHTMAGENTA,
             "GREEN" => Self::GREEN,
             "CYAN" => Self::CYAN,
-            "SKYBLUE" => Self::SKYBLUE,
+            "SKYBLUE" | "SKY_BLUE" => Self::SKYBLUE,
             "YELLOW" => Self::YELLOW,
             "WHITE" => Self::WHITE,
-            "PASTELBLUE" => Self::PASTELBLUE,
+            "PASTELBLUE" | "PASTEL_BLUE" => Self::PASTELBLUE,
             "ORANGE" => Self::ORANGE,
             "PINK" => Self::PINK,
-            "PASTELMAGENTA" => Self::PASTELMAGENTA,
-            "BRIGHTGREEN" => Self::BRIGHTGREEN,
-            "SEAGREEN" => Self::SEAGREEN,
-            "BRIGHTCYAN" => Self::BRIGHTCYAN,
+            "PASTELMAGENTA" | "PASTEL_MAGENTA" => Self::PASTELMAGENTA,
+            "BRIGHTGREEN" | "BRIGHT_GREEN" => Self::BRIGHTGREEN,
+            "SEAGREEN" | "SEA_GREEN" => Self::SEAGREEN,
+            "BRIGHTCYAN" | "BRIGHT_CYAN" => Self::BRIGHTCYAN,
             "LIME" => Self::LIME,
-            "PASTELGREEN" => Self::PASTELGREEN,
-            "PASTELCYAN" => Self::PASTELCYAN,
-            "BRIGHTYELLOW" => Self::BRIGHTYELLOW,
-            "PASTELYELLOW" => Self::PASTELYELLOW,
-            "BRIGHTWHITE" => Self::BRIGHTWHITE,
+            "PASTELGREEN" | "PASTEL_GREEN"  => Self::PASTELGREEN,
+            "PASTELCYAN" | "PASTEL_CYAN"  => Self::PASTELCYAN,
+            "BRIGHTYELLOW" | "BRIGHT_YELLOW"  => Self::BRIGHTYELLOW,
+            "PASTELYELLOW" | "PASTEL_YELLOW" => Self::PASTELYELLOW,
+            "BRIGHTWHITE" | "BRIGHT_WHITE" => Self::BRIGHTWHITE,
 
             "GRAY" | "GREY" => "WHITE".into(),
 
-            _ => panic!("{item} color does not exist")
+            _ => panic!("`{item}` color does not exist")
         }
     }
 }
@@ -634,31 +644,31 @@ impl Display for Ink {
         let repr = match self.as_ref() {
             0 => "BLACK",
             1 => "BLUE",
-            2 => "BRIGHTBLUE",
+            2 => "BRIGHT_BLUE",
             3 => "RED",
             4 => "MAGENTA",
             5 => "MAUVE",
-            6 => "BRIGHTRED",
+            6 => "BRIGHT_RED",
             7 => "PURPLE",
-            8 => "BRIGHTMAGENTA",
+            8 => "BRIGHT_MAGENTA",
             9 => "GREEN",
             10 => "CYAN",
-            11 => "SKYBLUE",
+            11 => "SKY_BLUE",
             12 => "YELLOW",
             13 => "WHITE",
-            14 => "PASTELBLUE",
+            14 => "PASTEL_BLUE",
             15 => "ORANGE",
             16 => "PINK",
-            17 => "PASTELMAGENTA",
-            18 => "BRIGHTGREEN",
-            19 => "SEAGREEN",
-            20 => "BRIGHTCYAN",
+            17 => "PASTEL_MAGENTA",
+            18 => "BRIGHT_GREEN",
+            19 => "SEA_GREEN",
+            20 => "BRIGHT_CYAN",
             21 => "LIME",
-            22 => "PASTELGREEN",
-            23 => "PASTELCYAN",
-            24 => "BRIGHTYELLOW",
-            25 => "PASTELYELLOW",
-            26 => "BRIGHTWHITE",
+            22 => "PASTEL_GREEN",
+            23 => "PASTEL_CYAN",
+            24 => "BRIGHT_YELLOW",
+            25 => "PASTEL_YELLOW",
+            26 => "BRIGHT_WHITE",
             _ => panic!()
         };
 

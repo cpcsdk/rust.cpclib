@@ -7,6 +7,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{ListingExt, assemble, assemble_to_amsdos_file};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib::common::winnow::{BStr, Parser};
 use cpclib::common::{clap, clap_parse_any_positive_number};
 use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
@@ -39,7 +40,11 @@ pub fn clap_parse_ink(arg: &str) -> Result<Ink, String> {
 macro_rules! specify_palette {
 
     ($e:expr) => {
-        $e.arg(
+        specify_palette!($e, true)
+    };
+
+    ($e:expr, $unlock:expr) => {{
+        let cmd = $e.arg(
             Arg::new("OCP_PAL")
             .long("pal")
             .required(false)
@@ -198,15 +203,32 @@ macro_rules! specify_palette {
                 .value_parser(value_parser!(u8))
         )
         .arg(
-            Arg::new("UNLOCK_PENS")
-                .long("unlock-pens")
+            Arg::new("PEN16")
+                .long("pen16")
                 .required(false)
+                .help("Ink number of the pen 16 (border)")
+                .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
-                .conflicts_with("PENS") // TODO make it work with PENS too
-                .help("When some pens are manually provided, allows to also use the other ones by automatically assign them missing inks. By default, this is forbidden.")
-                .action(ArgAction::SetTrue)
+                .value_parser(value_parser!(u8))
         )
-    };
+        ;
+
+
+        if $unlock {
+
+            cmd.arg(
+                Arg::new("UNLOCK_PENS")
+                    .long("unlock-pens")
+                    .required(false)
+                    .conflicts_with("OCP_PAL")
+                    .conflicts_with("PENS") // TODO make it work with PENS too
+                    .help("When some pens are manually provided, allows to also use the other ones by automatically assign them missing inks. By default, this is forbidden.")
+                    .action(ArgAction::SetTrue)
+            )
+        }else {
+            cmd
+        }
+    }};
 }
 
 pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, AmsdosError> {
@@ -215,7 +237,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
             .get_one::<String>("PENS")
             .unwrap()
             .split(",")
-            .map(|ink| ink.parse::<u8>().unwrap())
+            .map(|ink| cpclib::common::parse_value::<_, ()>.parse(BStr::new(ink)).unwrap_or_else(|_| Ink::from(ink.replace("GA_", "")).gate_array_value() as _))
             .collect::<Vec<_>>();
         Ok(LockablePalette::unlocked(numbers.into()))
     }
