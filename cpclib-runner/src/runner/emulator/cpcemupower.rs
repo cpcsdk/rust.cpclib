@@ -65,7 +65,6 @@ impl DownloadableInformation for CpcEmuPowerVersion {
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
         use cpclib_common::camino::Utf8PathBuf;
-        
 
         use crate::delegated::DelegateApplicationDescription;
 
@@ -80,11 +79,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
 
                 let mut perms = std::fs::metadata(&fname)
                     .map_err(|e| {
-                        format!(
-                            "Error when setting execution rights to {}. {}",
-                            &fname,
-                            e
-                        )
+                        format!("Error when setting execution rights to {}. {}", &fname, e)
                     })?
                     .permissions();
 

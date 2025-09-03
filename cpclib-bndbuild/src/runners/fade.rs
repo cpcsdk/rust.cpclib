@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use clap::{Arg, ArgAction};
 use cpclib_common::event::EventObserver;
 use cpclib_imgconverter::{fade_build_args, fade_handle_matches};
-use cpclib_runner::runner::{Runner, RunnerWithClap, runner::RunnerWithClapMatches};
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::FADE_CMDS;
 
@@ -20,13 +21,13 @@ impl<E: EventObserver> Default for FadeRunner<E> {
         let command = command
             .no_binary_name(true)
             .disable_help_flag(true)
-            /*.after_help(format!(
-                "{} {} embedded by {} {}",
-                cpclib_imgconverter::built_info::PKG_NAME,
-                cpclib_imgconverter::built_info::PKG_VERSION,
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
-            ))*/
+            // .after_help(format!(
+            // "{} {} embedded by {} {}",
+            // cpclib_imgconverter::built_info::PKG_NAME,
+            // cpclib_imgconverter::built_info::PKG_VERSION,
+            // built_info::PKG_NAME,
+            // built_info::PKG_VERSION
+            // ))
             .arg(
                 Arg::new("help")
                     .long("help")

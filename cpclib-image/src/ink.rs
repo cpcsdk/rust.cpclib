@@ -620,9 +620,9 @@ impl From<String> for Ink {
             "SEAGREEN" | "SEA_GREEN" => Self::SEAGREEN,
             "BRIGHTCYAN" | "BRIGHT_CYAN" => Self::BRIGHTCYAN,
             "LIME" => Self::LIME,
-            "PASTELGREEN" | "PASTEL_GREEN"  => Self::PASTELGREEN,
-            "PASTELCYAN" | "PASTEL_CYAN"  => Self::PASTELCYAN,
-            "BRIGHTYELLOW" | "BRIGHT_YELLOW"  => Self::BRIGHTYELLOW,
+            "PASTELGREEN" | "PASTEL_GREEN" => Self::PASTELGREEN,
+            "PASTELCYAN" | "PASTEL_CYAN" => Self::PASTELCYAN,
+            "BRIGHTYELLOW" | "BRIGHT_YELLOW" => Self::BRIGHTYELLOW,
             "PASTELYELLOW" | "PASTEL_YELLOW" => Self::PASTELYELLOW,
             "BRIGHTWHITE" | "BRIGHT_WHITE" => Self::BRIGHTWHITE,
 
