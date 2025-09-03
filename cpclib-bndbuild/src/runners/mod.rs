@@ -7,6 +7,7 @@ pub mod disassembler;
 pub mod disc;
 pub mod echo;
 pub mod emulator;
+pub mod fade;
 pub mod fs;
 pub mod hideur;
 pub mod imgconverter;

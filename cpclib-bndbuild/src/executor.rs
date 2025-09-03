@@ -21,6 +21,7 @@ use crate::runners::crunch::CrunchRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
+use crate::runners::fade::FadeRunner;
 use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::mkdir::MkdirRunner;
 use crate::runners::fs::rm::RmRunner;
@@ -132,6 +133,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
         InnerTask::Echo(_) => EchoRunner::default().run(task.args(), observer),
         InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),
+        InnerTask::Fade(_) => FadeRunner::<E>::default().run(task.args(), observer),
         InnerTask::Hideur(_) => HideurRunner::default().run(task.args(), observer),
         InnerTask::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
         InnerTask::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),

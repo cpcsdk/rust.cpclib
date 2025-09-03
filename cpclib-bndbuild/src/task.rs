@@ -38,6 +38,7 @@ use crate::execute;
 use crate::runners::assembler::Assembler;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
+use crate::runners::fade::FADE_CMD;
 use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::{SongConverter, Tracker};
 
@@ -53,6 +54,7 @@ pub enum InnerTask {
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
+    Fade(StandardTaskArguments),
     #[cfg(feature = "fap")]
     Fap(StandardTaskArguments),
     Grafx2(StandardTaskArguments),
@@ -191,6 +193,7 @@ pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 #[cfg(feature = "fap")]
 pub const FAP_CMDS: &[&str] = &[FAP_CMD];
+pub const FADE_CMDS: &[&str] = &[FADE_CMD];
 pub const GRAFX2_CMDS: &[&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
@@ -224,6 +227,7 @@ impl Display for InnerTask {
             Self::Echo(s) => (ECHO_CMDS[0], s),
             Self::Emulator(e, s) => (e.get_command(), s),
             Self::Extern(s) => (EXTERN_CMDS[0], s),
+            Self::Fade(s) => (FADE_CMDS[0], s),
             #[cfg(feature = "fap")]
             Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Grafx2(s) => (GRAFX2_CMDS[0], s),
@@ -274,6 +278,7 @@ is_some_cmd!(
     capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
     disark, disc,
     echo, emuctrl, r#extern,
+    fade,
     grafx2,
     hideur,hspc,
     img2cpc, impdisc,
@@ -435,6 +440,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_grafx2_cmd(code) {
                     Ok(InnerTask::Grafx2(std))
+                }
+                else if is_fade_cmd(code) {
+                    Ok(InnerTask::Fade(std))
                 }
                 else if is_fap_cmd(code) {
                     #[cfg(feature = "fap")]
@@ -599,6 +607,7 @@ impl InnerTask {
             | InnerTask::ImpDsk(t)
             | InnerTask::Echo(t)
             | InnerTask::Extern(t)
+            | InnerTask::Fade(t)
             | InnerTask::Grafx2(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
@@ -629,6 +638,7 @@ impl InnerTask {
             | InnerTask::Emulator(_, t)
             | InnerTask::Extern(t)
             | InnerTask::Grafx2(t)
+            | InnerTask::Fade(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
             | InnerTask::ImgConverter(t)
@@ -675,6 +685,7 @@ impl InnerTask {
             InnerTask::Grafx2(_) => true,
             #[cfg(feature = "fap")]
             InnerTask::Fap(..) => false,
+            InnerTask::Fade(_) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,
             InnerTask::ImgConverter(_) => false,
