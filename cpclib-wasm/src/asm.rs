@@ -106,7 +106,7 @@ pub fn asm_assemble_snapshot(
     console::log_1(&"assemble_snapshot".into());
 
     asm_parse_source(code, conf)
-        .inspect_err(|e| {
+        .inspect_err(|_e| {
             console::log_1(&"Parse NOK".into());
         })
         .and_then(|JsAsmListing { listing }| {

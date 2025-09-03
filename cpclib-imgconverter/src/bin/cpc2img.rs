@@ -1,10 +1,10 @@
 use cpclib::common::clap::{self, Arg, ArgAction, Command, value_parser};
 use cpclib::disc::amsdos::AmsdosError;
 use cpclib::image::image::{ColorMatrix, Mode};
-use cpclib_imgconverter::{self, get_requested_palette};
+use cpclib_imgconverter::{self, get_requested_palette, specify_palette};
 
 fn main() -> Result<(), AmsdosError> {
-    let cmd = cpclib_imgconverter::specify_palette!(
+    let cmd = specify_palette!(
         clap::Command::new("cpc2png")
             .about("Generate PNG from CPC files")
             .subcommand_required(true)
