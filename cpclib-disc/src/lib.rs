@@ -288,12 +288,13 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                 });
             }
             else {
+                // filename do not contain user
                 let file = file.unwrap();
                 if sub.get_flag("noheader") {
-                    std::fs::write(filename, file.content())?;
+                    std::fs::write(ams_filename.filename(), file.content())?;
                 }
                 else {
-                    std::fs::write(filename, file.header_and_content())?;
+                    std::fs::write(ams_filename.filename(), file.header_and_content())?;
                 }
             }
         }
@@ -317,7 +318,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                     AmsdosFile::open_valid_ascii(fname).expect("Error when reading the ascii file");
                 disc.add_ascii_file(
                     &ams_file,
-                    dbg!(&ams_filename),
+                    &ams_filename,
                     head,
                     is_system,
                     is_read_only,

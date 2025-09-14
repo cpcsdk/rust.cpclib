@@ -222,7 +222,11 @@ impl AmsdosFileName {
     pub fn is_valid(&self) -> bool {
         self.name().bytes().all(Self::is_valid_char)
             && self.extension().bytes().all(Self::is_valid_char)
-            && self.user() <= 16
+            /*&& self.user() <= 16*/ // some demos user 128
+    }
+
+    pub fn is_strictly_valid(&self) -> bool {
+        self.is_valid() && self.user() <= 16
     }
 
     pub fn is_valid_char(char: u8) -> bool {
@@ -341,13 +345,14 @@ impl TryFrom<&str> for AmsdosFileName {
     fn try_from(content: &str) -> Result<Self, Self::Error> {
         let (user, rest) = match content.find(':') {
             None => (0, content),
-            Some(1) => {
+            Some(pos) => {
                 (
-                    u8::from_str_radix(&content[..1], 10).unwrap_or_default(),
-                    &content[2..]
+                    u8::from_str_radix(&content[..pos], 10)
+                        .map_err(|e| AmsdosError::WrongFileName { msg: format!("Error when decoding user value {e}.") })
+                        ?,
+                    &content[(pos+1)..]
                 )
-            },
-            _ => unreachable!()
+            }
         };
 
         let (filename, extension) = match rest.find('.') {
@@ -1410,7 +1415,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     /// Return the file if it exists
     pub fn get_file<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<AmsdosFile> {
         // Collect the entries for the given file
-        let entries = self.entries_for(filename)?;
+        let entries = self.entries_for(filename))?;
 
         //     println!("{:?}", &entries);
 
@@ -1418,6 +1423,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         let content = self.read_entries(&entries);
         let mut file = AmsdosFile::from_buffer(&content);
         file.shrink_content_to_fit_header_size();
+        file.content().len();
 
         Some(file)
     }
