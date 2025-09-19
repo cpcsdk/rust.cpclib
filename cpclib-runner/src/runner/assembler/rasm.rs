@@ -43,7 +43,7 @@ impl GithubInformation for RasmVersion {
     }
 
     fn windows_key(&self) -> Option<&'static str> {
-        Some("rasm_x64.exe")
+        Some("rasm_w64.exe")
     }
 }
 
