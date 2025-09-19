@@ -1485,7 +1485,7 @@ impl ImageConverter {
 
     fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix {
         let img = im::open(input_file)
-            .unwrap_or_else(|_| panic!("Unable to convert {input_file:?} properly."));
+            .unwrap_or_else(|e| panic!("Unable to convert {input_file:?} properly. {e}"));
         let mat = ColorMatrix::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(&mat)
     }

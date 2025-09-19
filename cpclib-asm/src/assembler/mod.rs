@@ -959,7 +959,6 @@ impl Env {
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
     pub(crate) fn start_new_pass(&mut self) -> Result<(), AssemblerError> {
-        dbg!(self.pass());
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
             self.handle_print();
@@ -1971,11 +1970,10 @@ impl Env {
         code_adr: u16,
         output_adr: u16
     ) -> Result<(), AssemblerError> {
-        dbg!(&code_adr, &output_adr);
 
         // TODO Check overlapping region
         let page_info = {
-            let page_info = dbg!(self.page_info_for_logical_address_mut(output_adr as _));
+            let page_info = self.page_info_for_logical_address_mut(output_adr as _) ;
             page_info.logical_outputadr = output_adr as _;
             page_info.logical_codeadr = code_adr as _;
             page_info.fail_next_write_if_zero = false;

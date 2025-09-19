@@ -1415,7 +1415,7 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     /// Return the file if it exists
     pub fn get_file<F: Into<AmsdosFileName>>(&self, filename: F) -> Option<AmsdosFile> {
         // Collect the entries for the given file
-        let entries = self.entries_for(filename))?;
+        let entries = self.entries_for(filename)?;
 
         //     println!("{:?}", &entries);
 
