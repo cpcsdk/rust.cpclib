@@ -3014,7 +3014,7 @@ impl Env {
         {
             return Err(AssemblerError::AssemblingError {
                 msg: format!(
-                    "Cannot SAVE {amsdos_fname} as the address+size ({}) is out of bounds.",
+                    "Cannot SAVE {amsdos_fname} as the address+size (0x{:X}) is out of bounds.",
                     *from + *size
                 )
             });
