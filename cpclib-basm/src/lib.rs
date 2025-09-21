@@ -694,13 +694,6 @@ pub fn build_args_parser() -> clap::Command {
                     )
 
 					.arg(
-						Arg::new("OUTPUT")
-							.help("Filename of the output.")
-							.short('o')
-							.long("output")
-                            .value_hint(ValueHint::FilePath)
-					)
-					.arg(
                         Arg::new("DB_LIST")
                         .help("Write a db list on screen (usefull to get the value of an opcode)")
                         .long("db")
@@ -737,7 +730,16 @@ pub fn build_args_parser() -> clap::Command {
                         .long("sym_kind")
                         .value_parser(["winape", "basm"])
                         .default_value("basm")
-                )
+                    )
+					.arg(
+						Arg::new("OUTPUT")
+							.help("Filename of the output.")
+							.short('o')
+                            .num_args(1)
+							.long("output")
+                            .value_hint(ValueHint::FilePath)
+                            .allow_hyphen_values(true)
+					)
                     .group(
                         ArgGroup::new("ANY_OUTPUT")
                             .args(["DB_LIST", "OUTPUT"])

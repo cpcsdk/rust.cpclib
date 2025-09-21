@@ -494,31 +494,26 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                        .subcommand(
                             Command::new("get")
                                 .about("Retrieve files for the disc in the Amsdos way")
-                                .arg(Arg::new("OUTPUT_FILES")
-                                    .help("The files to retrieve")
-                                    .action(ArgAction::Append)
-                                    .required(true)
-                                )
+
                                 .arg(
                                     Arg::new("noheader")
                                     .long("no-header")
                                     .help("Do not store the header of the file")
                                     .action(ArgAction::SetTrue)
                                 )
+                                .arg(Arg::new("OUTPUT_FILES")
+                                    .help("The files to retrieve")
+                                    .action(ArgAction::Append)
+                                    .allow_hyphen_values(true) // this may be problematic
+                                    .required(true)
+                                )
                             )
                        .subcommand(
                            Command::new("add")
                            .about("Add files in the disc in an Amsdos way")
-                           .arg(
-                               Arg::new("INPUT_FILES")
-                                .help("The files to add. They MUST have a header if they are BINARY or BASIC files. Otherwise, they are considered to be ASCII files.")
-                                .action(ArgAction::Append)
-                                .required(true)
-                                .value_parser(clap::value_parser!(Utf8PathBuf))
-                            )
                             .arg(
                                 Arg::new("ASCII")
-                                    .help("Completly ignore header aspect. If it is present it will be an amsdos file. If it is absent, it will be an ascii file.")
+                                    .help("Completely ignore header aspect. If it is present it will be an amsdos file. If it is absent, it will be an ascii file.")
                                     .action(ArgAction::SetTrue)
                                     .long("ascii")
                                     .short('a')
@@ -545,6 +540,15 @@ pub fn dsk_manager_build_arg_parser() -> Command {
                                 .long("secure")
                         .action(ArgAction::SetTrue)
 
+                            )
+
+                           .arg(
+                               Arg::new("INPUT_FILES")
+                                .help("The files to add. They MUST have a header if they are BINARY or BASIC files. Otherwise, they are considered to be ASCII files.")
+                                .action(ArgAction::Append)
+                                .required(true)
+                                .value_parser(clap::value_parser!(Utf8PathBuf))
+                                .allow_hyphen_values(true) // this may be problematci
                             )
                        )
                        .subcommand(
