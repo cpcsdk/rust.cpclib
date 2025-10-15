@@ -6,7 +6,7 @@ runner = "wasmtime run --dir ."
 
 [target.x86_64-unknown-linux-gnu]
 rustflags = [
-    '-Clink-arg=-fuse-ld=lld',
+#    '-Clink-arg=-fuse-ld=lld',
     '-Zshare-generics=y',
 ]
 linker = '/usr/bin/clang'
