@@ -559,7 +559,6 @@ pub enum DataRate {
 }
 
 #[allow(missing_docs)]
-
 #[allow(missing_docs)]
 impl From<u8> for DataRate {
     fn from(b: u8) -> Self {
@@ -596,7 +595,6 @@ pub enum RecordingMode {
 }
 
 #[allow(missing_docs)]
-
 #[allow(missing_docs)]
 impl From<u8> for RecordingMode {
     fn from(b: u8) -> Self {

@@ -222,7 +222,7 @@ impl AmsdosFileName {
     pub fn is_valid(&self) -> bool {
         self.name().bytes().all(Self::is_valid_char)
             && self.extension().bytes().all(Self::is_valid_char)
-            /*&& self.user() <= 16*/ // some demos user 128
+        // && self.user() <= 16 // some demos user 128
     }
 
     pub fn is_strictly_valid(&self) -> bool {
@@ -347,12 +347,14 @@ impl TryFrom<&str> for AmsdosFileName {
             None => (0, content),
             Some(pos) => {
                 (
-                    u8::from_str_radix(&content[..pos], 10)
-                        .map_err(|e| AmsdosError::WrongFileName { msg: format!("Error when decoding user value {e}.") })
-                        ?,
-                    &content[(pos+1)..]
+                    u8::from_str_radix(&content[..pos], 10).map_err(|e| {
+                        AmsdosError::WrongFileName {
+                            msg: format!("Error when decoding user value {e}.")
+                        }
+                    })?,
+                    &content[(pos + 1)..]
                 )
-            }
+            },
         };
 
         let (filename, extension) = match rest.find('.') {

@@ -1063,7 +1063,6 @@ impl Env {
             }
         }
 
-
         let BASM_VERSION = built_info::PKG_VERSION.to_owned();
         let BASM = true;
         let BASM_FEATURE_HFE = cfg!(feature = "hfe");
@@ -1072,10 +1071,20 @@ impl Env {
             self.add_symbol_to_symbol_table("BASM_VERSION", BASM_VERSION, None);
             self.add_symbol_to_symbol_table("BASM", BASM, None);
             self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", BASM_FEATURE_HFE, None);
-        } else {
-            self.symbols_mut().update_symbol_to_value("BASM_VERSION", ValueAndSource::new(BASM_VERSION, Option::<SourceLocation>::None));
-            self.symbols_mut().update_symbol_to_value("BASM", ValueAndSource::new(BASM, Option::<SourceLocation>::None));
-            self.symbols_mut().update_symbol_to_value("BASM_FEATURE_HFE", ValueAndSource::new(BASM_FEATURE_HFE, Option::<SourceLocation>::None));
+        }
+        else {
+            self.symbols_mut().update_symbol_to_value(
+                "BASM_VERSION",
+                ValueAndSource::new(BASM_VERSION, Option::<SourceLocation>::None)
+            );
+            self.symbols_mut().update_symbol_to_value(
+                "BASM",
+                ValueAndSource::new(BASM, Option::<SourceLocation>::None)
+            );
+            self.symbols_mut().update_symbol_to_value(
+                "BASM_FEATURE_HFE",
+                ValueAndSource::new(BASM_FEATURE_HFE, Option::<SourceLocation>::None)
+            );
         }
 
         Ok(())
@@ -1975,10 +1984,9 @@ impl Env {
         code_adr: u16,
         output_adr: u16
     ) -> Result<(), AssemblerError> {
-
         // TODO Check overlapping region
         let page_info = {
-            let page_info = self.page_info_for_logical_address_mut(output_adr as _) ;
+            let page_info = self.page_info_for_logical_address_mut(output_adr as _);
             page_info.logical_outputadr = output_adr as _;
             page_info.logical_codeadr = code_adr as _;
             page_info.fail_next_write_if_zero = false;

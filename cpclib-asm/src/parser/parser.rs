@@ -5155,8 +5155,7 @@ pub fn parse_indexregister_with_index(
 ) -> ModalResult<LocatedDataAccess, Z80ParserError> {
     let start_checkpoint = input.checkpoint();
     let start_eof_offset = input.eof_offset();
-    let (open, _, reg) =
-        (alt((b'(', b'[')), my_space0, parse_indexregister16).parse_next(input)?;
+    let (open, _, reg) = (alt((b'(', b'[')), my_space0, parse_indexregister16).parse_next(input)?;
 
     let op = opt(preceded(
         my_space0,

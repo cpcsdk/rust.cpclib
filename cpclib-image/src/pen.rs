@@ -9,14 +9,29 @@ use crate::image::Mode;
 /// Number of pens, including the border
 const NB_PENS: u8 = 16 + 1;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, Hash, PartialEq, PartialOrd, Ord,
+)]
 #[repr(u8)]
 pub enum Pen {
     #[default]
-    Pen0=0, Pen1, Pen2, Pen3, Pen4,
-    Pen5, Pen6, Pen7, Pen8, Pen9,
-    Pen10, Pen11, Pen12, Pen13, Pen14,
-    Pen15, Border
+    Pen0 = 0,
+    Pen1,
+    Pen2,
+    Pen3,
+    Pen4,
+    Pen5,
+    Pen6,
+    Pen7,
+    Pen8,
+    Pen9,
+    Pen10,
+    Pen11,
+    Pen12,
+    Pen13,
+    Pen14,
+    Pen15,
+    Border
 }
 
 // Constructor of Pen from an integer
@@ -46,31 +61,44 @@ macro_rules! into_integer {
                 fn into(self) -> $ty {
                     self.number() as _
                 }
-            
+
             }
         )+
     };
 }
 
-into_integer!{u8, i8, u16, i16, u32, i32, u64, i64, usize}
-
+into_integer! {u8, i8, u16, i16, u32, i32, u64, i64, usize}
 
 #[allow(missing_docs)]
 impl Pen {
     pub const NB_PENS: u8 = NB_PENS;
     /// Available pens
     pub const PENS: [Pen; NB_PENS as usize] = [
-        Self::Pen0, Self::Pen1, Self::Pen2, Self::Pen3, Self::Pen4,
-        Self::Pen5, Self::Pen6, Self::Pen7, Self::Pen8, Self::Pen9,
-        Self::Pen10, Self::Pen11, Self::Pen12, Self::Pen13, Self::Pen14,
-        Self::Pen15, Self::Border
-    ]; 
+        Self::Pen0,
+        Self::Pen1,
+        Self::Pen2,
+        Self::Pen3,
+        Self::Pen4,
+        Self::Pen5,
+        Self::Pen6,
+        Self::Pen7,
+        Self::Pen8,
+        Self::Pen9,
+        Self::Pen10,
+        Self::Pen11,
+        Self::Pen12,
+        Self::Pen13,
+        Self::Pen14,
+        Self::Pen15,
+        Self::Border
+    ];
 
     pub fn border() -> Self {
         Self::Border
     }
 
-    pub fn pen<T: Integer> (v: T) -> Self where i32: From<T> {
+    pub fn pen<T: Integer>(v: T) -> Self
+    where i32: From<T> {
         let mut p = Pen::from(v);
         p.limit(Mode::Zero); // ensure border is not set
         p
@@ -93,51 +121,57 @@ impl Pen {
         .into();
     }
 
-    pub fn wrapping_add_border_included<P: Into<i8>> (&self, delta: P) -> Self {
+    pub fn wrapping_add_border_included<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_wrapping_add(delta.into(), 17)
     }
-    pub fn wrapping_add_border_excluded<P: Into<i8>> (&self, delta: P) -> Self {
+
+    pub fn wrapping_add_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_wrapping_add(delta.into(), 17)
     }
-    pub fn saturating_add_border_included<P: Into<i8>> (&self, delta: P) -> Self {
+
+    pub fn saturating_add_border_included<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_saturating_add(delta.into(), 16)
     }
-    pub fn saturating_add_border_excluded<P: Into<i8>> (&self, delta: P) -> Self {
+
+    pub fn saturating_add_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_saturating_add(delta.into(), 16)
     }
 
-    pub fn wrapping_sub_border_included<P: Into<i8>> (&self, delta: P) -> Self {
+    pub fn wrapping_sub_border_included<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_wrapping_sub(delta.into(), 17)
     }
-    pub fn wrapping_sub_border_excluded<P: Into<i8>> (&self, delta: P) -> Self {
+
+    pub fn wrapping_sub_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_wrapping_sub(delta.into(), 17)
     }
-    pub fn saturating_sub_border_included<P: Into<i8>> (&self, delta: P) -> Self {
-        self.inner_saturating_sub(delta.into(), 16)
-    }
-    pub fn saturating_sub_border_excluded<P: Into<i8>> (&self, delta: P) -> Self {
+
+    pub fn saturating_sub_border_included<P: Into<i8>>(&self, delta: P) -> Self {
         self.inner_saturating_sub(delta.into(), 16)
     }
 
+    pub fn saturating_sub_border_excluded<P: Into<i8>>(&self, delta: P) -> Self {
+        self.inner_saturating_sub(delta.into(), 16)
+    }
 
-    fn inner_wrapping_add(&self, delta: i8, max: u8 ) -> Self {
-        let value = ((self.number() as i8 + max as i8 + delta) as u8) % max;  
+    fn inner_wrapping_add(&self, delta: i8, max: u8) -> Self {
+        let value = ((self.number() as i8 + max as i8 + delta) as u8) % max;
         value.into()
     }
+
     fn inner_saturating_add(&self, delta: i8, max: u8) -> Self {
-        let value = ((self.number() as i8 + max as i8 + delta) as u8).max(max);  
+        let value = ((self.number() as i8 + max as i8 + delta) as u8).max(max);
         value.into()
     }
 
-    fn inner_wrapping_sub(&self, delta: i8, max: u8 ) -> Self {
-        let value = ((self.number() as i8 + max as i8 - delta) as u8) % max;  
+    fn inner_wrapping_sub(&self, delta: i8, max: u8) -> Self {
+        let value = ((self.number() as i8 + max as i8 - delta) as u8) % max;
         value.into()
     }
+
     fn inner_saturating_sub(&self, delta: i8, max: u8) -> Self {
-        let value = ((self.number() as i8 + max as i8 - delta) as u8).max(max);  
+        let value = ((self.number() as i8 + max as i8 - delta) as u8).max(max);
         value.into()
     }
-
 }
 
 impl<P: Into<i8>> Add<P> for Pen {
@@ -158,18 +192,13 @@ impl<P: Into<i8>> Sub<P> for Pen {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::pen::Pen;
     #[test]
     fn pen_add() {
-
         for i in (0..16) {
-            assert_eq!(
-                Pen::pen(0) + i,
-                Pen::pen(i)
-            );
+            assert_eq!(Pen::pen(0) + i, Pen::pen(i));
         }
     }
 }

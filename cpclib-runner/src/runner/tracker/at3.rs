@@ -45,7 +45,6 @@ impl StaticInformation for At3Version {
                 })
             },
 
-
             At3Version::V3_2_7 => {
                 static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URL.get_or_init(|| {
