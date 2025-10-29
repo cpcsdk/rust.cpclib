@@ -168,7 +168,7 @@ fn main() -> std::io::Result<()> {
                 "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
             );
             let mut dsk = ExtendedDsk::open(catalog_fname).expect("unable to read the dsk file");
-            let manager = AmsdosManagerNonMut::new_from_disc(&mut dsk, Head::A);
+            let manager = AmsdosManagerNonMut::new_from_disc(&dsk, Head::A);
             manager.catalog()
         }
         else {

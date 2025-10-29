@@ -16,7 +16,7 @@ where D: Deserializer<'de> {
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(s).or(Some(vec![])).unwrap();
+            let r = shlex::split(s).unwrap_or(vec![]);
             r.into_iter()
                 .flat_map(|s| expand_glob(s.as_ref()))
                 .map(|s| {

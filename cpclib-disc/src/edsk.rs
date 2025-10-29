@@ -549,7 +549,9 @@ impl TrackInformation {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 #[allow(missing_docs)]
+#[derive(Default)]
 pub enum DataRate {
+    #[default]
     Unknown = 0,
     SingleOrDoubleDensity = 1,
     HighDensity = 2,
@@ -557,11 +559,6 @@ pub enum DataRate {
 }
 
 #[allow(missing_docs)]
-impl Default for DataRate {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 #[allow(missing_docs)]
 impl From<u8> for DataRate {
@@ -590,18 +587,15 @@ impl From<DataRate> for u8 {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(missing_docs)]
+#[derive(Default)]
 pub enum RecordingMode {
+    #[default]
     Unknown = 0,
     FM = 1,
     MFM = 2
 }
 
 #[allow(missing_docs)]
-impl Default for RecordingMode {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 #[allow(missing_docs)]
 impl From<u8> for RecordingMode {

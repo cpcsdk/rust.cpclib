@@ -220,12 +220,12 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
         else if let Some(fname) = sub.get_one::<String>("EXPORT") {
             eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
-            let manager = AmsdosManagerNonMut::new_from_disc(&mut dsk, 0);
+            let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
             let bytes = manager.catalog().as_bytes();
             let mut f = File::create(fname)?;
             f.write_all(&bytes)?;
         } else if sub.contains_id("LIST") {
-            let manager = AmsdosManagerNonMut::new_from_disc(&mut dsk, 0);
+            let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
             // TODO manage files instead of entries

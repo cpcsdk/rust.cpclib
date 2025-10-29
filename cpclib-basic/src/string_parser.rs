@@ -92,7 +92,7 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     ))
     .parse_next(input)?;
 
-    let mut space = ((parse_space0, '=', parse_space0)).parse_next(input)?;
+    let mut space = (parse_space0, '=', parse_space0).parse_next(input)?;
 
     let mut val = match var.0 {
         Kind::Float | Kind::Int => {

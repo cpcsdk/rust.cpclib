@@ -1091,7 +1091,7 @@ where
                                     msg: format!(
                                         "Unable to skip {} bytes in  {}. Only {} bytes  are available",
                                         offset,
-                                        self.token.incbin_fname().to_string(),
+                                        self.token.incbin_fname(),
                                         data.len()
                                     )
                                 });
@@ -1106,7 +1106,7 @@ where
                                     msg: format!(
                                         "Unable to read {} bytes in {}. Only {} bytes are available",
                                         length,
-                                        self.token.incbin_fname().to_string(),
+                                        self.token.incbin_fname(),
                                         data.len()
                                     )
                                 });
