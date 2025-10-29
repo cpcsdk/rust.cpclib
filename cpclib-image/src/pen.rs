@@ -110,6 +110,11 @@ impl Pen {
         *self as u8
     }
 
+    #[deprecated(note="use number() instead")]
+    pub fn into_inner(&self) -> u8 {
+        self.number()
+    }
+
     /// Change the value of the pen in order to not exceed the number of pens available (border excluded) in the
     /// given mode
     pub fn limit(&mut self, mode: Mode) {
