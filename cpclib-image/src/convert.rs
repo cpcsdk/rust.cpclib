@@ -1112,7 +1112,7 @@ pub enum Output {
     CPCMemoryStandard([u8; 0x4000], Palette),
 
     /// Result using two banks
-    CPCMemoryOverscan([u8; 0x4000], [u8; 0x4000], Palette),
+    CPCMemoryOverscan([u8; 0x4000], Option<[u8; 0x4000]>, Palette),
 
     /// Result using several chunks of memory
     CPCSplittingMemory(Vec<Output>),
@@ -1194,7 +1194,7 @@ impl Output {
     /// Returns the bank that contains the second half of the screen
     pub fn overscan_screen2(&self) -> Option<&[u8; 0x4000]> {
         match self {
-            Self::CPCMemoryOverscan(_, s1, _) => Some(s1),
+            Self::CPCMemoryOverscan(_, Some(s1), _) => Some(s1),
             _ => None
         }
     }
@@ -1758,7 +1758,7 @@ impl ImageConverter {
         if is_overscan {
             Ok(Output::CPCMemoryOverscan(
                 used_pages[0],
-                used_pages[1],
+                used_pages.get(1).cloned(),
                 palette
             ))
         }

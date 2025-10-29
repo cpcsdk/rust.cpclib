@@ -1086,11 +1086,12 @@ where
 
                         if let Some(offset) = offset {
                             let offset = env.resolve_expr_must_never_fail(offset)?.int()? as usize;
-                            if offset >= data.len() {
+                            if offset > data.len() {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
-                                        "Unable to read {:?}. Only {} are available",
-                                        self.token.incbin_fname(),
+                                        "Unable to skip {} bytes in  {}. Only {} bytes  are available",
+                                        offset,
+                                        self.token.incbin_fname().to_string(),
                                         data.len()
                                     )
                                 });
@@ -1103,10 +1104,10 @@ where
                             if data.len() < length {
                                 return Err(AssemblerError::AssemblingError {
                                     msg: format!(
-                                        "Unable to read {:?}. Only {} bytes are available ({} expected)",
-                                        self.token.incbin_fname(),
-                                        data.len(),
-                                        length
+                                        "Unable to read {} bytes in {}. Only {} bytes are available",
+                                        length,
+                                        self.token.incbin_fname().to_string(),
+                                        data.len()
                                     )
                                 });
                             }

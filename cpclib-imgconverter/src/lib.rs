@@ -823,7 +823,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
 
                 let mut buffer = File::create(fname)?;
                 buffer.write_all(scr1)?;
-                buffer.write_all(scr2)?;
+                if let Some(scr2) = scr2 {
+                    buffer.write_all(scr2)?;
+                }
                 do_export_palette!(sub_scr, palette);
             },
 
@@ -926,8 +928,11 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                 Output::CPCMemoryOverscan(memory1, memory2, _) => {
                     sna.add_data(memory1.as_ref(), 0x8000)
                         .expect("Unable to add the image in the snapshot");
-                    sna.add_data(memory2.as_ref(), 0xC000)
-                        .expect("Unable to add the image in the snapshot");
+
+                    if let Some(memory2) = memory2 {
+                        sna.add_data(memory2.as_ref(), 0xC000)
+                            .expect("Unable to add the image in the snapshot");
+                    }
                 },
                 _ => unreachable!()
             };
