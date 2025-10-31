@@ -64,6 +64,7 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
     let mut instruction = alt((
         alt((parse_rem,)).map(|i| vec![i]),
         parse_call,
+        parse_run,
         parse_input,
         parse_print,
         parse_assign
@@ -181,7 +182,10 @@ pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         .parse_next(input)
 }
 
-pub fn parse_quoted_string<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+pub fn parse_quoted_string<'src>(closed: bool) -> impl Fn(&mut &'src str) -> BasicSeveralTokensResult<'src> {
+
+
+return move |input: &mut &'src str|  {
     let start = parse_quote.parse_next(input)?;
     let mut content = repeat(0.., alt((parse_char, parse_space)))
         .fold(Vec::new, |mut acc, new| {
@@ -189,14 +193,26 @@ pub fn parse_quoted_string<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
             acc
         })
         .parse_next(input)?;
-    let stop =
-        cut_err(parse_quote.context(StrContext::Label("Unclosed string"))).parse_next(input)?;
 
     let mut res = vec![start];
     res.append(&mut content);
-    res.push(stop);
+
+    if closed {
+        let stop =
+        cut_err(parse_quote.context(StrContext::Label("Unclosed string"))).parse_next(input)?;
+
+
+        res.push(stop);
+    }
+    else {
+        let stop = opt(parse_quote).parse_next(input)?;
+        if let Some(stop) = stop {
+            res.push(stop)
+        }
+    }
 
     Ok(res)
+}
 }
 
 /// Parse a comma optionally surrounded by space
@@ -244,7 +260,7 @@ pub fn parse_print_arg_using<'src>(input: &mut &'src str) -> BasicSeveralTokensR
         parse_space0,
         cut_err(
             alt((
-                parse_quoted_string, // TODO add filtering because this string is special
+                parse_quoted_string(true), // TODO add filtering because this string is special
                 parse_string_variable
             ))
             .context(StrContext::Label("FORMAT expected"))
@@ -323,7 +339,7 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
     let (prefix, mut expr) = (
         opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
         alt((
-            parse_quoted_string,
+            parse_quoted_string(true),
             parse_variable,
             parse_basic_value.map(|v| vec![v]),
             parse_numeric_expression(NumericExpressionConstraint::None)
@@ -415,6 +431,23 @@ pub fn parse_call<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     Ok(res)
 }
 
+pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut fname) = (
+        Caseless("RUN"),
+        parse_space0,
+        cut_err(
+            parse_quoted_string(false)
+                .context(StrContext::Label("Filename expected"))
+        )
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Run)];
+    res.append(&mut space);
+    res.append(&mut fname);
+    Ok(res)
+}
+
 pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (_, mut space_a, canal, mut space_b, sep, mut space_c, string, args): (
         _,
@@ -432,7 +465,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         parse_space0,
         opt(';'),
         parse_space0,
-        opt(parse_quoted_string),
+        opt(parse_quoted_string(true)),
         repeat(1.., (parse_space0, ';', parse_space0, parse_variable))
     )
         .parse_next(input)?;
@@ -543,7 +576,7 @@ pub fn parse_basic_value<'src>(input: &mut &'src str) -> BasicOneTokenResult<'sr
 
 pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     alt((
-        parse_quoted_string,
+        parse_quoted_string(true),
         parse_chr_dollar,
         parse_lower_dollar,
         parse_upper_dollar,
@@ -1096,6 +1129,7 @@ mod test {
 
     #[test]
     fn test_lines() {
+        check_line_tokenisation("10 RUN\"BLIGHT.001\n");
         check_line_tokenisation("10 call &0\n");
         check_line_tokenisation("10 call &0  \n");
         check_line_tokenisation("10 call &0: call &0\n");
