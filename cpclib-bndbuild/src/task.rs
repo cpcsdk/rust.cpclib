@@ -18,7 +18,7 @@ use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
 #[cfg(feature = "fap")]
-use cpclib_runner::runner::fap::FAP_CMD;
+use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
@@ -36,6 +36,7 @@ use serde::{Deserialize, Deserializer};
 use crate::event::BndBuilderObserver;
 use crate::execute;
 use crate::runners::assembler::Assembler;
+use crate::runners::ay::YmCruncher;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
@@ -45,6 +46,7 @@ use crate::runners::tracker::{SongConverter, Tracker};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InnerTask {
     Assembler(Assembler, StandardTaskArguments),
+    YmCruncher(YmCruncher, StandardTaskArguments),
     BndBuild(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
@@ -55,8 +57,6 @@ pub enum InnerTask {
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
     Fade(StandardTaskArguments),
-    #[cfg(feature = "fap")]
-    Fap(StandardTaskArguments),
     Grafx2(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     HspCompiler(StandardTaskArguments),
@@ -193,6 +193,7 @@ pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 #[cfg(feature = "fap")]
 pub const FAP_CMDS: &[&str] = &[FAP_CMD];
+pub const AYT_CMDS: &[&str] = &[cpclib_runner::runner::ay::ayt::AYT_CMD];
 pub const FADE_CMDS: &[&str] = &[FADE_CMD];
 pub const GRAFX2_CMDS: &[&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
@@ -218,6 +219,7 @@ impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
             Self::Assembler(a, s) => (a.get_command(), s),
+            Self::YmCruncher(t, s) => (t.get_command(), s),
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
@@ -228,8 +230,6 @@ impl Display for InnerTask {
             Self::Emulator(e, s) => (e.get_command(), s),
             Self::Extern(s) => (EXTERN_CMDS[0], s),
             Self::Fade(s) => (FADE_CMDS[0], s),
-            #[cfg(feature = "fap")]
-            Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Grafx2(s) => (GRAFX2_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
             Self::HspCompiler(s) => (HSPC_CMDS[0], s),
@@ -242,8 +242,6 @@ impl Display for InnerTask {
             Self::SongConverter(t, s) => (t.get_command(), s),
             Self::Tracker(t, s) => (t.get_command(), s),
             Self::Xfer(s) => (XFER_CMDS[0], s),
-            #[cfg(feature = "fap")]
-            Self::Fap(s) => (FAP_CMDS[0], s),
             Self::Snapshot(s) => (SNA_CMDS[0], s)
         };
 
@@ -273,7 +271,7 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, at,
+    ace, amspirit, at, ayt,
     basm, bdasm, bndbuild,
     capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
     disark, disc,
@@ -446,12 +444,15 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_fap_cmd(code) {
                     #[cfg(feature = "fap")]
-                    let res = Ok(InnerTask::Fap(std));
+                    let res = Ok(InnerTask::YmCruncher(YmCruncher::Fap, std));
 
                     #[cfg(not(feature = "fap"))]
                     let res = unreachable!();
 
                     res
+                }
+                else if is_ayt_cmd(code) {
+                    Ok(InnerTask::YmCruncher(YmCruncher::Ayt, std))
                 }
                 else if is_orgams_cmd(code) {
                     Ok(InnerTask::Assembler(Assembler::Orgams, std))
@@ -598,6 +599,7 @@ impl InnerTask {
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
+            | InnerTask::YmCruncher(_, t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
@@ -620,14 +622,13 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t) => t,
-            #[cfg(feature = "fap")]
-            InnerTask::Fap(t) => t
         }
     }
 
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
+            | InnerTask::YmCruncher(_, t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
@@ -651,8 +652,6 @@ impl InnerTask {
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
             | InnerTask::Xfer(t) => t,
-            #[cfg(feature = "fap")]
-            InnerTask::Fap(t) => t
         }
     }
 
@@ -683,8 +682,7 @@ impl InnerTask {
             InnerTask::Emulator(..) => true,
             InnerTask::Extern(_) => false,
             InnerTask::Grafx2(_) => true,
-            #[cfg(feature = "fap")]
-            InnerTask::Fap(..) => false,
+            InnerTask::YmCruncher(_, ..) => false,
             InnerTask::Fade(_) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,

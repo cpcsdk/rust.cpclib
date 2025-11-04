@@ -5,9 +5,10 @@ use cpclib_runner::delegated::{
 };
 use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::ay::ayt::AytVersion;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 #[cfg(feature = "fap")]
-use cpclib_runner::runner::fap::FAPVersion;
+use cpclib_runner::runner::ay::fap::FAPVersion;
 use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
@@ -16,6 +17,8 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
+#[cfg(feature = "fap")]
+use crate::runners::ay::YmCruncher;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::crunch::CrunchRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
@@ -54,6 +57,13 @@ impl InnerTask {
                 }
             },
 
+            InnerTask::YmCruncher(c,_ ) => {
+                match c {
+                    YmCruncher::Ayt => Some(AytVersion::default().configuration()),
+                    #[cfg(feature = "fap")]
+                    YmCruncher::Fap => Some(FAPVersion::default().configuration()),
+                }
+            }
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             InnerTask::Disassembler(d, _) => {
                 match d {
@@ -64,8 +74,7 @@ impl InnerTask {
 
             InnerTask::Grafx2(_) => Some(Grafx2Version::default().configuration()),
 
-            #[cfg(feature = "fap")]
-            InnerTask::Fap(_) => Some(FAPVersion::default().configuration()),
+
 
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
@@ -107,6 +116,26 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
+        InnerTask::YmCruncher(c, _) => {
+            match c {
+                YmCruncher::Ayt => {
+                    DelegatedRunner::<E>::new(
+                        task.configuration::<E>().unwrap(),
+                        c.get_command().to_owned()
+                    )
+                    .run(task.args(), observer)
+                },
+                #[cfg(feature = "fap")]
+                YmCruncher::Fap => {
+                    DelegatedRunner::<E>::new(
+                        task.configuration::<E>().unwrap(),
+                        c.get_command().to_owned()
+                    )
+                    .run(task.args(), observer)
+                },
+            }
+        }, 
+
         InnerTask::Crunch(_) => CrunchRunner::default().run(task.args(), observer),
         InnerTask::Disassembler(d, _) => {
             match d {
@@ -161,14 +190,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
-        #[cfg(feature = "fap")]
-        InnerTask::Fap(_) => {
-            DelegatedRunner::<E>::new(
-                task.configuration().unwrap(),
-                FAPVersion::default().get_command().to_owned()
-            )
-            .run(task.args(), observer)
-        },
+
         InnerTask::Grafx2(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),

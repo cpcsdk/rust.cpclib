@@ -207,7 +207,8 @@ impl BndBuilder {
         // Automatic feeding of FAP related environement variables
         #[cfg(feature = "fap")]
         {
-            use cpclib_runner::runner::fap::FAPVersion;
+            use cpclib_runner::runner::ay::fap::FAPVersion;
+
 
             let fap = FAPVersion::default(); // TODO allow to handle various versions
             env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str());

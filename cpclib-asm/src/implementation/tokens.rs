@@ -270,7 +270,7 @@ impl TokenExt for Token {
                                 match arg2 {
                                     Some(DataAccess::Expression(_)) => 3,
                                     Some(DataAccess::MemoryRegister16(Register16::Hl)) => 1,
-                                    Some(DataAccess::IndexRegister16(_)) => 2,
+                                    Some(DataAccess::MemoryIndexRegister16(_)) => 2,
                                     _ => {
                                         panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                                     }
@@ -381,7 +381,19 @@ impl TokenExt for Token {
 
                     &Mnemonic::Ldi | &Mnemonic::Ldd => 5,
 
-                    &Mnemonic::Nop | &Mnemonic::Exx | &Mnemonic::Di | &Mnemonic::ExHlDe => 1,
+                    &Mnemonic::Exx | &Mnemonic::Di | &Mnemonic::ExHlDe => 1,
+
+                    &Mnemonic::Nop => {
+                        if let Some(arg) = self.mnemonic_arg1() {
+                            arg.get_expression()
+                                .unwrap()
+                                .eval()?
+                                .int()? as _
+                        } else {
+                            1
+                        }
+                    },
+
                     &Mnemonic::Nop2 => 2,
 
                     &Mnemonic::Out => {
