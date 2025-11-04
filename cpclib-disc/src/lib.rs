@@ -141,7 +141,7 @@ impl From<AmsdosError> for DskManagerError {
 }
 
 #[inline]
-pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> AnyDisc {
+pub fn new_disc<P: AsRef<Utf8Path>>(_path: Option<P>) -> AnyDisc {
     AnyDisc::default()
 }
 

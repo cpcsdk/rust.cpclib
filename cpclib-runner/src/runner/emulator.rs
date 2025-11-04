@@ -80,7 +80,7 @@ impl Emulator {
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
-            Emulator::CpcEmuPower(cpc_emu_power_version) => CPCEMUPOWER_CMD
+            Emulator::CpcEmuPower(_cpc_emu_power_version) => CPCEMUPOWER_CMD
         }
     }
 
@@ -93,7 +93,7 @@ impl Emulator {
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
             Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower"),
-            Emulator::CapriceForever(caprice_forever_version) => {
+            Emulator::CapriceForever(_caprice_forever_version) => {
                 window_name.starts_with("CaPriCe Forever")
             },
         }
@@ -125,7 +125,7 @@ impl Emulator {
     /// Handle filename to make them work properly using wine
     pub fn wine_compatible_fname(&self, p: &Utf8Path) -> Result<Utf8PathBuf, String> {
         let abspath = absolute(p).map_err(|e| e.to_string())?;
-        let abspath = Utf8PathBuf::from_path_buf(abspath).map_err(|e| "File error".to_owned())?;
+        let abspath = Utf8PathBuf::from_path_buf(abspath).map_err(|_e| "File error".to_owned())?;
         if cfg!(target_os = "windows") {
             Ok(abspath)
         }

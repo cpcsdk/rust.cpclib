@@ -83,7 +83,7 @@ impl<'r> Graph<'r> {
                             match watch {
                                 WatchState::NoWatch => false,
                                 WatchState::WatchFirstRound => false,
-                                WatchState::WatchNextRounds { last_build } => false
+                                WatchState::WatchNextRounds { last_build: _ } => false
                             }
                         }
                         else {

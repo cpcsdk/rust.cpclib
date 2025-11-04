@@ -156,7 +156,7 @@ impl FileAndSupport {
     pub fn filename(&self) -> Utf8PathBuf {
         match &self.support {
             StorageSupport::Disc(p) => Utf8PathBuf::from(format!("{}#{}", p, self.file.1)),
-            StorageSupport::Tape(utf8_path_buf) => todo!(),
+            StorageSupport::Tape(_utf8_path_buf) => todo!(),
             StorageSupport::Host => Utf8PathBuf::from(format!("{}", &self.file.1))
         }
     }
@@ -273,7 +273,7 @@ impl FileAndSupport {
                 disc.save(disc_filename)
                     .map_err(|e| format!("Error while saving {e}"))?;
             },
-            StorageSupport::Tape(utf8_path_buf) => unimplemented!(),
+            StorageSupport::Tape(_utf8_path_buf) => unimplemented!(),
             StorageSupport::Host => {
                 // handle case with and without header
                 let (fname, content) = match &built_file {

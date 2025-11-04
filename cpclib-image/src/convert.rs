@@ -1166,7 +1166,7 @@ impl Debug for Output {
                     tile_height
                 )
             },
-            Output::SpriteAndMask { sprite, mask } => writeln!(fmt, "SpriteAndMask"),
+            Output::SpriteAndMask { sprite: _, mask: _ } => writeln!(fmt, "SpriteAndMask"),
             Output::Sprite(sprite_output) => writeln!(fmt, "{sprite_output:?}")
         }
     }

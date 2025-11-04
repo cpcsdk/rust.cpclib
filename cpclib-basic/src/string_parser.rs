@@ -182,37 +182,36 @@ pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         .parse_next(input)
 }
 
-pub fn parse_quoted_string<'src>(closed: bool) -> impl Fn(&mut &'src str) -> BasicSeveralTokensResult<'src> {
+pub fn parse_quoted_string<'src>(
+    closed: bool
+) -> impl Fn(&mut &'src str) -> BasicSeveralTokensResult<'src> {
+    move |input: &mut &'src str| {
+        let start = parse_quote.parse_next(input)?;
+        let mut content = repeat(0.., alt((parse_char, parse_space)))
+            .fold(Vec::new, |mut acc, new| {
+                acc.push(new);
+                acc
+            })
+            .parse_next(input)?;
 
+        let mut res = vec![start];
+        res.append(&mut content);
 
-return move |input: &mut &'src str|  {
-    let start = parse_quote.parse_next(input)?;
-    let mut content = repeat(0.., alt((parse_char, parse_space)))
-        .fold(Vec::new, |mut acc, new| {
-            acc.push(new);
-            acc
-        })
-        .parse_next(input)?;
+        if closed {
+            let stop = cut_err(parse_quote.context(StrContext::Label("Unclosed string")))
+                .parse_next(input)?;
 
-    let mut res = vec![start];
-    res.append(&mut content);
-
-    if closed {
-        let stop =
-        cut_err(parse_quote.context(StrContext::Label("Unclosed string"))).parse_next(input)?;
-
-
-        res.push(stop);
-    }
-    else {
-        let stop = opt(parse_quote).parse_next(input)?;
-        if let Some(stop) = stop {
-            res.push(stop)
+            res.push(stop);
         }
-    }
+        else {
+            let stop = opt(parse_quote).parse_next(input)?;
+            if let Some(stop) = stop {
+                res.push(stop)
+            }
+        }
 
-    Ok(res)
-}
+        Ok(res)
+    }
 }
 
 /// Parse a comma optionally surrounded by space
@@ -435,10 +434,7 @@ pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     let (_, mut space, mut fname) = (
         Caseless("RUN"),
         parse_space0,
-        cut_err(
-            parse_quoted_string(false)
-                .context(StrContext::Label("Filename expected"))
-        )
+        cut_err(parse_quoted_string(false).context(StrContext::Label("Filename expected")))
     )
         .parse_next(input)?;
 

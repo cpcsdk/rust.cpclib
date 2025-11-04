@@ -6,9 +6,9 @@ use cpclib_runner::delegated::{
 use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::ay::ayt::AytVersion;
-use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 #[cfg(feature = "fap")]
 use cpclib_runner::runner::ay::fap::FAPVersion;
+use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
@@ -57,13 +57,13 @@ impl InnerTask {
                 }
             },
 
-            InnerTask::YmCruncher(c,_ ) => {
+            InnerTask::YmCruncher(c, _) => {
                 match c {
                     YmCruncher::Ayt => Some(AytVersion::default().configuration()),
                     #[cfg(feature = "fap")]
-                    YmCruncher::Fap => Some(FAPVersion::default().configuration()),
+                    YmCruncher::Fap => Some(FAPVersion::default().configuration())
                 }
-            }
+            },
             InnerTask::Convgeneric(_) => Some(ConvGenericVersion::default().configuration()),
             InnerTask::Disassembler(d, _) => {
                 match d {
@@ -73,8 +73,6 @@ impl InnerTask {
             },
 
             InnerTask::Grafx2(_) => Some(Grafx2Version::default().configuration()),
-
-
 
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
@@ -134,7 +132,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                     .run(task.args(), observer)
                 },
             }
-        }, 
+        },
 
         InnerTask::Crunch(_) => CrunchRunner::default().run(task.args(), observer),
         InnerTask::Disassembler(d, _) => {
@@ -198,7 +196,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             )
             .run(task.args(), observer)
         },
-        InnerTask::Convgeneric(standard_task_arguments) => {
+        InnerTask::Convgeneric(_standard_task_arguments) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
                 ConvGenericVersion::default().get_command().to_owned()

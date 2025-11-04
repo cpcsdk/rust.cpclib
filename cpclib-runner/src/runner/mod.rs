@@ -2,10 +2,10 @@ pub mod arguments;
 pub mod runner;
 
 pub mod assembler;
+pub mod ay;
 pub mod convgeneric;
 pub mod disassembler;
 pub mod emulator;
-pub mod ay;
 pub mod grafx2;
 
 pub mod hspcompiler;

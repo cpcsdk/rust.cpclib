@@ -234,7 +234,7 @@ impl Rules {
                     all_deps.insert(dep.clone());
 
                     if let Some(rule_id) = rule_id.as_mut() {
-                        let e = digraph.edge(&dep, rule_id.clone());
+                        let _e = digraph.edge(&dep, rule_id.clone());
                     }
                 }
 

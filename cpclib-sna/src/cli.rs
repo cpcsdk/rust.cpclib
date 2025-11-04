@@ -112,7 +112,7 @@ impl Command {
 
             Command::Disassemble(..) => todo!(),
 
-            Command::Symbols(symbol) => {
+            Command::Symbols(_symbol) => {
                 if let Some(v) = sna
                     .get_chunk("SYMB")
                     .map(|chunk| chunk.ace_symbol_chunk().unwrap())
@@ -252,7 +252,7 @@ where
         Caseless(&b"SYMB"[..]),
         Caseless(&b"S"[..])
     )))
-    .map(|v| Command::Symbols(None))
+    .map(|_v| Command::Symbols(None))
     .parse_next(input)
 }
 
@@ -356,7 +356,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
 
                         let range = input.find_line_range(offset);
                         assert_eq!(range.start, 0);
-                        let pos_in_line = offset - range.start;
+                        let _pos_in_line = offset - range.start;
 
                         let line = &input[range];
                         eprintln!("{line}");

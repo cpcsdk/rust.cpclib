@@ -70,7 +70,7 @@ impl<E: EventObserver> Runner for CrunchRunner<E> {
         }
         let matches = matches.unwrap();
 
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         cpclib_crunch::process(matches)
     }

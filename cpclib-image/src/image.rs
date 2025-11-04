@@ -450,7 +450,7 @@ impl ColorMatrix {
         mode: Mode,
         mut hint: LockablePalette
     ) -> Result<Palette, String> {
-        for (idx, &ink) in self.data.iter().flatten().unique().sorted().enumerate() {
+        for &ink in self.data.iter().flatten().unique().sorted() {
             if !hint.contains_ink(ink) {
                 // here the palette does not contain the ink, so we have to add it
                 if hint.is_locked() {

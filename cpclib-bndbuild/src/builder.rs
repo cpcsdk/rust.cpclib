@@ -209,7 +209,6 @@ impl BndBuilder {
         {
             use cpclib_runner::runner::ay::fap::FAPVersion;
 
-
             let fap = FAPVersion::default(); // TODO allow to handle various versions
             env.add_global("FAP_PLAY_PATH", fap.fap_play_path::<()>().as_str());
             env.add_global("FAP_INIT_PATH", fap.fap_init_path::<()>().as_str());
@@ -330,7 +329,7 @@ impl BndBuilder {
         // execute only one task per group but still count the others
         grouped
             .into_iter()
-            .map(|(r, paths)| {
+            .map(|(_r, paths)| {
                 let other_paths = if paths.len() > 1 {
                     Some(&paths[1..])
                 }

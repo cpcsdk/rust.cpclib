@@ -110,7 +110,7 @@ impl Pen {
         *self as u8
     }
 
-    #[deprecated(note="use number() instead")]
+    #[deprecated(note = "use number() instead")]
     pub fn into_inner(&self) -> u8 {
         self.number()
     }

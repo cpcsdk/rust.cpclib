@@ -95,10 +95,10 @@ impl EmuWindow {
     pub fn capture_image(&self) -> EmuScreenShot {
         match self {
             EmuWindow::Xcap(window) => window.capture_image().unwrap(),
-            EmuWindow::Xvfb(display, window) => {
+            EmuWindow::Xvfb(_display, window) => {
                 match window {
                     Some(window) => {
-                        let cmd = std::process::Command::new("xwd")
+                        let _cmd = std::process::Command::new("xwd")
                             .args(["-name", window.title(), "-out", "/tmp/screen.xwd"])
                             .output()
                             .unwrap();
@@ -107,7 +107,7 @@ impl EmuWindow {
                     },
 
                     None => {
-                        let cmd = std::process::Command::new("xwd")
+                        let _cmd = std::process::Command::new("xwd")
                             .args(["-out", "/tmp/screen.xwd"])
                             .output()
                             .unwrap();
@@ -273,7 +273,7 @@ impl WindowEventsManager {
     pub fn alt_key<K: Into<HostKey>>(&mut self, key: K) {
         let key = key.into();
         match self {
-            Self::Enigo(enigo) => {
+            Self::Enigo(_enigo) => {
                 self.enigo_press_with_extra(Key::Alt, key);
             }
         }
@@ -283,7 +283,7 @@ impl WindowEventsManager {
     pub fn ctrl_char<K: Into<HostKey>>(&mut self, c: K) {
         let c = c.into();
         match self {
-            Self::Enigo(enigo) => {
+            Self::Enigo(_enigo) => {
                 self.enigo_press_with_extra(Key::Control, c);
             }
         }
@@ -293,7 +293,7 @@ impl WindowEventsManager {
         let c = c.into();
 
         match self {
-            Self::Enigo(enigo) => {
+            Self::Enigo(_enigo) => {
                 self.enigo_press_with_extra(Key::Shift, c);
             }
         }
@@ -327,7 +327,7 @@ impl WindowEventsManager {
     pub fn type_text<T: Into<HostKeys>>(&mut self, txt: T) {
         let txt = txt.into();
         match self {
-            Self::Enigo(enigo) => {
+            Self::Enigo(_enigo) => {
                 // asking enigo to write the full char does not work at all
                 for k in txt.iter() {
                     self.type_key(*k)
@@ -338,7 +338,7 @@ impl WindowEventsManager {
 
     pub fn type_char(&mut self, c: char) {
         match self {
-            Self::Enigo(enigo) => self.type_key(c)
+            Self::Enigo(_enigo) => self.type_key(c)
         }
     }
 
@@ -513,7 +513,7 @@ impl EmulatorConf {
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
                 },
-                Emulator::CpcEmuPower(cpc_emu_power_version) => {
+                Emulator::CpcEmuPower(_cpc_emu_power_version) => {
                     args.push(format!("--dsk0={}", emu.wine_compatible_fname(drive_a)?))
                 },
                 Emulator::CapriceForever(_) => {
@@ -529,7 +529,7 @@ impl EmulatorConf {
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::CpcEmuPower(cpc_emu_power_version) => {
+                Emulator::CpcEmuPower(_cpc_emu_power_version) => {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
                 },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}"))
@@ -538,21 +538,21 @@ impl EmulatorConf {
 
         if let Some(sna) = &self.snapshot {
             match emu {
-                Emulator::Ace(ace_version) => args.push(sna.to_string()),
-                Emulator::Cpcec(cpcec_version) => args.push(sna.to_string()),
+                Emulator::Ace(_ace_version) => args.push(sna.to_string()),
+                Emulator::Cpcec(_cpcec_version) => args.push(sna.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(sna.to_string()),
-                Emulator::Winape(winape_version) => {
+                Emulator::Winape(_winape_version) => {
                     let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("/SN:{fname}"));
                 },
-                Emulator::Amspirit(v) => {
+                Emulator::Amspirit(_v) => {
                     let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("--file={fname}"));
                 },
-                Emulator::CpcEmuPower(v) => {
+                Emulator::CpcEmuPower(_v) => {
                     args.push(format!("--sna={sna}"));
                 },
-                Emulator::CapriceForever(v) => {
+                Emulator::CapriceForever(_v) => {
                     args.push(format!("/SNA=\"{sna}\""));
                 }
             }
@@ -572,8 +572,8 @@ impl EmulatorConf {
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
                 Emulator::SugarBoxV2(_) => todo!(),
-                Emulator::CpcEmuPower(cpc_emu_power_version) => todo!(),
-                Emulator::CapriceForever(caprice_forever_version) => todo!()
+                Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
+                Emulator::CapriceForever(_caprice_forever_version) => todo!()
             }
         }
 
@@ -648,7 +648,7 @@ impl EmulatorConf {
                 },
                 Emulator::SugarBoxV2(_) => unimplemented!(),
                 Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{run}")),
-                Emulator::CapriceForever(v) => {
+                Emulator::CapriceForever(_v) => {
                     args.push(format!("/Command=RUN\"\"{run}"));
                 }
             }
@@ -702,7 +702,7 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
 
     // XX next seem to not work :(
     // change the display to get the window list of the framebuffer
-    let backup_display = std::env::var("DISPLAY").unwrap();
+    let _backup_display = std::env::var("DISPLAY").unwrap();
 
     unsafe { std::env::set_var("DISPLAY", format!(":{}", &display)) };
     let windows = wmctrl::get_windows();
@@ -1044,7 +1044,7 @@ impl Robot {
             Emulator::CpcEmuPower(_) => {
                 RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
             },
-            Emulator::CapriceForever(caprice_forever_version) => {
+            Emulator::CapriceForever(_caprice_forever_version) => {
                 RobotImpl::<CapriceForeverUsedEmulator>::from((window, eventsManager, emu)).into()
             },
         }
@@ -1745,7 +1745,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
     let t_emu = emu.clone();
     let conf_thread = conf.clone();
-    let emu_thread = std::thread::spawn(move || {
+    let _emu_thread = std::thread::spawn(move || {
         start_emulator(&t_emu, &conf_thread).expect("Error detected while closing the emulator")
     });
 

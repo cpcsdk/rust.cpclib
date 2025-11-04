@@ -13,7 +13,7 @@ pub enum ExternDisassembler {
 impl ExternDisassembler {
     pub fn get_command(&self) -> &str {
         match self {
-            ExternDisassembler::Disark(disark_version) => DISARK_CMD
+            ExternDisassembler::Disark(_disark_version) => DISARK_CMD
         }
     }
 

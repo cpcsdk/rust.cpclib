@@ -569,7 +569,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         #[cfg(feature = "self-update")]
         let update_self = || -> Result<(), BndBuilderError> {
             observers.emit_stdout("> Update bndbuild\n");
-            let (asset_url, asset_name) = if cfg!(target_os = "windows") {
+            let (asset_url, _asset_name) = if cfg!(target_os = "windows") {
                 (
                     "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe",
                     "bndbuild.exe"

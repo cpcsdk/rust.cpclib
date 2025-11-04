@@ -385,11 +385,9 @@ impl TokenExt for Token {
 
                     &Mnemonic::Nop => {
                         if let Some(arg) = self.mnemonic_arg1() {
-                            arg.get_expression()
-                                .unwrap()
-                                .eval()?
-                                .int()? as _
-                        } else {
+                            arg.get_expression().unwrap().eval()?.int()? as _
+                        }
+                        else {
                             1
                         }
                     },

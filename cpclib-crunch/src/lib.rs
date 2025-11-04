@@ -151,7 +151,7 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
 
     let crunched = cruncher
         .compress(&data)
-        .map_err(|e| "Error when crunching file.".to_string())?;
+        .map_err(|_e| "Error when crunching file.".to_string())?;
 
     let file_and_support = FileAndSupport::new_auto(args.output.unwrap(), args.header);
 

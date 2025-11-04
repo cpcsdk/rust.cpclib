@@ -44,7 +44,7 @@ impl<E: EventObserver> CpRunner<E> {
 impl<E: EventObserver> Runner for CpRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
         let mut errors = String::new();
 
         let fnames = itr

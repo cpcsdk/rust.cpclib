@@ -42,7 +42,7 @@ pub fn compress(
 ) -> Result<Vec<u8>, ()> {
     let p_input_data = data.as_ptr();
 
-    let lenout: libc::c_int = 0;
+    let _lenout: libc::c_int = 0;
 
     let compressed_data = Vec::with_capacity(65536);
     let (p_output_data, n_compressed_size, n_max_compressed_size) =

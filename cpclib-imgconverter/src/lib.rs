@@ -247,7 +247,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
         Ok(LockablePalette::unlocked(numbers.into()))
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
-        let (mut data, header) = cpclib::disc::read(fname)?; // get the file content but skip the header
+        let (mut data, _header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
         let pal = OcpPal::from_buffer(data);
         Ok(LockablePalette::unlocked(pal.palette(0).clone()))

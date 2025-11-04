@@ -9,6 +9,8 @@ use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
 use cpclib_runner::runner::assembler::{RASM_CMD, RasmVersion, SJASMPLUS_CMD, VASM_CMD};
+#[cfg(feature = "fap")]
+use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
@@ -17,8 +19,6 @@ use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
-#[cfg(feature = "fap")]
-use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
@@ -621,7 +621,7 @@ impl InnerTask {
             | InnerTask::Emulator(_, t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
-            | InnerTask::Tracker(_, t) => t,
+            | InnerTask::Tracker(_, t) => t
         }
     }
 
@@ -651,7 +651,7 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
-            | InnerTask::Xfer(t) => t,
+            | InnerTask::Xfer(t) => t
         }
     }
 
@@ -682,18 +682,18 @@ impl InnerTask {
             InnerTask::Emulator(..) => true,
             InnerTask::Extern(_) => false,
             InnerTask::Grafx2(_) => true,
-            InnerTask::YmCruncher(_, ..) => false,
+            InnerTask::YmCruncher(..) => false,
             InnerTask::Fade(_) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,
             InnerTask::ImgConverter(_) => false,
             InnerTask::ImpDsk(_) => false,
-            InnerTask::Martine(t) => false,
+            InnerTask::Martine(_t) => false,
             InnerTask::Mkdir(_) => false,
             InnerTask::Rm(_s) => false, // wrong when downloading files
             InnerTask::Snapshot(_) => false,
-            InnerTask::SongConverter(_, t) => false,
-            InnerTask::Tracker(_, t) => true, // XXX think if false is better
+            InnerTask::SongConverter(_, _t) => false,
+            InnerTask::Tracker(_, _t) => true, // XXX think if false is better
             InnerTask::Xfer(_) => true
         }
     }

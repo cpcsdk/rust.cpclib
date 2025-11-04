@@ -320,7 +320,7 @@ where E: BndBuilderObserved + Sync
 impl<E> BndBuilderObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved
 {
-    fn update(&mut self, event: BndBuilderEvent) {
+    fn update(&mut self, _event: BndBuilderEvent) {
         unreachable!()
     }
 }
@@ -361,21 +361,21 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             },
             BndBuilderEvent::StopRule(_) => {},
             BndBuilderEvent::FailedRule(_) => todo!(),
-            BndBuilderEvent::StartTask(r, t) => {
+            BndBuilderEvent::StartTask(_r, t) => {
                 println!("\t$ {t}");
             },
-            BndBuilderEvent::StopTask(r, t, d) => {
+            BndBuilderEvent::StopTask(_r, _t, d) => {
                 println!(
                     "\tElapsed time: {}",
                     fancy_duration::FancyDuration(d).truncate(1)
                 )
             },
-            BndBuilderEvent::TaskStdout(tgt, task, txt) => {
+            BndBuilderEvent::TaskStdout(tgt, _task, txt) => {
                 for line in txt.lines() {
                     println!("[{tgt}]\t{line}")
                 }
             },
-            BndBuilderEvent::TaskStderr(tgt, task, txt) => {
+            BndBuilderEvent::TaskStderr(tgt, _task, txt) => {
                 for line in txt.lines() {
                     eprintln!("[{tgt}]\t{line}")
                 }

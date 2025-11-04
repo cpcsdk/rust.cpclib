@@ -334,7 +334,7 @@ impl Palette {
         self.values
             .iter()
             .filter(|&(&p, _)| p.number() != 16)
-            .filter(|&(&p_, &i)| i == ink)
+            .filter(|&(&_p_, &i)| i == ink)
             .min()
             .map(|(p, _i)| *p)
     }

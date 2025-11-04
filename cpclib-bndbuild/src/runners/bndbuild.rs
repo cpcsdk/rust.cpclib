@@ -40,7 +40,7 @@ impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
     fn get_matches<S: AsRef<str>>(
         &self,
         itr: &[S],
-        e: &dyn EventObserver
+        _e: &dyn EventObserver
     ) -> Result<Option<ArgMatches>, String> {
         let args = self
             .get_clap_command()
