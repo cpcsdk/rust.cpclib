@@ -191,9 +191,12 @@ pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
+
 #[cfg(feature = "fap")]
 pub const FAP_CMDS: &[&str] = &[FAP_CMD];
 pub const AYT_CMDS: &[&str] = &[cpclib_runner::runner::ay::ayt::AYT_CMD];
+pub const MINY_CMDS: &[&str] = &[cpclib_runner::runner::ay::minimiser::MINIMISER_CMD];
+
 pub const FADE_CMDS: &[&str] = &[FADE_CMD];
 pub const GRAFX2_CMDS: &[&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
@@ -280,6 +283,7 @@ is_some_cmd!(
     grafx2,
     hideur,hspc,
     img2cpc, impdisc,
+    miny,
     martine, mkdir,
     orgams,
     rasm, rm,
@@ -453,6 +457,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_ayt_cmd(code) {
                     Ok(InnerTask::YmCruncher(YmCruncher::Ayt, std))
+                }
+                else if is_miny_cmd(code) {
+                    Ok(InnerTask::YmCruncher(YmCruncher::Miny, std))
                 }
                 else if is_orgams_cmd(code) {
                     Ok(InnerTask::Assembler(Assembler::Orgams, std))

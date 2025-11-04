@@ -8,6 +8,7 @@ use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::ay::ayt::AytVersion;
 #[cfg(feature = "fap")]
 use cpclib_runner::runner::ay::fap::FAPVersion;
+use cpclib_runner::runner::ay::minimiser::MinimiserVersion;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
@@ -60,6 +61,7 @@ impl InnerTask {
             InnerTask::YmCruncher(c, _) => {
                 match c {
                     YmCruncher::Ayt => Some(AytVersion::default().configuration()),
+                    YmCruncher::Miny => Some(MinimiserVersion::default().configuration()),
                     #[cfg(feature = "fap")]
                     YmCruncher::Fap => Some(FAPVersion::default().configuration())
                 }
@@ -117,6 +119,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::YmCruncher(c, _) => {
             match c {
                 YmCruncher::Ayt => {
+                    DelegatedRunner::<E>::new(
+                        task.configuration::<E>().unwrap(),
+                        c.get_command().to_owned()
+                    )
+                    .run(task.args(), observer)
+                },
+                YmCruncher::Miny => {
                     DelegatedRunner::<E>::new(
                         task.configuration::<E>().unwrap(),
                         c.get_command().to_owned()
