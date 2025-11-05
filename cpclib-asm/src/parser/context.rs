@@ -369,7 +369,7 @@ impl ParserOptions {
                         .case_insensitive(true)
                         .literal_separator(true)
                         .build()
-                        .unwrap();
+                        .map_err(|e| Either::Left(AssemblerError::AssemblingError { msg: format!("Error while searching the file. {e}") }))?;
                     let matcher = glob.compile_matcher();
 
                     for entry in std::fs::read_dir(search).unwrap() {
