@@ -12,7 +12,10 @@
     ;
     ld	hl, #C9FB
     ld	(#38), hl
+    ld sp, $
 
+		ld bc, 0xbc00+1 : out (c), c
+		ld bc, 0xbd00+0 : out (c), c
     ;
     ; Initialize the player.
     ; Once the player is initialized, you can overwrite the init code if you need some extra memory.
@@ -34,18 +37,30 @@ MainLoop:
     rra
     jr	nc, MainLoop
 
+    halt		; Wait to make sure the VBL is over.
+    halt
+    
     di			; Prevent interrupt apocalypse
     ld	(RestoreSp), sp	; Save our precious stack-pointer
+
+    		ld bc,#7f10		; Border 
+		ld a,#4c
+		out (c),c		; select border
+		out (c),a		; in red
+
     jp	FapPlay		; Jump into the replay-routine
 
 ReturnAddr:		; Return address the replay-routine will jump back to
 
 RestoreSp = $+1
     ld	sp, 0		; Restore our precious stack-pointer
+
+		ld bc,#7f54
+		out (c),c
+
     ei			; We may enable the maskable interrupts again
 
-    halt		; Wait to make sure the VBL is over.
-    halt
+
 
     jp	MainLoop
 

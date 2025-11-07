@@ -327,9 +327,7 @@ impl BndBuilder {
         }
 
         // execute only one task per group but still count the others
-        grouped
-            .into_iter()
-            .map(|(_r, paths)| {
+        grouped.into_values().map(|paths| {
                 let other_paths = if paths.len() > 1 {
                     Some(&paths[1..])
                 }

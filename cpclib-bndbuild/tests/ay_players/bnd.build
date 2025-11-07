@@ -1,0 +1,120 @@
+#!/usr/bin/env -S bndbuild -f
+
+# `bndbuild ace` plays the first music
+# `bndbuild ace -DMUSIC_IDX=n` plays the nth music (starts with 0)
+
+# This build file conver the musics in farious formats
+
+# The list of musics and their buffer size
+# TODO find a way to automatically get the buffer size
+
+{%- 
+  set MUSICS = [
+    ("FenyxKell - Bobline", "&b42"),
+    ("Targhan - A Harmless Grenade", "&b42"),
+    ("Targhan - Hocus Pocus", "&c48"),
+    ("Tom&Jerry - Boules Et Bits (Extended)", "&c48"),
+    ("Tom&Jerry - From Scratch - Part 1", "&a64"),
+    ("UltraSyd - Fractal", "0xb42")
+  ]
+-%}
+
+# handle the music selection
+
+{% if MUSIC_IDX %}
+  {% set PARAMS=MUSIC_IDX|int%}
+{% else %}
+  {% set PARAMS=3%}
+{% endif %}
+
+{% if not PLAYER_FORMAT%}
+{% set PLAYER_FORMAT="fap" %}
+{% endif %}
+
+{% if PLAYER_FORMAT == "fap" %}
+  {% set SNA="fap.sna" %}
+{% elif PLAYER_FORMAT == "miny" %}
+  {% set SNA="miny.sna" %}
+{% elif PLAYER_FORMAT == "ayt" %}
+  {% set SNA="ayt.sna" %}
+{% endif %}
+
+# get the appropriate value of the selected music
+{%- set selected_music = MUSICS[PARAMS][0]  -%}
+{%- set fap_selected_music = MUSICS[PARAMS][0] + ".fap"  -%}
+{%- set miny_selected_music = MUSICS[PARAMS][0] + ".miny"  -%}
+{%- set ayt_selected_music = MUSICS[PARAMS][0] + ".ayt"  -%}
+
+{%- set fap_buff_size = MUSICS[PARAMS][1]-%}
+
+{%- macro fap_rule(file, opt=None) %}
+{% set ym_file = "ym/" + file + ".ym" %}
+{% set fap_file = file + ".fap" %}
+- dep: "\"{{ym_file}}\""
+  tgt: "\"{{fap_file}}\""
+  cmd: fap "ym/{{ym_file}}" "{{fap_file}}" {%if opt %}{{opt}}{% endif %}
+{% endmacro -%}
+
+{%- macro miny_rule(file) %}
+{% set ym_file = "ym/" + file + ".ym" %}
+{% set miny_file = file + ".miny" %}
+- dep: "\"{{ym_file}}\""
+  tgt: "\"{{miny_file}}\""
+  cmd: miny pack "{{ym_file}}" "{{miny_file}}"
+{% endmacro -%}
+
+{%- macro ayt_rule(file) %}
+{% set ym_file = "ym/" + file + ".ym" %}
+{% set ayt_file = file + ".ayt" %}
+- dep: "\"{{ym_file}}\""
+  tgt: "\"{{ayt_file}}\""
+  cmd: ayt --verbose --target CPC  "{{ym_file}}" # -o and --output are not recognized despite the documentation ...
+{% endmacro -%}
+
+{% for (music, size) in MUSICS %}
+{{fap_rule(music)}}
+{{miny_rule(music)}}
+{{ayt_rule(music)}}
+{% endfor %}
+
+# build the sna test music
+# it uses 
+#  - the converted fap file
+#  - the init and play binary code provided by FAP automatically downloaded by bndbuild
+#  - the sour of the test program
+- tgt: fap.sna
+  dep: "\"{{fap_selected_music}}\" players/fap.asm" 
+  phony: true
+  cmd: |
+    basm players/fap.asm --snapshot -o fap.sna 
+    -DFAP_INIT_PATH="\"{{FAP_INIT_PATH|basm_escape_path}}\""
+    -DFAP_PLAY_PATH="\"{{FAP_PLAY_PATH|basm_escape_path}}\""
+    -DMUSIC="\"{{fap_selected_music}}\"" 
+    -DBuffSize="{{fap_buff_size}}" 
+
+- tgt: miny.sna
+  dep: "\"{{miny_selected_music}}\" players/{ymp.z80,miny.asm}"
+  phony: true
+  cmd: |
+    basm players/miny.asm --snapshot -o miny.sna 
+    -DMUSIC="\"{{miny_selected_music|basm_escape_path}}\""
+
+- tgt: ayt.sna
+  dep: "\"{{ayt_selected_music}}\" players/{ayt.asm,AytPlayerBuilder-CPC.asm}"
+  phony: true
+  cmd: |
+    basm players/ayt.asm --snapshot -o ayt.sna 
+    -DMUSIC="\"{{ayt_selected_music|basm_escape_path}}\""
+    --case-insensitive
+
+- tgt: ace
+  dep: {{SNA}}
+  cmd: ace {{SNA}}
+
+- tgt: clean
+  phony: true
+  cmd: -rm *.fap *.miny *.ayt
+  
+- tgt: distclean
+  dep: clean
+  cmd: -rm *.sna
