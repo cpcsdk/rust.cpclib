@@ -18,7 +18,6 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
-#[cfg(feature = "fap")]
 use crate::runners::ay::YmCruncher;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::crunch::CrunchRunner;
