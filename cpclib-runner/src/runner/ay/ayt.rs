@@ -5,6 +5,7 @@ use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 #[derive(Default)]
 pub enum AytVersion {
     #[default]
+    V1_02,
     V1_01
 }
 
@@ -18,6 +19,15 @@ impl AytVersion {
 impl AytVersion {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
+            AytVersion::V1_02  =>
+                DelegateApplicationDescription::builder()
+                    .download_fn_url("https://github.com/Logon-System/AYT-Format/releases/download/1.02/ayt-tools-win64.zip") // we assume a modern CPU
+                    .folder("ayt_1_02")
+                    .archive_format(ArchiveFormat::Zip)
+                    .exec_fname("ym2ayt\\ym2ayt.exe")
+                    .build(),
+
+
             AytVersion::V1_01  =>
                 DelegateApplicationDescription::builder()
                     .download_fn_url("https://github.com/Logon-System/AYT-Format/releases/download/1.01/ayt-tools-win64.zip") // we assume a modern CPU
