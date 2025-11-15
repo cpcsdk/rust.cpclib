@@ -310,15 +310,22 @@ pub fn assemble(
                 .build(value);
 
             let span = Z80Span::new_extra(value, &ctx);
-            let value = alt((string_expr, parse_value))
+            
+            let value = if let Ok(value) = alt((string_expr, parse_value))
                 .parse(span.into())
-                .map_err(|_e| BasmError::InvalidArgument(format!(" unable to parse the constant definition.\nBe sure numbers are properly encoded or strings have quote escaped when launched from a shell.\n{definition}")))?;
+                .map_err(|_e| BasmError::InvalidArgument(format!(" unable to parse the constant definition.\nBe sure numbers are properly encoded or strings have quote escaped when launched from a shell.\n{definition}"))) {
 
-            let value = value.eval()?;
-            assemble_options
-                .symbols_mut()
-                .assign_symbol_to_value(symbol, value.clone())
-                .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
+
+                let value = value.eval()?;
+                assemble_options
+                    .symbols_mut()
+                    .assign_symbol_to_value(symbol, value.clone())
+                    .map_err(|_e| BasmError::InvalidArgument(definition.to_string()))?;
+                value
+            } else {
+                ExprResult::String(value.into())
+            };
+
 
             o.emit_stdout(&format!("Assigned {value} to {symbol}"));
         }

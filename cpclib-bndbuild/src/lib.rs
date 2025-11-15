@@ -35,7 +35,7 @@ pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
-
+pub mod env;
 pub use builder::*;
 pub use cpclib_common;
 
@@ -165,6 +165,13 @@ pub fn build_args_parser() -> clap::Command {
             .long("direct")
             .help(format!("Bypass the task file and directly execute a command along: [{}].", commands_list.iter().join(", ")))
             .conflicts_with_all(["list", "init", "add"])
+        )
+        .arg(
+            Arg::new("with_expansion")
+            .action(ArgAction::SetTrue)
+            .long("with_expansion")
+            .help("Apply a variable expansion when using --direct (useful to use predefined variables)")
+            .requires("direct")
         )
         .arg(
             Arg::new("version")

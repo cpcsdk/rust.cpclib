@@ -6818,6 +6818,15 @@ endif"
         assert!(dbg!(parse_test(parse_breakpoint, "step=10,name=\"fdfdfd\"")).is_ok());
     }
 
+
+    #[test]
+    fn test_string() {
+        assert!(dbg!(parse_test(parse_string, "\"hello\"")).is_ok());
+        assert!(dbg!(parse_test(parse_string, "\"Andy Severn - Lop Earsfap.BIN\"")).is_ok());
+        assert!(dbg!(parse_test(parse_string, "\"ArkosTracker3\\\\Andy Severn - Lop Earsfap.BIN\"")).is_ok());
+        assert!(dbg!(parse_test(parse_string, "\"datasets\\\\ArkosTracker3\\\\ArkosTracker3\\\\Andy Severn - Lop Earsfap.BIN\"")).is_ok());
+
+    }
     #[test]
     fn test_standard_repeat() {
         let z80 = std::dbg!(

@@ -16,6 +16,7 @@ use cpclib_runner::delegated::base_cache_folder;
 use cpclib_runner::emucontrol::EmulatorFacadeRunner;
 use cpclib_runner::runner::RunnerWithClap;
 
+use crate::env::create_template_env;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
@@ -81,7 +82,7 @@ pub enum BndBuilderCommandInner {
     Clear(Option<String>),
     GenerateCompletion(Shell),
     /// Launch a direct command ans bypass bndbuild
-    Direct(String),
+    Direct(String, bool),
     /// Add a task
     AddTask {
         task: String,
@@ -193,8 +194,8 @@ impl BndBuilderCommand {
                 Self::execute_clear(&observers, command.as_deref())?;
                 Ok(None)
             },
-            BndBuilderCommandInner::Direct(args) => {
-                Self::execute_direct(args.as_str(), &observers)?;
+            BndBuilderCommandInner::Direct(args, with_expansion) => {
+                Self::execute_direct(args.as_str(), with_expansion, &observers)?;
                 Ok(None)
             },
             BndBuilderCommandInner::AddTask {
@@ -406,10 +407,19 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_direct<O>(cmd: &str, observers: &Arc<O>) -> Result<(), BndBuilderError>
+    fn execute_direct<O>(cmd: &str, with_expansion: bool, observers: &Arc<O>) -> Result<(), BndBuilderError>
     where O: BndBuilderObserver + 'static {
         // TODO remove strong dependency to serde_yaml and replace it by Task
-        let task: Task = serde_yaml::from_str(cmd).map_err(BndBuilderError::ParseError)?;
+        
+        let cmd = if with_expansion {
+            let env = create_template_env::<&str, &str, &str>(None, &[]); // TODO add definition handling
+            env.render_str(cmd, minijinja::context!())
+                .map_err(|e| BndBuilderError::AnyError(format!("Error when handling cmd expansion. {e}")))?
+        } else {
+            cmd.to_string()
+        };
+
+        let task: Task = serde_yaml::from_str(&cmd).map_err(BndBuilderError::ParseError)?;
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }
@@ -712,7 +722,9 @@ impl BndBuilderApp {
                     .map(|definition| {
                         let (symbol, value) = {
                             match definition.split_once("=") {
-                                Some((symbol, value)) => (symbol, value),
+                                Some((symbol, value)) => {
+                                    (symbol, value)
+                                },
                                 None => (definition.as_str(), "1")
                             }
                         };
@@ -769,7 +781,7 @@ impl BndBuilderApp {
                     })?
                     .map(|s| s.as_str())
                     .join(" ");
-                return Ok(BndBuilderCommandInner::Direct(cmd));
+                return Ok(BndBuilderCommandInner::Direct(cmd, matches.get_flag("with_expansion")));
             }
             else if let Some(generator) = matches.get_one::<Shell>("completion").copied() {
                 return Ok(BndBuilderCommandInner::GenerateCompletion(generator));
