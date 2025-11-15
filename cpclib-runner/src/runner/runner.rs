@@ -252,12 +252,21 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 }
             });
             s.spawn(|| {
-                // TODO use the same technique than stdout
-                let stderr_lines = BufReader::new(child_stderr).lines();
-                for line in stderr_lines {
-                    let line = line.unwrap();
-                    o.emit_stderr(&line);
-                    o.emit_stderr("\n");
+                let mut stderr = BufReader::new(child_stderr);
+                let mut current_string = String::new();
+                for c in stderr.chars() {
+                    // TODO handle a byte buffer
+                    if let Ok(c) = c {
+                        current_string.push(c);
+
+                        if c == '\n' {
+                            o.emit_stderr(&current_string);
+                            current_string.clear();
+                        }
+                    }
+                }
+                if !current_string.is_empty() {
+                    o.emit_stderr(&current_string);
                 }
             });
         });
