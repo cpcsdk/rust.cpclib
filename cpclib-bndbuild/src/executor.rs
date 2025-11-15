@@ -20,6 +20,7 @@ use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
 use crate::runners::bndbuild::BndBuildRunner;
+use crate::runners::cpc2img::CpcToImgRunner;
 use crate::runners::crunch::CrunchRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
@@ -29,7 +30,7 @@ use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::mkdir::MkdirRunner;
 use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
-use crate::runners::imgconverter::ImgConverterRunner;
+use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::InnerTask;
@@ -171,7 +172,8 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Fade(_) => FadeRunner::<E>::default().run(task.args(), observer),
         InnerTask::Hideur(_) => HideurRunner::default().run(task.args(), observer),
         InnerTask::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
-        InnerTask::ImgConverter(_) => ImgConverterRunner::default().run(task.args(), observer),
+        InnerTask::ImgToCpc(_) => ImgToCpcRunner::default().run(task.args(), observer),
+        InnerTask::CpcToImg(_) => CpcToImgRunner::default().run(task.args(), observer),
         InnerTask::ImpDsk(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),

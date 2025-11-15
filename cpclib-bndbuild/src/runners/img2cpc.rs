@@ -8,14 +8,14 @@ use super::{Runner, RunnerWithClap};
 use crate::built_info;
 use crate::task::IMG2CPC_CMDS;
 
-pub struct ImgConverterRunner<E: EventObserver> {
+pub struct ImgToCpcRunner<E: EventObserver> {
     command: Command,
     _phantom: PhantomData<E>
 }
 
-impl<E: EventObserver> Default for ImgConverterRunner<E> {
+impl<E: EventObserver> Default for ImgToCpcRunner<E> {
     fn default() -> Self {
-        let command = cpclib_imgconverter::build_args_parser()
+        let command = cpclib_imgconverter::build_img2cpc_args_parser()
             .after_help(format!(
                 "{} {} embedded by {} {}",
                 cpclib_imgconverter::built_info::PKG_NAME,
@@ -48,15 +48,15 @@ impl<E: EventObserver> Default for ImgConverterRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for ImgConverterRunner<E> {
+impl<E: EventObserver> RunnerWithClap for ImgToCpcRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for ImgConverterRunner<E> {}
+impl<E: EventObserver> RunnerWithClapMatches for ImgToCpcRunner<E> {}
 
-impl<E: EventObserver> Runner for ImgConverterRunner<E> {
+impl<E: EventObserver> Runner for ImgToCpcRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -68,7 +68,7 @@ impl<E: EventObserver> Runner for ImgConverterRunner<E> {
         }
         let matches = matches.unwrap();
 
-        cpclib_imgconverter::process(&matches, args).map_err(|e| e.to_string())
+        cpclib_imgconverter::process_img2cpc(&matches, args).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {

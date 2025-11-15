@@ -25,7 +25,7 @@ use thiserror::Error;
 pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
-use crate::task::GRAFX2_CMDS;
+use crate::task::{CPC2IMG_CMDS, GRAFX2_CMDS};
 
 pub mod app;
 pub mod builder;
@@ -68,6 +68,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (CHIPNSFX_CMDS, true),
     (CONVGENERIC_CMDS, true),
     (CP_CMDS, false),
+    (CPC2IMG_CMDS, false),
     (CPCEC_CMDS, true),
     (CPCEMUPOWER_CMDS, true),
     (CAPRICEFOREVER_CMDS, true),

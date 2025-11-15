@@ -26,7 +26,7 @@ use crate::runners::disc::DiscManagerRunner;
 use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
-use crate::runners::imgconverter::ImgConverterRunner;
+use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
     Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
@@ -443,7 +443,7 @@ impl BndBuilderCommand {
             DiscManagerRunner::<()>::render_help()
         }
         else if is_img2cpc_cmd(runner) {
-            ImgConverterRunner::<()>::render_help()
+            ImgToCpcRunner::<()>::render_help()
         }
         else if is_hideur_cmd(runner) {
             HideurRunner::<()>::render_help()
@@ -534,7 +534,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             BasmRunner::<()>::default()
                 .get_clap_command()
                 .render_long_version(),
-            ImgConverterRunner::<()>::default()
+            ImgToCpcRunner::<()>::default()
                 .get_clap_command()
                 .render_long_version(),
             XferRunner::<()>::default()

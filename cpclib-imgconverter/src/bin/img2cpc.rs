@@ -13,7 +13,7 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-use cpclib_imgconverter::{build_args_parser, built_info, process};
+use cpclib_imgconverter::{build_img2cpc_args_parser, built_info, process_img2cpc};
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(
@@ -22,8 +22,8 @@ fn main() -> anyhow::Result<()> {
         built_info::BUILT_TIME_UTC
     );
 
-    let args = build_args_parser().before_help(desc_before);
+    let args = build_img2cpc_args_parser().before_help(desc_before);
 
     let matches = args.clone().get_matches();
-    process(&matches, args)
+    process_img2cpc(&matches, args)
 }

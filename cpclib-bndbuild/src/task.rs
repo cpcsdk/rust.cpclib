@@ -50,6 +50,7 @@ pub enum InnerTask {
     BndBuild(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
+    CpcToImg(StandardTaskArguments),
     Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
@@ -60,7 +61,7 @@ pub enum InnerTask {
     Grafx2(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     HspCompiler(StandardTaskArguments),
-    ImgConverter(StandardTaskArguments),
+    ImgToCpc(StandardTaskArguments),
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
     Mkdir(StandardTaskArguments),
@@ -200,6 +201,7 @@ pub const MINY_CMDS: &[&str] = &[cpclib_runner::runner::ay::minimiser::MINIMISER
 pub const FADE_CMDS: &[&str] = &[FADE_CMD];
 pub const GRAFX2_CMDS: &[&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
+pub const CPC2IMG_CMDS: &[&str] = &["cpc2img"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
@@ -226,6 +228,7 @@ impl Display for InnerTask {
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
+            Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
             Self::Crunch(s) => (CRUNCH_CMDS[0], s),
             Self::Disassembler(d, s) => (d.get_command(), s),
             Self::Disc(s) => (DISC_CMDS[0], s),
@@ -236,7 +239,7 @@ impl Display for InnerTask {
             Self::Grafx2(s) => (GRAFX2_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
             Self::HspCompiler(s) => (HSPC_CMDS[0], s),
-            Self::ImgConverter(s) => (IMG2CPC_CMDS[0], s),
+            Self::ImgToCpc(s) => (IMG2CPC_CMDS[0], s),
             Self::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Self::Martine(s) => (MARTINE_CMDS[0], s),
             Self::Mkdir(s) => (MKDIR_CMDS[0], s),
@@ -276,7 +279,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at, ayt,
     basm, bdasm, bndbuild,
-    capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower,
+    capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
     echo, emuctrl, r#extern,
     fade,
@@ -517,7 +520,10 @@ impl<'de> Deserialize<'de> for InnerTask {
                     Ok(InnerTask::Hideur(std))
                 }
                 else if is_img2cpc_cmd(code) {
-                    Ok(InnerTask::ImgConverter(std))
+                    Ok(InnerTask::ImgToCpc(std))
+                }
+                else if is_cpc2img_cmd(code) {
+                    Ok(InnerTask::CpcToImg(std))
                 }
                 else if is_impdisc_cmd(code) {
                     Ok(InnerTask::ImpDsk(std))
@@ -591,7 +597,7 @@ impl InnerTask {
     }
 
     pub fn new_imgconverter(args: &str) -> Self {
-        Self::ImgConverter(StandardTaskArguments::new(args))
+        Self::ImgToCpc(StandardTaskArguments::new(args))
     }
 
     pub fn replace_automatic_variables(
@@ -611,6 +617,7 @@ impl InnerTask {
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
+            | InnerTask::CpcToImg(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
             | InnerTask::ImpDsk(t)
@@ -620,7 +627,7 @@ impl InnerTask {
             | InnerTask::Grafx2(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
-            | InnerTask::ImgConverter(t)
+            | InnerTask::ImgToCpc(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
@@ -640,6 +647,7 @@ impl InnerTask {
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
+            | InnerTask::CpcToImg(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
             | InnerTask::Echo(t)
@@ -649,7 +657,7 @@ impl InnerTask {
             | InnerTask::Fade(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
-            | InnerTask::ImgConverter(t)
+            | InnerTask::ImgToCpc(t)
             | InnerTask::ImpDsk(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Martine(t)
@@ -682,6 +690,7 @@ impl InnerTask {
             InnerTask::BndBuild(_) => false,
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cp(_) => false,
+            InnerTask::CpcToImg(_) => false,
             InnerTask::Crunch(_) => false,
             InnerTask::Disassembler(..) => false,
             InnerTask::Disc(_) => false,
@@ -693,7 +702,7 @@ impl InnerTask {
             InnerTask::Fade(_) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,
-            InnerTask::ImgConverter(_) => false,
+            InnerTask::ImgToCpc(_) => false,
             InnerTask::ImpDsk(_) => false,
             InnerTask::Martine(_t) => false,
             InnerTask::Mkdir(_) => false,
