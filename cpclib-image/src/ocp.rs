@@ -80,7 +80,7 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
 
 const NB_PAL: usize = 12;
 
-pub struct OcpPal {
+pub struct OcpPalette {
     screen_mode: Mode,
     cycling: bool,
     cycling_delay: u8,
@@ -90,14 +90,19 @@ pub struct OcpPal {
     projected: [u8; 16]
 }
 
-impl OcpPal {
+impl OcpPalette {
     /// Get the palette of interest (0..12)
     pub fn palette(&self, nb: usize) -> &Palette {
         assert!(nb < 12);
         &self.palettes[nb]
     }
 
+    pub fn palettes(&self) -> &[Palette; NB_PAL] {
+        &self.palettes
+    }
+
     pub fn from_buffer(data: &[u8]) -> Self {
+
         let mut data = data.iter().cloned();
 
         let screen_mode: Mode = (data.next().unwrap()).into();
@@ -109,7 +114,6 @@ impl OcpPal {
             for idx in 0..NB_PAL {
                 let ga_ink = data.next().unwrap();
                 let ink = Ink::from_gate_array_color_number(ga_ink);
-                dbg!(pen, idx, ink);
                 palettes[idx].set(pen, ink);
             }
         }

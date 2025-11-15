@@ -16,7 +16,7 @@ use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
 use cpclib::image::ga::{LockablePalette, Palette};
 use cpclib::image::image::{ColorMatrix, Mode};
-use cpclib::image::ocp::{self, OcpPal};
+use cpclib::image::ocp::{self, OcpPalette};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
@@ -250,7 +250,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, _header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
-        let pal = OcpPal::from_buffer(data);
+        let pal = OcpPalette::from_buffer(data);
         Ok(LockablePalette::unlocked(pal.palette(0).clone()))
     }
     else {
@@ -1000,6 +1000,11 @@ pub fn build_cpc2img_args_parser() -> clap::Command {
                     .action(ArgAction::SetTrue)
             )
             .subcommand(
+                Command::new("OCPPALETTECMD")
+                    .about("Load an ocp palette file")
+                    .name("palette")
+            )
+            .subcommand(
                 Command::new("SPRITECMD")
                     .about("Load from a linear sprite data")
                     .name("sprite")
@@ -1021,7 +1026,9 @@ pub fn build_cpc2img_args_parser() -> clap::Command {
                             .help("Width of the screen in bytes")
                     )
             )
-            .arg(Arg::new("INPUT").required(true))
+            .arg(Arg::new("INPUT")
+                .help("File to Read. Can be a .scr, a .pal")
+                .required(true))
             .arg(Arg::new("OUTPUT").required(true))
     )
 }
@@ -1394,7 +1401,7 @@ pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
     let data = std::fs::read(input_fname).expect("Unable to read input file");
 
     // remove header if any
-    let data = if cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid()
+    let data = if data.len() >= 128 && cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid()
         && data[..128].iter().map(|&b| b as usize).sum::<usize>() != 0
     {
         &data[128..]
@@ -1403,6 +1410,7 @@ pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
         &data
     };
 
+
     let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("sprite") {
         let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         ColorMatrix::from_sprite(data, width as _, mode, &palette)
@@ -1410,6 +1418,32 @@ pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
     else if let Some(screen) = matches.subcommand_matches("screen") {
         let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         ColorMatrix::from_screen(data, width as _, mode, &palette)
+    }
+    else if let Some(paletteocp) = matches.subcommand_matches("palette") {
+        let palettes = if data.len()%17 == 0 {
+            // this is my gate array format
+            data.chunks(17)
+                .map(|p|  {
+                    let inks = p.iter().map(|b| Ink::from(*b));
+                    Palette::from(inks)
+                })
+                .collect_vec()
+        } else {
+            // this is the real OCP format
+            OcpPalette::from_buffer(&data)
+                .palettes().into_iter()
+                .cloned()
+                .collect_vec()
+        };
+
+
+        let rows = palettes.into_iter()
+            .map(|p| ColorMatrix::from_palette(&p, 32))
+            .collect_vec();
+        
+    
+        ColorMatrix::vstack(&rows)
+
     }
     else {
         unreachable!()

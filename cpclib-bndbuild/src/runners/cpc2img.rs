@@ -68,7 +68,7 @@ impl<E: EventObserver> Runner for CpcToImgRunner<E> {
         }
         let matches = matches.unwrap();
 
-        cpclib_imgconverter::process_img2cpc(&matches, args).map_err(|e| e.to_string())
+        cpclib_imgconverter::process_cpc2img(&matches, args).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {
