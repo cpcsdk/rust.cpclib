@@ -5,7 +5,7 @@
 
  Several demos have been released using this toolchain. However they may not build with the very last version due to its evolution.
 
- - Blight (2025) <https://www.pouet.net/prod.php?which=105251>
+ - Blight (2025) <https://www.pouet.net/prod.php?which=105251>, <https://github.com/rgiot/demo.bnd5.blight>
  - Amstrology (2025) <https://www.pouet.net/prod.php?which=104909>
  - 4deKades (2025) <https://www.pouet.net/prod.php?which=103970>, <https://github.com/rgiot/demo.revision2025.4deKades>
  - J'AI PÉ-TÉLÉCRAN (2024) <https://www.pouet.net/prod.php?which=96575>, <https://github.com/rgiot/demo.revision2024.etchy>
@@ -46,5 +46,6 @@ There are more are less able to do:
  Documentation is available at <https://cpcsdk.github.io/rust.cpclib/>
 
  **WARNING** the windows toolchain has to be `nightly-x86_64-pc-windows-gnu`
+
 
 
