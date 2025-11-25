@@ -8,5 +8,5 @@ fn main() -> Result<(), String> {
 
     let matches = cmd.clone().get_matches();
 
-    cpclib_imgconverter::process_cpac2img(&matches, cmd.clone()).map_err(|e| e.to_string())
+    cpclib_imgconverter::process_cpc2img(&matches, cmd.clone()).map_err(|e| e.to_string())
 }
