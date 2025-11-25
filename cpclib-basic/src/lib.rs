@@ -6,6 +6,7 @@ pub mod tokens;
 
 use std::fmt::{self};
 
+use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::Parser;
 use cpclib_common::winnow::ascii::space0;
 use cpclib_sna::Snapshot;
@@ -284,11 +285,10 @@ impl BasicProgram {
         else {
             match self.previous_idx(current_idx) {
                 Some(previous_idx) => {
-                    let current_length = self.get_line(current_idx).unwrap().complete_bytes_length(); // TODO handle the case where they are multiple succsessive hidden lines
+                    let current_length = self.get_line(current_idx).unwrap().public_bytes_length(); // important to use the public byte length in case other lines are hidden
                     self.get_line_mut(previous_idx)
                         .unwrap()
                         .add_length(current_length);
-                    //self.get_line_mut(current_idx).unwrap().force_length(0); XXX this was wrongly activated before
                     Ok(())
                 },
                 None => Err(BasicError::UnknownLine { idx: current_idx })
@@ -297,8 +297,7 @@ impl BasicProgram {
     }
 
     pub fn hide_lines(&mut self, lines: &[u16]) -> Result<(), BasicError> {
-        assert!(lines.len() <= 1, "Consecutive lines hiding has not been treated. Maybe the API needs to be redone");
-        for number in lines {
+        for number in lines.iter().sorted().rev() {
             self.hide_line(BasicProgramLineIdx::Number(*number))?;
         }
         Ok(())
