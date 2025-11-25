@@ -70,7 +70,7 @@ impl BasicLine {
     }
 
     pub fn add_length(&mut self, length: u16) {
-        let current = self.expected_length();
+        let current = self.public_bytes_length();
         self.force_length(current + length);
     }
 
@@ -79,20 +79,22 @@ impl BasicLine {
     }
 
     /// Return the forced line length or the real line length if not specified
-    pub fn expected_length(&self) -> u16 {
+    /// This is used only by the LIST command.
+    /// RUN does not care of the line
+    pub fn public_bytes_length(&self) -> u16 {
         match self.forced_length {
             Some(val) => val,
-            None => self.real_complete_length()
+            None => self.complete_bytes_length()
         }
     }
 
     /// Return the byte size taken by the tokens
-    pub fn real_length(&self) -> u16 {
+    pub fn tokens_bytes_length(&self) -> u16 {
         self.tokens_as_bytes().len() as _
     }
 
-    pub fn real_complete_length(&self) -> u16 {
-        self.real_length() + 2 + 2 + 1
+    pub fn complete_bytes_length(&self) -> u16 {
+        2 /*line size*/ + 2 /*line number*/ + self.tokens_bytes_length() /* tokens */ + 1 /* &00 */
     }
 
     /// Returns the number of tokens
@@ -118,7 +120,7 @@ impl BasicLine {
     /// - n bytes for tokens
     /// - 1 bytes for end of line marker
     pub fn as_bytes(&self) -> Vec<u8> {
-        let size = self.expected_length();
+        let size = self.public_bytes_length();
 
         let mut content = vec![
             (size % 256) as u8,
@@ -269,23 +271,24 @@ impl BasicProgram {
 
     /// https://cpcrulez.fr/applications_protect-protection_logiciel_n42_ACPC.htm
     /// 64nops2
+    /// Line length of previous line contains the size of the current one to mask
     pub fn hide_line(&mut self, current_idx: BasicProgramLineIdx) -> Result<(), BasicError> {
         if !self.has_line(current_idx) {
             Err(BasicError::UnknownLine { idx: current_idx })
         }
         else if self.is_first_line(current_idx) {
-            // Locomotive basic stat to list lines from 1
+            // Locomotive basic start to list lines from 1
             self.lines[0].line_number = 0;
             Ok(())
         }
         else {
             match self.previous_idx(current_idx) {
                 Some(previous_idx) => {
-                    let current_length = self.get_line(current_idx).unwrap().real_complete_length(); // TODO handle the case where they are multiple hidden
+                    let current_length = self.get_line(current_idx).unwrap().complete_bytes_length(); // TODO handle the case where they are multiple succsessive hidden lines
                     self.get_line_mut(previous_idx)
                         .unwrap()
                         .add_length(current_length);
-                    self.get_line_mut(current_idx).unwrap().force_length(0);
+                    //self.get_line_mut(current_idx).unwrap().force_length(0); XXX this was wrongly activated before
                     Ok(())
                 },
                 None => Err(BasicError::UnknownLine { idx: current_idx })
@@ -294,15 +297,11 @@ impl BasicProgram {
     }
 
     pub fn hide_lines(&mut self, lines: &[u16]) -> Result<(), BasicError> {
-        match lines.len() {
-            0 => Ok(()),
-            1 => self.hide_line(BasicProgramLineIdx::Number(lines[0])),
-            _ => {
-                unimplemented!(
-                    "The current version is only able to hide one line. I can still implement multiline version if needed"
-                )
-            }
+        assert!(lines.len() <= 1, "Consecutive lines hiding has not been treated. Maybe the API needs to be redone");
+        for number in lines {
+            self.hide_line(BasicProgramLineIdx::Number(*number))?;
         }
+        Ok(())
     }
 
     /// Generate the byte stream for the given program

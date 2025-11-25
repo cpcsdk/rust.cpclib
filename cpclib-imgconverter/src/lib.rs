@@ -1389,8 +1389,8 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
     }
 }
 
-pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
-    let palette = get_requested_palette(&matches)?;
+pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<()> {
+    let palette = get_requested_palette(matches)?;
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
@@ -1419,7 +1419,7 @@ pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
         let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
         ColorMatrix::from_screen(data, width as _, mode, &palette)
     }
-    else if let Some(paletteocp) = matches.subcommand_matches("palette") {
+    else if let Some(_paletteocp) = matches.subcommand_matches("palette") {
         let palettes = if data.len()%17 == 0 {
             // this is my gate array format
             data.chunks(17)
@@ -1430,8 +1430,8 @@ pub fn process_cpc2img(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
                 .collect_vec()
         } else {
             // this is the real OCP format
-            OcpPalette::from_buffer(&data)
-                .palettes().into_iter()
+            OcpPalette::from_buffer(data)
+                .palettes().iter()
                 .cloned()
                 .collect_vec()
         };

@@ -6,8 +6,7 @@ use std::sync::Arc;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-use cpclib_runner::runner::tracker::at3::At3Version;
-use minijinja::{Environment, Error, ErrorKind, context};
+use minijinja::context;
 
 use crate::BndBuilderError;
 use crate::app::WatchState;
@@ -167,7 +166,7 @@ impl BndBuilder {
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
         // apply jinja templating
-        let mut env= create_template_env(working_directory.as_ref(), definitions);
+        let env= create_template_env(working_directory.as_ref(), definitions);
 
         // generate the template
         env.render_str(&content, context!())

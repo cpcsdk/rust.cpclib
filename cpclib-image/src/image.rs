@@ -759,8 +759,8 @@ impl ColorMatrix {
         let tot_height = stack.iter().map(|row| row.height()).sum::<u32>() as usize;
 
         let mut matrix = Self::new(max_width, tot_height);
-        let mut cumulative_height = 0;
-        for (i, row) in stack.iter().enumerate() {
+        let cumulative_height = 0;
+        for row in stack.iter() {
             matrix.draw_matrix_at(0, cumulative_height, row)
         }
 
@@ -774,7 +774,7 @@ impl ColorMatrix {
         for w in 0..(other.width() as usize) {
             for h in 0..(other.height() as usize) {
                 let i = other.get_ink(w, h);
-                self.set_ink(x+w, y+h, i.clone());
+                self.set_ink(x+w, y+h, *i);
             }
         }
     }

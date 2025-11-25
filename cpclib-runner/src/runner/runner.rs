@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;

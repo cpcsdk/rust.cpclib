@@ -1702,12 +1702,12 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     };
 
     if emu.is_ace() {
-        let emu_folder = emu.albireo_folder();
+        let _emu_folder = emu.albireo_folder();
 
         if let Some(albireo) = &cli.albireo {
             #[cfg(unix)]
             {
-                let (backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
+                let (_backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
 
                 std::os::unix::fs::symlink(
                     std::path::absolute(albireo).unwrap(),
@@ -1836,7 +1836,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         robot.close();
     }
 
-    if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {
+    if let Some((_backup_folder, _emu_folder)) = albireo_backup_and_original {
         if cli.keepemulator {
             eprintln!(
                 "Albireo folder not cleaned automatically. you'll have to do it if necessary"
