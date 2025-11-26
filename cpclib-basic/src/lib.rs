@@ -415,7 +415,7 @@ pub mod test {
         prog.hide_line(BasicProgramLineIdx::Number(20)).unwrap();
         let bytes = prog.as_bytes();
         let expected = vec![
-            20, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 00, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
+            20, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 10, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
             0, 0,
         ];
 
