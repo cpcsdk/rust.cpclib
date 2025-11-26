@@ -215,31 +215,28 @@ impl ColorMatrix {
     pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
     pub const INK_NOT_USED_IN_MASK: Ink = Ink::RED;
 
-
     /// Build a representation of a palette
     pub fn from_palette(pal: &Palette, ink_size: usize) -> Self {
         let height = ink_size;
-        let width = ink_size*17;
+        let width = ink_size * 17;
 
         // create a full black image
         let mut matrix = ColorMatrix::new(width, height);
 
         for p in Pen::PENS {
-
-            let x = p.number() as usize *ink_size;
+            let x = p.number() as usize * ink_size;
             let y = 0;
 
             let i = pal.get(&p);
             for w in 0..ink_size {
                 for h in 0..ink_size {
-                    matrix.set_ink(x+w, y+h, *i);
+                    matrix.set_ink(x + w, y + h, *i);
                 }
             }
         }
 
         matrix
     }
-
 
     pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
         let pixel_height = {
@@ -751,10 +748,7 @@ impl ColorMatrix {
         }
     }
 
-
     pub fn vstack(stack: &[Self]) -> Self {
-
-
         let max_width = stack.iter().map(|row| row.width()).max().unwrap() as usize;
         let tot_height = stack.iter().map(|row| row.height()).sum::<u32>() as usize;
 
@@ -768,13 +762,12 @@ impl ColorMatrix {
     }
 }
 
-
 impl ColorMatrix {
     pub fn draw_matrix_at(&mut self, x: usize, y: usize, other: &Self) {
         for w in 0..(other.width() as usize) {
             for h in 0..(other.height() as usize) {
                 let i = other.get_ink(w, h);
-                self.set_ink(x+w, y+h, *i);
+                self.set_ink(x + w, y + h, *i);
             }
         }
     }

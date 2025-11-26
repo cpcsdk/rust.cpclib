@@ -407,15 +407,23 @@ impl BndBuilderCommand {
         Ok(())
     }
 
-    fn execute_direct<O>(cmd: &str, with_expansion: bool, observers: &Arc<O>) -> Result<(), BndBuilderError>
-    where O: BndBuilderObserver + 'static {
+    fn execute_direct<O>(
+        cmd: &str,
+        with_expansion: bool,
+        observers: &Arc<O>
+    ) -> Result<(), BndBuilderError>
+    where
+        O: BndBuilderObserver + 'static
+    {
         // TODO remove strong dependency to serde_yaml and replace it by Task
-        
+
         let cmd = if with_expansion {
             let env = create_template_env::<&str, &str, &str>(None, &[]); // TODO add definition handling
-            env.render_str(cmd, minijinja::context!())
-                .map_err(|e| BndBuilderError::AnyError(format!("Error when handling cmd expansion. {e}")))?
-        } else {
+            env.render_str(cmd, minijinja::context!()).map_err(|e| {
+                BndBuilderError::AnyError(format!("Error when handling cmd expansion. {e}"))
+            })?
+        }
+        else {
             cmd.to_string()
         };
 
@@ -722,9 +730,7 @@ impl BndBuilderApp {
                     .map(|definition| {
                         let (symbol, value) = {
                             match definition.split_once("=") {
-                                Some((symbol, value)) => {
-                                    (symbol, value)
-                                },
+                                Some((symbol, value)) => (symbol, value),
                                 None => (definition.as_str(), "1")
                             }
                         };
@@ -781,7 +787,10 @@ impl BndBuilderApp {
                     })?
                     .map(|s| s.as_str())
                     .join(" ");
-                return Ok(BndBuilderCommandInner::Direct(cmd, matches.get_flag("with_expansion")));
+                return Ok(BndBuilderCommandInner::Direct(
+                    cmd,
+                    matches.get_flag("with_expansion")
+                ));
             }
             else if let Some(generator) = matches.get_one::<Shell>("completion").copied() {
                 return Ok(BndBuilderCommandInner::GenerateCompletion(generator));

@@ -166,7 +166,7 @@ impl BndBuilder {
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
         // apply jinja templating
-        let env= create_template_env(working_directory.as_ref(), definitions);
+        let env = create_template_env(working_directory.as_ref(), definitions);
 
         // generate the template
         env.render_str(&content, context!())
@@ -262,7 +262,9 @@ impl BndBuilder {
         }
 
         // execute only one task per group but still count the others
-        grouped.into_values().map(|paths| {
+        grouped
+            .into_values()
+            .map(|paths| {
                 let other_paths = if paths.len() > 1 {
                     Some(&paths[1..])
                 }

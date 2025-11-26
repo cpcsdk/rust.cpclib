@@ -12,7 +12,7 @@ impl YmCruncher {
             #[cfg(feature = "fap")]
             YmCruncher::Fap => cpclib_runner::runner::ay::fap::FAP_CMD,
             YmCruncher::Ayt => cpclib_runner::runner::ay::ayt::AYT_CMD,
-            YmCruncher::Miny => cpclib_runner::runner::ay::minimiser::MINIMISER_CMD,
+            YmCruncher::Miny => cpclib_runner::runner::ay::minimiser::MINIMISER_CMD
         }
     }
 }

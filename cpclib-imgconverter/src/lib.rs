@@ -1026,14 +1026,14 @@ pub fn build_cpc2img_args_parser() -> clap::Command {
                             .help("Width of the screen in bytes")
                     )
             )
-            .arg(Arg::new("INPUT")
-                .help("File to Read. Can be a .scr, a .pal")
-                .required(true))
+            .arg(
+                Arg::new("INPUT")
+                    .help("File to Read. Can be a .scr, a .pal")
+                    .required(true)
+            )
             .arg(Arg::new("OUTPUT").required(true))
     )
 }
-
-
 
 pub fn build_img2cpc_args_parser() -> clap::Command {
     let args = specify_palette!(Command::new("CPC image conversion tool")
@@ -1401,7 +1401,8 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
     let data = std::fs::read(input_fname).expect("Unable to read input file");
 
     // remove header if any
-    let data = if data.len() >= 128 && cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid()
+    let data = if data.len() >= 128
+        && cpclib::disc::amsdos::AmsdosHeader::from_buffer(&data).is_checksum_valid()
         && data[..128].iter().map(|&b| b as usize).sum::<usize>() != 0
     {
         &data[128..]
@@ -1409,7 +1410,6 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
     else {
         &data
     };
-
 
     let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("sprite") {
         let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
@@ -1420,30 +1420,30 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
         ColorMatrix::from_screen(data, width as _, mode, &palette)
     }
     else if let Some(_paletteocp) = matches.subcommand_matches("palette") {
-        let palettes = if data.len()%17 == 0 {
+        let palettes = if data.len() % 17 == 0 {
             // this is my gate array format
             data.chunks(17)
-                .map(|p|  {
+                .map(|p| {
                     let inks = p.iter().map(|b| Ink::from(*b));
                     Palette::from(inks)
                 })
                 .collect_vec()
-        } else {
+        }
+        else {
             // this is the real OCP format
             OcpPalette::from_buffer(data)
-                .palettes().iter()
+                .palettes()
+                .iter()
                 .cloned()
                 .collect_vec()
         };
 
-
-        let rows = palettes.into_iter()
+        let rows = palettes
+            .into_iter()
             .map(|p| ColorMatrix::from_palette(&p, 32))
             .collect_vec();
-        
-    
-        ColorMatrix::vstack(&rows)
 
+        ColorMatrix::vstack(&rows)
     }
     else {
         unreachable!()

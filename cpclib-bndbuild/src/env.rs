@@ -3,9 +3,9 @@ use cpclib_runner::runner::tracker::at3::At3Version;
 use minijinja::{Environment, Error, ErrorKind};
 
 pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
-        _working_directory: Option<P>,
-        definitions: &[(S1, S2)]) -> Environment<'_> {
-
+    _working_directory: Option<P>,
+    definitions: &[(S1, S2)]
+) -> Environment<'_> {
     let mut env = Environment::new();
     fn error(error: String) -> Result<String, Error> {
         Err(Error::new(ErrorKind::InvalidOperation, error))
@@ -13,7 +13,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
     #[cfg(target_os = "linux")]
     fn basm_escape_path(path: String) -> Result<String, Error> {
         Ok(path)
-    } 
+    }
 
     #[cfg(target_os = "windows")]
     fn basm_escape_path(path: String) -> Result<String, Error> {
@@ -22,8 +22,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
 
     pub fn path_loader<'x, P: AsRef<std::path::Path> + 'x>(
         dir: P
-    ) -> impl for<'a> Fn(&'a str) -> Result<Option<String>, Error> + Send + Sync + 'static
-    {
+    ) -> impl for<'a> Fn(&'a str) -> Result<Option<String>, Error> + Send + Sync + 'static {
         let dir = dir.as_ref().to_path_buf();
         move |name| {
             let path = dir.join(name); // TODO add a safety ??
@@ -75,5 +74,4 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
     }
 
     env
-
 }

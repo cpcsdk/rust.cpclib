@@ -30,12 +30,12 @@ use crate::task::{CPC2IMG_CMDS, GRAFX2_CMDS};
 pub mod app;
 pub mod builder;
 pub mod constraints;
+pub mod env;
 pub mod event;
 pub mod executor;
 pub mod rules;
 pub mod runners;
 pub mod task;
-pub mod env;
 pub use builder::*;
 pub use cpclib_common;
 
