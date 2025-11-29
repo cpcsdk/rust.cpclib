@@ -411,8 +411,8 @@ pub enum BndBuilderError {
     NoTargets,
     #[error("The target {0} is disabled.")]
     DisabledTarget(String),
-    #[error("Target {0} is not buildable.")]
-    UnknownTarget(String),
+    #[error("Target {0} is not buildable. You may want to build {1}")]
+    UnknownTarget(String, String),
     #[error("{0}")]
     AnyError(String),
     #[cfg(feature = "self-update")]

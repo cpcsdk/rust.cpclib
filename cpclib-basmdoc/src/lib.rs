@@ -1,4 +1,3 @@
-use std::thread::current;
 
 use cpclib_asm::ListingElement;
 

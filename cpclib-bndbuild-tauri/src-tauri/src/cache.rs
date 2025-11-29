@@ -38,7 +38,7 @@ impl EventObserver for TauriBndBuilderObserver {
 impl BndBuilderObserver for TauriBndBuilderObserver {
     fn update(&mut self, event: cpclib_bndbuild::event::BndBuilderEvent) {
         match event {
-            cpclib_bndbuild::event::BndBuilderEvent::ChangeState(state) => {
+            cpclib_bndbuild::event::BndBuilderEvent::ChangeState(_state) => {
                 // ignore that or use it to change a css class
             },
             cpclib_bndbuild::event::BndBuilderEvent::StartRule { rule, nb, out_of } => {
@@ -286,7 +286,7 @@ impl CachedBndBuilder {
 
             child
                 .write(dot.as_bytes())
-                .map_err(|e| "Error while piping the dot content".to_owned())?;
+                .map_err(|_e| "Error while piping the dot content".to_owned())?;
             drop(child); // XXX ensure stdin is closed
 
             let mut svg = Vec::new();
@@ -304,7 +304,7 @@ impl CachedBndBuilder {
                     CommandEvent::Error(e) => {
                         return Err(format!("Error with graphviz conversion. {e}"));
                     },
-                    CommandEvent::Terminated(terminated_payload) => break,
+                    CommandEvent::Terminated(_terminated_payload) => break,
                     _ => todo!()
                 }
             }

@@ -142,7 +142,7 @@ async fn load_build_file(fname: Utf8PathBuf, app: AppHandle) -> Result<(), ()> {
         BndbuildState::Empty | BndbuildState::Workdir(_) => {
             unreachable!()
         },
-        BndbuildState::Loaded(bndbuild_state_loaded) => {
+        BndbuildState::Loaded(_bndbuild_state_loaded) => {
             #[derive(Clone, Serialize)]
             #[serde(rename_all = "camelCase")]
             struct MsgLoad<'a> {
@@ -372,7 +372,7 @@ async fn add_menu(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         .quit()
         .build()?;
 
-    let (commands_list, clearable_list) = commands_list();
+    let (_commands_list, _clearable_list) = commands_list();
 
     let clear_all = MenuItemBuilder::new("All").build(app)?;
     let clearable = ALL_APPLICATIONS
