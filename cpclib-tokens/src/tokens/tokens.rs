@@ -354,6 +354,14 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn comment(&self) -> &str {
+            match self {
+                Self::Comment(content, ..) => content.as_str(),
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
         fn is_equ(&self) -> bool {
             match self {
                 Self::Equ { .. } => true,

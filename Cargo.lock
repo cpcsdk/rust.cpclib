@@ -2214,6 +2214,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-basmdoc"
+version = "0.1.0"
+dependencies = [
+ "cpclib-asm",
+]
+
+[[package]]
 name = "cpclib-bdasm"
 version = "0.10.0"
 dependencies = [

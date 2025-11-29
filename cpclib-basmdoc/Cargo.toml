@@ -1,0 +1,17 @@
+[package]
+name = "cpclib-basmdoc"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[dependencies]
+cpclib-asm.workspace = true
+
+
+[lints]
+workspace = true
+

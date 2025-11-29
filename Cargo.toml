@@ -3,7 +3,7 @@ members = [
   "cpclib",
   "cpclib-asm",
   "cpclib-basic",
-  "cpclib-basm",
+  "cpclib-basm", "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-bndbuild-tauri/src-tauri",
@@ -37,6 +37,7 @@ default-members = [
   "cpclib-asm",
   "cpclib-basic",
   "cpclib-basm",
+  "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-common",
@@ -75,6 +76,7 @@ cpclib = { version = "0.11.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.10.0", path = "cpclib-asm", default-features = false }
 cpclib-basic = { version = "0.10.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.10.0", path = "cpclib-basm", default-features = false }
+cpclib-basmdoc = { version = "0.10.0", path = "cpclib-basmdoc", default-features = false }
 cpclib-bdasm = { version = "0.10.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.8.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
@@ -211,6 +213,7 @@ cpclib = { path = "./cpclib/" }
 cpclib-asm = { path = "./cpclib-asm/" }
 cpclib-basic = { path = "./cpclib-basic/" }
 cpclib-basm = { path = "./cpclib-basm/" }
+cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
 cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }

@@ -1213,6 +1213,7 @@ impl ListingElement for LocatedToken {
 
     any_delegate!(
         fn assign_symbol(&self) -> &str;
+        fn comment(&self) -> &str;
         fn assign_value(&self) -> &Self::Expr;
         fn equ_symbol(&self) -> &str;
         fn equ_value(&self) -> &Self::Expr;

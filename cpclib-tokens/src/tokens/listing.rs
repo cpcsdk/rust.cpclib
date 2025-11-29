@@ -45,6 +45,8 @@ where Self: Debug + Sized + Sync
     fn org_second(&self) -> Option<&Self::Expr>;
 
     fn is_comment(&self) -> bool;
+    fn comment(&self) -> &str;
+
     fn is_set(&self) -> bool;
 
     fn is_label(&self) -> bool;
