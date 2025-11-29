@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::Display;
+use std::fmt::{Display, format};
 use std::io::Read;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -491,7 +491,11 @@ pub struct EmulatorConf {
     pub(crate) break_on_bad_vbl: bool,
     pub(crate) break_on_bad_hbl: bool,
 
+    /// The file name to launch automatically
     pub(crate) auto_run: Option<String>,
+
+    /// The file that contains the command to automaticall type
+    pub (crate) auto_type: Option<Utf8PathBuf>,
 
     pub(crate) memory: Option<u32>,
 
@@ -629,6 +633,19 @@ impl EmulatorConf {
                 _ => unimplemented!()
             };
             args.push(arg.to_owned());
+        }
+
+        if let Some(ftype) = &self.auto_type {
+            match emu {
+                Emulator::Ace(_) => {
+                    if let Some(ext) = dbg!(ftype.extension()) && ext == "txt" {
+                        args.push(ftype.as_str().to_string());
+                    } else {
+                        return Err(format!("`{ftype}` should end by .txt"));
+                    }
+                },
+                _ => unimplemented!()
+            }
         }
 
         if let Some(run) = &self.auto_run {
@@ -1427,6 +1444,9 @@ pub struct EmuCli {
     #[arg(short='r', long, aliases = ["auto", "run", "autoRunFile"], action = ArgAction::Set, help = "The file to run" )]
     auto_run_file: Option<String>,
 
+    #[arg(long, aliases = ["autotype", "type", "autoTypeFile"], action=ArgAction::Set, help = "The file that contains the text to type", conflicts_with="auto_run_file")]
+    auto_type_file: Option<Utf8PathBuf>,
+
     #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
     disable_rom: Vec<AmstradRom>,
 
@@ -1572,6 +1592,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         .maybe_snapshot(cli.snapshot.clone().map(|a| a.into()))
         .debug_files(cli.debug.clone())
         .maybe_auto_run(cli.auto_run_file.clone())
+        .maybe_auto_type(cli.auto_type_file.clone())
         .maybe_memory(cli.memory.clone().map(|v| v.parse::<u32>().unwrap()))
         .break_on_bad_hbl(cli.break_on_bad_hbl)
         .break_on_bad_vbl(cli.break_on_bad_vbl);
@@ -1707,7 +1728,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
         if let Some(albireo) = &cli.albireo {
             #[cfg(unix)]
             {
-                let (_backup_folder, emu_folder) = albireo_backup_and_original.as_ref().unwrap();
+                let (_backup_folder, emu_folder) = lbireo_backup_and_original.as_ref().unwrap();
 
                 std::os::unix::fs::symlink(
                     std::path::absolute(albireo).unwrap(),
