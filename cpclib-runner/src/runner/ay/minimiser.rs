@@ -20,7 +20,6 @@ cfg_select! {
     {
         impl MinimiserVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-               use crate::delegated::ArchiveFormat; 
                 match self {
                     MinimiserVersion::V0_4  =>
                         DelegateApplicationDescription::builder()

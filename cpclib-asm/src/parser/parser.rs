@@ -4639,7 +4639,10 @@ pub fn parse_out(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
             parse_comma,
             alt((
                 parse_register8,
-                alt((parse_word(b"f").take(), "0")).map(|w| {
+                alt((
+                    parse_word(b"f").take(),
+                    parse_value.verify(|e| e.is_value() && e.value() == 0).take()
+                )).map(|w| {
                     LocatedDataAccess::Expression(LocatedExpr::Value(
                         0,
                         cloned.update_slice(w).into()
