@@ -1,20 +1,96 @@
 use cpclib_asm::ListingElement;
+use cpclib_asm::parse_z80_str;
 
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 const LOCAL_DOCUMENTATION_START: &str = ";;";
 
+#[derive(Debug)]
 pub enum MetaDocumentation {
     Author(String),
     Date(String),
     Since(String)
 }
 
+#[derive(Debug)]
 pub enum DocumentedItem {
-    File,
-    Label,
-    Macro,
+    File(String),
+    Label(String),
+    Equ(String, String),
+    Macro(String, Vec<String>),
     Function
 }
+
+#[derive(Debug)]
+pub struct ItemDocumentation {
+    item: DocumentedItem,
+    doc: String // TODO use MetaDocumentation
+}
+
+impl ItemDocumentation {
+    pub fn to_markdown(&self) -> String {
+        let mut md = String::default();
+
+
+        match &self.item {
+            DocumentedItem::Label(l) => {
+                md += &format!("## {l} (label) \n\n");
+            },
+
+            DocumentedItem::Equ(l, v) => {
+                md += &format!("## {l} EQU {v} \n\n");
+            },
+
+            DocumentedItem::Macro(n, args) => {
+                let args = args.join(",");
+                md += &format!("## MACRO {n}({args}) \n\n");
+            }
+
+            _ => {
+                // currently ignored
+            }
+        }
+        
+        md += &self.doc;
+        md += "\n";
+
+        md
+    }
+}
+
+#[derive(Debug)]
+pub struct DocumentationPage {
+    fname: String,
+    content: Vec<ItemDocumentation>
+}
+
+impl DocumentationPage {
+    // TODO handle errors
+    pub fn for_file(fname: &str) -> Self {
+        let code = std::fs::read_to_string(fname).unwrap();
+        let tokens = parse_z80_str(&code).unwrap();
+        let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
+        build_documentation_page_from_aggregates(fname, doc)
+    }
+    
+    
+    /// Return a string that encode the documentation page in markdown
+    pub fn to_markdown(&self) -> String {
+        let mut md = String::default();
+
+        md += "# File: " ; md += &self.fname; md += "\n\n";
+
+        for item in self.content.iter() {
+            md += &item.to_markdown();
+            md += "\n\n";
+        }
+
+        md
+    }
+
+
+
+}
+
 
 #[inline]
 pub fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
@@ -33,27 +109,64 @@ pub fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
         && !token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
 }
 
-pub fn is_documentable<T: ListingElement>(token: &T) -> bool {
+pub fn is_documentable<T: ListingElement >(token: &T) -> bool {
     documentation_type(token).is_some()
 }
 
-pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem> {
+pub fn documentation_type<T: ListingElement >(token: &T) -> Option<DocumentedItem> {
     if token.is_label() {
-        Some(DocumentedItem::Label)
+        Some(DocumentedItem::Label(token.label_symbol().to_string()))
+    }
+    else if token.is_equ() {
+        Some(DocumentedItem::Equ(
+            token.equ_symbol().to_string(), 
+            token.equ_value().to_string()
+        ))
     }
     else if token.is_function_definition() {
         Some(DocumentedItem::Function)
     }
     else if token.is_macro_definition() {
-        Some(DocumentedItem::Macro)
+        Some(DocumentedItem::Macro(
+            token.macro_definition_name().to_string(),
+            token.macro_definition_arguments().iter()
+                .map(|a| a.to_string())
+                .collect()
+        ))
     }
     else {
         None
     }
 }
 
+pub fn build_documentation_page_from_aggregates<T: ListingElement >(fname: &str, agg: Vec<(String, Option<&T>)>) -> DocumentationPage {
+
+    let content = agg.into_iter()
+        .map(|(doc, t)| {
+            if let Some(t) = t {
+                ItemDocumentation { 
+                    item: documentation_type(t).unwrap(), 
+                    doc 
+                }
+
+            } else {
+                ItemDocumentation {
+                    item: DocumentedItem::File(fname.to_string()),
+                    doc
+                }
+            }
+
+        })
+        .collect();
+
+    DocumentationPage {
+        fname: fname.to_string(),
+        content
+    }
+}
+
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
-pub fn aggregate_documentation_on_tokens<T: ListingElement>(
+pub fn aggregate_documentation_on_tokens<T: ListingElement  >(
     tokens: &[T]
 ) -> Vec<(String, Option<&T>)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]

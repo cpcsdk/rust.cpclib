@@ -18,7 +18,7 @@ where Self: Debug + Sized + Sync
 {
     type MacroParam: MacroParamElement;
     type TestKind: TestKindElement;
-    type Expr: ExprElement + Debug + Eq + Clone;
+    type Expr: ExprElement + Debug + Eq + Clone + std::fmt::Display;
     // type Element: ListingElement + Debug + Sync;
     type DataAccess: DataAccessElem<Expr = Self::Expr>;
     // type Listing: ListingTrait;
@@ -54,6 +54,7 @@ where Self: Debug + Sized + Sync
     fn is_assign(&self) -> bool;
     fn equ_symbol(&self) -> &str;
     fn equ_value(&self) -> &Self::Expr;
+    fn label_symbol(&self) -> &str;
     fn assign_symbol(&self) -> &str;
     fn assign_value(&self) -> &Self::Expr;
 

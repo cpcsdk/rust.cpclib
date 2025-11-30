@@ -1216,6 +1216,7 @@ impl ListingElement for LocatedToken {
         fn comment(&self) -> &str;
         fn assign_value(&self) -> &Self::Expr;
         fn equ_symbol(&self) -> &str;
+        fn label_symbol(&self) -> &str;
         fn equ_value(&self) -> &Self::Expr;
         fn module_name(&self) -> &str;
         fn while_expr(&self) -> &Self::Expr;

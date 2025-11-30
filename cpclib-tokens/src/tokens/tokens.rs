@@ -82,6 +82,13 @@ macro_rules! listing_element_impl_most_methods {
                 _ => unreachable!()
             }
         }
+        #[inline]
+        fn label_symbol(&self) -> &str {
+            match self {
+                Self::Label(label, ..) => label.as_str(),
+                _ => unreachable!()
+            }
+        }
 
         #[inline]
         fn assign_symbol(&self) -> &str {
