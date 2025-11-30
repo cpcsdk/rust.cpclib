@@ -1,4 +1,6 @@
 
+use std::default;
+
 use cpclib_asm::ListingElement;
 
 const GLOBAL_DOCUMENTATION_START : &str = ";;;";
@@ -53,60 +55,119 @@ pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem
     }
 }
 
-pub fn aggregate_comments_on_tokens<T: ListingElement>(tokens: &[T]) -> Vec<(String, Option<&T>)>{
+/// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
+pub fn aggregate_documentation_on_tokens<T: ListingElement>(tokens: &[T]) -> Vec<(String, Option<&T>)>{
 
-    #[derive(PartialEq)]
+    #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
+        #[default]
         Unspecified,
         Global,
         Local
     }
 
+    #[derive(Default)]
+    struct CommentInConstruction {
+        kind: CommentKind,
+        content: String
+    };
+
+    impl CommentInConstruction {
+        fn consume(&mut self) -> String {
+            self.kind = CommentKind::Unspecified;
+            let comment = self.content.clone();
+            self.content.clear();
+            comment
+        }
+
+        fn clear(&mut self) {
+            let _ = self.consume();
+        }
+
+        fn kind (&self) -> CommentKind {
+            self.kind
+        }
+
+        fn set_kind(&mut self, kind: CommentKind) {
+            self.kind = kind;
+        }
+
+        fn is_local(&self) -> bool {
+            self.kind() == CommentKind::Local
+        }
+
+        fn is_global(&self) -> bool {
+            self.kind() == CommentKind::Global
+        }
+
+        fn is_unspecified(&self) -> bool {
+            self.kind() == CommentKind::Unspecified
+        }
+
+        fn add_comment(&mut self, comment: &str) {
+            if !self.content.is_empty() {
+                self.content += "\n";
+            }
+            self.content += comment;
+        }
+    }
+
 
     let mut doc = Vec::new();
 
-    let mut current_comment = String::new();
-    let mut current_kind = CommentKind::Unspecified;
+    let mut in_process_comment = CommentInConstruction::default();
 
     for token in tokens {
-        let is_comment = if is_global_documentation(token) {
-            if current_kind == CommentKind::Local {
+        let (current_is_doc, current_is_documentable) = if is_global_documentation(token) {
+            if in_process_comment.is_local() {
                 // here, this is an error, there was a local comment and it is replaced by a global one
                 // so, we lost it
-                current_comment.clear();
+                in_process_comment.clear();
             }
-            current_kind = CommentKind::Global;
-            true
+            in_process_comment.set_kind(CommentKind::Global);
+            (true, false)
         } else if is_local_documentation(token) {
-            if current_kind == CommentKind::Global {
+            if in_process_comment.is_global() {
                 // here we can release the global comment
-                doc.push((current_comment.clone(), None));
-                current_comment.clear();
+                doc.push((in_process_comment.consume(), None));
             }
-            current_kind = CommentKind::Local;
-            true
+            in_process_comment.set_kind(CommentKind::Local);
+            (true, false)
         } else {
-            false
+            (false, is_documentable(token))
         };
 
-
-        if is_comment {
-            if !current_comment.is_empty() {
-                current_comment += "\n";
-            }
-            current_comment += token.comment()
-        } else if is_documentable(token){
-            let added = if current_kind == CommentKind::Global {
-                None
+        if current_is_doc {
+            // we update the documentation
+            in_process_comment.add_comment(token.comment());
+        } else if current_is_documentable {
+            if !in_process_comment.is_unspecified() {
+                // we comment an item if any
+                let documented = if in_process_comment.is_global() {
+                    // for a global comment, we do not care of that
+                    None
+                } else {
+                    // but we do for a local comment
+                    Some(token)
+                };
+                doc.push((in_process_comment.consume(), documented));
             } else {
-                Some(token)
-            };
-            doc.push((current_comment.clone(), added));
-            current_comment.clear();
+                // we add no comment, so we do nothing
+            }
         } else {
-            // former comment was not commenting something and is ignored
-            current_comment.clear();
+            // this is not a doc or a documentable, so we can eventually treat a global
+            if in_process_comment.is_global() {
+                doc.push((in_process_comment.consume(), None));
+            } else if in_process_comment.is_local() {
+                // comment is lost as there is nothing else to comment
+                in_process_comment.clear();
+            }
         }
+    }
+
+    // The last comment can only be a global comment
+    if in_process_comment.is_global() {
+        doc.push((in_process_comment.consume(), None));
     }
 
 
@@ -118,7 +179,7 @@ pub fn aggregate_comments_on_tokens<T: ListingElement>(tokens: &[T]) -> Vec<(Str
 mod test {
     use cpclib_asm::Token;
 
-    use crate::{aggregate_comments_on_tokens, is_any_documentation};
+    use crate::{aggregate_documentation_on_tokens, is_any_documentation};
 
     #[test]
     fn test_is_documentation() {
@@ -129,18 +190,31 @@ mod test {
 
 
     #[test]
-    fn test_aggregate_global_comment() {
+    fn test_aggregate_global_documentation() {
         let tokens = [  
             Token::Comment(";;; This file is commented, not the function!".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_comments_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, ";;; This file is commented, not the function!");
         assert!(doc[0].1.is_none());
         
     }
 
+    #[test]
+    fn test_aggregate_global_documentation_followed_by_comment() {
+
+        let tokens = [
+                Token::Comment(";;; The aim of this file is to do stuffs.".into()),
+                Token::Comment(";;; And this comment is a top file comment.".into()),
+                Token::Comment("; This is not a documentation, just a comment".into())
+        ];
+            let doc = aggregate_documentation_on_tokens(&tokens);
+        assert_eq!(doc.len(), 1);
+        assert_eq!(&doc[0].0, ";;; The aim of this file is to do stuffs.\n;;; And this comment is a top file comment.");
+        assert!(doc[0].1.is_none());   
+    }
 
     #[test]
     fn test_aggregate_label_comment() {
@@ -148,7 +222,7 @@ mod test {
             Token::Comment(";; This function does something".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_comments_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, ";; This function does something");
         assert!(doc[0].1.is_some());
@@ -162,7 +236,7 @@ mod test {
             Token::Comment(";; ... on two lines".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_comments_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, ";; This function does something ...\n;; ... on two lines");
         assert!(doc[0].1.is_some());
@@ -181,7 +255,7 @@ mod test {
                 flavor: cpclib_asm::AssemblerFlavor::Basm,
             }
         ];
-        let doc = aggregate_comments_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, ";; This macro does something");
         assert!(doc[0].1.is_some());
