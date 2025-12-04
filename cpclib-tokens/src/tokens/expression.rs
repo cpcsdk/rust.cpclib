@@ -1379,6 +1379,11 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
             },
 
+            (ExprResult::String(s), _) => {
+                let rhs_str = rhs.to_string();
+                Ok(ExprResult::String(format!("{s}{rhs_str}").into()))
+            },
+
             (ExprResult::List(l1), ExprResult::List(l2)) if l1.len() == l2.len() => {
                 let l3 = l1
                     .into_iter()
@@ -1393,6 +1398,12 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
             (any, ExprResult::String(s)) if s.len() == 1 => {
                 any + ExprResult::Char(s.chars().next().unwrap() as u8)
             },
+
+            (any, ExprResult::String(s)) => {
+                let any_str = any.to_string();
+                Ok(ExprResult::String(format!("{any_str}{s}").into()))
+            },
+
             (any, ExprResult::Char(c)) => any + ExprResult::Value(*c as _),
 
             (any, _) => {
