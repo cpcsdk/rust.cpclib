@@ -19,6 +19,45 @@ pub enum DocumentedItem {
     Function
 }
 
+impl DocumentedItem {
+    pub fn is_label(&self) -> bool {
+        matches!(self, DocumentedItem::Label(_))
+    }
+
+    pub fn is_equ(&self) -> bool {
+        matches!(self, DocumentedItem::Equ(_, _))
+    }
+
+    pub fn is_macro(&self) -> bool {
+        matches!(self, DocumentedItem::Macro(_, _))
+    }
+
+    pub fn is_function(&self) -> bool {
+        matches!(self, DocumentedItem::Function)
+    }
+
+
+    pub fn item_key(&self) -> String {
+        match self {
+            DocumentedItem::Label(l) => {
+                format!("label_{}", l.to_string())
+            },
+
+            DocumentedItem::Equ(l, _) => {
+                format!("equ_{}", l.to_string())
+            },
+
+            DocumentedItem::Macro(n, _) => {
+                format!("macro_{}", n.to_string())
+            },
+
+            _ => {
+                String::from("unknown_item")
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ItemDocumentation {
     item: DocumentedItem,
@@ -26,6 +65,40 @@ pub struct ItemDocumentation {
 }
 
 impl ItemDocumentation {
+
+    delegate::delegate! {
+        to self.item {
+            pub fn is_label(&self) -> bool;
+            pub fn is_equ(&self) -> bool;
+            pub fn is_macro(&self) -> bool;
+            pub fn is_function(&self) -> bool;
+
+            pub fn item_key(&self) -> String;
+        }
+    }
+
+
+
+    pub fn item_summary(&self) -> String {
+        match &self.item {
+            DocumentedItem::Label(l) => {
+                l.to_string()
+            },
+
+            DocumentedItem::Equ(l, v) => {
+                format!("{l} EQU {v}")
+            },
+
+            DocumentedItem::Macro(n, args) => {
+                let args = args.join(",");
+                format!("MACRO {n}({args})")
+            },
+
+            _ => {
+                String::from("Unknown item")
+            }
+        }
+    }
     pub fn to_markdown(&self) -> String {
         let mut md = String::default();
 
@@ -68,6 +141,11 @@ impl DocumentationPage {
         let tokens = parse_z80_str(&code).unwrap();
         let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
         build_documentation_page_from_aggregates(fname, doc)
+    }
+
+    pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
+        self.content.iter()
+            .filter(|item| matches!(item.item, DocumentedItem::Label(_)))
     }
 
     /// Return a string that encode the documentation page in markdown

@@ -24,7 +24,7 @@ cpclib-asm.workspace = true
 cpclib-sna.workspace = true
 cpclib-basic.workspace = true
 
-wasm-bindgen = "0.2.100" 
+wasm-bindgen = "0.2.106" 
 
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
@@ -34,10 +34,10 @@ wasm-bindgen = "0.2.100"
 console_error_panic_hook = { version = "0.1.7", optional = true }
 
 
-js-sys = "0.3.77" 
+js-sys = "0.3.83" 
 
 [dependencies.web-sys]
-version = "0.3.77"
+version = "0.3.83"
 features = [
   'console',
   'Blob', 'BlobPropertyBag',
@@ -48,6 +48,6 @@ features = [
 
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.50"
+wasm-bindgen-test = "0.3.56"
 
 

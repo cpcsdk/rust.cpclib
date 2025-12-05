@@ -10,7 +10,7 @@ description.workspace = true
 
 [dependencies]
 cpclib-asm.workspace = true
-
+delegate.workspace = true
 
 [lints]
 workspace = true
