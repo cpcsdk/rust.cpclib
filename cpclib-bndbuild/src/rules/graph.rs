@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, HashSet};
 use camino::Utf8PathBuf;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
-use topologic::AcyclicDependencyGraph;
 use cpclib_common::strsim;
+use topologic::AcyclicDependencyGraph;
 
 use super::{Rule, Rules};
 use crate::BndBuilderError;
@@ -137,13 +137,17 @@ impl<'r> Graph<'r> {
         self.node2tracked
             .get(p)
             .map(|idx| self.tracked.rule_at(*idx))
-            .ok_or_else(||  {
-                let other = self.node2tracked.keys().map(|key|
-                    (strsim::levenshtein(p.as_str(), key.as_str()), key.as_str())
-                ).min();
+            .ok_or_else(|| {
+                let other = self
+                    .node2tracked
+                    .keys()
+                    .map(|key| (strsim::levenshtein(p.as_str(), key.as_str()), key.as_str()))
+                    .min();
 
-
-                BndBuilderError::UnknownTarget(p.as_str().to_owned(), other.map(|v| v.1.to_string()).unwrap_or_default())
+                BndBuilderError::UnknownTarget(
+                    p.as_str().to_owned(),
+                    other.map(|v| v.1.to_string()).unwrap_or_default()
+                )
             })
     }
 

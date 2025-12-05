@@ -1,9 +1,8 @@
 use cpclib_common::event::EventObserver;
 
-use crate::delegated::DelegateApplicationDescription;
-
 #[allow(unused_imports)]
 use crate::delegated::ArchiveFormat;
+use crate::delegated::DelegateApplicationDescription;
 
 #[derive(Default)]
 pub enum MinimiserVersion {

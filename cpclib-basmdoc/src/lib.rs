@@ -1,5 +1,4 @@
-use cpclib_asm::ListingElement;
-use cpclib_asm::parse_z80_str;
+use cpclib_asm::{ListingElement, parse_z80_str};
 
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 const LOCAL_DOCUMENTATION_START: &str = ";;";
@@ -30,7 +29,6 @@ impl ItemDocumentation {
     pub fn to_markdown(&self) -> String {
         let mut md = String::default();
 
-
         match &self.item {
             DocumentedItem::Label(l) => {
                 md += &format!("## {l} (label) \n\n");
@@ -43,13 +41,13 @@ impl ItemDocumentation {
             DocumentedItem::Macro(n, args) => {
                 let args = args.join(",");
                 md += &format!("## MACRO {n}({args}) \n\n");
-            }
+            },
 
             _ => {
                 // currently ignored
             }
         }
-        
+
         md += &self.doc;
         md += "\n";
 
@@ -71,13 +69,14 @@ impl DocumentationPage {
         let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
         build_documentation_page_from_aggregates(fname, doc)
     }
-    
-    
+
     /// Return a string that encode the documentation page in markdown
     pub fn to_markdown(&self) -> String {
         let mut md = String::default();
 
-        md += "# File: " ; md += &self.fname; md += "\n\n";
+        md += "# File: ";
+        md += &self.fname;
+        md += "\n\n";
 
         for item in self.content.iter() {
             md += &item.to_markdown();
@@ -86,11 +85,7 @@ impl DocumentationPage {
 
         md
     }
-
-
-
 }
-
 
 #[inline]
 pub fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
@@ -109,17 +104,17 @@ pub fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
         && !token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
 }
 
-pub fn is_documentable<T: ListingElement >(token: &T) -> bool {
+pub fn is_documentable<T: ListingElement>(token: &T) -> bool {
     documentation_type(token).is_some()
 }
 
-pub fn documentation_type<T: ListingElement >(token: &T) -> Option<DocumentedItem> {
+pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem> {
     if token.is_label() {
         Some(DocumentedItem::Label(token.label_symbol().to_string()))
     }
     else if token.is_equ() {
         Some(DocumentedItem::Equ(
-            token.equ_symbol().to_string(), 
+            token.equ_symbol().to_string(),
             token.equ_value().to_string()
         ))
     }
@@ -129,7 +124,9 @@ pub fn documentation_type<T: ListingElement >(token: &T) -> Option<DocumentedIte
     else if token.is_macro_definition() {
         Some(DocumentedItem::Macro(
             token.macro_definition_name().to_string(),
-            token.macro_definition_arguments().iter()
+            token
+                .macro_definition_arguments()
+                .iter()
                 .map(|a| a.to_string())
                 .collect()
         ))
@@ -139,23 +136,25 @@ pub fn documentation_type<T: ListingElement >(token: &T) -> Option<DocumentedIte
     }
 }
 
-pub fn build_documentation_page_from_aggregates<T: ListingElement >(fname: &str, agg: Vec<(String, Option<&T>)>) -> DocumentationPage {
-
-    let content = agg.into_iter()
+pub fn build_documentation_page_from_aggregates<T: ListingElement>(
+    fname: &str,
+    agg: Vec<(String, Option<&T>)>
+) -> DocumentationPage {
+    let content = agg
+        .into_iter()
         .map(|(doc, t)| {
             if let Some(t) = t {
-                ItemDocumentation { 
-                    item: documentation_type(t).unwrap(), 
-                    doc 
+                ItemDocumentation {
+                    item: documentation_type(t).unwrap(),
+                    doc
                 }
-
-            } else {
+            }
+            else {
                 ItemDocumentation {
                     item: DocumentedItem::File(fname.to_string()),
                     doc
                 }
             }
-
         })
         .collect();
 
@@ -166,7 +165,7 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement >(fname: &str,
 }
 
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
-pub fn aggregate_documentation_on_tokens<T: ListingElement  >(
+pub fn aggregate_documentation_on_tokens<T: ListingElement>(
     tokens: &[T]
 ) -> Vec<(String, Option<&T>)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]

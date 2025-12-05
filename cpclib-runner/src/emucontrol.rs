@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Display, format};
+use std::fmt::Display;
 use std::io::Read;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -495,7 +495,7 @@ pub struct EmulatorConf {
     pub(crate) auto_run: Option<String>,
 
     /// The file that contains the command to automaticall type
-    pub (crate) auto_type: Option<Utf8PathBuf>,
+    pub(crate) auto_type: Option<Utf8PathBuf>,
 
     pub(crate) memory: Option<u32>,
 
@@ -638,9 +638,12 @@ impl EmulatorConf {
         if let Some(ftype) = &self.auto_type {
             match emu {
                 Emulator::Ace(_) => {
-                    if let Some(ext) = dbg!(ftype.extension()) && ext == "txt" {
+                    if let Some(ext) = dbg!(ftype.extension())
+                        && ext == "txt"
+                    {
                         args.push(ftype.as_str().to_string());
-                    } else {
+                    }
+                    else {
                         return Err(format!("`{ftype}` should end by .txt"));
                     }
                 },
