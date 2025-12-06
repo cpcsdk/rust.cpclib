@@ -13,9 +13,10 @@ cpclib-asm.workspace = true
 cpclib-common.workspace = true
 
 delegate.workspace = true
+glob.workspace = true
 minijinja = { workspace = true, features = ["loader"] }
-serde.workspace = true
 rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
+serde.workspace = true
 
 pandoc = {version="0.8"}
 

@@ -4,7 +4,7 @@ pub mod cmdline;
 use std::sync::Arc;
 
 use cpclib_asm::{ListingElement, parse_z80_str};
-use minijinja::{Environment, ErrorKind, Value, context, value::Object};
+use minijinja::{Environment, ErrorKind, Value, context, filters::format, value::Object};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
 
@@ -213,11 +213,14 @@ impl Object for DocumentationPage {
 }
 impl DocumentationPage {
     // TODO handle errors
-    pub fn for_file(fname: &str) -> Self {
-        let code = std::fs::read_to_string(fname).unwrap();
-        let tokens = parse_z80_str(&code).unwrap();
+    pub fn for_file(fname: &str) -> Result<Self, String> {
+        let code = std::fs::read_to_string(fname)
+            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
+        let tokens = parse_z80_str(&code)
+            .map_err(|e| format!("Unable to read source. {}", e))?;
         let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
-        build_documentation_page_from_aggregates(fname, doc)
+        
+        Ok(build_documentation_page_from_aggregates(fname, doc))
     }
 
     pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
