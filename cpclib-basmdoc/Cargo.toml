@@ -17,6 +17,8 @@ minijinja = { workspace = true, features = ["loader"] }
 serde.workspace = true
 rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
 
+pandoc = {version="0.8"}
+
 [lints]
 workspace = true
 
