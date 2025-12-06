@@ -1,3 +1,6 @@
+pub mod cmdline;
+
+
 use std::sync::Arc;
 
 use cpclib_asm::{ListingElement, parse_z80_str};

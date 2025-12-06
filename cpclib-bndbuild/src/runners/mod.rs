@@ -2,6 +2,7 @@ use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 pub mod assembler;
 pub mod ay;
+pub mod basmdoc;
 pub mod bndbuild;
 pub mod cpc2img;
 pub mod crunch;

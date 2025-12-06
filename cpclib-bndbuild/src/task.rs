@@ -37,6 +37,7 @@ use crate::event::BndBuilderObserver;
 use crate::execute;
 use crate::runners::assembler::Assembler;
 use crate::runners::ay::YmCruncher;
+use crate::runners::basmdoc::BASMDOC_CMD;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
@@ -46,7 +47,7 @@ use crate::runners::tracker::{SongConverter, Tracker};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InnerTask {
     Assembler(Assembler, StandardTaskArguments),
-    YmCruncher(YmCruncher, StandardTaskArguments),
+    BasmDoc(StandardTaskArguments),
     BndBuild(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
@@ -65,12 +66,13 @@ pub enum InnerTask {
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
     Mkdir(StandardTaskArguments),
-    Rm(StandardTaskArguments),
     Mv(StandardTaskArguments),
+    Rm(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
     SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
-    Xfer(StandardTaskArguments)
+    Xfer(StandardTaskArguments),
+    YmCruncher(YmCruncher, StandardTaskArguments),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -176,6 +178,7 @@ pub const SJASMPLUS_CMDS: &[&str] = &[SJASMPLUS_CMD];
 pub const UZ80_CMDS: &[&str] = &[UZ80_CMD];
 pub const VASM_CMDS: &[&str] = &[VASM_CMD];
 
+pub const BASMDOC_CMDS: &[&str] = &[BASMDOC_CMD, "doc"];
 pub const BDASM_CMDS: &[&str] = &["bdasm", "dz80"];
 pub const DISARK_CMDS: &[&str] = &[DISARK_CMD];
 
@@ -227,6 +230,7 @@ impl Display for InnerTask {
         let (cmd, s) = match self {
             Self::Assembler(a, s) => (a.get_command(), s),
             Self::YmCruncher(t, s) => (t.get_command(), s),
+            Self::BasmDoc(s) => (BASMDOC_CMDS[0], s),
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
@@ -281,7 +285,7 @@ macro_rules! is_some_cmd {
 #[rustfmt::skip]
 is_some_cmd!(
     ace, amspirit, at, ayt,
-    basm, bdasm, bndbuild,
+    basm, basmdoc, bdasm, bndbuild,
     capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
     echo, emuctrl, r#extern,
@@ -439,6 +443,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 }
                 else if is_bdasm_cmd(code) {
                     Ok(InnerTask::Disassembler(Disassembler::Bdasm, std))
+                }
+                else if is_basmdoc_cmd(code) {
+                    Ok(InnerTask::BasmDoc(std))
                 }
                 else if is_disark_cmd(code) {
                     Ok(InnerTask::Disassembler(
@@ -619,6 +626,7 @@ impl InnerTask {
         match self {
             InnerTask::Assembler(_, t)
             | InnerTask::YmCruncher(_, t)
+            | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
@@ -650,6 +658,7 @@ impl InnerTask {
         match self {
             InnerTask::Assembler(_, t)
             | InnerTask::YmCruncher(_, t)
+            | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
@@ -696,6 +705,7 @@ impl InnerTask {
         match self {
             InnerTask::Assembler(..) => false, // wrong when displaying stuff
             InnerTask::BndBuild(_) => false,
+            InnerTask::BasmDoc(_) => false,
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cp(_) => false,
             InnerTask::Mv(_) => false,

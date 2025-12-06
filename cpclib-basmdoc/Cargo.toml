@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-basmdoc"
-version = "0.1.0"
+version = "0.10.0"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,8 @@ description.workspace = true
 
 [dependencies]
 cpclib-asm.workspace = true
+cpclib-common.workspace = true
+
 delegate.workspace = true
 minijinja = { workspace = true, features = ["loader"] }
 serde.workspace = true
@@ -18,3 +20,7 @@ rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
 [lints]
 workspace = true
 
+
+[[bin]]
+name = "basmdoc"
+path = "src/bin/basmdoc.rs"

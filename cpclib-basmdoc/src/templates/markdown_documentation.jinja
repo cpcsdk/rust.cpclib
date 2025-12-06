@@ -1,0 +1,68 @@
+{% macro item_summary(item) %}
+- [{{item.summary}}](#{{item.summary 
+    | replace(" ", "-")
+    | replace("(", "")
+    | replace(")", "")
+    | replace("-+-", "-")
+    | lower 
+    }})
+{% endmacro %}
+
+{% macro items_familly_summary(familly, items) -%}
+
+### {{familly}} Summary
+
+{% for item in items -%}
+{{ item_summary(item) }}
+{%- endfor %}
+
+{%- endmacro %}
+
+{% macro item_description(item) %}
+
+#### {{ item.summary }}
+
+{{ item.doc }}
+
+{% endmacro %}
+
+{% macro items_familly_description(familly, items) %}
+## {{ familly }}
+
+{% for item in items %}
+{{ item_description(item) }}
+{% endfor %}
+
+{% endmacro %}
+
+
+# File: `{{page.file_name}}`
+
+## Summary
+
+{% if page.has_labels() %}
+{{  items_familly_summary("Labels", page.labels) }}
+{% endif %}
+
+{% if page.has_macros() %}
+{{  items_familly_summary("Macros", page.macros) }}
+{% endif %}
+    
+{%  if page.has_equ() %}
+{{  items_familly_summary("Equs", page.equs) }}
+{% endif %}
+
+## Details
+
+
+{% if page.has_labels() %}
+{{  items_familly_description("Labels", page.labels) }}
+{% endif %}
+
+{% if page.has_macros() %}
+{{  items_familly_description("Macros", page.macros) }}
+{% endif %}
+
+{%  if page.has_equ() %}
+{{  items_familly_description("Equs", page.equs) }}
+{% endif %}

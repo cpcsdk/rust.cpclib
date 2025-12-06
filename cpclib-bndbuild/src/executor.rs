@@ -19,6 +19,7 @@ use cpclib_runner::runner::{ExternRunner, Runner};
 use crate::event::{BndBuilderObserved, BndBuilderObserver};
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
+use crate::runners::basmdoc::BasmDocRunner;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cpc2img::CpcToImgRunner;
 use crate::runners::crunch::CrunchRunner;
@@ -166,6 +167,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 .run(task.args(), observer)
         },
         InnerTask::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
+        InnerTask::BasmDoc(_) => BasmDocRunner::<E>::default().run(task.args(), observer),
         InnerTask::Cp(_) => CpRunner::default().run(task.args(), observer),
         InnerTask::Mv(_) => MvRunner::default().run(task.args(), observer),
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),

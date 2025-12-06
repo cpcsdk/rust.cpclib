@@ -23,6 +23,7 @@ cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-basm = { workspace = true, default-features = false, features = [
     "xferlib",
 ] }
+cpclib-basmdoc = { workspace = true}
 cpclib-asm.workspace = true
 cpclib-crunch.workspace = true
 cpclib-sna = { workspace = true, features = ["cmdline"] }
