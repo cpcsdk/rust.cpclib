@@ -2,8 +2,15 @@ use std::sync::Arc;
 
 use cpclib_asm::{ListingElement, parse_z80_str};
 use minijinja::{Environment, ErrorKind, Value, context, value::Object};
-use minijinja_embed;
+use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
+
+
+#[derive(Embed)]
+#[folder = "src/templates/"]
+#[include = "*.jinja"]
+struct Templates;
+
 
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 const LOCAL_DOCUMENTATION_START: &str = ";;";
@@ -242,7 +249,12 @@ impl DocumentationPage {
         let page = Value::from_object(self.clone());
 
         let mut env = Environment::new();
-        minijinja_embed::load_templates!(&mut env); 
+        const TMPL_NAME : &str = "markdown_documentation.jinja";
+        let tmpl_src = Templates::get(TMPL_NAME)
+            .expect("Template not found")
+            .data;
+        let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();
+        env.add_template(TMPL_NAME, tmpl_src).unwrap();
         
         let tmpl = env.get_template("markdown_documentation.jinja").unwrap();
         tmpl.render(context! {
