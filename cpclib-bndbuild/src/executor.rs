@@ -28,6 +28,7 @@ use crate::runners::echo::EchoRunner;
 use crate::runners::fade::FadeRunner;
 use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::mkdir::MkdirRunner;
+use crate::runners::fs::mv::MvRunner;
 use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
@@ -166,6 +167,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         },
         InnerTask::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
         InnerTask::Cp(_) => CpRunner::default().run(task.args(), observer),
+        InnerTask::Mv(_) => MvRunner::default().run(task.args(), observer),
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
         InnerTask::Echo(_) => EchoRunner::default().run(task.args(), observer),
         InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),

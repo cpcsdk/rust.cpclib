@@ -1,16 +1,21 @@
+use std::sync::Arc;
+
 use cpclib_asm::{ListingElement, parse_z80_str};
+use minijinja::{Environment, ErrorKind, Value, context, value::Object};
+use minijinja_embed;
+use serde::{Deserialize, Serialize};
 
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 const LOCAL_DOCUMENTATION_START: &str = ";;";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum MetaDocumentation {
     Author(String),
     Date(String),
     Since(String)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum DocumentedItem {
     File(String),
     Label(String),
@@ -58,10 +63,22 @@ impl DocumentedItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ItemDocumentation {
     item: DocumentedItem,
     doc: String // TODO use MetaDocumentation
+}
+
+impl Object for ItemDocumentation {
+    fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
+
+        match key.as_str() {
+            Some("doc") => Some(Value::from(self.doc.clone())),
+            Some("summary") => Some(Value::from(self.item_summary())),
+            Some("key") => Some(Value::from(self.item.item_key())),
+            _ => None
+        }
+    }
 }
 
 impl ItemDocumentation {
@@ -128,12 +145,62 @@ impl ItemDocumentation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentationPage {
     fname: String,
     content: Vec<ItemDocumentation>
 }
 
+impl Object for DocumentationPage {
+    fn get_value(self: &Arc<Self>, name: &Value) -> Option<minijinja::value::Value> {
+        match name.as_str() {
+            Some("file_name") => Some(Value::from(self.fname.clone())),
+            Some("labels") => {
+                let labels =self.label_iter()
+                    .cloned()
+                    .map(|item| Value::from_object(item))
+                    .collect::<Vec<_>>();
+                let labels = Value::from_object(dbg!(labels));
+                Some(labels)
+            },
+            Some("macros") => {
+                let macros =self.macro_iter()
+                    .cloned()
+                    .map(|item| Value::from_object(item))
+                    .collect::<Vec<_>>();
+                let macros = Value::from_object(dbg!(macros));
+                Some(macros)
+            },
+            Some("equs") => {
+                let equs =self.equ_iter()
+                    .cloned()
+                    .map(|item| Value::from_object(item))
+                    .collect::<Vec<_>>();
+                let equs = Value::from_object(dbg!(equs));
+                Some(equs)
+            },
+            _ => None
+        }
+    }
+
+    fn call_method(
+            self: &std::sync::Arc<Self>,
+            state: &minijinja::State<'_, '_>,
+            method: &str,
+            args: &[minijinja::Value],
+        ) -> Result<minijinja::Value, minijinja::Error> {
+        match method {
+            "has_labels" => Ok(Value::from(self.has_labels())),
+            "has_macros" => Ok(Value::from(self.has_macros())),
+            "has_equ" => Ok(Value::from(self.has_equ())),
+
+            _ => Err(minijinja::Error::new(
+                ErrorKind::UnknownMethod,
+                format!("Unknown method '{}'", method),
+            )),
+        }
+    }
+}
 impl DocumentationPage {
     // TODO handle errors
     pub fn for_file(fname: &str) -> Self {
@@ -145,23 +212,42 @@ impl DocumentationPage {
 
     pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
         self.content.iter()
-            .filter(|item| matches!(item.item, DocumentedItem::Label(_)))
+            .filter(|item| item.is_label())
+    }
+
+    pub fn macro_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
+        self.content.iter()
+            .filter(|item| item.is_macro())
+    }
+
+    pub fn equ_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
+        self.content.iter()
+            .filter(|item| item.is_equ())
+    }
+
+    pub fn has_labels(&self) -> bool {
+        self.label_iter().next().is_some()
+    }
+
+    pub fn has_macros(&self) -> bool {
+        self.macro_iter().next().is_some()
+    }
+
+    pub fn has_equ(&self) -> bool {
+        self.equ_iter().next().is_some()
     }
 
     /// Return a string that encode the documentation page in markdown
     pub fn to_markdown(&self) -> String {
-        let mut md = String::default();
+        let page = Value::from_object(self.clone());
 
-        md += "# File: ";
-        md += &self.fname;
-        md += "\n\n";
-
-        for item in self.content.iter() {
-            md += &item.to_markdown();
-            md += "\n\n";
-        }
-
-        md
+        let mut env = Environment::new();
+        minijinja_embed::load_templates!(&mut env); 
+        
+        let tmpl = env.get_template("markdown_documentation.jinja").unwrap();
+        tmpl.render(context! {
+            page
+        }).unwrap()
     }
 }
 

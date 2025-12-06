@@ -66,6 +66,7 @@ pub enum InnerTask {
     Martine(StandardTaskArguments),
     Mkdir(StandardTaskArguments),
     Rm(StandardTaskArguments),
+    Mv(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
     SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
@@ -184,6 +185,7 @@ pub const CHIPNSFX_CMDS: &[&str] = &[CHIPNSFX_CMD];
 pub const HSPC_CMDS: &[&str] = &[HSPC_CMD, "hspc"];
 
 pub const CP_CMDS: &[&str] = &["cp", "copy"];
+pub const MV_CMDS: &[&str] = &["mv", "move", "rename"];
 pub const MKDIR_CMDS: &[&str] = &["mkdir"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
 
@@ -228,6 +230,7 @@ impl Display for InnerTask {
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
+            Self::Mv(s) => (MV_CMDS[0], s),
             Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
             Self::Crunch(s) => (CRUNCH_CMDS[0], s),
             Self::Disassembler(d, s) => (d.get_command(), s),
@@ -287,7 +290,7 @@ is_some_cmd!(
     hideur,hspc,
     img2cpc, impdisc,
     miny,
-    martine, mkdir,
+    martine, mkdir, mv,
     orgams,
     rasm, rm,
     sjasmplus, sna, sugarbox,
@@ -540,6 +543,9 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_cp_cmd(code) {
                     Ok(InnerTask::Cp(std))
                 }
+                else if is_mv_cmd(code) {
+                    Ok(InnerTask::Mv(std))
+                }
                 else if is_mkdir_cmd(code) {
                     Ok(InnerTask::Mkdir(std))
                 }
@@ -617,6 +623,7 @@ impl InnerTask {
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
+            | InnerTask::Mv(t)
             | InnerTask::CpcToImg(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
@@ -647,6 +654,7 @@ impl InnerTask {
             | InnerTask::Convgeneric(t)
             | InnerTask::Crunch(t)
             | InnerTask::Cp(t)
+            | InnerTask::Mv(t)
             | InnerTask::CpcToImg(t)
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
@@ -690,6 +698,7 @@ impl InnerTask {
             InnerTask::BndBuild(_) => false,
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cp(_) => false,
+            InnerTask::Mv(_) => false,
             InnerTask::CpcToImg(_) => false,
             InnerTask::Crunch(_) => false,
             InnerTask::Disassembler(..) => false,

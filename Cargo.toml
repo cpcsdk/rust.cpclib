@@ -140,6 +140,8 @@ image = "0.25.9"
 indicatif = "0.17.11"
 itertools = "0.14"
 libc = "0.2.178"
+minijinja = "2.13.0"
+minijinja-embed = "2.13.0"
 log = "0.4.29"
 minus = { version = "5.6.1", features = ["static_output"] }
 notify = "6.1.1"

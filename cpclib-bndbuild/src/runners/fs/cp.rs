@@ -34,6 +34,7 @@ impl<E: EventObserver> CpRunner<E> {
             .arg(
                 Arg::new("arguments")
                     .action(ArgAction::Append)
+                    .num_args(2..)
                     .help("Files to copy. Last one being the destination")
             )
             .render_long_help()
@@ -137,5 +138,6 @@ mod test {
         cp.inner_run(&[src.to_string(), dst.to_string()], &())
             .unwrap();
         assert!(dst.exists());
+        assert!(src.exists());
     }
 }

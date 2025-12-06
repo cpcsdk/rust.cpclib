@@ -11,6 +11,12 @@ description.workspace = true
 [dependencies]
 cpclib-asm.workspace = true
 delegate.workspace = true
+minijinja = { workspace = true, features = ["loader"] }
+minijinja-embed.workspace = true 
+serde.workspace = true
+
+[build-dependencies]
+minijinja-embed.workspace = true 
 
 [lints]
 workspace = true
