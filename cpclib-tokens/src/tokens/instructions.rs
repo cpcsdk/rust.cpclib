@@ -367,7 +367,9 @@ pub enum CrunchType {
     LZ4,
     LZX7,
     #[cfg(not(target_arch = "wasm32"))]
-    LZX0,
+    Zx0,
+    #[cfg(not(target_arch = "wasm32"))]
+    BackwardZx0,
     #[cfg(not(target_arch = "wasm32"))]
     LZEXO,
     #[cfg(not(target_arch = "wasm32"))]
@@ -1091,7 +1093,9 @@ impl fmt::Display for Token {
                                 CrunchType::LZ4 =>"INCLZ4",
                                 CrunchType::LZX7 =>"INCZX7",
                                 #[cfg(not(target_arch = "wasm32"))]
-                                CrunchType::LZX0 => "INCZX0",
+                                CrunchType::Zx0 => "INCZX0",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BackwardZx0 => "INCZX0_BCKWARD",
                                 #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::LZEXO => "INCEXO",
                                 #[cfg(not(target_arch = "wasm32"))]

@@ -1,16 +1,100 @@
-use cpclib_crunchers::{CompressMethod, CompressionResult};
-use cpclib_tokens::CrunchType as CompressionType;
+use std::ops::Deref;
 
-use crate::error::AssemblerError;
+use cpclib_common::smol_str::SmolStr;
+use cpclib_crunchers::{CompressMethod};
+use cpclib_tokens::{CrunchType as CompressionType, Expr, symbols::ValueAndSource};
+
+use crate::{Env, error::AssemblerError};
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssemblerCompressionResult {
+    cruncher_result: cpclib_crunchers::CompressionResult,
+    input_len: usize
+}
+
+impl AsRef<[u8]> for AssemblerCompressionResult {
+    fn as_ref(&self) -> &[u8] {
+        self.cruncher_result.as_ref()
+    }
+}
+
+impl Into<Vec<u8>> for &AssemblerCompressionResult {
+    fn into(self) -> Vec<u8> {
+        self.as_ref().to_vec()
+    }
+}
+
+impl AssemblerCompressionResult {
+    pub fn new(input: &[u8], cruncher_result: cpclib_crunchers::CompressionResult) -> Self {
+        Self {
+            cruncher_result,
+            input_len: input.len()
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            cruncher_result: cpclib_crunchers::CompressionResult {
+                stream: Vec::new(),
+                delta: None
+            },
+            input_len: 0
+        }
+    }
+
+    pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), AssemblerError>{
+        
+        let to_be_set = [
+            ("BASM_LATEST_CRUNCH_INPUT_DATA_SIZE".to_string(), Expr::Value(self.input_len() as _)),
+            ("BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE".to_string(), Expr::Value(self.compressed_len() as _)),
+            ("BASM_LATEST_CRUNCH_DELTA_SIZE".to_string(), Expr::Value(self.compressed_delta().map(|v| v as i32).unwrap_or(-1)) as _) 
+        ];
+
+
+        for (name, expr) in to_be_set.into_iter() {
+            env.visit_assign(
+                &SmolStr::from(name),
+                &expr,
+                None
+            )?;
+        }
+
+
+        Ok(())
+    }
+}
+
+impl Deref for AssemblerCompressionResult {
+    type Target = cpclib_crunchers::CompressionResult;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cruncher_result
+    }
+}
+
+impl AssemblerCompressionResult {
+    pub fn compressed_len(&self) -> usize {
+        self.cruncher_result.stream.len()
+    }
+
+    pub fn compressed_delta(&self) -> Option<usize> {
+        self.cruncher_result.delta
+    }
+
+    pub fn input_len(&self) -> usize {
+        self.input_len
+    }
+}
 
 pub trait Compressor {
     /// Crunch the raw data with the dedicated algorithm.
     /// Fail when there is no data to crunch
-    fn compress(&self, raw: &[u8]) -> Result<CompressionResult, AssemblerError>;
+    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, AssemblerError>;
 }
 
 impl Compressor for CompressionType {
-    fn compress(&self, raw: &[u8]) -> Result<cpclib_crunchers::CompressionResult, AssemblerError> {
+    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, AssemblerError> {
         if raw.is_empty() {
             return Err(AssemblerError::NoDataToCrunch);
         }
@@ -34,7 +118,9 @@ impl Compressor for CompressionType {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::LZ4 => Ok(CompressMethod::Lz4),
             #[cfg(not(target_arch = "wasm32"))]
-            CompressionType::LZX0 => Ok(CompressMethod::Zx0),
+            CompressionType::Zx0 => Ok(CompressMethod::Zx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressionType::BackwardZx0 => Ok(CompressMethod::BackwardZx0),
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::LZX7 => Ok(CompressMethod::Zx7),
             #[cfg(not(target_arch = "wasm32"))]
@@ -70,7 +156,12 @@ impl Compressor for CompressionType {
                                                                * }, */
         }?;
 
-        method.compress(raw).map_err(|_| {
+        method.compress(raw)
+        .map(|res| AssemblerCompressionResult {
+            cruncher_result: res,
+            input_len: raw.len()
+        })
+        .map_err(|_| {
             AssemblerError::AssemblingError {
                 msg: "Error when crunching".to_string()
             }

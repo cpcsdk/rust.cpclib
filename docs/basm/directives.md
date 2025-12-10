@@ -384,12 +384,21 @@ These string can do expansion of formulas embedded in {}.
 
 basm embeds some files in its executable, they are access under the name "inner://" :
 
-### LZAPU, LZ4, LZ48, LZ49, LZEXO, LZSA1, LZSA2, LZUPKR, LZSHRINKLER, LZX0
+### LZAPU, LZ4, LZ48, LZ49, LZEXO, LZSA1, LZSA2, LZUPKR, LZSHRINKLER, LZX0, LZX0_BACKWARD
 
 Example:
 ```z80
 --8<-- "cpclib-basm/tests/asm/good_aplib_decrunch.asm"
 ```
+
+`basm` automatically replace the content of some automatic variables after crunching some data. They can help in the process of uncrunch for some uncrunchers (mainly the backward ones).
+
+- `BASM_LATEST_CRUNCH_INPUT_DATA_SIZE` contains the size of the data BEFORE crunching.
+- `BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE` contains the size of the data AFTER crunching.
+- `BASM_LATEST_CRUNCH_DELTA` contains the delta value of the compressor. -1 if does not exist
+
+
+
 
 
 ### INCBIN, BINCLUDE

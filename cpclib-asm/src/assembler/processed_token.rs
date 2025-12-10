@@ -26,7 +26,7 @@ use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Compressor;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
 use crate::progress::{self, Progress};
-use crate::{AssemblerError, Env, LocatedToken, Visited, r#macro, parse_z80_with_context_builder};
+use crate::{AssemblerCompressionResult, AssemblerError, Env, LocatedToken, Visited, r#macro, parse_z80_with_context_builder};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling
@@ -51,7 +51,7 @@ enum ProcessedTokenState<'token, T: Visited + ListingElement + Debug + Sync> {
         // The bytes previously generated - to be compared to avoid a second slow assembling
         previous_bytes: Option<Vec<u8>>,
         // The previous compressed flux - to reuse if needed
-        previous_compressed_bytes: Option<Vec<u8>>
+        previous_compressed_bytes: Option<AssemblerCompressionResult>
     },
     For(SimpleListingState<'token, T>),
     FunctionDefinition(FunctionDefinitionState),
@@ -1126,7 +1126,7 @@ where
 
                                 let crunch_type = other.crunch_type().unwrap();
                                 let result = crunch_type.compress(data)?;
-                                Cow::Owned(result.into()) // TODO store the delta somewhere to allow a reuse
+                                Cow::Owned(result.to_vec()) // TODO store the delta somewhere to allow a reuse
                             }
                         };
 

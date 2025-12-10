@@ -42,9 +42,12 @@ pub enum CompressMethod {
     #[cfg(not(target_arch = "wasm32"))]
     Zx0,
     #[cfg(not(target_arch = "wasm32"))]
+    BackwardZx0,
+    #[cfg(not(target_arch = "wasm32"))]
     Zx7
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressionResult {
     /// The compressed stream
     pub stream: Vec<u8>,
@@ -107,6 +110,9 @@ impl CompressMethod {
             },
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Zx0 => Ok(zx0::compress(data)),
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressMethod::BackwardZx0 => Ok(zx0::compress_backward(data)),
+
             #[cfg(not(target_arch = "wasm32"))]
             CompressMethod::Zx7 => Ok(zx7::compress(data).into())
         }

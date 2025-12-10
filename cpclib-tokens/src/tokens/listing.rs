@@ -144,7 +144,6 @@ where Self: Debug + Sized + Sync
     fn include_namespace(&self) -> Option<&str>;
     fn include_once(&self) -> bool;
     fn include_is_standard_include(&self) -> bool {
-        dbg!("include_is_standard_include is no more accurate and needs to be updated/removed");
         //   let has_bracket = self.incbin_fname().to_string().contains('{');
 
         self.is_include() && 

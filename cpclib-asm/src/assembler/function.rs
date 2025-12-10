@@ -424,7 +424,7 @@ impl HardCodedFunction {
             .unwrap() // Cannot fail by definition
     }
 
-    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult , AssemblerError> {
         let expected_nb_args = self.expected_nb_args();
         let nb_args = params.len();
 
@@ -599,7 +599,7 @@ impl HardCodedFunction {
                     b"LZSHRINKLER" => CrunchType::Shrinkler,
                     b"LZX7" => CrunchType::LZX7,
                     #[cfg(not(target_arch = "wasm32"))]
-                    b"LZX0" => CrunchType::LZX0,
+                    b"LZX0" => CrunchType::Zx0,
                     #[cfg(not(target_arch = "wasm32"))]
                     b"LZAPU" => CrunchType::LZAPU,
                     _ => {
@@ -617,6 +617,8 @@ impl HardCodedFunction {
 
                 let data = crunch_type.compress(&data)?;
                 let data = ExprResult::from(data.as_slice());
+                // TODO find a way to handle the side effects of the compression (extra variables to set up)
+                eprintln!("Warning: Hard coded function 'binary_transform' does not handle side effects of the compression");
                 Ok(data)
             }
         }

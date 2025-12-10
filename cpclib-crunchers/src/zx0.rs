@@ -23,3 +23,18 @@ pub fn compress(data: &[u8]) -> CompressionResult {
     let result = compressor.compress(data);
     result.into()
 }
+
+pub fn compress_backward(data: &[u8]) -> CompressionResult {
+    let mut compressor = zx0::Compressor::new();
+    compressor
+        .backwards_mode(true)
+        .classic_mode(false)
+        .quick_mode(false);
+
+    let data = data.iter().rev().cloned().collect::<Vec<u8>>();
+    let mut result = compressor.compress(&data);
+    result.output.reverse();
+    result.into()
+}
+
+

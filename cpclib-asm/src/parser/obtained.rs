@@ -1794,6 +1794,34 @@ impl MayHaveSpan for LocatedToken {
     }
 }
 
+impl MayHaveSpan for &str {
+    fn has_span(&self) -> bool {
+        false
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        None
+    }
+
+    fn span(&self) -> &Z80Span {
+        unreachable!()
+    }
+}
+
+impl MayHaveSpan for SmolStr {
+    fn has_span(&self) -> bool {
+        false
+    }
+
+    fn possible_span(&self) -> Option<&Z80Span> {
+        None
+    }
+
+    fn span(&self) -> &Z80Span {
+        unreachable!()
+    }
+}
+
 impl MayHaveSpan for &SmolStr {
     fn has_span(&self) -> bool {
         false

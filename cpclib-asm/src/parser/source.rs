@@ -83,9 +83,22 @@ impl SourceString for &String {
     }
 }
 
+
+impl SourceString for String {
+    fn as_str(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 impl SourceString for &SmolStr {
     fn as_str(&self) -> &str {
         self.as_ref()
+    }
+}
+
+impl SourceString for str {
+    fn as_str(&self) -> &str {
+        self
     }
 }
 

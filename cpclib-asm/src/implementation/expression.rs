@@ -275,6 +275,10 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 }
 
                 (Ok(_a), Err(b)) => {
+
+                    dbg!(&b, $env.symbols());
+                    
+
                     Err(AssemblerError::ExpressionError(
                         ExpressionError::RightError(oper, Box::new(b))
                     ))

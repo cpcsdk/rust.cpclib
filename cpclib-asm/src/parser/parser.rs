@@ -27,6 +27,8 @@ use cpclib_common::winnow::stream::{
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
 use cpclib_common::winnow::{self, BStr, ModalResult, Parser, Stateful};
+#[cfg(not(target_arch = "wasm32"))]
+use cpclib_sna::parse;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
@@ -231,6 +233,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"INCLZSA2",
     b"INCAPU",
     b"INCZX0",
+    b"INCZX0_BACKWARD",
     b"INCSHRINKLER",
     b"INCUPKR",
     b"LET",
@@ -294,6 +297,7 @@ const START_DIRECTIVE: &[&[u8]] = &[
     b"LZ49",
     b"LZ48",
     b"LZAPU",
+    b"LZX0_BACKWARD",
     b"LZX0",
     b"LZEXO",
     b"LZ4",
@@ -849,7 +853,9 @@ pub fn parse_crunched_section(
             #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZX7").value(CrunchType::LZX7),
             #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZX0").value(CrunchType::LZX0),
+            parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZX0").value(CrunchType::Zx0),
             #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
             parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
@@ -2511,8 +2517,15 @@ fn parse_directive_of_size_6(
 
         #[cfg(not(target_arch = "wasm32"))]
         choice_nocase!(b"INCZX0") => {
-            parse_incbin(BinaryTransformation::Crunch(CrunchType::LZX0)).parse_next(input)
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
         },
+
+        #[cfg(not(target_arch = "wasm32"))]
+        choice_nocase!(b"INCZX0_BACKWARD") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
+        },
+
+
 
         choice_nocase!(b"RETURN") => parse_return.parse_next(input),
         choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),

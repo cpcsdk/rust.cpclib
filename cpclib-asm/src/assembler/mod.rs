@@ -3211,8 +3211,8 @@ impl Env {
         &mut self,
         kind: &CrunchType,
         lst: &mut [ProcessedToken<'tokens, T>],
-        previous_bytes: &mut Option<Vec<u8>>,
-        previous_crunched_bytes: &mut Option<Vec<u8>>,
+        previous_bytes_to_crunch: &mut Option<Vec<u8>>,
+        previous_crunched_bytes: &mut Option<AssemblerCompressionResult>,
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
@@ -3221,6 +3221,7 @@ impl Env {
         <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
             ExprEvaluationExt
     {
+
         // deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
         // if let Some(state) = & self.crunched_section_state {
@@ -3263,18 +3264,19 @@ impl Env {
         }
 
         // get the new data and crunch it if needed
-        let bytes = crunched_env.produced_bytes();
+        let new_bytes_to_crunch = crunched_env.produced_bytes();
 
-        let must_crunch = previous_bytes
+        // indeed, there is no need to crunched again the same data
+        let have_to_really_crunch = previous_bytes_to_crunch
             .as_ref()
-            .map(|b| b.as_slice() != bytes.as_slice())
+            .map(|previous_bytes_to_crunch| previous_bytes_to_crunch.as_slice() != new_bytes_to_crunch.as_slice())
             .unwrap_or(true);
-        if must_crunch {
-            let crunched: Vec<u8> = if bytes.is_empty() {
-                Vec::new()
+        let crunched_bytes = if have_to_really_crunch {
+            if new_bytes_to_crunch.is_empty() {
+                AssemblerCompressionResult::empty()
             }
             else {
-                kind.compress(&bytes)
+                 kind.compress(&new_bytes_to_crunch)
                     .map_err(|e| {
                         match span {
                             Some(span) => {
@@ -3286,17 +3288,13 @@ impl Env {
                             None => e
                         }
                     })?
-                    .into() // TODO find a way to store the delta
-            };
-            previous_crunched_bytes.replace(crunched);
-            previous_bytes.replace(bytes);
-        }
-
-        let _bytes = previous_bytes.as_ref().unwrap();
-        let crunched = previous_crunched_bytes.as_ref().unwrap();
+            }
+        } else {
+            previous_crunched_bytes.as_ref().unwrap().clone() // safe because have_to_really_crunch is false only if previous_crunched_bytes is Some
+        };
 
         // inject the crunched data
-        self.visit_incbin(crunched).map_err(|e| {
+        self.visit_incbin(&crunched_bytes.to_vec()).map_err(|e| {
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
@@ -3310,6 +3308,21 @@ impl Env {
 
         // update the symbol table with the new symbols obtained in the crunched section
         std::mem::swap(self.symbols_mut(), crunched_env.symbols_mut());
+
+        // appy the side effects
+        crunched_bytes.apply_side_effects(self).map_err(|e| {
+            match span {
+                Some(span) => {
+                    AssemblerError::RelocatedError {
+                        error: e.into(),
+                        span: span.clone()
+                    }
+                },
+                None => e
+            }
+        })?;
+
+
         let can_skip_next_passes = *self.can_skip_next_passes.read().unwrap().deref()
             & *crunched_env.can_skip_next_passes.read().unwrap(); // report missing symbols from the crunched area to the current area
         let request_additional_pass = *self.request_additional_pass.read().unwrap().deref()
@@ -4629,7 +4642,7 @@ impl Env {
 }
 
 impl Env {
-    fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString + MayHaveSpan>(
+    pub fn visit_equ<E: ExprEvaluationExt + ExprElement + Debug, S: SourceString + MayHaveSpan>(
         &mut self,
         label_span: &S,
         exp: &E
@@ -4721,7 +4734,7 @@ impl Env {
         }
     }
 
-    fn visit_assign<'e, E: ExprEvaluationExt + ExprElement + Clone, S: AsRef<str>>(
+    pub fn visit_assign<'e, E: ExprEvaluationExt + ExprElement + Clone, S: AsRef<str>>(
         &mut self,
         label: S,
         exp: &E,

@@ -94,6 +94,7 @@ pub fn handle_matches(matches: &clap::ArgMatches) -> Result<(), String>{
 			pandoc.add_input(&md_fname);
 			pandoc.set_output(pandoc::OutputKind::File(output.clone().into()));
 			pandoc.add_option(pandoc::PandocOption::Standalone);
+			pandoc.add_option(pandoc::PandocOption::TableOfContents);
 			pandoc.execute().map_err(|e| format!("Pandoc error: {}", e))?;
 		}
 
