@@ -1,0 +1,42 @@
+	; command line to assemble with rasm:
+	;  bndbuild --direct -- rasm tests/asm/good_zx0_backward_decrunch.rasm  -I../cpclib-asm/assets/ -map
+	
+
+	;BANKSET 0 ; <= uncomment to build a sna
+	
+	org 0x100
+	run $
+	breakpoint
+
+	di
+
+	ld hl, 0xc9fb : ld (0x38), hl
+	ld sp, 0xc000
+
+	; uncrunch the 100 bytes in 0xc000
+	ld hl, CS_LAST_ADDRESS
+	ld de, US_LAST_ADDRESS
+	call dzx0_back
+	jp $
+
+	; create an area of 100 zero, but compress it
+CS_START
+	LZX0B
+INNER_START
+		defs 80, 0xff
+		defs 20, 0x0f
+INNER_STOP
+	LZCLOSE
+CS_STOP
+
+	; set up the needed symbols to uncruch
+CS_LAST_ADDRESS = CS_START + 8- 1 ; as in the doc. but does not work
+US_LAST_ADDRESS = 0xc000 + 100- 1 
+
+
+	; include the embedded uncruncher
+	include "uncrunch/dzx0_turbo_back.asm"
+dzx0_back
+	dzx0_turbo_back (void)
+
+

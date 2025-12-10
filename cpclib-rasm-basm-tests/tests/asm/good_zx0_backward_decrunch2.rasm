@@ -1,6 +1,7 @@
 	; command line to assemble with rasm:
 	;  bndbuild --direct -- rasm tests/asm/good_zx0_backward_decrunch.rasm  -I../cpclib-asm/assets/ -map
 	
+	fail "add different kind of bytes here to ensure ordering is vamlide. basm imple seems reversed according to discussions with roudoudou"
 
 	BANKSET 0
 	
@@ -19,21 +20,21 @@
 	call dzx0_back
 	jp $
 
-	db 0xCA, 0xFE
 	; create an area of 100 zero, but compress it
 CS_START
 	LZX0B
 INNER_START
 		defs 80, 0xff
-		defs 20, 0x0f
+		defs 80, 0xff
+		; forward : 90 FF 17 55 55 80
+		; backward: 3A FF BD AA AA 00  
 INNER_STOP
 	LZCLOSE
 CS_STOP
-	db 0xCA, 0xFE
 
 
 	; set up the needed symbols to uncruch
-CS_LAST_ADDRESS = CS_START + 8- 1 ; as in the doc. but does not work
+CS_LAST_ADDRESS = CS_START + 6- 1 ; as in the doc. but does not work
 US_LAST_ADDRESS = 0xc000 + 100- 1 
 
 
@@ -41,3 +42,4 @@ US_LAST_ADDRESS = 0xc000 + 100- 1
 	include "uncrunch/dzx0_turbo_back.asm"
 dzx0_back
 	dzx0_turbo_back (void)
+

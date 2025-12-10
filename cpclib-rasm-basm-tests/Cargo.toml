@@ -1,0 +1,11 @@
+[package]
+name = "cpclib-rasm-basm-tests"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+walkdir = { workspace = true }
+camino-tempfile = { workspace = true }
+
+[dev-dependencies]
+# none

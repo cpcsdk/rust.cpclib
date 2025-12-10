@@ -2249,6 +2249,7 @@ dependencies = [
  "strip-ansi-escapes",
  "test-generator",
  "time",
+ "walkdir",
 ]
 
 [[package]]
@@ -2490,6 +2491,14 @@ dependencies = [
  "proc-macro2 1.0.103",
  "quote 1.0.42",
  "syn 2.0.111",
+]
+
+[[package]]
+name = "cpclib-rasm-basm-tests"
+version = "0.1.0"
+dependencies = [
+ "camino-tempfile",
+ "walkdir",
 ]
 
 [[package]]

@@ -7,6 +7,7 @@ members = [
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-bndbuild-tauri/src-tauri",
+  "cpclib-rasm-basm-tests",
   "cpclib-common",
   "cpclib-cpr",
   "cpclib-cprcli", 
@@ -107,6 +108,7 @@ bon = "3.8.1"
 built = { version = "0.7.7", features = ["chrono"] }
 camino = "1.2.1"
 camino-tempfile = "1.4.1"
+walkdir = "2.3"
 cc = "1.2.48"
 cfg-if = "1.0.4"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
