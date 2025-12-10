@@ -4,9 +4,8 @@ use std::marker::PhantomData;
 
 use clap::{ArgMatches, Command};
 use cpclib_common::event::EventObserver;
-use cpclib_runner::runner::{Runner, RunnerWithClap, runner::RunnerWithClapMatches};
-
-use crate::task::BASMDOC_CMDS;
+use cpclib_runner::runner::runner::RunnerWithClapMatches;
+use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 pub struct BasmDocRunner<E: EventObserver> {
     command: clap::Command,
@@ -51,11 +50,10 @@ impl<E: EventObserver> Runner for BasmDocRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &Self::EventObserver) -> Result<(), String> {
-
         let matches = self.get_matches(itr, o)?;
         let matches = matches.unwrap();
 
-		let res = cpclib_basmdoc::cmdline::handle_matches(&matches);
+        let res = cpclib_basmdoc::cmdline::handle_matches(&matches);
 
         res.map_err(|e| e.to_string())
     }

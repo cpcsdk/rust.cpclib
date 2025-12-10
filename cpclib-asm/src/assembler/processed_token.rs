@@ -26,7 +26,10 @@ use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Compressor;
 use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
 use crate::progress::{self, Progress};
-use crate::{AssemblerCompressionResult, AssemblerError, Env, LocatedToken, Visited, r#macro, parse_z80_with_context_builder};
+use crate::{
+    AssemblerCompressionResult, AssemblerError, Env, LocatedToken, Visited, r#macro,
+    parse_z80_with_context_builder
+};
 
 /// Tokens are read only elements extracted from the parser
 /// ProcessedTokens allow to maintain their state during assembling

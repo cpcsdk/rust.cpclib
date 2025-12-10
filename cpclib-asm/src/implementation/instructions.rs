@@ -1,11 +1,12 @@
 use std::ops::Deref;
 
 use cpclib_common::smol_str::SmolStr;
-use cpclib_crunchers::{CompressMethod};
-use cpclib_tokens::{CrunchType as CompressionType, Expr, symbols::ValueAndSource};
+use cpclib_crunchers::CompressMethod;
+use cpclib_tokens::symbols::ValueAndSource;
+use cpclib_tokens::{CrunchType as CompressionType, Expr};
 
-use crate::{Env, error::AssemblerError};
-
+use crate::Env;
+use crate::error::AssemblerError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssemblerCompressionResult {
@@ -43,23 +44,25 @@ impl AssemblerCompressionResult {
         }
     }
 
-    pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), AssemblerError>{
-        
+    pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), AssemblerError> {
         let to_be_set = [
-            ("BASM_LATEST_CRUNCH_INPUT_DATA_SIZE".to_string(), Expr::Value(self.input_len() as _)),
-            ("BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE".to_string(), Expr::Value(self.compressed_len() as _)),
-            ("BASM_LATEST_CRUNCH_DELTA_SIZE".to_string(), Expr::Value(self.compressed_delta().map(|v| v as i32).unwrap_or(-1)) as _) 
+            (
+                "BASM_LATEST_CRUNCH_INPUT_DATA_SIZE".to_string(),
+                Expr::Value(self.input_len() as _)
+            ),
+            (
+                "BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE".to_string(),
+                Expr::Value(self.compressed_len() as _)
+            ),
+            (
+                "BASM_LATEST_CRUNCH_DELTA_SIZE".to_string(),
+                Expr::Value(self.compressed_delta().map(|v| v as i32).unwrap_or(-1)) as _
+            )
         ];
 
-
         for (name, expr) in to_be_set.into_iter() {
-            env.visit_assign(
-                &SmolStr::from(name),
-                &expr,
-                None
-            )?;
+            env.visit_assign(&SmolStr::from(name), &expr, None)?;
         }
-
 
         Ok(())
     }
@@ -156,15 +159,18 @@ impl Compressor for CompressionType {
                                                                * }, */
         }?;
 
-        method.compress(raw)
-        .map(|res| AssemblerCompressionResult {
-            cruncher_result: res,
-            input_len: raw.len()
-        })
-        .map_err(|_| {
-            AssemblerError::AssemblingError {
-                msg: "Error when crunching".to_string()
-            }
-        })
+        method
+            .compress(raw)
+            .map(|res| {
+                AssemblerCompressionResult {
+                    cruncher_result: res,
+                    input_len: raw.len()
+                }
+            })
+            .map_err(|_| {
+                AssemblerError::AssemblingError {
+                    msg: "Error when crunching".to_string()
+                }
+            })
     }
 }

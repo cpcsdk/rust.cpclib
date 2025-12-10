@@ -83,7 +83,6 @@ impl SourceString for &String {
     }
 }
 
-
 impl SourceString for String {
     fn as_str(&self) -> &str {
         self.as_ref()

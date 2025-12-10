@@ -853,7 +853,7 @@ impl SymbolsTable {
                 }
                 LabelPrefix::Page => match v {
                     PhysicalAddress::Memory(v) => v.ga_bank() & 0x00ff,
-                    PhysicalAddress::Bank(v) => todo!(),
+                    PhysicalAddress::Bank(_v) => todo!(),
                     PhysicalAddress::Cpr(_) => todo!(),
                 }
                 LabelPrefix::Pageset => match v {

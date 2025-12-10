@@ -2525,8 +2525,6 @@ fn parse_directive_of_size_6(
             parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
         },
 
-
-
         choice_nocase!(b"RETURN") => parse_return.parse_next(input),
         choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),
 

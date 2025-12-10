@@ -36,5 +36,3 @@ pub fn compress_backward(data: &[u8]) -> CompressionResult {
     result.output.reverse();
     result.into()
 }
-
-

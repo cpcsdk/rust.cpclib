@@ -3221,7 +3221,6 @@ impl Env {
         <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
             ExprEvaluationExt
     {
-
         // deactivated because there is no reason to do such thing
         // crunched section is disabled inside crunched section
         // if let Some(state) = & self.crunched_section_state {
@@ -3269,27 +3268,29 @@ impl Env {
         // indeed, there is no need to crunched again the same data
         let have_to_really_crunch = previous_bytes_to_crunch
             .as_ref()
-            .map(|previous_bytes_to_crunch| previous_bytes_to_crunch.as_slice() != new_bytes_to_crunch.as_slice())
+            .map(|previous_bytes_to_crunch| {
+                previous_bytes_to_crunch.as_slice() != new_bytes_to_crunch.as_slice()
+            })
             .unwrap_or(true);
         let crunched_bytes = if have_to_really_crunch {
             if new_bytes_to_crunch.is_empty() {
                 AssemblerCompressionResult::empty()
             }
             else {
-                 kind.compress(&new_bytes_to_crunch)
-                    .map_err(|e| {
-                        match span {
-                            Some(span) => {
-                                AssemblerError::RelocatedError {
-                                    error: e.into(),
-                                    span: span.clone()
-                                }
-                            },
-                            None => e
-                        }
-                    })?
+                kind.compress(&new_bytes_to_crunch).map_err(|e| {
+                    match span {
+                        Some(span) => {
+                            AssemblerError::RelocatedError {
+                                error: e.into(),
+                                span: span.clone()
+                            }
+                        },
+                        None => e
+                    }
+                })?
             }
-        } else {
+        }
+        else {
             previous_crunched_bytes.as_ref().unwrap().clone() // safe because have_to_really_crunch is false only if previous_crunched_bytes is Some
         };
 
@@ -3321,7 +3322,6 @@ impl Env {
                 None => e
             }
         })?;
-
 
         let can_skip_next_passes = *self.can_skip_next_passes.read().unwrap().deref()
             & *crunched_env.can_skip_next_passes.read().unwrap(); // report missing symbols from the crunched area to the current area

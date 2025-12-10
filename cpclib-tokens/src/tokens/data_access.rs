@@ -430,22 +430,22 @@ impl DataAccess {
 
     pub fn replace_expressions_by_0(&self) -> Self {
         match self {
-            DataAccess::IndexRegister16WithIndex(index_register16, binary_operation, expr) => {
+            DataAccess::IndexRegister16WithIndex(index_register16, binary_operation, _expr) => {
                 Self::IndexRegister16WithIndex(*index_register16, *binary_operation, 0.into())
             },
-            DataAccess::IndexRegister16(r) => self.clone(),
-            DataAccess::IndexRegister8(r) => self.clone(),
-            DataAccess::Register16(register16) => self.clone(),
-            DataAccess::Register8(register8) => self.clone(),
-            DataAccess::MemoryRegister16(register16) => self.clone(),
-            DataAccess::MemoryIndexRegister16(index_register16) => self.clone(),
-            DataAccess::Expression(expr) => Self::Expression(0.into()),
-            DataAccess::Memory(expr) => DataAccess::Memory(0.into()),
-            DataAccess::FlagTest(flag_test) => self.clone(),
+            DataAccess::IndexRegister16(_r) => self.clone(),
+            DataAccess::IndexRegister8(_r) => self.clone(),
+            DataAccess::Register16(_register16) => self.clone(),
+            DataAccess::Register8(_register8) => self.clone(),
+            DataAccess::MemoryRegister16(_register16) => self.clone(),
+            DataAccess::MemoryIndexRegister16(_index_register16) => self.clone(),
+            DataAccess::Expression(_expr) => Self::Expression(0.into()),
+            DataAccess::Memory(_expr) => DataAccess::Memory(0.into()),
+            DataAccess::FlagTest(_flag_test) => self.clone(),
             DataAccess::SpecialRegisterI => self.clone(),
             DataAccess::SpecialRegisterR => self.clone(),
             DataAccess::PortC => self.clone(),
-            DataAccess::PortN(expr) => DataAccess::PortN(0.into())
+            DataAccess::PortN(_expr) => DataAccess::PortN(0.into())
         }
     }
 }

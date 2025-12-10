@@ -72,7 +72,7 @@ pub enum InnerTask {
     SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
     Xfer(StandardTaskArguments),
-    YmCruncher(YmCruncher, StandardTaskArguments),
+    YmCruncher(YmCruncher, StandardTaskArguments)
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
