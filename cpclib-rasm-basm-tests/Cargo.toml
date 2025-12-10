@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 walkdir = { workspace = true }
 camino-tempfile = { workspace = true }
+cpclib-bndbuild = { workspace = true }
 
 [dev-dependencies]
 # none

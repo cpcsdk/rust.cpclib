@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use camino_tempfile::NamedUtf8TempFile;
 use std::io::Read;
+
+use cpclib_bndbuild::{build_args_parser, process_matches};
 
 fn find_pairs(asm_dir: &Path, rasm_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     // For each .rasm in `rasm_dir`, pair it with the .asm of same stem in `asm_dir`.
@@ -27,21 +28,27 @@ fn find_pairs(asm_dir: &Path, rasm_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     pairs
 }
 
-fn assemble_with_bndbuild_basm(bndbuild: &Path, asm_path: &Path) -> Vec<u8> {
+fn assemble_with_bndbuild_basm(_bndbuild: &Path, asm_path: &Path) -> Vec<u8> {
     let out_file = NamedUtf8TempFile::new().expect("unable to create temp file for basm output");
-    let out_path = out_file.path().as_os_str().to_str().unwrap().to_string();
+    let out_path = out_file.path().to_string();
 
-    let status = Command::new(bndbuild)
-        .arg("--direct")
-        .arg("--")
-        .arg("basm")
-        .arg(asm_path.to_str().unwrap())
-        .arg("-o")
-        .arg(out_path.as_str())
-        .status()
-        .expect("failed to run bndbuild basm");
+    // Build argument vector and parse with bndbuild's clap parser
+    let args = [
+        "bndbuilder",
+        "--direct",
+        "--",
+        "basm",
+        asm_path.to_str().unwrap(),
+        "-o",
+        out_path.as_str(),
+    ];
 
-    assert!(status.success(), "bndbuild basm failed for {}", asm_path.display());
+    let cmd = build_args_parser();
+    let matches = cmd
+        .try_get_matches_from(args)
+        .expect("failed to parse arguments for basm via bndbuild");
+
+    process_matches(&matches).expect("bndbuild process_matches failed for basm");
 
     let mut buf = Vec::new();
     let mut f = std::fs::File::open(out_path.as_str()).expect("unable to open basm output");
@@ -49,22 +56,30 @@ fn assemble_with_bndbuild_basm(bndbuild: &Path, asm_path: &Path) -> Vec<u8> {
     buf
 }
 
-fn assemble_with_bndbuild_rasm(bndbuild: &Path, rasm_path: &Path) -> Vec<u8> {
+fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Vec<u8> {
     let out_file = NamedUtf8TempFile::new().expect("unable to create temp file for rasm output");
-    let out_path = out_file.path().as_os_str().to_str().unwrap().to_string();
+    let out_path = out_file.path().to_string();
 
-    let status = Command::new(bndbuild)
-        .arg("--direct")
-        .arg("--")
-        .arg("rasm")
-        .arg(rasm_path.to_str().unwrap())
-        .arg(format!("-I{}", "../cpclib-asm/assets/"))
-        .arg("-ob")
-        .arg(out_path.as_str())
-        .status()
-        .expect("failed to run bndbuild rasm");
+    // rasm wants the include as a single token "-I<path>" and binary output as "-ob <file>"
+    let include_token = format!("-I{}", "../cpclib-asm/assets/");
 
-    assert!(status.success(), "bndbuild rasm failed for {}", rasm_path.display());
+    let args = [
+        "bndbuilder",
+        "--direct",
+        "--",
+        "rasm",
+        rasm_path.to_str().unwrap(),
+        include_token.as_str(),
+        "-ob",
+        out_path.as_str(),
+    ];
+
+    let cmd = build_args_parser();
+    let matches = cmd
+        .try_get_matches_from(args)
+        .expect("failed to parse arguments for rasm via bndbuild");
+
+    process_matches(&matches).expect("bndbuild process_matches failed for rasm");
 
     let mut buf = Vec::new();
     let mut f = std::fs::File::open(out_path.as_str()).expect("unable to open rasm output");
@@ -84,15 +99,8 @@ fn compare_basm_and_rasm_outputs() {
     let pairs = find_pairs(asm_dir, rasm_dir);
     assert!(!pairs.is_empty(), "no .asm/.rasm pairs found (asm: ../cpclib-basm/tests/asm, rasm: tests/asm)");
 
-    // ensure bndbuild binary is built
-    let build_status = Command::new("cargo")
-        .args(["build", "-p", "cpclib-bndbuild"]) 
-        .status()
-        .expect("failed to spawn cargo build for cpclib-bndbuild");
-    assert!(build_status.success(), "cargo build -p cpclib-bndbuild failed");
-
-    let bndbuild = Path::new("../target/debug/bndbuild");
-    assert!(bndbuild.exists(), "bndbuild binary not found at ../target/debug/bndbuild");
+    // No external binary required any more; we call cpclib-bndbuild functions directly.
+    let bndbuild = Path::new("");
 
     for (asm_path, rasm_path) in pairs {
         let a = assemble_with_bndbuild_basm(bndbuild, &asm_path);

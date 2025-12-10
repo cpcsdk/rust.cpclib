@@ -2498,6 +2498,7 @@ name = "cpclib-rasm-basm-tests"
 version = "0.1.0"
 dependencies = [
  "camino-tempfile",
+ "cpclib-bndbuild",
  "walkdir",
 ]
 
