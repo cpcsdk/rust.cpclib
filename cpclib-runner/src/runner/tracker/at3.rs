@@ -14,6 +14,7 @@ pub const AT_CMD: &str = "at3";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum At3Version {
     #[default]
+    V3_5,
     V3_4,
     V3_3,
     V3_2_7,
@@ -23,6 +24,7 @@ pub enum At3Version {
 impl Display for At3Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = match self {
+            At3Version::V3_5 => "v3.5",
             At3Version::V3_4 => "v3.4",
             At3Version::V3_3 => "v3.3",
             At3Version::V3_2_7 => "v3.2.7",
@@ -36,6 +38,17 @@ impl Display for At3Version {
 impl StaticInformation for At3Version {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
         match self {
+            At3Version::V3_5 => {
+                static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URL.get_or_init(|| {
+                MutiplatformUrls::builder()
+                    .linux("https://www.julien-nevo.com/arkostracker/release/3.5/linux64/ArkosTracker-linux64-3.5.zip")
+                    .windows("https://www.julien-nevo.com/arkostracker/release/3.5/windows/ArkosTracker-windows-3.5.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.5/macosx/ArkosTracker-macosx-3.5.zip")
+                    .build()
+                })
+            },
+
             At3Version::V3_4 => {
                 static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URL.get_or_init(|| {
