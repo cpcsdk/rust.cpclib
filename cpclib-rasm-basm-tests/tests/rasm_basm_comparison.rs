@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
-use camino_tempfile::NamedUtf8TempFile;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use camino_tempfile::NamedUtf8TempFile;
 use cpclib_bndbuild::{build_args_parser, process_matches};
 // use the macro with a workspace-root relative pattern (avoids compile-time missing-resource panic)
 
@@ -16,9 +16,11 @@ fn assemble_with_bndbuild_basm(_bndbuild: &Path, asm_path: &Path) -> Result<Vec<
         "--direct",
         "--",
         "basm",
-        asm_path.to_str().ok_or_else(|| anyhow!("asm path is not valid unicode"))?,
+        asm_path
+            .to_str()
+            .ok_or_else(|| anyhow!("asm path is not valid unicode"))?,
         "-o",
-        out_path.as_str(),
+        out_path.as_str()
     ];
 
     let cmd = build_args_parser();
@@ -46,7 +48,9 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
         "--direct",
         "--",
         "rasm",
-        rasm_path.to_str().ok_or_else(|| anyhow!("rasm path is not valid unicode"))?,
+        rasm_path
+            .to_str()
+            .ok_or_else(|| anyhow!("rasm path is not valid unicode"))?,
         include_token.as_str(),
         "-ob",
         out_path.as_str(),
@@ -72,7 +76,10 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
 fn compare_basm_and_rasm_outputs_per_file(rasm: &str) {
     // working dir is crate root (cpclib-rasm-basm-tests)
     let asm_dir = Path::new("../cpclib-basm/tests/asm");
-    assert!(asm_dir.exists(), "cpclib-basm/tests/asm directory not found");
+    assert!(
+        asm_dir.exists(),
+        "cpclib-basm/tests/asm directory not found"
+    );
 
     // `rasm` is provided by the macro as a workspace-prefixed path like
     // "cpclib-rasm-basm-tests/tests/asm/foo.rasm". Strip that prefix to get
@@ -82,11 +89,14 @@ fn compare_basm_and_rasm_outputs_per_file(rasm: &str) {
 
     let rasm_path = Path::new(rasm_rel);
 
-    if ! rasm_path.exists() {
+    if !rasm_path.exists() {
         panic!("rasm path should exist at runtime: {}", rasm_path.display());
     }
 
-    let stem = rasm_path.file_stem().and_then(|s| s.to_str()).expect("invalid rasm file stem");
+    let stem = rasm_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .expect("invalid rasm file stem");
     let asm_path = asm_dir.join(format!("{}.asm", stem));
     assert!(asm_path.exists(), "asm file not found for {}", rasm_rel);
 
@@ -95,5 +105,11 @@ fn compare_basm_and_rasm_outputs_per_file(rasm: &str) {
     let a = assemble_with_bndbuild_basm(bndbuild, &asm_path).expect("basm assembly failed");
     let b = assemble_with_bndbuild_rasm(bndbuild, rasm_path).expect("rasm assembly failed");
 
-    assert_eq!(a, b, "outputs differ for pair: {} / {}", asm_path.display(), rasm_path.display());
+    assert_eq!(
+        a,
+        b,
+        "outputs differ for pair: {} / {}",
+        asm_path.display(),
+        rasm_path.display()
+    );
 }
