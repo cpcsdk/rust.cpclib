@@ -10,4 +10,7 @@ cpclib-bndbuild = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]
-# none
+test-generator = "0.3.1"
+
+[build-dependencies]
+build-deps = "0.1.4"

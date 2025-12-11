@@ -4,29 +4,7 @@ use std::io::Read;
 
 use anyhow::{anyhow, Context, Result};
 use cpclib_bndbuild::{build_args_parser, process_matches};
-
-fn find_pairs(asm_dir: &Path, rasm_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
-    // For each .rasm in `rasm_dir`, pair it with the .asm of same stem in `asm_dir`.
-    let mut pairs = Vec::new();
-    for entry in walkdir::WalkDir::new(rasm_dir)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-    {
-        let p = entry.path();
-        if let Some(ext) = p.extension().and_then(|s| s.to_str()) {
-            if ext == "rasm" {
-                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
-                    let asm = asm_dir.join(format!("{}.asm", stem));
-                    if asm.exists() {
-                        pairs.push((asm, p.to_path_buf()));
-                    }
-                }
-            }
-        }
-    }
-    pairs
-}
+// use the macro with a workspace-root relative pattern (avoids compile-time missing-resource panic)
 
 fn assemble_with_bndbuild_basm(_bndbuild: &Path, asm_path: &Path) -> Result<Vec<u8>> {
     let out_file = NamedUtf8TempFile::new().context("creating temp file for basm output")?;
@@ -63,7 +41,7 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
     // rasm wants the include as a single token "-I<path>" and binary output as "-ob <file>"
     let include_token = format!("-I{}", "../cpclib-asm/assets/");
 
-    let args = [
+    let args = dbg!([
         "bndbuilder",
         "--direct",
         "--",
@@ -72,7 +50,7 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
         include_token.as_str(),
         "-ob",
         out_path.as_str(),
-    ];
+    ]);
 
     let cmd = build_args_parser();
     let matches = cmd
@@ -87,34 +65,35 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
     Ok(buf)
 }
 
-#[test]
-fn compare_basm_and_rasm_outputs() -> Result<()> {
+// Use a workspace-root relative pattern so the proc-macro can find resources here.
+// Strip the workspace prefix inside the test so the test code itself doesn't contain
+// the workspace path literal.
+#[test_generator::test_resources("cpclib-rasm-basm-tests/tests/asm/*.rasm")]
+fn compare_basm_and_rasm_outputs_per_file(rasm: &str) {
     // working dir is crate root (cpclib-rasm-basm-tests)
     let asm_dir = Path::new("../cpclib-basm/tests/asm");
-    if !asm_dir.exists() {
-        return Err(anyhow!("cpclib-basm/tests/asm directory not found"));
+    assert!(asm_dir.exists(), "cpclib-basm/tests/asm directory not found");
+
+    // `rasm` is provided by the macro as a workspace-prefixed path like
+    // "cpclib-rasm-basm-tests/tests/asm/foo.rasm". Strip that prefix to get
+    // the crate-relative path used at runtime.
+    let prefix = "cpclib-rasm-basm-tests/";
+    let rasm_rel = &rasm[prefix.len()..];
+
+    let rasm_path = Path::new(rasm_rel);
+
+    if ! rasm_path.exists() {
+        panic!("rasm path should exist at runtime: {}", rasm_path.display());
     }
 
-    let rasm_dir = Path::new("tests/asm");
-    if !rasm_dir.exists() {
-        return Err(anyhow!("cpclib-rasm-basm-tests/tests/asm directory not found"));
-    }
+    let stem = rasm_path.file_stem().and_then(|s| s.to_str()).expect("invalid rasm file stem");
+    let asm_path = asm_dir.join(format!("{}.asm", stem));
+    assert!(asm_path.exists(), "asm file not found for {}", rasm_rel);
 
-    let pairs = find_pairs(asm_dir, rasm_dir);
-    if pairs.is_empty() {
-        return Err(anyhow!("no .asm/.rasm pairs found (asm: ../cpclib-basm/tests/asm, rasm: tests/asm)"));
-    }
-
-    // No external binary required any more; we call cpclib-bndbuild functions directly.
     let bndbuild = Path::new("");
 
-    for (asm_path, rasm_path) in pairs {
-        let a = assemble_with_bndbuild_basm(bndbuild, &asm_path)?;
-        let b = assemble_with_bndbuild_rasm(bndbuild, &rasm_path)?;
-        if a != b {
-            return Err(anyhow!("outputs differ for pair: {} / {}", asm_path.display(), rasm_path.display()));
-        }
-    }
+    let a = assemble_with_bndbuild_basm(bndbuild, &asm_path).expect("basm assembly failed");
+    let b = assemble_with_bndbuild_rasm(bndbuild, rasm_path).expect("rasm assembly failed");
 
-    Ok(())
+    assert_eq!(a, b, "outputs differ for pair: {} / {}", asm_path.display(), rasm_path.display());
 }
