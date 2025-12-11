@@ -59,5 +59,6 @@ impl SongConverter {
         SongToVgm, new_song_to_vgm_default
         SongToWav, new_song_to_wav_default
         SongToYm, new_song_to_ym_default
+        Z80Profiler, new_z80profiler_default
     }
 }

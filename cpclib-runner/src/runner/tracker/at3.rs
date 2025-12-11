@@ -198,5 +198,5 @@ pub mod extra {
         };
     }
 
-    generate_song_handler! {SongToAkg  SongToAkm  SongToAky  SongToEvents  SongToRaw  SongToSoundEffects  SongToVgm  SongToWav  SongToYm}
+    generate_song_handler! {SongToAkg  SongToAkm  SongToAky  SongToEvents  SongToRaw  SongToSoundEffects  SongToVgm  SongToWav  SongToYm  Z80Profiler}
 }

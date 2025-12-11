@@ -26,7 +26,7 @@ use cpclib_runner::runner::martine::MARTINE_CMD;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
 use cpclib_runner::runner::tracker::at3::extra::{
     SongToAkg, SongToAkm, SongToAky, SongToEvents, SongToRaw, SongToSoundEffects, SongToVgm,
-    SongToWav, SongToYm
+    SongToWav, SongToYm, Z80Profiler
 };
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
@@ -224,6 +224,7 @@ pub const SONG2SOUNDEFFECTS_CMDS: &[&str] = &[SongToSoundEffects::CMD];
 pub const SONG2VGM_CMDS: &[&str] = &[SongToVgm::CMD];
 pub const SONG2WAV_CMDS: &[&str] = &[SongToWav::CMD];
 pub const SONG2YM_CMDS: &[&str] = &[SongToYm::CMD];
+pub const Z80PROFILER_CMDS: &[&str] = &[Z80Profiler::CMD];
 
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -307,6 +308,7 @@ is_some_cmd!(
     song2vgm,
     song2wav,
     song2ym,
+    z80profiler,
     uz80,
     vasm,
     winape,
@@ -402,6 +404,12 @@ impl<'de> Deserialize<'de> for InnerTask {
                 else if is_song2ym_cmd(code) {
                     Ok(InnerTask::SongConverter(
                         SongConverter::new_song_to_ym_default(),
+                        std
+                    ))
+                }
+                else if is_z80profiler_cmd(code) {
+                    Ok(InnerTask::SongConverter(
+                        SongConverter::new_z80profiler_default(),
                         std
                     ))
                 }

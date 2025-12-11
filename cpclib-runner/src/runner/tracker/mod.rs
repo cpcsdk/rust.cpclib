@@ -40,7 +40,8 @@ pub enum SongConverter {
     SongToSoundEffects(SongToSoundEffects),
     SongToVgm(SongToVgm),
     SongToWav(SongToWav),
-    SongToYm(SongToYm)
+    SongToYm(SongToYm),
+    Z80Profiler(Z80Profiler)
 }
 
 impl SongConverter {
@@ -54,7 +55,8 @@ impl SongConverter {
             Self::SongToSoundEffects(_) => SongToSoundEffects::CMD,
             Self::SongToVgm(_) => SongToVgm::CMD,
             Self::SongToWav(_) => SongToWav::CMD,
-            Self::SongToYm(_) => SongToYm::CMD
+            Self::SongToYm(_) => SongToYm::CMD,
+            Self::Z80Profiler(_) => Z80Profiler::CMD
         }
     }
 
@@ -68,7 +70,8 @@ impl SongConverter {
             Self::SongToSoundEffects(v) => v.configuration(),
             Self::SongToVgm(v) => v.configuration(),
             Self::SongToWav(v) => v.configuration(),
-            Self::SongToYm(v) => v.configuration()
+            Self::SongToYm(v) => v.configuration(),
+            Self::Z80Profiler(v) => v.configuration()
         }
     }
 }
