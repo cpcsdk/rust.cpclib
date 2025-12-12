@@ -8,6 +8,7 @@ members = [
   "cpclib-bndbuild",
   "cpclib-bndbuild-tauri/src-tauri",
   "cpclib-rasm-basm-tests",
+  "cpclib-python",
   "cpclib-common",
   "cpclib-cpr",
   "cpclib-cprcli", 
@@ -59,6 +60,7 @@ default-members = [
   "cpclib-wasm", 
   "cpclib-xfer",
   "cpclib-xfertool",
+  "cpclib-python",
 ]
 
 resolver = "2"
