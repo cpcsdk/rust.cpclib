@@ -2794,9 +2794,9 @@ impl Env {
             return Err(AssemblerError::NotAllowed);
         }
 
-        let output_kind = dbg!(self.output_kind());
+        let output_kind = self.output_kind();
 
-        match dbg!(exp) {
+        match exp {
             Some(exp) => {
                 // prefix provided, we explicitely want one configuration
                 let exp = self.resolve_expr_must_never_fail(exp)?.int()?;

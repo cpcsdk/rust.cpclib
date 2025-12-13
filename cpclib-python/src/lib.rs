@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 mod bndbuild;
+mod basm;
 
 // Lightweight placeholders for crate-specific wrappers.
 // These functions are intentionally minimal so the crate builds
@@ -49,8 +50,11 @@ fn cpclib_python(py: Python, m: &PyModule) -> PyResult<()> {
     basic_mod.add_function(wrap_pyfunction!(basic_info, basic_mod)?)?;
     m.add_submodule(basic_mod)?;
 
+    // basm submodule: assemble helper
     let basm_mod = PyModule::new(py, "basm")?;
     basm_mod.add_function(wrap_pyfunction!(basm_info, basm_mod)?)?;
+    // register the real basm functions
+    basm::basm(py, basm_mod)?;
     m.add_submodule(basm_mod)?;
 
     let bdasm_mod = PyModule::new(py, "bdasm")?;

@@ -7,7 +7,7 @@
 ;   DE: last destination address (decompressing)
 ; -----------------------------------------------------------------------------
 
-macro dzx0_turbo_back
+macro DecompressZX0TurboBackward     
         ld      bc, 1                   ; preserve default offset 1
         ld      (@dzx0tb_last_offset+1), bc
         ld      a, $80
