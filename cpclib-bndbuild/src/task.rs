@@ -1072,4 +1072,25 @@ mod test {
             )
         );
     }
+
+    #[test]
+    fn test_from_command_and_arguments_basm() {
+        // Build standard args as if provided by Python's quoted-join (but here unquoted)
+        let std = StandardTaskArguments::new("toto.asm -o toto.o");
+        let t = InnerTask::from_command_and_arguments("basm", std.clone()).unwrap();
+        assert_eq!(
+            t,
+            InnerTask::Assembler(
+                crate::runners::assembler::Assembler::Basm,
+                std
+            )
+        );
+    }
+
+    #[test]
+    fn test_from_command_and_arguments_rm() {
+        let std = StandardTaskArguments::new("file1.txt");
+        let t = InnerTask::from_command_and_arguments("rm", std.clone()).unwrap();
+        assert_eq!(t, InnerTask::Rm(std));
+    }
 }

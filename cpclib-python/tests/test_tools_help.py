@@ -41,7 +41,7 @@ def _parse_possible_values(help_text: str):
 
 def test_tools_from_bndbuild_help_construct_and_execute():
     """For every tool listed in `bndbuild --help` attempt to construct a
-    `PyBndTask("<tool> --help")` and call `execute()`.
+    `Task("<tool> --help")` and call `execute()`.
 
     This test tries multiple help invocation styles per tool and fails if
     all variants raise (except it skips when repository build files are missing).
@@ -82,7 +82,7 @@ def test_tools_from_bndbuild_help_construct_and_execute():
         for hv in help_variants:
             task_str = f"{tool} {hv}".strip()
             # Construction should not raise
-            t = b.PyBndTask(task_str)
+            t = b.Task(task_str)
             constructed += 1
 
             try:

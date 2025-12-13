@@ -1,85 +1,19 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use std::sync::{Arc, Mutex};
 use std::fmt;
 use std::str::FromStr;
 
-use cpclib_bndbuild::task::Task;
-use cpclib_bndbuild::task::StandardTaskArguments;
+use cpclib_bndbuild::task::{InnerTask, Task, StandardTaskArguments};
 use cpclib_bndbuild::event::{BndBuilderEvent, BndBuilderObserver};
 use cpclib_common::event::EventObserver;
 
 use pyo3::types::PyAny;
-
-/// Python-visible task object that stores a parsed `Task` and exposes `execute`.
-#[pyclass]
-pub struct PyBndTask {
-    inner: Mutex<Task>,
-}
-
-/// Python wrapper around `StandardTaskArguments`.
-///
-/// This wrapper directly owns a shared (`Arc`) `StandardTaskArguments`.
-/// It intentionally does not keep separate Python-visible caches for
-/// `args`/`ignore_error` and instead exposes the underlying Rust value
-/// directly via `Deref`.
-#[pyclass]
-pub struct PyStandardTaskArguments {
-    /// Shared, immutable Rust `StandardTaskArguments` value.
-    inner: Arc<StandardTaskArguments>,
-}
-
-#[pymethods]
-impl PyStandardTaskArguments {
-    #[new]
-    pub fn new(task_args: &PyAny) -> PyResult<Self> {
-        let s: &str = task_args.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        let args_s = s.to_owned();
-        Ok(PyStandardTaskArguments {
-            inner: Arc::new(StandardTaskArguments::new(args_s)),
-        })
-    }
-}
+use pyo3::Py;
 
 
-// Rust-only helper conversion: not exposed to Python via `#[pymethods]`.
-impl PyStandardTaskArguments {
-    /// Create a Rust `StandardTaskArguments` from this wrapper.
-    /// Returns a cloned value of the inner `StandardTaskArguments`.
-    pub fn into_rust(&self) -> StandardTaskArguments {
-        (*self.inner).clone()
-    }
-
-    /// Replace automatic variables on a cloned copy and return the resulting
-    /// args string. This keeps the wrapper immutable while allowing callers
-    /// to obtain the string with automatic variables substituted.
-    pub fn replace_automatic_variables(&self) -> Result<String, String> {
-        let mut cloned = (*self.inner).clone();
-        cloned
-            .replace_automatic_variables(None, None)
-            .map_err(|e| e)?;
-        Ok(cloned.args().to_string())
-    }
-}
-
-// Allow transparent access to the underlying `StandardTaskArguments` via
-// deref, e.g. `&*py_args` yields a `&StandardTaskArguments`.
-impl std::ops::Deref for PyStandardTaskArguments {
-    type Target = StandardTaskArguments;
-    fn deref(&self) -> &Self::Target {
-        &*self.inner
-    }
-}
-
-impl fmt::Display for PyStandardTaskArguments {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.replace_automatic_variables() {
-            Ok(s) => write!(f, "{}", s),
-            Err(_) => write!(f, "{}", self.inner.args()),
-        }
-    }
-}
 
 // Observer that forwards outputs to process streams (no internal storage)
 #[derive(Default)]
@@ -145,14 +79,44 @@ impl fmt::Debug for PyBndTask {
     }
 }
 
+/// Python-visible task object that stores a parsed `Task` and exposes `execute`.
+#[pyclass(name = "Task")]
+pub struct PyBndTask {
+    inner: Mutex<Task>,
+}
+
 #[pymethods]
 impl PyBndTask {
     /// Constructor: parse a task string and return a new PyBndTask.
+    ///
+    /// Two modes are supported from Python:
+    ///  - `PyBndTask("basm toto.asm -o toto.o")` (single string, YAML-like parse)
+    ///  - `PyBndTask("basm", ["toto.asm", "-o", "toto.o"])` (command + args list)
     #[new]
-    pub fn new(task: &PyAny) -> PyResult<Self> {
-        let task_str: &str = task.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        let t = Task::from_str(task_str).map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
-        Ok(PyBndTask { inner: Mutex::new(t) })
+    pub fn new(task: &PyAny, args: Option<&PyAny>) -> PyResult<Self> {
+        match args {
+            None => {
+                let task_str: &str = task.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                let t = InnerTask::from_str(task_str).map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                let t: Task = t.into();
+                Ok(PyBndTask { inner: Mutex::new(t) })
+            }
+            Some(py_args) => {
+                // First argument is the command token, second is a sequence of strings
+                let code: &str = task.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                let vec: Vec<String> = py_args.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                // Surround each argument with quotes and escape internal quotes.
+                let quoted: Vec<String> = vec
+                    .into_iter()
+                    .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                    .collect();
+                let joined = quoted.join(" ");
+                let std = StandardTaskArguments::new(joined);
+                let inner = InnerTask::from_command_and_arguments(code, std)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+                Ok(PyBndTask { inner: Mutex::new(inner.into()) })
+            }
+        }
     }
 
     /// Execute the stored task synchronously and return a result dict.
@@ -176,4 +140,11 @@ impl PyBndTask {
     }
 }
 
-// Factory removed: use `PyBndTask(...)` constructor from Python instead.
+/// Factory function to create a `PyBndTask` from a task string.
+#[pyfunction]
+pub fn create_bndbuild_task(task: &PyAny, py: Python) -> PyResult<PyObject> {
+    let task_str: &str = task.extract().map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let t = Task::from_str(task_str).map_err(|e| pyo3::exceptions::PyValueError::new_err(e))?;
+    let obj = Py::new(py, PyBndTask { inner: Mutex::new(t) })?;
+    Ok(obj.into_py(py))
+}

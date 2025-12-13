@@ -11,8 +11,7 @@ def test_module_and_submodule_present():
 
     assert hasattr(cp, "bndbuild")
     b = getattr(cp, "bndbuild")
-    assert hasattr(b, "create_bndbuild_task")
-    assert hasattr(b, "PyBndTask")
+    assert hasattr(b, "Task")
 
 
 def test_create_task_and_execute_shape():
@@ -20,7 +19,7 @@ def test_create_task_and_execute_shape():
     cp = importlib.import_module("cpclib_python")
     b = getattr(cp, "bndbuild")
 
-    task = b.PyBndTask("basm --version")
+    task = b.Task("basm --version")
 
     # task should expose an execute method
     assert hasattr(task, "execute")
@@ -54,5 +53,5 @@ def test_create_task_invalid_string_raises():
 
     # Creating with a clearly invalid input (non-string) should raise a TypeError or ValueError
     with pytest.raises(Exception):
-        # The `PyBndTask` constructor requires a string-like task description.
-        b.PyBndTask({"not": "a string"})
+        # The `Task` constructor requires a string-like task description.
+        b.Task({"not": "a string"})

@@ -8,3 +8,4 @@ tests/dsk/AMSTRAD CPC eDSK Editor - 07-05-2019.exe
 .vscode/
 **/perf.data
 **/perf.data.old
+__pycache__
