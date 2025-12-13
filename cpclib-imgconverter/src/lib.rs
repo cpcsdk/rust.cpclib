@@ -982,7 +982,7 @@ pub fn build_cpc2img_args_parser() -> clap::Command {
     specify_palette!(
         clap::Command::new("cpc2png")
             .about("Generate PNG from CPC files")
-            .subcommand_required(true)
+ //           .subcommand_required(true) # too write seems seems to forbid the use of --help
             .arg(
                 Arg::new("MODE")
                     .short('m')

@@ -343,233 +343,11 @@ impl<'de> Deserialize<'de> for InnerTask {
                     args: next.to_owned(),
                     ignore_error: ignore
                 };
-
-                if is_ace_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_ace_default(), std))
+                match InnerTask::from_command_and_arguments(code, std) {
+                    Ok(t) => Ok(t),
+                    Err(e) => Err(E::custom(e)),
                 }
-                else if is_at_cmd(code) {
-                    Ok(InnerTask::Tracker(Tracker::new_at3_default(), std))
-                }
-                else if is_chipnsfx_cmd(code) {
-                    Ok(InnerTask::Tracker(Tracker::new_chipnsfx_default(), std))
-                }
-                else if is_song2akm_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_akm_default(),
-                        std
-                    ))
-                }
-                else if is_song2aky_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_aky_default(),
-                        std
-                    ))
-                }
-                else if is_song2akg_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_akg_default(),
-                        std
-                    ))
-                }
-                else if is_song2events_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_events_default(),
-                        std
-                    ))
-                }
-                else if is_song2raw_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_raw_default(),
-                        std
-                    ))
-                }
-                else if is_song2soundeffects_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_sound_effects_default(),
-                        std
-                    ))
-                }
-                else if is_song2vgm_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_vgm_default(),
-                        std
-                    ))
-                }
-                else if is_song2wav_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_wav_default(),
-                        std
-                    ))
-                }
-                else if is_song2ym_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_song_to_ym_default(),
-                        std
-                    ))
-                }
-                else if is_z80profiler_cmd(code) {
-                    Ok(InnerTask::SongConverter(
-                        SongConverter::new_z80profiler_default(),
-                        std
-                    ))
-                }
-                else if is_crunch_cmd(code) {
-                    Ok(InnerTask::Crunch(std))
-                }
-                else if is_convgeneric_cmd(code) {
-                    Ok(InnerTask::Convgeneric(std))
-                }
-                else if is_cpcec_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_cpcec_default(), std))
-                }
-                else if is_amspirit_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_amspirit_default(), std))
-                }
-                else if is_sugarbox_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_sugarbox_default(), std))
-                }
-                else if is_winape_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_winape_default(), std))
-                }
-                else if is_cpcemupower_cmd(code) {
-                    Ok(InnerTask::Emulator(
-                        Emulator::new_cpcemupower_default(),
-                        std
-                    ))
-                }
-                else if is_capriceforever_cmd(code) {
-                    Ok(InnerTask::Emulator(
-                        Emulator::new_capriceforever_default(),
-                        std
-                    ))
-                }
-                else if is_emuctrl_cmd(code) {
-                    Ok(InnerTask::Emulator(Emulator::new_facade(), std))
-                }
-                else if is_basm_cmd(code) {
-                    Ok(InnerTask::Assembler(Assembler::Basm, std))
-                }
-                else if is_bdasm_cmd(code) {
-                    Ok(InnerTask::Disassembler(Disassembler::Bdasm, std))
-                }
-                else if is_basmdoc_cmd(code) {
-                    Ok(InnerTask::BasmDoc(std))
-                }
-                else if is_disark_cmd(code) {
-                    Ok(InnerTask::Disassembler(
-                        Disassembler::Extern(ExternDisassembler::Disark(DisarkVersion::default())),
-                        std
-                    ))
-                }
-                else if is_grafx2_cmd(code) {
-                    Ok(InnerTask::Grafx2(std))
-                }
-                else if is_fade_cmd(code) {
-                    Ok(InnerTask::Fade(std))
-                }
-                else if is_fap_cmd(code) {
-                    #[cfg(feature = "fap")]
-                    let res = Ok(InnerTask::YmCruncher(YmCruncher::Fap, std));
-
-                    #[cfg(not(feature = "fap"))]
-                    let res = unreachable!();
-
-                    res
-                }
-                else if is_ayt_cmd(code) {
-                    Ok(InnerTask::YmCruncher(YmCruncher::Ayt, std))
-                }
-                else if is_miny_cmd(code) {
-                    Ok(InnerTask::YmCruncher(YmCruncher::Miny, std))
-                }
-                else if is_orgams_cmd(code) {
-                    Ok(InnerTask::Assembler(Assembler::Orgams, std))
-                }
-                else if is_rasm_cmd(code) {
-                    Ok(InnerTask::Assembler(
-                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
-                            RasmVersion::default()
-                        )),
-                        std
-                    ))
-                }
-                else if is_uz80_cmd(code) {
-                    Ok(InnerTask::Assembler(
-                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80(
-                            Default::default()
-                        )),
-                        std
-                    ))
-                }
-                else if is_sjasmplus_cmd(code) {
-                    Ok(InnerTask::Assembler(
-                        Assembler::Extern(
-                            cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
-                                Default::default()
-                            )
-                        ),
-                        std
-                    ))
-                }
-                else if is_vasm_cmd(code) {
-                    Ok(InnerTask::Assembler(
-                        Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Vasm(
-                            Default::default()
-                        )),
-                        std
-                    ))
-                }
-                else if is_sna_cmd(code) {
-                    Ok(InnerTask::Snapshot(std))
-                }
-                else if is_bndbuild_cmd(code) {
-                    Ok(InnerTask::BndBuild(std))
-                }
-                else if is_disc_cmd(code) {
-                    Ok(InnerTask::Disc(std))
-                }
-                else if is_echo_cmd(code) {
-                    Ok(InnerTask::Echo(std))
-                }
-                else if is_extern_cmd(code) {
-                    Ok(InnerTask::Extern(std))
-                }
-                else if is_hideur_cmd(code) {
-                    Ok(InnerTask::Hideur(std))
-                }
-                else if is_img2cpc_cmd(code) {
-                    Ok(InnerTask::ImgToCpc(std))
-                }
-                else if is_cpc2img_cmd(code) {
-                    Ok(InnerTask::CpcToImg(std))
-                }
-                else if is_impdisc_cmd(code) {
-                    Ok(InnerTask::ImpDsk(std))
-                }
-                else if is_hspc_cmd(code) {
-                    Ok(InnerTask::HspCompiler(std))
-                }
-                else if is_martine_cmd(code) {
-                    Ok(InnerTask::Martine(std))
-                }
-                else if is_xfer_cmd(code) {
-                    Ok(InnerTask::Xfer(std))
-                }
-                else if is_cp_cmd(code) {
-                    Ok(InnerTask::Cp(std))
-                }
-                else if is_mv_cmd(code) {
-                    Ok(InnerTask::Mv(std))
-                }
-                else if is_mkdir_cmd(code) {
-                    Ok(InnerTask::Mkdir(std))
-                }
-                else if is_rm_cmd(code) {
-                    Ok(InnerTask::Rm(std))
-                }
-                else {
-                    Err(Error::custom(format!("{code} is an invalid command")))
-                }
+            
             }
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -619,6 +397,348 @@ impl InnerTask {
 
     pub fn new_imgconverter(args: &str) -> Self {
         Self::ImgToCpc(StandardTaskArguments::new(args))
+    }
+
+    // Helper constructors that accept already-built StandardTaskArguments.
+    pub fn with_assembler(a: Assembler, std: StandardTaskArguments) -> Self {
+        Self::Assembler(a, std)
+    }
+
+    pub fn with_basmdoc(std: StandardTaskArguments) -> Self {
+        Self::BasmDoc(std)
+    }
+
+    pub fn with_bndbuild(std: StandardTaskArguments) -> Self {
+        Self::BndBuild(std)
+    }
+
+    pub fn with_convgeneric(std: StandardTaskArguments) -> Self {
+        Self::Convgeneric(std)
+    }
+
+    pub fn with_cp(std: StandardTaskArguments) -> Self {
+        Self::Cp(std)
+    }
+
+    pub fn with_cpc_to_img(std: StandardTaskArguments) -> Self {
+        Self::CpcToImg(std)
+    }
+
+    pub fn with_crunch(std: StandardTaskArguments) -> Self {
+        Self::Crunch(std)
+    }
+
+    pub fn with_disassembler(d: Disassembler, std: StandardTaskArguments) -> Self {
+        Self::Disassembler(d, std)
+    }
+
+    pub fn with_disc(std: StandardTaskArguments) -> Self {
+        Self::Disc(std)
+    }
+
+    pub fn with_echo(std: StandardTaskArguments) -> Self {
+        Self::Echo(std)
+    }
+
+    pub fn with_extern(std: StandardTaskArguments) -> Self {
+        Self::Extern(std)
+    }
+
+    pub fn with_hideur(std: StandardTaskArguments) -> Self {
+        Self::Hideur(std)
+    }
+
+    pub fn with_img_to_cpc(std: StandardTaskArguments) -> Self {
+        Self::ImgToCpc(std)
+    }
+
+    pub fn with_impdsk(std: StandardTaskArguments) -> Self {
+        Self::ImpDsk(std)
+    }
+
+    pub fn with_hspcompiler(std: StandardTaskArguments) -> Self {
+        Self::HspCompiler(std)
+    }
+
+    pub fn with_martine(std: StandardTaskArguments) -> Self {
+        Self::Martine(std)
+    }
+
+    pub fn with_xfer(std: StandardTaskArguments) -> Self {
+        Self::Xfer(std)
+    }
+
+    pub fn with_mkdir(std: StandardTaskArguments) -> Self {
+        Self::Mkdir(std)
+    }
+
+    pub fn with_mv(std: StandardTaskArguments) -> Self {
+        Self::Mv(std)
+    }
+
+    pub fn with_rm(std: StandardTaskArguments) -> Self {
+        Self::Rm(std)
+    }
+
+    pub fn with_snapshot(std: StandardTaskArguments) -> Self {
+        Self::Snapshot(std)
+    }
+
+    pub fn with_emulator(e: Emulator, std: StandardTaskArguments) -> Self {
+        Self::Emulator(e, std)
+    }
+
+    pub fn with_songconverter(sc: SongConverter, std: StandardTaskArguments) -> Self {
+        Self::SongConverter(sc, std)
+    }
+
+    pub fn with_tracker(t: Tracker, std: StandardTaskArguments) -> Self {
+        Self::Tracker(t, std)
+    }
+
+    pub fn with_ym_cruncher(y: YmCruncher, std: StandardTaskArguments) -> Self {
+        Self::YmCruncher(y, std)
+    }
+
+    pub fn with_grafx2(std: StandardTaskArguments) -> Self {
+        Self::Grafx2(std)
+    }
+
+    pub fn with_fade(std: StandardTaskArguments) -> Self {
+        Self::Fade(std)
+    }
+
+    /// Create an InnerTask from a command token and its standard arguments.
+    pub fn from_command_and_arguments(
+        code: &str,
+        std: StandardTaskArguments,
+    ) -> Result<Self, String> {
+        if is_ace_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_ace_default(), std))
+        }
+        else if is_at_cmd(code) {
+            Ok(Self::with_tracker(Tracker::new_at3_default(), std))
+        }
+        else if is_chipnsfx_cmd(code) {
+            Ok(Self::with_tracker(Tracker::new_chipnsfx_default(), std))
+        }
+        else if is_song2akm_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_akm_default(),
+                std
+            ))
+        }
+        else if is_song2aky_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_aky_default(),
+                std
+            ))
+        }
+        else if is_song2akg_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_akg_default(),
+                std
+            ))
+        }
+        else if is_song2events_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_events_default(),
+                std
+            ))
+        }
+        else if is_song2raw_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_raw_default(),
+                std
+            ))
+        }
+        else if is_song2soundeffects_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_sound_effects_default(),
+                std
+            ))
+        }
+        else if is_song2vgm_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_vgm_default(),
+                std
+            ))
+        }
+        else if is_song2wav_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_wav_default(),
+                std
+            ))
+        }
+        else if is_song2ym_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_song_to_ym_default(),
+                std
+            ))
+        }
+        else if is_z80profiler_cmd(code) {
+            Ok(Self::with_songconverter(
+                SongConverter::new_z80profiler_default(),
+                std
+            ))
+        }
+        else if is_crunch_cmd(code) {
+            Ok(Self::with_crunch(std))
+        }
+        else if is_convgeneric_cmd(code) {
+            Ok(Self::with_convgeneric(std))
+        }
+        else if is_cpcec_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_cpcec_default(), std))
+        }
+        else if is_amspirit_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_amspirit_default(), std))
+        }
+        else if is_sugarbox_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_sugarbox_default(), std))
+        }
+        else if is_winape_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_winape_default(), std))
+        }
+        else if is_cpcemupower_cmd(code) {
+            Ok(Self::with_emulator(
+                Emulator::new_cpcemupower_default(),
+                std
+            ))
+        }
+        else if is_capriceforever_cmd(code) {
+            Ok(Self::with_emulator(
+                Emulator::new_capriceforever_default(),
+                std
+            ))
+        }
+        else if is_emuctrl_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_facade(), std))
+        }
+        else if is_basm_cmd(code) {
+            Ok(Self::with_assembler(Assembler::Basm, std))
+        }
+        else if is_bdasm_cmd(code) {
+            Ok(Self::with_disassembler(Disassembler::Bdasm, std))
+        }
+        else if is_basmdoc_cmd(code) {
+            Ok(Self::with_basmdoc(std))
+        }
+        else if is_disark_cmd(code) {
+            Ok(Self::with_disassembler(
+                Disassembler::Extern(ExternDisassembler::Disark(DisarkVersion::default())),
+                std
+            ))
+        }
+        else if is_grafx2_cmd(code) {
+            Ok(Self::with_grafx2(std))
+        }
+        else if is_fade_cmd(code) {
+            Ok(Self::with_fade(std))
+        }
+        else if is_fap_cmd(code) {
+            #[cfg(feature = "fap")]
+            let res = Ok(Self::with_ym_cruncher(YmCruncher::Fap, std));
+
+            #[cfg(not(feature = "fap"))]
+            let res = unreachable!();
+
+            res
+        }
+        else if is_ayt_cmd(code) {
+            Ok(Self::with_ym_cruncher(YmCruncher::Ayt, std))
+        }
+        else if is_miny_cmd(code) {
+            Ok(Self::with_ym_cruncher(YmCruncher::Miny, std))
+        }
+        else if is_orgams_cmd(code) {
+            Ok(Self::with_assembler(Assembler::Orgams, std))
+        }
+        else if is_rasm_cmd(code) {
+            Ok(Self::with_assembler(
+                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Rasm(
+                    RasmVersion::default()
+                )),
+                std
+            ))
+        }
+        else if is_uz80_cmd(code) {
+            Ok(Self::with_assembler(
+                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Uz80(
+                    Default::default()
+                )),
+                std
+            ))
+        }
+        else if is_sjasmplus_cmd(code) {
+            Ok(Self::with_assembler(
+                Assembler::Extern(
+                    cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
+                        Default::default()
+                    )
+                ),
+                std
+            ))
+        }
+        else if is_vasm_cmd(code) {
+            Ok(Self::with_assembler(
+                Assembler::Extern(cpclib_runner::runner::assembler::ExternAssembler::Vasm(
+                    Default::default()
+                )),
+                std
+            ))
+        }
+        else if is_sna_cmd(code) {
+            Ok(Self::with_snapshot(std))
+        }
+        else if is_bndbuild_cmd(code) {
+            Ok(Self::with_bndbuild(std))
+        }
+        else if is_disc_cmd(code) {
+            Ok(Self::with_disc(std))
+        }
+        else if is_echo_cmd(code) {
+            Ok(Self::with_echo(std))
+        }
+        else if is_extern_cmd(code) {
+            Ok(Self::with_extern(std))
+        }
+        else if is_hideur_cmd(code) {
+            Ok(Self::with_hideur(std))
+        }
+        else if is_img2cpc_cmd(code) {
+            Ok(Self::with_img_to_cpc(std))
+        }
+        else if is_cpc2img_cmd(code) {
+            Ok(Self::with_cpc_to_img(std))
+        }
+        else if is_impdisc_cmd(code) {
+            Ok(Self::with_impdsk(std))
+        }
+        else if is_hspc_cmd(code) {
+            Ok(Self::with_hspcompiler(std))
+        }
+        else if is_martine_cmd(code) {
+            Ok(Self::with_martine(std))
+        }
+        else if is_xfer_cmd(code) {
+            Ok(Self::with_xfer(std))
+        }
+        else if is_cp_cmd(code) {
+            Ok(Self::with_cp(std))
+        }
+        else if is_mv_cmd(code) {
+            Ok(Self::with_mv(std))
+        }
+        else if is_mkdir_cmd(code) {
+            Ok(Self::with_mkdir(std))
+        }
+        else if is_rm_cmd(code) {
+            Ok(Self::with_rm(std))
+        }
+        else {
+            Err(format!("{code} is an invalid command"))
+        }
     }
 
     pub fn replace_automatic_variables(
@@ -758,7 +878,7 @@ impl StandardTaskArguments {
 
     /// This method modify the args to replace automatic variables by the expected values
     /// TODO keep the original argument for display and error purposes ?
-    fn replace_automatic_variables(
+    pub fn replace_automatic_variables(
         &mut self,
         first_dep: Option<&Utf8Path>,
         first_tgt: Option<&Utf8Path>
@@ -801,6 +921,18 @@ impl StandardTaskArguments {
             ));
         }
         Ok(())
+    }
+}
+
+impl StandardTaskArguments {
+    /// Public accessor for the raw args string.
+    pub fn args(&self) -> &str {
+        &self.args
+    }
+
+    /// Public accessor for the ignore flag.
+    pub fn ignore_error(&self) -> bool {
+        self.ignore_error
     }
 }
 

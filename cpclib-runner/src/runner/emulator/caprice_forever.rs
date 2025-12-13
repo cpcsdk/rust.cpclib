@@ -29,7 +29,7 @@ impl ExecutableInformation for CapriceForeverVersion {
                 #[cfg(target_os = "windows")]
                 return "Caprice64.exe";
                 #[cfg(target_os = "linux")]
-                unreachable!();
+                return "Caprice64.exe";
                 #[cfg(target_os = "macosx")]
                 unreachable!();
             }
@@ -45,8 +45,9 @@ impl StaticInformation for CapriceForeverVersion {
     fn static_download_urls(&self) -> &'static MutiplatformUrls {
         match self {
             CapriceForeverVersion::V25_3 => {
+                let url = "https://www.cpc-power.com/cpcarchives/download/Emulateurs/%5BWin64%5D%20Caprice_Forever_v25.3.7z";
                 static URLS: OnceLock<MutiplatformUrls> = OnceLock::new();
-                URLS.get_or_init(|| MutiplatformUrls::builder().windows("https://www.cpc-power.com/cpcarchives/download/Emulateurs/%5BWin64%5D%20Caprice_Forever_v25.3.7z").build())
+                URLS.get_or_init(|| MutiplatformUrls::builder().windows(url).linux(url).build())
             }
         }
     }

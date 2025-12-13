@@ -10,6 +10,7 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
+use cpclib_runner::runner::ay::minimiser::MINIMISER_CMD;
 use lazy_regex::regex_captures;
 #[cfg(feature = "fap")]
 use task::FAP_CMDS;
@@ -26,7 +27,7 @@ use thiserror::Error;
 pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
-use crate::task::{BASMDOC_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS};
+use crate::task::{BASMDOC_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS, MINY_CMDS};
 
 pub mod app;
 pub mod builder;
@@ -88,6 +89,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (IMG2CPC_CMDS, false),
     (IMPDISC_CMDS, true),
     (MARTINE_CMDS, true),
+    (MINY_CMDS, true),
     (ORGAMS_CMDS, false),
     (RASM_CMDS, true),
     (RM_CMDS, false),

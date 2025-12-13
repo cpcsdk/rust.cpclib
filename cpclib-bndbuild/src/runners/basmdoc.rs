@@ -2,7 +2,7 @@ pub const BASMDOC_CMD: &str = "basmdoc";
 
 use std::marker::PhantomData;
 
-use clap::{ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use cpclib_common::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
@@ -16,6 +16,23 @@ impl<E: EventObserver> Default for BasmDocRunner<E> {
     fn default() -> Self {
         let command = cpclib_basmdoc::cmdline::build_args_parser();
         let command = command.no_binary_name(true);
+        let command = command.disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true)
+            );
 
         Self {
             command,
@@ -53,7 +70,7 @@ impl<E: EventObserver> Runner for BasmDocRunner<E> {
         let matches = self.get_matches(itr, o)?;
         let matches = matches.unwrap();
 
-        let res = cpclib_basmdoc::cmdline::handle_matches(&matches);
+        let res = cpclib_basmdoc::cmdline::handle_matches(&matches, &self.command);
 
         res.map_err(|e| e.to_string())
     }

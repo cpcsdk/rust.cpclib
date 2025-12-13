@@ -311,13 +311,14 @@ impl SymbolsTable {
     {
         let symbol: Symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
+        //dbg!("Input", &symbol);
 
         // handle the labels build with patterns
         // Get the replacement strings
         static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
         let mut replace = HashSet::new();
         for cap in RE.captures_iter(&symbol) {
-            if cap[0] != symbol {
+            if &cap[0] != symbol {
                 replace.insert(cap[0].to_owned());
             }
         }
@@ -375,7 +376,10 @@ impl SymbolsTable {
             }
         }
 
-        Ok(symbol.into())
+        let symbol: Symbol = symbol.into();
+        //dbg!("output", &symbol);
+
+        Ok(symbol)
     }
 }
 

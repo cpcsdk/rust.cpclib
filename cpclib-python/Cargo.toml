@@ -1,0 +1,24 @@
+[package]
+name = "cpclib-python"
+version = "0.1.0"
+edition = "2024"
+description = "Python wrappers for cpclib components using pyo3"
+license = "MIT"
+
+[lib]
+name = "cpclib_python"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.20.0", features = ["auto-initialize"] }
+cpclib-asm = { path = "../cpclib-asm", default-features = false }
+cpclib-basic = { path = "../cpclib-basic", default-features = false }
+cpclib-basm = { path = "../cpclib-basm", default-features = false }
+cpclib-bdasm = { path = "../cpclib-bdasm", default-features = false }
+cpclib-bndbuild = { path = "../cpclib-bndbuild", default-features = false }
+cpclib-cpr = { path = "../cpclib-cpr", default-features = false }
+cpclib-crunchers = { path = "../cpclib-crunchers", default-features = false }
+cpclib-common = { path = "../cpclib-common", default-features = false }
+
+[package.metadata]
+# Notes: This crate provides Python bindings; extend with real wrappers as needed.
