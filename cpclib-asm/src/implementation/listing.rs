@@ -106,7 +106,7 @@ impl ListingExt for Listing {
 
         let mut current_address: Option<u16> = None;
         let mut current_idx = 0;
-        let mut nb_labels_added = 0;
+        let mut _nb_labels_added = 0;
 
         // inject labels at the appropriate address if any
         while current_idx < self.len() && !labels.is_empty() {
@@ -115,7 +115,7 @@ impl ListingExt for Listing {
             {
                 self.listing_mut()
                     .insert(current_idx, label(new_label.borrow()));
-                nb_labels_added += 1;
+                _nb_labels_added += 1;
             }
 
             let current_instruction = &self.listing()[current_idx];

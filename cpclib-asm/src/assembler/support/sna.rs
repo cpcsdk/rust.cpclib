@@ -55,12 +55,12 @@ impl SnaAssembler {
     }
 
     #[inline]
-    pub fn page_info_mut(&mut self, page: u8) -> &mut PageInformation {
+    pub fn _page_info_mut(&mut self, page: u8) -> &mut PageInformation {
         &mut self.pages_info[page as usize]
     }
 
     #[inline]
-    pub fn page_info(&self, page: u8) -> &PageInformation {
+    pub fn _page_info(&self, page: u8) -> &PageInformation {
         &self.pages_info[page as usize]
     }
 }

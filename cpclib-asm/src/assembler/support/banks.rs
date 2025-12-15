@@ -53,7 +53,7 @@ impl DecoratedPage {
     }
 
     #[inline(always)]
-    fn written_bytes(&self) -> &BitVec {
+    fn _written_bytes(&self) -> &BitVec {
         &self.0.2
     }
 

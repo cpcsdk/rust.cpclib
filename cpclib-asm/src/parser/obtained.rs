@@ -2109,7 +2109,7 @@ pub(crate) enum ParseResult {
 }
 
 #[derive(Debug)]
-pub(crate) enum ParseResultFirstStage {
+pub(crate) enum _ParseResultFirstStage {
     Success {
         listing: Option<InnerLocatedListing>,
         remaining_span: Option<Z80Span>

@@ -6,25 +6,25 @@ use crate::preamble::Z80Span;
 
 /// This structure store the necessary information to replay the assembled stuff of previous passes when we do not reassemble
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ControlOutputByte {
+pub(crate) struct ControlOutputByte {
     // The value to output
     value: u8
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ControlOutputBytes {
+pub(crate) struct ControlOutputBytes {
     // The value to output
     bytes: Vec<u8>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ControlOrg {
+pub(crate) struct ControlOrg {
     code: u16,
     output: u16
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ControlAssert {
+pub(crate) struct ControlAssert {
     exp: Expr,
     txt: Option<Vec<FormattedExpr>>,
     span: Option<Z80Span>
