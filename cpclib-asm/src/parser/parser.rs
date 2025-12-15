@@ -446,7 +446,7 @@ static DOTTED_MIN_MAX_LABEL_SIZE: LazyLock<(usize, usize)> = LazyLock::new(|| {
         .map(|l| l.len())
         .minmax()
         .into_option()
-        .unwrap()
+        .expect("DOTTED_IMPOSSIBLE_NAMES must not be empty")
 });
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -588,7 +588,7 @@ pub fn inner_code_with_state(
     move |input: &mut InnerZ80Span| {
         // dbg!("Requested state", &new_state);
         LocatedListing::parse_inner(input, new_state, only_one_instruction)
-            .map(|l| Arc::<LocatedListing>::try_unwrap(l).unwrap())
+            .map(|l| Arc::<LocatedListing>::try_unwrap(l).expect("Arc should have single owner"))
     }
 }
 
@@ -2719,7 +2719,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
         // leave if the first loop does not have a test
         if first_loop && if_token_or_error.is_err() {
             input.reset(&if_start);
-            return Err(if_token_or_error.err().unwrap());
+            return Err(if_token_or_error.unwrap_err());
         }
 
         // Get the current condition or nothing for the very last branch
@@ -3047,20 +3047,20 @@ pub fn parse_breakpoint(
     }
 
     let brk = LocatedTokenInner::Breakpoint {
-        address: Rc::into_inner(address).unwrap().into_inner().map(|a| a.1),
-        r#type: Rc::into_inner(r#type).unwrap().into_inner().map(|r| r.1),
-        access: Rc::into_inner(access).unwrap().into_inner().map(|a| a.1),
-        run: Rc::into_inner(run).unwrap().into_inner().map(|a| a.1),
-        mask: Rc::into_inner(mask).unwrap().into_inner().map(|a| a.1),
-        size: Rc::into_inner(size).unwrap().into_inner().map(|a| a.1),
-        value: Rc::into_inner(value).unwrap().into_inner().map(|a| a.1),
+        address: Rc::into_inner(address).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        r#type: Rc::into_inner(r#type).expect("Rc should have single owner").into_inner().map(|r| r.1),
+        access: Rc::into_inner(access).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        run: Rc::into_inner(run).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        mask: Rc::into_inner(mask).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        size: Rc::into_inner(size).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        value: Rc::into_inner(value).expect("Rc should have single owner").into_inner().map(|a| a.1),
         value_mask: Rc::into_inner(value_mask)
-            .unwrap()
+            .expect("Rc should have single owner")
             .into_inner()
             .map(|a| a.1),
-        condition: Rc::into_inner(condition).unwrap().into_inner().map(|a| a.1),
-        name: Rc::into_inner(name).unwrap().into_inner().map(|a| a.1),
-        step: Rc::into_inner(step).unwrap().into_inner().map(|a| a.1)
+        condition: Rc::into_inner(condition).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        name: Rc::into_inner(name).expect("Rc should have single owner").into_inner().map(|a| a.1),
+        step: Rc::into_inner(step).expect("Rc should have single owner").into_inner().map(|a| a.1)
     };
 
     Ok(brk)
@@ -6177,7 +6177,7 @@ where
 }
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn parse_bool<F>(
+fn _parse_bool<F>(
     inner: F,
     pattern: &'static str,
     symbol: BinaryOperation
