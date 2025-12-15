@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
 use crate::assembler::Env;
@@ -17,7 +16,7 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
             | ExprResult::Value(_)
             | ExprResult::Char(_)
             | ExprResult::Bool(_) => ExprResult::Value(e.int()?),
-            ExprResult::String(s) => e,
+            ExprResult::String(_s) => e,
             _ => {
                 return Err(AssemblerError::AlreadyRenderedError(format!(
                     "Incompatible type with orgams {e:?}"
@@ -331,7 +330,7 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 Some(cpclib_tokens::symbols::Value::Address( val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len($env.symbols()).into()),
                 Some(cpclib_tokens::symbols::Value::String( val)) => Ok(val.into()),
-                Some(e) => { Err(AssemblerError::WrongSymbolType {
+                Some(_e) => { Err(AssemblerError::WrongSymbolType {
                     symbol: label.into(),
                     isnot: "a value".into(),
                 })},

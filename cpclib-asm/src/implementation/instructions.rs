@@ -2,7 +2,6 @@ use std::ops::Deref;
 
 use cpclib_common::smol_str::SmolStr;
 use cpclib_crunchers::CompressMethod;
-use cpclib_tokens::symbols::ValueAndSource;
 use cpclib_tokens::{CrunchType as CompressionType, Expr};
 
 use crate::Env;

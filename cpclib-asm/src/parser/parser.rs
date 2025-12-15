@@ -27,8 +27,6 @@ use cpclib_common::winnow::stream::{
 };
 use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
 use cpclib_common::winnow::{self, BStr, ModalResult, Parser, Stateful};
-#[cfg(not(target_arch = "wasm32"))]
-use cpclib_sna::parse;
 use cpclib_sna::parse::parse_flag;
 use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
@@ -98,7 +96,7 @@ impl Z80ParserError {
 
 impl ParserError<InnerZ80Span> for Z80ParserError {
     #[allow(deprecated)]
-    fn from_error_kind(input: &InnerZ80Span, kind: ErrorKind) -> Self {
+    fn from_error_kind(input: &InnerZ80Span, _kind: ErrorKind) -> Self {
         Self(vec![(*input, Z80ParserErrorKind::Winnow)])
     }
 
@@ -106,8 +104,8 @@ impl ParserError<InnerZ80Span> for Z80ParserError {
     fn append(
         mut self,
         input: &InnerZ80Span,
-        token_start: &<InnerZ80Span as Stream>::Checkpoint,
-        kind: ErrorKind
+        _token_start: &<InnerZ80Span as Stream>::Checkpoint,
+        _kind: ErrorKind
     ) -> Self {
         self.0.push((*input, Z80ParserErrorKind::Winnow));
         self
@@ -130,7 +128,7 @@ impl AddContext<InnerZ80Span> for Z80ParserError {
     fn add_context(
         mut self,
         input: &InnerZ80Span,
-        start: &<InnerZ80Span as Stream>::Checkpoint,
+        _start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: &'static str
     ) -> Self {
         self.0
@@ -143,7 +141,7 @@ impl AddContext<InnerZ80Span, StrContext> for Z80ParserError {
     fn add_context(
         mut self,
         input: &InnerZ80Span,
-        start: &<InnerZ80Span as Stream>::Checkpoint,
+        _start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: StrContext
     ) -> Self {
         self.0.push((*input, Z80ParserErrorKind::Context(ctx)));
@@ -1295,7 +1293,7 @@ pub fn parse_line_component_standard(
         }
     }
 
-    let before_let = input.checkpoint();
+    let _before_let = input.checkpoint();
     let r#let = terminated(opt(parse_directive_word(b"LET")), my_space0).parse_next(input)?;
 
     let before_label = input.checkpoint();
@@ -2376,8 +2374,8 @@ fn parse_directive_of_size_others(
         Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
-    is_orgams: bool,
-    within_struct: bool,
+    _is_orgams: bool,
+    _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match &word.to_ascii_uppercase()[..] {
@@ -2403,8 +2401,8 @@ fn parse_directive_of_size_10(
         Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
-    is_orgams: bool,
-    within_struct: bool,
+    _is_orgams: bool,
+    _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
@@ -2425,8 +2423,8 @@ fn parse_directive_of_size_8(
         Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
-    is_orgams: bool,
-    within_struct: bool,
+    _is_orgams: bool,
+    _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
@@ -2456,8 +2454,8 @@ fn parse_directive_of_size_7(
         Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
-    is_orgams: bool,
-    within_struct: bool,
+    _is_orgams: bool,
+    _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
@@ -2485,7 +2483,7 @@ fn parse_directive_of_size_6(
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
     is_orgams: bool,
-    within_struct: bool,
+    _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match word {
@@ -2548,7 +2546,7 @@ fn parse_directive_of_size_5(
         Checkpoint<Checkpoint<&'static BStr, &'static BStr>, LocatingSlice<&'static BStr>>,
         Stateful<LocatingSlice<&'static BStr>, &'static context::ParserContext>
     >,
-    is_orgams: bool,
+    _is_orgams: bool,
     within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
@@ -2855,7 +2853,7 @@ pub fn parse_breakpoint(
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let expr = opt(terminated(located_expr, not('='))
         .with_taken()
-        .verify(|(e, s)| {
+        .verify(|(_e, s)| {
             // disallow labels that are similar to some keywords
             !s.eq_ignore_ascii_case(b"READ")
                 && !s.eq_ignore_ascii_case(b"R")
@@ -2873,7 +2871,7 @@ pub fn parse_breakpoint(
                 && !s.eq_ignore_ascii_case(b"WATCHER")
                 && !s.contains(&b'=')
         })
-        .map(|(e, s)| e))
+        .map(|(e, _s)| e))
     .parse_next(input)?;
 
     let address = Rc::new(RefCell::new(expr.map(|expr| (None, expr))));
@@ -4071,7 +4069,7 @@ pub fn parse_macro_or_struct_call_inner(
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 /// TODO remove by restore the way to parse the macro name
 pub fn parse_macro_or_struct_call(
-    allowed_to_return_a_label: bool,
+    _allowed_to_return_a_label: bool,
     for_struct: bool
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
@@ -5996,7 +5994,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                     .map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into())))
             )
                 .with_taken()
-                .map(|((m, dollar), content)| {
+                .map(|((_m, dollar), content)| {
                     LocatedExpr::UnaryOperation(
                         UnaryOperation::Neg,
                         dollar,

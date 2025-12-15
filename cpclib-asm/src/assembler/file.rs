@@ -141,7 +141,7 @@ impl<'fname> AnyFileName<'fname> {
     pub fn content_filename(&self) -> &str {
         match self {
             AnyFileName::InImage {
-                image,
+                image: _image,
                 content: amsdos
             } => amsdos,
             AnyFileName::Standard(content) => content
@@ -161,7 +161,7 @@ impl<'fname> AnyFileName<'fname> {
         match self {
             AnyFileName::InImage {
                 image,
-                content: amsdos
+                content: _amsdos
             } => image,
             AnyFileName::Standard(f) => f
         }

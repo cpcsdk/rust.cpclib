@@ -2146,7 +2146,7 @@ impl Env {
             if let Some(condition) = condition {
                 let cond = self.resolve_expr_may_fail_in_first_pass(condition)?;
                 let cond = cond.string()?;
-                brk.condition.replace(String127::try_new(cond).map_err(|e| {
+                brk.condition.replace(String127::try_new(cond).map_err(|_| {
                     let e = AssemblerError::AssemblingError {
                         msg: "Condition is too long".to_owned()
                     };
@@ -2161,7 +2161,7 @@ impl Env {
             if let Some(name) = name {
                 let n = self.resolve_expr_may_fail_in_first_pass(name)?;
                 let n = n.string()?;
-                brk.name.replace(String127::try_new(n).map_err(|e| {
+                brk.name.replace(String127::try_new(n).map_err(|_| {
                     let e = AssemblerError::AssemblingError {
                         msg: "Name is too long".to_owned()
                     };
@@ -4416,7 +4416,7 @@ impl Env {
 
         // handle the end of visibility of unique labels
         self.symbols_mut().pop_seed();
-        if let Some(counter_value) = &counter_value {
+        if let Some(_counter_value) = &counter_value {
             self.symbols_mut().pop_counter_value();
         }
 
@@ -4860,7 +4860,7 @@ impl Env {
                 },
                 ExprResult::Char(c) => {
                     // XXX here it is problematci c shold be a char and not a byte
-                    let c = env.charset_encoding.transform_char(*c as char);
+                    let _c = env.charset_encoding.transform_char(*c as char);
                     output(env, expr.int()?, delta, mask)
                 },
                 ExprResult::String(s) => {

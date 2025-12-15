@@ -1,4 +1,4 @@
-use cpclib_tokens::{Expr, ExprElement, FormattedExpr};
+use cpclib_tokens::{Expr, FormattedExpr};
 
 use super::{Env, visit_assert};
 use crate::error::AssemblerError;

@@ -24,7 +24,7 @@ fn expand_param<'p, P: MacroParamElement>(
 ) -> Result<beef::lean::Cow<'p, str>, AssemblerError> {
     let extended = if m.is_single() {
         let s = m.single_argument();
-        let trimmed = s.trim();
+        let _trimmed = s.trim();
         if m.must_be_evaluated() {
             let src = &s[..];
             let ctx_builder = env

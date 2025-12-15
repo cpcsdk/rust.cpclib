@@ -1,4 +1,3 @@
-use cpclib_disc::disc::Disc;
 #[cfg(feature = "hfe")]
 use cpclib_disc::hfe::Hfe;
 use cpclib_files::*;

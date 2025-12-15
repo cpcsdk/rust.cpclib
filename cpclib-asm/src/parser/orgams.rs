@@ -174,7 +174,7 @@ pub fn parse_orgams_ordered_expression(
 
 #[inline]
 pub fn parse_orgams_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
-    let before_bracket = input.checkpoint();
+    let _before_bracket = input.checkpoint();
     let bracket = opt(('[', my_space0)).parse_next(input)?;
     let exp = if bracket.is_some() {
         let exp = parse_orgams_expression.parse_next(input)?;

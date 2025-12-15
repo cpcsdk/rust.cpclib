@@ -12,7 +12,7 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_disc::amsdos::AmsdosFileType;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait};
 use cpclib_tokens::{
-    AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ExprElement, ListingElement,
+    AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, ListingElement,
     MacroParamElement, TestKindElement, ToSimpleToken, Token
 };
 use ouroboros::*;
@@ -814,7 +814,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
             // get the generated code
             // TODO handle some errors there
-            let (source, code, flavor) = if let Some(r#macro) = &r#macro {
+            let (source, code, _flavor) = if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
                 let flavor = r#macro.flavor();
                 let code = r#macro.expand(env)?;

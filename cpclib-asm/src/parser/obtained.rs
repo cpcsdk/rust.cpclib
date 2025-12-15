@@ -1467,14 +1467,17 @@ impl ListingElement for LocatedTokenInner {
                     e.as_ref().map(|l| l.as_listing())
                 ))
             },
-            Self::Repeat(e, l, s, start, step) => {
+            Self::Repeat(_e, _l, _s, _start, _step) => {
                 unimplemented!("step");
-                Cow::Owned(Token::Repeat(
-                    e.to_expr().into_owned(),
-                    l.as_listing(),
-                    s.as_ref().map(|s| s.into()),
-                    start.as_ref().map(|e| e.to_expr().into_owned())
-                ))
+                #[allow(unreachable_code)]
+                {
+                    Cow::Owned(Token::Repeat(
+                        _e.to_expr().into_owned(),
+                        _l.as_listing(),
+                        _s.as_ref().map(|s| s.into()),
+                        _start.as_ref().map(|e| e.to_expr().into_owned())
+                    ))
+                }
             },
             Self::RepeatUntil(e, l) => {
                 Cow::Owned(Token::RepeatUntil(e.to_expr().into_owned(), l.as_listing()))
@@ -2459,7 +2462,7 @@ impl ParseToken for Token {
 impl ListingExt for LocatedListing {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
-        code: S
+        _code: S
     ) -> Result<(), AssemblerError> {
         panic!("Cannot be used in this context");
     }
@@ -2486,7 +2489,7 @@ impl ListingExt for LocatedListing {
         todo!()
     }
 
-    fn inject_labels<S: Borrow<str>>(&mut self, labels: HashMap<u16, S>) {
+    fn inject_labels<S: Borrow<str>>(&mut self, _labels: HashMap<u16, S>) {
         todo!()
     }
 
