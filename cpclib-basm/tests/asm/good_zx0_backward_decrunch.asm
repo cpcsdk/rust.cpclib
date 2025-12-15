@@ -39,4 +39,4 @@ US_LAST_ADDRESS = 0xc000 + BASM_LATEST_CRUNCH_INPUT_DATA_SIZE - 1
 	; include the embedded uncruncher
 	include "inner://uncrunch/dzx0_turbo_back.asm"
 dzx0_back
-	dzx0_turbo_back (void)
+	DecompressZX0TurboBackward()
