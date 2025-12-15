@@ -1,0 +1,5 @@
+# `bndbuild --watch test` should display "watched.txt as been modified" only when it is the case. Not at each tick
+- tgt: test
+  dep: watched.txt
+  phony: true
+  cmd: echo watched.txt as been modified

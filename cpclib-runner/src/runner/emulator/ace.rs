@@ -110,6 +110,8 @@ impl ExecutableInformation for AceVersion {
         return "AceDL.exe";
         #[cfg(target_os = "linux")]
         return "AceDL";
+        #[cfg(target_os = "macos")]
+        todo!("Ace executable not defined for macOS");
     }
 }
 

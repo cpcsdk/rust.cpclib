@@ -30,8 +30,8 @@ impl ExecutableInformation for CapriceForeverVersion {
                 return "Caprice64.exe";
                 #[cfg(target_os = "linux")]
                 return "Caprice64.exe";
-                #[cfg(target_os = "macosx")]
-                unreachable!();
+                #[cfg(target_os = "macos")]
+                todo!("Caprice Forever not available on macOS");
             }
         }
     }

@@ -1,0 +1,226 @@
+Context: tests/asm/good_zx0_backward_decrunch.asm
+0100                                    2 	org 0x100
+0100        F3                          6 	di
+0104        21 FB C9 22 38 00           8 	ld hl, 0xc9fb : ld (0x38), hl
+0107        31 00 C0                    9 	ld sp, 0xc000
+010A                                   11 	; uncrunch the 100 bytes in 0xc000
+010A        21 1D 01                   12 	ld hl, CS_LAST_ADDRESS
+010D        11 63 C0                   13 	ld de, US_LAST_ADDRESS
+0110        CD 1E 01                   14 	call dzx0_back
+0113        C3 13 01                   15 	jp $
+0116                                   17 	; create an area of 100 zero, but compress it
+0116 00116 CS_START                    18 CS_START
+0116 00000 INNER_START                 20 INNER_START
+0116 00000C FF FF FF FF FF FF FF FF    21 		defs 80, 0xff
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+            FF FF FF FF FF FF FF FF       
+0166 00050C 0F 0F 0F 0F 0F 0F 0F 0F    22 		defs 20, 0x0f
+            0F 0F 0F 0F 0F 0F 0F 0F       
+            0F 0F 0F 0F                   
+0002 00116  A0 AA DA BF FF C2 0F 2B    19 	LZX0_BACKWARD
+011E 0011E CS_STOP                     25 CS_STOP
+011E                                   27 	; Check that basm computes the right sizes
+011E                                   32 	; set up the needed symbols to uncruch
+011D ????? CS_LAST_ADDRESS             33 CS_LAST_ADDRESS = CS_START + BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE - 1 ; as in the doc. but does not work
+011E                                   33 CS_LAST_ADDRESS = CS_START + BASM_LATEST_CRUNCH_OUTPUT_DATA_SIZE - 1 ; as in the doc. but does not work
+C063 ????? US_LAST_ADDRESS             34 US_LAST_ADDRESS = 0xc000 + BASM_LATEST_CRUNCH_INPUT_DATA_SIZE - 1 
+011E                                   39 	; include the embedded uncruncher
+011E                                   40 	include "inner://uncrunch/dzx0_turbo_back.asm"
+Context: inner://uncrunch/dzx0_turbo_back.asm
+011E                                    1 ; -----------------------------------------------------------------------------
+011E                                    2 ; ZX0 decoder by Einar Saukas & introspec
+011E                                    3 ; "Turbo" version (126 bytes, 21% faster) - BACKWARDS VARIANT
+011E                                    4 ; -----------------------------------------------------------------------------
+011E                                    5 ; Parameters:
+011E                                    6 ;   HL: last source address (compressed data)
+011E                                    7 ;   DE: last destination address (decompressing)
+011E                                    8 ; -----------------------------------------------------------------------------
+MACRO      dzx0_turbo_back             10 macro dzx0_turbo_back
+                                       11         ld      bc, 1                   ; preserve default offset 1
+                                       12         ld      (@dzx0tb_last_offset+1), bc
+                                       13         ld      a, $80
+                                       14         jr      @dzx0tb_literals
+                                       15 @dzx0tb_new_offset:
+                                       16         add     a, a                    ; obtain offset MSB
+                                       17         call    c, @dzx0tb_elias
+                                       18         dec     b
+                                       19         ret     z                       ; check end marker
+                                       20         dec     c                       ; adjust for positive offset
+                                       21         ld      b, c
+                                       22         ld      c, (hl)                 ; obtain offset LSB
+                                       23         dec     hl
+                                       24         srl     b                       ; last offset bit becomes first length bit
+                                       25         rr      c
+                                       26         inc     bc
+                                       27         ld      (@dzx0tb_last_offset+1), bc ; preserve new offset
+                                       28         ld      bc, 1                   ; obtain length
+                                       29         call    c, @dzx0tb_elias_loop
+                                       30         inc     bc
+                                       31 @dzx0tb_copy:
+                                       32         push    hl                      ; preserve source
+                                       33 @dzx0tb_last_offset:
+                                       34         ld      hl, 0                   ; restore offset
+                                       35         add     hl, de                  ; calculate destination - offset
+                                       36         lddr                            ; copy from offset
+                                       37         inc     c
+                                       38         pop     hl                      ; restore source
+                                       39         add     a, a                    ; copy from literals or new offset?
+                                       40         jr      c, @dzx0tb_new_offset
+                                       41 @dzx0tb_literals:
+                                       42         add     a, a                    ; obtain length
+                                       43         call    c, @dzx0tb_elias
+                                       44         lddr                            ; copy literals
+                                       45         inc     c
+                                       46         add     a, a                    ; copy from last offset or new offset?
+                                       47         jr      c, @dzx0tb_new_offset
+                                       48         add     a, a                    ; obtain length
+                                       49         call    c, @dzx0tb_elias
+                                       50         jp      @dzx0tb_copy
+                                       51 @dzx0tb_elias_loop:
+                                       52         add     a, a
+                                       53         rl      c
+                                       54         add     a, a
+                                       55         ret     nc
+                                       56 @dzx0tb_elias:
+                                       57         jp      nz, @dzx0tb_elias_loop   ; inverted interlaced Elias gamma coding
+                                       58         ld      a, (hl)                 ; load another group of 8 bits
+                                       59         dec     hl
+                                       60         rla
+                                       61         ret     nc
+                                       62         add     a, a
+                                       63         rl      c
+                                       64         add     a, a
+                                       65         ret     nc
+                                       66         add     a, a
+                                       67         rl      c
+                                       68         add     a, a
+                                       69         ret     nc
+                                       70         add     a, a
+                                       71         rl      c
+                                       72         add     a, a
+                                       73         ret     nc
+                                       74 @dzx0tb_elias_reload:
+                                       75         add     a, a
+                                       76         rl      c
+                                       77         rl      b
+                                       78         add     a, a
+                                       79         ld      a, (hl)                 ; load another group of 8 bits
+                                       80         dec     hl
+                                       81         rla
+                                       82         ret     nc
+                                       83         add     a, a
+                                       84         rl      c
+                                       85         rl      b
+                                       86         add     a, a
+                                       87         ret     nc
+                                       88         add     a, a
+                                       89         rl      c
+                                       90         rl      b
+                                       91         add     a, a
+                                       92         ret     nc
+                                       93         add     a, a
+                                       94         rl      c
+                                       95         rl      b
+                                       96         add     a, a
+                                       97         jr      c, @dzx0tb_elias_reload
+                                       98         ret
+                                       99 ; -----------------------------------------------------------------------------
+                                      100 mend
+Context: tests/asm/good_zx0_backward_decrunch.asm
+011E 0011E dzx0_back                   41 dzx0_back
+011E                                   42 	dzx0_turbo_back (void)
+Context: inner://uncrunch/dzx0_turbo_back.asm:10:1 > MACRO dzx0_turbo_back:
+0121        01 01 00                    2         ld      bc, 1                   ; preserve default offset 1
+0121        ED 43 45 01                 3         ld      (@dzx0tb_last_offset+1), bc
+0125        3E 80                       4         ld      a, $80
+0127        18 26                       5         jr      @dzx0tb_literals
+0129 00129 @dzx0tb_new_offset           6 @dzx0tb_new_offset:
+012A        87                          7         add     a, a                    ; obtain offset MSB
+012A        DC 65 01                    8         call    c, @dzx0tb_elias
+012D        05                          9         dec     b
+012F        C8                         10         ret     z                       ; check end marker
+0130        0D                         11         dec     c                       ; adjust for positive offset
+0130        41                         12         ld      b, c
+0132        4E                         13         ld      c, (hl)                 ; obtain offset LSB
+0132        2B                         14         dec     hl
+0135        CB 38                      15         srl     b                       ; last offset bit becomes first length bit
+0135        CB 19                      16         rr      c
+0137        03                         17         inc     bc
+013C        ED 43 45 01                18         ld      (@dzx0tb_last_offset+1), bc ; preserve new offset
+013F        01 01 00                   19         ld      bc, 1                   ; obtain length
+013F        DC 60 01                   20         call    c, @dzx0tb_elias_loop
+0142        03                         21         inc     bc
+0143 00143 @dzx0tb_copy                22 @dzx0tb_copy:
+0144        E5                         23         push    hl                      ; preserve source
+0144 00144 @dzx0tb_last_offset         24 @dzx0tb_last_offset:
+0147        21 00 00                   25         ld      hl, 0                   ; restore offset
+0148        19                         26         add     hl, de                  ; calculate destination - offset
+014A        ED B8                      27         lddr                            ; copy from offset
+014A        0C                         28         inc     c
+014C        E1                         29         pop     hl                      ; restore source
+014D        87                         30         add     a, a                    ; copy from literals or new offset?
+014D        38 DA                      31         jr      c, @dzx0tb_new_offset
+014F 0014F @dzx0tb_literals            32 @dzx0tb_literals:
+0150        87                         33         add     a, a                    ; obtain length
+0150        DC 65 01                   34         call    c, @dzx0tb_elias
+0155        ED B8                      35         lddr                            ; copy literals
+0155        0C                         36         inc     c
+0157        87                         37         add     a, a                    ; copy from last offset or new offset?
+0157        38 D0                      38         jr      c, @dzx0tb_new_offset
+015A        87                         39         add     a, a                    ; obtain length
+015A        DC 65 01                   40         call    c, @dzx0tb_elias
+015D        C3 43 01                   41         jp      @dzx0tb_copy
+0160 00160 @dzx0tb_elias_loop          42 @dzx0tb_elias_loop:
+0160        87                         43         add     a, a
+0161        CB 11                      44         rl      c
+0163        87                         45         add     a, a
+0164        D0                         46         ret     nc
+0165 00165 @dzx0tb_elias               47 @dzx0tb_elias:
+0168        C2 60 01                   48         jp      nz, @dzx0tb_elias_loop   ; inverted interlaced Elias gamma coding
+0169        7E                         49         ld      a, (hl)                 ; load another group of 8 bits
+0169        2B                         50         dec     hl
+016A        17                         51         rla
+016B        D0                         52         ret     nc
+016C        87                         53         add     a, a
+016D        CB 11                      54         rl      c
+016F        87                         55         add     a, a
+0170        D0                         56         ret     nc
+0171        87                         57         add     a, a
+0172        CB 11                      58         rl      c
+0174        87                         59         add     a, a
+0175        D0                         60         ret     nc
+0176        87                         61         add     a, a
+0177        CB 11                      62         rl      c
+0179        87                         63         add     a, a
+017A        D0                         64         ret     nc
+017B 0017B @dzx0tb_elias_reload        65 @dzx0tb_elias_reload:
+017B        87                         66         add     a, a
+017C        CB 11                      67         rl      c
+017E        CB 10                      68         rl      b
+0180        87                         69         add     a, a
+0182        7E                         70         ld      a, (hl)                 ; load another group of 8 bits
+0182        2B                         71         dec     hl
+0183        17                         72         rla
+0184        D0                         73         ret     nc
+0185        87                         74         add     a, a
+0186        CB 11                      75         rl      c
+0188        CB 10                      76         rl      b
+018A        87                         77         add     a, a
+018B        D0                         78         ret     nc
+018C        87                         79         add     a, a
+018D        CB 11                      80         rl      c
+018F        CB 10                      81         rl      b
+0191        87                         82         add     a, a
+0192        D0                         83         ret     nc
+0193        87                         84         add     a, a
+0194        CB 11                      85         rl      c
+0196        CB 10                      86         rl      b
+0198        87                         87         add     a, a
+0199        38 E0                      88         jr      c, @dzx0tb_elias_reload

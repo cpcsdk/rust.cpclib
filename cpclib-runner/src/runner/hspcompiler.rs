@@ -61,7 +61,7 @@ impl ExecutableInformation for HspCompilerVersion {
         #[cfg(target_os = "windows")]
         return "compiler.exe";
         #[cfg(target_os = "macos")]
-        unimplemented!();
+        todo!("HSPCompiler executable not defined for macOS");
         #[cfg(target_os = "linux")]
         return "hspcompiler";
     }
@@ -84,5 +84,7 @@ impl DownloadableInformation for HspCompilerVersion {
         return ArchiveFormat::Zip;
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Raw;
+        #[cfg(target_os = "macos")]
+        todo!("HSPCompiler archive format not defined for macOS");
     }
 }

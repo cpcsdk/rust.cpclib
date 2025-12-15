@@ -1,0 +1,40 @@
+thread 'rustc' panicked at src/tools/clippy/clippy_lints/src/len_zero.rs:374:36:
+index out of bounds: the len is 0 but the index is 0
+stack backtrace:
+   0:     0x79cef4478855 - std::backtrace::Backtrace::create::h58a09bc01a7f9ca5
+   1:     0x79cef44787a5 - std::backtrace::Backtrace::force_capture::h70a2dd873d6c116b
+   2:     0x79cef346a3e2 - std[2e9cea970755fc74]::panicking::update_hook::<alloc[e7314e8b75bbc9c1]::boxed::Box<rustc_driver_impl[447f5b9daaaa35c8]::install_ice_hook::{closure#1}>>::{closure#0}
+   3:     0x79cef447977f - std::panicking::panic_with_hook::ha7f9e02ea924afa3
+   4:     0x79cef447953a - std::panicking::panic_handler::{{closure}}::h4444ad1c1089e9d8
+   5:     0x79cef4473549 - std::sys::backtrace::__rust_end_short_backtrace::ha75a166928e9a5b6
+   6:     0x79cef4453e9d - __rustc[b0411827a87bdb1a]::rust_begin_unwind
+   7:     0x79cef0ae7830 - core::panicking::panic_fmt::h0429a0fc40c9084c
+   8:     0x79cef2af39f3 - core::panicking::panic_bounds_check::h148e09c22de18c67
+   9:     0x5c2ee194d09b - clippy_lints[719febbafe7e5aa2]::len_zero::parse_len_output
+  10:     0x5c2ee19f4434 - <clippy_lints[719febbafe7e5aa2]::len_zero::LenZero as rustc_lint[2f151efc55232d07]::passes::LateLintPass>::check_impl_item
+  11:     0x79cef39df2a9 - <rustc_lint[2f151efc55232d07]::late::LateContextAndPass<rustc_lint[2f151efc55232d07]::late::RuntimeCombinedLateLintPass> as rustc_hir[2163440399a9a0dc]::intravisit::Visitor>::visit_nested_item
+  12:     0x79cef39651e9 - <rustc_lint[2f151efc55232d07]::late::LateContextAndPass<rustc_lint[2f151efc55232d07]::late::RuntimeCombinedLateLintPass>>::process_mod
+  13:     0x79cef5c07bb6 - rustc_lint[2f151efc55232d07]::late::check_crate::{closure#0}
+  14:     0x79cef5c06d31 - rustc_lint[2f151efc55232d07]::late::check_crate
+  15:     0x79cef4f21f84 - rustc_interface[5d3398ba9832b53f]::passes::analysis
+  16:     0x79cef4f2170b - rustc_query_impl[6869d9db47d31cc9]::plumbing::__rust_begin_short_backtrace::<rustc_query_impl[6869d9db47d31cc9]::query_impl::analysis::dynamic_query::{closure#2}::{closure#0}, rustc_middle[5826dd2881054471]::query::erase::Erased<[u8; 0usize]>>
+  17:     0x79cef5e83498 - rustc_query_system[8de771621bc1057f]::query::plumbing::try_execute_query::<rustc_query_impl[6869d9db47d31cc9]::DynamicConfig<rustc_query_system[8de771621bc1057f]::query::caches::SingleCache<rustc_middle[5826dd2881054471]::query::erase::Erased<[u8; 0usize]>>, false, false, false>, rustc_query_impl[6869d9db47d31cc9]::plumbing::QueryCtxt, true>
+  18:     0x79cef5e82da3 - rustc_query_impl[6869d9db47d31cc9]::query_impl::analysis::get_query_incr::__rust_end_short_backtrace
+  19:     0x79cef5f3daa3 - rustc_interface[5d3398ba9832b53f]::passes::create_and_enter_global_ctxt::<core[97f840f9f3caa67e]::option::Option<rustc_interface[5d3398ba9832b53f]::queries::Linker>, rustc_driver_impl[447f5b9daaaa35c8]::run_compiler::{closure#0}::{closure#2}>::{closure#2}::{closure#0}
+  20:     0x79cef5ec8b7e - rustc_interface[5d3398ba9832b53f]::interface::run_compiler::<(), rustc_driver_impl[447f5b9daaaa35c8]::run_compiler::{closure#0}>::{closure#1}
+  21:     0x79cef5dcce78 - std[2e9cea970755fc74]::sys::backtrace::__rust_begin_short_backtrace::<rustc_interface[5d3398ba9832b53f]::util::run_in_thread_with_globals<rustc_interface[5d3398ba9832b53f]::util::run_in_thread_pool_with_globals<rustc_interface[5d3398ba9832b53f]::interface::run_compiler<(), rustc_driver_impl[447f5b9daaaa35c8]::run_compiler::{closure#0}>::{closure#1}, ()>::{closure#0}, ()>::{closure#0}::{closure#0}, ()>
+  22:     0x79cef5dccb5c - <<std[2e9cea970755fc74]::thread::Builder>::spawn_unchecked_<rustc_interface[5d3398ba9832b53f]::util::run_in_thread_with_globals<rustc_interface[5d3398ba9832b53f]::util::run_in_thread_pool_with_globals<rustc_interface[5d3398ba9832b53f]::interface::run_compiler<(), rustc_driver_impl[447f5b9daaaa35c8]::run_compiler::{closure#0}>::{closure#1}, ()>::{closure#0}, ()>::{closure#0}::{closure#0}, ()>::{closure#1} as core[97f840f9f3caa67e]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+  23:     0x79cef5dd31cd - std::sys::thread::unix::Thread::new::thread_start::h6e735c8c2a1e207b
+  24:     0x79ceef49caa4 - start_thread
+                               at ./nptl/pthread_create.c:447:8
+  25:     0x79ceef529c3c - clone3
+                               at ./misc/../sysdeps/unix/sysv/linux/x86_64/clone3.S:78:0
+  26:                0x0 - <unknown>
+
+
+rustc version: 1.92.0-nightly (a9d0a6f15 2025-09-16)
+platform: x86_64-unknown-linux-gnu
+
+query stack during panic:
+#0 [analysis] running analysis passes on this crate
+end of query stack

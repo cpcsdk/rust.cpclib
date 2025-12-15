@@ -33,7 +33,7 @@ impl ExecutableInformation for CpcEmuPowerVersion {
                 return "CPCEPower_SDL_x64.exe";
                 #[cfg(target_os = "linux")]
                 return "CPCEPower_SDL_Linux_x64";
-                #[cfg(target_os = "macosx")]
+                #[cfg(target_os = "macos")]
                 return "CPCEPower_SDL_MacOS";
             }
         }

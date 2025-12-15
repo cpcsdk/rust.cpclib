@@ -1,0 +1,23 @@
+[package]
+
+name = "cpclib-xferfs"
+version = "0.5.0"
+authors = ["Romain Giot <giot.romain@gmail.com>"]
+edition = "2021"
+license = "MIT"
+description = "cpclib tool related to xfer accrosss file system"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+cpclib-xfer.workspace = true
+
+fuse_mt="0.5.1"
+log = "0.4"
+
+[build-dependencies]
+built = { version = "0.4.3", features = ["chrono"] }
+
+

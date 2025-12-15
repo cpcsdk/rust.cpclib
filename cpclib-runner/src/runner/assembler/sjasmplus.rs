@@ -55,6 +55,8 @@ impl ExecutableInformation for SjasmplusVersion {
         return "sjasmplus";
         #[cfg(target_os = "windows")]
         return "sjasmplus.exe";
+        #[cfg(target_os = "macos")]
+        todo!("Sjasmplus executable not defined for macOS");
     }
 }
 
@@ -75,5 +77,7 @@ impl DownloadableInformation for SjasmplusVersion {
         return ArchiveFormat::TarXz;
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Zip;
+        #[cfg(target_os = "macos")]
+        todo!("Sjasmplus archive format not defined for macOS");
     }
 }

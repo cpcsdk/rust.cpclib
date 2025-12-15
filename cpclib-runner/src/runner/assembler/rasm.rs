@@ -59,7 +59,7 @@ impl ExecutableInformation for RasmVersion {
         #[cfg(target_os = "windows")]
         return "rasm_w64.exe";
         #[cfg(target_os = "macos")]
-        unimplemented!();
+        todo!("RASM executable not defined for macOS");
         #[cfg(target_os = "linux")]
         return "rasm";
     }
@@ -82,5 +82,7 @@ impl DownloadableInformation for RasmVersion {
         return ArchiveFormat::Zip;
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Raw;
+        #[cfg(target_os = "macos")]
+        todo!("RASM archive format not defined for macOS");
     }
 }

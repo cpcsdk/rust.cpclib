@@ -22,7 +22,11 @@ impl Grafx2Version {
             #[cfg(target_os = "windows")]
             Grafx2Version::V2_9 => DOWNLOAD_URL_V2_9_WINDOWS,
             #[cfg(target_os = "linux")]
-            Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE
+            Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE,
+            #[cfg(target_os = "macos")]
+            Self::V2_9 => todo!("GrafX2 download URL not defined for macOS"),
+            #[allow(unreachable_patterns)]
+            _ => unreachable!()
         };
 
         let folder = match self {
@@ -33,11 +37,15 @@ impl Grafx2Version {
         let exec = "bin/grafx2-sdl2.exe";
         #[cfg(target_os = "linux")]
         let exec = "GrafX2-2.9.3245-x86_64.AppImage";
+        #[cfg(target_os = "macos")]
+        let exec = "GrafX2";
 
         #[cfg(target_os = "windows")]
         let archive_format = ArchiveFormat::Zip;
         #[cfg(target_os = "linux")]
         let archive_format = ArchiveFormat::Raw;
+        #[cfg(target_os = "macos")]
+        let archive_format = ArchiveFormat::Zip;
 
         let builder = DelegateApplicationDescription::builder()
             .download_fn_url(url) // we assume a modern CPU

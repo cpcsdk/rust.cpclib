@@ -22,7 +22,7 @@ impl DownloadableInformation for VasmVersion {
                 #[cfg(target_os = "windows")]
                 return ArchiveFormat::Zip;
                 #[cfg(target_os = "macos")]
-                unimplemented!();
+                todo!("VASM archive format not defined for macOS");
                 #[cfg(target_os = "linux")]
                 return ArchiveFormat::Tar; // XXX yep extension is wrong
             }
@@ -58,7 +58,7 @@ impl ExecutableInformation for VasmVersion {
         #[cfg(target_os = "windows")]
         return "bin/vasmz80_oldstyle.exe";
         #[cfg(target_os = "macos")]
-        unimplemented!();
+        todo!("VASM executable not defined for macOS");
         #[cfg(target_os = "linux")]
         return "vbcc/bin/vasmz80_oldstyle";
     }

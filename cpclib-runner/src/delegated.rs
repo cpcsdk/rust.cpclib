@@ -90,7 +90,7 @@ impl MutiplatformUrls {
         #[cfg(target_os = "windows")]
         return self.windows.as_ref();
         #[cfg(target_os = "macos")]
-        return self.macosx.as_ref();
+        return self.macos.as_ref();
         #[cfg(target_os = "linux")]
         return self.linux.as_ref();
     }
