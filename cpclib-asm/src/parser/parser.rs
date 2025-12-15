@@ -2298,7 +2298,7 @@ fn parse_struct_directive_inner(
 
     let input_start = input.checkpoint();
     let parsing_state = ParsingState::StructLimited;
-    let directive = parse_directive_new(&parsing_state.clone())
+    let directive = parse_directive_new(&parsing_state)
         .verify(move |d| d.is_accepted(&parsing_state))
         .parse_next(input)?;
 
@@ -2316,7 +2316,7 @@ fn parse_struct_directive_inner(
 /// Parse any directive
 pub fn parse_directive(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let parsing_state = input.state.state;
-    parse_directive_new(&parsing_state.clone())
+    parse_directive_new(&parsing_state)
         .verify(move |d| d.is_accepted(&parsing_state))
         .parse_next(input)
 }
