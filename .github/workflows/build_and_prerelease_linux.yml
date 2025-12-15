@@ -6,40 +6,63 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   build-linux:
-
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Dependencies
-      run: sudo apt update && sudo apt install libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev libwebkit2gtk-4.1-dev  curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-    - uses: actions-rs/toolchain@v1
-      with:
-            toolchain: nightly
-            profile: minimal
-            target: x86_64-unknown-linux-gnu
-    - uses: Swatinem/rust-cache@v2
-    - name: install tauri cli
-      run: cargo install tauri-cli --version "^2.0.0" --locked
-    - uses: actions-rs/cargo@v1
-      with:
-        command: test
-        toolchain: nightly
-        args: --features hfe
-    - name: "cleanup after test"
-      run: "cargo clean"
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        toolchain: nightly
-        args: --bins --release --features hfe
-    - name: build tauri
-      run: cd cpclib-bndbuild-tauri && cargo tauri build
-    - uses: ncipollo/release-action@v1
-      with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y \
+          libgtk-3-dev libcogl-pango-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+          libspeechd-dev libxkbcommon-dev libssl-dev libxdo-dev libwebkit2gtk-4.1-dev \
+          libayatana-appindicator3-dev librsvg2-dev curl wget file
+
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: linux-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: linux-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: linux-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Run tests
+        run: cargo test --features hfe
+
+      - name: Cleanup after test
+        run: cargo clean
+
+      - name: Build release binaries
+        run: cargo build --bins --release --features hfe
+
+      - name: Build Tauri app
+        run: cd cpclib-bndbuild-tauri && cargo tauri build
+
+      - name: Publish prerelease artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           allowUpdates: true
           removeArtifacts: false
           prerelease: true
@@ -47,4 +70,18 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: false
-          artifacts: "target/release/basm, target/release/bdasm, target/release/bndbuild-gui, target/release/bndbuild, target/release/catalog,  target/release/cpc2img, target/release/cpclib-visual-bndbuild, target/release/visual-basm,  target/release/hideur, target/release/imgconverter, target/release/snapshot, target/release/bundle/deb/bndbuild-tauri_0.1.0_amd64.deb, target/release/bundle/rpm/bndbuild-tauri-0.1.0-1.x86_64.rpm, target/release/bundle/appimage/bndbuild-tauri_0.1.0_amd64.AppImage"
+          artifacts: |
+            target/release/basm,
+            target/release/bdasm,
+            target/release/bndbuild-gui,
+            target/release/bndbuild,
+            target/release/catalog,
+            target/release/cpc2img,
+            target/release/cpclib-visual-bndbuild,
+            target/release/visual-basm,
+            target/release/hideur,
+            target/release/imgconverter,
+            target/release/snapshot,
+            target/release/bundle/deb/bndbuild-tauri_0.1.0_amd64.deb,
+            target/release/bundle/rpm/bndbuild-tauri-0.1.0-1.x86_64.rpm,
+            target/release/bundle/appimage/bndbuild-tauri_0.1.0_amd64.AppImage

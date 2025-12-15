@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-asm"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aho-corasick",
  "arrayref",
@@ -2214,7 +2214,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basic"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "cfg-if",
@@ -2228,7 +2228,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basm"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "build-deps",
  "built 0.7.7",
@@ -2254,7 +2254,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-basmdoc"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
@@ -2268,7 +2268,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bdasm"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "const_format",
@@ -2280,7 +2280,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild"
-version = "0.8.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2324,7 +2324,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-bndbuild-tauri"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "camino",
  "cpclib-bndbuild",
@@ -2349,7 +2349,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-common"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "bitfield",
  "bitflags 2.10.0",
@@ -2371,14 +2371,14 @@ dependencies = [
 
 [[package]]
 name = "cpclib-cpr"
-version = "0.8.0"
+version = "0.11.0"
 dependencies = [
  "cpclib-common",
 ]
 
 [[package]]
 name = "cpclib-cprcli"
-version = "0.8.0"
+version = "0.11.0"
 dependencies = [
  "colored",
  "cpclib-common",
@@ -2387,7 +2387,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-crunch"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "cpclib-asm",
@@ -2399,7 +2399,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-crunchers"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "cc",
@@ -2412,7 +2412,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-disc"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "arrayref",
  "built 0.7.7",
@@ -2434,7 +2434,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-emucontrol"
-version = "0.7.0"
+version = "0.11.0"
 dependencies = [
  "assert_cmd",
  "clap 4.5.53",
@@ -2447,7 +2447,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-files"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "cpclib-common",
  "cpclib-disc",
@@ -2457,7 +2457,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-image"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "as-slice",
@@ -2471,7 +2471,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-imgconverter"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "built 0.7.7",
@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-macros"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
@@ -2495,7 +2495,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-python"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-basic",
@@ -2510,7 +2510,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-rasm-basm-tests"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "build-deps",
@@ -2522,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-runner"
-version = "0.8.0"
+version = "0.11.0"
 dependencies = [
  "bon",
  "camino-tempfile",
@@ -2552,7 +2552,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sna"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "camino-tempfile",
@@ -2571,7 +2571,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-sprite-compiler"
-version = "0.1.0"
+version = "0.11.0"
 dependencies = [
  "bon",
  "cpclib-asm",
@@ -2582,7 +2582,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-tokens"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "beef",
  "built 0.7.7",
@@ -2601,7 +2601,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-visual-bndbuild"
-version = "0.6.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "camino",
@@ -2620,7 +2620,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-wasm"
-version = "0.5.0"
+version = "0.11.0"
 dependencies = [
  "console_error_panic_hook",
  "cpclib-asm",
@@ -2634,7 +2634,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfer"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "arrayref",
  "built 0.7.7",
@@ -2655,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-xfertool"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -2686,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "cpclib-z80emu"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "cfg-if",
  "cpclib-asm",
@@ -11500,7 +11500,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "visual-basm"
-version = "0.6.0"
+version = "0.11.0"
 dependencies = [
  "built 0.7.7",
  "claui",

@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-common"
-version = "0.10.0"
+version.workspace = true
 description = "common libraries used in cpclib"
 
 authors.workspace = true

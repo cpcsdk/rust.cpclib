@@ -2,7 +2,7 @@ cargo-features = ["profile-rustflags", "trim-paths"]
 
 [package]
 name = "cpclib-bndbuild-tauri"
-version = "0.1.0"
+version.workspace = true
 description = "Tauri GUI of bndbuild"
 
 

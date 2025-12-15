@@ -1,9 +1,9 @@
 [package]
 name = "cpclib-python"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "Python wrappers for cpclib components using pyo3"
-license = "MIT"
+license.workspace = true
 
 [lib]
 name = "cpclib_python"

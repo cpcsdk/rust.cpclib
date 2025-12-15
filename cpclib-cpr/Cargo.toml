@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-cpr"
-version = "0.8.0"
+version.workspace = true
 description = "cpclib libraries related to CPR handling"
 
 authors.workspace = true
