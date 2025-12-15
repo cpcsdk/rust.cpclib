@@ -9,3 +9,11 @@ tests/dsk/AMSTRAD CPC eDSK Editor - 07-05-2019.exe
 **/perf.data
 **/perf.data.old
 __pycache__
+
+# IDE directories
+.idea/
+.zed/
+
+# Node modules
+node_modules/
+**/node_modules/
