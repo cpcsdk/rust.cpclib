@@ -2844,9 +2844,7 @@ fn parse_conditional_condition(
                 parse_label(false)
                     .map(|l| LocatedTestKind::LabelNused(l.into()))
                     .parse_next(input)
-            },
-
-            _ => unreachable!()
+            }
         }
     }
 }
@@ -3029,9 +3027,7 @@ pub fn parse_breakpoint(
                                     item.replace((arg, value));
                                     Some(())
                                 }
-                            },
-
-                            _ => Some(()) // TODO implement the tests
+                            }
                         }
                     }
                     else if *first.borrow() {

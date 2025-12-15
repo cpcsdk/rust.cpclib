@@ -25,7 +25,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
         let mut env = Env::new(option);
         // we need several passes in case the token is a directive that contains code
         loop {
-            env.start_new_pass();
+            let _ = env.start_new_pass();
             // println!("[pass] {:?}", env.pass);
 
             if env.pass().is_finished() {

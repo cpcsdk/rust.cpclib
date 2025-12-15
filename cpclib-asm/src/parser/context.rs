@@ -435,16 +435,7 @@ impl PartialEq for ParserContext {
 
 impl Clone for ParserContext {
     fn clone(&self) -> Self {
-        panic!();
-
-        Self {
-            current_filename: self.current_filename.clone(),
-            context_name: self.context_name.clone(),
-            state: self.state,
-            source: self.source,
-            options: self.options.clone(),
-            line_col_lut: RwLock::default() /* no need to copy paste the datastructure if it is never used */
-        }
+        panic!("ParserContext::clone() should never be called - this is intentional design");
     }
 }
 

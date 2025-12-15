@@ -738,7 +738,7 @@ pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Assemble
 
     let mut env = Env::new(base_env.options().clone());
     env.symbols = base_env.symbols().clone();
-    env.start_new_pass();
+    let _ = env.start_new_pass();
     env.visit_page_or_bank::<Expr>(None)?; // assemble in a new bank
     env.visit_listing(&tokens)?;
     let bank_info = env.free_banks.pages.pop().unwrap();

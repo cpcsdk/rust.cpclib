@@ -762,10 +762,9 @@ impl Env {
                 }
             },
             (false, AssemblingPass::ListingPass) => {
-                panic!();
                 Err(AssemblerError::IncoherentCode {
                     msg: format!(
-                        "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
+                        "Label {} is not present in the symbol table in pass {}. There is an issue with some conditional code.",
                         label, self.pass
                     )
                 })
@@ -952,7 +951,7 @@ impl Env {
                 .unwrap()
                 .clone();
 
-            self.symbols_mut().set_symbol_to_value(symbol, value);
+            let _ = self.symbols_mut().set_symbol_to_value(symbol, value);
         }
     }
 
@@ -961,8 +960,8 @@ impl Env {
     pub(crate) fn start_new_pass(&mut self) -> Result<(), AssemblerError> {
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
-            self.handle_print();
-            self.generate_symbols_output(
+            let _ = self.handle_print();
+            let _ = self.generate_symbols_output(
                 std::io::stderr().borrow_mut(),
                 SymbolOutputFormat::Winape
             );
@@ -1068,20 +1067,20 @@ impl Env {
         let BASM_FEATURE_HFE = cfg!(feature = "hfe");
 
         if AssemblingPass::FirstPass == self.pass {
-            self.add_symbol_to_symbol_table("BASM_VERSION", BASM_VERSION, None);
-            self.add_symbol_to_symbol_table("BASM", BASM, None);
-            self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", BASM_FEATURE_HFE, None);
+            let _ = self.add_symbol_to_symbol_table("BASM_VERSION", BASM_VERSION, None);
+            let _ = self.add_symbol_to_symbol_table("BASM", BASM, None);
+            let _ = self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", BASM_FEATURE_HFE, None);
         }
         else {
-            self.symbols_mut().update_symbol_to_value(
+            let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM_VERSION",
                 ValueAndSource::new(BASM_VERSION, Option::<SourceLocation>::None)
             );
-            self.symbols_mut().update_symbol_to_value(
+            let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM",
                 ValueAndSource::new(BASM, Option::<SourceLocation>::None)
             );
-            self.symbols_mut().update_symbol_to_value(
+            let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM_FEATURE_HFE",
                 ValueAndSource::new(BASM_FEATURE_HFE, Option::<SourceLocation>::None)
             );
@@ -2328,7 +2327,7 @@ impl Env {
             let label = self.handle_global_and_local_labels(label)?;
             // XXX limit: should not be done here as it may start by {...} that contains when interpreted.}
             if !label.starts_with('.') {
-                self.symbols_mut().set_current_label(label);
+                let _ = self.symbols_mut().set_current_label(label);
             }
 
             // If the current address is not set up, we force it to be 0
@@ -2558,7 +2557,7 @@ impl Env {
                     Err(error) => either::Either::Right(error)
                 };
 
-            PrintCommand {
+            let _ = PrintCommand {
                 prefix: Some(format!("[PASS{}] ", self.pass)),
                 span: span.cloned(),
                 print_or_error
@@ -3129,8 +3128,7 @@ impl Env {
             },
             (None, None, amsdos_fname) => {
                 SaveFile::new(StorageSupport::Host, (FileType::Ascii, amsdos_fname))
-            },
-            (a, b, c) => unimplemented!("{a:?} {b:?} {c:?}")
+            }
         };
 
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
@@ -4083,7 +4081,6 @@ impl Env {
         confined_env.output_address = 0;
         // TODO: forbid a subset of instructions to ensure it works properly
         visit_processed_tokens(lst, &mut confined_env).map_err(|e| {
-            panic!("{e:?}");
             match span {
                 Some(span) => e.locate(span.clone()),
                 None => e
@@ -4919,7 +4916,7 @@ impl Env {
             let last_address = env.logical_output_address() - 1;
             let last_address = env.logical_to_physical_address(last_address as _);
             let last_value = env.peek(&last_address);
-            env.poke(last_value | 0x80, &last_address);
+            let _ = env.poke(last_value | 0x80, &last_address);
         }
 
         Ok(())

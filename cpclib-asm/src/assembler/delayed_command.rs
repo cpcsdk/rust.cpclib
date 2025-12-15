@@ -423,7 +423,7 @@ impl DelayedCommands {
                 match c {
                     PrintOrPauseCommand::Print(p) => {
                         if p.is_print() {
-                            p.execute(writer);
+                            let _ = p.execute(writer);
                             None
                         }
                         else {
@@ -431,7 +431,7 @@ impl DelayedCommands {
                         }
                     },
                     PrintOrPauseCommand::Pause(p) => {
-                        p.execute(writer);
+                        let _ = p.execute(writer);
                         None
                     }
                 }

@@ -101,8 +101,7 @@ impl ControlOutputCommand {
             ControlOutputCommand::Assert(cmd) => cmd.execute(env),
             ControlOutputCommand::Byte(cmd) => cmd.execute(env),
             ControlOutputCommand::Bytes(cmd) => cmd.execute(env),
-            ControlOutputCommand::Org(cmd) => cmd.execute(env),
-            _ => unimplemented!()
+            ControlOutputCommand::Org(cmd) => cmd.execute(env)
         }
     }
 }
