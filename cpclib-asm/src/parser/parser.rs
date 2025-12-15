@@ -4946,7 +4946,7 @@ pub fn parse_register8(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAcces
     enum Reg16Modifier {
         Low,
         High
-    };
+    }
 
     alt((
         (

@@ -1062,27 +1062,27 @@ impl Env {
             }
         }
 
-        let BASM_VERSION = built_info::PKG_VERSION.to_owned();
-        let BASM = true;
-        let BASM_FEATURE_HFE = cfg!(feature = "hfe");
+        let basm_version = built_info::PKG_VERSION.to_owned();
+        let basm = true;
+        let basm_feature_hfe = cfg!(feature = "hfe");
 
         if AssemblingPass::FirstPass == self.pass {
-            let _ = self.add_symbol_to_symbol_table("BASM_VERSION", BASM_VERSION, None);
-            let _ = self.add_symbol_to_symbol_table("BASM", BASM, None);
-            let _ = self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", BASM_FEATURE_HFE, None);
+            let _ = self.add_symbol_to_symbol_table("BASM_VERSION", basm_version, None);
+            let _ = self.add_symbol_to_symbol_table("BASM", basm, None);
+            let _ = self.add_symbol_to_symbol_table("BASM_FEATURE_HFE", basm_feature_hfe, None);
         }
         else {
             let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM_VERSION",
-                ValueAndSource::new(BASM_VERSION, Option::<SourceLocation>::None)
+                ValueAndSource::new(basm_version, Option::<SourceLocation>::None)
             );
             let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM",
-                ValueAndSource::new(BASM, Option::<SourceLocation>::None)
+                ValueAndSource::new(basm, Option::<SourceLocation>::None)
             );
             let _ = self.symbols_mut().update_symbol_to_value(
                 "BASM_FEATURE_HFE",
-                ValueAndSource::new(BASM_FEATURE_HFE, Option::<SourceLocation>::None)
+                ValueAndSource::new(basm_feature_hfe, Option::<SourceLocation>::None)
             );
         }
 

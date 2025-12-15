@@ -31,7 +31,7 @@ struct ControlAssert {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ControlOutputCommand {
+pub(crate) enum ControlOutputCommand {
     Assert(ControlAssert),
     Byte(ControlOutputByte),
     Bytes(ControlOutputBytes),

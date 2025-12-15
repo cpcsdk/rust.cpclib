@@ -37,7 +37,7 @@ impl Display for PreprocessedFormattedString {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.components.iter().for_each(|c| {
-            c.fmt(f);
+            let _ = c.fmt(f);
         });
         Ok(())
     }

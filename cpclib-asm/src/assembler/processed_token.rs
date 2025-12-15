@@ -216,7 +216,7 @@ impl IncludeState {
             env.enter_current_working_file(fname);
             let res = state.with_processed_tokens_mut(|tokens| {
                 let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
-                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+                visit_processed_tokens::<LocatedToken>(tokens, env)
             });
             env.leave_current_working_file();
             res?;
@@ -329,9 +329,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         let mut selected_idx = None;
         let mut request_additional_pass = false;
         use cpclib_tokens::ExprResult;
-        let FLAG_FAILURE: OnceCell<ExprResult> = OnceCell::new();
-        let FLAG_FAILURE =
-            FLAG_FAILURE.get_or_init(|| "__BASM_INNER_TEST_FAILURE__".to_owned().into());
+        let flag_failure: OnceCell<ExprResult> = OnceCell::new();
+        let flag_failure =
+            flag_failure.get_or_init(|| "__BASM_INNER_TEST_FAILURE__".to_owned().into());
 
         for idx in 0..self.token.if_nb_tests() {
             let (test, _) = self.token.if_test(idx);
@@ -343,8 +343,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 let exp = test.expr_unchecked();
                 // Expression must be true
                 let value = env
-                    .resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
-                if &value == FLAG_FAILURE {
+                    .resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
+                if &value == flag_failure {
                     // no code is executed if the test cannot be done
                     return Ok(None);
                 }
@@ -358,8 +358,8 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             else if test.is_false_test() {
                 let exp = test.expr_unchecked();
                 let value = env
-                    .resolve_expr_may_fail_in_first_pass_with_default(exp, FLAG_FAILURE.clone())?;
-                if &value == FLAG_FAILURE {
+                    .resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
+                if &value == flag_failure {
                     // no code is executed if the test cannot be done
                     return Ok(None);
                 }
@@ -1189,7 +1189,7 @@ where
                             .with_processed_tokens_mut(|listing| {
                                 let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
                                     &mut listing[..];
-                                visit_processed_tokens::<'_, LocatedToken>(tokens, env)
+                                visit_processed_tokens::<LocatedToken>(tokens, env)
                             })
                             .map_err(|e| {
                                 let location = env

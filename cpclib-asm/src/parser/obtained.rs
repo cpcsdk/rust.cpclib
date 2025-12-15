@@ -1658,7 +1658,7 @@ impl ListingElement for LocatedTokenInner {
         todo!()
     }
 
-    fn if_test(&self, idx: usize) -> (&Self::TestKind, &[Self]) {
+    fn if_test(&self, _idx: usize) -> (&Self::TestKind, &[Self]) {
         unreachable!()
     }
 
