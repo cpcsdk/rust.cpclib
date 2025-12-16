@@ -345,9 +345,8 @@ impl<'de> Deserialize<'de> for InnerTask {
                 };
                 match InnerTask::from_command_and_arguments(code, std) {
                     Ok(t) => Ok(t),
-                    Err(e) => Err(E::custom(e)),
+                    Err(e) => Err(E::custom(e))
                 }
-            
             }
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -511,7 +510,7 @@ impl InnerTask {
     /// Create an InnerTask from a command token and its standard arguments.
     pub fn from_command_and_arguments(
         code: &str,
-        std: StandardTaskArguments,
+        std: StandardTaskArguments
     ) -> Result<Self, String> {
         if is_ace_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_ace_default(), std))
@@ -673,9 +672,7 @@ impl InnerTask {
         else if is_sjasmplus_cmd(code) {
             Ok(Self::with_assembler(
                 Assembler::Extern(
-                    cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(
-                        Default::default()
-                    )
+                    cpclib_runner::runner::assembler::ExternAssembler::Sjasmplus(Default::default())
                 ),
                 std
             ))
@@ -1080,10 +1077,7 @@ mod test {
         let t = InnerTask::from_command_and_arguments("basm", std.clone()).unwrap();
         assert_eq!(
             t,
-            InnerTask::Assembler(
-                crate::runners::assembler::Assembler::Basm,
-                std
-            )
+            InnerTask::Assembler(crate::runners::assembler::Assembler::Basm, std)
         );
     }
 

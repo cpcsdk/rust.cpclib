@@ -19,9 +19,9 @@ impl AsRef<[u8]> for AssemblerCompressionResult {
     }
 }
 
-impl Into<Vec<u8>> for &AssemblerCompressionResult {
-    fn into(self) -> Vec<u8> {
-        self.as_ref().to_vec()
+impl From<&AssemblerCompressionResult> for Vec<u8> {
+    fn from(val: &AssemblerCompressionResult) -> Self {
+        val.as_ref().to_vec()
     }
 }
 
@@ -60,7 +60,7 @@ impl AssemblerCompressionResult {
         ];
 
         for (name, expr) in to_be_set.into_iter() {
-            env.visit_assign(&SmolStr::from(name), &expr, None)?;
+            env.visit_assign(SmolStr::from(name), &expr, None)?;
         }
 
         Ok(())

@@ -47,7 +47,7 @@ cfg_select! {
                             .archive_format(ArchiveFormat::Zip)
                             .exec_fname("packer\\bin\\miny-amd64-win.exe")
                             .build()
-                }            
+                }
             }
         }
     }

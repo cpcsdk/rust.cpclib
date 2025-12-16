@@ -311,7 +311,7 @@ impl SymbolsTable {
     {
         let symbol: Symbol = symbol.into();
         let mut symbol = symbol.value().to_owned();
-        //dbg!("Input", &symbol);
+        // dbg!("Input", &symbol);
 
         // handle the labels build with patterns
         // Get the replacement strings
@@ -377,7 +377,7 @@ impl SymbolsTable {
         }
 
         let symbol: Symbol = symbol.into();
-        //dbg!("output", &symbol);
+        // dbg!("output", &symbol);
 
         Ok(symbol)
     }

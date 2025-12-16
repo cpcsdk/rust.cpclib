@@ -16,7 +16,8 @@ impl<E: EventObserver> Default for BasmDocRunner<E> {
     fn default() -> Self {
         let command = cpclib_basmdoc::cmdline::build_args_parser();
         let command = command.no_binary_name(true);
-        let command = command.disable_help_flag(true)
+        let command = command
+            .disable_help_flag(true)
             .disable_version_flag(true)
             .arg(
                 Arg::new("help")

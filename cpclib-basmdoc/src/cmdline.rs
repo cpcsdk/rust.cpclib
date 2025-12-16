@@ -29,7 +29,6 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result<(), String> {
-
     if matches.get_flag("help") {
         cmd.clone().print_long_help().map_err(|e| e.to_string())?;
         return Ok(());

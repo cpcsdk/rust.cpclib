@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-mod bndbuild;
 mod basm;
+mod bndbuild;
 
 // Lightweight placeholders for crate-specific wrappers.
 // These functions are intentionally minimal so the crate builds
@@ -22,19 +22,33 @@ fn crate_info(py: Python) -> PyResult<PyObject> {
 }
 
 #[pyfunction]
-fn asm_info() -> PyResult<&'static str> { Ok("cpclib-asm (placeholder)") }
+fn asm_info() -> PyResult<&'static str> {
+    Ok("cpclib-asm (placeholder)")
+}
 #[pyfunction]
-fn basic_info() -> PyResult<&'static str> { Ok("cpclib-basic (placeholder)") }
+fn basic_info() -> PyResult<&'static str> {
+    Ok("cpclib-basic (placeholder)")
+}
 #[pyfunction]
-fn basm_info() -> PyResult<&'static str> { Ok("cpclib-basm (placeholder)") }
+fn basm_info() -> PyResult<&'static str> {
+    Ok("cpclib-basm (placeholder)")
+}
 #[pyfunction]
-fn bdasm_info() -> PyResult<&'static str> { Ok("cpclib-bdasm (placeholder)") }
+fn bdasm_info() -> PyResult<&'static str> {
+    Ok("cpclib-bdasm (placeholder)")
+}
 #[pyfunction]
-fn bndbuild_info() -> PyResult<&'static str> { Ok("cpclib-bndbuild (placeholder)") }
+fn bndbuild_info() -> PyResult<&'static str> {
+    Ok("cpclib-bndbuild (placeholder)")
+}
 #[pyfunction]
-fn cpr_info() -> PyResult<&'static str> { Ok("cpclib-cpr (placeholder)") }
+fn cpr_info() -> PyResult<&'static str> {
+    Ok("cpclib-cpr (placeholder)")
+}
 #[pyfunction]
-fn crunchers_info() -> PyResult<&'static str> { Ok("cpclib-crunchers (placeholder)") }
+fn crunchers_info() -> PyResult<&'static str> {
+    Ok("cpclib-crunchers (placeholder)")
+}
 
 #[pymodule]
 fn cpclib_python(py: Python, m: &PyModule) -> PyResult<()> {
@@ -79,4 +93,3 @@ fn cpclib_python(py: Python, m: &PyModule) -> PyResult<()> {
 }
 
 // `execute_bndbuild_task` moved to `src/bndbuild.rs`.
-

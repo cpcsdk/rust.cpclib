@@ -1,12 +1,24 @@
+mod common;
 mod context;
+mod directives;
+mod error;
+mod expression;
+mod instructions;
 mod line_col;
 mod obtained;
 mod orgams;
 mod parser;
+mod registers;
 mod source;
 
+pub use common::*;
 pub use context::*;
+pub use directives::*;
+pub use error::*;
+pub use expression::*;
+pub use instructions::*;
 pub use obtained::*;
 pub use orgams::*;
 pub use parser::*;
+pub use registers::*;
 pub use source::*;

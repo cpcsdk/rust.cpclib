@@ -10,7 +10,6 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
 use cpclib_common::itertools::Itertools;
-use cpclib_runner::runner::ay::minimiser::MINIMISER_CMD;
 use lazy_regex::regex_captures;
 #[cfg(feature = "fap")]
 use task::FAP_CMDS;

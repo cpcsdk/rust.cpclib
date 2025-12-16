@@ -3128,7 +3128,7 @@ impl Env {
             },
             (None, None, amsdos_fname) => {
                 SaveFile::new(StorageSupport::Host, (FileType::Ascii, amsdos_fname))
-            }
+            },
         };
 
         //       eprintln!("MMR at save=0x{:x}", self.ga_mmr);
@@ -3293,7 +3293,7 @@ impl Env {
         };
 
         // inject the crunched data
-        self.visit_incbin(&crunched_bytes.to_vec()).map_err(|e| {
+        self.visit_incbin(crunched_bytes.as_ref()).map_err(|e| {
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
