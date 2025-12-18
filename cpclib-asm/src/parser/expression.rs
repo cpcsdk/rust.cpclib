@@ -12,7 +12,7 @@ use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{AsBytes, AsChar, Stream, UpdateSlice};
+use cpclib_common::winnow::stream::{AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
@@ -1087,6 +1087,7 @@ pub fn my_escaped<'a, I: 'a, Error, F, G, O1, O2>(
 where
     I: cpclib_common::winnow::stream::StreamIsPartial,
     I: Stream,
+    I: AsBStr,
     <I as Stream>::Token: AsChar + Clone,
     <I as Stream>::Slice: AsBytes,
     I: cpclib_common::winnow::stream::Compare<char>,
@@ -1097,29 +1098,129 @@ where
     O2: Debug + AsChar
 {
     move |input: &mut I| {
-        // Start with stack storage to avoid heap allocations on short strings without escapes.
-        let mut res: SmallVec<[u8; 64]> = SmallVec::new();
+
 
         let start = input.checkpoint();
+
+        enum CollectedString  {
+            Owned(&'static [u8], SmallVec<[u8; 64]>),
+            Borrowed(&'static [u8], usize)
+        };
+
+        impl CollectedString {
+            
+            #[inline]
+            fn new(start:&'static [u8]) -> Self {
+                CollectedString::Borrowed(start, 0)
+            }
+
+            #[inline]
+            fn extend_from_input_slice(&mut self, slice: &[u8]) {
+                match self {
+                    CollectedString::Owned(i, vec) => vec.extend_from_slice(slice),
+                    CollectedString::Borrowed(i, len) => {
+
+                        *len += slice.len();
+                    }
+                }
+            }
+
+            #[inline]
+            fn extend_from_slice(&mut self, slice: &[u8]) {
+                match self {
+                    CollectedString::Owned(i, vec) => vec.extend_from_slice(slice),
+                    CollectedString::Borrowed(i, len) => unreachable!()
+                }
+            }
+
+
+            #[inline]
+            fn extend_with_char(&mut self, c: u8) {
+                match self {
+                    CollectedString::Owned(i, vec) => vec.push(c),
+                    CollectedString::Borrowed(i, len) => {
+                        let mut vec = SmallVec::with_capacity(*len + 1);
+                        vec.extend_from_slice(&i[..*len]);
+                        vec.push(c);
+                        *self = CollectedString::Owned(i,vec);
+                    }
+                }
+            }
+
+            #[inline]
+            fn increment_borrowed_length(&mut self) {
+                match self {
+                    CollectedString::Owned(i, _) => unreachable!(),
+                    CollectedString::Borrowed(i, len) => {
+                        *len += 1;
+                    }
+                }
+            }
+
+            #[inline]
+            fn as_slice(&self) -> &[u8] {
+                match self {
+                    CollectedString::Owned(i, vec) => vec.as_slice(),
+                    CollectedString::Borrowed(i, len) => &i[..*len]
+                }
+            }
+
+            #[inline]
+            // by construction, the strings are valid utf8, so no need to check
+            fn into_string(self) -> String {
+                match self {
+                    CollectedString::Owned(i, vec) => {
+                        let vec = vec.into_vec();
+                        unsafe{String::from_utf8_unchecked(vec)}
+                    },
+                    CollectedString::Borrowed(i,len) => unsafe{String::from_utf8_unchecked((i[..len].to_vec()))}
+                }
+            }
+
+            #[inline]
+            fn is_borrowed(&self) -> bool {
+                match self {
+                    CollectedString::Owned(..) => false,
+                    CollectedString::Borrowed(..) => true
+                }
+            }
+
+            #[inline]
+            fn transmute_to_owned_if_needed(self) -> Self {
+                if let CollectedString::Borrowed(i, len) = self {
+                    let mut vec: SmallVec<[u8; 64]> = SmallVec::with_capacity(len + 16);
+                    vec.extend_from_slice(&i[..len]);
+                    CollectedString::Owned(i, vec)
+                } else {
+                    self
+                }
+            }
+        }
+
+        let mut res: CollectedString = CollectedString::new(unsafe{std::mem::transmute(input.as_bstr())});
+
 
         while input.eof_offset() > 0 {
             let current_len = input.eof_offset();
 
             if let Some(c) = opt(normal.by_ref().take()).parse_next(input)? {
-                res.extend_from_slice(c.as_bytes());
+                res.extend_from_input_slice(c.as_bytes()); // handle properly owned or borrowed version
                 if input.eof_offset() == current_len {
-                    return Ok(String::from_utf8_lossy(res.as_slice()).into_owned());
+                    return Ok(res.into_string());
                 }
                 continue;
             }
 
             if opt(control_char).parse_next(input)?.is_some() {
+                if res.is_borrowed() {
+                    res = res.transmute_to_owned_if_needed();
+                }
                 let c = escapable.parse_next(input)?;
                 let c = c.as_char();
                 match c {
-                    'n' => res.push(b'\n'),
-                    'r' => res.push(b'\r'),
-                    't' => res.push(b'\t'),
+                    'n' => res.extend_with_char(b'\n'),
+                    'r' => res.extend_with_char(b'\r'),
+                    't' => res.extend_with_char(b'\t'),
                     other => {
                         let mut buffer = [0; 4];
                         let s = other.encode_utf8(&mut buffer);
@@ -1129,13 +1230,13 @@ where
                 
             }
             else {
-                return Ok(String::from_utf8_lossy(res.as_slice()).into_owned());
+                return Ok(res.into_string());
             }
         }
 
         input.reset(&start);
         input.finish();
-        Ok(String::from_utf8_lossy(res.as_slice()).into_owned())
+        Ok(res.into_string())
     }
 }
 

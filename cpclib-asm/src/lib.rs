@@ -9,6 +9,7 @@
 #![feature(get_mut_unchecked)]
 #![feature(stmt_expr_attributes)]
 #![feature(write_all_vectored)]
+#![feature(string_from_utf8_lossy_owned)]
 
 // mod rewrite;
 /// Implementation of various behavior for the tokens of cpclib_tokens
