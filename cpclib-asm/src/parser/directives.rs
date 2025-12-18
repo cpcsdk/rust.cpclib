@@ -6,14 +6,18 @@ use std::ops::DerefMut;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use cpclib_common::winnow::ascii::{Caseless, line_ending, alphanumeric1, alpha1};
+use cpclib_common::winnow::ascii::{Caseless, line_ending, alphanumeric1};
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, opt, preceded, repeat, separated, terminated, repeat_till, not, eof, peek};
 use cpclib_common::winnow::error::{StrContext, ErrMode, AddContext};
 use cpclib_common::winnow::stream::{Stream, AsBStr, UpdateSlice, Offset, Checkpoint, LocatingSlice, Stateful};
 use cpclib_common::winnow::{ModalResult, Parser, BStr};
 use cpclib_common::winnow::token::{take, take_till, take_while, none_of, one_of};
 
-use super::expression::located_expr;
+use super::expression::{
+    located_expr, parse_label, parse_flag_value_inner, ignore_ascii_case_allowed_label,
+    parse_string, expr_list, parse_expr_bracketed_list, parse_unary_function_call,
+    parse_binary_function_call, parse_any_function_call, parse_assemble, parse_fname, expr
+};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::context;
 use super::parser::{
@@ -22,16 +26,10 @@ use super::parser::{
     parse_argname_and_value, parse_optional_argname_and_value, parse_convertible_word,
     inner_code_with_state
 };
-use super::expression::{parse_label, parse_flag_value_inner, ignore_ascii_case_allowed_label, parse_string, expr_list};
-use super::instructions::INSTRUCTIONS;
 use super::orgams::parse_orgams_fail;
 use super::instructions::{parse_nop, parse_opcode_no_arg};
-use super::expression::{
-    parse_expr_bracketed_list, parse_unary_function_call, parse_binary_function_call,
-    parse_any_function_call, parse_assemble, parse_fname, expr
-};
 use cpclib_common::itertools::Itertools;
-use cpclib_sna::{SnapshotVersion, RemuBreakPointType, RemuBreakPointAccessMode, RemuBreakPointRunMode, parse::parse_flag, flags::SnapshotFlag};
+use cpclib_sna::{SnapshotVersion, RemuBreakPointType, RemuBreakPointAccessMode, RemuBreakPointRunMode, flags::SnapshotFlag};
 use crate::preamble::*;
 use choice_nocase::choice_nocase;
 use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};

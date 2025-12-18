@@ -19,6 +19,5 @@ pub use expression::*;
 pub use instructions::*;
 pub use obtained::*;
 pub use orgams::*;
-pub use parser::*;
 pub use registers::*;
 pub use source::*;

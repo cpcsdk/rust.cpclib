@@ -1,11 +1,7 @@
 #![allow(clippy::cast_lossless)]
 
 use core::str;
-use std::borrow::Cow;
-use std::cell::RefCell;
 use std::fmt::Debug;
-use std::ops::DerefMut;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
@@ -14,24 +10,18 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending, newline, space0};
+use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space0};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, terminated
 };
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Checkpoint, LocatingSlice, Offset, Stream, UpdateSlice
+    Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice
 };
-use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_until, take_while};
-use cpclib_common::winnow::{self, BStr, ModalResult, Parser, Stateful};
-use cpclib_sna::parse::parse_flag;
-use cpclib_sna::{
-    FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
-};
-use cpclib_tokens::ListingElement;
+use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
+use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;
 use obtained::LocatedTokenInner;
 
@@ -42,7 +32,6 @@ use super::instructions::*;
 use super::obtained::*;
 use super::orgams::*;
 use super::*;
-use crate::parser::parser::winnow::combinator::repeat_till;
 use crate::preamble::*;
 
 // const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
@@ -403,7 +392,7 @@ pub fn inner_code(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80Pa
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 
 
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(not(target_arch = "wasm32"), )]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn one_instruction_inner_code(
     input: &mut InnerZ80Span
@@ -715,7 +704,7 @@ enum LabelModifier {
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 // MIGRATED: parse_z80_directive_with_block -> directives.rs
 
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(not(target_arch = "wasm32"), )]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_lines(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedToken>, Z80ParserError> {
     let mut tokens = Vec::with_capacity(100);
@@ -1181,7 +1170,7 @@ pub fn parse_word(
 // (migrated) formatted_expr lives in directives.rs
 
 /// Handle \ in end of line
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(not(target_arch = "wasm32"), )]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_space0(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
@@ -1319,8 +1308,7 @@ pub fn parse_comma_multiline(
 /// TODO rename to emphasize it is standard reigsters
 // Register functions moved to registers.rs module
 pub use super::registers::{
-    parse_register_c, parse_register_hl, parse_register_i, parse_register_ix, parse_register_ixh,
-    parse_register_ixl, parse_register_iy, parse_register_iyh, parse_register_iyl,
+    parse_register_i, parse_register_ix, parse_register_iy,
     parse_register_r, parse_register8, parse_register16,
     parse_indexregister8, parse_indexregister16, parse_indexregister_with_index
 };
@@ -1379,16 +1367,27 @@ pub fn parse_multiline_comment(
 
 // MIGRATED: string_expr -> expression.rs
 
-/// Parse a label(label: S)
-/// TODO reimplement to never build a string
+
+
+pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
+    use std::ops::Deref;
+        let ctx = Box::new(
+            ParserContextBuilder::default()
+                .set_context_name("TEST")
+                .build(code)
+        );
+        let span = Z80Span::new_extra(code, ctx.deref());
+        (ctx, span)
+    }
 
 // (deprecated) parse_end_directive was used only in local tests; removed
 
 // Test are deactivated, API is not enough stabilized and tests are broken
 #[cfg(test)]
-mod test {
+pub mod test {
     use std::ops::Deref;
 
+    use cpclib_common::winnow::combinator::repeat;
     use cpclib_common::winnow::error::ParseError;
 
     use super::*;
@@ -1425,7 +1424,7 @@ mod test {
         }
     }
 
-    fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+    pub fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
         mut parser: P,
         code: &'static str
     ) -> TestResult<O>
@@ -1468,15 +1467,7 @@ mod test {
         TestResultRest { ctx, span, res }
     }
 
-    fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
-        let ctx = Box::new(
-            ParserContextBuilder::default()
-                .set_context_name("TEST")
-                .build(code)
-        );
-        let span = Z80Span::new_extra(code, ctx.deref());
-        (ctx, span)
-    }
+    
 
     // removed: test_parse_end_directive (helper removed)
 
@@ -2370,7 +2361,8 @@ MEND";
             r#"'kjkj\'hkl'"#,
             r#""""#,
             r#"''"#,
-            r#""fdfd\" et voila""#
+            r#""fdfd\" et voila""#,
+            r#""HE\"LL\nO\t""#
         ] {
             let res = parse_test(parse_string, string);
             assert!(dbg!(&res).is_ok());

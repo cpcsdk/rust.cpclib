@@ -1,6 +1,7 @@
 // Expression module - contains expression parsing functions
 
 use std::sync::LazyLock;
+use smallvec::SmallVec;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -10,10 +11,8 @@ use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending}
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
-#[allow(deprecated)]
-use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{AsBytes, AsBStr, AsChar, Checkpoint, Stream, UpdateSlice};
+use cpclib_common::winnow::stream::{AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
@@ -1039,11 +1038,12 @@ pub fn ignore_ascii_case_allowed_label(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_string(input: &mut InnerZ80Span) -> ModalResult<UnescapedString, Z80ParserError> {
+    // Fast path keeps short strings on stack; heap is used only if escapes extend beyond the stack buffer.
     let opener = alt(('"', '\'')).parse_next(input)? as char;
     let closer = opener;
     let (normal, escapable) = match opener {
-        '\'' => (none_of(('\\', '\'')).take(), one_of(('\\', '\''))),
-        '"' => (none_of(('\\', '"')).take(), one_of(('\\', '"'))),
+        '\'' => (none_of(('\\', '\'')).take(), one_of(('\\', '\'', 'r', 'n', 't'))),
+        '"' => (none_of(('\\', '"')).take(), one_of(('\\', '"', 'r', 'n', 't'))),
         _ => unreachable!()
     };
 
@@ -1097,38 +1097,45 @@ where
     O2: Debug + AsChar
 {
     move |input: &mut I| {
-        let mut res = Vec::new();
+        // Start with stack storage to avoid heap allocations on short strings without escapes.
+        let mut res: SmallVec<[u8; 64]> = SmallVec::new();
 
         let start = input.checkpoint();
 
         while input.eof_offset() > 0 {
             let current_len = input.eof_offset();
 
-            match opt(normal.by_ref().take()).parse_next(input)? {
-                Some(c) => {
-                    res.extend(c.as_bytes());
-                    if input.eof_offset() == current_len {
-                        return Ok(String::from_utf8_lossy(&res).into_owned());
-                    }
-                },
-                None => {
-                    if opt(control_char).parse_next(input)?.is_some() {
-                        let c = escapable.parse_next(input)?;
-                        let c = c.as_char();
+            if let Some(c) = opt(normal.by_ref().take()).parse_next(input)? {
+                res.extend_from_slice(c.as_bytes());
+                if input.eof_offset() == current_len {
+                    return Ok(String::from_utf8_lossy(res.as_slice()).into_owned());
+                }
+                continue;
+            }
+
+            if opt(control_char).parse_next(input)?.is_some() {
+                let c = escapable.parse_next(input)?;
+                let c = c.as_char();
+                match c {
+                    'n' => res.push(b'\n'),
+                    'r' => res.push(b'\r'),
+                    't' => res.push(b'\t'),
+                    other => {
                         let mut buffer = [0; 4];
-                        let s = c.encode_utf8(&mut buffer);
-                        res.extend(s.bytes());
+                        let s = other.encode_utf8(&mut buffer);
+                        res.extend_from_slice(s.as_bytes());
                     }
-                    else {
-                        return Ok(String::from_utf8_lossy(&res).into_owned());
-                    }
-                },
+                };
+                
+            }
+            else {
+                return Ok(String::from_utf8_lossy(res.as_slice()).into_owned());
             }
         }
 
         input.reset(&start);
         input.finish();
-        Ok(String::from_utf8_lossy(&res).into_owned())
+        Ok(String::from_utf8_lossy(res.as_slice()).into_owned())
     }
 }
 

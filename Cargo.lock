@@ -2191,6 +2191,7 @@ dependencies = [
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
+ "criterion",
  "custom_error",
  "delegate",
  "either",
@@ -2208,6 +2209,7 @@ dependencies = [
  "regex",
  "rust-embed",
  "serde",
+ "smallvec",
  "substring",
  "velcro",
 ]

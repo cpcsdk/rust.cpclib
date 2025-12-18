@@ -165,7 +165,7 @@ impl<'builder> From<&'builder BndBuilder> for UpToDate<'builder> {
     fn from(builder: &'builder BndBuilder) -> Self {
         let mut map = HashMap::default();
         for rule in builder.rules().iter() {
-            map.insert(rule, rule.is_up_to_date::<Utf8PathBuf>(None));
+            map.insert(rule, rule.is_up_to_date::<Utf8PathBuf>(None, None));
         }
         UpToDate(map)
     }
@@ -650,7 +650,7 @@ impl eframe::App for BndBuildApp {
                 && self
                     .builder_and_layers
                     .as_ref()
-                    .map(|bnl| bnl.borrow_owner().outdated(watched).unwrap_or(false))
+                    .map(|bnl| bnl.borrow_owner().outdated(watched, None).unwrap_or(false))
                     .unwrap_or(false)
             {
                 self.watch_logs
