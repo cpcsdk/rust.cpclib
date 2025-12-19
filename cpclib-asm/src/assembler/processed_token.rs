@@ -324,7 +324,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         test: &<T as ListingElement>::TestKind,
         env: &mut Env,
         flag_failure: &cpclib_tokens::ExprResult
-    ) -> Result<bool, AssemblerError>
+    ) -> Result<Option<bool>, AssemblerError>
     where
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt
@@ -333,12 +333,12 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
         
         if &value == flag_failure {
-            // Test cannot be evaluated, return false to skip this branch
-            return Ok(false);
+            // Test cannot be evaluated, return None
+            return Ok(None);
         }
         
         let result = value.bool()?;
-        Ok(if test.is_true_test() { result } else { !result })
+        Ok(Some(if test.is_true_test() { result } else { !result }))
     }
 
     /// Helper method to evaluate label usage tests (IFUSED/IFNUSED)
@@ -403,21 +403,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             let token_adr = ptr::from_ref(test) as usize;
 
             let test_passed = if test.is_true_test() || test.is_false_test() {
-                // Expression-based tests (IF/IFNOT)
+                // Expression-based tests (IF/IFNOT) — only evaluate once
                 match self.evaluate_expression_test(test, env, flag_failure)? {
-                    true => true,
-                    false => {
-                        // Check if we need to abort due to unresolvable expression
-                        let exp = test.expr_unchecked();
-                        let value = env.resolve_expr_may_fail_in_first_pass_with_default(
-                            exp,
-                            flag_failure.clone()
-                        )?;
-                        if &value == flag_failure {
-                            return Ok(None);
-                        }
-                        false
-                    }
+                    Some(result) => result,
+                    None => return Ok(None)  // Unresolvable expression, abort
                 }
             } else if test.is_label_used_test() || test.is_label_nused_test() {
                 // Label usage tests (IFUSED/IFNUSED)
@@ -1198,9 +1187,10 @@ where
                     Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                         let name = self.token.macro_call_name();
 
+                        // Increment macro seed for this macro invocation
                         env.inc_macro_seed();
-                        let seed = env.macro_seed();
-                        env.symbols_mut().push_seed(seed);
+                        let macro_seed = env.macro_seed();
+                        env.symbols_mut().push_seed(macro_seed);
 
                         // save the number of prints to patch the ones added by the macro
                         // to properly locate them
@@ -1211,37 +1201,42 @@ where
                             .map(|ti| ti.print_commands().len())
                             .collect_vec();
 
-                        state
+                        // Process tokens - if error occurs, we still need to pop_seed (see cleanup below)
+                        let process_result = state
                             .with_processed_tokens_mut(|listing| {
                                 let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
                                     &mut listing[..];
                                 visit_processed_tokens::<LocatedToken>(tokens, env)
-                            })
-                            .map_err(|e| {
-                                let location = env
-                                    .symbols()
-                                    .any_value(name)
-                                    .unwrap()
-                                    .unwrap()
-                                    .location()
-                                    .cloned();
+                            });
 
-                                let e = AssemblerError::MacroError {
-                                    name: name.into(),
-                                    root: Box::new(e),
-                                    location
-                                };
-                                let caller_span = self.possible_span();
-                                match caller_span {
-                                    Some(span) => {
-                                        AssemblerError::RelocatedError {
-                                            error: e.into(),
-                                            span: span.clone()
-                                        }
-                                    },
-                                    None => e
-                                }
-                            })?;
+                        // Always pop the seed, even if an error occurred (RAII principle)
+                        env.symbols_mut().pop_seed();
+
+                        let result = process_result.map_err(|e| {
+                            let location = env
+                                .symbols()
+                                .any_value(name)
+                                .unwrap()
+                                .unwrap()
+                                .location()
+                                .cloned();
+
+                            let e = AssemblerError::MacroError {
+                                name: name.into(),
+                                root: Box::new(e),
+                                location
+                            };
+                            let caller_span = self.possible_span();
+                            match caller_span {
+                                Some(span) => {
+                                    AssemblerError::RelocatedError {
+                                        error: e.into(),
+                                        span: span.clone()
+                                    }
+                                },
+                                None => e
+                            }
+                        })?;
 
                         let caller_span = self.possible_span();
                         if let Some(span) = caller_span {
@@ -1255,8 +1250,6 @@ where
                                         .for_each(|cmd| cmd.relocate(span.clone()))
                                 });
                         }
-
-                        env.symbols_mut().pop_seed();
 
                         Ok(())
                     },
