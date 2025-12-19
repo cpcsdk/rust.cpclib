@@ -481,10 +481,13 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
     let state = if token.is_confined() {
-        Some(ProcessedTokenState::Confined(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.confined_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::Confined(
+            SimpleListingState::build(
+                token.confined_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_if() {
         let state = IfState::new(token);
@@ -540,22 +543,23 @@ where
     }
     else if token.is_crunched_section() {
         Some(ProcessedTokenState::CrunchedSection {
-            listing: SimpleListingState {
-                processed_tokens: build_processed_tokens_list(
-                    token.crunched_section_listing(),
-                    env
-                )?,
-                span: token.possible_span().cloned()
-            },
+            listing: SimpleListingState::build(
+                token.crunched_section_listing(),
+                token.possible_span().cloned(),
+                env
+            )?,
             previous_bytes: None,
             previous_compressed_bytes: None
         })
     }
     else if token.is_for() {
-        Some(ProcessedTokenState::For(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.for_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::For(
+            SimpleListingState::build(
+                token.for_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_function_definition() {
         Some(ProcessedTokenState::FunctionDefinition(
@@ -563,22 +567,31 @@ where
         ))
     }
     else if token.is_iterate() {
-        Some(ProcessedTokenState::Iterate(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.iterate_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::Iterate(
+            SimpleListingState::build(
+                token.iterate_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_module() {
-        Some(ProcessedTokenState::Module(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.module_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::Module(
+            SimpleListingState::build(
+                token.module_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_repeat() {
-        Some(ProcessedTokenState::Repeat(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.repeat_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::Repeat(
+            SimpleListingState::build(
+                token.repeat_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_repeat_token() {
         Some(ProcessedTokenState::RepeatToken(
@@ -605,24 +618,31 @@ where
 
         let tokens = token.assembler_control_get_listing();
         Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
-            listing: SimpleListingState {
-                processed_tokens: build_processed_tokens_list(tokens, env)?,
-                span: token.possible_span().cloned()
-            },
+            listing: SimpleListingState::build(
+                tokens,
+                token.possible_span().cloned(),
+                env
+            )?,
             commands: Some(ControlOutputStore::with_passes(passes.unwrap()))
         })
     }
     else if token.is_repeat_until() {
-        Some(ProcessedTokenState::RepeatUntil(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.repeat_until_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::RepeatUntil(
+            SimpleListingState::build(
+                token.repeat_until_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_rorg() {
-        Some(ProcessedTokenState::Rorg(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.rorg_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::Rorg(
+            SimpleListingState::build(
+                token.rorg_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_switch() {
         // todo setup properly the spans
@@ -646,10 +666,13 @@ where
         )))
     }
     else if token.is_while() {
-        Some(ProcessedTokenState::While(SimpleListingState {
-            processed_tokens: build_processed_tokens_list(token.while_listing(), env)?,
-            span: token.possible_span().cloned()
-        }))
+        Some(ProcessedTokenState::While(
+            SimpleListingState::build(
+                token.while_listing(),
+                token.possible_span().cloned(),
+                env
+            )?
+        ))
     }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
