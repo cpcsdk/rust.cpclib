@@ -3,7 +3,7 @@ use cpclib_common::winnow::ascii::{Caseless, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, eof, not, opt, preceded, repeat, terminated
 };
-use cpclib_common::winnow::error::{ContextError, ParserError, StrContext};
+use cpclib_common::winnow::error::{ContextError, StrContext};
 use cpclib_common::winnow::stream::AsChar;
 use cpclib_common::winnow::token::{one_of, take_while};
 /// ! Locomotive basic parser routines.

@@ -6,7 +6,6 @@ use std::iter::Iterator;
 use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::itertools::Itertools;
 use delegate::delegate;
 use thiserror::Error;
 
@@ -1425,7 +1424,6 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         let content = self.read_entries(&entries);
         let mut file = AmsdosFile::from_buffer(&content);
         file.shrink_content_to_fit_header_size();
-        file.content().len();
 
         Some(file)
     }

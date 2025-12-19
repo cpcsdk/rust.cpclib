@@ -1444,11 +1444,11 @@ impl ImageConverter {
             )?;
 
             // Just for debug stuff
-            if true {
+            if false {
                 let mask_img = mask.as_sprite().as_image();
                 let sprite_img = sprite.as_sprite().as_image();
-                mask_img.save_with_format("/tmp/mask.png", image::ImageFormat::Png);
-                sprite_img.save_with_format("/tmp/sprite.png", image::ImageFormat::Png);
+                let _ = mask_img.save_with_format("/tmp/mask.png", image::ImageFormat::Png);
+                let _ = sprite_img.save_with_format("/tmp/sprite.png", image::ImageFormat::Png);
             }
 
             Ok(Output::SpriteAndMask { sprite, mask })

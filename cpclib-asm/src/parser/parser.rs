@@ -17,7 +17,7 @@ use cpclib_common::winnow::combinator::{
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
+use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;

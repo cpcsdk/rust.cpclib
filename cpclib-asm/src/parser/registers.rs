@@ -3,7 +3,7 @@
 use choice_nocase::choice_nocase;
 use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1};
 use cpclib_common::winnow::combinator::{alt, not, opt, preceded, terminated};
-use cpclib_common::winnow::error::{ErrMode, ParserError};
+use cpclib_common::winnow::error::ErrMode;
 use cpclib_common::winnow::stream::{Stream, UpdateSlice};
 use cpclib_common::winnow::token::{one_of, take};
 use cpclib_common::winnow::{ModalResult, Parser};

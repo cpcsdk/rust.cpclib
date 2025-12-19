@@ -7,7 +7,6 @@ use image as im;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use self::im::Pixel;
 use crate::ga::{Ink, InkComponent, InkComponentQuantity, Pen};
 use crate::image::Mode;
 

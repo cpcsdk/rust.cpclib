@@ -251,10 +251,10 @@ impl TrackInformationList {
                 item.sector_id_head.clone()
             )
         });
-        // group_by
+        // chunk_by
         let mut grouped = single
             .iter()
-            .group_by(|item| {
+            .chunk_by(|item| {
                 (
                     item.head,
                     item.sector_size,
