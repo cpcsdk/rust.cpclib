@@ -1,12 +1,12 @@
 // Expression module - contains expression parsing functions
 
+use std::fmt::Debug;
 use std::sync::LazyLock;
-use smallvec::SmallVec;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
@@ -17,15 +17,17 @@ use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
 use cpclib_tokens::{
-    AssemblerFlavor, BinaryFunction, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest, LabelPrefix,
-    Register16, UnaryFunction, UnaryOperation, UnaryTokenOperation
+    AssemblerFlavor, BinaryFunction, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest,
+    LabelPrefix, Register16, UnaryFunction, UnaryOperation, UnaryTokenOperation
 };
-use std::fmt::Debug;
+use smallvec::SmallVec;
 
 use super::error::*;
-use super::obtained::*;
-use super::parser::{parse_comma, REGISTERS, STAND_ALONE_DIRECTIVE, START_DIRECTIVE, END_DIRECTIVE};
 use super::instructions::INSTRUCTIONS;
+use super::obtained::*;
+use super::parser::{
+    END_DIRECTIVE, REGISTERS, STAND_ALONE_DIRECTIVE, START_DIRECTIVE, parse_comma
+};
 use super::*;
 
 pub fn parse_fname(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
@@ -632,27 +634,10 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
 }
 
 // Constants for label validation
-const STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"DB",
-    b"DW",
-    b"DS",
-    b"ORG",
-    b"EQU"
-];
-const START_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"REPEAT",
-    b"REPT",
-    b"MACRO",
-    b"IF",
-    b"IFDEF",
-    b"IFNDEF"
-];
-const END_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"UNTIL",
-    b"ENDM",
-    b"ENDR",
-    b"ENDIF"
-];
+const STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"DB", b"DW", b"DS", b"ORG", b"EQU"];
+const START_DIRECTIVE_ORGAMS: &[&[u8]] =
+    &[b"REPEAT", b"REPT", b"MACRO", b"IF", b"IFDEF", b"IFNDEF"];
+const END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"UNTIL", b"ENDM", b"ENDR", b"ENDIF"];
 
 static _DOTTED_END_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
     END_DIRECTIVE
@@ -922,49 +907,54 @@ pub fn parse_label(
                     one_of((
                         b'a'..=b'z',
                         b'A'..=b'Z',
-                        b'_', 
-                        b'#', b'\'' // orgams additions
-                    )).value(()),
+                        b'_',
+                        b'#',
+                        b'\'' // orgams additions
+                    ))
+                    .value(()),
                     delimited('{', expr, '}').value(())
                 )),
-                repeat::<_, _, (), _, _>(0.., alt((
-                    take_while(1..,
-                        (b'a'..=b'z',
-                        b'A'..=b'Z',
-                        b'0'..=b'9',
-                        b'_', 
-                        b'#', b'\'' // orgams additions
-                    )
-                      ).value(()),
-                    ".".value(()),
-                    delimited('{', opt(expr), '}').value(())
-                )))
-            ).take()
-            .parse_next(input)?
-        } else {
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        take_while(
+                            1..,
+                            (
+                                b'a'..=b'z',
+                                b'A'..=b'Z',
+                                b'0'..=b'9',
+                                b'_',
+                                b'#',
+                                b'\'' // orgams additions
+                            )
+                        )
+                        .value(()),
+                        ".".value(()),
+                        delimited('{', opt(expr), '}').value(())
+                    ))
+                )
+            )
+                .take()
+                .parse_next(input)?
+        }
+        else {
             (
                 opt(alt(("::", "@", "."))).value(()),
                 alt((
-                    one_of((
-                        b'a'..=b'z',
-                        b'A'..=b'Z',
-                        b'_', 
-                    )).value(()),
+                    one_of((b'a'..=b'z', b'A'..=b'Z', b'_')).value(()),
                     delimited('{', expr, '}').value(())
                 )),
-                repeat::<_, _, (), _, _>(0.., alt((
-                    take_while(1..,
-                        (b'a'..=b'z',
-                        b'A'..=b'Z',
-                        b'0'..=b'9',
-                        b'_', 
-                    )
-                      ).value(()),
-                    ".".value(()),
-                    delimited('{', opt(expr), '}').value(())
-                )))
-            ).take()
-            .parse_next(input)?
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        take_while(1.., (b'a'..=b'z', b'A'..=b'Z', b'0'..=b'9', b'_')).value(()),
+                        ".".value(()),
+                        delimited('{', opt(expr), '}').value(())
+                    ))
+                )
+            )
+                .take()
+                .parse_next(input)?
         };
 
         let start_with_double_dots = obtained_label.len() > 2 && &obtained_label[..2] == b"::";
@@ -975,9 +965,9 @@ pub fn parse_label(
             obtained_label
         };
 
-        //needed because of AT2
+        // needed because of AT2
         let input = if doubledots {
-            let _ =opt(Caseless(":")).parse_next(input)?;
+            let _ = opt(Caseless(":")).parse_next(input)?;
             input
         }
         else {
@@ -986,13 +976,21 @@ pub fn parse_label(
 
         // Be sure that ::ld is not considered to be a label
         let label_len = true_label.len();
-        if label_len >= MIN_MAX_LABEL_SIZE.0 &&
-        label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1 &&
-            !ignore_ascii_case_allowed_label( true_label, input.state.options().dotted_directive, input.state.options().assembler_flavor)  {
+        if label_len >= MIN_MAX_LABEL_SIZE.0
+            && label_len <= DOTTED_MIN_MAX_LABEL_SIZE.1
+            && !ignore_ascii_case_allowed_label(
+                true_label,
+                input.state.options().dotted_directive,
+                input.state.options().assembler_flavor
+            )
+        {
             input.reset(&start);
-            Err(ErrMode::Backtrack(Z80ParserError::from_input(
-                input
-            ).add_context(input, &start, "You cannot use a directive or an instruction as a label")
+            Err(ErrMode::Backtrack(
+                Z80ParserError::from_input(input).add_context(
+                    input,
+                    &start,
+                    "You cannot use a directive or an instruction as a label"
+                )
             ))
         }
         else {
@@ -1042,8 +1040,18 @@ pub fn parse_string(input: &mut InnerZ80Span) -> ModalResult<UnescapedString, Z8
     let opener = alt(('"', '\'')).parse_next(input)? as char;
     let closer = opener;
     let (normal, escapable) = match opener {
-        '\'' => (none_of(('\\', '\'')).take(), one_of(('\\', '\'', 'r', 'n', 't'))),
-        '"' => (none_of(('\\', '"')).take(), one_of(('\\', '"', 'r', 'n', 't'))),
+        '\'' => {
+            (
+                none_of(('\\', '\'')).take(),
+                one_of(('\\', '\'', 'r', 'n', 't'))
+            )
+        },
+        '"' => {
+            (
+                none_of(('\\', '"')).take(),
+                one_of(('\\', '"', 'r', 'n', 't'))
+            )
+        },
         _ => unreachable!()
     };
 
@@ -1098,19 +1106,16 @@ where
     O2: Debug + AsChar
 {
     move |input: &mut I| {
-
-
         let start = input.checkpoint();
 
-        enum CollectedString  {
+        enum CollectedString {
             Owned(&'static [u8], SmallVec<[u8; 64]>),
             Borrowed(&'static [u8], usize)
         };
 
         impl CollectedString {
-            
             #[inline]
-            fn new(start:&'static [u8]) -> Self {
+            fn new(start: &'static [u8]) -> Self {
                 CollectedString::Borrowed(start, 0)
             }
 
@@ -1119,7 +1124,6 @@ where
                 match self {
                     CollectedString::Owned(i, vec) => vec.extend_from_slice(slice),
                     CollectedString::Borrowed(i, len) => {
-
                         *len += slice.len();
                     }
                 }
@@ -1133,7 +1137,6 @@ where
                 }
             }
 
-
             #[inline]
             fn extend_with_char(&mut self, c: u8) {
                 match self {
@@ -1142,7 +1145,7 @@ where
                         let mut vec = SmallVec::with_capacity(*len + 1);
                         vec.extend_from_slice(&i[..*len]);
                         vec.push(c);
-                        *self = CollectedString::Owned(i,vec);
+                        *self = CollectedString::Owned(i, vec);
                     }
                 }
             }
@@ -1171,9 +1174,11 @@ where
                 match self {
                     CollectedString::Owned(i, vec) => {
                         let vec = vec.into_vec();
-                        unsafe{String::from_utf8_unchecked(vec)}
+                        unsafe { String::from_utf8_unchecked(vec) }
                     },
-                    CollectedString::Borrowed(i,len) => unsafe{String::from_utf8_unchecked((i[..len].to_vec()))}
+                    CollectedString::Borrowed(i, len) => unsafe {
+                        String::from_utf8_unchecked((i[..len].to_vec()))
+                    }
                 }
             }
 
@@ -1191,14 +1196,15 @@ where
                     let mut vec: SmallVec<[u8; 64]> = SmallVec::with_capacity(len + 16);
                     vec.extend_from_slice(&i[..len]);
                     CollectedString::Owned(i, vec)
-                } else {
+                }
+                else {
                     self
                 }
             }
         }
 
-        let mut res: CollectedString = CollectedString::new(unsafe{std::mem::transmute(input.as_bstr())});
-
+        let mut res: CollectedString =
+            CollectedString::new(unsafe { std::mem::transmute(input.as_bstr()) });
 
         while input.eof_offset() > 0 {
             let current_len = input.eof_offset();
@@ -1227,7 +1233,6 @@ where
                         res.extend_from_slice(s.as_bytes());
                     }
                 };
-                
             }
             else {
                 return Ok(res.into_string());

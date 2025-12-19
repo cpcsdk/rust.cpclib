@@ -17,9 +17,7 @@ use cpclib_common::winnow::combinator::{
 #[allow(deprecated)]
 use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{
-    Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice
-};
+use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;
@@ -268,8 +266,6 @@ pub static DOTTED_END_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(||
         .collect_vec()
 });
 
-
-
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
 pub fn parse_z80_with_context_builder<S: Into<String>>(
@@ -390,9 +386,7 @@ pub fn inner_code(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80Pa
 }
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-
-
-#[cfg_attr(not(target_arch = "wasm32"), )]
+#[cfg_attr(not(target_arch = "wasm32"))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn one_instruction_inner_code(
     input: &mut InnerZ80Span
@@ -505,7 +499,8 @@ pub fn parse_line_component_standard(
             parse_word(b"EQU").value(LabelModifier::Equ),
             parse_word(b"SETN").value(LabelModifier::SetN),
             parse_word(b"NEXT").value(LabelModifier::Next),
-            terminated(parse_word(b"SET"), not((my_space0, expr, parse_comma))).map(|_| LabelModifier::Set),
+            terminated(parse_word(b"SET"), not((my_space0, expr, parse_comma)))
+                .map(|_| LabelModifier::Set),
             b"=".value(LabelModifier::Equal(None)),
             alt((parse_word(b"FIELD").value(()), b"#".value(()))).value(LabelModifier::Field),
             alt((
@@ -703,8 +698,7 @@ enum LabelModifier {
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 // MIGRATED: parse_z80_directive_with_block -> directives.rs
-
-#[cfg_attr(not(target_arch = "wasm32"), )]
+#[cfg_attr(not(target_arch = "wasm32"))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_lines(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedToken>, Z80ParserError> {
     let mut tokens = Vec::with_capacity(100);
@@ -1118,7 +1112,6 @@ pub fn parse_forbidden_keyword(
     Ok(name)
 }
 
-
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 /// Consume the word and the empty space after
@@ -1170,7 +1163,7 @@ pub fn parse_word(
 // (migrated) formatted_expr lives in directives.rs
 
 /// Handle \ in end of line
-#[cfg_attr(not(target_arch = "wasm32"), )]
+#[cfg_attr(not(target_arch = "wasm32"))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_space0(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
@@ -1308,19 +1301,13 @@ pub fn parse_comma_multiline(
 /// TODO rename to emphasize it is standard reigsters
 // Register functions moved to registers.rs module
 pub use super::registers::{
-    parse_register_i, parse_register_ix, parse_register_iy,
-    parse_register_r, parse_register8, parse_register16,
-    parse_indexregister8, parse_indexregister16, parse_indexregister_with_index
+    parse_indexregister_with_index, parse_indexregister8, parse_indexregister16, parse_register_i,
+    parse_register_ix, parse_register_iy, parse_register_r, parse_register8, parse_register16
 };
 
 // (migrated) parse_indexregister8/16/with_index live in registers.rs
 
-
 // MIGRATED: parse_portc, parse_portnn -> instructions.rs
-
-
-
-
 
 /// Parse standard org directive
 /// Migrated to directives.rs
@@ -1367,18 +1354,16 @@ pub fn parse_multiline_comment(
 
 // MIGRATED: string_expr -> expression.rs
 
-
-
 pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
     use std::ops::Deref;
-        let ctx = Box::new(
-            ParserContextBuilder::default()
-                .set_context_name("TEST")
-                .build(code)
-        );
-        let span = Z80Span::new_extra(code, ctx.deref());
-        (ctx, span)
-    }
+    let ctx = Box::new(
+        ParserContextBuilder::default()
+            .set_context_name("TEST")
+            .build(code)
+    );
+    let span = Z80Span::new_extra(code, ctx.deref());
+    (ctx, span)
+}
 
 // (deprecated) parse_end_directive was used only in local tests; removed
 
@@ -1466,8 +1451,6 @@ pub mod test {
 
         TestResultRest { ctx, span, res }
     }
-
-    
 
     // removed: test_parse_end_directive (helper removed)
 

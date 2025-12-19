@@ -23,6 +23,35 @@ enum MacroSegment {
     Arg { index: usize }
 }
 
+fn estimate_arg_len<P: MacroParamElement + ?Sized>(arg: &P) -> usize {
+    if arg.is_single() {
+        arg.single_argument().len()
+    }
+    else {
+        let list = arg.list_argument();
+        let separators = list.len().saturating_sub(1);
+        let elems = list
+            .iter()
+            .map(|p| estimate_arg_len(p.deref()))
+            .sum::<usize>();
+        elems + separators
+    }
+}
+
+/// Strip raw string quotes if the parameter is a raw string literal.
+/// Raw strings are marked with `r#` prefix and have literal quotes that need removal.
+fn strip_raw_string_quotes<'a>(
+    argname: &str,
+    expanded: beef::lean::Cow<'a, str>
+) -> beef::lean::Cow<'a, str> {
+    if argname.starts_with("r#") && expanded.starts_with("\"") && expanded.ends_with("\"") {
+        beef::lean::Cow::owned(expanded[1..expanded.len() - 1].to_string())
+    }
+    else {
+        expanded
+    }
+}
+
 fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
     let listing = r#macro.code();
     let mut segments = Vec::new();
@@ -34,11 +63,7 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
         .iter()
         .map(|p| {
             let s = p.as_str();
-            if s.starts_with("r#") {
-                &s[2..]
-            } else {
-                s
-            }
+            if s.starts_with("r#") { &s[2..] } else { s }
         })
         .collect();
 
@@ -68,7 +93,8 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
                 end: close + 1
             });
             cursor = close + 1;
-        } else {
+        }
+        else {
             // No closing brace: rest is literal
             segments.push(MacroSegment::Lit {
                 start: open,
@@ -182,43 +208,56 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
     #[inline]
     fn expand_for_basm(&self, env: &mut Env) -> Result<String, AssemblerError> {
         let listing = self.r#macro.code();
+        let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
 
-        // Pre-expand parameters once, keeping replacement payload.
-        let mut expanded_args = Vec::with_capacity(self.args.len());
-        for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
-            let expanded = expand_param(argvalue, env)?;
+        // First pass: expand all arguments and calculate exact capacity.
+        let capacity =
+            self.segments
+                .iter()
+                .try_fold(0, |acc, segment| -> Result<usize, AssemblerError> {
+                    match *segment {
+                        MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
+                        MacroSegment::Arg { index } => {
+                            let slot = expanded_args.get_mut(index).expect("Invalid segment index");
 
-            let replacement = if argname.starts_with("r#")
-                && expanded.starts_with("\"")
-                && expanded.ends_with("\"")
-            {
-                beef::lean::Cow::owned(expanded[1..expanded.len() - 1].to_string())
-            }
-            else {
-                expanded
-            };
+                            if slot.is_none() {
+                                let argvalue =
+                                    self.args.get(index).expect("Argument count mismatch");
+                                let mut expanded = expand_param(argvalue, env)?;
+                                let argname = self
+                                    .r#macro
+                                    .params()
+                                    .get(index)
+                                    .expect("Param count mismatch");
+                                expanded = strip_raw_string_quotes(argname, expanded);
+                                let arg_len = expanded.len();
+                                *slot = Some(expanded);
+                                Ok(acc + arg_len)
+                            }
+                            else {
+                                Ok(acc + slot.as_ref().unwrap().len())
+                            }
+                        }
+                    }
+                })?;
 
-            expanded_args.push(replacement);
-        }
-
-        // Simple capacity: listing + sum of all replacement lengths (overestimate, but fast)
-        let extra = expanded_args.iter().map(|v| v.len()).sum::<usize>();
-        let mut output = String::with_capacity(listing.len() + extra);
-
-        // Use pre-tokenized segments
+        // Second pass: assemble output from pre-expanded arguments.
+        let mut output = String::with_capacity(capacity);
         for segment in self.segments.iter() {
             match *segment {
                 MacroSegment::Lit { start, end } => {
                     output.push_str(&listing[start..end]);
-                }
+                },
                 MacroSegment::Arg { index } => {
-                    if let Some(rep) = expanded_args.get(index) {
-                        output.push_str(rep.as_ref());
+                    let slot = expanded_args.get(index).expect("Invalid segment index");
+                    if let Some(expanded_value) = slot.as_ref() {
+                        output.push_str(expanded_value.as_ref());
                     }
                 }
             }
         }
 
+        debug_assert_eq!(output.len(), capacity, "Capacity estimation mismatch");
         Ok(output)
     }
 

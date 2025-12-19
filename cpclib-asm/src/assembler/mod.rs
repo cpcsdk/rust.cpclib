@@ -4776,7 +4776,7 @@ fn visit_defs<E: ExprEvaluationExt>(
 }
 
 fn visit_end(_env: &mut Env) -> Result<(), AssemblerError> {
-    //eprintln!("END directive is not implemented");
+    // eprintln!("END directive is not implemented");
     Ok(())
 }
 
@@ -6015,7 +6015,6 @@ fn assemble_ld<D: DataAccessElem + Debug>(
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
-
     let mut bytes = Bytes::new();
 
     // Destination is 8bits register
@@ -7119,13 +7118,12 @@ fn register16_to_code_with_sp(reg: Register16) -> u8 {
     }
 }
 
-
 fn register16_to_code(reg: Register16) -> u8 {
     match reg {
         Register16::Bc => 0b00,
         Register16::De => 0b01,
         Register16::Hl => 0b10,
-        Register16::Sp | Register16::Af=> 0b11,
+        Register16::Sp | Register16::Af => 0b11,
         _ => panic!("no mapping for {reg:?}")
     }
 }

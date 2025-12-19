@@ -6,34 +6,41 @@ use std::ops::DerefMut;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use cpclib_common::winnow::ascii::{Caseless, line_ending, alphanumeric1};
-use cpclib_common::winnow::combinator::{alt, cut_err, delimited, opt, preceded, repeat, separated, terminated, repeat_till, not, eof, peek};
-use cpclib_common::winnow::error::{StrContext, ErrMode, AddContext};
-use cpclib_common::winnow::stream::{Stream, AsBStr, UpdateSlice, Offset, Checkpoint, LocatingSlice, Stateful};
-use cpclib_common::winnow::{ModalResult, Parser, BStr};
-use cpclib_common::winnow::token::{take, take_till, take_while, none_of, one_of};
-
-use super::expression::{
-    located_expr, parse_label, parse_flag_value_inner, ignore_ascii_case_allowed_label,
-    parse_string, expr_list, parse_expr_bracketed_list, parse_unary_function_call,
-    parse_binary_function_call, parse_any_function_call, parse_assemble, parse_fname, expr
-};
-use super::obtained::{LocatedToken, LocatedTokenInner};
-use super::context;
-use super::parser::{
-    inner_code, my_line_ending, my_many0_nocollect, my_space0, my_space1, parse_comment,
-    parse_comma, parse_word,
-    parse_argname_and_value, parse_optional_argname_and_value, parse_convertible_word,
-    inner_code_with_state
-};
-use super::orgams::parse_orgams_fail;
-use super::instructions::{parse_nop, parse_opcode_no_arg};
-use cpclib_common::itertools::Itertools;
-use cpclib_sna::{SnapshotVersion, RemuBreakPointType, RemuBreakPointAccessMode, RemuBreakPointRunMode, flags::SnapshotFlag};
-use crate::preamble::*;
 use choice_nocase::choice_nocase;
-use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
+use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
+use cpclib_common::winnow::combinator::{
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, repeat_till, separated,
+    terminated
+};
+use cpclib_common::winnow::error::{AddContext, ErrMode, StrContext};
+use cpclib_common::winnow::stream::{
+    AsBStr, Checkpoint, LocatingSlice, Offset, Stateful, Stream, UpdateSlice
+};
+use cpclib_common::winnow::token::{none_of, one_of, take, take_till, take_while};
+use cpclib_common::winnow::{BStr, ModalResult, Parser};
+use cpclib_sna::flags::SnapshotFlag;
+use cpclib_sna::{
+    RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
+};
+use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
+
+use super::context;
+use super::expression::{
+    expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
+    parse_assemble, parse_binary_function_call, parse_expr_bracketed_list, parse_flag_value_inner,
+    parse_fname, parse_label, parse_string, parse_unary_function_call
+};
+use super::instructions::{parse_nop, parse_opcode_no_arg};
+use super::obtained::{LocatedToken, LocatedTokenInner};
+use super::orgams::parse_orgams_fail;
+use super::parser::{
+    inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0, my_space1,
+    parse_argname_and_value, parse_comma, parse_comment, parse_convertible_word,
+    parse_optional_argname_and_value, parse_word
+};
+use crate::preamble::*;
 
 pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
@@ -1190,7 +1197,11 @@ pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner,
 pub fn parse_struct_directive(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedToken, Z80ParserError> {
-    alt((parse_struct_directive_inner, parse_macro_or_struct_call(false, true))).parse_next(input)
+    alt((
+        parse_struct_directive_inner,
+        parse_macro_or_struct_call(false, true)
+    ))
+    .parse_next(input)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -1868,7 +1879,7 @@ pub fn parse_macro_inner(
             name: name.into(),
             params: arguments,
             content: content.into(),
-            flavor: input.state.options().assembler_flavor,
+            flavor: input.state.options().assembler_flavor
         }
         .into_located_token_between(&dir_start, *input))
     }
@@ -2073,11 +2084,10 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             conditions.push((condition, code));
 
             let r#else = opt(preceded(
-                repeat::<_, _, (), _, _>(0.., alt((
-                    my_space1.value(()),
-                    line_ending.value(()),
-                    ':'.value(())
-                ))),
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((my_space1.value(()), line_ending.value(()), ':'.value(())))
+                ),
                 (Caseless(b"ELSE"), my_space0)
             ))
             .parse_next(input)?;
@@ -2626,8 +2636,6 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pars
     Ok(token)
 }
 
-
-
 pub fn parse_undef(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let label = parse_label(false).parse_next(input)?;
 
@@ -2684,5 +2692,3 @@ directive_with_expr!(parse_map, Map);
 directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
-
-

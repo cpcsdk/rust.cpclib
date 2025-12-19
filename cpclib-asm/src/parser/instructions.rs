@@ -2,7 +2,9 @@
 
 use choice_nocase::choice_nocase;
 use cpclib_common::winnow::ascii::{Caseless, alpha1};
-use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, preceded, separated, terminated};
+use cpclib_common::winnow::combinator::{
+    alt, cut_err, delimited, not, opt, preceded, separated, terminated
+};
 use cpclib_common::winnow::error::{ErrMode, StrContext};
 use cpclib_common::winnow::stream::{Stream, UpdateSlice};
 use cpclib_common::winnow::{ModalResult, Parser};

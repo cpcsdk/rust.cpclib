@@ -1,12 +1,11 @@
 #![feature(str_as_str)]
 
-use cpclib_common::winnow::{BStr, LocatingSlice, Stateful, Parser};
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use cpclib_asm::{InnerZ80Span, ParserContext, parser::parse_string};
-use    cpclib_asm::parser::ctx_and_span;
+use cpclib_asm::parser::{ctx_and_span, parse_string};
+use cpclib_asm::{InnerZ80Span, ParserContext};
+use cpclib_common::winnow::{BStr, LocatingSlice, Parser, Stateful};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 fn bench_parse_strings(c: &mut Criterion) {
-
     let (ctx_simple, span_simple) = ctx_and_span(r#""HELLOHELLHELLOO""#);
     let (ctx_escaped, span_escaped) = ctx_and_span(r#""HE\"LL\nO\tHE\"LL\nO\tHE\"LL\nO\t""#);
 
