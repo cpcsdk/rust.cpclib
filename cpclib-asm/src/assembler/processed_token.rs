@@ -2,7 +2,6 @@ use std::borrow::{Borrow, Cow};
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
 use std::ptr;
 use std::sync::Arc;
 
@@ -178,10 +177,12 @@ impl IncludeState {
             }
             .try_build()?;
 
-            self.0.try_insert(fname.clone(), include_state).unwrap()
+            self.0.try_insert(fname.clone(), include_state)
+                .expect("BUG: fname should not already be in include map")
         }
         else {
-            self.0.get_mut(fname).unwrap()
+            self.0.get_mut(fname)
+                .expect("BUG: fname should exist in include map")
         };
 
         // handle the listing
@@ -227,12 +228,9 @@ impl IncludeState {
                 env.leave_namespace()?;
                 //.map_err(|e| e.locate(span.clone()))?;
             }
+        }
 
-            Ok(())
-        }
-        else {
-            Ok(())
-        }
+        Ok(())
     }
 }
 
@@ -424,19 +422,21 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
         let selected_listing = match selected_idx {
             Some(selected_idx) => {
-                // build the listing if never done
-                if self.tests_listing.get(&selected_idx).is_none() {
-                    let listing = self.token.if_test(selected_idx).1;
-                    let listing = build_processed_tokens_list(listing, env)?;
-                    self.tests_listing.insert(selected_idx, listing);
+                // Build the listing if never done, using entry API to avoid double lookup
+                use std::collections::hash_map::Entry;
+                match self.tests_listing.entry(selected_idx) {
+                    Entry::Occupied(e) => Some(e.into_mut()),
+                    Entry::Vacant(e) => {
+                        let listing = self.token.if_test(selected_idx).1;
+                        let listing = build_processed_tokens_list(listing, env)?;
+                        Some(e.insert(listing))
+                    }
                 }
-                self.tests_listing.get_mut(&selected_idx)
             },
             None => {
-                // build else listing if needed
-                if self.else_listing.is_none() && self.token.if_else().is_some() {
-                    let listing = self.token.if_else();
-                    self.else_listing = listing
+                // Build else listing on-demand if it exists and hasn't been built
+                if self.else_listing.is_none() {
+                    self.else_listing = self.token.if_else()
                         .map(|listing| build_processed_tokens_list(listing, env))
                         .transpose()?;
                 }
@@ -445,9 +445,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         };
 
         // update env to request an additional pass
-        let request_additional_pass =
-            *env.request_additional_pass.read().unwrap().deref() | request_additional_pass;
-        *env.request_additional_pass.write().unwrap() = request_additional_pass;
+        if request_additional_pass {
+            *env.request_additional_pass.write().unwrap() = true;
+        }
 
         Ok(selected_listing.map(|l| l.as_mut_slice()))
     }
@@ -464,6 +464,47 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
 pub type AssemblerInfo = AssemblerError;
 
+/// Helper: Extract and clone the span from a token if present
+fn get_token_span<T: MayHaveSpan>(token: &T) -> Option<Z80Span> {
+    token.possible_span().cloned()
+}
+
+/// Helper: Build SimpleListingState from a listing, span, and environment
+fn build_simple_listing_state<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
+    listing: &'token [T],
+    span: Option<Z80Span>,
+    env: &mut Env
+) -> Result<SimpleListingState<'token, T>, AssemblerError>
+where
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+{
+    SimpleListingState::build(listing, span, env)
+}
+
+/// Helper: Relocate print commands from a given index with a specific span
+fn relocate_print_commands(env: &mut Env, nb_prints: Vec<usize>, span: &Z80Span) {
+    env.sna
+        .pages_info
+        .iter_mut()
+        .zip(nb_prints.into_iter())
+        .for_each(|(ti, count)| {
+            ti.print_commands_mut()[count..]
+                .iter_mut()
+                .for_each(|cmd| cmd.relocate(span.clone()))
+        });
+}
+
+/// Helper: Relocate error with span if available
+fn relocate_error_with_span<T: MayHaveSpan>(error: AssemblerError, token: &T) -> AssemblerError {
+    match token.possible_span() {
+        Some(span) => AssemblerError::RelocatedError {
+            error: error.into(),
+            span: span.clone()
+        },
+        None => error
+    }
+}
+
 /// Build a processed token based on the base token
 pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
@@ -472,11 +513,12 @@ pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement 
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 {
+    let span = get_token_span(token);
     let state = if token.is_confined() {
         Some(ProcessedTokenState::Confined(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.confined_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
@@ -535,9 +577,9 @@ where
     }
     else if token.is_crunched_section() {
         Some(ProcessedTokenState::CrunchedSection {
-            listing: SimpleListingState::build(
+            listing: build_simple_listing_state(
                 token.crunched_section_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?,
             previous_bytes: None,
@@ -546,9 +588,9 @@ where
     }
     else if token.is_for() {
         Some(ProcessedTokenState::For(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.for_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
@@ -560,27 +602,27 @@ where
     }
     else if token.is_iterate() {
         Some(ProcessedTokenState::Iterate(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.iterate_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
     }
     else if token.is_module() {
         Some(ProcessedTokenState::Module(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.module_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
     }
     else if token.is_repeat() {
         Some(ProcessedTokenState::Repeat(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.repeat_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
@@ -610,28 +652,30 @@ where
 
         let tokens = token.assembler_control_get_listing();
         Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
-            listing: SimpleListingState::build(
+            listing: build_simple_listing_state(
                 tokens,
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?,
-            commands: Some(ControlOutputStore::with_passes(passes.unwrap()))
+            commands: Some(ControlOutputStore::with_passes(
+                passes.expect("BUG: passes should be Some after assertion")
+            ))
         })
     }
     else if token.is_repeat_until() {
         Some(ProcessedTokenState::RepeatUntil(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.repeat_until_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
     }
     else if token.is_rorg() {
         Some(ProcessedTokenState::Rorg(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.rorg_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
@@ -642,13 +686,13 @@ where
             cases: token
                 .switch_cases()
                 .map(|(_v, l, _b)| {
-                    SimpleListingState::build(l, token.possible_span().cloned(), env)
+                    build_simple_listing_state(l, span.clone(), env)
                 })
                 .collect::<Result<Vec<_>, _>>()?,
 
             default: token
                 .switch_default()
-                .map(|l| SimpleListingState::build(l, token.possible_span().cloned(), env))
+                .map(|l| build_simple_listing_state(l, span.clone(), env))
                 .transpose()?
         }))
     }
@@ -659,9 +703,9 @@ where
     }
     else if token.is_while() {
         Some(ProcessedTokenState::While(
-            SimpleListingState::build(
+            build_simple_listing_state(
                 token.while_listing(),
-                token.possible_span().cloned(),
+                span.clone(),
                 env
             )?
         ))
@@ -816,15 +860,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                         .closest_symbol(name, SymbolFor::Macro)?
                         .map(|s| s.into())
                 };
-                return match self.possible_span() {
-                    Some(span) => {
-                        Err(AssemblerError::RelocatedError {
-                            error: e.into(),
-                            span: span.clone()
-                        })
-                    },
-                    None => Err(e)
-                };
+                return Err(relocate_error_with_span(e, self.token));
             }
 
             // get the generated code
@@ -836,7 +872,8 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 (source, code, flavor)
             }
             else {
-                let r#struct = r#struct.as_ref().unwrap();
+                let r#struct = r#struct.as_ref()
+                    .expect("BUG: r#struct should be Some when r#macro is None");
                 let mut parameters = parameters.to_vec();
                 parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
                 (
@@ -936,7 +973,8 @@ where
                         listing,
                         commands
                     }) => {
-                        let mut new_commands = commands.take().unwrap();
+                        let mut new_commands = commands.take()
+                            .expect("BUG: commands should be Some for RestrictedAssemblingEnvironment");
 
                         if !new_commands.has_remaining_passes() {
                             new_commands.execute(env)?;
@@ -950,7 +988,7 @@ where
                             new_commands = env
                                 .assembling_control_current_output_commands
                                 .pop()
-                                .unwrap();
+                                .expect("BUG: output commands stack should not be empty");
                         }
                         commands.replace(new_commands);
                         Ok(())
@@ -1089,10 +1127,12 @@ where
                                 env.add_warning(warning)
                             }
 
-                            contents.try_insert(fname.clone(), data.into()).unwrap()
+                            contents.try_insert(fname.clone(), data.into())
+                                .expect("BUG: fname should not already be in incbin contents")
                         }
                         else {
-                            contents.get(&fname).unwrap()
+                            contents.get(&fname)
+                                .expect("BUG: fname should exist in incbin contents")
                         };
 
                         let mut data = data.as_slice();
@@ -1142,7 +1182,8 @@ where
                                     ));
                                 }
 
-                                let crunch_type = other.crunch_type().unwrap();
+                                let crunch_type = other.crunch_type()
+                                    .expect("BUG: crunch_type should return Some for non-None transformation");
                                 let result = crunch_type.compress(data)?;
                                 Cow::Owned(result.to_vec()) // TODO store the delta somewhere to allow a reuse
                             }
@@ -1216,8 +1257,9 @@ where
                             let location = env
                                 .symbols()
                                 .any_value(name)
-                                .unwrap()
-                                .unwrap()
+                                .ok()
+                                .flatten()
+                                .expect("BUG: macro name should exist in symbol table")
                                 .location()
                                 .cloned();
 
@@ -1227,28 +1269,12 @@ where
                                 location
                             };
                             let caller_span = self.possible_span();
-                            match caller_span {
-                                Some(span) => {
-                                    AssemblerError::RelocatedError {
-                                        error: e.into(),
-                                        span: span.clone()
-                                    }
-                                },
-                                None => e
-                            }
+                            relocate_error_with_span(e, self.token)
                         })?;
 
                         let caller_span = self.possible_span();
                         if let Some(span) = caller_span {
-                            env.sna
-                                .pages_info
-                                .iter_mut()
-                                .zip(nb_prints.into_iter())
-                                .for_each(|(ti, count)| {
-                                    ti.print_commands_mut()[count..]
-                                        .iter_mut()
-                                        .for_each(|cmd| cmd.relocate(span.clone()))
-                                });
+                            relocate_print_commands(env, nb_prints, span);
                         }
 
                         Ok(())
@@ -1334,7 +1360,9 @@ where
                             warning: Box::new(AssemblerError::AssemblingError {
                                 msg: self.token.warning_message().to_owned()
                             }),
-                            span: self.token.possible_span().unwrap().clone()
+                            span: self.token.possible_span()
+                                .expect("BUG: warning token should have a span")
+                                .clone()
                         };
                         let warning = AssemblerError::AlreadyRenderedError(warning.to_string());
 
