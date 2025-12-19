@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
@@ -14,6 +15,77 @@ use crate::preamble::{Z80ParserError, Z80Span};
 pub trait Expandable {
     /// Returns a string version of the element after expansion
     fn expand(&self, env: &mut Env) -> Result<String, AssemblerError>;
+}
+
+#[derive(Copy, Clone, Debug)]
+enum MacroSegment {
+    Lit { start: usize, end: usize },
+    Arg { index: usize }
+}
+
+fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
+    let listing = r#macro.code();
+    let mut segments = Vec::new();
+    let mut cursor = 0;
+
+    // Build param index lookup
+    let param_names: Vec<&str> = r#macro
+        .params()
+        .iter()
+        .map(|p| {
+            let s = p.as_str();
+            if s.starts_with("r#") {
+                &s[2..]
+            } else {
+                s
+            }
+        })
+        .collect();
+
+    while let Some(rel_open) = listing[cursor..].find('{') {
+        let open = cursor + rel_open;
+        if open > cursor {
+            segments.push(MacroSegment::Lit {
+                start: cursor,
+                end: open
+            });
+        }
+
+        let after_open = open + 1;
+        if let Some(rel_close) = listing[after_open..].find('}') {
+            let close = after_open + rel_close;
+            let key = &listing[after_open..close];
+
+            if let Some(idx) = param_names.iter().position(|n| *n == key) {
+                segments.push(MacroSegment::Arg { index: idx });
+                cursor = close + 1;
+                continue;
+            }
+
+            // Not a known placeholder: keep verbatim
+            segments.push(MacroSegment::Lit {
+                start: open,
+                end: close + 1
+            });
+            cursor = close + 1;
+        } else {
+            // No closing brace: rest is literal
+            segments.push(MacroSegment::Lit {
+                start: open,
+                end: listing.len()
+            });
+            cursor = listing.len();
+        }
+    }
+
+    if cursor < listing.len() {
+        segments.push(MacroSegment::Lit {
+            start: cursor,
+            end: listing.len()
+        });
+    }
+
+    segments
 }
 
 #[inline]
@@ -66,7 +138,8 @@ fn expand_param<'p, P: MacroParamElement>(
 #[derive(Debug)]
 pub struct MacroWithArgs<P: MacroParamElement> {
     r#macro: Macro,
-    args: Vec<P>
+    args: Vec<P>,
+    segments: Arc<Vec<MacroSegment>>
 }
 
 impl<P: MacroParamElement> MacroWithArgs<P> {
@@ -91,6 +164,7 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
             Ok(Self {
                 r#macro: r#macro.clone(),
                 args: args.to_vec(),
+                segments: Arc::new(tokenize_macro_body(r#macro))
             })
         }
     }
@@ -130,49 +204,19 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
         // Simple capacity: listing + sum of all replacement lengths (overestimate, but fast)
         let extra = expanded_args.iter().map(|v| v.len()).sum::<usize>();
         let mut output = String::with_capacity(listing.len() + extra);
-        let mut cursor = 0;
-        while let Some(rel_open) = listing[cursor..].find('{') {
-            let open = cursor + rel_open;
-            output.push_str(&listing[cursor..open]);
-            let after_open = open + 1;
 
-            if let Some(rel_close) = listing[after_open..].find('}') {
-                let close = after_open + rel_close;
-                let key = &listing[after_open..close];
-
-                if let Some((argname, replacement)) = self
-                    .r#macro
-                    .params()
-                    .iter()
-                    .zip(expanded_args.iter())
-                    .find(|(argname, _)| {
-                        if argname.starts_with("r#") {
-                            &argname[2..] == key
-                        }
-                        else {
-                            argname.as_str() == key
-                        }
-                    })
-                {
-                    output.push_str(replacement.as_ref());
-                    cursor = close + 1;
-                    // continue scanning
-                    continue;
+        // Use pre-tokenized segments
+        for segment in self.segments.iter() {
+            match *segment {
+                MacroSegment::Lit { start, end } => {
+                    output.push_str(&listing[start..end]);
                 }
-
-                // Not a known placeholder; emit verbatim and keep scanning
-                output.push_str(&listing[open..=close]);
-                cursor = close + 1;
+                MacroSegment::Arg { index } => {
+                    if let Some(rep) = expanded_args.get(index) {
+                        output.push_str(rep.as_ref());
+                    }
+                }
             }
-            else {
-                // No closing brace; emit rest and finish
-                output.push_str(&listing[open..]);
-                cursor = listing.len();
-            }
-        }
-
-        if cursor < listing.len() {
-            output.push_str(&listing[cursor..]);
         }
 
         Ok(output)
