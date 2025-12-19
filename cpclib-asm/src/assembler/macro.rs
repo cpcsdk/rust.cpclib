@@ -234,9 +234,8 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
                     output.push_str(&listing[start..end]);
                 },
                 MacroSegment::Arg { index } => {
-                    // All arguments were expanded in first pass, so this is always Some
-                    let expanded_value = &expanded_args[index].as_ref().unwrap();
-                    output.push_str(expanded_value.as_ref());
+                    // All arguments were expanded in first pass, guaranteed Some
+                    output.push_str(&expanded_args[index].as_ref().unwrap());
                 }
             }
         }
