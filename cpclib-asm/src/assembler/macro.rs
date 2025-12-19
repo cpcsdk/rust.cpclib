@@ -23,21 +23,6 @@ enum MacroSegment {
     Arg { index: usize }
 }
 
-fn estimate_arg_len<P: MacroParamElement + ?Sized>(arg: &P) -> usize {
-    if arg.is_single() {
-        arg.single_argument().len()
-    }
-    else {
-        let list = arg.list_argument();
-        let separators = list.len().saturating_sub(1);
-        let elems = list
-            .iter()
-            .map(|p| estimate_arg_len(p.deref()))
-            .sum::<usize>();
-        elems + separators
-    }
-}
-
 /// Strip raw string quotes if the parameter is a raw string literal.
 /// Raw strings are marked with `r#` prefix and have literal quotes that need removal.
 fn strip_raw_string_quotes<'a>(
@@ -249,10 +234,9 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
                     output.push_str(&listing[start..end]);
                 },
                 MacroSegment::Arg { index } => {
-                    let slot = expanded_args.get(index).expect("Invalid segment index");
-                    if let Some(expanded_value) = slot.as_ref() {
-                        output.push_str(expanded_value.as_ref());
-                    }
+                    // All arguments were expanded in first pass, so this is always Some
+                    let expanded_value = &expanded_args[index].as_ref().unwrap();
+                    output.push_str(expanded_value.as_ref());
                 }
             }
         }
@@ -275,17 +259,19 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
         let mut replacements = Vec::with_capacity(capacity);
 
         for (argname, expanded) in self.r#macro.params().iter().zip(&all_expanded) {
-            let (pattern, replacement) = if argname.starts_with("r#")
-                & expanded.starts_with("\"")
-                & expanded.ends_with("\"")
-            {
-                // remove " " before doing the expansion
-                (&argname[2..], &expanded[1..(expanded.len() - 1)])
-            }
-            else {
-                (&argname[..], &expanded[..])
+            let pattern = if argname.starts_with("r#") {
+                &argname[2..]
+            } else {
+                argname.as_str()
             };
-
+            let replacement = if argname.starts_with("r#")
+                && expanded.starts_with("\"")
+                && expanded.ends_with("\"")
+            {
+                &expanded[1..(expanded.len() - 1)]
+            } else {
+                &expanded[..]
+            };
             patterns.push(pattern);
             replacements.push(replacement);
         }

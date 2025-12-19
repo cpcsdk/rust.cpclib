@@ -386,8 +386,6 @@ pub fn inner_code(input: &mut InnerZ80Span) -> ModalResult<LocatedListing, Z80Pa
 }
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-#[cfg_attr(not(target_arch = "wasm32"))]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn one_instruction_inner_code(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedListing, Z80ParserError> {
@@ -698,8 +696,6 @@ enum LabelModifier {
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 // MIGRATED: parse_z80_directive_with_block -> directives.rs
-#[cfg_attr(not(target_arch = "wasm32"))]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_lines(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedToken>, Z80ParserError> {
     let mut tokens = Vec::with_capacity(100);
 
@@ -1163,7 +1159,7 @@ pub fn parse_word(
 // (migrated) formatted_expr lives in directives.rs
 
 /// Handle \ in end of line
-#[cfg_attr(not(target_arch = "wasm32"))]
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_space0(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
