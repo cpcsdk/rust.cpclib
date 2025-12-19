@@ -3,6 +3,7 @@ use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
+use std::ptr;
 use std::sync::Arc;
 
 use cpclib_common::camino::Utf8PathBuf;
@@ -317,6 +318,69 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
         }
     }
 
+    /// Helper method to evaluate expression-based tests (IF/IFNOT)
+    fn evaluate_expression_test(
+        &self,
+        test: &<T as ListingElement>::TestKind,
+        env: &mut Env,
+        flag_failure: &cpclib_tokens::ExprResult
+    ) -> Result<bool, AssemblerError>
+    where
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt
+    {
+        let exp = test.expr_unchecked();
+        let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
+        
+        if &value == flag_failure {
+            // Test cannot be evaluated, return false to skip this branch
+            return Ok(false);
+        }
+        
+        let result = value.bool()?;
+        Ok(if test.is_true_test() { result } else { !result })
+    }
+
+    /// Helper method to evaluate label usage tests (IFUSED/IFNUSED)
+    fn evaluate_label_usage_test(
+        &mut self,
+        test: &<T as ListingElement>::TestKind,
+        token_adr: usize,
+        env: &Env,
+        request_additional_pass: &mut bool
+    ) -> Result<bool, AssemblerError> {
+        let label = test.label_unchecked();
+        let is_used = env.symbols().is_used(label);
+        let decision = if test.is_label_used_test() { is_used } else { !is_used };
+
+        let map = if test.is_label_used_test() {
+            &mut self.if_token_adr_to_used_decision
+        } else {
+            &mut self.if_token_adr_to_unused_decision
+        };
+
+        // Add an extra pass if the test result differs from previous
+        if let Some(&previous) = map.get(&token_adr) {
+            if previous != decision {
+                *request_additional_pass = true;
+            }
+        }
+
+        map.insert(token_adr, decision);
+        Ok(decision)
+    }
+
+    /// Helper method to evaluate label existence tests (IFDEF/IFNDEF)
+    fn evaluate_label_existence_test(
+        &self,
+        test: &<T as ListingElement>::TestKind,
+        env: &Env
+    ) -> Result<bool, AssemblerError> {
+        let label = test.label_unchecked();
+        let exists = env.symbols().symbol_exist_in_current_pass(label)?;
+        Ok(if test.is_label_exists_test() { exists } else { !exists })
+    }
+
     fn choose_listing_to_assemble(
         &mut self,
         env: &mut Env
@@ -335,98 +399,37 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
         for idx in 0..self.token.if_nb_tests() {
             let (test, _) = self.token.if_test(idx);
-            let token_adr = test as *const _ as usize;
+            // Use safe pointer conversion for stable address
+            let token_adr = ptr::from_ref(test) as usize;
 
-            // Expression must be true
-            // IF
-            if test.is_true_test() {
-                let exp = test.expr_unchecked();
-                // Expression must be true
-                let value = env
-                    .resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
-                if &value == flag_failure {
-                    // no code is executed if the test cannot be done
-                    return Ok(None);
+            let test_passed = if test.is_true_test() || test.is_false_test() {
+                // Expression-based tests (IF/IFNOT)
+                match self.evaluate_expression_test(test, env, flag_failure)? {
+                    true => true,
+                    false => {
+                        // Check if we need to abort due to unresolvable expression
+                        let exp = test.expr_unchecked();
+                        let value = env.resolve_expr_may_fail_in_first_pass_with_default(
+                            exp,
+                            flag_failure.clone()
+                        )?;
+                        if &value == flag_failure {
+                            return Ok(None);
+                        }
+                        false
+                    }
                 }
-                if value.bool()? {
-                    selected_idx = Some(idx);
-                    break;
-                }
-            }
-            // Expression must be false
-            // IFNOT
-            else if test.is_false_test() {
-                let exp = test.expr_unchecked();
-                let value = env
-                    .resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
-                if &value == flag_failure {
-                    // no code is executed if the test cannot be done
-                    return Ok(None);
-                }
-                if !value.bool()? {
-                    selected_idx = Some(idx);
-                    break;
-                }
-            }
-            // IFUSED
-            else if test.is_label_used_test() {
-                let label = test.label_unchecked();
-                let decision = env.symbols().is_used(label);
+            } else if test.is_label_used_test() || test.is_label_nused_test() {
+                // Label usage tests (IFUSED/IFNUSED)
+                self.evaluate_label_usage_test(test, token_adr, env, &mut request_additional_pass)?
+            } else {
+                // Label existence tests (IFDEF/IFNDEF)
+                self.evaluate_label_existence_test(test, env)?
+            };
 
-                // Add an extra pass if the test differ
-                if let Some(res) = self.if_token_adr_to_used_decision.get(&token_adr)
-                    && *res != decision
-                {
-                    request_additional_pass = true;
-                }
-
-                // replace the previously stored value
-                self.if_token_adr_to_used_decision
-                    .insert(token_adr, decision);
-
-                if decision {
-                    selected_idx = Some(idx);
-                    break;
-                }
-            }
-            // IFNUSED
-            else if test.is_label_nused_test() {
-                let label = test.label_unchecked();
-                let decision = !env.symbols().is_used(label);
-
-                // Add an extra pass if the test differ
-                if let Some(res) = self.if_token_adr_to_unused_decision.get(&token_adr)
-                    && *res != decision
-                {
-                    request_additional_pass = true;
-                }
-
-                // replace the previously stored value
-                self.if_token_adr_to_unused_decision
-                    .insert(token_adr, decision);
-
-                if decision {
-                    selected_idx = Some(idx);
-                    break;
-                }
-            }
-            // Label must exist at this specific moment
-            // IFDEF
-            else if test.is_label_exists_test() {
-                let label = test.label_unchecked();
-                if env.symbols().symbol_exist_in_current_pass(label)? {
-                    selected_idx = Some(idx);
-                    break;
-                }
-            }
-            // IFNDEF
-            // Label must not exist at this specific moment
-            else {
-                let label = test.label_unchecked();
-                if !env.symbols().symbol_exist_in_current_pass(label)? {
-                    selected_idx = Some(idx);
-                    break;
-                }
+            if test_passed {
+                selected_idx = Some(idx);
+                break;
             }
         }
 
@@ -908,10 +911,10 @@ where
             let deferred = self.token.defer_listing_output();
             if !deferred {
                 // dbg!(&self.token, deferred);
+                // SAFETY: This transmute is only safe when T is LocatedToken.
+                // This is guaranteed by the type system at the call site.
                 let outer_token = unsafe {
-                    (self.token as *const T as *const LocatedToken)
-                        .as_ref()
-                        .unwrap()
+                    std::mem::transmute::<&T, &LocatedToken>(self.token)
                 };
 
                 env.handle_output_trigger(outer_token);
@@ -1367,10 +1370,10 @@ where
             }
 
             if deferred {
+                // SAFETY: This transmute is only safe when T is LocatedToken.
+                // This is guaranteed by the type system at the call site.
                 let outer_token = unsafe {
-                    (self.token as *const T as *const LocatedToken)
-                        .as_ref()
-                        .unwrap()
+                    std::mem::transmute::<&T, &LocatedToken>(self.token)
                 };
 
                 env.handle_output_trigger(outer_token);
