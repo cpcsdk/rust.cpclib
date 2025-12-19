@@ -1,7 +1,6 @@
 use std::ops::Deref;
 
 use aho_corasick::{AhoCorasick, MatchKind};
-use compact_str::CompactString;
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, SourceLocation, Struct};
@@ -91,7 +90,7 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
         else {
             Ok(Self {
                 r#macro: r#macro.clone(),
-                args: args.to_vec()
+                args: args.to_vec(),
             })
         }
     }
@@ -108,46 +107,75 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
 
     #[inline]
     fn expand_for_basm(&self, env: &mut Env) -> Result<String, AssemblerError> {
-        //        assert_eq!(args.len(), self.nb_args());
         let listing = self.r#macro.code();
-        let all_expanded = self.args.iter().map(|argvalue| expand_param(argvalue, env)); //.collect::<Result<Vec<_>, _ >>()?; // we ensure there is no more resizing
-        // build the needed datastructures for replacement
-        // let (patterns, replacements) =
-        {
-            // let capacity = all_expanded.len();
-            // let mut patterns = Vec::with_capacity(capacity);
-            // let mut replacement = Vec::with_capacity(capacity);
 
-            let mut listing = beef::lean::Cow::borrowed(listing);
+        // Pre-expand parameters once, keeping replacement payload.
+        let mut expanded_args = Vec::with_capacity(self.args.len());
+        for (argname, argvalue) in self.r#macro.params().iter().zip(self.args.iter()) {
+            let expanded = expand_param(argvalue, env)?;
 
-            for (argname, expanded) in self.r#macro.params().iter().zip(/* & */ all_expanded) {
-                let expanded = expanded?;
-                let (pattern, replacement) = if argname.starts_with("r#")
-                    & expanded.starts_with("\"")
-                    & expanded.ends_with("\"")
-                {
-                    let mut search = CompactString::with_capacity(argname.len() - 2 + 2);
-                    search += "{";
-                    search += &argname[2..];
-                    search += "}";
-                    // remove " " before doing the expansion
-                    (search, &expanded[1..(expanded.len() - 1)])
-                }
-                else {
-                    let mut search = CompactString::with_capacity(argname.len() + 2);
-                    search += "{";
-                    search += argname;
-                    search += "}";
-                    (search, &expanded[..])
-                };
-
-                listing = listing.replace(pattern.as_str(), replacement).into();
-                // sadly this dumb way is faster than the ahocarasick one ...
+            let replacement = if argname.starts_with("r#")
+                && expanded.starts_with("\"")
+                && expanded.ends_with("\"")
+            {
+                beef::lean::Cow::owned(expanded[1..expanded.len() - 1].to_string())
             }
-            Ok(listing.into_owned())
+            else {
+                expanded
+            };
 
-            //(patterns, replacement)
+            expanded_args.push(replacement);
         }
+
+        // Simple capacity: listing + sum of all replacement lengths (overestimate, but fast)
+        let extra = expanded_args.iter().map(|v| v.len()).sum::<usize>();
+        let mut output = String::with_capacity(listing.len() + extra);
+        let mut cursor = 0;
+        while let Some(rel_open) = listing[cursor..].find('{') {
+            let open = cursor + rel_open;
+            output.push_str(&listing[cursor..open]);
+            let after_open = open + 1;
+
+            if let Some(rel_close) = listing[after_open..].find('}') {
+                let close = after_open + rel_close;
+                let key = &listing[after_open..close];
+
+                if let Some((argname, replacement)) = self
+                    .r#macro
+                    .params()
+                    .iter()
+                    .zip(expanded_args.iter())
+                    .find(|(argname, _)| {
+                        if argname.starts_with("r#") {
+                            &argname[2..] == key
+                        }
+                        else {
+                            argname.as_str() == key
+                        }
+                    })
+                {
+                    output.push_str(replacement.as_ref());
+                    cursor = close + 1;
+                    // continue scanning
+                    continue;
+                }
+
+                // Not a known placeholder; emit verbatim and keep scanning
+                output.push_str(&listing[open..=close]);
+                cursor = close + 1;
+            }
+            else {
+                // No closing brace; emit rest and finish
+                output.push_str(&listing[open..]);
+                cursor = listing.len();
+            }
+        }
+
+        if cursor < listing.len() {
+            output.push_str(&listing[cursor..]);
+        }
+
+        Ok(output)
     }
 
     #[inline]

@@ -4776,7 +4776,7 @@ fn visit_defs<E: ExprEvaluationExt>(
 }
 
 fn visit_end(_env: &mut Env) -> Result<(), AssemblerError> {
-    eprintln!("END directive is not implemented");
+    //eprintln!("END directive is not implemented");
     Ok(())
 }
 
@@ -5353,7 +5353,7 @@ where
         let reg = arg1.get_register16().unwrap();
         {
             let base = if is_inc { 0b0000_0011 } else { 0b0000_1011 };
-            let byte = base | (register16_to_code_with_sp(reg) << 4);
+            let byte = base | (register16_to_code(reg) << 4);
             bytes.push(byte);
         }
     }
@@ -6015,6 +6015,7 @@ fn assemble_ld<D: DataAccessElem + Debug>(
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
+
     let mut bytes = Bytes::new();
 
     // Destination is 8bits register
@@ -6117,7 +6118,7 @@ where
     // Destination is 16 bits register
     else if arg1.is_register16() {
         let dst = arg1.get_register16().unwrap();
-        let dst_code = register16_to_code_with_sp(dst);
+        let dst_code = register16_to_code(dst);
 
         if arg2.is_expression() {
             let exp = arg2.get_expression().unwrap();
@@ -6369,7 +6370,7 @@ where
             let reg = arg2.get_register16().unwrap();
             {
                 bytes.push(0xED);
-                bytes.push(0b0100_0011 | (register16_to_code_with_sp(reg) << 4));
+                bytes.push(0b0100_0011 | (register16_to_code(reg) << 4));
                 add_word(&mut bytes, address as _);
             }
         }
@@ -7114,6 +7115,17 @@ fn register16_to_code_with_sp(reg: Register16) -> u8 {
         Register16::De => 0b01,
         Register16::Hl => 0b10,
         Register16::Sp => 0b11,
+        _ => panic!("no mapping for {reg:?}")
+    }
+}
+
+
+fn register16_to_code(reg: Register16) -> u8 {
+    match reg {
+        Register16::Bc => 0b00,
+        Register16::De => 0b01,
+        Register16::Hl => 0b10,
+        Register16::Sp | Register16::Af=> 0b11,
         _ => panic!("no mapping for {reg:?}")
     }
 }

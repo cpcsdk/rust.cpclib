@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use camino_tempfile::NamedUtf8TempFile;
 use cpclib_basm::{build_args_parser, process};
+use cpclib_asm::assemble;
 use cpclib_common::itertools::Itertools;
 use criterion::{Criterion, criterion_group, criterion_main};
 use globset::Glob;
@@ -46,5 +47,14 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, criterion_benchmark);
+fn macro_expansion_benchmark(c: &mut Criterion) {
+    let code = std::fs::read_to_string("tests/asm/macros/macro_bench.asm")
+        .expect("Unable to read macro benchmark file");
+
+    c.bench_function("macro_expansion_~420_invocations", |b| {
+        b.iter(|| assemble(&code))
+    });
+}
+
+criterion_group!(benches, criterion_benchmark, macro_expansion_benchmark);
 criterion_main!(benches);
