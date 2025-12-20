@@ -3,7 +3,6 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Add, Sub};
 
-use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
 

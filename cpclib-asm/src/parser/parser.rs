@@ -6,7 +6,6 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
 use choice_nocase::choice_nocase;
-use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
@@ -226,7 +225,7 @@ static _DOTTED_END_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
     END_DIRECTIVE
         .iter()
         .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect_vec()
+        .collect()
 });
 
 // tODO use hash-based structures
@@ -234,14 +233,14 @@ static _DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
     STAND_ALONE_DIRECTIVE
         .iter()
         .map(|d| format!(".{}", unsafe { std::str::from_utf8_unchecked(d) }))
-        .collect_vec()
+        .collect()
 });
 
 static _DOTTED_START_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
     START_DIRECTIVE
         .iter()
         .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect_vec()
+        .collect()
 });
 
 static DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
@@ -249,21 +248,21 @@ static DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::ne
         .iter()
         .map(String::as_str)
         .map(str::as_bytes)
-        .collect_vec()
+        .collect()
 });
 static DOTTED_START_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
     _DOTTED_START_DIRECTIVE
         .iter()
         .map(String::as_str)
         .map(str::as_bytes)
-        .collect_vec()
+        .collect()
 });
 pub static DOTTED_END_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
     _DOTTED_END_DIRECTIVE
         .iter()
         .map(String::as_str)
         .map(str::as_bytes)
-        .collect_vec()
+        .collect()
 });
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
@@ -1977,7 +1976,7 @@ MEND";
         assert!(res.is_ok(), "{:?}", &res);
 
         assert_eq!(
-            r#in.iter().map(|t| t.to_token().into_owned()).collect_vec(),
+            r#in.iter().map(|t| t.to_token().into_owned()).collect::<Vec<_>>(),
             vec![Token::new_opcode(
                 Mnemonic::Ld,
                 Some(Register8::C.into()),

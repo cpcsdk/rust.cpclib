@@ -541,7 +541,7 @@ pub mod mode0 {
 
     /// Convert a vector of bytes as a vector of pens
     pub fn bytes_to_pens(bytes: &[u8]) -> Vec<Pen> {
-        super::bytes_to_pens(bytes, crate::image::Mode::Zero).collect_vec()
+        super::bytes_to_pens(bytes, crate::image::Mode::Zero).collect()
     }
 
     /// Returns a pen that corresponds to first argument in mode 0 and second in mode3

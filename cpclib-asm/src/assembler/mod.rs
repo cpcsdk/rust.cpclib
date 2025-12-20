@@ -921,12 +921,12 @@ impl Env {
     }
 
     fn retrieve_options_symbols(&mut self) {
-        let symbols = self
+        let symbols: Vec<_> = self
             .options()
             .symbols()
             .available_symbols()
             .cloned()
-            .collect_vec();
+            .collect();
         for symbol in symbols {
             let value = self
                 .options()
@@ -2397,7 +2397,7 @@ impl Env {
             .iter()
             .map(|reg| assemble_push(reg))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
-        let result = result.into_iter().flatten().collect_vec();
+        let result: Vec<u8> = result.into_iter().flatten().collect();
         self.output_bytes(&result)
     }
 
@@ -2406,7 +2406,7 @@ impl Env {
             .iter()
             .map(|reg| assemble_pop(reg))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
-        let result = result.into_iter().flatten().collect_vec();
+        let result: Vec<u8> = result.into_iter().flatten().collect();
         self.output_bytes(&result)
     }
 
@@ -3321,7 +3321,7 @@ impl Env {
         if could_display_warning_message {
             self.add_warning(
                 AssemblerWarning::AssemblingError{
-                    msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".to_owned()
+                    msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".into()
                 }
             );
         }
@@ -3472,7 +3472,7 @@ impl Env {
             return dbg!(Err(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
-                msg: "Return value is alread set up".to_owned()
+                msg: "Return value is alread set up".into()
             }));
         }
         self.return_value = Some(self.resolve_expr_must_never_fail(e)?);
@@ -3602,7 +3602,7 @@ macro_rules! visit_token_impl {
                 $env.visit_basic(
                     variables
                         .as_ref()
-                        .map(|l| l.iter().map(|i| i).collect_vec()),
+                        .map(|l| l.iter().map(|i| i).collect()),
                     hidden_lines.as_ref(),
                     code
                 )
@@ -4985,8 +4985,8 @@ impl Env {
             return Err(e.into());
         }
 
-        let hidden_lines =
-            hidden_lines.map(|r| r.unwrap().into_iter().map(|e| e as u16).collect_vec());
+        let hidden_lines: Option<Vec<u16>> =
+            hidden_lines.map(|r| r.unwrap().into_iter().map(|e| e as u16).collect());
 
         // Build the final basic code by replacing variables by value
         // Hexadecimal is used to ensure a consistent 2 bytes representation
@@ -6929,7 +6929,7 @@ where
                 {
                     if reg1 != reg2 {
                         return Err(AssemblerError::InvalidArgument {
-                            msg: "Unable to add different indexed registers".to_owned()
+                            msg: "Unable to add different indexed registers".into()
                         });
                     }
 

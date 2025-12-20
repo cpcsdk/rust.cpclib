@@ -1064,7 +1064,7 @@ where
                     Some(ProcessedTokenState::Incbin(IncbinState { contents })) => {
                         if cfg!(target_arch = "wasm32") {
                             return Err(AssemblerError::AssemblingError { msg:
-                                "INCBIN-like directives are not allowed in a web-based assembling.".to_owned()
+                                "INCBIN-like directives are not allowed in a web-based assembling.".into()
                             });
                         }
 
@@ -1240,7 +1240,7 @@ where
                             .pages_info
                             .iter()
                             .map(|ti| ti.print_commands().len())
-                            .collect_vec();
+                            .collect();
 
                         // Process tokens - if error occurs, we still need to pop_seed (see cleanup below)
                         let process_result = state

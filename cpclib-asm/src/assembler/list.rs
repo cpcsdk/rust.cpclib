@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::ExprResult;
 use substring::Substring;
@@ -219,7 +218,7 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
         ExprResult::List(l) => {
             // https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
             fn argsort<T: Ord>(data: &[T]) -> Vec<ExprResult> {
-                let mut indices = (0..data.len()).map(ExprResult::from).collect_vec();
+                let mut indices = (0..data.len()).map(ExprResult::from).collect::<Vec<_>>();
                 indices.sort_by_key(|i| &data[i.int().unwrap() as usize]);
                 indices
             }

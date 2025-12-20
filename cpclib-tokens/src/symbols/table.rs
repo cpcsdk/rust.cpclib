@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
-use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::strsim;
 use delegate::delegate;
@@ -182,7 +181,7 @@ struct ModuleSymbolTableIterator<'t> {
 impl<'t> ModuleSymbolTableIterator<'t> {
     fn new(table: &'t ModuleSymbolTable) -> Self {
         Self {
-            others: table.children.values().collect_vec(),
+            others: table.children.values().collect(),
             current: table.current.iter()
         }
     }
@@ -435,7 +434,7 @@ impl SymbolsTable {
             .split(':')
             .map(|s| s.to_owned())
             .map(|s| s.into())
-            .collect_vec()
+            .collect()
     }
 }
 
@@ -445,12 +444,9 @@ impl SymbolsTableTrait for SymbolsTable {
         self.map
             .iter()
             .filter(|(_k, v)| {
-                match v.value() {
-                    Value::Expr(_) | Value::Address(_) => true,
-                    _ => false
-                }
+                matches!(v.value(), Value::Expr(_) | Value::Address(_))
             })
-            .collect_vec()
+            .collect()
     }
 
     #[inline]
