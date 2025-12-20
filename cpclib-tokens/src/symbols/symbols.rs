@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
-use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
@@ -36,7 +35,7 @@ impl Struct {
             content: content
                 .iter()
                 .map(|(s, t)| (SmolStr::from(s.as_ref()), t.as_simple_token().into_owned()))
-                .collect_vec(),
+                .collect::<Vec<_>>(),
             source
         }
     }
@@ -58,7 +57,7 @@ impl Struct {
         self.content
             .iter()
             .map(|(n, t)| (n.as_ref(), Self::field_size(t, table)))
-            .collect_vec()
+            .collect::<Vec<_>>()
     }
 
     /// Get the len of any field
@@ -76,7 +75,7 @@ impl Struct {
 
     /// Get the len of the structure
     pub fn len<T: SymbolsTableTrait>(&self, table: &T) -> i32 {
-        self.fields_size(table).iter().map(|(_, s)| *s).sum()
+        self.content.iter().map(|(_, t)| Self::field_size(t, table)).sum()
     }
 
     pub fn nb_args(&self) -> usize {
@@ -235,17 +234,15 @@ pub enum SymbolFor {
 
 impl Value {
     pub fn expr(&self) -> Option<&ExprResult> {
-        match self {
-            Value::Expr(e) => Some(e),
-            _ => None
+        if let Value::Expr(e) = self {
+            Some(e)
+        } else {
+            None
         }
     }
 
     pub fn is_expr(&self) -> bool {
-        match self {
-            Value::Expr(_) => true,
-            _ => false
-        }
+        matches!(self, Value::Expr(_))
     }
 
     pub fn integer(&self) -> Option<i32> {
@@ -257,30 +254,34 @@ impl Value {
     }
 
     pub fn address(&self) -> Option<&PhysicalAddress> {
-        match self {
-            Value::Address(addr) => Some(addr),
-            _ => None
+        if let Value::Address(addr) = self {
+            Some(addr)
+        } else {
+            None
         }
     }
 
     pub fn counter(&self) -> Option<i32> {
-        match self {
-            Value::Counter(i) => Some(*i),
-            _ => None
+        if let Value::Counter(i) = self {
+            Some(*i)
+        } else {
+            None
         }
     }
 
     pub fn r#macro(&self) -> Option<&Macro> {
-        match self {
-            Value::Macro(m) => Some(m),
-            _ => None
+        if let Value::Macro(m) = self {
+            Some(m)
+        } else {
+            None
         }
     }
 
     pub fn r#struct(&self) -> Option<&Struct> {
-        match self {
-            Value::Struct(m) => Some(m),
-            _ => None
+        if let Value::Struct(m) = self {
+            Some(m)
+        } else {
+            None
         }
     }
 }
@@ -306,9 +307,9 @@ impl From<Macro> for Value {
 impl<I: Into<ExprResult>> From<I> for Value {
     fn from(i: I) -> Self {
         let value = i.into();
-        match &value {
-            ExprResult::String(s) => Value::String(s.clone()),
-            _ => Value::Expr(value)
+        match value {
+            ExprResult::String(s) => Value::String(s),
+            v => Value::Expr(v)
         }
     }
 }
@@ -318,13 +319,13 @@ pub struct Symbol(SmolStr);
 
 impl Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.0)
+        write!(f, "{}", self.0.as_str())
     }
 }
 
 impl From<&str> for Symbol {
     fn from(s: &str) -> Symbol {
-        s.to_owned().into()
+        Symbol(SmolStr::from(s))
     }
 }
 
@@ -336,7 +337,7 @@ impl From<String> for Symbol {
 
 impl From<&String> for Symbol {
     fn from(s: &String) -> Symbol {
-        Symbol(s.into())
+        Symbol(SmolStr::from(s.as_str()))
     }
 }
 

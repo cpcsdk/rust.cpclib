@@ -449,17 +449,11 @@ impl ExprElement for Expr {
     }
 
     fn is_negated(&self) -> bool {
-        match self {
-            Expr::UnaryOperation(UnaryOperation::Neg, _) => true,
-            _ => false
-        }
+        matches!(self, Expr::UnaryOperation(UnaryOperation::Neg, _))
     }
 
     fn is_relative(&self) -> bool {
-        match self {
-            Expr::RelativeDelta(_) => true,
-            _ => false
-        }
+        matches!(self, Expr::RelativeDelta(_))
     }
 
     fn relative_delta(&self) -> i8 {
@@ -504,10 +498,7 @@ impl ExprElement for Expr {
     }
 
     fn is_value(&self) -> bool {
-        match self {
-            Self::Value(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Value(_))
     }
 
     fn value(&self) -> i32 {
@@ -518,10 +509,7 @@ impl ExprElement for Expr {
     }
 
     fn is_char(&self) -> bool {
-        match self {
-            Self::Char(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Char(_))
     }
 
     fn char(&self) -> char {
@@ -532,10 +520,7 @@ impl ExprElement for Expr {
     }
 
     fn is_bool(&self) -> bool {
-        match self {
-            Self::Bool(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Bool(_))
     }
 
     fn bool(&self) -> bool {
@@ -546,10 +531,7 @@ impl ExprElement for Expr {
     }
 
     fn is_string(&self) -> bool {
-        match self {
-            Self::String(_) => true,
-            _ => false
-        }
+        matches!(self, Self::String(_))
     }
 
     fn string(&self) -> &str {
@@ -560,10 +542,7 @@ impl ExprElement for Expr {
     }
 
     fn is_float(&self) -> bool {
-        match self {
-            Self::Float(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Float(_))
     }
 
     fn float(&self) -> OrderedFloat<f64> {
@@ -574,10 +553,7 @@ impl ExprElement for Expr {
     }
 
     fn is_list(&self) -> bool {
-        match self {
-            Self::List(_) => true,
-            _ => false
-        }
+        matches!(self, Self::List(_))
     }
 
     fn list(&self) -> &[Self] {
@@ -588,10 +564,7 @@ impl ExprElement for Expr {
     }
 
     fn is_label(&self) -> bool {
-        match self {
-            Self::Label(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Label(_))
     }
 
     fn label(&self) -> &str {
@@ -603,10 +576,7 @@ impl ExprElement for Expr {
     }
 
     fn is_token_operation(&self) -> bool {
-        match self {
-            Self::UnaryTokenOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryTokenOperation(..))
     }
 
     fn token_operation(&self) -> &UnaryTokenOperation {
@@ -624,10 +594,7 @@ impl ExprElement for Expr {
     }
 
     fn is_prefix_label(&self) -> bool {
-        match self {
-            Self::PrefixedLabel(..) => true,
-            _ => false
-        }
+        matches!(self, Self::PrefixedLabel(..))
     }
 
     fn prefix(&self) -> &LabelPrefix {
@@ -638,10 +605,7 @@ impl ExprElement for Expr {
     }
 
     fn is_binary_operation(&self) -> bool {
-        match self {
-            Self::BinaryOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::BinaryOperation(..))
     }
 
     fn binary_operation(&self) -> BinaryOperation {
@@ -652,10 +616,7 @@ impl ExprElement for Expr {
     }
 
     fn is_unary_operation(&self) -> bool {
-        match self {
-            Self::UnaryOperation(..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryOperation(..))
     }
 
     fn unary_operation(&self) -> UnaryOperation {
@@ -666,10 +627,7 @@ impl ExprElement for Expr {
     }
 
     fn is_unary_function(&self) -> bool {
-        match self {
-            Self::UnaryFunction(..) => true,
-            _ => false
-        }
+        matches!(self, Self::UnaryFunction(..))
     }
 
     fn unary_function(&self) -> UnaryFunction {
@@ -680,10 +638,7 @@ impl ExprElement for Expr {
     }
 
     fn is_binary_function(&self) -> bool {
-        match self {
-            Self::BinaryFunction(..) => true,
-            _ => false
-        }
+        matches!(self, Self::BinaryFunction(..))
     }
 
     fn binary_function(&self) -> BinaryFunction {
@@ -694,24 +649,15 @@ impl ExprElement for Expr {
     }
 
     fn is_paren(&self) -> bool {
-        match self {
-            Self::Paren(..) => true,
-            _ => false
-        }
+        matches!(self, Self::Paren(..))
     }
 
     fn is_rnd(&self) -> bool {
-        match self {
-            Self::Rnd => true,
-            _ => false
-        }
+        matches!(self, Self::Rnd)
     }
 
     fn is_any_function(&self) -> bool {
-        match self {
-            Self::AnyFunction(..) => true,
-            _ => false
-        }
+        matches!(self, Self::AnyFunction(..))
     }
 
     fn function_name(&self) -> &str {
@@ -998,7 +944,7 @@ impl From<char> for ExprResult {
 
 impl<T: Into<ExprResult> + Clone> From<&[T]> for ExprResult {
     fn from(slice: &[T]) -> Self {
-        ExprResult::List(slice.iter().cloned().map(|e| e.into()).collect_vec())
+        ExprResult::List(slice.iter().cloned().map(|e| e.into()).collect())
     }
 }
 
@@ -1202,7 +1148,7 @@ impl ExprResult {
         let l = (0..self.matrix_height())
             .map(|row| self.matrix_rows()[row].list_get(x))
             .cloned()
-            .collect_vec();
+            .collect();
         ExprResult::List(l)
     }
 
@@ -1227,7 +1173,7 @@ impl ExprResult {
                         cols[col_idx].push(col_val.clone())
                     }
                 }
-                let cols = cols.into_iter().map(ExprResult::List).collect_vec();
+                let cols = cols.into_iter().map(ExprResult::List).collect();
                 ExprResult::Matrix {
                     content: cols,
                     width: *height,
@@ -1240,7 +1186,7 @@ impl ExprResult {
 
     pub fn matrix_cols(&self) -> Vec<ExprResult> {
         let t = self.matrix_transpose();
-        t.matrix_rows().iter().cloned().collect_vec()
+        t.matrix_rows().iter().cloned().collect()
     }
 }
 

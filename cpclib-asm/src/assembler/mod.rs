@@ -235,38 +235,23 @@ impl fmt::Display for AssemblingPass {
 #[allow(unused)]
 impl AssemblingPass {
     fn is_uninitialized(self) -> bool {
-        match self {
-            AssemblingPass::Uninitialized => true,
-            _ => false
-        }
+        matches!(self, AssemblingPass::Uninitialized)
     }
 
     pub fn is_finished(self) -> bool {
-        match self {
-            AssemblingPass::Finished(_) => true,
-            _ => false
-        }
+        matches!(self, AssemblingPass::Finished(_))
     }
 
     pub fn is_first_pass(self) -> bool {
-        match self {
-            AssemblingPass::FirstPass => true,
-            _ => false
-        }
+        matches!(self, AssemblingPass::FirstPass)
     }
 
     pub fn is_second_pass(self) -> bool {
-        match self {
-            AssemblingPass::SecondPass(_) => true,
-            _ => false
-        }
+        matches!(self, AssemblingPass::SecondPass(_))
     }
 
     pub fn is_listing_pass(self) -> bool {
-        match self {
-            AssemblingPass::ListingPass => true,
-            _ => false
-        }
+        matches!(self, AssemblingPass::ListingPass)
     }
 
     pub fn nb_passes(&self) -> Option<usize> {
@@ -392,7 +377,7 @@ impl CharsetEncoding {
     }
 
     pub fn transform_string(&self, s: &str) -> Vec<u8> {
-        s.chars().map(|c| self.transform_char(c)).collect_vec()
+        s.chars().map(|c| self.transform_char(c)).collect()
     }
 }
 
@@ -1419,8 +1404,8 @@ impl Env {
 
         #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
         let iter = {
-            let can_save_in_parallel = self.banks.iter().all(|b| b.1.can_save_in_parallel());
-            CondIterator::new(&self.banks, can_save_in_parallel)
+            let can_save_in_parallel = self.free_banks.iter().all(|b| b.1.can_save_in_parallel());
+            CondIterator::new(&self.free_banks, can_save_in_parallel)
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.free_banks.pages.iter();
@@ -2148,7 +2133,7 @@ impl Env {
                 let cond = cond.string()?;
                 brk.condition.replace(String127::try_new(cond).map_err(|_| {
                     let e = AssemblerError::AssemblingError {
-                        msg: "Condition is too long".to_owned()
+                        msg: "Condition is too long".into()
                     };
                     if condition.has_span() {
                         e.locate(condition.span().clone())
@@ -2163,7 +2148,7 @@ impl Env {
                 let n = n.string()?;
                 brk.name.replace(String127::try_new(n).map_err(|_| {
                     let e = AssemblerError::AssemblingError {
-                        msg: "Name is too long".to_owned()
+                        msg: "Name is too long".into()
                     };
                     if name.has_span() {
                         e.locate(name.span().clone())
@@ -2988,7 +2973,7 @@ impl Env {
     ) -> Result<(), AssemblerError> {
         if cfg!(target_arch = "wasm32") {
             return Err(AssemblerError::AssemblingError {
-                msg: "SAVE directive is not allowed in a web-based assembling.".to_owned()
+                msg: "SAVE directive is not allowed in a web-based assembling.".into()
             });
         }
 
