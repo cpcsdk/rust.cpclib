@@ -83,7 +83,7 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     )
     .parse_next(input)?;
 
-    let mut cases_listing = Vec::new();
+    let mut cases_listing = Vec::with_capacity(4);
     let mut default_listing = None;
 
     loop {
@@ -2028,7 +2028,7 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
     let if_clone = *input;
     let if_start = input.checkpoint();
 
-    let mut conditions = Vec::new();
+    let mut conditions = Vec::with_capacity(4);
     let mut else_clause = None;
 
     loop {

@@ -27,6 +27,7 @@ remain.workspace = true
 serde.workspace = true
 regex.workspace = true
 beef = "0.5.2"
+ahash = "0.8"
 
 [build-dependencies]
 built.workspace = true

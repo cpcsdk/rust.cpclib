@@ -2202,6 +2202,7 @@ dependencies = [
  "indicatif",
  "libc",
  "line-span",
+ "memchr",
  "ouroboros",
  "paste",
  "prettydiff",
@@ -2586,6 +2587,7 @@ dependencies = [
 name = "cpclib-tokens"
 version = "0.11.0"
 dependencies = [
+ "ahash 0.8.12",
  "beef",
  "built 0.7.7",
  "cfg-if",

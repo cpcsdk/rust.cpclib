@@ -848,7 +848,7 @@ impl Env {
 /// Namespace handling
 impl Env {
     fn enter_namespace(&mut self, namespace: &str) -> Result<(), AssemblerError> {
-        if namespace.contains(".") {
+        if namespace.as_bytes().contains(&b'.') {
             return Err(AssemblerError::AssemblingError {
                 msg: format!("Invalid namespace \"{namespace}\"")
             });
@@ -2393,20 +2393,20 @@ impl Env {
     }
 
     fn visit_multi_pushes<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), AssemblerError> {
-        let result = regs
-            .iter()
-            .map(|reg| assemble_push(reg))
-            .collect::<Result<Vec<_>, AssemblerError>>()?;
-        let result: Vec<u8> = result.into_iter().flatten().collect();
+        // pre-size assuming 2 bytes per push; actual size may vary slightly
+        let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
+        for bytes in regs.iter().map(assemble_push) {
+            result.extend_from_slice(&bytes?);
+        }
         self.output_bytes(&result)
     }
 
     fn visit_multi_pops<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), AssemblerError> {
-        let result = regs
-            .iter()
-            .map(|reg| assemble_pop(reg))
-            .collect::<Result<Vec<_>, AssemblerError>>()?;
-        let result: Vec<u8> = result.into_iter().flatten().collect();
+        // pre-size assuming 2 bytes per pop; actual size may vary slightly
+        let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
+        for bytes in regs.iter().map(assemble_pop) {
+            result.extend_from_slice(&bytes?);
+        }
         self.output_bytes(&result)
     }
 
@@ -3602,7 +3602,7 @@ macro_rules! visit_token_impl {
                 $env.visit_basic(
                     variables
                         .as_ref()
-                        .map(|l| l.iter().map(|i| i).collect()),
+                        .map(|l| l.iter().collect()),
                     hidden_lines.as_ref(),
                     code
                 )

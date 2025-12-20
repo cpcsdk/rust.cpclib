@@ -4,6 +4,8 @@ use std::sync::Arc;
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::winnow::Parser;
+use cpclib_common::smallvec::SmallVec;
+use memchr::memchr;
 use cpclib_tokens::symbols::{Macro, SourceLocation, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
@@ -39,7 +41,8 @@ fn strip_raw_string_quotes<'a>(
 
 fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
     let listing = r#macro.code();
-    let mut segments = Vec::new();
+    // Preallocate small buffer to avoid heap for common cases
+    let mut segments: SmallVec<[MacroSegment; 8]> = SmallVec::with_capacity(listing.len() / 8);
     let mut cursor = 0;
 
     // Build param index lookup map for O(1) lookups
@@ -54,7 +57,8 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
         })
         .collect();
 
-    while let Some(rel_open) = listing[cursor..].find('{') {
+    let bytes = listing.as_bytes();
+    while let Some(rel_open) = memchr(b'{', &bytes[cursor..]) {
         let open = cursor + rel_open;
         if open > cursor {
             segments.push(MacroSegment::Lit {
@@ -64,7 +68,7 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
         }
 
         let after_open = open + 1;
-        if let Some(rel_close) = listing[after_open..].find('}') {
+        if let Some(rel_close) = memchr(b'}', &bytes[after_open..]) {
             let close = after_open + rel_close;
             let key = &listing[after_open..close];
 
@@ -98,7 +102,7 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
         });
     }
 
-    segments
+    segments.into_vec()
 }
 
 #[inline]

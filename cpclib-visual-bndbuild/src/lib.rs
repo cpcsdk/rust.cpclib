@@ -650,7 +650,10 @@ impl eframe::App for BndBuildApp {
                 && self
                     .builder_and_layers
                     .as_ref()
-                    .map(|bnl| bnl.borrow_owner().outdated(watched, None).unwrap_or(false))
+                    .map(|bnl| bnl
+                        .borrow_owner()
+                        .outdated(&cpclib_bndbuild::app::WatchState::WatchFirstRound, watched)
+                        .unwrap_or(false))
                     .unwrap_or(false)
             {
                 self.watch_logs

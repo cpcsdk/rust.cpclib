@@ -740,19 +740,18 @@ where
         let iter = tokens.iter();
 
         // get filename of files that will be read in parallel
-        let include_fnames = iter
-            .filter(|t| t.include_is_standard_include())
-            .flat_map(|t| {
+        let mut include_fnames: Vec<String> = Vec::with_capacity(tokens.len());
+        include_fnames.extend(
+            iter.filter(|t| t.include_is_standard_include()).flat_map(|t| {
                 let fname = t.include_fname();
                 let fname = env.build_fname(fname)?;
                 get_filename_to_read(fname, env.options().parse_options(), Some(env))
             })
-            .collect::<Vec<_>>();
-        let include_fnames = include_fnames.iter().map(|t| progress::normalize(t));
+            .map(|path| progress::normalize(&path).to_string())
+        );
 
-        // inform the progress bar
-        // add all fnames in one time
-        Progress::progress().add_parses(include_fnames);
+        // inform the progress bar in one go
+        Progress::progress().add_parses(include_fnames.iter().map(String::as_str));
     }
 
     // the files will be read here while token are built

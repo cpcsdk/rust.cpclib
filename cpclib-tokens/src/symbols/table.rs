@@ -1,4 +1,5 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use ahash::AHashMap as HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
@@ -692,12 +693,17 @@ impl SymbolsTable {
     {
         let mut global = self.namespace_stack.clone();
         global.push(symbol.into());
-        let joined = global
-            .iter()
-            .map(|s| s.to_smolstr().to_string())
-            .collect::<Vec<_>>()
-            .join(".");
-        joined.into()
+        // Precompute capacity for final string: sum of segment lengths + separators dots
+        let seg_lens: usize = global.iter().map(|s| s.to_smolstr().len()).sum();
+        let separators = if global.is_empty() { 0 } else { global.len() - 1 };
+        let mut acc = String::with_capacity(seg_lens + separators);
+        for (i, s) in global.iter().enumerate() {
+            acc.push_str(s.to_smolstr().as_str());
+            if i + 1 < global.len() {
+                acc.push('.');
+            }
+        }
+        acc.into()
     }
 
     #[inline]

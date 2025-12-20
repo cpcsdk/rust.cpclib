@@ -73,6 +73,7 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
 // Strip the workspace prefix inside the test so the test code itself doesn't contain
 // the workspace path literal.
 #[test_generator::test_resources("cpclib-rasm-basm-tests/tests/asm/*.rasm")]
+#[cfg(not(windows))]
 fn compare_basm_and_rasm_outputs_per_file(rasm: &str) {
     // working dir is crate root (cpclib-rasm-basm-tests)
     let asm_dir = Path::new("../cpclib-basm/tests/asm");

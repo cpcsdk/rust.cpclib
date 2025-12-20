@@ -1825,7 +1825,7 @@ endif"
                     "
         .replace("\u{C2}\u{A0}", " ");
         let code: &'static str = unsafe { std::mem::transmute(code.as_str()) };
-        let mut vec = Vec::new();
+        let mut vec = Vec::with_capacity(8);
         let res: TestResult<()> = parse_test(repeat(2, parse_z80_line_complete(&mut vec)), code);
         assert!(res.is_ok(), "{:?}", &res);
     }
@@ -1994,7 +1994,7 @@ MEND";
 
     #[test]
     fn test_line() {
-        let mut tokens = Vec::new();
+        let mut tokens = Vec::with_capacity(16);
 
         let res = parse_test(parse_line(&mut tokens), " hello   ");
         assert!(res.is_ok(), "{:?}", &res);
@@ -2321,7 +2321,7 @@ MEND";
             dbg!("parse_instruction");
             assert!(dbg!(parse_test(parse_token, code)).is_ok());
             dbg!("parse_line");
-            let mut tokens = Vec::new();
+            let mut tokens = Vec::with_capacity(16);
             assert!(dbg!(parse_test(parse_line(&mut tokens), code)).is_ok());
         }
     }
@@ -2358,7 +2358,7 @@ MEND";
 
     #[test]
     fn test_parse_macro() {
-        let mut tokens = Vec::new();
+        let mut tokens = Vec::with_capacity(16);
         let r#macro = "macro bankm
                 call xxx
             endm;";

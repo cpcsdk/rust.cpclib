@@ -288,42 +288,55 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         },
 
         (ExprResult::String(s1), ExprResult::String(s2)) => {
-            let s1 = s1.to_string() + fix_string(s2.clone()).as_str();
-            Ok(ExprResult::String(s1.into()))
+            let mut result = String::with_capacity(s1.len() + s2.len());
+            result.push_str(&s1);
+            result.push_str(&fix_string(s2.clone()));
+            Ok(ExprResult::String(result.into()))
         },
         (ExprResult::String(s1), ExprResult::List(l)) => {
-            let mut s1 = s1.to_string() + "[";
+            // Pre-estimate capacity
+            let capacity = s1.len() + 2 + l.len() * 10; // rough estimate
+            let mut result = String::with_capacity(capacity);
+            result.push_str(&s1);
+            result.push('[');
 
-            for (i, e) in l.iter().cloned().enumerate() {
+            for (i, e) in l.iter().enumerate() {
                 if i != 0 {
-                    s1 += ","
+                    result.push(',');
                 }
-
-                s1 = string_push(s1.into(), e)?.string().unwrap().to_string();
+                // Directly append without intermediate String allocation
+                match string_push(result.into(), e.clone())? {
+                    ExprResult::String(s) => result = s.to_string(),
+                    _ => unreachable!()
+                }
             }
 
-            s1 += "]";
-            Ok(ExprResult::String(s1.into()))
+            result.push(']');
+            Ok(ExprResult::String(result.into()))
         },
 
         (ExprResult::String(s1), ExprResult::Float(s2)) => {
-            let mut s1 = s1.to_string();
-            s1 += &s2.into_inner().to_string();
-            Ok(ExprResult::String(s1.into()))
+            let s2_str = s2.into_inner().to_string();
+            let mut result = String::with_capacity(s1.len() + s2_str.len());
+            result.push_str(&s1);
+            result.push_str(&s2_str);
+            Ok(ExprResult::String(result.into()))
         },
 
         (ExprResult::String(s1), ExprResult::Value(s2)) => {
-            let mut s1 = s1.to_string();
-
-            s1 += &s2.to_string();
-            Ok(ExprResult::String(s1.into()))
+            let s2_str = s2.to_string();
+            let mut result = String::with_capacity(s1.len() + s2_str.len());
+            result.push_str(&s1);
+            result.push_str(&s2_str);
+            Ok(ExprResult::String(result.into()))
         },
 
         (ExprResult::String(s1), ExprResult::Bool(s2)) => {
-            let mut s1 = s1.to_string();
-
-            s1 += &s2.to_string();
-            Ok(ExprResult::String(s1.into()))
+            let s2_str = s2.to_string();
+            let mut result = String::with_capacity(s1.len() + s2_str.len());
+            result.push_str(&s1);
+            result.push_str(&s2_str);
+            Ok(ExprResult::String(result.into()))
         },
 
         _ => {
