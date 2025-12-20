@@ -97,7 +97,7 @@ fn expect_warning_but_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+    let content = std::fs::read_to_string(&real_fname["cpclib-basm/".len()..])
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
@@ -195,11 +195,9 @@ fn expect_one_line_success(real_fname: &str) {
         .split("\n")
         .map(|l| RE1.replace(l, "").replace('\r', ""))
         .join(":");
-    dbg!(&content);
     while RE2.is_match(&content) {
         content = RE2.replace_all(&content, ":").to_string();
     }
-    dbg!(&content);
 
     let content = if content.starts_with(':') {
         &content[1..]
@@ -207,7 +205,6 @@ fn expect_one_line_success(real_fname: &str) {
     else {
         &content[..]
     };
-    dbg!(&content);
 
     let content = if let Some(':') = content.chars().last() {
         &content[..content.len() - 1]
@@ -216,11 +213,7 @@ fn expect_one_line_success(real_fname: &str) {
         content
     };
 
-    dbg!(&content);
-
     let content = content.replace("\\:", "");
-
-    dbg!(&content);
 
     if !content.is_empty() {
         let input_file =
@@ -271,7 +264,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+    let content = std::fs::read_to_string(&real_fname["cpclib-basm/".len()..])
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)([^\\])\n").unwrap());
@@ -282,7 +275,10 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     let content = RE2.replace_all(&content, "\\\n\\\n\\\n");
     let content = content.as_ref();
 
-    eprintln!("{}", &content);
+    // Optional verbose dump: set BASM_TEST_DEBUG=1 to enable
+    if std::env::var("BASM_TEST_DEBUG").is_ok() {
+        eprintln!("{}", &content);
+    }
 
     let input_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
@@ -403,7 +399,10 @@ fn expect_success(fname: &str) {
 
     manual_cleanup();
 
-    eprintln!("{}", fname);
+    // Optional verbose: set BASM_TEST_DEBUG=1 to print file under test
+    if std::env::var("BASM_TEST_DEBUG").is_ok() {
+        eprintln!("{}", fname);
+    }
 
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
 

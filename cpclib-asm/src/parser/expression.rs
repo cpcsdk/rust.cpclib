@@ -1109,9 +1109,9 @@ where
         let start = input.checkpoint();
 
         enum CollectedString {
-            Owned(&'static [u8], SmallVec<[u8; 64]>),
+            Owned(SmallVec<[u8; 64]>),
             Borrowed(&'static [u8], usize)
-        };
+        }
 
         impl CollectedString {
             #[inline]
@@ -1122,8 +1122,8 @@ where
             #[inline]
             fn extend_from_input_slice(&mut self, slice: &[u8]) {
                 match self {
-                    CollectedString::Owned(i, vec) => vec.extend_from_slice(slice),
-                    CollectedString::Borrowed(i, len) => {
+                    CollectedString::Owned(vec) => vec.extend_from_slice(slice),
+                    CollectedString::Borrowed(_, len) => {
                         *len += slice.len();
                     }
                 }
@@ -1132,20 +1132,20 @@ where
             #[inline]
             fn extend_from_slice(&mut self, slice: &[u8]) {
                 match self {
-                    CollectedString::Owned(i, vec) => vec.extend_from_slice(slice),
-                    CollectedString::Borrowed(i, len) => unreachable!()
+                    CollectedString::Owned(vec) => vec.extend_from_slice(slice),
+                    CollectedString::Borrowed(_, _) => unreachable!()
                 }
             }
 
             #[inline]
             fn extend_with_char(&mut self, c: u8) {
                 match self {
-                    CollectedString::Owned(i, vec) => vec.push(c),
+                    CollectedString::Owned(vec) => vec.push(c),
                     CollectedString::Borrowed(i, len) => {
                         let mut vec = SmallVec::with_capacity(*len + 1);
                         vec.extend_from_slice(&i[..*len]);
                         vec.push(c);
-                        *self = CollectedString::Owned(i, vec);
+                        *self = CollectedString::Owned(vec);
                     }
                 }
             }
@@ -1153,8 +1153,8 @@ where
             #[inline]
             fn increment_borrowed_length(&mut self) {
                 match self {
-                    CollectedString::Owned(i, _) => unreachable!(),
-                    CollectedString::Borrowed(i, len) => {
+                    CollectedString::Owned(..) => unreachable!(),
+                    CollectedString::Borrowed(_, len) => {
                         *len += 1;
                     }
                 }
@@ -1163,7 +1163,7 @@ where
             #[inline]
             fn as_slice(&self) -> &[u8] {
                 match self {
-                    CollectedString::Owned(i, vec) => vec.as_slice(),
+                    CollectedString::Owned(vec) => vec.as_slice(),
                     CollectedString::Borrowed(i, len) => &i[..*len]
                 }
             }
@@ -1172,12 +1172,12 @@ where
             // by construction, the strings are valid utf8, so no need to check
             fn into_string(self) -> String {
                 match self {
-                    CollectedString::Owned(i, vec) => {
+                    CollectedString::Owned(vec) => {
                         let vec = vec.into_vec();
                         unsafe { String::from_utf8_unchecked(vec) }
                     },
                     CollectedString::Borrowed(i, len) => unsafe {
-                        String::from_utf8_unchecked((i[..len].to_vec()))
+                        String::from_utf8_unchecked(i[..len].to_vec())
                     }
                 }
             }
@@ -1195,7 +1195,7 @@ where
                 if let CollectedString::Borrowed(i, len) = self {
                     let mut vec: SmallVec<[u8; 64]> = SmallVec::with_capacity(len + 16);
                     vec.extend_from_slice(&i[..len]);
-                    CollectedString::Owned(i, vec)
+                    CollectedString::Owned(vec)
                 }
                 else {
                     self

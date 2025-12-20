@@ -50,8 +50,8 @@ macro_rules! import_rasm_success {
 	   );+
 		;
 	)  => {$(
-				#[ignore]
-				#[test]
+                #[cfg(feature = "rasm-autotests")]
+                #[test]
 				fn $name() {
 					let mut verif = VerifyOutput::default();
 					$(
@@ -69,9 +69,9 @@ macro_rules! import_rasm_success {
 }
 
 macro_rules! import_rasm_failure {
-	($ (#define $name:ident $($code:expr)+);+ ;)  => {$(
-				#[ignore]
-				#[test]
+    ($ (#define $name:ident $($code:expr)+);+ ;)  => {$(
+                #[cfg(feature = "rasm-autotests")]
+                #[test]
 				fn $name() {
 					assemble_failure(concat!($($code),+), VerifyOutput::default())
 				}

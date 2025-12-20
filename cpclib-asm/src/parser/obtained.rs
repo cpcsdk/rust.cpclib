@@ -733,7 +733,9 @@ impl MacroParamElement for LocatedMacroParam {
     fn is_single(&self) -> bool {
         matches!(
             self,
-            LocatedMacroParam::RawArgument(..) | LocatedMacroParam::EvaluatedArgument(..)
+            LocatedMacroParam::RawArgument(..)
+                | LocatedMacroParam::EvaluatedArgument(..)
+                | LocatedMacroParam::Empty
         )
     }
 
@@ -754,7 +756,7 @@ impl MacroParamElement for LocatedMacroParam {
     fn list_argument(&self) -> &[Box<Self>] {
         match self {
             LocatedMacroParam::List(l) => l,
-            _ => unreachable!()
+            _ => &[]
         }
     }
 }

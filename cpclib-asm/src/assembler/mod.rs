@@ -32,7 +32,6 @@ use cpclib_common::bitvec::prelude::BitVec;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::chars::{Charset, char_to_amscii};
 use cpclib_common::event::EventObserver;
-use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::UpdateSlice;
@@ -921,22 +920,21 @@ impl Env {
     }
 
     fn retrieve_options_symbols(&mut self) {
-        let symbols: Vec<_> = self
-            .options()
+        let opts = self.options();
+        let available: Vec<_> = opts
             .symbols()
             .available_symbols()
-            .cloned()
+            .filter_map(|symbol| {
+                opts.symbols()
+                    .any_value(symbol.clone())
+                    .ok()
+                    .and_then(|v| v)
+                    .map(|val| (symbol.clone(), val.clone()))
+            })
             .collect();
-        for symbol in symbols {
-            let value = self
-                .options()
-                .symbols()
-                .any_value(symbol.clone())
-                .unwrap()
-                .unwrap()
-                .clone();
 
-            let _ = self.symbols_mut().set_symbol_to_value(symbol, value);
+        for (symbol, val) in available {
+            let _ = self.symbols_mut().set_symbol_to_value(symbol, val);
         }
     }
 
@@ -3599,13 +3597,7 @@ macro_rules! visit_token_impl {
             $cls::Assign { label, expr, op } => $env.visit_assign(label, expr, op.as_ref()),
 
             $cls::Basic(variables, hidden_lines, code) => {
-                $env.visit_basic(
-                    variables
-                        .as_ref()
-                        .map(|l| l.iter().collect()),
-                    hidden_lines.as_ref(),
-                    code
-                )
+                $env.visit_basic(variables.as_deref(), hidden_lines.as_deref(), code)
             }, // TODO move in the processed tokens stuff
             $cls::Bank(exp) => $env.visit_page_or_bank(exp.as_ref()),
             $cls::Bankset(v) => $env.visit_pageset(v),
@@ -4942,8 +4934,8 @@ impl Env {
 impl Env {
     pub fn visit_basic<S: SourceString, S2: SourceString, E: ExprEvaluationExt>(
         &mut self,
-        variables: Option<Vec<S>>,
-        hidden_lines: Option<&Vec<E>>,
+        variables: Option<&[S]>,
+        hidden_lines: Option<&[E]>,
         code: S2
     ) -> Result<(), AssemblerError> {
         let bytes = self.assemble_basic(variables, hidden_lines, code)?;
@@ -4962,50 +4954,35 @@ impl Env {
 
     pub fn assemble_basic<S: SourceString, S2: SourceString, E: ExprEvaluationExt>(
         &mut self,
-        variables: Option<Vec<S>>,
-        hidden_lines: Option<&Vec<E>>,
+        variables: Option<&[S]>,
+        hidden_lines: Option<&[E]>,
         code: S2
     ) -> Result<Vec<u8>, AssemblerError> {
-        let hidden_lines = hidden_lines.map(|h| {
-            h.iter()
-                .map(|e| self.resolve_expr_must_never_fail(e))
-                .collect::<Result<Vec<_>, AssemblerError>>()
-        });
-        if let Some(Err(e)) = hidden_lines {
-            return Err(e);
+        let hidden_lines: Option<Vec<u16>> = if let Some(lines) = hidden_lines {
+            let mut resolved = Vec::with_capacity(lines.len());
+            for expr in lines {
+                let val = self.resolve_expr_must_never_fail(expr)?.int()?;
+                resolved.push(val as u16);
+            }
+            Some(resolved)
         }
-
-        let hidden_lines = hidden_lines.map(|r| {
-            r.unwrap()
-                .into_iter()
-                .map(|e| e.int())
-                .collect::<Result<Vec<_>, ExpressionTypeError>>()
-        });
-        if let Some(Err(e)) = hidden_lines {
-            return Err(e.into());
-        }
-
-        let hidden_lines: Option<Vec<u16>> =
-            hidden_lines.map(|r| r.unwrap().into_iter().map(|e| e as u16).collect());
+        else {
+            None
+        };
 
         // Build the final basic code by replacing variables by value
         // Hexadecimal is used to ensure a consistent 2 bytes representation
         let basic_src = {
             let mut basic = code.as_str().to_owned();
-            match variables {
-                None => {},
-                Some(arguments) => {
-                    for argument in arguments {
-                        let key = format!("{{{}}}", argument.as_str());
-                        let value = format!(
-                            "&{:X}",
-                            self.resolve_expr_may_fail_in_first_pass(&Expr::from(
-                                argument.as_str()
-                            ))?
-                        );
-                        basic = basic.replace(&key, &value);
-                    }
-                },
+            if let Some(arguments) = variables {
+                for argument in arguments {
+                    let key = format!("{{{}}}", argument.as_str());
+                    let value = format!(
+                        "&{:X}",
+                        self.resolve_expr_may_fail_in_first_pass(&Expr::from(argument.as_str()))?
+                    );
+                    basic = basic.replace(&key, &value);
+                }
             }
             basic
         };

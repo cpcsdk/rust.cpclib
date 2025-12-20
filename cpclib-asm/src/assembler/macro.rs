@@ -110,7 +110,8 @@ fn expand_param<'p, P: MacroParamElement>(
     m: &'p P,
     env: &mut Env
 ) -> Result<beef::lean::Cow<'p, str>, AssemblerError> {
-    let extended = if m.is_single() {
+    // Treat non-list params (including Empty) as single arguments
+    let extended = if m.is_single() || !m.is_list() {
         let s = m.single_argument();
         let _trimmed = s.trim();
         if m.must_be_evaluated() {
@@ -153,16 +154,16 @@ fn expand_param<'p, P: MacroParamElement>(
 
 /// Encodes both the arguments and the macro
 #[derive(Debug)]
-pub struct MacroWithArgs<P: MacroParamElement> {
+pub struct MacroWithArgs<'a, P: MacroParamElement> {
     r#macro: Macro,
-    args: Vec<P>,
+    args: &'a [P],
     segments: Arc<Vec<MacroSegment>>
 }
 
-impl<P: MacroParamElement> MacroWithArgs<P> {
+impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     /// The construction fails if the number pf arguments is incorrect
     #[inline]
-    pub fn build(r#macro: &Macro, args: &[P]) -> Result<Self, AssemblerError> {
+    pub fn build(r#macro: &Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),
@@ -180,7 +181,7 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
         else {
             Ok(Self {
                 r#macro: r#macro.clone(),
-                args: args.to_vec(),
+                args,
                 segments: Arc::new(tokenize_macro_body(r#macro))
             })
         }
@@ -292,7 +293,7 @@ impl<P: MacroParamElement> MacroWithArgs<P> {
     }
 }
 
-impl<P: MacroParamElement> Expandable for MacroWithArgs<P> {
+impl<'a, P: MacroParamElement> Expandable for MacroWithArgs<'a, P> {
     /// Develop the macro with the given arguments
     #[inline]
     fn expand(&self, env: &mut Env) -> Result<String, AssemblerError> {
@@ -337,18 +338,18 @@ impl<P: MacroParamElement> Expandable for MacroWithArgs<P> {
 }
 
 #[derive(Debug)]
-pub struct StructWithArgs<P: MacroParamElement> {
+pub struct StructWithArgs<'a, P: MacroParamElement> {
     r#struct: Struct,
-    args: Vec<P>
+    args: &'a [P]
 }
 
-impl<P: MacroParamElement> StructWithArgs<P> {
+impl<'a, P: MacroParamElement> StructWithArgs<'a, P> {
     pub fn r#struct(&self) -> &Struct {
         &self.r#struct
     }
 
     /// The construction fails if the number pf arguments is incorrect
-    pub fn build(r#struct: &Struct, args: &[P]) -> Result<Self, AssemblerError> {
+    pub fn build(r#struct: &Struct, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#struct.nb_args() < args.len() {
             Err(AssemblerError::MacroError {
                 name: r#struct.name().into(),
@@ -365,7 +366,7 @@ impl<P: MacroParamElement> StructWithArgs<P> {
         else {
             Ok(Self {
                 r#struct: r#struct.clone(),
-                args: args.to_vec()
+                args
             })
         }
     }
@@ -375,7 +376,7 @@ impl<P: MacroParamElement> StructWithArgs<P> {
     }
 }
 
-impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
+impl<'a, P: MacroParamElement> Expandable for StructWithArgs<'a, P> {
     /// Generate the token that correspond to the current structure
     /// Current bersion does not handle at all directive with several arguments
     /// BUG does not work when directives have a prefix
@@ -442,13 +443,27 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                             let args: Vec<beef::lean::Cow<str>> = match provided_param {
                                 Some(provided_param2) => {
                                     if provided_param2.is_single() {
+                                        // For single provided argument, fall back to default when empty
                                         provided_param
                                             .into_iter()
                                             .zip_longest(current_default_args)
-                                            .map(|a| {
-                                                match a {
-                                                    EitherOrBoth::Both(provided, _)
-                                                    | EitherOrBoth::Left(provided) => {
+                                            .map(|pair| {
+                                                match pair {
+                                                    EitherOrBoth::Both(provided, default) => {
+                                                        // Use default when provided is an empty single argument
+                                                        if provided.is_empty() {
+                                                            (
+                                                                default.is_single(),
+                                                                expand_param(default, env)
+                                                            )
+                                                        } else {
+                                                            (
+                                                                provided.is_single(),
+                                                                expand_param(provided, env)
+                                                            )
+                                                        }
+                                                    }
+                                                    EitherOrBoth::Left(provided) => {
                                                         (
                                                             provided.is_single(),
                                                             expand_param(provided, env)
@@ -466,23 +481,34 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                                                 a.map(|repr| {
                                                     if is_single {
                                                         repr
-                                                    }
-                                                    else {
+                                                    } else {
                                                         beef::lean::Cow::owned(format!("[{repr}]"))
                                                     }
                                                 })
                                             })
                                             .collect::<Result<Vec<_>, AssemblerError>>()?
-                                    }
-                                    else {
+                                    } else {
+                                        // For list provided arguments, apply per-element fallback to defaults when elements are empty
                                         provided_param2
                                             .list_argument()
                                             .iter()
                                             .zip_longest(current_default_args)
-                                            .map(|a| {
-                                                match a {
-                                                    EitherOrBoth::Both(provided, _)
-                                                    | EitherOrBoth::Left(provided) => {
+                                            .map(|pair| {
+                                                match pair {
+                                                    EitherOrBoth::Both(provided, default) => {
+                                                        if provided.is_empty() {
+                                                            (
+                                                                default.is_single(),
+                                                                expand_param(default, env)
+                                                            )
+                                                        } else {
+                                                            (
+                                                                provided.is_single(),
+                                                                expand_param(provided.deref(), env)
+                                                            )
+                                                        }
+                                                    }
+                                                    EitherOrBoth::Left(provided) => {
                                                         (
                                                             provided.is_single(),
                                                             expand_param(provided.deref(), env)
@@ -500,8 +526,7 @@ impl<P: MacroParamElement> Expandable for StructWithArgs<P> {
                                                 a.map(|repr| {
                                                     if is_single {
                                                         repr
-                                                    }
-                                                    else {
+                                                    } else {
                                                         beef::lean::Cow::owned(format!("[{repr}]"))
                                                     }
                                                 })

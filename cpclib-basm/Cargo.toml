@@ -59,6 +59,7 @@ indicatif = ["cpclib-asm/indicatif"]
 colored_errors = ["cpclib-asm/colored_errors"]
 rayon = ["cpclib-asm/rayon", "cpclib-common/rayon"]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
+rasm-autotests = []
 
 [profile.release]
 lto = "fat"

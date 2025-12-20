@@ -375,15 +375,8 @@ impl DelayedCommands {
         let iter = self.save_commands.iter();
 
         let res = iter
-            .filter_map(|(save_mmr, save_cmd)| {
-                if *save_mmr == ga_mmr {
-                    Some(save_cmd)
-                }
-                else {
-                    None
-                }
-            })
-            .flatten()
+            .filter_map(|(save_mmr, save_cmds)| (*save_mmr == ga_mmr).then_some(save_cmds))
+            .flat_map(|save_cmds| save_cmds.iter())
             .map(|cmd| cmd.execute_on(env))
             .collect::<Result<Vec<_>, AssemblerError>>()?;
 

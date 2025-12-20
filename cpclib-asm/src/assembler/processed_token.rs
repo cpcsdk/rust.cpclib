@@ -832,6 +832,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
         let caller = self.token;
         let name = caller.macro_call_name();
         let parameters = caller.macro_call_arguments();
+        let mut padded_struct_params: Option<Vec<T::MacroParam>> = None;
 
         let listing = {
             // Retreive the macro or structure definition
@@ -843,7 +844,22 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
             let r#struct = if r#macro.is_none() {
                 env.symbols()
                     .struct_value(name)?
-                    .map(|s| r#macro::StructWithArgs::build(s, parameters))
+                    .map(|s| {
+                        let needed = s.nb_args();
+                        let args_slice = if parameters.len() < needed {
+                            let mut buf = parameters.to_vec();
+                            buf.resize(needed, T::MacroParam::empty());
+                            padded_struct_params = Some(buf);
+                            padded_struct_params
+                                .as_deref()
+                                .expect("padded params must be present when needed")
+                        }
+                        else {
+                            parameters
+                        };
+
+                        r#macro::StructWithArgs::build(s, args_slice)
+                    })
                     .transpose()?
             }
             else {
@@ -871,10 +887,9 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
                 (source, code, flavor)
             }
             else {
-                let r#struct = r#struct.as_ref()
+                let r#struct = r#struct
+                    .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
-                let mut parameters = parameters.to_vec();
-                parameters.resize(r#struct.r#struct().nb_args(), T::MacroParam::empty());
                 (
                     r#struct.source(),
                     r#struct.expand(env)?,
