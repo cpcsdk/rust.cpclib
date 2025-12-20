@@ -257,16 +257,16 @@ impl ColorMatrix {
                 line_bytes
                     .iter()
                     .flat_map(|b| pixels::byte_to_pens(*b, mode))
-                    .collect()
+                    .collect::<Vec<crate::ga::Pen>>()
             })
             .map(move |pens| {
                 // build lines of inks
                 pens.iter()
                     .map(|pen| palette.get(pen))
                     .cloned()
-                    .collect_vec()
+                    .collect::<Vec<_>>()
             })
-            .collect()
+            .collect::<Vec<_>>()
             .into()
     }
 
@@ -279,16 +279,16 @@ impl ColorMatrix {
                 // build lines of pen
                 let line = line.iter();
                 line.flat_map(|b| pixels::byte_to_pens(*b, mode))
-                    .collect()
+                    .collect::<Vec<crate::ga::Pen>>()
             })
             .map(move |pens| {
                 // build lines of inks
                 pens.iter()
                     .map(|pen| palette.get(pen))
                     .cloned()
-                    .collect_vec()
+                    .collect::<Vec<_>>()
             })
-            .collect_vec()
+            .collect::<Vec<_>>()
             .into()
     }
 }
@@ -1103,9 +1103,9 @@ impl Sprite {
     }
 
     pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette) -> Self {
-        let pens = bytes
+        let pens: Vec<Vec<_>> = bytes
             .chunks(bytes_width)
-            .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect())
+            .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect::<Vec<_>>())
             .collect();
 
         Self::from_pens(&pens, mode, Some(palette))

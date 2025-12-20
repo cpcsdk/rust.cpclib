@@ -13,14 +13,17 @@ use crate::support::banks::Bank;
 #[derive(Clone, Debug)]
 pub struct CprAssembler {
     pages: DecoratedPages,
-    codes: Vec<(u8, String)>
+    codes: Vec<(u8, String)>,
+    /// Fast lookup from bank code to its index in `codes`
+    code_index: std::collections::HashMap<String, usize>
 }
 
 impl Default for CprAssembler {
     fn default() -> Self {
         Self {
             pages: DecoratedPages::default(),
-            codes: Vec::with_capacity(32)
+            codes: Vec::with_capacity(32),
+            code_index: std::collections::HashMap::with_capacity(32)
         }
     }
 }
@@ -96,6 +99,8 @@ impl CprAssembler {
         assert!(self.code_to_index(bank_number).is_none()); // TODO raise an error
         self.pages.add_new_and_select();
         self.codes.push((bank_number, code.into()));
+        let idx = self.pages.pages.len() - 1;
+        self.code_index.insert(code.to_string(), idx);
     }
 
     fn number_to_code(bank_number: u8) -> &'static str {
@@ -106,7 +111,11 @@ impl CprAssembler {
     // TODO reduce String building if it is too slow
     fn code_to_index(&self, bank_number: u8) -> Option<usize> {
         let code = Self::number_to_code(bank_number);
-        self.codes.iter().position(|c| c.1 == code)
+        // Prefer hashmap lookup; fall back to linear scan if not present
+        self.code_index
+            .get(code)
+            .copied()
+            .or_else(|| self.codes.iter().position(|c| c.1 == code))
     }
 
     pub fn selected_bloc(&self) -> Option<u8> {

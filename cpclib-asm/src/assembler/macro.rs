@@ -42,13 +42,15 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
     let mut segments = Vec::new();
     let mut cursor = 0;
 
-    // Build param index lookup
-    let param_names: Vec<&str> = r#macro
+    // Build param index lookup map for O(1) lookups
+    let param_names: std::collections::HashMap<&str, usize> = r#macro
         .params()
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(idx, p)| {
             let s = p.as_str();
-            if s.starts_with("r#") { &s[2..] } else { s }
+            let key = if s.starts_with("r#") { &s[2..] } else { s };
+            (key, idx)
         })
         .collect();
 
@@ -66,7 +68,7 @@ fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
             let close = after_open + rel_close;
             let key = &listing[after_open..close];
 
-            if let Some(idx) = param_names.iter().position(|n| *n == key) {
+            if let Some(&idx) = param_names.get(key) {
                 segments.push(MacroSegment::Arg { index: idx });
                 cursor = close + 1;
                 continue;

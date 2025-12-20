@@ -727,7 +727,7 @@ impl Display for Expr {
             Char(c) => write!(format, "'{c}'"),
             Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
             String(string) => write!(format, "\"{string}\""),
-            List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).join(",")),
+            List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
             Label(label) => write!(format, "{label}"),
             PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
 
@@ -742,7 +742,7 @@ impl Display for Expr {
                     format,
                     "{}({})",
                     name,
-                    args.iter().map(|e| e.to_string()).join(",")
+                    args.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")
                 )
             },
 
@@ -1644,7 +1644,7 @@ impl std::fmt::Display for ExprResult {
             ExprResult::Bool(b) => write!(f, "{b}"),
             ExprResult::String(v) => write!(f, "\"{v}\""),
             ExprResult::List(v) => {
-                write!(f, "[{}]", v.iter().map(|item| format!("{item}")).join(","))
+                write!(f, "[{}]", v.iter().map(|item| format!("{item}")).collect::<Vec<_>>().join(","))
             },
             ExprResult::Matrix { .. } => {
                 write!(
@@ -1653,6 +1653,7 @@ impl std::fmt::Display for ExprResult {
                     self.matrix_rows()
                         .iter()
                         .map(|row| format!("{row}"))
+                        .collect::<Vec<_>>()
                         .join(",")
                 )
             }
@@ -1672,7 +1673,7 @@ impl std::fmt::LowerHex for ExprResult {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{item:x}")).join(",")
+                    v.iter().map(|item| format!("{item:x}")).collect::<Vec<_>>().join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1682,6 +1683,7 @@ impl std::fmt::LowerHex for ExprResult {
                     self.matrix_rows()
                         .iter()
                         .map(|row| format!("{row:x}"))
+                        .collect::<Vec<_>>()
                         .join(",")
                 )
             }
@@ -1701,7 +1703,7 @@ impl std::fmt::UpperHex for ExprResult {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{item:X}")).join(",")
+                    v.iter().map(|item| format!("{item:X}")).collect::<Vec<_>>().join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1711,6 +1713,7 @@ impl std::fmt::UpperHex for ExprResult {
                     self.matrix_rows()
                         .iter()
                         .map(|row| format!("{row:X}"))
+                        .collect::<Vec<_>>()
                         .join(",")
                 )
             }

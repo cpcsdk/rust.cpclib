@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
 use cpclib_common::smallvec::{SmallVec, smallvec};
+use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
 use delegate::delegate;
 use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
@@ -691,7 +692,12 @@ impl SymbolsTable {
     {
         let mut global = self.namespace_stack.clone();
         global.push(symbol.into());
-        global.iter().join(".").into()
+        let joined = global
+            .iter()
+            .map(|s| s.to_smolstr().to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+        joined.into()
     }
 
     #[inline]

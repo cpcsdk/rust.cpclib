@@ -29,7 +29,7 @@ impl ToString for MacroParam {
         match self {
             Self::RawArgument(s) | Self::EvaluatedArgument(s) => s.clone(),
             Self::List(l) => {
-                format!("[{}]", l.iter().map(|p| p.to_string()).join(","))
+                format!("[{}]", l.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(","))
             }
         }
     }
@@ -996,7 +996,7 @@ impl fmt::Display for Token {
             Token::Assert( expr, None)
                 => write!(f, "ASSERT {}", expr.to_simplified_string()),
             Token::Assert( expr, Some( text))
-                => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text.iter().map(|e|e.to_string()).join(",")),
+                => write!(f, "ASSERT {}, {}", expr.to_simplified_string(), text.iter().map(|e|e.to_string()).collect::<Vec<_>>().join(",")),
 
             Token::Breakpoint{address, ..} => {
                 write!(f, "BREAKPOINT")?;
@@ -1030,7 +1030,7 @@ impl fmt::Display for Token {
 
             Token::Fail(msg) => {
                 if let Some(msg) = msg {
-                    write!(f, "FAIL {}", msg.iter().map(|e| e.to_string()).join(", "))
+                    write!(f, "FAIL {}", msg.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "))
                 } else {
                     write!(f, "FAIL")
                 }
@@ -1147,6 +1147,7 @@ impl fmt::Display for Token {
                     let args = args.clone()
                     .iter()
                     .map(|a|{a.to_string()})
+                    .collect::<Vec<_>>()
                     .join(", ");
                     let args = if args.is_empty() {
                         "(void)".to_owned()
@@ -1188,7 +1189,7 @@ impl fmt::Display for Token {
 
 
             Token::Print( exp)
-                => write!(f, "PRINT {}", exp.iter().map(|e|e.to_string()).join(",")),
+                => write!(f, "PRINT {}", exp.iter().map(|e|e.to_string()).collect::<Vec<_>>().join(",")),
 
             Token::Protect( exp1,  exp2)
                 => write!(f, "PROTECT {exp1}, {exp2}"),
