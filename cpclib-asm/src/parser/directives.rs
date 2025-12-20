@@ -62,7 +62,11 @@ pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
     let _ = cut_err(
         preceded(
             my_space0,
-            alt((parse_directive_word(b"ENDW"), parse_directive_word(b"WEND")))
+            alt((
+                parse_directive_word(b"ENDWHILE"),
+                parse_directive_word(b"ENDW"),
+                parse_directive_word(b"WEND")
+            ))
         )
         .context(StrContext::Label("WHILE: not closed"))
     )

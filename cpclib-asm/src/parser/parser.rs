@@ -31,6 +31,11 @@ use super::orgams::*;
 use super::*;
 use crate::preamble::*;
 
+include!(concat!(
+    env!("OUT_DIR"),
+    "/basm_directives_name_generated.rs"
+));
+
 // const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
 trait AccumulateSeveral<O>: Accumulate<O> {
@@ -48,222 +53,6 @@ pub const REGISTERS: &[&[u8]] = &[b"AF", b"HL", b"DE", b"BC", b"IX", b"IY", b"IX
 
 // INSTRUCTIONS constant moved to instructions module (re-exported via mod.rs)
 
-pub const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
-    b"#",
-    b"ABYTE",
-    b"ALIGN",
-    b"ASMCONTROL",
-    b"ASSERT",
-    b"BANK",
-    b"BANKSET",
-    b"BINCLUDE",
-    b"BREAK",
-    b"BREAKPOINT",
-    b"BUILDCPR",
-    b"BUILDSNA",
-    b"BYTE",
-    b"CASE",
-    b"CHARSET",
-    b"DB",
-    b"DEFAULT",
-    b"DEFB",
-    b"DEFM",
-    b"DEFS",
-    b"DEFW",
-    b"DEFSECTION",
-    b"DM",
-    b"DS",
-    b"FOR",
-    b"DW",
-    b"ELSE",
-    b"ELSEIF",
-    b"ELSEIFDEF",
-    b"ELSEIFEXIST",
-    b"ELSEIFNDEF",
-    b"ELSEIFNOT",
-    b"ELSEIFUSED",
-    //  b"END",
-    b"ENT",
-    b"EQU",
-    b"EXPORT",
-    b"FAIL",
-    b"INCBIN",
-    b"INCLUDE",
-    b"INCLZ4",
-    b"INCEXO",
-    b"INCL48",
-    b"INCL49",
-    b"INCLZSA1",
-    b"INCLZSA2",
-    b"INCAPU",
-    b"INCZX0",
-    b"INCZX0_BACKWARD",
-    b"INCSHRINKLER",
-    b"INCUPKR",
-    b"LET",
-    b"LIMIT",
-    b"LIST",
-    b"LZEXO",
-    b"LZSA1",
-    b"LZSA2",
-    b"LZUPKR",
-    b"MAP",
-    b"MODULE",
-    b"NOEXPORT",
-    b"NOLIST",
-    b"NOP",
-    b"ORG",
-    b"PAUSE",
-    b"PRINT",
-    b"PROTECT",
-    b"RANGE",
-    b"READ",
-    b"REND",
-    b"REPEAT",
-    b"REP",
-    b"REPT",
-    b"RORG",
-    b"RETURN",
-    b"RUN",
-    b"SAVE",
-    b"SECTION",
-    b"SNAINIT",
-    b"SNAPINIT",
-    b"SNASET",
-    b"STARTINGINDEX",
-    b"STR",
-    b"TEXT",
-    b"TICKER",
-    b"UNDEF",
-    b"UNTIL",
-    b"WAITNOPS",
-    b"WORD",
-    b"WRITE DIRECT",
-    b"WRITE"
-];
-
-pub const START_DIRECTIVE: &[&[u8]] = &[
-    b"ASMCONTROLENV",
-    b"CONFINED",
-    b"FUNCTION",
-    b"FOR",
-    b"IF",
-    b"IFDEF",
-    b"IFEXIST",
-    b"IFNDEF",
-    b"IFNOT",
-    b"IFUSED",
-    b"IFNUSED",
-    b"ITER",
-    b"ITERATE",
-    b"LZ4",
-    b"LZ48",
-    b"LZ49",
-    b"LZ48",
-    b"LZAPU",
-    b"LZX0_BACKWARD",
-    b"LZX0",
-    b"LZEXO",
-    b"LZ4",
-    b"LZX7",
-    b"LZSHRINKLER",
-    b"LOCOMOTIVE",
-    b"MACRO",
-    b"MODULE",
-    b"PHASE",
-    b"REPEAT",
-    b"REPT",
-    b"STRUCT",
-    b"SWITCH",
-    b"WHILE"
-];
-
-// This table is supposed to contain the keywords that finish a section
-pub const END_DIRECTIVE: &[&[u8]] = &[
-    b"END", // for orgams
-    b"ENDASMCONTROLENV",
-    b"ENDA",
-    b"BREAK",
-    b"CASE",
-    b"CEND",
-    b"DEFAULT",
-    b"DEPHASE",
-    b"ELSE",
-    b"ELSEIF",
-    b"ELSEIFDEF",
-    b"ELSEIFEXIST",
-    b"ELSEIFNDEF",
-    b"ELSEIFNOT",
-    b"ELSEIFUSED",
-    b"ENDC",
-    b"ENDCONFINED",
-    b"ENDF",
-    b"ENDFOR",
-    b"ENDFUNCTION",
-    b"ENDI",
-    b"ENDIF", // if directive
-    b"ENDITER",
-    b"ENDITERATE",
-    b"ENDM",
-    b"ENDMACRO",
-    b"ENDMODULE",
-    b"ENDR",
-    b"ENDREP", // repeat directive
-    b"ENDREPEAT",
-    b"ENDS",
-    b"ENDSWITCH",
-    b"ENDW",
-    b"FEND",
-    b"IEND",
-    b"LZCLOSE",
-    b"REND", // rorg directive
-    b"UNTIL",
-    b"WEND"
-];
-
-static _DOTTED_END_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    END_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect()
-});
-
-// tODO use hash-based structures
-static _DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    STAND_ALONE_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", unsafe { std::str::from_utf8_unchecked(d) }))
-        .collect()
-});
-
-static _DOTTED_START_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    START_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect()
-});
-
-static DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_STAND_ALONE_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect()
-});
-static DOTTED_START_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_START_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect()
-});
-pub static DOTTED_END_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_END_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect()
-});
 
 /// Produce the stream of tokens. In case of error, return an explanatory string.
 /// In case of success loop over all the tokens in order to expand those that read files
@@ -1976,7 +1765,9 @@ MEND";
         assert!(res.is_ok(), "{:?}", &res);
 
         assert_eq!(
-            r#in.iter().map(|t| t.to_token().into_owned()).collect::<Vec<_>>(),
+            r#in.iter()
+                .map(|t| t.to_token().into_owned())
+                .collect::<Vec<_>>(),
             vec![Token::new_opcode(
                 Mnemonic::Ld,
                 Some(Register8::C.into()),

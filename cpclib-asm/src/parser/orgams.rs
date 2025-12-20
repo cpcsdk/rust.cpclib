@@ -11,27 +11,10 @@ use super::{
 };
 use crate::preamble::{MayHaveSpan, located_expr, my_space0, one_instruction_inner_code};
 
-pub static STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[
-    b"BANK",
-    b"BRK",
-    b"BUILDSNA",
-    b"BY",
-    b"BYTE",
-    b"DB",
-    b"DEFB",
-    b"DEFS",
-    b"ELSE", //  b"END",
-    b"ENT",
-    b"IMPORT",
-    b"ORG",
-    b"PRINT",
-    b"SKIP",
-    b"WORD"
-];
-
-pub static START_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"IF", b"MACRO"];
-
-pub static END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"END", b"ENDM", b"]"];
+include!(concat!(
+    env!("OUT_DIR"),
+    "/orgams_directives_name_generated.rs"
+));
 
 pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let input_start = input.checkpoint();

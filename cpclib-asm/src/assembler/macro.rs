@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
-use cpclib_common::winnow::Parser;
 use cpclib_common::smallvec::SmallVec;
-use memchr::memchr;
+use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{Macro, SourceLocation, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
+use memchr::memchr;
 
 use crate::Env;
 use crate::error::AssemblerError;
@@ -267,7 +267,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         for (argname, expanded) in self.r#macro.params().iter().zip(&all_expanded) {
             let pattern = if argname.starts_with("r#") {
                 &argname[2..]
-            } else {
+            }
+            else {
                 argname.as_str()
             };
             let replacement = if argname.starts_with("r#")
@@ -275,7 +276,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 && expanded.ends_with("\"")
             {
                 &expanded[1..(expanded.len() - 1)]
-            } else {
+            }
+            else {
                 &expanded[..]
             };
             patterns.push(pattern);

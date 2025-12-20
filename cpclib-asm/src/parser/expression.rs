@@ -1,7 +1,6 @@
 // Expression module - contains expression parsing functions
 
 use std::fmt::Debug;
-use std::sync::LazyLock;
 
 use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
@@ -29,6 +28,9 @@ use super::parser::{
     END_DIRECTIVE, REGISTERS, STAND_ALONE_DIRECTIVE, START_DIRECTIVE, parse_comma
 };
 use super::*;
+
+// Include build-time generated forbidden names
+include!(concat!(env!("OUT_DIR"), "/forbidden_names_generated.rs"));
 
 pub fn parse_fname(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     alt((
@@ -633,104 +635,11 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     ))
 }
 
-// Constants for label validation
+// Constants for label validation (orgams-specific)
 const STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"DB", b"DW", b"DS", b"ORG", b"EQU"];
 const START_DIRECTIVE_ORGAMS: &[&[u8]] =
     &[b"REPEAT", b"REPT", b"MACRO", b"IF", b"IFDEF", b"IFNDEF"];
 const END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"UNTIL", b"ENDM", b"ENDR", b"ENDIF"];
-
-static _DOTTED_END_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    END_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect_vec()
-});
-
-static _DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    STAND_ALONE_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", unsafe { std::str::from_utf8_unchecked(d) }))
-        .collect_vec()
-});
-
-static _DOTTED_START_DIRECTIVE: LazyLock<Vec<String>> = LazyLock::new(|| {
-    START_DIRECTIVE
-        .iter()
-        .map(|d| format!(".{}", { unsafe { std::str::from_utf8_unchecked(d) } }))
-        .collect_vec()
-});
-
-static DOTTED_STAND_ALONE_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_STAND_ALONE_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect_vec()
-});
-static DOTTED_START_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_START_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect_vec()
-});
-static DOTTED_END_DIRECTIVE: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    _DOTTED_END_DIRECTIVE
-        .iter()
-        .map(String::as_str)
-        .map(str::as_bytes)
-        .collect_vec()
-});
-
-static DOTTED_IMPOSSIBLE_NAMES: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    REGISTERS
-        .iter()
-        .chain(INSTRUCTIONS)
-        .chain(DOTTED_STAND_ALONE_DIRECTIVE.iter())
-        .chain(DOTTED_START_DIRECTIVE.iter())
-        .chain(DOTTED_END_DIRECTIVE.iter())
-        .cloned()
-        .collect()
-});
-
-static IMPOSSIBLE_NAMES: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    REGISTERS
-        .iter()
-        .chain(INSTRUCTIONS)
-        .chain(STAND_ALONE_DIRECTIVE)
-        .chain(START_DIRECTIVE)
-        .chain(END_DIRECTIVE)
-        .cloned()
-        .collect()
-});
-
-static IMPOSSIBLE_NAMES_ORGAMS: LazyLock<Vec<&'static [u8]>> = LazyLock::new(|| {
-    REGISTERS
-        .iter()
-        .chain(INSTRUCTIONS)
-        .chain(STAND_ALONE_DIRECTIVE_ORGAMS)
-        .chain(START_DIRECTIVE_ORGAMS)
-        .chain(END_DIRECTIVE_ORGAMS)
-        .cloned()
-        .collect()
-});
-
-static MIN_MAX_LABEL_SIZE: LazyLock<(usize, usize)> = LazyLock::new(|| {
-    IMPOSSIBLE_NAMES
-        .iter()
-        .map(|l| l.len())
-        .minmax()
-        .into_option()
-        .unwrap()
-});
-static DOTTED_MIN_MAX_LABEL_SIZE: LazyLock<(usize, usize)> = LazyLock::new(|| {
-    DOTTED_IMPOSSIBLE_NAMES
-        .iter()
-        .map(|l| l.len())
-        .minmax()
-        .into_option()
-        .expect("DOTTED_IMPOSSIBLE_NAMES must not be empty")
-});
 
 // Flag parsing functions
 pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> ModalResult<FlagValue, Z80ParserError> {
@@ -1001,35 +910,48 @@ pub fn parse_label(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-fn impossible_names(dotted_directive: bool, flavor: AssemblerFlavor) -> &'static [&'static [u8]] {
-    if flavor == AssemblerFlavor::Basm {
-        if dotted_directive {
-            &DOTTED_IMPOSSIBLE_NAMES
-        }
-        else {
-            &IMPOSSIBLE_NAMES
-        }
-    }
-    else {
-        assert_eq!(flavor, AssemblerFlavor::Orgams);
-        &IMPOSSIBLE_NAMES_ORGAMS
-    }
-}
-
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn ignore_ascii_case_allowed_label(
     name: &[u8],
     dotted_directive: bool,
     flavor: AssemblerFlavor
 ) -> bool {
+    let len = name.len();
+
+    // Get min/max and bucket function based on flavor and dotted directive
+    let (min_max, bucket_fn): ((usize, usize), fn(usize) -> &'static [&'static str]) =
+        match (flavor, dotted_directive) {
+            (AssemblerFlavor::Basm, true) => {
+                (DOTTED_MIN_MAX_LABEL_SIZE, dotted_impossible_by_length)
+            },
+            (AssemblerFlavor::Basm, false) => (MIN_MAX_LABEL_SIZE, impossible_by_length),
+            (AssemblerFlavor::Orgams, _) => (ORGAMS_MIN_MAX_LABEL_SIZE, orgams_impossible_by_length)
+        };
+
+    let (min, max) = min_max;
+
+    // Out-of-range lengths cannot match forbidden names
+    if len < min || len > max {
+        return true;
+    }
+
+    // Get bucket for this length
+    let bucket = bucket_fn(len);
+
+    // Check if name matches any forbidden name (case-insensitive)
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-    let iter = impossible_names(dotted_directive, flavor).par_iter();
+    {
+        use cpclib_common::rayon::prelude::*;
+        return !bucket
+            .par_iter()
+            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name));
+    }
 
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
-    let mut iter = impossible_names(dotted_directive, flavor).iter();
-
-    !iter.any(|&content| content.eq_ignore_ascii_case(name))
+    {
+        return !bucket
+            .iter()
+            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name));
+    }
 }
 
 /// Parser for file names in appropriate directives
@@ -1133,7 +1055,7 @@ where
             fn extend_from_slice(&mut self, slice: &[u8]) {
                 match self {
                     CollectedString::Owned(vec) => vec.extend_from_slice(slice),
-                    CollectedString::Borrowed(_, _) => unreachable!()
+                    CollectedString::Borrowed(..) => unreachable!()
                 }
             }
 

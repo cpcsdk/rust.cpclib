@@ -61,8 +61,3 @@ rayon = ["cpclib-asm/rayon", "cpclib-common/rayon"]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 rasm-autotests = []
 
-[profile.release]
-lto = "fat"
-opt-level = 3
-codegen-units = 1
-strip = true

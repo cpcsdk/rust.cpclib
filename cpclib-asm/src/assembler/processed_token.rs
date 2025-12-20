@@ -177,11 +177,13 @@ impl IncludeState {
             }
             .try_build()?;
 
-            self.0.try_insert(fname.clone(), include_state)
+            self.0
+                .try_insert(fname.clone(), include_state)
                 .expect("BUG: fname should not already be in include map")
         }
         else {
-            self.0.get_mut(fname)
+            self.0
+                .get_mut(fname)
                 .expect("BUG: fname should exist in include map")
         };
 
@@ -328,13 +330,14 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             ExprEvaluationExt
     {
         let exp = test.expr_unchecked();
-        let value = env.resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
-        
+        let value =
+            env.resolve_expr_may_fail_in_first_pass_with_default(exp, flag_failure.clone())?;
+
         if &value == flag_failure {
             // Test cannot be evaluated, return None
             return Ok(None);
         }
-        
+
         let result = value.bool()?;
         Ok(Some(if test.is_true_test() { result } else { !result }))
     }
@@ -349,11 +352,17 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     ) -> Result<bool, AssemblerError> {
         let label = test.label_unchecked();
         let is_used = env.symbols().is_used(label);
-        let decision = if test.is_label_used_test() { is_used } else { !is_used };
+        let decision = if test.is_label_used_test() {
+            is_used
+        }
+        else {
+            !is_used
+        };
 
         let map = if test.is_label_used_test() {
             &mut self.if_token_adr_to_used_decision
-        } else {
+        }
+        else {
             &mut self.if_token_adr_to_unused_decision
         };
 
@@ -376,7 +385,12 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
     ) -> Result<bool, AssemblerError> {
         let label = test.label_unchecked();
         let exists = env.symbols().symbol_exist_in_current_pass(label)?;
-        Ok(if test.is_label_exists_test() { exists } else { !exists })
+        Ok(if test.is_label_exists_test() {
+            exists
+        }
+        else {
+            !exists
+        })
     }
 
     fn choose_listing_to_assemble(
@@ -404,12 +418,14 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
                 // Expression-based tests (IF/IFNOT) — only evaluate once
                 match self.evaluate_expression_test(test, env, flag_failure)? {
                     Some(result) => result,
-                    None => return Ok(None)  // Unresolvable expression, abort
+                    None => return Ok(None) // Unresolvable expression, abort
                 }
-            } else if test.is_label_used_test() || test.is_label_nused_test() {
+            }
+            else if test.is_label_used_test() || test.is_label_nused_test() {
                 // Label usage tests (IFUSED/IFNUSED)
                 self.evaluate_label_usage_test(test, token_adr, env, &mut request_additional_pass)?
-            } else {
+            }
+            else {
                 // Label existence tests (IFDEF/IFNDEF)
                 self.evaluate_label_existence_test(test, env)?
             };
@@ -436,7 +452,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
             None => {
                 // Build else listing on-demand if it exists and hasn't been built
                 if self.else_listing.is_none() {
-                    self.else_listing = self.token.if_else()
+                    self.else_listing = self
+                        .token
+                        .if_else()
                         .map(|listing| build_processed_tokens_list(listing, env))
                         .transpose()?;
                 }
@@ -497,9 +515,11 @@ fn relocate_print_commands(env: &mut Env, nb_prints: Vec<usize>, span: &Z80Span)
 /// Helper: Relocate error with span if available
 fn relocate_error_with_span<T: MayHaveSpan>(error: AssemblerError, token: &T) -> AssemblerError {
     match token.possible_span() {
-        Some(span) => AssemblerError::RelocatedError {
-            error: error.into(),
-            span: span.clone()
+        Some(span) => {
+            AssemblerError::RelocatedError {
+                error: error.into(),
+                span: span.clone()
+            }
         },
         None => error
     }
@@ -515,13 +535,11 @@ where
 {
     let span = get_token_span(token);
     let state = if token.is_confined() {
-        Some(ProcessedTokenState::Confined(
-            build_simple_listing_state(
-                token.confined_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::Confined(build_simple_listing_state(
+            token.confined_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_if() {
         let state = IfState::new(token);
@@ -587,13 +605,11 @@ where
         })
     }
     else if token.is_for() {
-        Some(ProcessedTokenState::For(
-            build_simple_listing_state(
-                token.for_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::For(build_simple_listing_state(
+            token.for_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_function_definition() {
         Some(ProcessedTokenState::FunctionDefinition(
@@ -601,31 +617,25 @@ where
         ))
     }
     else if token.is_iterate() {
-        Some(ProcessedTokenState::Iterate(
-            build_simple_listing_state(
-                token.iterate_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::Iterate(build_simple_listing_state(
+            token.iterate_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_module() {
-        Some(ProcessedTokenState::Module(
-            build_simple_listing_state(
-                token.module_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::Module(build_simple_listing_state(
+            token.module_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_repeat() {
-        Some(ProcessedTokenState::Repeat(
-            build_simple_listing_state(
-                token.repeat_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::Repeat(build_simple_listing_state(
+            token.repeat_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_repeat_token() {
         Some(ProcessedTokenState::RepeatToken(
@@ -652,11 +662,7 @@ where
 
         let tokens = token.assembler_control_get_listing();
         Some(ProcessedTokenState::RestrictedAssemblingEnvironment {
-            listing: build_simple_listing_state(
-                tokens,
-                span.clone(),
-                env
-            )?,
+            listing: build_simple_listing_state(tokens, span.clone(), env)?,
             commands: Some(ControlOutputStore::with_passes(
                 passes.expect("BUG: passes should be Some after assertion")
             ))
@@ -664,30 +670,22 @@ where
     }
     else if token.is_repeat_until() {
         Some(ProcessedTokenState::RepeatUntil(
-            build_simple_listing_state(
-                token.repeat_until_listing(),
-                span.clone(),
-                env
-            )?
+            build_simple_listing_state(token.repeat_until_listing(), span.clone(), env)?
         ))
     }
     else if token.is_rorg() {
-        Some(ProcessedTokenState::Rorg(
-            build_simple_listing_state(
-                token.rorg_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::Rorg(build_simple_listing_state(
+            token.rorg_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_switch() {
         // todo setup properly the spans
         Some(ProcessedTokenState::Switch(SwitchState {
             cases: token
                 .switch_cases()
-                .map(|(_v, l, _b)| {
-                    build_simple_listing_state(l, span.clone(), env)
-                })
+                .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env))
                 .collect::<Result<Vec<_>, _>>()?,
 
             default: token
@@ -702,13 +700,11 @@ where
         )))
     }
     else if token.is_while() {
-        Some(ProcessedTokenState::While(
-            build_simple_listing_state(
-                token.while_listing(),
-                span.clone(),
-                env
-            )?
-        ))
+        Some(ProcessedTokenState::While(build_simple_listing_state(
+            token.while_listing(),
+            span.clone(),
+            env
+        )?))
     }
     else if token.is_call_macro_or_build_struct() {
         // one day, we may whish to maintain a state
@@ -742,12 +738,13 @@ where
         // get filename of files that will be read in parallel
         let mut include_fnames: Vec<String> = Vec::with_capacity(tokens.len());
         include_fnames.extend(
-            iter.filter(|t| t.include_is_standard_include()).flat_map(|t| {
-                let fname = t.include_fname();
-                let fname = env.build_fname(fname)?;
-                get_filename_to_read(fname, env.options().parse_options(), Some(env))
-            })
-            .map(|path| progress::normalize(&path).to_string())
+            iter.filter(|t| t.include_is_standard_include())
+                .flat_map(|t| {
+                    let fname = t.include_fname();
+                    let fname = env.build_fname(fname)?;
+                    get_filename_to_read(fname, env.options().parse_options(), Some(env))
+                })
+                .map(|path| progress::normalize(&path).to_string())
         );
 
         // inform the progress bar in one go
@@ -953,9 +950,7 @@ where
                 // dbg!(&self.token, deferred);
                 // SAFETY: This transmute is only safe when T is LocatedToken.
                 // This is guaranteed by the type system at the call site.
-                let outer_token = unsafe {
-                    std::mem::transmute::<&T, &LocatedToken>(self.token)
-                };
+                let outer_token = unsafe { std::mem::transmute::<&T, &LocatedToken>(self.token) };
 
                 env.handle_output_trigger(outer_token);
             }
@@ -987,8 +982,9 @@ where
                         listing,
                         commands
                     }) => {
-                        let mut new_commands = commands.take()
-                            .expect("BUG: commands should be Some for RestrictedAssemblingEnvironment");
+                        let mut new_commands = commands.take().expect(
+                            "BUG: commands should be Some for RestrictedAssemblingEnvironment"
+                        );
 
                         if !new_commands.has_remaining_passes() {
                             new_commands.execute(env)?;
@@ -1141,11 +1137,13 @@ where
                                 env.add_warning(warning)
                             }
 
-                            contents.try_insert(fname.clone(), data.into())
+                            contents
+                                .try_insert(fname.clone(), data.into())
                                 .expect("BUG: fname should not already be in incbin contents")
                         }
                         else {
-                            contents.get(&fname)
+                            contents
+                                .get(&fname)
                                 .expect("BUG: fname should exist in incbin contents")
                         };
 
@@ -1257,12 +1255,10 @@ where
                             .collect();
 
                         // Process tokens - if error occurs, we still need to pop_seed (see cleanup below)
-                        let process_result = state
-                            .with_processed_tokens_mut(|listing| {
-                                let tokens: &mut [ProcessedToken<'_, LocatedToken>] =
-                                    &mut listing[..];
-                                visit_processed_tokens::<LocatedToken>(tokens, env)
-                            });
+                        let process_result = state.with_processed_tokens_mut(|listing| {
+                            let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut listing[..];
+                            visit_processed_tokens::<LocatedToken>(tokens, env)
+                        });
 
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
@@ -1374,7 +1370,9 @@ where
                             warning: Box::new(AssemblerError::AssemblingError {
                                 msg: self.token.warning_message().to_owned()
                             }),
-                            span: self.token.possible_span()
+                            span: self
+                                .token
+                                .possible_span()
                                 .expect("BUG: warning token should have a span")
                                 .clone()
                         };
@@ -1407,9 +1405,7 @@ where
             if deferred {
                 // SAFETY: This transmute is only safe when T is LocatedToken.
                 // This is guaranteed by the type system at the call site.
-                let outer_token = unsafe {
-                    std::mem::transmute::<&T, &LocatedToken>(self.token)
-                };
+                let outer_token = unsafe { std::mem::transmute::<&T, &LocatedToken>(self.token) };
 
                 env.handle_output_trigger(outer_token);
             }

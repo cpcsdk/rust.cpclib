@@ -6,6 +6,30 @@ use cpclib_common::winnow;
 use cpclib_common::winnow::combinator::terminated;
 use winnow::Parser;
 
+#[test]
+fn test_while_block_parsing() {
+    let code = r#"
+        org &8000
+        counter db 0
+        WHILE counter < 10
+            counter db counter+1
+        WEND
+    "#;
+    let result = cpclib_asm::assemble(code);
+    assert!(result.is_ok(), "WHILE/WEND block should parse correctly");
+}
+
+#[test]
+fn test_forbidden_label_rejected() {
+    let code = r#"
+        WHILE:
+            db 1
+        ENDW
+    "#;
+    let result = cpclib_asm::assemble(code);
+    assert!(result.is_err(), "Label 'WHILE' should be forbidden");
+}
+
 fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
     let mut ctx = Box::new(ParserContextBuilder::default().build(code));
     ctx.context_name = Some("TEST".into());
