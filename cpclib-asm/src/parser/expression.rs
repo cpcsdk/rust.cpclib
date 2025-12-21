@@ -176,15 +176,26 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let not = opt(delimited(
+    #[derive(Clone)]
+    pub enum FactorModifier {
+        High,
+        Low,
+        LogicalNot,
+        BinaryNot,
+    };
+
+    let modifier = opt(delimited(
         my_space0,
-        alt(('!'.take(), parse_word(b"NOT").take())),
+        alt((
+            b'!'.value(FactorModifier::LogicalNot),
+            (Caseless(b"NOT"), my_space0).value(FactorModifier::LogicalNot),
+            b'~'.value(FactorModifier::BinaryNot),
+            b'>'.value(FactorModifier::High),
+            b'<'.value(FactorModifier::Low)
+        )),
         my_space0
     ))
     .parse_next(input)?;
-
-    let binary_not = opt(delimited(my_space0, '~', my_space0)).parse_next(input)?;
-    let high_or_low = opt(preceded(my_space0, alt((b'>', b'<')))).parse_next(input)?;
 
     let cloned = *input;
     let factor = preceded(
@@ -244,38 +255,32 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         factor
     };
 
-    // XXX I have replaced Neg by Not, this seems the most coherent stuff
-    // XXX Need to check later
-    let factor = match not {
-        Some(_) => {
+
+    let factor = match modifier {
+        Some(FactorModifier::LogicalNot) => {
             LocatedExpr::UnaryOperation(
                 UnaryOperation::Not,
                 Box::new(factor),
                 build_span(input_offset, &input_start, *input).into()
             )
         },
-        None => factor
-    };
-
-    let factor = match binary_not {
-        Some(_) => {
+        Some(FactorModifier::BinaryNot) => {
             LocatedExpr::UnaryOperation(
                 UnaryOperation::BinaryNot,
                 Box::new(factor),
                 build_span(input_offset, &input_start, *input).into()
             )
         },
-        None => factor
-    };
-
-    let factor = match high_or_low {
-        Some(k) => {
+        Some(FactorModifier::High) => {
             LocatedExpr::UnaryFunction(
-                match k {
-                    b'>' => UnaryFunction::High,
-                    b'<' => UnaryFunction::Low,
-                    _ => unreachable!()
-                },
+                UnaryFunction::High,
+                Box::new(factor),
+                build_span(input_offset, &input_start, *input).into()
+            )
+        },
+        Some(FactorModifier::Low) => {
+            LocatedExpr::UnaryFunction(
+                UnaryFunction::Low,
                 Box::new(factor),
                 build_span(input_offset, &input_start, *input).into()
             )
