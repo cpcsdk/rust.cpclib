@@ -190,10 +190,12 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let factor = preceded(
         my_space0,
         alt((
+            positive_number, 
+            parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             prefixed_label_expr,
+            negative_number,
             parse_expr_bracketed_list.verify(|_| !is_orgams),
             // manage values
-            alt((positive_number, negative_number)),
             parse_string.map(|s| {
                 if s.as_ref().len() == 1 {
                     LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
@@ -220,7 +222,6 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                 }),
             parse_bool_expr,
             // manage labels
-            parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             parens
         )) /* ,
             * my_space0 */
@@ -229,7 +230,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
 
     // if labels is followed by parenthesis, in fact it is a function call
     let factor = if factor.is_label() {
-        if let Some(args) = opt(parse_function_arguments).parse_next(input)?{
+        if peek::<_, _ , Z80ParserError, _>(b'(').parse_next(input).is_ok() {
+            let args =  parse_function_arguments.parse_next(input)?;
             LocatedExpr::AnyFunction(
                 factor.span().clone(),
                 args,
