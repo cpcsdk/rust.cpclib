@@ -45,7 +45,7 @@ paste.workspace = true
 regex.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
-smallvec.workspace = true
+smallvec = {workspace = true, features = ["const_generics"]}
 #smartstring.workspace = true
 substring.workspace = true
 velcro.workspace = true
@@ -68,6 +68,10 @@ harness = false
 
 [[bench]]
 name = "parse_factor"
+harness = false
+
+[[bench]]
+name = "located_expr"
 harness = false
 
 [lib]

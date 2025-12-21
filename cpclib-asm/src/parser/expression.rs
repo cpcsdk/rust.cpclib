@@ -1,6 +1,7 @@
 // Expression module - contains expression parsing functions
 
 use std::fmt::Debug;
+use std::ops::Deref;
 
 use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
@@ -11,7 +12,7 @@ use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
+use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
@@ -20,6 +21,7 @@ use cpclib_tokens::{
     Register16, UnaryOperation, UnaryTokenOperation
 };
 use smallvec::SmallVec;
+use smallvec::Array;
 
 use super::error::*;
 use super::instructions::INSTRUCTIONS;
@@ -375,15 +377,26 @@ pub fn parse_labelprefix(input: &mut InnerZ80Span) -> ModalResult<LabelPrefix, Z
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn fold_exprs(
+pub fn fold_exprs<R>(
     initial: LocatedExpr,
-    remainder: Vec<(BinaryOperation, LocatedExpr)>,
+    remainder: R,
     span: InnerZ80Span
-) -> LocatedExpr {
-    remainder.into_iter().fold(initial, move |acc, pair| {
-        let (oper, expr) = pair;
-        LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), span.into())
-    })
+) -> LocatedExpr 
+
+
+where
+    R: IntoIterator<Item = (BinaryOperation, LocatedExpr)>,
+    <R as IntoIterator>::IntoIter: ExactSizeIterator
+{
+    let remainder = remainder.into_iter();
+    if remainder.is_empty() {
+        return initial;
+    } else {
+        remainder.into_iter()
+            .fold(initial, move |acc, (oper, expr)| {
+                LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), span.into())
+        })
+    }
 }
 
 /// Compute operations related to * % /
@@ -394,7 +407,7 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let input_offset = input.eof_offset();
 
     let initial = parse_factor(input)?;
-    let remainder = repeat(
+    let remainder: MySmallVec<[_; 2]> = repeat(
         0..,
         alt((
             parse_oper(parse_factor, b"*", BinaryOperation::Mul),
@@ -426,15 +439,14 @@ where
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
-        let _ = my_space0(input)?;
-        let _ = Caseless(pattern).parse_next(input)?;
+        let _ = (my_space0, Caseless(pattern), my_space0).parse_next(input)?;
 
         // for orgams we cannot accept * as being a multiplication if it is followed by another * as it represents a repetition
         if input.state.options().is_orgams() && pattern == b"*" {
-            not(pattern).parse_next(input)?;
+            let _ = not(pattern).parse_next(input)?;
+            let _ = my_space0(input)?;
         }
 
-        let _ = my_space0(input)?;
         let operation = inner(input)?;
 
         Ok((symbol, operation))
@@ -449,7 +461,7 @@ pub fn expr2(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let input_offset = input.eof_offset();
 
     let initial = shift(input)?;
-    let remainder = repeat(
+    let remainder: MySmallVec<[_; 2]> = repeat(
         0..,
         alt((
             parse_oper(shift, b"<=", BinaryOperation::LowerOrEqual),
@@ -472,6 +484,38 @@ pub fn expr(input: &mut InnerZ80Span) -> ModalResult<Expr, Z80ParserError> {
         .map(|e| e.to_expr().into_owned())
         .parse_next(input)
 }
+
+pub struct MySmallVec<A: Array>(SmallVec<A>);
+impl<A: Array> Deref for MySmallVec<A> {
+    type Target = SmallVec<A>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<A: Array> IntoIterator for MySmallVec<A> {
+    type Item = <SmallVec<A> as IntoIterator>::Item;
+    type IntoIter = <SmallVec<A> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<A: Array, I> Accumulate<I> for MySmallVec<A> where I: Into<<A as Array>::Item> {
+    fn initial(capacity: Option<usize>) -> Self {
+        if let Some(capacity) = capacity {
+            MySmallVec(SmallVec::with_capacity(capacity))
+        } else {
+            MySmallVec(SmallVec::new())
+        }
+    }
+
+    fn accumulate(&mut self, acc: I) {
+        self.0.push(acc.into());
+    }
+}
+
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
@@ -484,7 +528,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
 
     let initial = expr2(input)?;
 
-    let remainder = repeat(
+    let remainder: MySmallVec<[_; 2]> = repeat(
         0..,
         alt((
             parse_oper(expr2, b"&&", BinaryOperation::BooleanAnd),
@@ -571,7 +615,7 @@ pub fn shift(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let start_eof_offset = input.eof_offset();
 
     let initial = comp(input)?;
-    let remainder = repeat(
+    let remainder: MySmallVec<[_; 2]> = repeat(
         0..,
         alt((
             parse_oper(comp, b"<<", BinaryOperation::LeftShift),
@@ -595,7 +639,7 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let start_eof_offset = input.eof_offset();
 
     let initial = term(input)?;
-    let remainder = repeat(0.., alt((
+    let remainder: MySmallVec<[_; 2]> = repeat(0.., alt((
         parse_oper(term, b"+", BinaryOperation::Add),
         parse_oper(term, b"-", BinaryOperation::Sub),
         parse_oper(term, b"&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
