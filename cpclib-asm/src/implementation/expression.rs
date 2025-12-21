@@ -297,6 +297,12 @@ impl ExprEvaluationExt for Expr {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
+            Expr::BinaryOperation(_, left, right) => {
+                let mut syms = left.symbols_used();
+                syms.extend(right.symbols_used());
+                syms
+            },
+
             _ => {
                 unimplemented!("Need to retreive the symbols from the operation")
             }
