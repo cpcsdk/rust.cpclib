@@ -841,8 +841,7 @@ pub fn parse_label(
                         ".".value(()),
                         delimited('{', opt(expr), '}').value(())
                     ))
-                )
-            )
+                ))
                 .take()
                 .parse_next(input)?
         }
@@ -860,8 +859,7 @@ pub fn parse_label(
                         ".".value(()),
                         delimited('{', opt(expr), '}').value(())
                     ))
-                )
-            )
+                ))
                 .take()
                 .parse_next(input)?
         };

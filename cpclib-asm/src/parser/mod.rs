@@ -2,7 +2,7 @@ mod common;
 mod context;
 mod directives;
 mod error;
-mod expression;
+pub mod expression;
 mod instructions;
 mod line_col;
 mod obtained;
