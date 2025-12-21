@@ -4,70 +4,14 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-pub fn generate_orgams_directive_names() {
-    generate_directive_names_file(
-        STAND_ALONE_DIRECTIVE_ORGAMS,
-        START_DIRECTIVE_ORGAMS,
-        END_DIRECTIVE_ORGAMS,
-        "orgams_directives_name_generated.rs",
-        "STAND_ALONE_DIRECTIVE_ORGAMS",
-        "START_DIRECTIVE_ORGAMS",
-        "END_DIRECTIVE_ORGAMS"
-    );
-}
+const UNARY_FUNCTIONS: &[&[u8]] = &[
+    b"ABS", b"ACOS", b"ASIN", b"CEIL", b"CHAR", b"COS", b"EXP", b"FLOOR", b"FRAC", b"HI", b"HIGH",
+    b"INT", b"LN", b"LO", b"LOG10", b"LOW", b"MEMORY", b"PEEK", b"SIN", b"SQRT"
+];
 
-pub fn generate_basm_directive_names() {
-    generate_directive_names_file(
-        STAND_ALONE_DIRECTIVE,
-        START_DIRECTIVE,
-        END_DIRECTIVE,
-        "basm_directives_name_generated.rs",
-        "STAND_ALONE_DIRECTIVE",
-        "START_DIRECTIVE",
-        "END_DIRECTIVE"
-    );
-}
+const NO_ARGS_FUNCTIONS: &[&[u8]] = &[b"RND"];
 
-/// Helper to generate directive names file for both BASM and ORGAMS
-pub fn generate_directive_names_file(
-    stand_alone: &[&[u8]],
-    start: &[&[u8]],
-    end: &[&[u8]],
-    filename: &str,
-    stand_alone_array_name: &str,
-    start_array_name: &str,
-    end_array_name: &str
-) {
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join(filename);
-    let mut file = File::create(&dest_path).unwrap();
-    let mut file = BufWriter::new(file);
-
-    let arrays = [
-        (stand_alone, stand_alone_array_name),
-        (start, start_array_name),
-        (end, end_array_name),
-    ];
-
-    for (array, array_name) in arrays.iter() {
-        writeln!(file, "pub const {}: &[&[u8]] = &[", array_name).unwrap();
-        for directive in *array {
-            writeln!(file, "    b\"{}\",", std::str::from_utf8(directive).unwrap()).unwrap();
-        }
-        writeln!(file, "];").unwrap();
-    }
-
-    // Generate DOTTED_* arrays by prepending '.'
-    for (array, array_name) in arrays.iter() {
-        let dotted_name = format!("DOTTED_{}", array_name);
-        writeln!(file, "pub const {}: &[&[u8]] = &[", dotted_name).unwrap();
-        for directive in *array {
-            let s = std::str::from_utf8(directive).unwrap();
-            writeln!(file, "    b\".{}\",", s).unwrap();
-        }
-        writeln!(file, "];").unwrap();
-    }
-}
+const BINARY_FUNCTIONS: &[&[u8]] = &[b"MAX", b"MIN", b"POW"];
 
 // Directive and instruction definitions (must match parser.rs and instructions.rs)
 const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
@@ -426,6 +370,76 @@ fn generate_forbidden_names() {
     write_bucket_match(&mut f, "orgams_impossible_by_length", &orgams_buckets);
 
     println!("cargo:rerun-if-changed=build.rs");
+}
+
+pub fn generate_orgams_directive_names() {
+    generate_directive_names_file(
+        STAND_ALONE_DIRECTIVE_ORGAMS,
+        START_DIRECTIVE_ORGAMS,
+        END_DIRECTIVE_ORGAMS,
+        "orgams_directives_name_generated.rs",
+        "STAND_ALONE_DIRECTIVE_ORGAMS",
+        "START_DIRECTIVE_ORGAMS",
+        "END_DIRECTIVE_ORGAMS"
+    );
+}
+
+pub fn generate_basm_directive_names() {
+    generate_directive_names_file(
+        STAND_ALONE_DIRECTIVE,
+        START_DIRECTIVE,
+        END_DIRECTIVE,
+        "basm_directives_name_generated.rs",
+        "STAND_ALONE_DIRECTIVE",
+        "START_DIRECTIVE",
+        "END_DIRECTIVE"
+    );
+}
+
+/// Helper to generate directive names file for both BASM and ORGAMS
+pub fn generate_directive_names_file(
+    stand_alone: &[&[u8]],
+    start: &[&[u8]],
+    end: &[&[u8]],
+    filename: &str,
+    stand_alone_array_name: &str,
+    start_array_name: &str,
+    end_array_name: &str
+) {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join(filename);
+    let mut file = File::create(&dest_path).unwrap();
+    let mut file = BufWriter::new(file);
+
+    let arrays = [
+        (stand_alone, stand_alone_array_name),
+        (start, start_array_name),
+        (end, end_array_name)
+    ];
+
+    for (array, array_name) in arrays.iter() {
+        writeln!(file, "pub const {}: &[&[u8]] = &[", array_name).unwrap();
+        for directive in *array {
+            writeln!(
+                file,
+                "    b\"{}\",",
+                std::str::from_utf8(directive).unwrap()
+            )
+            .unwrap();
+        }
+        writeln!(file, "];").unwrap();
+    }
+
+    // Generate DOTTED_* arrays by prepending '.'
+    for (array, array_name) in arrays.iter() {
+        let dotted_name = format!("DOTTED_{}", array_name);
+        writeln!(file, "pub const {}: &[&[u8]] = &[", dotted_name).unwrap();
+        for directive in *array {
+            let s = std::str::from_utf8(directive).unwrap();
+            writeln!(file, "    b\".{}\",", s).unwrap();
+        }
+        writeln!(file, "];").unwrap();
+    }
 }
 
 fn build() {

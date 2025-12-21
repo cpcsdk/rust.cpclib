@@ -14,7 +14,7 @@ pub mod stable_ticker;
 pub mod string;
 pub mod support;
 pub mod symbols_output;
-
+pub mod maths;
 pub mod embedded;
 pub mod processed_token;
 

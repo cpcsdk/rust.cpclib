@@ -20,11 +20,11 @@ use cpclib_sna::{
 };
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryFunction, BinaryOperation,
+    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation,
     CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest,
     FormattedExpr, IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam,
     MacroParamElement, Mnemonic, Register8, Register16, SaveType, StableTickerAction, TestKind,
-    TestKindElement, ToSimpleToken, Token, UnaryFunction, UnaryOperation, UnaryTokenOperation,
+    TestKindElement, ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation,
     data_access_impl_most_methods, data_access_is_any_indexregister8,
     data_access_is_any_indexregister16, data_access_is_any_register8,
     data_access_is_any_register16, listing_element_impl_most_methods
@@ -65,10 +65,8 @@ pub enum LocatedExpr {
 
     Paren(Box<LocatedExpr>, Z80Span),
 
-    UnaryFunction(UnaryFunction, Box<LocatedExpr>, Z80Span),
     UnaryOperation(UnaryOperation, Box<LocatedExpr>, Z80Span),
     UnaryTokenOperation(UnaryTokenOperation, Box<LocatedToken>, Z80Span),
-    BinaryFunction(BinaryFunction, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
     BinaryOperation(BinaryOperation, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
 
     /// Function supposely coded by the user
@@ -123,22 +121,13 @@ impl ExprElement for LocatedExpr {
             },
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
             LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
-            LocatedExpr::UnaryFunction(f, box e, _) => {
-                Expr::UnaryFunction(*f, Box::new(e.to_expr().into_owned()))
-            },
             LocatedExpr::UnaryOperation(o, box e, _) => {
                 Expr::UnaryOperation(*o, Box::new(e.to_expr().into_owned()))
             },
             LocatedExpr::UnaryTokenOperation(o, box t, _) => {
                 Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             },
-            LocatedExpr::BinaryFunction(f, box e1, box e2, _) => {
-                Expr::BinaryFunction(
-                    *f,
-                    Box::new(e1.to_expr().into_owned()),
-                    Box::new(e2.to_expr().into_owned())
-                )
-            },
+            
             LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
                 Expr::BinaryOperation(
                     *o,
@@ -372,35 +361,7 @@ impl ExprElement for LocatedExpr {
             _ => unreachable!()
         }
     }
-
-    fn is_unary_function(&self) -> bool {
-        match self {
-            Self::UnaryFunction(..) => true,
-            _ => false
-        }
-    }
-
-    fn unary_function(&self) -> UnaryFunction {
-        match self {
-            Self::UnaryFunction(f, ..) => *f,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_binary_function(&self) -> bool {
-        match self {
-            Self::BinaryFunction(..) => true,
-            _ => false
-        }
-    }
-
-    fn binary_function(&self) -> BinaryFunction {
-        match self {
-            Self::BinaryFunction(f, ..) => *f,
-            _ => unreachable!()
-        }
-    }
-
+ 
     fn is_paren(&self) -> bool {
         match self {
             Self::Paren(..) => true,
@@ -425,8 +386,6 @@ impl ExprElement for LocatedExpr {
     fn function_name(&self) -> &str {
         match self {
             Self::AnyFunction(n, ..) => n.as_str(),
-            Self::UnaryFunction(_f, ..) => todo!(),
-            Self::BinaryFunction(_f, ..) => todo!(),
             _ => unreachable!()
         }
     }
@@ -442,8 +401,6 @@ impl ExprElement for LocatedExpr {
         match self {
             Self::BinaryOperation(_, box arg1, ..) => arg1,
             Self::UnaryOperation(_, box arg, _) => arg,
-            Self::UnaryFunction(_, box arg, _) => arg,
-            Self::BinaryFunction(_, box arg1, ..) => arg1,
             Self::Paren(box p, _) => p,
 
             _ => unreachable!()
@@ -453,8 +410,6 @@ impl ExprElement for LocatedExpr {
     fn arg2(&self) -> &Self {
         match self {
             Self::BinaryOperation(_, _, box arg2, _) => arg2,
-            Self::BinaryFunction(_, _, box arg2, _) => arg2,
-
             _ => unreachable!()
         }
     }
@@ -483,8 +438,7 @@ impl ExprEvaluationExt for LocatedExpr {
                 vec![label.as_str()]
             },
 
-            LocatedExpr::BinaryFunction(_, box a, box b, _)
-            | LocatedExpr::BinaryOperation(_, box a, box b, _) => {
+           LocatedExpr::BinaryOperation(_, box a, box b, _) => {
                 a.symbols_used()
                     .into_iter()
                     .chain(b.symbols_used())
@@ -492,7 +446,6 @@ impl ExprEvaluationExt for LocatedExpr {
             },
 
             LocatedExpr::Paren(a, _)
-            | LocatedExpr::UnaryFunction(_, a, _)
             | LocatedExpr::UnaryOperation(_, a, _) => a.symbols_used(),
 
             LocatedExpr::AnyFunction(_, l, _) | LocatedExpr::List(l, _) => {
@@ -528,10 +481,8 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::List(_, span)
             | LocatedExpr::PrefixedLabel(_, _, span)
             | LocatedExpr::Paren(_, span)
-            | LocatedExpr::UnaryFunction(_, _, span)
             | LocatedExpr::UnaryOperation(_, _, span)
             | LocatedExpr::UnaryTokenOperation(_, _, span)
-            | LocatedExpr::BinaryFunction(_, _, _, span)
             | LocatedExpr::BinaryOperation(_, _, _, span)
             | LocatedExpr::AnyFunction(_, _, span)
             | LocatedExpr::Rnd(span) => span

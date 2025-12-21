@@ -16,8 +16,8 @@ use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
 use cpclib_tokens::{
-    AssemblerFlavor, BinaryFunction, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest,
-    LabelPrefix, Register16, UnaryFunction, UnaryOperation, UnaryTokenOperation
+    AssemblerFlavor, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest,
+    LabelPrefix, Register16, UnaryOperation, UnaryTokenOperation
 };
 use smallvec::SmallVec;
 
@@ -184,7 +184,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         BinaryNot,
     };
 
-    let modifier = opt(delimited(
+    let (modifier, modifier_content) = opt(delimited(
         my_space0,
         alt((
             b'!'.value(FactorModifier::LogicalNot),
@@ -194,7 +194,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             b'<'.value(FactorModifier::Low)
         )),
         my_space0
-    ))
+    )).with_taken()
     .parse_next(input)?;
 
     let cloned = *input;
@@ -272,16 +272,16 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             )
         },
         Some(FactorModifier::High) => {
-            LocatedExpr::UnaryFunction(
-                UnaryFunction::High,
-                Box::new(factor),
+            LocatedExpr::AnyFunction(
+                (*input).update_slice(modifier_content).into(),
+                vec![factor],
                 build_span(input_offset, &input_start, *input).into()
             )
         },
         Some(FactorModifier::Low) => {
-            LocatedExpr::UnaryFunction(
-                UnaryFunction::Low,
-                Box::new(factor),
+            LocatedExpr::AnyFunction(
+                (*input).update_slice(modifier_content).into(),
+                vec![factor],
                 build_span(input_offset, &input_start, *input).into()
             )
         },
@@ -471,87 +471,6 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     Ok(fold_exprs(initial, remainder, span))
 }
 
-/// parse functions with one argument
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_unary_function_call(
-    input: &mut InnerZ80Span
-) -> ModalResult<LocatedExpr, Z80ParserError> {
-    let input_start = input.checkpoint();
-    let input_offset = input.eof_offset();
-
-    let (word, exp) = (
-        delimited(my_space0, alpha1, my_space0),
-        delimited((my_space0, "(", my_space0), located_expr, (my_space0, ")"))
-            .context(StrContext::Label("UNARY function: error in parameters"))
-    )
-        .parse_next(input)?;
-
-    let func = match word {
-        choice_nocase!(b"HIGH") | choice_nocase!(b"HI") => Some(UnaryFunction::High),
-        choice_nocase!(b"LOW") | choice_nocase!(b"LO") => Some(UnaryFunction::Low),
-        choice_nocase!(b"PEEK") | choice_nocase!(b"MEMORY") => Some(UnaryFunction::Memory),
-        choice_nocase!(b"FLOOR") => Some(UnaryFunction::Floor),
-        choice_nocase!(b"CEIL") => Some(UnaryFunction::Ceil),
-        choice_nocase!(b"FRAC") => Some(UnaryFunction::Frac),
-        choice_nocase!(b"CHAR") => Some(UnaryFunction::Char),
-        choice_nocase!(b"INT") => Some(UnaryFunction::Int),
-        choice_nocase!(b"SIN") => Some(UnaryFunction::Sin),
-        choice_nocase!(b"COS") => Some(UnaryFunction::Cos),
-        choice_nocase!(b"ASIN") => Some(UnaryFunction::ASin),
-        choice_nocase!(b"ACOS") => Some(UnaryFunction::ACos),
-        choice_nocase!(b"LN") => Some(UnaryFunction::Ln),
-        choice_nocase!(b"LOG10") => Some(UnaryFunction::Log10),
-        choice_nocase!(b"EXP") => Some(UnaryFunction::Exp),
-        choice_nocase!(b"SQRT") => Some(UnaryFunction::Sqrt),
-        choice_nocase!(b"ABS") => Some(UnaryFunction::Abs),
-        _ => None
-    };
-
-    let span = build_span(input_offset, &input_start, *input);
-    let word = (*input).update_slice(word);
-
-    let token = match func {
-        Some(func) => LocatedExpr::UnaryFunction(func, Box::new(exp), span.into()),
-        None => LocatedExpr::AnyFunction(word.into(), vec![exp], span.into())
-    };
-
-    Ok(token)
-}
-
-/// parse functions with two arguments
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_binary_function_call(
-    input: &mut InnerZ80Span
-) -> ModalResult<LocatedExpr, Z80ParserError> {
-    let input_start = input.checkpoint();
-    let input_offset = input.eof_offset();
-
-    let func = alt((
-        Caseless("MIN").value(BinaryFunction::Min),
-        Caseless("MAX").value(BinaryFunction::Max),
-        Caseless("POW").value(BinaryFunction::Pow)
-    ))
-    .parse_next(input)?;
-
-    let _ = (my_space0, "(", my_space0).parse_next(input)?;
-
-    let arg1 = located_expr.parse_next(input)?;
-    let _ = (my_space0, ',', my_space0).parse_next(input)?;
-    let arg2 = located_expr.parse_next(input)?;
-
-    let _ = (my_space0, ")").parse_next(input)?;
-
-    let span = build_span(input_offset, &input_start, *input);
-
-    Ok(LocatedExpr::BinaryFunction(
-        func,
-        Box::new(arg1),
-        Box::new(arg2),
-        span.into()
-    ))
-}
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]

@@ -6,9 +6,11 @@ use cpclib_tokens::tokens::*;
 use crate::assembler::Env;
 use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
-use crate::{SymbolFor, UnaryFunction};
+use crate::{SymbolFor};
 
 /// XXX Orgams only handles integer values and strings
+/// TODO call it somewhere in the expression evaluation
+/// because it seesm not use anymore since various refactoring
 pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
     let e = if env.options().parse_options().is_orgams() {
         match &e {
@@ -56,175 +58,6 @@ macro_rules! resolve_impl {
     ($self: ident, $env: ident) => { {
         use std::ops::Neg;
         use cpclib_tokens::symbols::SymbolsTableTrait;
-
-
-/// utility class for unary function evaluation
-struct UnaryFunctionWrapper<'a, E:ExprEvaluationExt> {
-    func:  UnaryFunction,
-    arg: &'a E
-}
-
-
-impl<'a, E:ExprEvaluationExt>  std::fmt::Display for  UnaryFunctionWrapper<'a,E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}({})", self.func, self.arg)
-    }
-}
-
-impl<'a, E:ExprEvaluationExt> UnaryFunctionWrapper<'a, E> {
-    fn new(func:  UnaryFunction, arg: &'a E) -> UnaryFunctionWrapper<'a,E> {
-        UnaryFunctionWrapper { func, arg }
-    }
-}
-
-impl<'a, E:ExprEvaluationExt> ExprEvaluationExt for UnaryFunctionWrapper<'a,E> {
-
-
-    fn symbols_used(&self) -> Vec<&str> {
-        self.arg.symbols_used()
-    }
-
-    /// TODO handle float numbers
-    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
-        let arg = self.arg.resolve(env)?;
-
-        let res = match self.func {
-            UnaryFunction::High => {
-                ((arg >> 8.into())? & 0xFF.into())
-                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Low => {
-                (arg & 0xFF.into()).map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Memory => {
-                if arg < 0.into() || arg > 0xFFFF.into() {
-                    return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        Box::new(AssemblerError::AssemblingError {
-                            msg: format!("Impossible to read memory address 0x{:X}", arg)
-                        })
-                    )));
-                }
-                else {
-                    Ok(env
-                        .peek(&env.logical_to_physical_address(arg.int()? as _))
-                        .into())
-                }
-            }
-            UnaryFunction::Floor => {
-                (arg.floor()).map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Ceil => (arg.ceil()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Frac => (arg.frac()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Int => {
-                (arg.int())
-                    .map(|i| i.into())
-                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Char => {
-                (arg.char())
-                    .map(|i| i.into())
-                    .map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Sin => {
-                if env.options().parse_options().is_orgams() {
-                    dbg!("We need to check things here");
-                    dbg!(Ok((512.0*(arg.float()? * 3.1415926545 / (256.0/2.0)).sin()).into()))
-                } else {
-                    arg.sin()
-                }.map_err(|e| AssemblerError::ExpressionTypeError(e))
-            },
-            UnaryFunction::Cos => (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::ASin => (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::ACos => (arg.acos()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Abs => (arg.abs()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Ln => (arg.ln()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Log10 => {
-                (arg.log10()).map_err(|e| AssemblerError::ExpressionTypeError(e))
-            }
-            UnaryFunction::Exp => (arg.exp()).map_err(|e| AssemblerError::ExpressionTypeError(e)),
-            UnaryFunction::Sqrt => (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e))
-        }?;
-
-
-        ensure_orgams_type(res, env)
-
-
-    }
-}
-
-
-/// utility class for binary function evaluation
-struct BinaryFunctionWrapper<'a,  E:ExprEvaluationExt> {
-    func: BinaryFunction,
-    arg1: &'a E,
-    arg2: &'a E
-}
-
-
-impl<'a, E:ExprEvaluationExt>  std::fmt::Display for  BinaryFunctionWrapper<'a,E> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "{}({},{})", self.func, self.arg1, self.arg2)
-    }
-}
-
-
-
-impl<'a,  E:ExprEvaluationExt> BinaryFunctionWrapper<'a, E> {
-    fn new(func:  BinaryFunction, arg1: &'a E, arg2: &'a E) -> Self {
-        BinaryFunctionWrapper { func, arg1, arg2 }
-    }
-}
-
-impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E> {
-    fn symbols_used(&self) -> Vec<&str> {
-        self.arg1
-            .symbols_used()
-            .into_iter()
-            .chain(self.arg2.symbols_used().into_iter())
-            .collect_vec()
-    }
-
-    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
-        let arg1 = self.arg1.resolve(env)?;
-        let arg2 = self.arg2.resolve(env)?;
-
-        let res = match self.func {
-            BinaryFunction::Min => Ok(arg1.min(arg2)),
-            BinaryFunction::Max => Ok(arg1.max(arg2)),
-            BinaryFunction::Pow => {
-                let power = arg2.int()?;
-                match arg1 {
-                    ExprResult::Float(f) => Ok(f.into_inner().powf(power as f64).into()),
-                    ExprResult::Value(v) => Ok(v.pow(power as _).into()),
-
-                    ExprResult::List(_) => {
-                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                            Box::new(AssemblerError::AssemblingError {
-                                msg: format!("pow cannot be applied to a list")
-                            })
-                        )))
-                    },
-
-                    _ => {
-                        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                            Box::new(AssemblerError::AssemblingError {
-                                msg: format!("pow cannot be applied to a string")
-                            })
-                        )))
-                    }
-                }
-            }
-        }?;
-
-        let res = ensure_orgams_type(res, env);
-        res
-
-    }
-}
-
-
-
-
 
         let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, AssemblerError> {
             let res_left = left.resolve($env);
@@ -417,17 +250,6 @@ impl<'a,  E:ExprEvaluationExt> ExprEvaluationExt for BinaryFunctionWrapper<'a, E
                 }
             }
         }
-        else if $self.is_unary_function() {
-            let func = $self.unary_function();
-            let arg = $self.arg1();
-            UnaryFunctionWrapper::new(func, arg).resolve($env)
-        }
-        else if $self.is_binary_function() {
-            let func = $self.binary_function();
-            let arg1 = $self.arg1();
-            let arg2 = $self.arg2();
-            BinaryFunctionWrapper::new(func, arg1, arg2).resolve($env)
-        }
 
         else if $self.is_rnd() {
             unimplemented!("Env need to maintain a counter of call with its value to ensure a consistant generation among the passes")
@@ -466,14 +288,8 @@ impl ExprEvaluationExt for Expr {
 
             Expr::Label(label) | Expr::PrefixedLabel(_, label) => vec![label.as_str()],
 
-            Expr::BinaryFunction(_, box a, box b) | Expr::BinaryOperation(_, box a, box b) => {
-                a.symbols_used()
-                    .into_iter()
-                    .chain(b.symbols_used())
-                    .collect_vec()
-            },
 
-            Expr::Paren(a) | Expr::UnaryFunction(_, a) | Expr::UnaryOperation(_, a) => {
+            Expr::Paren(a) | Expr::UnaryOperation(_, a) => {
                 a.symbols_used()
             },
 
@@ -481,7 +297,7 @@ impl ExprEvaluationExt for Expr {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
-            Expr::UnaryTokenOperation(_, box _t) => {
+            _ => {
                 unimplemented!("Need to retreive the symbols from the operation")
             }
         }

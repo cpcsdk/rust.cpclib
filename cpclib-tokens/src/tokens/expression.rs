@@ -36,10 +36,8 @@ pub enum Expr {
 
     Paren(Box<Expr>),
 
-    UnaryFunction(UnaryFunction, Box<Expr>),
     UnaryOperation(UnaryOperation, Box<Expr>),
     UnaryTokenOperation(UnaryTokenOperation, Box<Token>),
-    BinaryFunction(BinaryFunction, Box<Expr>, Box<Expr>),
     BinaryOperation(BinaryOperation, Box<Expr>, Box<Expr>),
 
     /// Function supposely coded by the user
@@ -109,11 +107,7 @@ pub trait ExprElement: Sized {
     fn is_unary_operation(&self) -> bool;
     fn unary_operation(&self) -> UnaryOperation;
 
-    fn is_unary_function(&self) -> bool;
-    fn unary_function(&self) -> UnaryFunction;
-
-    fn is_binary_function(&self) -> bool;
-    fn binary_function(&self) -> BinaryFunction;
+    // Removed is_unary_function, unary_function, is_binary_function, binary_function
 
     fn is_paren(&self) -> bool;
 
@@ -255,56 +249,6 @@ impl From<Expr> for FormattedExpr {
     }
 }
 
-/// Represent a function with one argument
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum UnaryFunction {
-    /// High byte of a value
-    High,
-    /// Low byte of a value
-    Low,
-    /// Memory already assembled
-    Memory,
-    Char,
-    Floor,
-    Ceil,
-    Frac,
-    Int,
-    Sin,
-    Cos,
-    ASin,
-    ACos,
-    Abs,
-    Ln,
-    Log10,
-    Exp,
-    Sqrt
-}
-
-impl Display for UnaryFunction {
-    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        //    panic!();
-        let repr = match self {
-            UnaryFunction::High => "high",
-            UnaryFunction::Low => "low",
-            UnaryFunction::Memory => "memory",
-            UnaryFunction::Floor => "floor",
-            UnaryFunction::Ceil => "ceil",
-            UnaryFunction::Frac => "frac",
-            UnaryFunction::Int => "int",
-            UnaryFunction::Char => "char",
-            UnaryFunction::Sin => "sin",
-            UnaryFunction::Cos => "cos",
-            UnaryFunction::ASin => "asin",
-            UnaryFunction::ACos => "acos",
-            UnaryFunction::Abs => "abs",
-            UnaryFunction::Ln => "ln",
-            UnaryFunction::Log10 => "log10",
-            UnaryFunction::Exp => "exp",
-            UnaryFunction::Sqrt => "sqrt"
-        };
-        write!(format, "{repr}")
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum UnaryOperation {
@@ -319,17 +263,6 @@ impl Display for UnaryOperation {
             UnaryOperation::Neg => "-",
             UnaryOperation::Not => "!",
             UnaryOperation::BinaryNot => "~"
-        };
-        write!(format, "{repr}")
-    }
-}
-
-impl Display for BinaryFunction {
-    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        let repr = match self {
-            BinaryFunction::Min => "min",
-            BinaryFunction::Max => "max",
-            BinaryFunction::Pow => "pow"
         };
         write!(format, "{repr}")
     }
@@ -408,13 +341,7 @@ impl Display for BinaryOperation {
     }
 }
 
-/// Function with two arguments
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum BinaryFunction {
-    Min,
-    Max,
-    Pow
-}
+
 
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
@@ -625,28 +552,6 @@ impl ExprElement for Expr {
         }
     }
 
-    fn is_unary_function(&self) -> bool {
-        matches!(self, Self::UnaryFunction(..))
-    }
-
-    fn unary_function(&self) -> UnaryFunction {
-        match self {
-            Self::UnaryFunction(f, _) => *f,
-            _ => unreachable!()
-        }
-    }
-
-    fn is_binary_function(&self) -> bool {
-        matches!(self, Self::BinaryFunction(..))
-    }
-
-    fn binary_function(&self) -> BinaryFunction {
-        match self {
-            Self::BinaryFunction(f, ..) => *f,
-            _ => unreachable!()
-        }
-    }
-
     fn is_paren(&self) -> bool {
         matches!(self, Self::Paren(..))
     }
@@ -662,8 +567,6 @@ impl ExprElement for Expr {
     fn function_name(&self) -> &str {
         match self {
             Self::AnyFunction(n, _) => n.as_str(),
-            Self::UnaryFunction(_f, _) => todo!(),
-            Self::BinaryFunction(_f, ..) => todo!(),
             _ => unreachable!()
         }
     }
@@ -679,8 +582,6 @@ impl ExprElement for Expr {
         match self {
             Self::BinaryOperation(_, box arg1, _) => arg1,
             Self::UnaryOperation(_, box arg) => arg,
-            Self::UnaryFunction(_, box arg) => arg,
-            Self::BinaryFunction(_, box arg1, _) => arg1,
             Self::Paren(box p) => p,
 
             _ => unreachable!()
@@ -690,8 +591,6 @@ impl ExprElement for Expr {
     fn arg2(&self) -> &Self {
         match self {
             Self::BinaryOperation(_, _, box arg2) => arg2,
-            Self::BinaryFunction(_, _, box arg2) => arg2,
-
             _ => unreachable!()
         }
     }
@@ -730,10 +629,6 @@ impl Display for Expr {
             List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
             Label(label) => write!(format, "{label}"),
             PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
-
-            UnaryFunction(func, arg) => write!(format, "{func}({arg})"),
-
-            BinaryFunction(func, arg1, arg2) => write!(format, "{func}({arg1}, {arg2})"),
 
             Paren(expr) => write!(format, "({expr})"),
 
