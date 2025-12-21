@@ -366,10 +366,10 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
     let remainder = repeat(
         0..,
         alt((
-            parse_oper(parse_factor, "*", BinaryOperation::Mul),
-            parse_oper(parse_factor, "%", BinaryOperation::Mod),
-            parse_oper(parse_factor, "MOD", BinaryOperation::Mod),
-            parse_oper(parse_factor, "/", BinaryOperation::Div)
+            parse_oper(parse_factor, b"*", BinaryOperation::Mul),
+            parse_oper(parse_factor, b"%", BinaryOperation::Mod),
+            parse_oper(parse_factor, b"MOD", BinaryOperation::Mod),
+            parse_oper(parse_factor, b"/", BinaryOperation::Div)
         ))
     )
     .parse_next(input)?;
@@ -386,7 +386,7 @@ pub fn term(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_oper<F>(
     inner: F,
-    pattern: &'static str,
+    pattern: &'static [u8],
     symbol: BinaryOperation
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<(BinaryOperation, LocatedExpr), Z80ParserError>
 where
@@ -398,8 +398,8 @@ where
         let _ = my_space0(input)?;
         let _ = Caseless(pattern).parse_next(input)?;
 
-        // for orgams we cannot accept * as being a mulitplication if it is followed by another * as it repreents a repetition
-        if input.state.options().is_orgams() && pattern == "*" {
+        // for orgams we cannot accept * as being a multiplication if it is followed by another * as it represents a repetition
+        if input.state.options().is_orgams() && pattern == b"*" {
             not(pattern).parse_next(input)?;
         }
 
@@ -421,13 +421,13 @@ pub fn expr2(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let remainder = repeat(
         0..,
         alt((
-            parse_oper(shift, "<=", BinaryOperation::LowerOrEqual),
-            parse_oper(shift, "<", BinaryOperation::StrictlyLower),
-            parse_oper(shift, ">=", BinaryOperation::GreaterOrEqual),
-            parse_oper(shift, ">", BinaryOperation::StrictlyGreater),
-            parse_oper(shift, "==", BinaryOperation::Equal),
-            parse_oper(shift, "=", BinaryOperation::Equal),
-            parse_oper(shift, "!=", BinaryOperation::Different)
+            parse_oper(shift, b"<=", BinaryOperation::LowerOrEqual),
+            parse_oper(shift, b"<", BinaryOperation::StrictlyLower),
+            parse_oper(shift, b">=", BinaryOperation::GreaterOrEqual),
+            parse_oper(shift, b">", BinaryOperation::StrictlyGreater),
+            parse_oper(shift, b"==", BinaryOperation::Equal),
+            parse_oper(shift, b"=", BinaryOperation::Equal),
+            parse_oper(shift, b"!=", BinaryOperation::Different)
         ))
     )
     .parse_next(input)?;
@@ -452,14 +452,16 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let input_offset = input.eof_offset();
 
     let initial = expr2(input)?;
+
     let remainder = repeat(
         0..,
         alt((
-            parse_oper(expr2, "&&", BinaryOperation::BooleanAnd),
-            parse_oper(expr2, "||", BinaryOperation::BooleanOr)
-        ))
-    )
+            parse_oper(expr2, b"&&", BinaryOperation::BooleanAnd),
+            parse_oper(expr2, b"||", BinaryOperation::BooleanOr)
+        )
+    ))
     .parse_next(input)?;
+
     let span = build_span(input_offset, &input_start, *input);
     Ok(fold_exprs(initial, remainder, span))
 }
@@ -623,8 +625,8 @@ pub fn shift(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErro
     let remainder = repeat(
         0..,
         alt((
-            parse_oper(comp, "<<", BinaryOperation::LeftShift),
-            parse_oper(comp, ">>", BinaryOperation::RightShift)
+            parse_oper(comp, b"<<", BinaryOperation::LeftShift),
+            parse_oper(comp, b">>", BinaryOperation::RightShift)
         ))
     )
     .parse_next(input)?;
@@ -645,14 +647,14 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
 
     let initial = term(input)?;
     let remainder = repeat(0.., alt((
-        parse_oper(term, "+", BinaryOperation::Add),
-        parse_oper(term, "-", BinaryOperation::Sub),
-        parse_oper(term, "&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
-        parse_oper(term, "AND", BinaryOperation::BinaryAnd),
-        parse_oper(term, "|", BinaryOperation::BinaryOr), /* TODO check if it works and not compete with || */
-        parse_oper(term, "OR", BinaryOperation::BinaryOr),
-        parse_oper(term, "^", BinaryOperation::BinaryXor), /* TODO check if it works and not compete with ^^ */
-        parse_oper(term, "XOR", BinaryOperation::BinaryXor)
+        parse_oper(term, b"+", BinaryOperation::Add),
+        parse_oper(term, b"-", BinaryOperation::Sub),
+        parse_oper(term, b"&", BinaryOperation::BinaryAnd), /* TODO check if it works and not compete with && */
+        parse_oper(term, b"AND", BinaryOperation::BinaryAnd),
+        parse_oper(term, b"|", BinaryOperation::BinaryOr), /* TODO check if it works and not compete with || */
+        parse_oper(term, b"OR", BinaryOperation::BinaryOr),
+        parse_oper(term, b"^", BinaryOperation::BinaryXor), /* TODO check if it works and not compete with ^^ */
+        parse_oper(term, b"XOR", BinaryOperation::BinaryXor)
     ))).parse_next(input)?;
 
     Ok(fold_exprs(

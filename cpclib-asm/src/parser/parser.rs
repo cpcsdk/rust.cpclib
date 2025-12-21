@@ -1754,7 +1754,7 @@ endif"
     #[test]
     fn parser_regression2() {
         let res = parse_test(
-            parse_assert,
+            parse_z80_line_complete(&mut Vec::new()),
             "assert (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)"
         );
         assert!(res.is_ok(), "{:?}", &res);
@@ -2311,7 +2311,7 @@ MEND";
     
     #[test]
     fn test_parse_expr2_robust() {
-        for (input, should_succeed) in EXPR2_CASES.iter() {
+        for (input, should_succeed) in EXPR2_CASES.iter().chain(COMP_CASES.iter()) {
             let result = parse_test(expr2, input);
             if *should_succeed {
                 assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
@@ -2344,9 +2344,9 @@ MEND";
     #[test]
     fn test_parse_comp_robust() {
         
-        for (input, should_succeed) in COMP_CASES.iter() {
+        for (input, should_succeed) in COMP_CASES {
             let result = parse_test(comp, input);
-            if *should_succeed {
+                       if *should_succeed {
                 assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
             } else {
                 assert!(result.is_err(), "Should fail to parse '{}', got {:?}", input, result);
@@ -2354,15 +2354,30 @@ MEND";
         }
     }
 
+    static LOCATED_EXPR_CASES: &[(&str, bool)] = &[
+
+            ("BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES", true),
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)", true),
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)||(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)", true),
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)||(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)", true),
+            ("((BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES))", true),
+
+    ];
 
     #[test]
-    fn test_parse_located_robust() {
+    fn test_parse_located_expression_robust() {
         
-        for (input, should_succeed) in COMP_CASES.iter().chain(EXPR2_CASES.iter()) {
-            let result = parse_test(comp, input);
+        for (input, should_succeed) in COMP_CASES.iter().chain(EXPR2_CASES.iter()).chain(LOCATED_EXPR_CASES.iter()) {
+            let result = parse_test(located_expr, input);
             if *should_succeed {
+                if result.is_err() {
+                    eprintln!("FAIL: Should parse '{}', got {:?}", input, result);
+                }
                 assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
             } else {
+                if result.is_ok() {
+                    eprintln!("FAIL: Should fail to parse '{}', got {:?}", input, result);
+                }
                 assert!(result.is_err(), "Should fail to parse '{}', got {:?}", input, result);
             }
         }

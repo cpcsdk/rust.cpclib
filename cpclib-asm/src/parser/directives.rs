@@ -1,3 +1,4 @@
+
 // Directives module - contains directive-related constants and parsing functions
 
 use std::borrow::Cow;
@@ -2696,3 +2697,32 @@ directive_with_expr!(parse_map, Map);
 directive_with_expr!(parse_limit, Limit);
 directive_with_expr!(parse_waitnops, WaitNops);
 directive_with_expr!(parse_return, Return);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parser::test::parse_test;
+    use cpclib_tokens::{Expr, FormattedExpr};
+
+    #[test]
+    fn test_parse_assert_cases() {
+        let cases = vec![
+            ("42", true),
+            ("1+2, 'ok'", true),
+            ("0, {HEX2} 255", true),
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
+            (" (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
+            ("   (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
+            ("", false),
+        ];
+
+        for (input, expect_ok) in cases {
+            let res = parse_test(parse_assert, input);
+            if expect_ok {
+                assert!(res.res.is_ok(), "Should parse successfully: {}", input);
+            } else {
+                assert!(res.res.is_err(), "Should error on input: {}", input);
+            }
+        }
+    }
+}
