@@ -138,6 +138,23 @@ pub fn parse_expr_bracketed_list(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_function_arguments(
+    input: &mut InnerZ80Span
+) -> ModalResult<Vec<LocatedExpr>, Z80ParserError> {
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
+
+    delimited(
+        ("(", (my_space0, opt((line_ending, my_space0)))),
+        separated(0.., located_expr, parse_comma_multiline),
+        ((my_space0, opt((line_ending, my_space0))), ")")
+    )
+    .parse_next(input)
+
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_bool_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
@@ -175,13 +192,6 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         alt((
             prefixed_label_expr,
             parse_expr_bracketed_list.verify(|_| !is_orgams),
-            // Manage functions
-            parse_word(b"RND()").map(|w| LocatedExpr::Rnd(w.into())),
-            parse_unary_function_call,
-            parse_binary_function_call,
-            parse_duration,
-            parse_assemble,
-            parse_any_function_call,
             // manage values
             alt((positive_number, negative_number)),
             parse_string.map(|s| {
@@ -216,6 +226,21 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             * my_space0 */
     )
     .parse_next(input)?;
+
+    // if labels is followed by parenthesis, in fact it is a function call
+    let factor = if factor.is_label() {
+        if let Some(args) = opt(parse_function_arguments).parse_next(input)?{
+            LocatedExpr::AnyFunction(
+                factor.span().clone(),
+                args,
+                build_span(input_offset, &input_start, *input).into()
+            )
+        } else {
+            factor
+        }
+    } else {
+        factor
+    };
 
     // XXX I have replaced Neg by Not, this seems the most coherent stuff
     // XXX Need to check later
