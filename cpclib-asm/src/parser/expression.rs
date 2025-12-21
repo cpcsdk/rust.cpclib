@@ -240,16 +240,42 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     .parse_next(input)?;
 
     // if labels is followed by parenthesis, in fact it is a function call
-    let factor = if factor.is_label() {
-        if peek::<_, _ , Z80ParserError, _>(b'(').parse_next(input).is_ok() {
+    let factor = if factor.is_label() && peek::<_, _ , Z80ParserError, _>(b'(').parse_next(input).is_ok() {
+        let fname = factor.span();
+        // specific content for specific functions
+        if fname.as_str().eq_ignore_ascii_case("opcode") {
+            // TODO move it in function handling and not operation
+            let token = delimited(
+                ('(', my_space0),
+                parse_token,
+                (my_space0, ')')
+            ).parse_next(input)?;
+            LocatedExpr::UnaryTokenOperation(
+                UnaryTokenOperation::Opcode,
+                Box::new(token),
+                build_span(input_offset, &input_start, *input).into()
+            )
+        } 
+        else if fname.as_str().eq_ignore_ascii_case("duration") {
+            let token = delimited(
+                ('(', my_space0),
+                parse_token,
+                (my_space0, ')')
+            ).parse_next(input)?;
+            LocatedExpr::UnaryTokenOperation(
+                UnaryTokenOperation::Duration,
+                Box::new(token),
+                build_span(input_offset, &input_start, *input).into()
+            )
+        } 
+        else {
+            // general case
             let args =  parse_function_arguments.parse_next(input)?;
             LocatedExpr::AnyFunction(
                 factor.span().clone(),
                 args,
                 build_span(input_offset, &input_start, *input).into()
             )
-        } else {
-            factor
         }
     } else {
         factor
