@@ -41,6 +41,63 @@ include!(concat!(
 trait AccumulateSeveral<O>: Accumulate<O> {
     fn accumulate_several(&mut self, items: &mut Vec<O>);
 }
+#[cfg(test)]
+mod parse_factor_robust_suite {
+    use crate::test::parse_test;
+
+    use super::*;
+    #[test]
+    fn test_parse_factor_robust() {
+        // Numbers
+        assert!(parse_test(parse_factor, "42").is_ok());
+        assert!(parse_test(parse_factor, "0x2A").is_ok());
+        assert!(parse_test(parse_factor, "$2A").is_ok());
+        assert!(parse_test(parse_factor, "%101010").is_ok());
+        assert!(parse_test(parse_factor, "'A'").is_ok());
+        assert!(parse_test(parse_factor, "0b1010").is_ok());
+        // Labels
+        assert!(parse_test(parse_factor, "LABEL").is_ok());
+        assert!(parse_test(parse_factor, "_label").is_ok());
+        assert!(parse_test(parse_factor, "label123").is_ok());
+        assert!(parse_test(parse_factor, "@bad").is_ok());
+        // Function calls
+        assert!(parse_test(parse_factor, "func()").is_ok());
+        assert!(parse_test(parse_factor, "func(1,2,3)").is_ok());
+        assert!(parse_test(parse_factor, "func(label, 42)").is_ok());
+        assert!(parse_test(parse_factor, "f(1)").is_ok());
+        // Parenthesized expressions
+        assert!(parse_test(parse_factor, "(1)").is_ok());
+        assert!(parse_test(parse_factor, "(LABEL)").is_ok());
+        assert!(parse_test(parse_factor, "(1+2)").is_ok());
+        // Strings
+        assert!(parse_test(parse_factor, "\"hello\"").is_ok());
+        assert!(parse_test(parse_factor, "'c'").is_ok());
+        // Unary operations
+        assert!(parse_test(parse_factor, "-42").is_ok());
+        assert!(parse_test(parse_factor, "+42").is_ok());
+        assert!(parse_test(parse_factor, "~42").is_ok());
+        // Nested function calls
+        assert!(parse_test(parse_factor, "f(g(1),h(2,3))").is_ok());
+        // Error cases
+        assert!(parse_test(parse_factor, "").is_err());
+        assert!(parse_test(parse_factor, "(").is_err());
+        assert!(parse_test(parse_factor, "func(1,2").is_err());
+        assert!(parse_test(parse_factor, "1 2").is_err());
+        // Complex expressions (should succeed as factor if valid)
+        assert!(parse_test(parse_factor, "(func(1)+2)").is_ok());
+        assert!(parse_test(parse_factor, "((42))").is_ok());
+        // Large number
+        assert!(parse_test(parse_factor, "123456789").is_ok());
+        // Hex with prefix
+        assert!(parse_test(parse_factor, "0XDEADBEEF").is_ok());
+        // Binary with prefix
+        assert!(parse_test(parse_factor, "0b1101").is_ok());
+        // Label with dot
+        assert!(parse_test(parse_factor, "label.with.dot").is_ok());
+        // Label with braces (we do not yet handle that. But we'll have too later)
+        //assert!(parse_test(parse_factor, "label{macro}").is_ok());
+    }
+}
 
 impl<O> AccumulateSeveral<O> for Vec<O> {
     fn accumulate_several(&mut self, items: &mut Vec<O>) {
@@ -1164,10 +1221,10 @@ pub mod test {
     use crate::parser::parse_stable_ticker_start;
 
     #[derive(Debug)]
-    struct TestResult<O: std::fmt::Debug> {
-        ctx: Box<ParserContext>,
-        span: Z80Span,
-        res: Result<O, ParseError<InnerZ80Span, Z80ParserError>>
+    pub struct TestResult<O: std::fmt::Debug> {
+        pub ctx: Box<ParserContext>,
+        pub span: Z80Span,
+        pub res: Result<O, ParseError<InnerZ80Span, Z80ParserError>>
     }
 
     impl<O: std::fmt::Debug> Deref for TestResult<O> {
