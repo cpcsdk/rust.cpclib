@@ -1,3 +1,4 @@
+
 #![allow(clippy::cast_lossless)]
 
 use core::str;
@@ -45,6 +46,8 @@ trait AccumulateSeveral<O>: Accumulate<O> {
 mod parse_factor_robust_suite {
     use crate::test::parse_test;
 
+    
+
     use super::*;
     #[test]
     fn test_parse_factor_robust() {
@@ -56,6 +59,10 @@ mod parse_factor_robust_suite {
         assert!(parse_test(parse_factor, "'A'").is_ok());
         assert!(parse_test(parse_factor, "0b1010").is_ok());
         // Labels
+        assert!(parse_test(parse_factor, "LABEL").is_ok());
+        assert!(parse_test(parse_factor, "BREAKPOINT_METHOD").is_ok());
+        assert!(parse_test(parse_factor, "BREAKPOINT_WITH_WINAPE_BYTES").is_ok());
+        assert!(parse_test(parse_factor, "BREAKPOINT_WITH_SNAPSHOT_MODIFICATION").is_ok());
         assert!(parse_test(parse_factor, "LABEL").is_ok());
         assert!(parse_test(parse_factor, "_label").is_ok());
         assert!(parse_test(parse_factor, "label123").is_ok());
@@ -2254,5 +2261,110 @@ MEND";
 
         assert!(dbg!(parse_test((parse_directive, "  "), "incbin \"test.asm\"  ")).is_ok());
         assert!(parse_test((parse_directive, "  "), "incbin test.asm  ").is_ok());
+    }
+
+
+    static EXPR2_CASES: &[(&str, bool)] = &[
+            ("1<=2", true),
+            ("A<=B", true),
+            ("func(1,2)<=3", true),
+            ("(1+2)<=3", true),
+            ("func(1,2)<=func2(3,4)", true),
+
+            ("1<2", true),
+            ("A<B", true),
+            ("func(1,2)<3", true),
+            ("(1+2)<3", true),
+            ("func(1,2)<func2(3,4)", true),
+
+            ("1>2", true),
+            ("A>B", true),
+            ("func(1,2)>3", true),
+            ("(1+2)>3", true),
+            ("func(1,2)>func2(3,4)", true),
+ 
+            ("1==2", true),
+            ("A==B", true),
+            ("func(1,2)==3", true),
+            ("(1+2)==3", true),
+            ("func(1,2)==func2(3,4)", true),
+
+            ("1!=2", true),
+            ("A!=B", true),
+            ("func(1,2)!=3", true),
+            ("(1+2)!=3", true),
+            ("func(1,2)!=func2(3,4)", true),
+
+
+
+            ("BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES", true),
+            ("BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION", true),
+
+
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES)", true),
+            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
+
+
+
+        ];
+
+    
+    #[test]
+    fn test_parse_expr2_robust() {
+        for (input, should_succeed) in EXPR2_CASES.iter() {
+            let result = parse_test(expr2, input);
+            if *should_succeed {
+                assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
+            } else {
+                assert!(result.is_err(), "Should fail to parse '{}', got {:?}", input, result);
+            }
+        }
+    }
+
+    static COMP_CASES: &[(&str, bool)] = &[
+                      ("1+2", true),
+            ("A+B", true),
+            ("func(1,2)+3", true),
+            ("(1+2)*3", true),
+            ("1+2*3", true),
+            ("(A)", true),
+            ("A+B*C", true),
+            ("A+B*C-D", true),
+            ("A+B*C-D/E", true),
+            ("func(1,2)+func2(3,4)", true),
+            ("1+", false),
+            ("+1", true),
+            ("A+", false),
+            ("(1+2", false),
+            ("A+B*", false),
+            ("func(1,2", false),
+            ("A+B C", false),
+        ];
+
+    #[test]
+    fn test_parse_comp_robust() {
+        
+        for (input, should_succeed) in COMP_CASES.iter() {
+            let result = parse_test(comp, input);
+            if *should_succeed {
+                assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
+            } else {
+                assert!(result.is_err(), "Should fail to parse '{}', got {:?}", input, result);
+            }
+        }
+    }
+
+
+    #[test]
+    fn test_parse_located_robust() {
+        
+        for (input, should_succeed) in COMP_CASES.iter().chain(EXPR2_CASES.iter()) {
+            let result = parse_test(comp, input);
+            if *should_succeed {
+                assert!(result.is_ok(), "Should parse '{}', got {:?}", input, result);
+            } else {
+                assert!(result.is_err(), "Should fail to parse '{}', got {:?}", input, result);
+            }
+        }
     }
 }
