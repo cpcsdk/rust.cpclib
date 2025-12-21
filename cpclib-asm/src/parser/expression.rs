@@ -155,7 +155,7 @@ pub fn parse_function_arguments(
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_bool_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+pub fn parse_bool_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
     let bool = alt((
@@ -202,6 +202,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         my_space0,
         alt((
             positive_number, 
+            parse_bool_value,
             parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             prefixed_label_expr,
             negative_number,
@@ -231,7 +232,6 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
                         cloned.update_slice(content).into()
                     )
                 }),
-            parse_bool_expr,
             // manage labels
             parens
         )) /* ,
