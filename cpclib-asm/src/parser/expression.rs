@@ -16,8 +16,8 @@ use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
 use cpclib_tokens::{
-    AssemblerFlavor, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest,
-    LabelPrefix, Register16, UnaryOperation, UnaryTokenOperation
+    AssemblerFlavor, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest, LabelPrefix,
+    Register16, UnaryOperation, UnaryTokenOperation
 };
 use smallvec::SmallVec;
 
@@ -150,7 +150,6 @@ pub fn parse_function_arguments(
         ((my_space0, opt((line_ending, my_space0))), ")")
     )
     .parse_next(input)
-
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -181,7 +180,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         High,
         Low,
         LogicalNot,
-        BinaryNot,
+        BinaryNot
     };
 
     let (modifier, modifier_content) = opt(delimited(
@@ -194,14 +193,15 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             b'<'.value(FactorModifier::Low)
         )),
         my_space0
-    )).with_taken()
+    ))
+    .with_taken()
     .parse_next(input)?;
 
     let cloned = *input;
     let factor = preceded(
         my_space0,
         alt((
-            positive_number, 
+            positive_number,
             parse_bool_value,
             parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             prefixed_label_expr,
@@ -242,47 +242,45 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let _ = my_space0(input)?;
 
     // if labels is followed by parenthesis, in fact it is a function call
-    let factor = if factor.is_label() && peek::<_, _ , Z80ParserError, _>(b'(').parse_next(input).is_ok() {
+    let factor = if factor.is_label()
+        && peek::<_, _, Z80ParserError, _>(b'(')
+            .parse_next(input)
+            .is_ok()
+    {
         let fname = factor.span();
         // specific content for specific functions
         if fname.as_str().eq_ignore_ascii_case("opcode") {
             // TODO move it in function handling and not operation
-            let token = delimited(
-                ('(', my_space0),
-                parse_token,
-                (my_space0, ')')
-            ).parse_next(input)?;
+            let token =
+                delimited(('(', my_space0), parse_token, (my_space0, ')')).parse_next(input)?;
             LocatedExpr::UnaryTokenOperation(
                 UnaryTokenOperation::Opcode,
                 Box::new(token),
                 build_span(input_offset, &input_start, *input).into()
             )
-        } 
+        }
         else if fname.as_str().eq_ignore_ascii_case("duration") {
-            let token = delimited(
-                ('(', my_space0),
-                parse_token,
-                (my_space0, ')')
-            ).parse_next(input)?;
+            let token =
+                delimited(('(', my_space0), parse_token, (my_space0, ')')).parse_next(input)?;
             LocatedExpr::UnaryTokenOperation(
                 UnaryTokenOperation::Duration,
                 Box::new(token),
                 build_span(input_offset, &input_start, *input).into()
             )
-        } 
+        }
         else {
             // general case
-            let args =  parse_function_arguments.parse_next(input)?;
+            let args = parse_function_arguments.parse_next(input)?;
             LocatedExpr::AnyFunction(
                 factor.span().clone(),
                 args,
                 build_span(input_offset, &input_start, *input).into()
             )
         }
-    } else {
+    }
+    else {
         factor
     };
-
 
     let factor = match modifier {
         Some(FactorModifier::LogicalNot) => {
@@ -491,14 +489,13 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         alt((
             parse_oper(expr2, b"&&", BinaryOperation::BooleanAnd),
             parse_oper(expr2, b"||", BinaryOperation::BooleanOr)
-        )
-    ))
+        ))
+    )
     .parse_next(input)?;
 
     let span = build_span(input_offset, &input_start, *input);
     Ok(fold_exprs(initial, remainder, span))
 }
-
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -822,7 +819,8 @@ pub fn parse_label(
                         ".".value(()),
                         delimited('{', opt(expr), '}').value(())
                     ))
-                ))
+                )
+            )
                 .take()
                 .parse_next(input)?
         }
@@ -840,7 +838,8 @@ pub fn parse_label(
                         ".".value(()),
                         delimited('{', opt(expr), '}').value(())
                     ))
-                ))
+                )
+            )
                 .take()
                 .parse_next(input)?
         };

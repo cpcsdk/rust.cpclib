@@ -1,4 +1,3 @@
-
 // Directives module - contains directive-related constants and parsing functions
 
 use std::borrow::Cow;
@@ -30,8 +29,8 @@ use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
 use super::context;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
-    parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner,
-    parse_fname, parse_label, parse_string
+    parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner, parse_fname, parse_label,
+    parse_string
 };
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
@@ -2698,9 +2697,10 @@ directive_with_expr!(parse_return, Return);
 
 #[cfg(test)]
 mod tests {
+    use cpclib_tokens::{Expr, FormattedExpr};
+
     use super::*;
     use crate::parser::parser::test::parse_test;
-    use cpclib_tokens::{Expr, FormattedExpr};
 
     #[test]
     fn test_parse_assert_cases() {
@@ -2708,9 +2708,18 @@ mod tests {
             ("42", true),
             ("1+2, 'ok'", true),
             ("0, {HEX2} 255", true),
-            ("(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
-            (" (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
-            ("   (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)", true),
+            (
+                "(BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)",
+                true
+            ),
+            (
+                " (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)",
+                true
+            ),
+            (
+                "   (BREAKPOINT_METHOD == BREAKPOINT_WITH_WINAPE_BYTES) || (BREAKPOINT_METHOD == BREAKPOINT_WITH_SNAPSHOT_MODIFICATION)",
+                true
+            ),
             ("", false),
         ];
 
@@ -2718,7 +2727,8 @@ mod tests {
             let res = parse_test(parse_assert, input);
             if expect_ok {
                 assert!(res.res.is_ok(), "Should parse successfully: {}", input);
-            } else {
+            }
+            else {
                 assert!(res.res.is_err(), "Should error on input: {}", input);
             }
         }

@@ -29,7 +29,13 @@ impl ToString for MacroParam {
         match self {
             Self::RawArgument(s) | Self::EvaluatedArgument(s) => s.clone(),
             Self::List(l) => {
-                format!("[{}]", l.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(","))
+                format!(
+                    "[{}]",
+                    l.iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
             }
         }
     }

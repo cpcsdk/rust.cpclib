@@ -1,8 +1,8 @@
 use std::collections::HashSet;
-use ahash::AHashMap as HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
+use ahash::AHashMap as HashMap;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
@@ -445,9 +445,7 @@ impl SymbolsTableTrait for SymbolsTable {
     fn expression_symbol(&self) -> Vec<(&Symbol, &ValueAndSource)> {
         self.map
             .iter()
-            .filter(|(_k, v)| {
-                matches!(v.value(), Value::Expr(_) | Value::Address(_))
-            })
+            .filter(|(_k, v)| matches!(v.value(), Value::Expr(_) | Value::Address(_)))
             .collect()
     }
 
@@ -695,7 +693,12 @@ impl SymbolsTable {
         global.push(symbol.into());
         // Precompute capacity for final string: sum of segment lengths + separators dots
         let seg_lens: usize = global.iter().map(|s| s.to_smolstr().len()).sum();
-        let separators = if global.is_empty() { 0 } else { global.len() - 1 };
+        let separators = if global.is_empty() {
+            0
+        }
+        else {
+            global.len() - 1
+        };
         let mut acc = String::with_capacity(seg_lens + separators);
         for (i, s) in global.iter().enumerate() {
             acc.push_str(s.to_smolstr().as_str());

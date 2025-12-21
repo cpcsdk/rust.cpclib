@@ -75,7 +75,10 @@ impl Struct {
 
     /// Get the len of the structure
     pub fn len<T: SymbolsTableTrait>(&self, table: &T) -> i32 {
-        self.content.iter().map(|(_, t)| Self::field_size(t, table)).sum()
+        self.content
+            .iter()
+            .map(|(_, t)| Self::field_size(t, table))
+            .sum()
     }
 
     pub fn nb_args(&self) -> usize {
@@ -236,7 +239,8 @@ impl Value {
     pub fn expr(&self) -> Option<&ExprResult> {
         if let Value::Expr(e) = self {
             Some(e)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -256,7 +260,8 @@ impl Value {
     pub fn address(&self) -> Option<&PhysicalAddress> {
         if let Value::Address(addr) = self {
             Some(addr)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -264,7 +269,8 @@ impl Value {
     pub fn counter(&self) -> Option<i32> {
         if let Value::Counter(i) = self {
             Some(*i)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -272,7 +278,8 @@ impl Value {
     pub fn r#macro(&self) -> Option<&Macro> {
         if let Value::Macro(m) = self {
             Some(m)
-        } else {
+        }
+        else {
             None
         }
     }
@@ -280,7 +287,8 @@ impl Value {
     pub fn r#struct(&self) -> Option<&Struct> {
         if let Value::Struct(m) = self {
             Some(m)
-        } else {
+        }
+        else {
             None
         }
     }

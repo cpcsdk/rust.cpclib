@@ -3,10 +3,10 @@ use std::fmt::Display;
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::tokens::*;
 
+use crate::SymbolFor;
 use crate::assembler::Env;
 use crate::error::{ExpressionError, *};
 use crate::implementation::tokens::TokenExt;
-use crate::{SymbolFor};
 
 /// XXX Orgams only handles integer values and strings
 /// TODO call it somewhere in the expression evaluation
@@ -288,10 +288,7 @@ impl ExprEvaluationExt for Expr {
 
             Expr::Label(label) | Expr::PrefixedLabel(_, label) => vec![label.as_str()],
 
-
-            Expr::Paren(a) | Expr::UnaryOperation(_, a) => {
-                a.symbols_used()
-            },
+            Expr::Paren(a) | Expr::UnaryOperation(_, a) => a.symbols_used(),
 
             Expr::AnyFunction(_, l) | Expr::List(l) => {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()

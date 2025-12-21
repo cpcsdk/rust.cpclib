@@ -1,12 +1,15 @@
 pub mod control;
 pub mod delayed_command;
+pub mod embedded;
 pub mod file;
 pub mod function;
 pub mod list;
 pub mod listing_output;
 pub mod r#macro;
+pub mod maths;
 pub mod matrix;
 pub mod page_info;
+pub mod processed_token;
 pub mod report;
 pub mod save_command;
 pub mod section;
@@ -14,9 +17,6 @@ pub mod stable_ticker;
 pub mod string;
 pub mod support;
 pub mod symbols_output;
-pub mod maths;
-pub mod embedded;
-pub mod processed_token;
 
 use std::borrow::BorrowMut;
 use std::collections::{BTreeMap, HashMap, HashSet};

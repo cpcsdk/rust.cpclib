@@ -249,7 +249,6 @@ impl From<Expr> for FormattedExpr {
     }
 }
 
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum UnaryOperation {
     Neg,
@@ -340,8 +339,6 @@ impl Display for BinaryOperation {
         write!(format, "{repr}")
     }
 }
-
-
 
 impl From<&str> for Expr {
     fn from(src: &str) -> Self {
@@ -626,7 +623,16 @@ impl Display for Expr {
             Char(c) => write!(format, "'{c}'"),
             Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
             String(string) => write!(format, "\"{string}\""),
-            List(l) => write!(format, "[{}]", l.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
+            List(l) => {
+                write!(
+                    format,
+                    "[{}]",
+                    l.iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            },
             Label(label) => write!(format, "{label}"),
             PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
 
@@ -637,7 +643,10 @@ impl Display for Expr {
                     format,
                     "{}({})",
                     name,
-                    args.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")
+                    args.iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 )
             },
 
@@ -1539,7 +1548,14 @@ impl std::fmt::Display for ExprResult {
             ExprResult::Bool(b) => write!(f, "{b}"),
             ExprResult::String(v) => write!(f, "\"{v}\""),
             ExprResult::List(v) => {
-                write!(f, "[{}]", v.iter().map(|item| format!("{item}")).collect::<Vec<_>>().join(","))
+                write!(
+                    f,
+                    "[{}]",
+                    v.iter()
+                        .map(|item| format!("{item}"))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
             },
             ExprResult::Matrix { .. } => {
                 write!(
@@ -1568,7 +1584,10 @@ impl std::fmt::LowerHex for ExprResult {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{item:x}")).collect::<Vec<_>>().join(",")
+                    v.iter()
+                        .map(|item| format!("{item:x}"))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 )
             },
             ExprResult::Matrix { .. } => {
@@ -1598,7 +1617,10 @@ impl std::fmt::UpperHex for ExprResult {
                 write!(
                     f,
                     "[{}]",
-                    v.iter().map(|item| format!("{item:X}")).collect::<Vec<_>>().join(",")
+                    v.iter()
+                        .map(|item| format!("{item:X}"))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 )
             },
             ExprResult::Matrix { .. } => {

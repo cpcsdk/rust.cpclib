@@ -27,8 +27,7 @@ use crate::list::list_extend;
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
-use crate::{Compressor, Visited};
-use crate::maths;
+use crate::{Compressor, Visited, maths};
 
 /// Returns the expression of the RETURN directive
 pub trait ReturnExpr {
@@ -333,7 +332,7 @@ pub enum HardCodedFunction {
     BinaryTransform,
 
     UnaryFunction(UnaryFunction),
-    BinaryFunction(BinaryFunction),
+    BinaryFunction(BinaryFunction)
 }
 
 /// Represent a function with one argument
@@ -402,8 +401,6 @@ impl Display for BinaryFunction {
         write!(format, "{repr}")
     }
 }
-
-
 
 pub enum ExpectedNbArgs {
     Unknown,
@@ -487,7 +484,7 @@ impl HardCodedFunction {
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::UnaryFunction(unary_function) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryFunction(binary_function) => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::BinaryFunction(binary_function) => ExpectedNbArgs::Fixed(2)
         }
     }
 
@@ -701,30 +698,34 @@ impl HardCodedFunction {
                 );
                 Ok(data)
             },
-            HardCodedFunction::UnaryFunction(unary_function) => match unary_function {
-                UnaryFunction::High => maths::high(&params[0]),
-                UnaryFunction::Low => maths::low(&params[0]),
-                UnaryFunction::Char => maths::char(&params[0]),
-                UnaryFunction::Floor => maths::floor(&params[0]),
-                UnaryFunction::Ceil => maths::ceil(&params[0]),
-                UnaryFunction::Frac => maths::frac(&params[0]),
-                UnaryFunction::Int => maths::int(&params[0]),
-                UnaryFunction::Sin => maths::sin(&params[0], env),
-                UnaryFunction::Cos => maths::cos(&params[0]),
-                UnaryFunction::ASin => maths::asin(&params[0]),
-                UnaryFunction::ACos => maths::acos(&params[0]),
-                UnaryFunction::Abs => maths::abs(&params[0]),
-                UnaryFunction::Ln => maths::ln(&params[0]),
-                UnaryFunction::Log10 => maths::log10(&params[0]),
-                UnaryFunction::Exp => maths::exp(&params[0]),
-                UnaryFunction::Sqrt => maths::sqrt(&params[0]),
-                UnaryFunction::Peek => maths::peek(&params[0], env),
+            HardCodedFunction::UnaryFunction(unary_function) => {
+                match unary_function {
+                    UnaryFunction::High => maths::high(&params[0]),
+                    UnaryFunction::Low => maths::low(&params[0]),
+                    UnaryFunction::Char => maths::char(&params[0]),
+                    UnaryFunction::Floor => maths::floor(&params[0]),
+                    UnaryFunction::Ceil => maths::ceil(&params[0]),
+                    UnaryFunction::Frac => maths::frac(&params[0]),
+                    UnaryFunction::Int => maths::int(&params[0]),
+                    UnaryFunction::Sin => maths::sin(&params[0], env),
+                    UnaryFunction::Cos => maths::cos(&params[0]),
+                    UnaryFunction::ASin => maths::asin(&params[0]),
+                    UnaryFunction::ACos => maths::acos(&params[0]),
+                    UnaryFunction::Abs => maths::abs(&params[0]),
+                    UnaryFunction::Ln => maths::ln(&params[0]),
+                    UnaryFunction::Log10 => maths::log10(&params[0]),
+                    UnaryFunction::Exp => maths::exp(&params[0]),
+                    UnaryFunction::Sqrt => maths::sqrt(&params[0]),
+                    UnaryFunction::Peek => maths::peek(&params[0], env)
+                }
             },
-            HardCodedFunction::BinaryFunction(binary_function) => match binary_function {
-                BinaryFunction::Min => maths::min(&params[0], &params[1]),
-                BinaryFunction::Max => maths::max(&params[0], &params[1]),
-                BinaryFunction::Pow => maths::pow(&params[0], &params[1])
-            }
+            HardCodedFunction::BinaryFunction(binary_function) => {
+                match binary_function {
+                    BinaryFunction::Min => maths::min(&params[0], &params[1]),
+                    BinaryFunction::Max => maths::max(&params[0], &params[1]),
+                    BinaryFunction::Pow => maths::pow(&params[0], &params[1])
+                }
+            },
         }
     }
 }

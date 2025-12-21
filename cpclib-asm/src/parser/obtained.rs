@@ -20,14 +20,13 @@ use cpclib_sna::{
 };
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
-    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation,
-    CharsetFormat, CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest,
-    FormattedExpr, IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam,
-    MacroParamElement, Mnemonic, Register8, Register16, SaveType, StableTickerAction, TestKind,
-    TestKindElement, ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation,
-    data_access_impl_most_methods, data_access_is_any_indexregister8,
-    data_access_is_any_indexregister16, data_access_is_any_register8,
-    data_access_is_any_register16, listing_element_impl_most_methods
+    AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation, CharsetFormat,
+    CrunchType, DataAccess, DataAccessElem, Expr, ExprResult, FlagTest, FormattedExpr,
+    IndexRegister8, IndexRegister16, LabelPrefix, ListingElement, MacroParam, MacroParamElement,
+    Mnemonic, Register8, Register16, SaveType, StableTickerAction, TestKind, TestKindElement,
+    ToSimpleToken, Token, UnaryOperation, UnaryTokenOperation, data_access_impl_most_methods,
+    data_access_is_any_indexregister8, data_access_is_any_indexregister16,
+    data_access_is_any_register8, data_access_is_any_register16, listing_element_impl_most_methods
 };
 use ouroboros::self_referencing;
 
@@ -127,7 +126,7 @@ impl ExprElement for LocatedExpr {
             LocatedExpr::UnaryTokenOperation(o, box t, _) => {
                 Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             },
-            
+
             LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
                 Expr::BinaryOperation(
                     *o,
@@ -361,7 +360,7 @@ impl ExprElement for LocatedExpr {
             _ => unreachable!()
         }
     }
- 
+
     fn is_paren(&self) -> bool {
         match self {
             Self::Paren(..) => true,
@@ -438,15 +437,14 @@ impl ExprEvaluationExt for LocatedExpr {
                 vec![label.as_str()]
             },
 
-           LocatedExpr::BinaryOperation(_, box a, box b, _) => {
+            LocatedExpr::BinaryOperation(_, box a, box b, _) => {
                 a.symbols_used()
                     .into_iter()
                     .chain(b.symbols_used())
                     .collect_vec()
             },
 
-            LocatedExpr::Paren(a, _)
-            | LocatedExpr::UnaryOperation(_, a, _) => a.symbols_used(),
+            LocatedExpr::Paren(a, _) | LocatedExpr::UnaryOperation(_, a, _) => a.symbols_used(),
 
             LocatedExpr::AnyFunction(_, l, _) | LocatedExpr::List(l, _) => {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()
