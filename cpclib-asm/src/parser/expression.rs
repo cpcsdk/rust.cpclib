@@ -239,6 +239,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     )
     .parse_next(input)?;
 
+    let _ = my_space0(input)?;
+
     // if labels is followed by parenthesis, in fact it is a function call
     let factor = if factor.is_label() && peek::<_, _ , Z80ParserError, _>(b'(').parse_next(input).is_ok() {
         let fname = factor.span();
