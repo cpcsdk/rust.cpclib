@@ -11,6 +11,9 @@ pub mod parser;
 pub mod registers;
 pub mod source;
 
+#[macro_use]
+pub mod macros;
+
 pub use common::*;
 pub use context::*;
 pub use directives::*;

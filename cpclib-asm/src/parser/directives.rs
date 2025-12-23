@@ -42,44 +42,8 @@ use super::common::{
     parse_optional_argname_and_value, parse_word
 };
 use crate::preamble::*;
+use crate::hashed_choice;
 
-
-
-/// This macros helps matching case-insensitively a literal string that has been converted to a hash number
-macro_rules! hashed_choice {
-    // With guard: delegate to the main branch, then add the guard
-    ($hash:expr, $word:expr, $($lit:expr),+,  if $guard:expr) => {
-        ($guard) && hashed_choice!($hash, $word, $($lit),+)
-    };
-    // Main branch: no guard
-    ($hash:expr, $word:expr, $($lit:expr),+) => {
-        (
-            $(
-                ($hash == fnv1a_ascii_upper($lit) && eq_ascii_nocase($word, $lit)) ||
-            )+
-            false
-        )
-    };
-}
-
-// Compile-time, case-insensitive FNV-1a hash for ASCII
-pub const fn fnv1a_ascii_upper(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf29ce484222325u64;
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        let upper = if b >= b'a' && b <= b'z' { b - 32 } else { b };
-        hash ^= upper as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
-        i += 1;
-    }
-    hash
-}
-
-#[inline(always)]
-fn eq_ascii_nocase(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| x.to_ascii_uppercase() == y.to_ascii_uppercase())
-}
 
 
 

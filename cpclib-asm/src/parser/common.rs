@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 
-use choice_nocase::choice_nocase;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use cpclib_common::smallvec::SmallVec;
@@ -19,6 +18,7 @@ use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;
 use obtained::LocatedTokenInner;
+use crate::hashed_choice;
 
 use super::context::*;
 use super::error::*;
@@ -26,6 +26,7 @@ use super::expression::*;
 use super::instructions::*;
 use super::obtained::*;
 use super::orgams::*;
+
 use super::*;
 use crate::parser::parser::{DOTTED_END_DIRECTIVE, END_DIRECTIVE};
 use crate::preamble::*;
@@ -34,6 +35,29 @@ pub use super::registers::{
     parse_indexregister_with_index, parse_indexregister8, parse_indexregister16, parse_register_i,
     parse_register_ix, parse_register_iy, parse_register_r, parse_register8, parse_register16
 };
+
+
+
+// Compile-time, case-insensitive FNV-1a hash for ASCII
+pub(crate) const fn fnv1a_ascii_upper(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let upper = if b >= b'a' && b <= b'z' { b - 32 } else { b };
+        hash ^= upper as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        i += 1;
+    }
+    hash
+}
+
+#[inline(always)]
+pub(crate) fn eq_ascii_nocase(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| x.to_ascii_uppercase() == y.to_ascii_uppercase())
+}
+
+
 
 #[derive(PartialEq)]
 pub enum SaveKind {
@@ -117,89 +141,88 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     // Get the first word that will drive the rest of parsing
     let word = delimited(my_space0, alpha1, my_space0).parse_next(input)?;
 
-    // Apply the right parsing
-    // We use this way of doing to reduce function calls and error. Let's hope it will speed everything
-    // choice_no_case is used to avoid memory allocation of uppercased mnemonic
-    let token: LocatedTokenInner = match word {
-        choice_nocase!(b"LD") => parse_ld(true).parse_next(input),
-        choice_nocase!(b"ADC") => parse_add_or_adc(Mnemonic::Adc).parse_next(input),
-        choice_nocase!(b"ADD") => parse_add_or_adc(Mnemonic::Add).parse_next(input),
-        choice_nocase!(b"AND") => parse_logical_operator(Mnemonic::And).parse_next(input),
+    // Apply the right parsing using hash-based matching for performance and consistency
+    let h = fnv1a_ascii_upper(word);
+    let token: LocatedTokenInner = match h {
+        h if hashed_choice!(h, word, b"LD") => parse_ld(true).parse_next(input),
+        h if hashed_choice!(h, word, b"ADC") => parse_add_or_adc(Mnemonic::Adc).parse_next(input),
+        h if hashed_choice!(h, word, b"ADD") => parse_add_or_adc(Mnemonic::Add).parse_next(input),
+        h if hashed_choice!(h, word, b"AND") => parse_logical_operator(Mnemonic::And).parse_next(input),
 
-        choice_nocase!(b"BIT") => parse_res_set_bit(Mnemonic::Bit).parse_next(input),
+        h if hashed_choice!(h, word, b"BIT") => parse_res_set_bit(Mnemonic::Bit).parse_next(input),
 
-        choice_nocase!(b"CALL") => parse_call_jp_or_jr(Mnemonic::Call).parse_next(input),
-        choice_nocase!(b"CP") => parse_cp.parse_next(input),
+        h if hashed_choice!(h, word, b"CALL") => parse_call_jp_or_jr(Mnemonic::Call).parse_next(input),
+        h if hashed_choice!(h, word, b"CP") => parse_cp.parse_next(input),
 
-        choice_nocase!(b"DEC") => parse_inc_dec(Mnemonic::Dec).parse_next(input),
-        choice_nocase!(b"DJNZ") => parse_djnz.parse_next(input),
+        h if hashed_choice!(h, word, b"DEC") => parse_inc_dec(Mnemonic::Dec).parse_next(input),
+        h if hashed_choice!(h, word, b"DJNZ") => parse_djnz.parse_next(input),
 
-        choice_nocase!(b"EX") => {
+        h if hashed_choice!(h, word, b"EX") => {
             alt((parse_ex_af, parse_ex_hl_de, parse_ex_mem_sp)).parse_next(input)
         },
 
-        choice_nocase!(b"EXA") => Ok(LocatedTokenInner::new_opcode(Mnemonic::ExAf, None, None)),
-        choice_nocase!(b"EXD") => Ok(LocatedTokenInner::new_opcode(Mnemonic::ExHlDe, None, None)),
+        h if hashed_choice!(h, word, b"EXA") => Ok(LocatedTokenInner::new_opcode(Mnemonic::ExAf, None, None)),
+        h if hashed_choice!(h, word, b"EXD") => Ok(LocatedTokenInner::new_opcode(Mnemonic::ExHlDe, None, None)),
 
-        choice_nocase!(b"IN") => parse_in.parse_next(input),
-        choice_nocase!(b"INC") => parse_inc_dec(Mnemonic::Inc).parse_next(input),
-        choice_nocase!(b"IM") => parse_im.parse_next(input),
+        h if hashed_choice!(h, word, b"IN") => parse_in.parse_next(input),
+        h if hashed_choice!(h, word, b"INC") => parse_inc_dec(Mnemonic::Inc).parse_next(input),
+        h if hashed_choice!(h, word, b"IM") => parse_im.parse_next(input),
 
-        choice_nocase!(b"JP") => parse_call_jp_or_jr(Mnemonic::Jp).parse_next(input),
-        choice_nocase!(b"JR") => parse_call_jp_or_jr(Mnemonic::Jr).parse_next(input),
+        h if hashed_choice!(h, word, b"JP") => parse_call_jp_or_jr(Mnemonic::Jp).parse_next(input),
+        h if hashed_choice!(h, word, b"JR") => parse_call_jp_or_jr(Mnemonic::Jr).parse_next(input),
 
-        choice_nocase!(b"OR") => parse_logical_operator(Mnemonic::Or).parse_next(input),
-        choice_nocase!(b"OUT") => parse_out.parse_next(input),
+        h if hashed_choice!(h, word, b"OR") => parse_logical_operator(Mnemonic::Or).parse_next(input),
+        h if hashed_choice!(h, word, b"OUT") => parse_out.parse_next(input),
 
-        choice_nocase!(b"POP") => parse_push_n_pop(Mnemonic::Pop).parse_next(input),
-        choice_nocase!(b"PUSH") => parse_push_n_pop(Mnemonic::Push).parse_next(input),
+        h if hashed_choice!(h, word, b"POP") => parse_push_n_pop(Mnemonic::Pop).parse_next(input),
+        h if hashed_choice!(h, word, b"PUSH") => parse_push_n_pop(Mnemonic::Push).parse_next(input),
 
-        choice_nocase!(b"RES") => parse_res_set_bit(Mnemonic::Res).parse_next(input),
-        choice_nocase!(b"RET") => parse_ret.parse_next(input),
-        choice_nocase!(b"RLC") => alt((
+        h if hashed_choice!(h, word, b"RES") => parse_res_set_bit(Mnemonic::Res).parse_next(input),
+        h if hashed_choice!(h, word, b"RET") => parse_ret.parse_next(input),
+        h if hashed_choice!(h, word, b"RLC") => alt((
             parse_shifts_and_rotations(Mnemonic::Rlc),
             parse_shifts_and_rotations_fake(Mnemonic::Rlc)
         )).parse_next(input),
-        choice_nocase!(b"RL") => alt((
+        h if hashed_choice!(h, word, b"RL") => alt((
             parse_shifts_and_rotations(Mnemonic::Rl),
             parse_shifts_and_rotations_fake(Mnemonic::Rl)
         )).parse_next(input),
-        choice_nocase!(b"RRC") => alt((
+        h if hashed_choice!(h, word, b"RRC") => alt((
             parse_shifts_and_rotations(Mnemonic::Rrc),
             parse_shifts_and_rotations_fake(Mnemonic::Rrc)
         )).parse_next(input),
-        choice_nocase!(b"RR") => alt((
+        h if hashed_choice!(h, word, b"RR") => alt((
             parse_shifts_and_rotations(Mnemonic::Rr),
             parse_shifts_and_rotations_fake(Mnemonic::Rr),
         )).parse_next(input),
-        choice_nocase!(b"RST") => {
+        h if hashed_choice!(h, word, b"RST") => {
                 alt((
                 parse_rst_fake, parse_rst
             )).parse_next(input)
         },
 
-        choice_nocase!(b"SBC") => parse_sbc.parse_next(input),
-        choice_nocase!(b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
-        choice_nocase!(b"SL") /*1*/  => cut_err(preceded(('1', my_space1), parse_shifts_and_rotations(Mnemonic::Sl1))).parse_next(input),
-        choice_nocase!(b"SLA") => alt((
+        h if hashed_choice!(h, word, b"SBC") => parse_sbc.parse_next(input),
+        h if hashed_choice!(h, word, b"SET") => parse_res_set_bit(Mnemonic::Set).parse_next(input),
+        h if hashed_choice!(h, word, b"SL") /*1*/  => cut_err(preceded(('1', my_space1), parse_shifts_and_rotations(Mnemonic::Sl1))).parse_next(input),
+        h if hashed_choice!(h, word, b"SLA") => alt((
             parse_shifts_and_rotations(Mnemonic::Sla),
             parse_shifts_and_rotations_fake(Mnemonic::Sla),
         )).parse_next(input),
-        choice_nocase!(b"SLL") => alt((
+        h if hashed_choice!(h, word, b"SLL") => alt((
             parse_shifts_and_rotations(Mnemonic::Sl1),
             parse_shifts_and_rotations_fake(Mnemonic::Sl1),
         )).parse_next(input),
-        choice_nocase!(b"SRA") => alt((
+        h if hashed_choice!(h, word, b"SRA") => alt((
             parse_shifts_and_rotations(Mnemonic::Sra),
             parse_shifts_and_rotations_fake(Mnemonic::Sra)
         )).parse_next(input),
-        choice_nocase!(b"SRL") => alt((
+        h if hashed_choice!(h, word, b"SRL") => alt((
             parse_shifts_and_rotations(Mnemonic::Srl),
             parse_shifts_and_rotations_fake(Mnemonic::Srl),
         )).parse_next(input),
-        choice_nocase!(b"SUB") => parse_sub.parse_next(input),
+        h if hashed_choice!(h, word, b"SUB") => parse_sub.parse_next(input),
 
-        choice_nocase!(b"XOR") => parse_logical_operator(Mnemonic::Xor).parse_next(input),
+        h if hashed_choice!(h, word, b"XOR") => parse_logical_operator(Mnemonic::Xor).parse_next(input),
 
         _ => {
             Err(ErrMode::Backtrack(Z80ParserError::from_input(

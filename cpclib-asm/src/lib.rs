@@ -12,7 +12,6 @@
 #![feature(string_from_utf8_lossy_owned)]
 #![feature(guard_patterns)]
 
-// mod rewrite;
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;
 
