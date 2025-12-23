@@ -1227,7 +1227,7 @@ MEND";
         ("1+2", true),
         ("A+B", true),
         ("AB+BC", false), // BC is a register
-        ("AB+CD", false), // BC is a register
+        ("AB+CD", true), // BC is a register
         ("func(1,2)+3", true),
         ("(1+2)*3", true),
         ("1+2*3", true),

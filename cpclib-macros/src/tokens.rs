@@ -1,7 +1,7 @@
 use cpclib_asm::BinaryOperation;
 use cpclib_asm::preamble::{
-    BinaryFunction, DataAccess, Expr, FlagTest, Listing, Mnemonic, Register8, Register16,
-    StableTickerAction, Token, UnaryFunction
+    DataAccess, Expr, FlagTest, Listing, Mnemonic, Register8, Register16,
+    StableTickerAction, Token
 };
 use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;
@@ -431,16 +431,6 @@ impl MyToTokens for FlagTest {
     }
 }
 
-impl MyToTokens for UnaryFunction {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.append(Ident::new("UnaryFunction", Span::call_site()));
-        tokens.append(Punct::new(':', Spacing::Joint));
-        tokens.append(Punct::new(':', Spacing::Joint));
-
-        no_param(&upper_first(&self.to_string()), tokens);
-    }
-}
-
 impl MyToTokens for BinaryOperation {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("BinaryOperation", Span::call_site()));
@@ -471,16 +461,6 @@ impl MyToTokens for BinaryOperation {
     }
 }
 
-impl MyToTokens for BinaryFunction {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.append(Ident::new("BinaryFunction", Span::call_site()));
-        tokens.append(Punct::new(':', Spacing::Joint));
-        tokens.append(Punct::new(':', Spacing::Joint));
-
-        no_param(&upper_first(&self.to_string()), tokens);
-    }
-}
-
 impl MyToTokens for Expr {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.append(Ident::new("Expr", Span::call_site()));
@@ -508,14 +488,6 @@ impl MyToTokens for Expr {
 
             Expr::Paren(val) => {
                 one_param("Paren", val, tokens);
-            },
-
-            Expr::UnaryFunction(func, arg) => {
-                two_params("UnaryFunction", func, arg, tokens);
-            },
-
-            Expr::BinaryFunction(func, arg1, arg2) => {
-                three_params("BinaryFunction", func, arg1, arg2, tokens);
             },
 
             Expr::BinaryOperation(oper, arg1, arg2) => {

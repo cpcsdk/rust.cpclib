@@ -6,7 +6,6 @@ use std::ops::DerefMut;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use choice_nocase::choice_nocase;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
@@ -26,6 +25,8 @@ use cpclib_sna::{
 };
 use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
 
+
+
 use super::context;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
@@ -41,6 +42,46 @@ use super::common::{
     parse_optional_argname_and_value, parse_word
 };
 use crate::preamble::*;
+
+
+
+/// This macros helps matching case-insensitively a literal string that has been converted to a hash number
+macro_rules! hashed_choice {
+    // With guard: delegate to the main branch, then add the guard
+    ($hash:expr, $word:expr, $($lit:expr),+,  if $guard:expr) => {
+        ($guard) && hashed_choice!($hash, $word, $($lit),+)
+    };
+    // Main branch: no guard
+    ($hash:expr, $word:expr, $($lit:expr),+) => {
+        (
+            $(
+                ($hash == fnv1a_ascii_upper($lit) && eq_ascii_nocase($word, $lit)) ||
+            )+
+            false
+        )
+    };
+}
+
+// Compile-time, case-insensitive FNV-1a hash for ASCII
+pub const fn fnv1a_ascii_upper(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let upper = if b >= b'a' && b <= b'z' { b - 32 } else { b };
+        hash ^= upper as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        i += 1;
+    }
+    hash
+}
+
+#[inline(always)]
+fn eq_ascii_nocase(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| x.to_ascii_uppercase() == y.to_ascii_uppercase())
+}
+
+
 
 pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
@@ -1455,10 +1496,11 @@ fn parse_directive_of_size_10(
     _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"ASMCONTROL") => parse_assembler_control.parse_next(input),
-        choice_nocase!(b"BREAKPOINT") => parse_breakpoint.parse_next(input),
-        choice_nocase!(b"DEFSECTION") => parse_range.parse_next(input),
+    
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"ASMCONTROL") => parse_assembler_control.parse_next(input),
+        h if hashed_choice!(h, word, b"BREAKPOINT") => parse_breakpoint.parse_next(input),
+        h if hashed_choice!(h, word, b"DEFSECTION") => parse_range.parse_next(input),
 
         _ => {
             input.reset(input_start);
@@ -1477,19 +1519,19 @@ fn parse_directive_of_size_8(
     _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"BINCLUDE") => parse_incbin(BinaryTransformation::None).parse_next(input),
-        choice_nocase!(b"BUILDSNA") => parse_buildsna(true).parse_next(input),
-        choice_nocase!(b"BUILDCPR") => Ok(LocatedTokenInner::BuildCpr),
-        choice_nocase!(b"INCLZSA1") => {
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"BINCLUDE") => parse_incbin(BinaryTransformation::None).parse_next(input),
+        h if hashed_choice!(h, word, b"BUILDSNA") => parse_buildsna(true).parse_next(input),
+        h if hashed_choice!(h, word, b"BUILDCPR") => Ok(LocatedTokenInner::BuildCpr),
+        h if hashed_choice!(h, word, b"INCLZSA1") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZSA1)).parse_next(input)
         },
-        choice_nocase!(b"INCLZSA2") => {
+        h if hashed_choice!(h, word, b"INCLZSA2") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZSA1)).parse_next(input)
         },
-        choice_nocase!(b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input),
-        choice_nocase!(b"WAITNOPS") => parse_waitnops.parse_next(input),
-        choice_nocase!(b"SNAPINIT") => parse_snainit.parse_next(input),
+        h if hashed_choice!(h, word, b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input),
+        h if hashed_choice!(h, word, b"WAITNOPS") => parse_waitnops.parse_next(input),
+        h if hashed_choice!(h, word, b"SNAPINIT") => parse_snainit.parse_next(input),
 
         _ => {
             input.reset(input_start);
@@ -1508,15 +1550,15 @@ fn parse_directive_of_size_7(
     _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"INCLUDE") => parse_include.parse_next(input),
-        choice_nocase!(b"BANKSET") => parse_bankset.parse_next(input),
-        choice_nocase!(b"CHARSET") => parse_charset.parse_next(input),
-        choice_nocase!(b"PROTECT") => parse_protect.parse_next(input),
-        choice_nocase!(b"SECTION") => parse_section.parse_next(input),
-        choice_nocase!(b"SNAINIT") => parse_snainit.parse_next(input),
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"INCLUDE") => parse_include.parse_next(input),
+        h if hashed_choice!(h, word, b"BANKSET") => parse_bankset.parse_next(input),
+        h if hashed_choice!(h, word, b"CHARSET") => parse_charset.parse_next(input),
+        h if hashed_choice!(h, word, b"PROTECT") => parse_protect.parse_next(input),
+        h if hashed_choice!(h, word, b"SECTION") => parse_section.parse_next(input),
+        h if hashed_choice!(h, word, b"SNAINIT") => parse_snainit.parse_next(input),
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCUPKR") => {
+        h if hashed_choice!(h, word, b"INCUPKR") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
         },
         _ => {
@@ -1536,52 +1578,52 @@ fn parse_directive_of_size_6(
     _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"ASSERT") => parse_assert.parse_next(input),
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"ASSERT") => parse_assert.parse_next(input),
 
-        choice_nocase!(b"EXPORT") => parse_export(ExportKind::Export).parse_next(input),
-        choice_nocase!(b"INCBIN") => parse_incbin(BinaryTransformation::None).parse_next(input),
+        h if hashed_choice!(h, word, b"EXPORT") => parse_export(ExportKind::Export).parse_next(input),
+        h if hashed_choice!(h, word, b"INCBIN") => parse_incbin(BinaryTransformation::None).parse_next(input),
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCEXO") => {
+        h if hashed_choice!(h, word, b"INCEXO") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO)).parse_next(input)
         },
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCLZ4") => {
+        h if hashed_choice!(h, word, b"INCLZ4") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4)).parse_next(input)
         },
 
-        choice_nocase!(b"INCL48") => {
+        h if hashed_choice!(h, word, b"INCL48") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ48)).parse_next(input)
         },
 
-        choice_nocase!(b"INCL49") => {
+        h if hashed_choice!(h, word, b"INCL49") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49)).parse_next(input)
         },
 
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCAPU") => {
+        h if hashed_choice!(h, word, b"INCAPU") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU)).parse_next(input)
         },
 
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCZX0") => {
+        h if hashed_choice!(h, word, b"INCZX0") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
         },
 
         #[cfg(not(target_arch = "wasm32"))]
-        choice_nocase!(b"INCZX0_BACKWARD") => {
+        h if hashed_choice!(h, word, b"INCZX0_BACKWARD") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
         },
 
-        choice_nocase!(b"RETURN") => parse_return.parse_next(input),
-        choice_nocase!(b"SNASET") => parse_snaset(true).parse_next(input),
+        h if hashed_choice!(h, word, b"RETURN") => parse_return.parse_next(input),
+        h if hashed_choice!(h, word, b"SNASET") => parse_snaset(true).parse_next(input),
 
-        choice_nocase!(b"STRUCT") => parse_struct.parse_next(input),
-        choice_nocase!(b"TICKER") => parse_stable_ticker.parse_next(input),
+        h if hashed_choice!(h, word, b"STRUCT") => parse_struct.parse_next(input),
+        h if hashed_choice!(h, word, b"TICKER") => parse_stable_ticker.parse_next(input),
 
-        choice_nocase!(b"NOLIST") => Ok(LocatedTokenInner::NoList),
+        h if hashed_choice!(h, word, b"NOLIST") => Ok(LocatedTokenInner::NoList),
 
-        choice_nocase!(b"IMPORT") if is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
+        h if hashed_choice!(h, word, b"IMPORT") && is_orgams => parse_include.parse_next(input), /* TODO filter to remove the orgams specificies */
 
         _ => {
             input.reset(input_start);
@@ -1600,18 +1642,18 @@ fn parse_directive_of_size_5(
     within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"ALIGN") => parse_align.parse_next(input),
-        choice_nocase!(b"ABYTE") => {
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"ALIGN") => parse_align.parse_next(input),
+        h if hashed_choice!(h, word, b"ABYTE") => {
             parse_db_or_dw_or_str(DbDwStr::Abyte, within_struct).parse_next(input)
         },
-        choice_nocase!(b"LIMIT") => parse_limit.parse_next(input),
-        choice_nocase!(b"PAUSE") => Ok(LocatedTokenInner::Pause),
-        choice_nocase!(b"PRINT") => parse_print(true).parse_next(input),
-        choice_nocase!(b"RANGE") => parse_range.parse_next(input),
-        choice_nocase!(b"UNDEF") => parse_undef.parse_next(input),
+        h if hashed_choice!(h, word, b"LIMIT") => parse_limit.parse_next(input),
+        h if hashed_choice!(h, word, b"PAUSE") => Ok(LocatedTokenInner::Pause),
+        h if hashed_choice!(h, word, b"PRINT") => parse_print(true).parse_next(input),
+        h if hashed_choice!(h, word, b"RANGE") => parse_range.parse_next(input),
+        h if hashed_choice!(h, word, b"UNDEF") => parse_undef.parse_next(input),
 
-        choice_nocase!(b"WRITE") => {
+        h if hashed_choice!(h, word, b"WRITE") => {
             alt((parse_save(SaveKind::WriteDirect), parse_write_direct_memory)).parse_next(input)
         },
 
@@ -1632,28 +1674,26 @@ fn parse_directive_of_size_4(
     within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"DEFB")
-        | choice_nocase!(b"DEFM")
-        | choice_nocase!(b"BYTE")
-        | choice_nocase!(b"TEXT") => {
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"DEFB", 
+         b"DEFM", b"BYTE",  b"TEXT") => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
-        choice_nocase!(b"FILL") | choice_nocase!(b"DEFS") | choice_nocase!(b"RMEM") => {
+        h if hashed_choice!(h, word, b"FILL" , b"DEFS" , b"RMEM") => {
             parse_defs.parse_next(input)
         },
 
-        choice_nocase!(b"BANK") => parse_bank.parse_next(input),
-        choice_nocase!(b"FAIL") => parse_fail(true).parse_next(input),
-        choice_nocase!(b"LIST") => Ok(LocatedTokenInner::List),
-        choice_nocase!(b"READ") => parse_include.parse_next(input),
+        h if hashed_choice!(h, word, b"BANK") => parse_bank.parse_next(input),
+        h if hashed_choice!(h, word, b"FAIL") => parse_fail(true).parse_next(input),
+        h if hashed_choice!(h, word, b"LIST") => Ok(LocatedTokenInner::List),
+        h if hashed_choice!(h, word, b"READ") => parse_include.parse_next(input),
 
-        choice_nocase!(b"SAVE") => parse_save(SaveKind::Save).parse_next(input),
+        h if hashed_choice!(h, word, b"SAVE") => parse_save(SaveKind::Save).parse_next(input),
 
-        choice_nocase!(b"SKIP") if is_orgams => parse_skip.parse_next(input),
+        h if hashed_choice!(h, word, b"SKIP") && is_orgams => parse_skip.parse_next(input),
 
-        choice_nocase!(b"WORD") | choice_nocase!(b"DEFW") => {
+        h if hashed_choice!(h, word, b"WORD" , b"DEFW") => {
             parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
         },
         _ => {
@@ -1673,18 +1713,18 @@ fn parse_directive_of_size3(
     within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"BRK") if is_orgams => parse_breakpoint.parse_next(input),
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"BRK") && is_orgams => parse_breakpoint.parse_next(input),
 
-        choice_nocase!(b"STR") => {
+        h if hashed_choice!(h, word, b"STR") => {
             parse_db_or_dw_or_str(DbDwStr::Str, within_struct).parse_next(input)
         },
-        choice_nocase!(b"END") if !is_orgams => Ok(LocatedTokenInner::End),
-        choice_nocase!(b"ENT") => parse_run(RunEnt::Ent).parse_next(input),
-        choice_nocase!(b"MAP") => parse_map.parse_next(input),
-        choice_nocase!(b"NOP") => parse_nop.parse_next(input),
-        choice_nocase!(b"ORG") => parse_org.parse_next(input),
-        choice_nocase!(b"RUN") => parse_run(RunEnt::Run).parse_next(input),
+        h if hashed_choice!(h, word, b"END") && !is_orgams => Ok(LocatedTokenInner::End),
+        h if hashed_choice!(h, word, b"ENT") => parse_run(RunEnt::Ent).parse_next(input),
+        h if hashed_choice!(h, word, b"MAP") => parse_map.parse_next(input),
+        h if hashed_choice!(h, word, b"NOP") => parse_nop.parse_next(input),
+        h if hashed_choice!(h, word, b"ORG") => parse_org.parse_next(input),
+        h if hashed_choice!(h, word, b"RUN") => parse_run(RunEnt::Run).parse_next(input),
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
@@ -1702,18 +1742,18 @@ fn parse_directive_of_size_2(
     within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    match word {
-        choice_nocase!(b"BY") if is_orgams => {
+    match fnv1a_ascii_upper(word) {
+        h if hashed_choice!(h, word, b"BY") && is_orgams => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
-        choice_nocase!(b"DB") | choice_nocase!(b"DM") => {
+        h if hashed_choice!(h, word, b"DB" , b"DM") => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
-        choice_nocase!(b"DS") => parse_defs.parse_next(input),
+        h if hashed_choice!(h, word, b"DS") => parse_defs.parse_next(input),
 
-        choice_nocase!(b"DW") => {
+        h if hashed_choice!(h, word, b"DW") => {
             parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
         },
 
@@ -2196,9 +2236,9 @@ pub fn parse_assembler_control_max_passes_number(
     ))
     .parse_next(input)?;
 
-    let inner = cut_err(inner_code.context(StrContext::Label(
+    let inner = cut_err((inner_code.context(StrContext::Label(
         "ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"
-    )))
+    ))))
     .parse_next(input)?;
 
     let _ = cut_err(
@@ -2209,7 +2249,7 @@ pub fn parse_assembler_control_max_passes_number(
                 parse_directive_word(b"ENDA")
             ))
         )
-        .context(StrContext::Label("REPEAT: not closed"))
+        .context(StrContext::Label("ASMCONTROLENV: not closed"))
     )
     .parse_next(input)?;
 
