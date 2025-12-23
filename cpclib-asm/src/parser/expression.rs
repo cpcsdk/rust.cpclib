@@ -27,8 +27,9 @@ use super::error::*;
 use super::instructions::INSTRUCTIONS;
 use super::obtained::*;
 use super::parser::{
-    END_DIRECTIVE, REGISTERS, STAND_ALONE_DIRECTIVE, START_DIRECTIVE, parse_comma
+    END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE
 };
+use super::common::parse_comma;
 use super::*;
 
 // Include build-time generated forbidden names
@@ -394,7 +395,8 @@ where
     } else {
         remainder.into_iter()
             .fold(initial, move |acc, (oper, expr)| {
-                LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), span.into())
+                let covering_span = build_span_covering(acc.span(), expr.span());
+                LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), covering_span.into())
         })
     }
 }

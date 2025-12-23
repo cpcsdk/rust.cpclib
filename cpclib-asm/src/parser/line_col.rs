@@ -1,8 +1,5 @@
 /// This file is a copy/pasted version of https://crates.io/crates/line-col with some modifications to compile with this project
 
-#[cfg(feature = "grapheme-clusters")]
-use unicode_segmentation::UnicodeSegmentation;
-
 /// Pre-cached line/column lookup table for a string slice.
 #[derive(Debug, Clone)]
 pub struct LineColLookup<'source> {
@@ -67,50 +64,7 @@ impl<'source> LineColLookup<'source> {
         (line, col)
     }
 
-    /// Looks up the 1-based line and column numbers of the specified byte index.
-    /// The column number correlates to the number of grapheme clusters up to and at the specified index.
-    ///
-    /// Returns a tuple with the line number first, then column number.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `index` is greater than the length of the input `&str`.
-    ///
-    /// # Notes
-    /// This function uses a binary search to locate the line on which `index` resides.
-    /// This means that it runs in approximately O(log n) time.
-    #[cfg(feature = "grapheme-clusters")]
-    pub fn get_by_cluster(&self, index: usize) -> (usize, usize) {
-        if index > self.src.len() {
-            panic!("Index cannot be greater than the length of the input slice.");
-        }
 
-        if let Some(heads) = self.heads().as_ref() {
-            // Perform a binary search to locate the line on which `index` resides
-            let mut line_range = 0..heads.len();
-            while line_range.end - line_range.start > 1 {
-                let range_middle = line_range.start + (line_range.end - line_range.start) / 2;
-                let (left, right) = (line_range.start..range_middle, range_middle..line_range.end);
-                // Check which line window contains our character index
-                if (heads[left.start]..heads[left.end]).contains(&index) {
-                    line_range = left;
-                }
-                else {
-                    line_range = right;
-                }
-            }
-
-            let line_start_index = heads[line_range.start];
-            let line = line_range.start + 1;
-            let col = UnicodeSegmentation::graphemes(&self.src[line_start_index..index], true)
-                .count()
-                + 1;
-
-            return (line, col);
-        }
-
-        unreachable!()
-    }
 }
 
 #[cfg(test)]
@@ -140,14 +94,7 @@ mod tests {
         assert_eq!(lookup.get(8), (3, 4));
     }
 
-    #[test]
-    #[cfg(feature = "grapheme-clusters")]
-    fn emoji_text_by_grapheme_clusters() {
-        let text = "The 👨‍👩‍👦 emoji is made of 5 code points and 18 bytes in UTF-8.";
-        let lookup = LineColLookup::new(text);
-        assert_eq!(lookup.get_by_cluster(4), (1, 5));
-        assert_eq!(lookup.get_by_cluster(22), (1, 6));
-    }
+
 
     #[test]
     fn emoji_text_by_codepoints() {

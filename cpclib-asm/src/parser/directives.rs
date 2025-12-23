@@ -35,7 +35,7 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
-use super::parser::{
+use super::common::{
     inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0, my_space1,
     parse_argname_and_value, parse_comma, parse_comment, parse_convertible_word,
     parse_optional_argname_and_value, parse_word

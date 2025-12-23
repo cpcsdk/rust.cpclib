@@ -1,15 +1,15 @@
-mod common;
-mod context;
-mod directives;
-mod error;
+pub mod common;
+pub mod context;
+pub mod directives;
+pub mod error;
 pub mod expression;
-mod instructions;
-mod line_col;
-mod obtained;
-mod orgams;
-mod parser;
-mod registers;
-mod source;
+pub mod instructions;
+pub mod line_col;
+pub mod obtained;
+pub mod orgams;
+pub mod parser;
+pub mod registers;
+pub mod source;
 
 pub use common::*;
 pub use context::*;
