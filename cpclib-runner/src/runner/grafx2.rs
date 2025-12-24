@@ -4,6 +4,7 @@ use crate::event::EventObserver;
 pub const GRAFX2_CMD: &str = "grafx2";
 pub const DOWNLOAD_URL_V2_9_WINDOWS: &str = "https://gitlab.com/GrafX2/grafX2/-/jobs/10877001445/artifacts/raw/grafx2-sdl2-2.9.3245-win32.zip";
 pub const DOWNLOAD_URL_V2_P_APPIMAGE: &str = "https://gitlab.com/GrafX2/grafX2/-/jobs/10877001436/artifacts/raw/GrafX2-2.9.3245-x86_64.AppImage";
+pub const DOWNLOAD_URL_V2_9_MACOS: &str = "https://pulkomandy.tk/projects/GrafX2/downloads/71";
 #[derive(Default)]
 pub enum Grafx2Version {
     #[default]
@@ -24,7 +25,7 @@ impl Grafx2Version {
             #[cfg(target_os = "linux")]
             Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE,
             #[cfg(target_os = "macos")]
-            Self::V2_9 => todo!("GrafX2 download URL not defined for macOS"),
+            Self::V2_9 => DOWNLOAD_URL_V2_9_MACOS,
             #[allow(unreachable_patterns)]
             _ => unreachable!()
         };
