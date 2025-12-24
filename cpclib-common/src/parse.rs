@@ -7,7 +7,7 @@ use winnow::{ModalResult, Parser};
 
 #[inline]
 ///  (prefix) space number suffix
-pub fn parse_value<I, Error: ParserError<I>>(input: &mut I) -> ModalResult<u32, Error>
+pub fn parse_value<I, Error>(input: &mut I) -> ModalResult<u32, Error>
 where
     I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
     <I as Stream>::Slice: AsBytes,
@@ -16,7 +16,7 @@ where
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
     I: winnow::stream::Compare<u8>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     #[derive(Clone, PartialEq, Debug)]
     #[repr(u32)]

@@ -6,7 +6,7 @@ impl TryFrom<u8> for BasicTokenNoPrefix {
     fn try_from(value: u8) -> Result<Self, String> {
         match value {
             5 => Err(format!("{value} is invalid")),
-            _ => Ok(unsafe { std::mem::transmute(value) })
+            _ => Ok(unsafe { std::mem::transmute::<u8, BasicTokenNoPrefix>(value) })
         }
     }
 }
@@ -424,7 +424,7 @@ impl TryFrom<u8> for BasicTokenPrefixed {
     fn try_from(value: u8) -> Result<Self, String> {
         match value {
             0x1E..0x40 | 0x50..0x71 | 0x80.. => Err(format!("{value} is invalid")),
-            _ => Ok(unsafe { std::mem::transmute(value) })
+            _ => Ok(unsafe { std::mem::transmute::<u8, BasicTokenPrefixed>(value) })
         }
     }
 }
@@ -535,7 +535,7 @@ pub enum BasicValue {
 #[allow(missing_docs)]
 impl BasicValue {
     pub fn new_integer(word: i16) -> Self {
-        let word: u16 = unsafe { i16::cast_unsigned(word) };
+        let word: u16 = i16::cast_unsigned(word);
         BasicValue::Integer((word % 256) as u8, (word / 256) as u8)
     }
 

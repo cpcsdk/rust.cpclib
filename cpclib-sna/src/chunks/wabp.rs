@@ -37,6 +37,7 @@ pub enum BreakpointIoType {
     GateArray = 1
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 pub struct BreakpointFlag(u8);
 
@@ -196,6 +197,7 @@ impl MemoryBreakpoint {
         )
     }
 }
+#[allow(dead_code)]
 pub struct IOBreakpoint {
     r#type: BreakpointIoType,
     flag: BreakpointFlag,
@@ -331,6 +333,7 @@ pub struct WabpChunk {
     wabp: Wabp
 }
 
+#[allow(dead_code)]
 impl WabpChunk {
     const CODE: RiffCode = RiffCode::new([b'W', b'A', b'B', b'P']);
 

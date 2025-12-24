@@ -1,7 +1,7 @@
 use cpclib_cpr::Cpr;
 
 fn read_cartridge(fname: &str) {
-    let cpr = Cpr::load(fname).expect("Error when reading CPR");
+    let _cpr = Cpr::load(fname).expect("Error when reading CPR");
 }
 
 #[test]

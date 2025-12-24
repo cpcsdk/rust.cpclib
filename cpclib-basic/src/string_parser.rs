@@ -85,7 +85,7 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         Float,
         Int,
         String
-    };
+    }
     let var = alt((
         parse_string_variable.map(|v| (Kind::String, v)),
         parse_integer_variable.map(|v| (Kind::Int, v)),
@@ -564,7 +564,6 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 // }
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
-
 /// Parse a basic value
 pub fn parse_basic_value<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     alt((parse_floating_point, parse_integer_value_16bits)).parse_next(input)
@@ -832,8 +831,8 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
 
     let mut bitpos = 0;
     let mut exp: i32 = 0;
-    let mut mantissa: u64 = 0;
-    let mut mask: u64 = 0x80000000;
+    let mut mantissa: u64;
+    let mut mask: u64;
 
     if deci >= 1 {
         // nb is >=1
@@ -897,8 +896,8 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
         // generate the mantissa bytes
         let mut ib: usize = 3;
         let mut ibb: u8 = 0x80;
-        for j in 0..bitpos {
-            if bits[j] {
+        for (j, &bit) in bits.iter().enumerate().take(bitpos) {
+            if bit {
                 res[ib] |= ibb;
             }
             ibb /= 2;
@@ -906,10 +905,9 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
                 ibb = 0x80;
                 if ib != 0 {
                     ib -= 1
-                }
-                else {
+                } else {
                     debug_assert!(j == bitpos - 1);
-                };
+                }
             }
         }
     }
@@ -940,7 +938,7 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
 
 pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     let nb = (opt('-'), dec_u16_inner, '.', dec_u16_inner)
-        .recognize()
+        .take()
         .map(|nb| f32_to_amstrad_float(nb.parse::<f64>().unwrap()))
         .verify(|res| res.is_ok())
         .context(StrContext::Label("Unable to parse float"))
@@ -1001,7 +999,7 @@ pub fn hex_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
             }
             res
         })
-        .verify(|res| *res < u32::from(u16::max_value()))
+        .verify(|res| *res < u32::from(u16::MAX))
         .map(|res| res as u16)
         .parse_next(input)
 }
@@ -1020,7 +1018,7 @@ pub fn dec_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
             }
             res
         })
-        .verify(|nb| *nb < u32::from(u16::max_value()))
+        .verify(|nb| *nb < u32::from(u16::MAX))
         .map(|nb| nb as u16)
         .parse_next(input)
 }
@@ -1111,6 +1109,7 @@ mod test {
         }
     }
 
+    #[allow(dead_code)]
     fn check_token_tokenisation(code: &str) {
         let res = parse_instruction.parse(code);
         match res {

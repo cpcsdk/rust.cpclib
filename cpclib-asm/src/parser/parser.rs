@@ -738,7 +738,6 @@ MEND";
         let res = parse_test(parse_line(&mut tokens), "  ");
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
-
         let res = parse_test(parse_line(&mut tokens), "  ; comment");
         assert!(res.is_ok(), "{:?}", &res);
         tokens.clear();
@@ -998,7 +997,7 @@ MEND";
     fn test_regression_check() {
         let check = "CHECK";
 
-        let (ctx, mut span) = ctx_and_span("CHECK");
+        let (_ctx, mut span) = ctx_and_span("CHECK");
         assert!(dbg!(parse_factor.parse_next(&mut span.0)).is_ok());
 
         assert!(dbg!(parse_test(parse_label(false), check)).is_ok());

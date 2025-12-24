@@ -72,24 +72,15 @@ impl SnapshotMemory {
     }
 
     pub fn is_empty(&self) -> bool {
-        match self {
-            Self::Empty(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Empty(_))
     }
 
     pub fn is_64k(&self) -> bool {
-        match self {
-            Self::SixtyFourKb(_) => true,
-            _ => false
-        }
+        matches!(self, Self::SixtyFourKb(_))
     }
 
     pub fn is_128k(&self) -> bool {
-        match self {
-            Self::OneHundredTwentyHeightKb(_) => true,
-            _ => false
-        }
+        matches!(self, Self::OneHundredTwentyHeightKb(_))
     }
 
     /// Read only access to the memory

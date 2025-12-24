@@ -19,9 +19,8 @@ pub fn convert_real_sector_size_to_fdc_sector_size(mut size: u16) -> u8 {
     let mut n = 0;
     while size > 0x80 {
         size >>= 1;
-        n += 1
+        n += 1;
     }
-
     n as _
 }
 
@@ -51,7 +50,6 @@ impl From<Head> for i32 {
     }
 }
 
-#[allow(missing_docs)]
 impl From<u8> for Head {
     fn from(val: u8) -> Self {
         match val {
@@ -62,7 +60,6 @@ impl From<u8> for Head {
     }
 }
 
-#[allow(missing_docs)]
 impl From<Head> for u8 {
     fn from(val: Head) -> Self {
         match val {
@@ -90,23 +87,23 @@ impl From<&Head> for u8 {
 ///
 ///
 /// The Disc Information block
-/// Byte (Hex): 	Meaning:
-/// 00 - 21 	"MV - CPCEMU Disk-File\r\nDisk-Info\r\n"
+/// Byte (Hex):     Meaning:
+/// 00 - 21     "MV - CPCEMU Disk-File\r\nDisk-Info\r\n"
 /// ("MV - CPC" is characteristic)
 ///
 /// *E* -- "EXTENDED CPC DSK File\r\n\Disk-Info\r\n"
 /// ("EXTENDED" is characteristic)
-/// 22 - 2F 	unused (0)
+/// 22 - 2F     unused (0)
 ///
 /// *E* -- DSK creator (name of the utility)
 /// (no ending \0 needed!)
-/// 30 	number of tracks (40, 42, maybe 80)
-/// 31 	number of heads (1 or 2)
-/// 32 - 33 	size of one track (including 0x100-byte track info)
+/// 30     number of tracks (40, 42, maybe 80)
+/// 31     number of heads (1 or 2)
+/// 32 - 33     size of one track (including 0x100-byte track info)
 /// With 9 sectors * 0x200 bytes + 0x100 byte track info = 0x1300.
 ///
 /// *E* -- unused (0)
-/// 34 - FF 	unused (0)
+/// 34 - FF     unused (0)
 ///
 /// *E* -- high bytes of track sizes for all tracks
 /// (computed in the same way as 32-33 for the normal format).
@@ -246,25 +243,25 @@ impl DiscInformation {
     }
 }
 
-/// Byte (Hex) 	Meaning:
-/// 00 - 0C 	Track-Info\r\n
-/// 0D - 0F 	unused (0)
-/// 10 	track number (0 to number of tracks-1)
-/// 11 	head number (0 or 1)
-/// 12 - 13 	unused (0)
+/// Byte (Hex)     Meaning:
+/// 00 - 0C     Track-Info\r\n
+/// 0D - 0F     unused (0)
+/// 10     track number (0 to number of tracks-1)
+/// 11     head number (0 or 1)
+/// 12 - 13     unused (0)
 /// Format track parameters:
-/// 14 	BPS (bytes per sector) (2 for 0x200 bytes)
-/// 15 	SPT (sectors per track) (9, at the most 18)
-/// 16 	GAP#3 format (gap for formatting; 0x4E)
-/// 17 	Filling byte (filling byte for formatting; 0xE5)
+/// 14     BPS (bytes per sector) (2 for 0x200 bytes)
+/// 15     SPT (sectors per track) (9, at the most 18)
+/// 16     GAP#3 format (gap for formatting; 0x4E)
+/// 17     Filling byte (filling byte for formatting; 0xE5)
 /// Sector info (for every sector at a time):
-/// 18+i 	track number (sector ID information)
-/// 19+i 	head number (sector ID information)
-/// 1A+i 	sector number (sector ID information)
-/// 1B+i 	BPS (sector ID information)
-/// 1C+i 	state 1 error code (0)
-/// 1D+i 	state 2 error code (0)
-/// 1E+i,1F+i 	unused (0)
+/// 18+i     track number (sector ID information)
+/// 19+i     head number (sector ID information)
+/// 1A+i     sector number (sector ID information)
+/// 1B+i     BPS (sector ID information)
+/// 1C+i     state 1 error code (0)
+/// 1D+i     state 2 error code (0)
+/// 1E+i,1F+i     unused (0)
 ///
 /// *E* -- sector data length in bytes (little endian notation).
 /// This allows different sector sizes in a track.
@@ -275,7 +272,6 @@ impl DiscInformation {
 ///   - The sector data must follow the track information block in the order of the sector IDs. No track or sector may be omitted.
 ///   - With double sided formats, the tracks are alternating, e.g. track 0 head 0, track 0 head 1, track 1 ...
 ///   - Use CPCTRANS to copy CPC discs into this format.
-
 #[allow(missing_docs)]
 #[derive(Getters, Debug, Default, PartialEq, Clone)]
 pub struct TrackInformation {
@@ -430,22 +426,22 @@ impl TrackInformation {
 
     /// http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format#TRACK_INFORMATION_BLOCK_2
     ///
-    /// offset 	description 	bytes
-    /// 00 - 0b 	"Track-Info\r\n" 	12
-    /// 0c - 0f 	unused 	4
-    /// 10 	track number 	1
-    /// 11 	Head number 	1
-    /// 12 - 13 	unused 	2
-    /// 14 	sector size 	1
-    /// 15 	number of sectors 	1
-    /// 16 	GAP#3 length 	1
-    /// 17 	filler byte 	1
-    /// 18 - xx 	Sector Information List 	xx
+    /// offset     description     bytes
+    /// 00 - 0b     "Track-Info\r\n"     12
+    /// 0c - 0f     unused     4
+    /// 10     track number     1
+    /// 11     Head number     1
+    /// 12 - 13     unused     2
+    /// 14     sector size     1
+    /// 15     number of sectors     1
+    /// 16     GAP#3 length     1
+    /// 17     filler byte     1
+    /// 18 - xx     Sector Information List     xx
     ///
     /// Extensions
-    /// offset 	description 	bytes
-    /// 12 	Data rate. (See note 1 and note 3) 	1
-    /// 13 	Recording mode. (See note 2 and note 3) 	1
+    /// offset     description     bytes
+    /// 12     Data rate. (See note 1 and note 3)     1
+    /// 13     Recording mode. (See note 2 and note 3)     1
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         let start_size = buffer.len();
 
@@ -557,8 +553,6 @@ pub enum DataRate {
     ExtendedDensity = 3
 }
 
-#[allow(missing_docs)]
-#[allow(missing_docs)]
 impl From<u8> for DataRate {
     fn from(b: u8) -> Self {
         match b {
@@ -593,7 +587,6 @@ pub enum RecordingMode {
     MFM = 2
 }
 
-#[allow(missing_docs)]
 #[allow(missing_docs)]
 impl From<u8> for RecordingMode {
     fn from(b: u8) -> Self {
@@ -668,13 +661,13 @@ impl SectorInformation {
         }
     }
 
-    /// 00 	track (equivalent to C parameter in NEC765 commands) 	1
-    /// 01 	Head (equivalent to H parameter in NEC765 commands) 	1
-    /// 02 	sector ID (equivalent to R parameter in NEC765 commands) 	1
-    /// 03 	sector size (equivalent to N parameter in NEC765 commands) 	1
-    /// 04 	FDC status register 1 (equivalent to NEC765 ST1 status register) 	1
-    /// 05 	FDC status register 2 (equivalent to NEC765 ST2 status register) 	1
-    /// 06 - 07 	actual data length in bytes 	2
+    /// 00     track (equivalent to C parameter in NEC765 commands)     1
+    /// 01     Head (equivalent to H parameter in NEC765 commands)     1
+    /// 02     sector ID (equivalent to R parameter in NEC765 commands)     1
+    /// 03     sector size (equivalent to N parameter in NEC765 commands)     1
+    /// 04     FDC status register 1 (equivalent to NEC765 ST1 status register)     1
+    /// 05     FDC status register 2 (equivalent to NEC765 ST2 status register)     1
+    /// 06 - 07     actual data length in bytes     2
     #[allow(clippy::cast_possible_truncation)]
     pub fn to_buffer(&self, buffer: &mut Vec<u8>) {
         buffer.push(self.track);

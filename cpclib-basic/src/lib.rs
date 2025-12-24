@@ -168,13 +168,9 @@ impl BasicProgram {
         let input = code.as_ref();
         match (parse_basic_program, space0).parse(input) {
             Ok((prog, _)) => Ok(prog),
-            Err(e) => {
-                Err(BasicError::ParseError {
-                    msg: format!("Error while parsing the Basic content: {e}")
-                })
-            },
-
-            _ => unreachable!()
+            Err(e) => Err(BasicError::ParseError {
+                msg: format!("Error while parsing the Basic content: {e}")
+            })
         }
     }
 
@@ -201,10 +197,7 @@ impl BasicProgram {
 
     /// Returns true if the index corresponds to the very first line. False if it does not correspond or does not exists
     pub fn is_first_line(&self, idx: BasicProgramLineIdx) -> bool {
-        match self.line_idx_as_valid_index(idx) {
-            Ok(BasicProgramLineIdx::Index(0)) => true,
-            _ => false
-        }
+        matches!(self.line_idx_as_valid_index(idx), Ok(BasicProgramLineIdx::Index(0)))
     }
 
     /// Returns the previous index of idx if it exists

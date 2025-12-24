@@ -1,3 +1,4 @@
+
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
@@ -10,21 +11,18 @@
     unused,
     warnings
 )]
-#![deny(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation)]
-
 use cpclib_disc::hideur::{HideurError, hideur_build_arg_parser, hideur_handle};
 
-/// Convert a string to its unsigned 32 bits representation (to access to extra memory)
-/// TODO share implementation
-#[must_use]
+///
+/// # Panics
+///
+/// Panics if the string cannot be parsed as a number in the expected format.
 pub fn string_to_nb(source: &str) -> u32 {
-    let error = format!("Unable to read the value: {source}");
-    if source.starts_with("0x") {
-        u32::from_str_radix(&source[2..], 16).expect(&error)
-    }
-    else {
-        source.parse::<u32>().expect(&error)
+    let error = format!("Unable to parse {source}");
+    if let Some(stripped) = source.strip_prefix("0x") {
+        u32::from_str_radix(stripped, 16).expect(&error)
+    } else {
+        source.parse().expect(&error)
     }
 }
 

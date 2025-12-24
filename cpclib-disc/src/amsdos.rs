@@ -59,7 +59,7 @@ impl From<String> for AmsdosError {
 /// - the user
 /// - the filename (up to 8 chars)
 /// - the extension (up to 3 chars)
-/// It does not contain property information
+///   It does not contain property information
 #[derive(Clone, Copy)]
 pub struct AmsdosFileName {
     user: u8,
@@ -346,7 +346,7 @@ impl TryFrom<&str> for AmsdosFileName {
             None => (0, content),
             Some(pos) => {
                 (
-                    u8::from_str_radix(&content[..pos], 10).map_err(|e| {
+                    content[..pos].parse::<u8>().map_err(|e| {
                         AmsdosError::WrongFileName {
                             msg: format!("Error when decoding user value {e}.")
                         }
@@ -404,7 +404,7 @@ impl std::fmt::Debug for AmsdosFileType {
     }
 }
 /// Encode the index of a bloc
-#[derive(Debug, Copy, Clone, Ord, Eq, Default)]
+#[derive(Debug, Copy, Clone, Eq, Ord, PartialEq, PartialOrd, Default)]
 pub enum BlocIdx {
     /// The block is not used
     #[default]
@@ -425,9 +425,9 @@ impl From<u8> for BlocIdx {
     }
 }
 
-impl Into<u8> for &BlocIdx {
-    fn into(self) -> u8 {
-        match self {
+impl From<&BlocIdx> for u8 {
+    fn from(b: &BlocIdx) -> u8 {
+        match b {
             BlocIdx::Empty => 0,
             BlocIdx::Deleted => 0xE5,
             BlocIdx::Index(val) => val.get()
@@ -435,29 +435,11 @@ impl Into<u8> for &BlocIdx {
     }
 }
 
-impl PartialOrd for BlocIdx {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let a: u8 = self.into();
-        let b: u8 = other.into();
-        a.partial_cmp(&b)
-    }
-}
-
-impl PartialEq for BlocIdx {
-    fn eq(&self, other: &Self) -> bool {
-        let a: u8 = self.into();
-        let b: u8 = other.into();
-        a == b
-    }
-}
 
 #[allow(missing_docs)]
 impl BlocIdx {
     pub fn is_valid(self) -> bool {
-        match self {
-            BlocIdx::Index(_) => true,
-            _ => false
-        }
+        matches!(self, BlocIdx::Index(_))
     }
 
     pub fn value(self) -> u8 {

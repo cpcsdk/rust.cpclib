@@ -395,24 +395,15 @@ impl DataAccessElem for DataAccess {
     }
 
     fn is_port_c(&self) -> bool {
-        match self {
-            Self::PortC => true,
-            _ => false
-        }
+        matches!(self, Self::PortC)
     }
 
     fn is_register_i(&self) -> bool {
-        match self {
-            Self::SpecialRegisterI => true,
-            _ => false
-        }
+        matches!(self, Self::SpecialRegisterI)
     }
 
     fn is_register_r(&self) -> bool {
-        match self {
-            Self::SpecialRegisterR => true,
-            _ => false
-        }
+        matches!(self, Self::SpecialRegisterR)
     }
 
     fn to_data_access(&self) -> Cow<'_, DataAccess> {
@@ -420,6 +411,7 @@ impl DataAccessElem for DataAccess {
     }
 }
 
+#[allow(dead_code)]
 impl DataAccess {
     fn expression_mut(&mut self) -> Option<&mut Expr> {
         match self {

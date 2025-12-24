@@ -100,6 +100,7 @@ impl DerefMut for TableFrame {
 #[derive(Debug, Clone, Default)]
 struct FunctionsStack(Vec<TableFrame>);
 
+#[allow(dead_code)]
 impl FunctionsStack {
     pub fn len(&self) -> usize {
         self.0.len()
@@ -151,6 +152,7 @@ impl DerefMut for ModuleSymbolTable {
     }
 }
 
+#[allow(dead_code)]
 impl ModuleSymbolTable {
     /// Add a new branch in the module tree
     fn add_children(&mut self, new: Symbol) {
@@ -255,6 +257,7 @@ impl Default for SymbolsTable {
 }
 
 /// Local/global label handling code
+#[allow(dead_code)]
 impl SymbolsTable {
     pub fn enter_function(&mut self) {
         self.functions_stack.enter_function();
@@ -319,7 +322,7 @@ impl SymbolsTable {
         static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
         let mut replace = HashSet::new();
         for cap in RE.captures_iter(&symbol) {
-            if &cap[0] != symbol {
+            if cap[0] != symbol {
                 replace.insert(cap[0].to_owned());
             }
         }
@@ -388,6 +391,7 @@ impl SymbolsTable {
 impl SymbolsTable {
     /// Retrieve the map for the currently selected module
     #[inline]
+    #[allow(dead_code)]
     fn current_module_map(&self) -> &ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &self.map
@@ -399,6 +403,7 @@ impl SymbolsTable {
 
     /// Retrieve the mutable map for the currently selected module
     #[inline]
+    #[allow(dead_code)]
     fn current_module_map_mut(&mut self) -> &mut ModuleSymbolTable {
         if self.namespace_stack.is_empty() {
             &mut self.map
@@ -411,6 +416,7 @@ impl SymbolsTable {
 
     /// Retreive the map for the requested module
     #[inline]
+    #[allow(dead_code)]
     fn module_map(&self, namespace: &[Symbol]) -> &ModuleSymbolTable {
         let mut current_map = &self.map;
         for current_namespace in namespace.iter() {
@@ -420,6 +426,7 @@ impl SymbolsTable {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn module_map_mut(&mut self, namespace: &[Symbol]) -> &mut ModuleSymbolTable {
         let mut current_map = &mut self.map;
         for current_namespace in namespace.iter() {
@@ -430,6 +437,7 @@ impl SymbolsTable {
 
     /// Split the namespaces of the symbol
     #[inline]
+    #[allow(dead_code)]
     fn split_namespaces(symbol: Symbol) -> Vec<Symbol> {
         symbol
             .value()
@@ -641,15 +649,15 @@ impl SymbolsTable {
     }
 }
 
-#[allow(missing_docs)]
 impl SymbolsTable {
     pub fn laxist() -> Self {
         let mut map = ModuleSymbolTable::default();
         map.insert(Symbol::from("$"), Value::Expr(0.into()).into());
-        let mut table = SymbolsTable::default();
-        table.dummy = true;
-        table.current_global_label = "".into();
-        table
+        SymbolsTable {
+            dummy: true,
+            current_global_label: "".into(),
+            ..Default::default()
+        }
     }
 
     /// Add a new seed for the @ symbol name resolution (we enter in a repeat)
@@ -718,10 +726,7 @@ impl SymbolsTable {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let candidates = self.get_potential_candidates(symbol);
 
-        if candidates.len() == 1 {
-            Ok(candidates[0].clone())
-        }
-        else if self.map.contains_key(&candidates[0]) {
+        if candidates.len() == 1 || self.map.contains_key(&candidates[0]) {
             Ok(candidates[0].clone())
         }
         else {
@@ -730,6 +735,7 @@ impl SymbolsTable {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn extend_writable_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
     where
         Symbol: From<S>,
@@ -962,7 +968,7 @@ impl SymbolsTable {
 
         Ok(iter
             .filter(|(_k, v)| {
-                match (v.value(), r#for) {
+                matches!((v.value(), r#for),
                     (Value::Expr(_), SymbolFor::Number)
                     | (Value::Expr(_), SymbolFor::Address)
                     | (Value::Address(_), SymbolFor::Address)
@@ -970,9 +976,8 @@ impl SymbolsTable {
                     | (Value::Macro(_), SymbolFor::Macro)
                     | (Value::Struct(_), SymbolFor::Struct)
                     | (Value::Counter(_), SymbolFor::Counter)
-                    | (_, SymbolFor::Any) => true,
-                    _ => false
-                }
+                    | (_, SymbolFor::Any)
+                )
             })
             .map(|(k, _v)| k)
             .map(move |symbol2| {

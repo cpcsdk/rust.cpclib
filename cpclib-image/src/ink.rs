@@ -796,6 +796,6 @@ mod tests {
             .cartesian_product(RGB_RATIOS)
             .map(|t| (*t.0.0, *t.0.1, *t.1))
             .map(Ink::from);
-        let rgb_palette = Palette::from(rgb_palette);
+        let _rgb_palette = Palette::from(rgb_palette);
     }
 }

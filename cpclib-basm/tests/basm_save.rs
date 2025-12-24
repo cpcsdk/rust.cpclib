@@ -18,7 +18,7 @@ fn test_save_ascii() {
         "good_save_ascii.asm",
         "--override"
     ]);
-    let (env, _) = process(&args, Arc::new(())).expect("Unable to assemble the file");
+    let (_env, _) = process(&args, Arc::new(())).expect("Unable to assemble the file");
 
     let expected = b"HELLO WORLD";
 

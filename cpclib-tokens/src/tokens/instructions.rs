@@ -25,18 +25,16 @@ pub enum MacroParam {
     List(Vec<Box<MacroParam>>)
 }
 
-impl ToString for MacroParam {
-    fn to_string(&self) -> String {
+impl fmt::Display for MacroParam {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RawArgument(s) | Self::EvaluatedArgument(s) => s.clone(),
+            Self::RawArgument(s) | Self::EvaluatedArgument(s) => write!(f, "{}", s),
             Self::List(l) => {
-                format!(
-                    "[{}]",
-                    l.iter()
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
+                let inner = l.iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                write!(f, "[{}]", inner)
             }
         }
     }
@@ -1012,7 +1010,6 @@ impl fmt::Display for Token {
                     write!(f, " {}", address.to_simplified_string())?;
                 }
                 unimplemented!();
-                Ok(())
             }
             Token::Comment( string)
                  => write!(f, " ; {}", string.replace('\n',"\n;")),
@@ -1145,7 +1142,7 @@ impl fmt::Display for Token {
 
 
             Token::MacroCall( name,  args)
-                => {use cpclib_common::itertools::Itertools;
+                => {
                     let args = args.clone()
                     .iter()
                     .map(|a|{a.to_string()})
@@ -1254,23 +1251,6 @@ impl Token {
     /// When diassembling code, the token with relative information are not appropriate
     pub fn fix_relative_jumps_after_disassembling(&mut self) {
         panic!("I plan to remove this code, it sould not be called");
-        dbg!("before", &self);
-
-        if self.is_opcode() {
-            let expression = match self {
-                Self::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(exp)), _) => Some(exp),
-                Self::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(exp)), ..) => Some(exp),
-                //          Self::OpCode(_, Some(DataAccess::IndexRegister16WithIndex(_, exp)), _) => Some(exp),
-                //         Self::OpCode(_, _, Some(DataAccess::IndexRegister16WithIndex(_, exp))) => Some(exp),
-                _ => None
-            };
-
-            if let Some(expr) = expression {
-                expr.fix_relative_value();
-            };
-        }
-
-        dbg!("after", &self);
     }
 
     pub fn is_opcode(&self) -> bool {
@@ -1278,34 +1258,31 @@ impl Token {
     }
 
     pub fn is_output_opcode(&self) -> bool {
-        match self {
+        matches!(self,
             Token::OpCode(Mnemonic::Out, ..)
             | Token::OpCode(Mnemonic::Outd, ..)
             | Token::OpCode(Mnemonic::Outi, ..)
             | Token::OpCode(Mnemonic::Otdr, ..)
-            | Token::OpCode(Mnemonic::Otir, ..) => true,
-            _ => false
-        }
+            | Token::OpCode(Mnemonic::Otir, ..)
+        )
     }
 
     pub fn is_input_opcode(&self) -> bool {
-        match self {
+        matches!(self,
             Token::OpCode(Mnemonic::In, ..)
             | Token::OpCode(Mnemonic::Ind, ..)
             | Token::OpCode(Mnemonic::Ini, ..)
             | Token::OpCode(Mnemonic::Indr, ..)
-            | Token::OpCode(Mnemonic::Inir, ..) => true,
-            _ => false
-        }
+            | Token::OpCode(Mnemonic::Inir, ..)
+        )
     }
 
     pub fn is_retlike_opcode(&self) -> bool {
-        match self {
+        matches!(self,
             Token::OpCode(Mnemonic::Ret, ..)
             | Token::OpCode(Mnemonic::Reti, ..)
-            | Token::OpCode(Mnemonic::Retn, ..) => true,
-            _ => false
-        }
+            | Token::OpCode(Mnemonic::Retn, ..)
+        )
     }
 
     /// Check if it is an undocumented instruction that makes a copy of the data to save in an additional register
@@ -1341,10 +1318,7 @@ impl Token {
     }
 
     pub fn is_label(&self) -> bool {
-        match self {
-            Self::Label(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Label(_))
     }
 
     pub fn macro_name(&self) -> Option<&str> {
@@ -1369,8 +1343,8 @@ impl Token {
         }
     }
 
-    /// Rename the @labels in macros
-    /// XXX no more needed - to remove later
+    // /// Rename the @labels in macros
+    // /// XXX no more needed - to remove later
     // pub fn fix_local_macro_labels_with_seed(&mut self, seed: usize) {
     // match self {
     // Self::Align(a, b)  | Self::Org(a, b) | Self::Run(a, b) => {
@@ -1513,7 +1487,7 @@ impl Token {
 
     /// Return true for directives that can emebed some listing information
     pub fn has_at_least_one_listing(&self) -> bool {
-        match self {
+        matches!(self,
             Self::CrunchedSection(..)
             | Self::Include(..)
             | Self::If(..)
@@ -1521,8 +1495,7 @@ impl Token {
             | Self::RepeatUntil(..)
             | Self::Rorg(..)
             | Self::Switch(..)
-            | Self::While(..) => true,
-            _ => false
-        }
+            | Self::While(..)
+        )
     }
 }

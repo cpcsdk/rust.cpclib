@@ -2,13 +2,13 @@
 
 use cpclib_asm::parser::expression::located_expr;
 use cpclib_asm::parser::parser::ctx_and_span;
-use cpclib_asm::{InnerZ80Span, MayHaveSpan, SourceString, Z80Span};
-use cpclib_common::winnow::stream::{AsBStr, Offset};
+use cpclib_asm::{InnerZ80Span, MayHaveSpan};
+use cpclib_common::winnow::stream::AsBStr;
 
 #[test]
 fn test_span_covering_basic() {
     // Parse the expression "A+B*C"
-    let (ctx, mut span) = ctx_and_span("A+B*C");
+    let (_ctx, span) = ctx_and_span("A+B*C");
     let mut inner: InnerZ80Span = span.clone().into();
     let expr = located_expr(&mut inner).expect("parse");
 

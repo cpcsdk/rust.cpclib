@@ -127,11 +127,6 @@ impl RiffLen {
     }
 }
 
-pub struct RiffContainer {
-    /// RIFF or LIST only
-    ckid: RiffCode
-}
-
 #[derive(Clone, Debug)]
 /// Raw chunk data.
 #[derive(PartialEq)]

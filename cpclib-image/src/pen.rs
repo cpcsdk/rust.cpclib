@@ -202,7 +202,7 @@ mod test {
     use crate::pen::Pen;
     #[test]
     fn pen_add() {
-        for i in (0..16) {
+        for i in 0..16  {
             assert_eq!(Pen::pen(0) + i, Pen::pen(i));
         }
     }

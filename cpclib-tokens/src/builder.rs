@@ -55,7 +55,7 @@ pub fn outir() -> Token {
     token_for_opcode_no_arg(Mnemonic::Otir)
 }
 
-pub fn neg() -> Token {
+pub fn neg_token() -> Token {
     token_for_opcode_no_arg(Mnemonic::Neg)
 }
 
@@ -93,7 +93,6 @@ pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
 }
 
 /// Generate a call
-
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
     Token::Comment(label.as_ref().to_owned())
@@ -119,8 +118,8 @@ pub fn defb<E: Into<Expr>>(val: E) -> Token {
 }
 
 /// Generate defb directive from a slice of expression
-pub fn defb_elements<E: Into<Expr>>(elements: &[E]) -> Token
-where E: Clone {
+pub fn defb_elements<E>(elements: &[E]) -> Token
+where E: Clone + Into<Expr> {
     let mut data = Vec::new();
     for val in elements {
         let val = val.clone();
@@ -420,7 +419,7 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
             else {
                 BinaryOperation::Add
             },
-            if expr.is_negated() { expr.neg() } else { expr }
+            if expr.is_negated() { expr.negate() } else { expr }
         )
     )
 }
@@ -848,7 +847,7 @@ impl ListingBuilder {
 
     ld_mem_hl_r8_builder! {A B C D E H L}
 
-    no_arg_builder! {exx nop ldi ldd ldir lddr neg exa ex_hl_de halt di ei ind indr outd outdr outi outir ret}
+    no_arg_builder! {exx nop ldi ldd ldir lddr neg_token exa ex_hl_de halt di ei ind indr outd outdr outi outir ret}
 
     ld_r8_r8_builder! {
         A,A A,B A,C A,D A,E A,H A,L
@@ -956,11 +955,10 @@ impl ListingBuilder {
 /// Code function that generate Listing instead of Tokens
 pub mod routines {
     use crate::builder::*;
-    use crate::tokens::tokens::Listing;
+    use crate::tokens::listing_element::Listing;
 
     /// Generate the listing that handle a wait loop
     /// Idea comes from Rhino/Batman Group http://cpcrulez.fr/forum/viewtopic.php?p=15827#p15827
-
     #[allow(dead_code)]
     pub fn wait(mut duration: u32) -> Listing {
         let wait_code_for = |l_duration| {

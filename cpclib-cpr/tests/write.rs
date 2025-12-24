@@ -24,7 +24,7 @@ pub fn test_write_copter() {
     let fname = "tests/Copter 271 (1991)(Loriciels).cpr";
 
     dbg!("Read file");
-    let content = std::fs::read(fname).unwrap();
+    let _content = std::fs::read(fname).unwrap();
     let cpr = Cpr::load(fname).expect("Unable to read copter");
 
     dbg!("Write file");

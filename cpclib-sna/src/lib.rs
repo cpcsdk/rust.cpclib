@@ -44,11 +44,10 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
         .map_err(SnapshotError::AnyError)
 }
 
+
 /// ! Re-implementation of createsnapshot by Ramlaid/Arkos
 /// ! in rust by Krusty/Benediction
-
 /// Original options
-///
 /// {'i',"inSnapshot",0,1,1,"Load <$1> snapshot file"},
 /// {'l',"loadFileData",0,0,2,"Load <$1> file data at <$2> address in snapshot memory (or use AMSDOS header load address if <$2> is negative)"},
 /// {'p',"putData",0,0,2,"Put <$2> byte at <$1> address in snapshot memory"},
@@ -66,7 +65,6 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
 /// {'g',"fillText",0,0,3,"Fill snapshot from <$1> over <$2> bytes, with <$3> text"},
 /// {'j',"loadIniFile",0,1,1,"Load <$1> init file"},
 /// {'k',"saveIniFile",0,1,1,"Save <$1> init file"},
-
 pub const HEADER_SIZE: usize = 256;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -96,12 +94,7 @@ impl TryInto<SnapshotVersion> for u8 {
 impl SnapshotVersion {
     /// Check if snapshot ius V3 version
     pub fn is_v3(self) -> bool {
-        if let SnapshotVersion::V3 = self {
-            true
-        }
-        else {
-            false
-        }
+        matches!(self, SnapshotVersion::V3)
     }
 }
 
@@ -553,8 +546,8 @@ impl Snapshot {
         if version == SnapshotVersion::V3 && !self.has_memory_chunk() {
             // println!("Generate chunks from standard memory");
             let chunks = cloned.memory.to_chunks();
-            for idx in 0..chunks.len() {
-                cloned.chunks.insert(idx, chunks[idx].clone());
+            for (idx, chunk) in chunks.iter().enumerate() {
+                cloned.chunks.insert(idx, chunk.clone());
             }
             cloned.memory = SnapshotMemory::default();
             cloned.set_memory_size_header(0);
@@ -773,6 +766,7 @@ impl Snapshot {
     /// Add the content of a file at the required position
     pub fn add_file(&mut self, fname: &str, address: usize) -> Result<(), SnapshotError> {
         let f = File::open(fname).unwrap();
+        let f = std::io::BufReader::new(f);
         let data: Vec<u8> = f.bytes().map(Result::unwrap).collect();
         let size = data.len();
 

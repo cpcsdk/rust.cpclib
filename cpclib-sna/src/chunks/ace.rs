@@ -272,6 +272,7 @@ impl<'a> From<AceBreakPoint<'a>> for [u8; 216] {
     }
 }
 
+#[allow(dead_code)]
 impl AceBreakPoint<'_> {
     const BRK_TYPE_EXEC: u8 = 0;
     const BRK_TYPE_MEM: u8 = 1;

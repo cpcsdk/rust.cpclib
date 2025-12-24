@@ -282,20 +282,18 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             let ams_filename = AmsdosFileName::try_from(filename)?;
             let file = disc.get_amsdos_file(head, ams_filename)?;
 
-            if file.is_none() {
-                return Err(DskManagerError::AnyError {
-                    msg: format!("missing {filename}")
-                });
-            }
-            else {
+            if let Some(file) = file {
                 // filename do not contain user
-                let file = file.unwrap();
                 if sub.get_flag("noheader") {
                     std::fs::write(ams_filename.filename(), file.content())?;
                 }
                 else {
                     std::fs::write(ams_filename.filename(), file.header_and_content())?;
                 }
+            } else {
+                return Err(DskManagerError::AnyError {
+                    msg: format!("missing {filename}")
+                });
             }
         }
     }

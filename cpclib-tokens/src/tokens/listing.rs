@@ -240,9 +240,10 @@ impl<T: Clone + ListingElement + ::std::fmt::Debug> BaseListing<T> {
 
     /// Create a new  listing based on the provided Ts
     pub fn new_with(arg: &[T]) -> Self {
-        let mut new = Self::default();
-        new.listing = arg.to_vec();
-        new
+        Self{
+            listing: arg.to_vec(),
+            ..Default::default()
+        } 
     }
 
     /// Write access to listing. Should not exist but I do not know how to access to private firlds

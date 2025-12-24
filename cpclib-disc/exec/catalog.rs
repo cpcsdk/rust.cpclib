@@ -25,6 +25,10 @@ use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simple_logger::{SimpleLogger, set_up_color_terminal};
 #[must_use]
+///
+/// # Panics
+///
+/// Panics if the string cannot be parsed as a number in the expected format.
 pub fn to_number<T>(repr: &str) -> T
 where
     T: Num,
@@ -32,22 +36,25 @@ where
 {
     dbg!(repr);
     let repr = repr.trim();
-    let repr = &repr;
-    if repr.starts_with("0x") {
-        T::from_str_radix(dbg!(&repr[2..]), 16)
+    if let Some(stripped) = repr.strip_prefix("0x") {
+        T::from_str_radix(stripped, 16)
     }
-    else if repr.starts_with("\\$") || repr.starts_with('&') {
-        T::from_str_radix(dbg!(&repr[1..]), 16)
+    else if let Some(stripped) = repr.strip_prefix("\\$") {
+        T::from_str_radix(stripped, 16)
+    }
+    else if let Some(stripped) = repr.strip_prefix('&') {
+        T::from_str_radix(stripped, 16)
     }
     else if repr.starts_with('0') {
-        T::from_str_radix(dbg!(repr), 8)
+        T::from_str_radix(repr, 8)
     }
     else {
-        T::from_str_radix(dbg!(repr), 10)
+        T::from_str_radix(repr, 10)
     }
     .expect("Unable to parse number")
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> std::io::Result<()> {
     // XXX this has been disabled for compatbility reasons with gpu
     // XXX as this software has been used since ages, I have no idea if this is an issue or not

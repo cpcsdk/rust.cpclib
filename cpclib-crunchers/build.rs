@@ -8,7 +8,6 @@ fn build_others() {
         .warnings(false)
         .file("extra/apultra.c")
         .opt_level(3)
-        .shared_flag(true)
         .cargo_metadata(true)
         .compile("apultra");
 
@@ -17,7 +16,6 @@ fn build_others() {
         .warnings(false)
         .file("extra/exomizer.c")
         .opt_level(3)
-        .shared_flag(true)
         .cargo_metadata(true)
         .compile("exomizer");
 
@@ -26,7 +24,6 @@ fn build_others() {
         .warnings(false)
         .file("extra/lz4_embedded.c")
         .opt_level(3)
-        .shared_flag(true)
         .cargo_metadata(true)
         .compile("lz4");
 
@@ -35,7 +32,6 @@ fn build_others() {
         .warnings(false)
         .file("extra/zx7/zx7.c")
         .opt_level(3)
-        .shared_flag(false)
         .cargo_metadata(true)
         .compile("zx7");
 }
@@ -68,7 +64,6 @@ fn build_lzsa() {
         .file("extra/lzsa/lzsa-master/src/shrink_streaming.c")
         .flag("-fomit-frame-pointer")
         .opt_level(3)
-        .shared_flag(true)
         .cargo_metadata(true)
         .compile("lzsa");
 }

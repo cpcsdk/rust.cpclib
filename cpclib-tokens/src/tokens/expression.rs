@@ -403,20 +403,18 @@ impl ExprElement for Expr {
 
     /// Check if it is necessary to read within a symbol table
     fn is_context_independant(&self) -> bool {
-        use self::Expr::*;
-        match *self {
-            Label(_) => false,
-            _ => true
-        }
+        matches!(self, Expr::Label(_))
     }
 
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
     fn fix_relative_value(&mut self) {
         panic!("i am planning to remove this code, it should not be called");
+        /* 
         if let Expr::Value(val) = self {
             let mut new_expr = Expr::RelativeDelta(*val as i8);
             std::mem::swap(self, &mut new_expr);
         }
+        */
     }
 
     fn not(&self) -> Self::ResultExpr {
@@ -614,48 +612,23 @@ impl Expr {
     }
 }
 impl Display for Expr {
-    fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
-        use self::Expr::*;
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Rnd => write!(format, "RND()"),
-            // Should not be displayed often
-            RelativeDelta(delta) => write!(format, "$ + {delta} + 2"),
-
-            Value(val) => write!(format, "0x{val:x}"),
-            Float(val) => write!(format, "{val}"),
-            Char(c) => write!(format, "'{c}'"),
-            Bool(b) => write!(format, "{}", if *b { "true" } else { "false" }),
-            String(string) => write!(format, "\"{string}\""),
-            List(l) => {
-                write!(
-                    format,
-                    "[{}]",
-                    l.iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            },
-            Label(label) => write!(format, "{label}"),
-            PrefixedLabel(prefix, label) => write!(format, "{prefix}{label}"),
-
-            Paren(expr) => write!(format, "({expr})"),
-
-            AnyFunction(name, args) => {
-                write!(
-                    format,
-                    "{}({})",
-                    name,
-                    args.iter()
-                        .map(|e| e.to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            },
-
-            UnaryOperation(op, exp) => write!(format, "{op}{exp}"),
-            UnaryTokenOperation(op, tok) => write!(format, "{op}({tok})"),
-            BinaryOperation(op, exp1, exp2) => write!(format, "({exp1} {op} {exp2})")
+            Expr::Value(val) => write!(f, "0x{val:x}"),
+            Expr::Float(val) => write!(f, "{val}"),
+            Expr::Char(c) => write!(f, "'{c}'"),
+            Expr::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
+            Expr::String(string) => write!(f, "\"{string}\""),
+            Expr::List(l) => write!(f, "[{}]", l.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
+            Expr::Label(label) => write!(f, "{label}"),
+            Expr::PrefixedLabel(prefix, label) => write!(f, "{prefix}{label}"),
+            Expr::Paren(expr) => write!(f, "({expr})"),
+            Expr::AnyFunction(name, args) => write!(f, "{}({})", name, args.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
+            Expr::UnaryOperation(op, exp) => write!(f, "{op}{exp}"),
+            Expr::UnaryTokenOperation(op, tok) => write!(f, "{op}({tok})"),
+            Expr::BinaryOperation(op, exp1, exp2) => write!(f, "({exp1} {op} {exp2})"),
+            Expr::RelativeDelta(val) => write!(f, "$ + {val} + 2"),
+            Expr::Rnd => write!(f, "RND()"),
         }
     }
 }
@@ -746,7 +719,7 @@ impl Expr {
         }
     }
 
-    pub fn neg(self) -> Self {
+    pub fn negate(self) -> Self {
         Expr::UnaryOperation(UnaryOperation::Neg, Box::new(self))
     }
 }
@@ -762,7 +735,7 @@ impl Display for ExpressionTypeError {
 
 /// The successful result of an evaluation.
 /// Embeds  a real,  an integer or a string
-#[derive(Eq, Ord, Debug, Clone)]
+#[derive(Eq, Debug, Clone)]
 pub enum ExprResult {
     Float(OrderedFloat<f64>),
     Value(i32),
@@ -856,31 +829,19 @@ impl<T: Into<ExprResult> + Clone> From<&[T]> for ExprResult {
 
 impl ExprResult {
     pub fn is_float(&self) -> bool {
-        match self {
-            Self::Float(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Float(_))
     }
 
     pub fn is_int(&self) -> bool {
-        match self {
-            Self::Value(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Value(_))
     }
 
     pub fn is_char(&self) -> bool {
-        match self {
-            Self::Char(_) => true,
-            _ => false
-        }
+        matches!(self, Self::Char(_))
     }
 
     pub fn is_string(&self) -> bool {
-        match self {
-            Self::String(_) => true,
-            _ => false
-        }
+        matches!(self, Self::String(_))
     }
 
     pub fn is_list(&self) -> bool {
@@ -925,9 +886,6 @@ impl ExprResult {
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
             _ => {
                 panic!("TODO remove this forgotten panic");
-                Err(ExpressionTypeError(format!(
-                    "Try to convert {self} as an int"
-                )))
             }
         }
     }
@@ -1092,7 +1050,7 @@ impl ExprResult {
 
     pub fn matrix_cols(&self) -> Vec<ExprResult> {
         let t = self.matrix_transpose();
-        t.matrix_rows().iter().cloned().collect()
+        t.matrix_rows().to_vec()
     }
 }
 
@@ -1496,6 +1454,7 @@ impl std::ops::BitXor for ExprResult {
 }
 
 impl std::cmp::PartialEq for ExprResult {
+    #[allow(clippy::non_canonical_partial_ord_impl)]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Float(l0), Self::Float(r0)) => l0 == r0,
@@ -1525,21 +1484,30 @@ impl std::cmp::PartialEq for ExprResult {
     }
 }
 
-impl std::cmp::PartialOrd for ExprResult {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl std::cmp::Ord for ExprResult {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
-            (Self::Float(l0), Self::Float(r0)) => l0.partial_cmp(r0),
-            (Self::Value(l0), Self::Value(r0)) => l0.partial_cmp(r0),
+            (Self::Float(l0), Self::Float(r0)) => l0.cmp(r0),
+            (Self::Value(l0), Self::Value(r0)) => l0.cmp(r0),
 
-            (Self::String(l0), Self::String(r0)) => l0.partial_cmp(r0),
-            (Self::String(_), _) | (_, Self::String(_)) => None,
+            (Self::String(l0), Self::String(r0)) => l0.cmp(r0),
+            (Self::String(_), _) | (_, Self::String(_)) => unimplemented!(),
 
-            (Self::List(l0), Self::List(r0)) => l0.partial_cmp(r0),
-            (Self::List(_), _) | (_, Self::List(_)) => None,
+            (Self::List(l0), Self::List(r0)) => l0.cmp(r0),
+            (Self::List(_), _) | (_, Self::List(_)) => unimplemented!(),
 
-            _ => self.float().unwrap().partial_cmp(&other.float().unwrap())
+            _ => self.float().unwrap().partial_cmp(&other.float().unwrap()).unwrap()
         }
     }
+}
+
+impl std::cmp::PartialOrd for ExprResult {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+
+        Some(self.cmp(other))
+    }
+
+
 }
 
 impl std::fmt::Display for ExprResult {
