@@ -18,12 +18,11 @@ use cpclib_tokens::{
     AssemblerFlavor, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest, LabelPrefix,
     Register16, UnaryOperation, UnaryTokenOperation
 };
-use smallvec::SmallVec;
-use smallvec::Array;
+use smallvec::{Array, SmallVec};
 
+use super::common::parse_comma;
 use super::error::*;
 use super::obtained::*;
-use super::common::parse_comma;
 use super::*;
 
 // Include build-time generated forbidden names
@@ -372,26 +371,27 @@ pub fn parse_labelprefix(input: &mut InnerZ80Span) -> ModalResult<LabelPrefix, Z
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn fold_exprs<R>(
-    initial: LocatedExpr,
-    remainder: R,
-    _span: InnerZ80Span
-) -> LocatedExpr 
-
-
+pub fn fold_exprs<R>(initial: LocatedExpr, remainder: R, _span: InnerZ80Span) -> LocatedExpr
 where
     R: IntoIterator<Item = (BinaryOperation, LocatedExpr)>,
     <R as IntoIterator>::IntoIter: ExactSizeIterator
 {
     let remainder = remainder.into_iter();
     if remainder.is_empty() {
-        return initial;
-    } else {
-        remainder.into_iter()
+        initial
+    }
+    else {
+        remainder
+            .into_iter()
             .fold(initial, move |acc, (oper, expr)| {
                 let covering_span = build_span_covering(acc.span(), expr.span());
-                LocatedExpr::BinaryOperation(oper, Box::new(acc), Box::new(expr), covering_span.into())
-        })
+                LocatedExpr::BinaryOperation(
+                    oper,
+                    Box::new(acc),
+                    Box::new(expr),
+                    covering_span.into()
+                )
+            })
     }
 }
 
@@ -439,7 +439,7 @@ where
 
         // for orgams we cannot accept * as being a multiplication if it is followed by another * as it represents a repetition
         if input.state.options().is_orgams() && pattern == b"*" {
-            let _ = not(pattern).parse_next(input)?;
+            not(pattern).parse_next(input)?;
             let _ = my_space0(input)?;
         }
 
@@ -484,25 +484,29 @@ pub fn expr(input: &mut InnerZ80Span) -> ModalResult<Expr, Z80ParserError> {
 pub struct MySmallVec<A: Array>(SmallVec<A>);
 impl<A: Array> Deref for MySmallVec<A> {
     type Target = SmallVec<A>;
+
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl<A: Array> IntoIterator for MySmallVec<A> {
-    type Item = <SmallVec<A> as IntoIterator>::Item;
     type IntoIter = <SmallVec<A> as IntoIterator>::IntoIter;
+    type Item = <SmallVec<A> as IntoIterator>::Item;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<A: Array, I> Accumulate<I> for MySmallVec<A> where I: Into<<A as Array>::Item> {
+impl<A: Array, I> Accumulate<I> for MySmallVec<A>
+where I: Into<<A as Array>::Item>
+{
     fn initial(capacity: Option<usize>) -> Self {
         if let Some(capacity) = capacity {
             MySmallVec(SmallVec::with_capacity(capacity))
-        } else {
+        }
+        else {
             MySmallVec(SmallVec::new())
         }
     }
@@ -959,16 +963,16 @@ pub fn ignore_ascii_case_allowed_label(
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
     {
         use cpclib_common::rayon::prelude::*;
-        return !bucket
+        !bucket
             .par_iter()
-            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name));
+            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name))
     }
 
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     {
-        return !bucket
+        !bucket
             .iter()
-            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name));
+            .any(|&content| content.as_bytes().eq_ignore_ascii_case(name))
     }
 }
 

@@ -11,7 +11,7 @@ use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree}
 use regex::Regex;
 
 use crate::symbols::{
-    ValueMacro, PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource
+    PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource, ValueMacro
 };
 use crate::{ExprResult, LabelPrefix};
 

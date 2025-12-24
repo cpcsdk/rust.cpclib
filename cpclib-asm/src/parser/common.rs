@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use cpclib_common::rayon::iter::ParallelIterator;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space0};
 use cpclib_common::winnow::combinator::{
@@ -18,7 +18,6 @@ use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;
 use obtained::LocatedTokenInner;
-use crate::hashed_choice;
 
 use super::context::*;
 use super::error::*;
@@ -26,27 +25,24 @@ use super::expression::*;
 use super::instructions::*;
 use super::obtained::*;
 use super::orgams::*;
-
-use super::*;
-use crate::parser::parser::{DOTTED_END_DIRECTIVE, END_DIRECTIVE};
-use crate::preamble::*;
-
 pub use super::registers::{
     parse_indexregister_with_index, parse_indexregister8, parse_indexregister16, parse_register_i,
     parse_register_ix, parse_register_iy, parse_register_r, parse_register8, parse_register16
 };
-
-
+use super::*;
+use crate::hashed_choice;
+use crate::parser::parser::{DOTTED_END_DIRECTIVE, END_DIRECTIVE};
+use crate::preamble::*;
 
 // Compile-time, case-insensitive FNV-1a hash for ASCII
 pub(crate) const fn fnv1a_ascii_upper(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf29ce484222325u64;
+    let mut hash = 0xCBF29CE484222325u64;
     let mut i = 0;
     while i < bytes.len() {
         let b = bytes[i];
         let upper = if b >= b'a' && b <= b'z' { b - 32 } else { b };
         hash ^= upper as u64;
-        hash = hash.wrapping_mul(0x100000001b3);
+        hash = hash.wrapping_mul(0x100000001B3);
         i += 1;
     }
     hash
@@ -54,17 +50,14 @@ pub(crate) const fn fnv1a_ascii_upper(bytes: &[u8]) -> u64 {
 
 #[inline(always)]
 pub(crate) fn eq_ascii_nocase(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| x.to_ascii_uppercase() == y.to_ascii_uppercase())
+    a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| x.eq_ignore_ascii_case(&y))
 }
-
-
 
 #[derive(PartialEq)]
 pub enum SaveKind {
     Save,
     WriteDirect
 }
-
 
 #[cfg_attr(not(target_arch = "wasm32"), inline(always))]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -115,7 +108,6 @@ pub fn parse_optional_argname_and_value<'f, 's, O>(
         .parse_next(input)
     }
 }
-
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -235,8 +227,6 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     Ok(token)
 }
 
-
-
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub(crate) fn build_span(
@@ -253,31 +243,33 @@ pub(crate) fn build_span(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn build_span_covering(span: &Z80Span, right: &Z80Span) -> InnerZ80Span {
-        // Safety: We assume both spans are from the same buffer/context.
-        let left = &span.0;
-        let right = &right.0;
-        debug_assert!(left.state == right.state, "Spans must have the same context");
+    // Safety: We assume both spans are from the same buffer/context.
+    let left = &span.0;
+    let right = &right.0;
+    debug_assert!(
+        left.state == right.state,
+        "Spans must have the same context"
+    );
 
-        // If either is empty, return the other
-        if left.is_empty() {
-            return right.clone();
-        }
-        if right.is_empty() {
-            return left.clone();
-        }
+    // If either is empty, return the other
+    if left.is_empty() {
+        return *right;
+    }
+    if right.is_empty() {
+        return *left;
+    }
 
-        let left_bytes = left.as_bstr();
-        let right_bytes = right.as_bstr();
+    let left_bytes = left.as_bstr();
+    let right_bytes = right.as_bstr();
 
-        let start_ptr = left_bytes.as_ptr();
-        let end_ptr = unsafe { right_bytes.as_ptr().add(right_bytes.len()) };
-        let total_len = (end_ptr as usize).wrapping_sub(start_ptr as usize);
+    let start_ptr = left_bytes.as_ptr();
+    let end_ptr = unsafe { right_bytes.as_ptr().add(right_bytes.len()) };
+    let total_len = (end_ptr as usize).wrapping_sub(start_ptr as usize);
 
-        // Safety: start_ptr and total_len are valid and within the same buffer
-        let covering_bytes = unsafe { std::slice::from_raw_parts(start_ptr, total_len) };
-        left.update_slice(covering_bytes)
+    // Safety: start_ptr and total_len are valid and within the same buffer
+    let covering_bytes = unsafe { std::slice::from_raw_parts(start_ptr, total_len) };
+    left.update_slice(covering_bytes)
 }
-
 
 // TODO search why they are listed to forbid label naming. Delete it if unneeded
 pub const REGISTERS: &[&[u8]] = &[b"AF", b"HL", b"DE", b"BC", b"IX", b"IY", b"IXL", b"IXH"];
@@ -293,8 +285,6 @@ pub fn parse_z80_with_context_builder<S: Into<String>>(
     LocatedListing::new_complete_source(str, builder)
         .map_err(|l| AssemblerError::LocatedListingError(std::sync::Arc::new(l)))
 }
-
-
 
 /// TODO better to build parse_z80_with_options from parse_z80_span than the opposite
 // pub fn parse_z80_span(span: InnerZ80Span) -> Result<LocatedListing, AssemblerError> {
@@ -840,7 +830,6 @@ pub fn parse_assign_operator(
     Ok(oper)
 }
 
-
 // Fail if we do not read a forbidden keyword
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -1049,4 +1038,3 @@ pub fn parse_multiline_comment(
         })
         .parse_next(input)
 }
-

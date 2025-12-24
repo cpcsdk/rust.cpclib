@@ -1,11 +1,9 @@
 #![feature(box_patterns)]
 
-use cpclib_asm::{parser::expression::located_expr, Z80Span, InnerZ80Span};
+use cpclib_asm::parser::expression::located_expr;
 use cpclib_asm::parser::parser::ctx_and_span;
-use cpclib_common::winnow::stream::AsBStr;
-use cpclib_common::winnow::stream::Offset;
-use cpclib_asm::MayHaveSpan;
-use cpclib_asm::SourceString;
+use cpclib_asm::{InnerZ80Span, MayHaveSpan, SourceString, Z80Span};
+use cpclib_common::winnow::stream::{AsBStr, Offset};
 
 #[test]
 fn test_span_covering_basic() {
@@ -16,9 +14,18 @@ fn test_span_covering_basic() {
 
     // Print the top-level span and sub-spans for debugging
     let top_span = expr.span();
-    println!("[span_covering] top_span.as_bstr() = {:?}", top_span.as_bstr());
-    println!("[span_covering] top_span.offset_from_start() = {:?}", top_span.offset_from_start());
-    println!("[span_covering] top_span.len = {:?}", top_span.as_bstr().len());
+    println!(
+        "[span_covering] top_span.as_bstr() = {:?}",
+        top_span.as_bstr()
+    );
+    println!(
+        "[span_covering] top_span.offset_from_start() = {:?}",
+        top_span.offset_from_start()
+    );
+    println!(
+        "[span_covering] top_span.len = {:?}",
+        top_span.as_bstr().len()
+    );
 
     // The top-level should be a BinaryOperation(Add, A, B*C)
     if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
@@ -26,23 +33,42 @@ fn test_span_covering_basic() {
         box left,
         box right,
         _
-    ) = &expr {
-        println!("[span_covering] left.span().as_bstr() = {:?}", left.span().as_bstr());
-        println!("[span_covering] right.span().as_bstr() = {:?}", right.span().as_bstr());
+    ) = &expr
+    {
+        println!(
+            "[span_covering] left.span().as_bstr() = {:?}",
+            left.span().as_bstr()
+        );
+        println!(
+            "[span_covering] right.span().as_bstr() = {:?}",
+            right.span().as_bstr()
+        );
         // Right should be BinaryOperation(Mul, B, C) covering "B*C"
         if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
             cpclib_tokens::BinaryOperation::Mul,
             box b,
             box c,
             mul_span
-        ) = right {
-            println!("[span_covering] mul_span.as_bstr() = {:?}", mul_span.as_bstr());
-            println!("[span_covering] b.span().as_bstr() = {:?}", b.span().as_bstr());
-            println!("[span_covering] c.span().as_bstr() = {:?}", c.span().as_bstr());
-        } else {
+        ) = right
+        {
+            println!(
+                "[span_covering] mul_span.as_bstr() = {:?}",
+                mul_span.as_bstr()
+            );
+            println!(
+                "[span_covering] b.span().as_bstr() = {:?}",
+                b.span().as_bstr()
+            );
+            println!(
+                "[span_covering] c.span().as_bstr() = {:?}",
+                c.span().as_bstr()
+            );
+        }
+        else {
             println!("[span_covering] right is not a BinaryOperation(Mul, ...) as expected");
         }
-    } else {
+    }
+    else {
         println!("[span_covering] top-level is not a BinaryOperation(Add, ...) as expected");
     }
     // Keep the original assertions (may fail, but now we get debug output)
@@ -56,7 +82,10 @@ fn test_span_covering_single_var() {
     let (_ctx, mut span) = ctx_and_span("A");
     let expr = located_expr(&mut span).expect("parse");
     let top_span = expr.span();
-    println!("[test_span_covering_single_var] top_span.as_bstr() = {:?}", top_span.as_bstr());
+    println!(
+        "[test_span_covering_single_var] top_span.as_bstr() = {:?}",
+        top_span.as_bstr()
+    );
     assert_eq!(top_span.as_bstr(), b"A");
 }
 
@@ -65,22 +94,23 @@ fn test_span_covering_simple_add() {
     let (_ctx, mut span) = ctx_and_span("A+B");
     let expr = located_expr(&mut span).expect("parse");
     let top_span = expr.span();
-    println!("[test_span_covering_simple_add] top_span.as_bstr() = {:?}", top_span.as_bstr());
+    println!(
+        "[test_span_covering_simple_add] top_span.as_bstr() = {:?}",
+        top_span.as_bstr()
+    );
     assert_eq!(top_span.as_bstr(), b"A+B");
 }
 
-/* 
-#[test]
-fn test_span_covering_nested() {
-    let (_ctx, left) = ctx_and_span("A+B");
-    let (_ctx, right) = ctx_and_span("C-D");
-    let left_span: Z80Span = left.clone();
-    let right_span: Z80Span = right.clone();
-    let covering = build_span_covering(&left_span, &right_span);
-    assert!(covering.offset_from_start() == left_span.offset_from_start());
-    assert!(covering.offset_from_start() + covering.as_bstr().len() >= right_span.offset_from_start() + right_span.as_bstr().len());
-}
-*/
+// #[test]
+// fn test_span_covering_nested() {
+// let (_ctx, left) = ctx_and_span("A+B");
+// let (_ctx, right) = ctx_and_span("C-D");
+// let left_span: Z80Span = left.clone();
+// let right_span: Z80Span = right.clone();
+// let covering = build_span_covering(&left_span, &right_span);
+// assert!(covering.offset_from_start() == left_span.offset_from_start());
+// assert!(covering.offset_from_start() + covering.as_bstr().len() >= right_span.offset_from_start() + right_span.as_bstr().len());
+// }
 
 #[test]
 fn test_span_covering_complex_expression() {
@@ -94,18 +124,21 @@ fn test_span_covering_complex_expression() {
         box left,
         box right,
         sub_span
-    ) = &expr {
+    ) = &expr
+    {
         // left: should be BinaryOperation(Add, A, B*C)
         if let cpclib_asm::parser::obtained::LocatedExpr::BinaryOperation(
             cpclib_tokens::BinaryOperation::Add,
             box a,
             box b_mul_c,
             add_span
-        ) = left {
+        ) = left
+        {
             // a: should be variable A
             if let cpclib_asm::parser::obtained::LocatedExpr::Label(a_span) = a {
                 assert_eq!(a_span.as_bstr(), b"A");
-            } else {
+            }
+            else {
                 panic!("Expected leftmost to be label A");
             }
             // b_mul_c: should be BinaryOperation(Mul, B, C)
@@ -114,23 +147,28 @@ fn test_span_covering_complex_expression() {
                 box b,
                 box c,
                 mul_span
-            ) = b_mul_c {
+            ) = b_mul_c
+            {
                 if let cpclib_asm::parser::obtained::LocatedExpr::Label(b_span) = b {
                     assert_eq!(b_span.as_bstr(), b"B");
-                } else {
+                }
+                else {
                     panic!("Expected B in B*C");
                 }
                 if let cpclib_asm::parser::obtained::LocatedExpr::Label(c_span) = c {
                     assert_eq!(c_span.as_bstr(), b"C");
-                } else {
+                }
+                else {
                     panic!("Expected C in B*C");
                 }
                 assert_eq!(mul_span.as_bstr(), b"B*C");
-            } else {
+            }
+            else {
                 panic!("Expected B*C as right of +");
             }
             assert_eq!(add_span.as_bstr(), b"A+B*C");
-        } else {
+        }
+        else {
             panic!("Expected left of - to be A+B*C");
         }
         // right: should be BinaryOperation(Div, D, E)
@@ -139,23 +177,28 @@ fn test_span_covering_complex_expression() {
             box d,
             box e,
             div_span
-        ) = right {
+        ) = right
+        {
             if let cpclib_asm::parser::obtained::LocatedExpr::Label(d_span) = d {
                 assert_eq!(d_span.as_bstr(), b"D");
-            } else {
+            }
+            else {
                 panic!("Expected D in D/E");
             }
             if let cpclib_asm::parser::obtained::LocatedExpr::Label(e_span) = e {
                 assert_eq!(e_span.as_bstr(), b"E");
-            } else {
+            }
+            else {
                 panic!("Expected E in D/E");
             }
             assert_eq!(div_span.as_bstr(), b"D/E");
-        } else {
+        }
+        else {
             panic!("Expected right of - to be D/E");
         }
         assert_eq!(sub_span.as_bstr(), b"A+B*C-D/E");
-    } else {
+    }
+    else {
         panic!("Top-level is not a BinaryOperation(Sub, ...) as expected");
     }
 }
@@ -172,13 +215,15 @@ fn test_span_covering_overlap() {
         box left,
         box right,
         _
-    ) = &expr {
+    ) = &expr
+    {
         // Check left and right operand spans
         assert_eq!(left.span().as_bstr(), b"AB");
         assert_eq!(right.span().as_bstr(), b"BA");
         // The top span should cover the whole expression
         assert_eq!(top_span.as_bstr(), b"AB+BA");
-    } else {
+    }
+    else {
         panic!("Top-level is not a BinaryOperation(Add, ...) as expected");
     }
 }

@@ -1126,8 +1126,11 @@ impl Env {
 
         // Add an additional pass to build the listing (this way it is built only one time)
         if self.options().assemble_options().output_builder.is_some() {
-            let mut tokens = processed_token::build_processed_tokens_list(tokens, std::sync::Arc::new(std::sync::RwLock::new(self)))
-                .expect("No errors must occur here");
+            let mut tokens = processed_token::build_processed_tokens_list(
+                tokens,
+                std::sync::Arc::new(std::sync::RwLock::new(self))
+            )
+            .expect("No errors must occur here");
             self.pass = AssemblingPass::ListingPass;
             self.start_new_pass()?;
             processed_token::visit_processed_tokens(&mut tokens, self)
@@ -1402,7 +1405,11 @@ impl Env {
 
         #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
         let iter = {
-            let can_save_in_parallel = self.free_banks.pages.iter().all(|b| b.1.can_save_in_parallel());
+            let can_save_in_parallel = self
+                .free_banks
+                .pages
+                .iter()
+                .all(|b| b.1.can_save_in_parallel());
             CondIterator::new(&self.free_banks.pages, can_save_in_parallel)
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
@@ -2346,7 +2353,10 @@ impl Env {
 
                 // I'm really unsure of memory safety in case of bugs
                 let macro_token = Token::MacroCall(label.into(), Default::default());
-                let mut processed_token = build_processed_token(&macro_token, std::sync::Arc::new(std::sync::RwLock::new(self)))?;
+                let mut processed_token = build_processed_token(
+                    &macro_token,
+                    std::sync::Arc::new(std::sync::RwLock::new(self))
+                )?;
                 processed_token.visited(self)
             }
             else {
@@ -3531,11 +3541,15 @@ where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
         ExprEvaluationExt + ExprElement + Sync,
-    ProcessedToken<'token, T>: FunctionBuilder, <T as cpclib_tokens::ListingElement>::Expr: Sync
+    ProcessedToken<'token, T>: FunctionBuilder,
+    <T as cpclib_tokens::ListingElement>::Expr: Sync
 {
     let mut env = Env::new(options);
 
-    let mut tokens = match processed_token::build_processed_tokens_list(tokens, std::sync::Arc::new(std::sync::RwLock::new(&mut env))) {
+    let mut tokens = match processed_token::build_processed_tokens_list(
+        tokens,
+        std::sync::Arc::new(std::sync::RwLock::new(&mut env))
+    ) {
         Ok(tokens) => tokens,
         Err(e) => return Err((None, env, e))
     };
@@ -7142,7 +7156,8 @@ mod test {
     use super::*;
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-        let mut processed = build_processed_token(token, std::sync::Arc::new(std::sync::RwLock::new(env)))?;
+        let mut processed =
+            build_processed_token(token, std::sync::Arc::new(std::sync::RwLock::new(env)))?;
         processed.visited(env)
     }
 

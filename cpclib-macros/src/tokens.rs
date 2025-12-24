@@ -1,7 +1,6 @@
 use cpclib_asm::BinaryOperation;
 use cpclib_asm::preamble::{
-    DataAccess, Expr, FlagTest, Listing, Mnemonic, Register8, Register16,
-    StableTickerAction, Token
+    DataAccess, Expr, FlagTest, Listing, Mnemonic, Register8, Register16, StableTickerAction, Token
 };
 use cpclib_common::smol_str::SmolStr;
 use proc_macro2::*;

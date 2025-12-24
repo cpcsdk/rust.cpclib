@@ -209,10 +209,10 @@ impl IncludeState {
         once: bool
     ) -> Result<(), AssemblerError> {
         let fname = {
-                let env_guard = env.read().unwrap();
-                let options = env_guard.options().parse_options();
-                let env: &Env = env_guard.deref();
-                get_filename_to_read(fname,     options, Some(env))?
+            let env_guard = env.read().unwrap();
+            let options = env_guard.options().parse_options();
+            let env: &Env = env_guard.deref();
+            get_filename_to_read(fname, options, Some(env))?
         };
 
         let need_to_include = {
@@ -233,12 +233,12 @@ impl IncludeState {
             }
 
             // Visit the included listing
-            env.write().unwrap().enter_current_working_file(fname.clone());
-            let res = 
-            {
-
+            env.write()
+                .unwrap()
+                .enter_current_working_file(fname.clone());
+            let res = {
                 let mut env_guard = env.write().unwrap();
-                let mut env_extracted: &mut Env = *env_guard;
+                let env_extracted: &mut Env = *env_guard;
                 state.with_processed_tokens_mut(|tokens| {
                     let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
                     visit_processed_tokens::<LocatedToken>(tokens, env_extracted)
@@ -389,10 +389,10 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
         };
 
         // Add an extra pass if the test result differs from previous
-        if let Some(&previous) = map.get(&token_adr) {
-            if previous != decision {
-                *request_additional_pass = true;
-            }
+        if let Some(&previous) = map.get(&token_adr)
+            && previous != decision
+        {
+            *request_additional_pass = true;
         }
 
         map.insert(token_adr, decision);
@@ -528,7 +528,7 @@ fn relocate_print_commands(env: &mut Env, nb_prints: Vec<usize>, span: &Z80Span)
     env.sna
         .pages_info
         .iter_mut()
-        .zip(nb_prints.into_iter())
+        .zip(nb_prints)
         .for_each(|(ti, count)| {
             ti.print_commands_mut()[count..]
                 .iter_mut()
@@ -687,7 +687,14 @@ where
         );
 
         let passes = match token.assembler_control_get_max_passes() {
-            Some(passes) => Some(env.write().unwrap().resolve_expr_must_never_fail(passes)?.int()? as u8),
+            Some(passes) => {
+                Some(
+                    env.write()
+                        .unwrap()
+                        .resolve_expr_must_never_fail(passes)?
+                        .int()? as u8
+                )
+            },
             None => None
         };
 
@@ -758,7 +765,6 @@ pub fn build_processed_tokens_list<
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
-
     let show_progress = env.read().unwrap().options().parse_options().show_progress;
     if show_progress {
         let mut env_write = env.write().unwrap();
@@ -771,7 +777,12 @@ where
                 .flat_map(|t| {
                     let fname = t.include_fname();
                     let fname = env_write.build_fname(fname).ok()?;
-                    get_filename_to_read(fname, env_write.options().parse_options(), Some(&*env_write)).ok()
+                    get_filename_to_read(
+                        fname,
+                        env_write.options().parse_options(),
+                        Some(*env_write)
+                    )
+                    .ok()
                 })
                 .map(|path| progress::normalize(&path).to_string())
         );
@@ -1093,7 +1104,8 @@ where
                             let params = self.token.function_definition_params();
 
                             // Always use Arc<RwLock<&mut Env>>
-                            let inner = build_processed_tokens_list(inner, Arc::new(RwLock::new(env)))?;
+                            let inner =
+                                build_processed_tokens_list(inner, Arc::new(RwLock::new(env)))?;
                             let f =
                                 Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
                             option.replace(f.clone());
@@ -1241,13 +1253,16 @@ where
 
                     Some(ProcessedTokenState::Include(state)) => {
                         let fname = env.build_fname(self.token.include_fname())?;
-                        {let env_arc_include: Arc<RwLock<&mut Env>> = std::sync::Arc::new(std::sync::RwLock::new(env));
-                        state.handle(
-                            env_arc_include,
-                            &fname,
-                            self.token.include_namespace(),
-                            self.token.include_once()
-                        )}
+                        {
+                            let env_arc_include: Arc<RwLock<&mut Env>> =
+                                std::sync::Arc::new(std::sync::RwLock::new(env));
+                            state.handle(
+                                env_arc_include,
+                                &fname,
+                                self.token.include_namespace(),
+                                self.token.include_once()
+                            )
+                        }
                     },
 
                     Some(ProcessedTokenState::If(if_state)) => {
@@ -1298,7 +1313,7 @@ where
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
 
-                        let _result = process_result.map_err(|e| {
+                        process_result.map_err(|e| {
                             let location = env
                                 .symbols()
                                 .any_value(name)

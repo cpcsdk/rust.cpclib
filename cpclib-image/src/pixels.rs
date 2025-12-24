@@ -399,8 +399,6 @@ pub mod mode1 {
 pub mod mode0 {
     // use contracts::{ensures, requires};
 
-    use cpclib_common::itertools::Itertools;
-
     use crate::ga::Pen;
 
     /// Pixel ordering in a byte

@@ -187,7 +187,7 @@ impl ValueMacro {
 
     #[inline]
     pub fn segments(&self) -> &TokenizedMacroContent {
-        &self.segments  
+        &self.segments
     }
 }
 

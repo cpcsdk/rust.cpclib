@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+use cpclib_common::rayon::prelude::*;
 use cpclib_sna::{
     AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, WabpAnyBreakpoint,
     WinapeBreakPoint
 };
-#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
 
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
@@ -369,18 +369,19 @@ impl DelayedCommands {
 impl DelayedCommands {
     /// Execute the commands that correspond to the appropriate mmr configuration
     pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
-         let cmds = self.save_commands.iter()
+        let cmds = self
+            .save_commands
+            .iter()
             .filter_map(|(save_mmr, save_cmds)| (*save_mmr == ga_mmr).then_some(save_cmds))
             .flat_map(|save_cmds| save_cmds.iter())
             .collect_vec();
 
-        
         // TODO reactivate parallalism for save. BUT ATM I am unable to make it compile
         //#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-        //let cmds = CondIterator::new(&cmds, self.can_save_in_parallel());
+        // let cmds = CondIterator::new(&cmds, self.can_save_in_parallel());
         //#[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let cmds = cmds.iter();
-        
+
         let res = cmds
             .map(|cmd| cmd.execute_on(env))
             .collect::<Result<Vec<_>, AssemblerError>>()?;

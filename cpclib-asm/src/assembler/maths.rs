@@ -19,7 +19,7 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, AssemblerError>
         ExprResult::List(_) => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("pow cannot be applied to a list")
+                    msg: "pow cannot be applied to a list".to_string()
                 })
             )))
         },
@@ -27,7 +27,7 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, AssemblerError>
         _ => {
             Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
                 Box::new(AssemblerError::AssemblingError {
-                    msg: format!("pow cannot be applied to a string")
+                    msg: "pow cannot be applied to a string".to_string()
                 })
             )))
         },
@@ -35,27 +35,23 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, AssemblerError>
 }
 
 pub fn high(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    let arg = arg
-        .int()
-        .map_err(|e| AssemblerError::ExpressionTypeError(e))?;
+    let arg = arg.int().map_err(AssemblerError::ExpressionTypeError)?;
     Ok(((arg >> 8) & 0xFF).into())
 }
 
 pub fn low(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    let arg = arg
-        .int()
-        .map_err(|e| AssemblerError::ExpressionTypeError(e))?;
+    let arg = arg.int().map_err(AssemblerError::ExpressionTypeError)?;
     Ok((arg & 0xFF).into())
 }
 
 pub fn peek(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, AssemblerError> {
     let arg = arg.int()?;
-    if arg < 0 || arg > 0xFFFF {
-        return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
+    if !(0..=0xFFFF).contains(&arg) {
+        Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
             Box::new(AssemblerError::AssemblingError {
                 msg: format!("Impossible to read memory address 0x{:X}", arg)
             })
-        )));
+        )))
     }
     else {
         Ok(env.peek(&env.logical_to_physical_address(arg as _)).into())
@@ -63,27 +59,27 @@ pub fn peek(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, AssemblerE
 }
 
 pub fn floor(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.floor()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.floor()).map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn ceil(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.ceil()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.ceil()).map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn frac(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.frac()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.frac()).map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn int(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
     (arg.int())
         .map(|i| i.into())
-        .map_err(|e| AssemblerError::ExpressionTypeError(e))
+        .map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn char(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
     (arg.char())
         .map(|i| i.into())
-        .map_err(|e| AssemblerError::ExpressionTypeError(e))
+        .map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn sin(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, AssemblerError> {
@@ -96,30 +92,30 @@ pub fn sin(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, AssemblerEr
     else {
         arg.sin()
     }
-    .map_err(|e| AssemblerError::ExpressionTypeError(e))
+    .map_err(AssemblerError::ExpressionTypeError)
 }
 
 pub fn cos(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.cos()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.cos()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn asin(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.asin()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.asin()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn acos(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.acos()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.acos()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn abs(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.abs()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.abs()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn ln(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.ln()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.ln()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn log10(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.log10()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.log10()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn exp(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.exp()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.exp()).map_err(AssemblerError::ExpressionTypeError)
 }
 pub fn sqrt(arg: &ExprResult) -> Result<ExprResult, AssemblerError> {
-    (arg.sqrt()).map_err(|e| AssemblerError::ExpressionTypeError(e))
+    (arg.sqrt()).map_err(AssemblerError::ExpressionTypeError)
 }

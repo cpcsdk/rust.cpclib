@@ -2,14 +2,10 @@
 
 use core::str;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 // use crc::*;
-
 use super::context::*;
 use super::*;
 use crate::preamble::*;
-
 
 include!(concat!(
     env!("OUT_DIR"),
@@ -17,8 +13,6 @@ include!(concat!(
 ));
 
 // const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
-
-
 
 pub use super::registers::{
     parse_indexregister_with_index, parse_indexregister8, parse_indexregister16, parse_register_i,
@@ -1209,7 +1203,7 @@ MEND";
         ("1+2", true),
         ("A+B", true),
         ("AB+BC", false), // BC is a register
-        ("AB+CD", true), // BC is a register
+        ("AB+CD", true),  // BC is a register
         ("func(1,2)+3", true),
         ("(1+2)*3", true),
         ("1+2*3", true),

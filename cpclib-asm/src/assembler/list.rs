@@ -289,7 +289,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
 
         (ExprResult::String(s1), ExprResult::String(s2)) => {
             let mut result = String::with_capacity(s1.len() + s2.len());
-            result.push_str(&s1);
+            result.push_str(s1);
             result.push_str(&fix_string(s2.clone()));
             Ok(ExprResult::String(result.into()))
         },
@@ -297,7 +297,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
             // Pre-estimate capacity
             let capacity = s1.len() + 2 + l.len() * 10; // rough estimate
             let mut result = String::with_capacity(capacity);
-            result.push_str(&s1);
+            result.push_str(s1);
             result.push('[');
 
             for (i, e) in l.iter().enumerate() {
@@ -318,7 +318,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         (ExprResult::String(s1), ExprResult::Float(s2)) => {
             let s2_str = s2.into_inner().to_string();
             let mut result = String::with_capacity(s1.len() + s2_str.len());
-            result.push_str(&s1);
+            result.push_str(s1);
             result.push_str(&s2_str);
             Ok(ExprResult::String(result.into()))
         },
@@ -326,7 +326,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         (ExprResult::String(s1), ExprResult::Value(s2)) => {
             let s2_str = s2.to_string();
             let mut result = String::with_capacity(s1.len() + s2_str.len());
-            result.push_str(&s1);
+            result.push_str(s1);
             result.push_str(&s2_str);
             Ok(ExprResult::String(result.into()))
         },
@@ -334,7 +334,7 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         (ExprResult::String(s1), ExprResult::Bool(s2)) => {
             let s2_str = s2.to_string();
             let mut result = String::with_capacity(s1.len() + s2_str.len());
-            result.push_str(&s1);
+            result.push_str(s1);
             result.push_str(&s2_str);
             Ok(ExprResult::String(result.into()))
         },

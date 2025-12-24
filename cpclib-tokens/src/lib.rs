@@ -3,9 +3,9 @@
 #![feature(box_patterns)]
 
 pub mod builder;
+pub mod macro_segment;
 pub mod symbols;
 pub mod tokens;
-pub mod macro_segment;
 
-pub use tokens::*;
 pub use macro_segment::MacroSegment;
+pub use tokens::*;

@@ -1,9 +1,13 @@
-use cpclib_common::smallvec::SmallVec;
-use memchr::memchr;
 use std::ops::Deref;
 
+use cpclib_common::smallvec::SmallVec;
+use memchr::memchr;
+
 /// Tokenize a macro body into MacroSegments
-pub fn tokenize_macro_body<'l, 'p>(listing: &'l str, params: &'p [impl AsRef<str> + 'p]) -> TokenizedMacroContent {
+pub fn tokenize_macro_body<'l, 'p>(
+    listing: &'l str,
+    params: &'p [impl AsRef<str> + 'p]
+) -> TokenizedMacroContent {
     let mut segments: SmallVec<[MacroSegment; 8]> = SmallVec::with_capacity(listing.len() / 8);
     let mut cursor = 0;
     let param_names: std::collections::HashMap<&'p str, usize> = params
@@ -38,7 +42,8 @@ pub fn tokenize_macro_body<'l, 'p>(listing: &'l str, params: &'p [impl AsRef<str
                 end: close + 1
             });
             cursor = close + 1;
-        } else {
+        }
+        else {
             segments.push(MacroSegment::Lit {
                 start: open,
                 end: listing.len()
@@ -52,7 +57,7 @@ pub fn tokenize_macro_body<'l, 'p>(listing: &'l str, params: &'p [impl AsRef<str
             end: listing.len()
         });
     }
-    
+
     TokenizedMacroContent {
         segments: segments.into_vec()
     }
@@ -61,12 +66,12 @@ pub fn tokenize_macro_body<'l, 'p>(listing: &'l str, params: &'p [impl AsRef<str
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MacroSegment {
     Lit { start: usize, end: usize },
-    Arg { index: usize },
+    Arg { index: usize }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TokenizedMacroContent {
-    pub segments: Vec<MacroSegment>,
+    pub segments: Vec<MacroSegment>
 }
 
 impl Deref for TokenizedMacroContent {

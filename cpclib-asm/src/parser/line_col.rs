@@ -63,8 +63,6 @@ impl<'source> LineColLookup<'source> {
 
         (line, col)
     }
-
-
 }
 
 #[cfg(test)]
@@ -93,8 +91,6 @@ mod tests {
         assert_eq!(lookup.get(7), (3, 3));
         assert_eq!(lookup.get(8), (3, 4));
     }
-
-
 
     #[test]
     fn emoji_text_by_codepoints() {

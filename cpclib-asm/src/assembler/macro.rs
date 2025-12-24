@@ -3,7 +3,7 @@ use std::ops::Deref;
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::winnow::Parser;
-use cpclib_tokens::symbols::{ValueMacro, SourceLocation, Struct};
+use cpclib_tokens::symbols::{SourceLocation, Struct, ValueMacro};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 
 use crate::Env;
@@ -15,7 +15,6 @@ pub trait Expandable {
     /// Returns a string version of the element after expansion
     fn expand(&self, env: &mut Env) -> Result<String, AssemblerError>;
 }
-
 
 use cpclib_tokens::MacroSegment;
 
@@ -32,7 +31,6 @@ fn strip_raw_string_quotes<'a>(
         expanded
     }
 }
-
 
 #[inline]
 fn expand_param<'p, P: MacroParamElement>(
@@ -109,7 +107,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         else {
             Ok(Self {
                 r#macro: r#macro.clone(), // TODO use reference?
-                args,
+                args
             })
         }
     }
@@ -130,35 +128,34 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
 
         // First pass: expand all arguments and calculate exact capacity.
-        let capacity =
-            self.r#macro.segments()
-                .iter()
-                .try_fold(0, |acc, segment| -> Result<usize, AssemblerError> {
-                    match *segment {
-                        MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
-                        MacroSegment::Arg { index } => {
-                            let slot = expanded_args.get_mut(index).expect("Invalid segment index");
+        let capacity = self.r#macro.segments().iter().try_fold(
+            0,
+            |acc, segment| -> Result<usize, AssemblerError> {
+                match *segment {
+                    MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
+                    MacroSegment::Arg { index } => {
+                        let slot = expanded_args.get_mut(index).expect("Invalid segment index");
 
-                            if slot.is_none() {
-                                let argvalue =
-                                    self.args.get(index).expect("Argument count mismatch");
-                                let mut expanded = expand_param(argvalue, env)?;
-                                let argname = self
-                                    .r#macro
-                                    .params()
-                                    .get(index)
-                                    .expect("Param count mismatch");
-                                expanded = strip_raw_string_quotes(argname, expanded);
-                                let arg_len = expanded.len();
-                                *slot = Some(expanded);
-                                Ok(acc + arg_len)
-                            }
-                            else {
-                                Ok(acc + slot.as_ref().unwrap().len())
-                            }
+                        if slot.is_none() {
+                            let argvalue = self.args.get(index).expect("Argument count mismatch");
+                            let mut expanded = expand_param(argvalue, env)?;
+                            let argname = self
+                                .r#macro
+                                .params()
+                                .get(index)
+                                .expect("Param count mismatch");
+                            expanded = strip_raw_string_quotes(argname, expanded);
+                            let arg_len = expanded.len();
+                            *slot = Some(expanded);
+                            Ok(acc + arg_len)
+                        }
+                        else {
+                            Ok(acc + slot.as_ref().unwrap().len())
                         }
                     }
-                })?;
+                }
+            }
+        )?;
 
         // Second pass: assemble output from pre-expanded arguments.
         let mut output = String::with_capacity(capacity);
@@ -169,7 +166,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 },
                 MacroSegment::Arg { index } => {
                     // All arguments were expanded in first pass, guaranteed Some
-                    output.push_str(&expanded_args[index].as_ref().unwrap());
+                    output.push_str(expanded_args[index].as_ref().unwrap());
                 }
             }
         }

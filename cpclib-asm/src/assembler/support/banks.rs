@@ -5,8 +5,8 @@ unsafe impl Sync for DecoratedPage {}
 unsafe impl Sync for DecoratedPages {}
 // Allow sequential iteration over DecoratedPages
 impl<'a> IntoIterator for &'a DecoratedPages {
-    type Item = &'a DecoratedPage;
     type IntoIter = std::slice::Iter<'a, DecoratedPage>;
+    type Item = &'a DecoratedPage;
 
     fn into_iter(self) -> Self::IntoIter {
         self.pages.iter()
@@ -15,8 +15,8 @@ impl<'a> IntoIterator for &'a DecoratedPages {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 impl<'a> cpclib_common::rayon::iter::IntoParallelRefIterator<'a> for &'a DecoratedPages {
-    type Iter = cpclib_common::rayon::slice::Iter<'a, DecoratedPage>;
     type Item = &'a DecoratedPage;
+    type Iter = cpclib_common::rayon::slice::Iter<'a, DecoratedPage>;
 
     fn par_iter(&'a self) -> Self::Iter {
         self.pages.par_iter()

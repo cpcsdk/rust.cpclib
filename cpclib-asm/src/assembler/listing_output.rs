@@ -419,7 +419,6 @@ impl ListingOutput {
     }
 }
 
-
 unsafe impl Send for ListingOutputTrigger {}
 unsafe impl Sync for ListingOutputTrigger {}
 
@@ -428,14 +427,13 @@ unsafe impl Sync for ListingOutputTrigger {}
 pub struct ListingOutputTrigger {
     /// the token read before collecting the bytes
     /// Because each token can have a different lifespan, we store them using a pointer
-    pub(crate) token: Option<*const LocatedToken>, 
+    pub(crate) token: Option<*const LocatedToken>,
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,
     pub(crate) physical_address: PhysicalAddress,
     pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
-
 
 impl ListingOutputTrigger {
     pub fn write_byte(&mut self, b: u8) {

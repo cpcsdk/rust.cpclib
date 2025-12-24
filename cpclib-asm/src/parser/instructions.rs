@@ -1,6 +1,5 @@
 // Instructions module - contains instruction parsing functions and constants
 
-use crate::hashed_choice;
 use cpclib_common::winnow::ascii::{Caseless, alpha1};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, not, opt, preceded, separated, terminated
@@ -13,6 +12,7 @@ use cpclib_tokens::{DataAccessElem, ExprElement, FlagTest, Mnemonic};
 use super::error::*;
 use super::obtained::*;
 use super::*;
+use crate::hashed_choice;
 
 // Instruction mnemonics constant - used to forbid label naming conflicts
 pub const INSTRUCTIONS: &[&[u8]] = &[
@@ -70,7 +70,7 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken
                 h if hashed_choice!(h, word, b"RRCA") => Some(Mnemonic::Rrca),
                 h if hashed_choice!(h, word, b"RRD") => Some(Mnemonic::Rrd),
                 h if hashed_choice!(h, word, b"SCF") => Some(Mnemonic::Scf),
-                _ => None,
+                _ => None
             }
         })
     )

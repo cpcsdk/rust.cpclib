@@ -1,6 +1,4 @@
-use cpclib_tokens::macro_segment::tokenize_macro_body;
 // Directives module - contains directive-related constants and parsing functions
-
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ops::DerefMut;
@@ -24,10 +22,14 @@ use cpclib_sna::flags::SnapshotFlag;
 use cpclib_sna::{
     RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
 };
+use cpclib_tokens::macro_segment::tokenize_macro_body;
 use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
 
-
-
+use super::common::{
+    inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0, my_space1,
+    parse_argname_and_value, parse_comma, parse_comment, parse_convertible_word,
+    parse_optional_argname_and_value, parse_word
+};
 use super::context;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
@@ -37,16 +39,8 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
-use super::common::{
-    inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0, my_space1,
-    parse_argname_and_value, parse_comma, parse_comment, parse_convertible_word,
-    parse_optional_argname_and_value, parse_word
-};
-use crate::preamble::*;
 use crate::hashed_choice;
-
-
-
+use crate::preamble::*;
 
 pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
@@ -1461,7 +1455,6 @@ fn parse_directive_of_size_10(
     _within_struct: bool,
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    
     match fnv1a_ascii_upper(word) {
         h if hashed_choice!(h, word, b"ASMCONTROL") => parse_assembler_control.parse_next(input),
         h if hashed_choice!(h, word, b"BREAKPOINT") => parse_breakpoint.parse_next(input),
@@ -1485,7 +1478,9 @@ fn parse_directive_of_size_8(
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match fnv1a_ascii_upper(word) {
-        h if hashed_choice!(h, word, b"BINCLUDE") => parse_incbin(BinaryTransformation::None).parse_next(input),
+        h if hashed_choice!(h, word, b"BINCLUDE") => {
+            parse_incbin(BinaryTransformation::None).parse_next(input)
+        },
         h if hashed_choice!(h, word, b"BUILDSNA") => parse_buildsna(true).parse_next(input),
         h if hashed_choice!(h, word, b"BUILDCPR") => Ok(LocatedTokenInner::BuildCpr),
         h if hashed_choice!(h, word, b"INCLZSA1") => {
@@ -1494,7 +1489,9 @@ fn parse_directive_of_size_8(
         h if hashed_choice!(h, word, b"INCLZSA2") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZSA1)).parse_next(input)
         },
-        h if hashed_choice!(h, word, b"NOEXPORT") => parse_export(ExportKind::NoExport).parse_next(input),
+        h if hashed_choice!(h, word, b"NOEXPORT") => {
+            parse_export(ExportKind::NoExport).parse_next(input)
+        },
         h if hashed_choice!(h, word, b"WAITNOPS") => parse_waitnops.parse_next(input),
         h if hashed_choice!(h, word, b"SNAPINIT") => parse_snainit.parse_next(input),
 
@@ -1546,8 +1543,12 @@ fn parse_directive_of_size_6(
     match fnv1a_ascii_upper(word) {
         h if hashed_choice!(h, word, b"ASSERT") => parse_assert.parse_next(input),
 
-        h if hashed_choice!(h, word, b"EXPORT") => parse_export(ExportKind::Export).parse_next(input),
-        h if hashed_choice!(h, word, b"INCBIN") => parse_incbin(BinaryTransformation::None).parse_next(input),
+        h if hashed_choice!(h, word, b"EXPORT") => {
+            parse_export(ExportKind::Export).parse_next(input)
+        },
+        h if hashed_choice!(h, word, b"INCBIN") => {
+            parse_incbin(BinaryTransformation::None).parse_next(input)
+        },
         #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCEXO") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO)).parse_next(input)
@@ -1640,14 +1641,11 @@ fn parse_directive_of_size_4(
     word: &[u8]
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match fnv1a_ascii_upper(word) {
-        h if hashed_choice!(h, word, b"DEFB", 
-         b"DEFM", b"BYTE",  b"TEXT") => {
+        h if hashed_choice!(h, word, b"DEFB", b"DEFM", b"BYTE", b"TEXT") => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
-        h if hashed_choice!(h, word, b"FILL" , b"DEFS" , b"RMEM") => {
-            parse_defs.parse_next(input)
-        },
+        h if hashed_choice!(h, word, b"FILL", b"DEFS", b"RMEM") => parse_defs.parse_next(input),
 
         h if hashed_choice!(h, word, b"BANK") => parse_bank.parse_next(input),
         h if hashed_choice!(h, word, b"FAIL") => parse_fail(true).parse_next(input),
@@ -1658,7 +1656,7 @@ fn parse_directive_of_size_4(
 
         h if hashed_choice!(h, word, b"SKIP") && is_orgams => parse_skip.parse_next(input),
 
-        h if hashed_choice!(h, word, b"WORD" , b"DEFW") => {
+        h if hashed_choice!(h, word, b"WORD", b"DEFW") => {
             parse_db_or_dw_or_str(DbDwStr::Dw, within_struct).parse_next(input)
         },
         _ => {
@@ -1712,7 +1710,7 @@ fn parse_directive_of_size_2(
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
-        h if hashed_choice!(h, word, b"DB" , b"DM") => {
+        h if hashed_choice!(h, word, b"DB", b"DM") => {
             parse_db_or_dw_or_str(DbDwStr::Db, within_struct).parse_next(input)
         },
 
@@ -1882,13 +1880,12 @@ pub fn parse_macro_inner(
         let content: &BStr = unsafe { std::mem::transmute(&content.as_bstr()[..content_length]) };
         let content = (*input).update_slice(content);
 
-       
         let content: Z80Span = content.into();
         let tokenized_content = tokenize_macro_body(content.as_str(), &arguments);
         Ok(LocatedTokenInner::Macro {
             name: name.into(),
             params: arguments,
-            content: content,
+            content,
             flavor: input.state.options().assembler_flavor,
             tokenized_content
         }
@@ -2207,7 +2204,7 @@ pub fn parse_assembler_control_max_passes_number(
 
     let inner = cut_err(inner_code.context(StrContext::Label(
         "ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"
-    )) )
+    )))
     .parse_next(input)?;
 
     let _ = cut_err(
