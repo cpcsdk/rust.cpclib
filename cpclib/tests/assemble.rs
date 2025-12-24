@@ -83,7 +83,7 @@ mod tests {
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::C)),
-                Some(DataAccess::Register8(Register8::L)),
+                Some(DataAccess::Register8(Register8::C)),
                 None
             ),
             env_arc.clone()
