@@ -1523,7 +1523,7 @@ mod test_super {
         let token = &tokens[0];
         let mut env = Env::default();
 
-        let processed = build_processed_token(token, &mut env);
+        let processed = build_processed_token(token, Arc::new(RwLock::new(&mut env)));
         assert!(matches!(
             processed.unwrap().state,
             Some(ProcessedTokenState::Include(..))

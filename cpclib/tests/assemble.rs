@@ -3,15 +3,18 @@ mod tests {
     use cpclib_asm::assembler::processed_token::build_processed_token;
     use cpclib_asm::preamble::*;
 
-    fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-        let processed = build_processed_token(token, env);
-        processed?.visited(env)
+    use std::sync::{Arc, RwLock};
+
+    fn visit_token(token: &Token, env: Arc<RwLock<&mut Env>>) -> Result<(), AssemblerError> {
+        let processed = build_processed_token(token, env.clone());
+        processed?.visited(&mut *env.write().unwrap())
     }
 
     fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
         let mut env = Env::default();
+        let env_arc = Arc::new(RwLock::new(&mut env));
         for t in tokens {
-            visit_token(t, &mut env)?;
+            visit_token(t, env_arc.clone())?;
         }
         Ok(env)
     }
@@ -19,18 +22,19 @@ mod tests {
     #[test]
     pub fn test_visit() {
         let mut env = Env::default();
+        let env_arc = Arc::new(RwLock::new(&mut env));
 
         visit_token(
             &Token::Org {
                 val1: Expr::Value(10),
                 val2: None
             },
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
         visit_token(
             &Token::Defb(vec![Expr::Value(10), Expr::Value(5)]),
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
         visit_token(
@@ -40,7 +44,7 @@ mod tests {
                 Some(DataAccess::Register8(Register8::L)),
                 None
             ),
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
     }
@@ -48,7 +52,8 @@ mod tests {
     #[test]
     pub fn test_ld() {
         let mut env = Env::default();
-        assert_ne!(env.peek(&0x0000.into()), 0x7F);
+        let env_arc = Arc::new(RwLock::new(&mut env));
+        assert_ne!(env_arc.read().unwrap().peek(&0x0000.into()), 0x7F);
 
         visit_token(
             &Token::OpCode(
@@ -57,10 +62,10 @@ mod tests {
                 Some(DataAccess::Register8(Register8::A)),
                 None
             ),
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
-        assert_eq!(env.peek(&0x0000.into()), 0x7F);
+        assert_eq!(env_arc.read().unwrap().peek(&0x0000.into()), 0x7F);
 
         visit_token(
             &Token::OpCode(
@@ -69,22 +74,22 @@ mod tests {
                 Some(DataAccess::Register8(Register8::L)),
                 None
             ),
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
-        assert_eq!(env.peek(&0x0001.into()), 0x7D);
+        assert_eq!(env_arc.read().unwrap().peek(&0x0001.into()), 0x7D);
 
         visit_token(
             &Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::C)),
-                Some(DataAccess::Register8(Register8::C)),
+                Some(DataAccess::Register8(Register8::L)),
                 None
             ),
-            &mut env
+            env_arc.clone()
         )
         .unwrap();
-        assert_eq!(env.peek(&0x0002.into()), 0x49);
+        assert_eq!(env_arc.read().unwrap().peek(&0x0002.into()), 0x49);
     }
 
     #[test]

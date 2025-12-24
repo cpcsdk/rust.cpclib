@@ -559,6 +559,7 @@ mod test {
                 name: "macro_name".into(),
                 params: Vec::new(),
                 content: "".into(),
+                tokenized_content: Default::default(),
                 flavor: cpclib_asm::AssemblerFlavor::Basm
             }
         ];

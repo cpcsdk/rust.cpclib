@@ -69,7 +69,7 @@ pub enum MacroSegment {
     Arg { index: usize }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TokenizedMacroContent {
     pub segments: Vec<MacroSegment>
 }
