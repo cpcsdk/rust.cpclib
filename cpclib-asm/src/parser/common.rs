@@ -279,18 +279,6 @@ pub fn build_span_covering(span: &Z80Span, right: &Z80Span) -> InnerZ80Span {
 }
 
 
-pub trait AccumulateSeveral<O>: Accumulate<O> {
-    fn accumulate_several(&mut self, items: &mut Vec<O>);
-}
-
-
-
-impl<O> AccumulateSeveral<O> for Vec<O> {
-    fn accumulate_several(&mut self, items: &mut Vec<O>) {
-        self.append(items);
-    }
-}
-
 // TODO search why they are listed to forbid label naming. Delete it if unneeded
 pub const REGISTERS: &[&[u8]] = &[b"AF", b"HL", b"DE", b"BC", b"IX", b"IY", b"IXL", b"IXH"];
 
