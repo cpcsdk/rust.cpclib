@@ -146,7 +146,7 @@ where Self: Debug + Sized + Sync
     fn include_is_standard_include(&self) -> bool {
         //   let has_bracket = self.incbin_fname().to_string().contains('{');
 
-        self.is_include() && 
+        self.is_include() &&
        /* !self.include_fname().contains('{') &&*/ // no expansion
         !self.include_once()
     }

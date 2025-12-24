@@ -1016,8 +1016,7 @@ impl fmt::Display for Token {
             }
             Token::Comment( string)
                  => write!(f, " ; {}", string.replace('\n',"\n;")),
- 
-                 Token::Defb( exprs)
+            Token::Defb( exprs)
                  => write!(f, "DB {}", expr_list_to_string(exprs)),
             Token::Defs( vals)
                  => write!(f, "DEFS {}", vals.iter()
@@ -1032,7 +1031,6 @@ impl fmt::Display for Token {
 
             Token::Defw( exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
- 
             Token::Equ{label, expr}
                  => write!(f, "{} EQU {}", label, expr.to_simplified_string()),
 
@@ -1082,13 +1080,13 @@ impl fmt::Display for Token {
             }
 
              Token::Incbin{
-                 fname, 
-                 offset, 
-                 length, 
-                 extended_offset, 
-                 off, 
+                 fname,
+                 offset,
+                 length,
+                 extended_offset,
+                 off,
                  transformation
-             } 
+             }
                  => {
 
                     let directive = match transformation {
@@ -1130,7 +1128,6 @@ impl fmt::Display for Token {
 
                                 if *off {
                                     write!(f, ", OFF")?;
-    
                                  }
                              }
                          }
@@ -1138,16 +1135,13 @@ impl fmt::Display for Token {
                      Ok(())
 
                  }
- 
 
                  Token::Include( fname, Some(module), once)
                  => write!(f, "INCLUDE {}\"{}\" namespace {}", fname, module.as_str(), if *once {"ONCE "} else {""}),
 
                  Token::Include( fname, None, once)
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
- 
-            Token::Label( string)
-                => write!(f, "{string}"),
+            Token::Label( string) => write!(f, "{string}"),
 
 
             Token::MacroCall( name,  args)
@@ -1169,7 +1163,6 @@ impl fmt::Display for Token {
             Token::MultiPop( regs) => {
                 write!(f, "POP {}", data_access_list_to_string(regs))
             },
-            
             Token::MultiPush( regs) => {
                 write!(f, "PUSH {}", data_access_list_to_string(regs))
             },
@@ -1203,7 +1196,6 @@ impl fmt::Display for Token {
                 => write!(f, "PROTECT {exp1}, {exp2}"),
 
             Token::Repeat( exp,  code,  label,  start) => {
-                
                 write!(f, "REPEAT {exp}")?;
                 if label.is_some() {
                     write!(f, " {}", label.as_ref().unwrap())?;

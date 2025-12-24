@@ -47,7 +47,7 @@ pub fn build_args_parser() -> clap::Command {
     .arg(
         clap::Arg::new("CPCADDR")
         .help("Specify the address of the M4. This argument is optional. If not set up, the content of the environment variable CPCIP is used.")
-        .required(false) 
+        .required(false)
     )
     .subcommand(
         Command::new("-r")

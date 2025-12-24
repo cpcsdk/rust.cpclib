@@ -1129,7 +1129,6 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                     .required(false)
                     .help("Number of pixel lines to keep.")
                 )
-                
                     .subcommand(
                         Command::new("sna")
                             .about("Generate a snapshot with the converted image.")

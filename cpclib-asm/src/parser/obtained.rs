@@ -1674,7 +1674,7 @@ impl ListingElement for LocatedTokenInner {
     fn include_is_standard_include(&self) -> bool {
         dbg!("include_is_standard_include is no more accurate and needs to be updated/removed");
 
-        self.is_include() && 
+        self.is_include() &&
        /* !self.include_fname().contains('{') && */ // no expansion
         !self.include_once()
     }
