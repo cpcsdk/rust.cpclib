@@ -2596,6 +2596,7 @@ dependencies = [
  "delegate",
  "either",
  "evalexpr",
+ "memchr",
  "ordered-float",
  "paste",
  "regex",

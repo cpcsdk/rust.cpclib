@@ -5,7 +5,7 @@ use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::Parser;
-use cpclib_tokens::symbols::{Macro, SourceLocation, Struct};
+use cpclib_tokens::symbols::{ValueMacro, SourceLocation, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
 use memchr::memchr;
 
@@ -19,11 +19,8 @@ pub trait Expandable {
     fn expand(&self, env: &mut Env) -> Result<String, AssemblerError>;
 }
 
-#[derive(Copy, Clone, Debug)]
-enum MacroSegment {
-    Lit { start: usize, end: usize },
-    Arg { index: usize }
-}
+
+use cpclib_tokens::MacroSegment;
 
 /// Strip raw string quotes if the parameter is a raw string literal.
 /// Raw strings are marked with `r#` prefix and have literal quotes that need removal.
@@ -39,71 +36,6 @@ fn strip_raw_string_quotes<'a>(
     }
 }
 
-fn tokenize_macro_body(r#macro: &Macro) -> Vec<MacroSegment> {
-    let listing = r#macro.code();
-    // Preallocate small buffer to avoid heap for common cases
-    let mut segments: SmallVec<[MacroSegment; 8]> = SmallVec::with_capacity(listing.len() / 8);
-    let mut cursor = 0;
-
-    // Build param index lookup map for O(1) lookups
-    let param_names: std::collections::HashMap<&str, usize> = r#macro
-        .params()
-        .iter()
-        .enumerate()
-        .map(|(idx, p)| {
-            let s = p.as_str();
-            let key = if s.starts_with("r#") { &s[2..] } else { s };
-            (key, idx)
-        })
-        .collect();
-
-    let bytes = listing.as_bytes();
-    while let Some(rel_open) = memchr(b'{', &bytes[cursor..]) {
-        let open = cursor + rel_open;
-        if open > cursor {
-            segments.push(MacroSegment::Lit {
-                start: cursor,
-                end: open
-            });
-        }
-
-        let after_open = open + 1;
-        if let Some(rel_close) = memchr(b'}', &bytes[after_open..]) {
-            let close = after_open + rel_close;
-            let key = &listing[after_open..close];
-
-            if let Some(&idx) = param_names.get(key) {
-                segments.push(MacroSegment::Arg { index: idx });
-                cursor = close + 1;
-                continue;
-            }
-
-            // Not a known placeholder: keep verbatim
-            segments.push(MacroSegment::Lit {
-                start: open,
-                end: close + 1
-            });
-            cursor = close + 1;
-        }
-        else {
-            // No closing brace: rest is literal
-            segments.push(MacroSegment::Lit {
-                start: open,
-                end: listing.len()
-            });
-            cursor = listing.len();
-        }
-    }
-
-    if cursor < listing.len() {
-        segments.push(MacroSegment::Lit {
-            start: cursor,
-            end: listing.len()
-        });
-    }
-
-    segments.into_vec()
-}
 
 #[inline]
 fn expand_param<'p, P: MacroParamElement>(
@@ -155,15 +87,14 @@ fn expand_param<'p, P: MacroParamElement>(
 /// Encodes both the arguments and the macro
 #[derive(Debug)]
 pub struct MacroWithArgs<'a, P: MacroParamElement> {
-    r#macro: Macro,
-    args: &'a [P],
-    segments: Arc<Vec<MacroSegment>>
+    r#macro: ValueMacro, // TODO check if we can use a reference here
+    args: &'a [P]
 }
 
 impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     /// The construction fails if the number pf arguments is incorrect
     #[inline]
-    pub fn build(r#macro: &Macro, args: &'a [P]) -> Result<Self, AssemblerError> {
+    pub fn build(r#macro: &ValueMacro, args: &'a [P]) -> Result<Self, AssemblerError> {
         if r#macro.nb_args() != args.len() {
             Err(AssemblerError::MacroError {
                 name: r#macro.name().into(),
@@ -180,9 +111,8 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         }
         else {
             Ok(Self {
-                r#macro: r#macro.clone(),
+                r#macro: r#macro.clone(), // TODO use reference?
                 args,
-                segments: Arc::new(tokenize_macro_body(r#macro))
             })
         }
     }
@@ -204,7 +134,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
 
         // First pass: expand all arguments and calculate exact capacity.
         let capacity =
-            self.segments
+            self.r#macro.segments()
                 .iter()
                 .try_fold(0, |acc, segment| -> Result<usize, AssemblerError> {
                     match *segment {
@@ -235,7 +165,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
 
         // Second pass: assemble output from pre-expanded arguments.
         let mut output = String::with_capacity(capacity);
-        for segment in self.segments.iter() {
+        for segment in self.r#macro.segments().iter() {
             match *segment {
                 MacroSegment::Lit { start, end } => {
                     output.push_str(&listing[start..end]);

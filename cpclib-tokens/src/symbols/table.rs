@@ -11,7 +11,7 @@ use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree}
 use regex::Regex;
 
 use crate::symbols::{
-    Macro, PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource
+    ValueMacro, PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource
 };
 use crate::{ExprResult, LabelPrefix};
 
@@ -46,7 +46,7 @@ pub trait SymbolsTableTrait {
     where
         Symbol: From<S>,
         S: AsRef<str>;
-    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&ValueMacro>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
@@ -535,7 +535,7 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     #[inline]
-    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&ValueMacro>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
@@ -1273,7 +1273,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn macro_value<S>(&self, symbol: S) -> Result<Option<&Macro>, SymbolError>
+    fn macro_value<S>(&self, symbol: S) -> Result<Option<&ValueMacro>, SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>

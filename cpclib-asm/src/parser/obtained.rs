@@ -18,6 +18,7 @@ use cpclib_sna::{
     FlagValue, RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotFlag,
     SnapshotVersion
 };
+use cpclib_tokens::macro_segment::TokenizedMacroContent;
 use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     AssemblerControlCommand, AssemblerFlavor, BaseListing, BinaryOperation, CharsetFormat,
@@ -963,7 +964,8 @@ pub enum LocatedTokenInner {
         name: Z80Span,
         params: Vec<Z80Span>,
         content: Z80Span,
-        flavor: AssemblerFlavor
+        flavor: AssemblerFlavor,
+        tokenized_content: TokenizedMacroContent
     },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>),
@@ -1517,13 +1519,15 @@ impl ListingElement for LocatedTokenInner {
                 name,
                 params,
                 content,
-                flavor
+                flavor,
+                tokenized_content
             } => {
                 Cow::Owned(Token::Macro {
                     name: name.into(),
                     params: params.iter().map(|p| p.into()).collect_vec(),
                     content: content.as_str().to_owned(),
-                    flavor: *flavor
+                    flavor: *flavor,
+                    tokenized_content: tokenized_content.clone()
                 })
             },
             Self::Confined(..) => todo!(),

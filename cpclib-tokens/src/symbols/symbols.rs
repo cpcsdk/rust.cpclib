@@ -5,6 +5,7 @@ use std::ops::Deref;
 use cpclib_common::rayon::{iter::IntoParallelRefIterator, iter::ParallelIterator};
 use cpclib_common::smol_str::SmolStr;
 
+use crate::macro_segment::TokenizedMacroContent;
 use crate::symbols::{PhysicalAddress, SymbolsTableTrait};
 use crate::{AssemblerFlavor, ExprResult, ListingElement, ToSimpleToken, Token, expression};
 
@@ -122,30 +123,33 @@ impl SourceLocation {
 }
 
 #[derive(Debug, Clone)]
-pub struct Macro {
+pub struct ValueMacro {
     // The name of the macro
     name: SmolStr,
     // The name of its arguments
     params: Vec<SmolStr>,
     // The content
     code: String,
+    segments: TokenizedMacroContent,
     // Origin of the macro (for error messages)
     source: Option<SourceLocation>,
     flavor: AssemblerFlavor
 }
 
-impl Macro {
+impl ValueMacro {
     pub fn new(
         name: SmolStr,
         params: &[&str],
         code: String,
+        tokenized_content: crate::macro_segment::TokenizedMacroContent,
         source: Option<SourceLocation>,
         flavor: AssemblerFlavor
     ) -> Self {
-        Macro {
+        ValueMacro {
             name,
             params: params.iter().map(|&s| SmolStr::from(s)).collect(),
             code,
+            segments: tokenized_content,
             source,
             flavor
         }
@@ -180,6 +184,11 @@ impl Macro {
     pub fn nb_args(&self) -> usize {
         self.params.len()
     }
+
+    #[inline]
+    pub fn segments(&self) -> &TokenizedMacroContent {
+        &self.segments  
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -191,7 +200,7 @@ pub enum Value {
     /// Address (use in physical way to ensure all bank/page info are available)
     Address(PhysicalAddress),
     /// Macro information
-    Macro(Macro),
+    Macro(ValueMacro),
     /// Structure information
     Struct(Struct),
     /// Counter for a repetition
@@ -275,7 +284,7 @@ impl Value {
         }
     }
 
-    pub fn r#macro(&self) -> Option<&Macro> {
+    pub fn r#macro(&self) -> Option<&ValueMacro> {
         if let Value::Macro(m) = self {
             Some(m)
         }
@@ -306,8 +315,8 @@ impl From<Struct> for Value {
     }
 }
 
-impl From<Macro> for Value {
-    fn from(m: Macro) -> Self {
+impl From<ValueMacro> for Value {
+    fn from(m: ValueMacro) -> Self {
         Self::Macro(m)
     }
 }

@@ -2443,7 +2443,15 @@ impl Env {
         let location: Option<SourceLocation> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
-        let r#macro = Macro::new(name.into(), arguments, code.to_owned(), source, flavor);
+        let tokenized_content = cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments);
+        let r#macro = ValueMacro::new(
+            name.into(),
+            arguments,
+            code.to_owned(),
+            tokenized_content,
+            source,
+            flavor
+        );
         self.symbols_mut()
             .set_symbol_to_value(name, ValueAndSource::new(r#macro, location))?;
         Ok(())

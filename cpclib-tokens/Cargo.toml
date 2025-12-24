@@ -17,17 +17,18 @@ independent = true
 cpclib-sna.workspace = true
 cpclib-common.workspace = true
 
+ahash.workspace = true
+beef.workspace = true
 cfg-if.workspace = true
 delegate.workspace = true
 either.workspace = true
 evalexpr.workspace = true
 ordered-float.workspace = true
+memchr.workspace = true
 paste.workspace = true
+regex.workspace = true
 remain.workspace = true
 serde.workspace = true
-regex.workspace = true
-beef = "0.5.2"
-ahash = "0.8"
 
 [build-dependencies]
 built.workspace = true

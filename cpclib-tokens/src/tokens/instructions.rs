@@ -7,6 +7,7 @@ use cpclib_sna::{
     RemuBreakPointAccessMode, RemuBreakPointRunMode, RemuBreakPointType, SnapshotVersion
 };
 
+use crate::macro_segment::TokenizedMacroContent;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::listing::ListingElement;
@@ -692,7 +693,8 @@ pub enum Token {
         name: SmolStr,
         params: Vec<SmolStr>,
         content: String,
-        flavor: AssemblerFlavor
+        flavor: AssemblerFlavor,
+        tokenized_content: TokenizedMacroContent
     }, // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */

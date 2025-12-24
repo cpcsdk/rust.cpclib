@@ -1,3 +1,4 @@
+use cpclib_tokens::macro_segment::tokenize_macro_body;
 // Directives module - contains directive-related constants and parsing functions
 
 use std::borrow::Cow;
@@ -1881,11 +1882,15 @@ pub fn parse_macro_inner(
         let content: &BStr = unsafe { std::mem::transmute(&content.as_bstr()[..content_length]) };
         let content = (*input).update_slice(content);
 
+       
+        let content: Z80Span = content.into();
+        let tokenized_content = tokenize_macro_body(content.as_str(), &arguments);
         Ok(LocatedTokenInner::Macro {
             name: name.into(),
             params: arguments,
-            content: content.into(),
-            flavor: input.state.options().assembler_flavor
+            content: content,
+            flavor: input.state.options().assembler_flavor,
+            tokenized_content
         }
         .into_located_token_between(&dir_start, *input))
     }
