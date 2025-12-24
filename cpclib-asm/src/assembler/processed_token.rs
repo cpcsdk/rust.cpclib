@@ -2,8 +2,9 @@ use std::borrow::{Borrow, Cow};
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
+use std::ops::Deref;
 use std::ptr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
@@ -109,7 +110,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
     fn build(
         tokens: &'token [T],
         span: Option<Z80Span>,
-        env: &mut Env
+        env: Arc<RwLock<&mut Env>>
     ) -> Result<Self, AssemblerError> {
         Ok(Self {
             processed_tokens: build_processed_tokens_list(tokens, env)?,
@@ -138,7 +139,7 @@ impl IncludeState {
     /// By constructon fname exists and is correct
     fn retreive_listing(
         &mut self,
-        env: &mut Env,
+        env: Arc<RwLock<&mut Env>>,
         fname: &Utf8PathBuf
     ) -> Result<&mut IncludeStateInner, AssemblerError> {
         if cfg!(target_arch = "wasm32") {
@@ -149,15 +150,18 @@ impl IncludeState {
         }
 
         // Build the state if needed / retreive it otherwise
+        let options: crate::EnvOptions = {
+            let env_guard = env.read().unwrap();
+            env_guard.options().clone()
+        };
         let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
-            let content = read_source(fname.clone(), env.options().parse_options())?;
+            let content = read_source(fname.clone(), options.parse_options())?;
 
-            if env.options().show_progress() {
+            if options.show_progress() {
                 Progress::progress().add_parse(progress::normalize(fname));
             }
 
-            let builder = env
-                .options()
+            let builder = options
                 .clone()
                 .context_builder()
                 .set_current_filename(fname.clone());
@@ -165,14 +169,15 @@ impl IncludeState {
             let listing = parse_z80_with_context_builder(content, builder)?;
 
             // Remove the progression
-            if env.options().show_progress() {
+            if options.show_progress() {
                 Progress::progress().remove_parse(progress::normalize(fname));
             }
 
             let include_state = IncludeStateInnerTryBuilder {
                 listing,
                 processed_tokens_builder: |listing: &LocatedListing| {
-                    build_processed_tokens_list(listing.as_slice(), env)
+                    // Minimize lock scope: clone Arc, do not hold lock across call
+                    build_processed_tokens_list(listing.as_slice(), env.clone())
                 }
             }
             .try_build()?;
@@ -188,46 +193,63 @@ impl IncludeState {
         };
 
         // handle the listing
-        env.included_marks_add(fname.clone());
+        {
+            let mut env_guard = env.write().unwrap();
+            env_guard.included_marks_add(fname.clone());
+        }
 
         Ok(state)
     }
 
     fn handle(
         &mut self,
-        env: &mut Env,
+        env: Arc<RwLock<&mut Env>>,
         fname: &str,
         namespace: Option<&str>,
         once: bool
     ) -> Result<(), AssemblerError> {
-        let fname = get_filename_to_read(fname, env.options().parse_options(), Some(env))?;
+        let fname = {
+                let env_guard = env.read().unwrap();
+                let options = env_guard.options().parse_options();
+                let env: &Env = env_guard.deref();
+                get_filename_to_read(fname,     options, Some(env))?
+        };
 
-        let need_to_include = !once || !env.included_marks_includes(&fname);
+        let need_to_include = {
+            let env_read = env.read().unwrap();
+            !once || !env_read.included_marks_includes(&fname)
+        };
 
         // Process the inclusion only if necessary
         if need_to_include {
             // most of the time, file has been loaded
-            let state = self.retreive_listing(env, &fname)?;
+            let state = self.retreive_listing(env.clone(), &fname)?;
 
             // handle module if necessary
             if let Some(namespace) = namespace {
-                env.enter_namespace(namespace)?;
+                env.write().unwrap().enter_namespace(namespace)?;
                 // TODO handle the locating of error
                 //.map_err(|e| e.locate(span.clone()))?;
             }
 
             // Visit the included listing
-            env.enter_current_working_file(fname);
-            let res = state.with_processed_tokens_mut(|tokens| {
-                let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
-                visit_processed_tokens::<LocatedToken>(tokens, env)
-            });
-            env.leave_current_working_file();
+            env.write().unwrap().enter_current_working_file(fname.clone());
+            let res = 
+            {
+
+                let mut env_guard = env.write().unwrap();
+                let mut env_extracted: &mut Env = *env_guard;
+                state.with_processed_tokens_mut(|tokens| {
+                    let tokens: &mut [ProcessedToken<'_, LocatedToken>] = &mut tokens[..];
+                    visit_processed_tokens::<LocatedToken>(tokens, env_extracted)
+                })
+            };
+            env.write().unwrap().leave_current_working_file();
             res?;
 
             // Remove module if necessary
             if namespace.is_some() {
-                env.leave_namespace()?;
+                env.write().unwrap().leave_namespace()?;
                 //.map_err(|e| e.locate(span.clone()))?;
             }
         }
@@ -436,26 +458,26 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
             }
         }
 
+        // Wrap env in Arc<RwLock<&mut Env>> for processed token logic, but do not move env
+        let env_arc = std::sync::Arc::new(std::sync::RwLock::new(&mut *env));
         let selected_listing = match selected_idx {
             Some(selected_idx) => {
-                // Build the listing if never done, using entry API to avoid double lookup
                 use std::collections::hash_map::Entry;
                 match self.tests_listing.entry(selected_idx) {
                     Entry::Occupied(e) => Some(e.into_mut()),
                     Entry::Vacant(e) => {
                         let listing = self.token.if_test(selected_idx).1;
-                        let listing = build_processed_tokens_list(listing, env)?;
+                        let listing = build_processed_tokens_list(listing, env_arc.clone())?;
                         Some(e.insert(listing))
                     }
                 }
             },
             None => {
-                // Build else listing on-demand if it exists and hasn't been built
                 if self.else_listing.is_none() {
                     self.else_listing = self
                         .token
                         .if_else()
-                        .map(|listing| build_processed_tokens_list(listing, env))
+                        .map(|listing| build_processed_tokens_list(listing, env_arc.clone()))
                         .transpose()?;
                 }
                 self.else_listing.as_mut()
@@ -464,7 +486,9 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 
         // update env to request an additional pass
         if request_additional_pass {
-            *env.request_additional_pass.write().unwrap() = true;
+            // Minimize lock scope to prevent deadlocks
+            let mut pass = env.request_additional_pass.write().unwrap();
+            *pass = true;
         }
 
         Ok(selected_listing.map(|l| l.as_mut_slice()))
@@ -491,7 +515,7 @@ fn get_token_span<T: MayHaveSpan>(token: &T) -> Option<Z80Span> {
 fn build_simple_listing_state<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     listing: &'token [T],
     span: Option<Z80Span>,
-    env: &mut Env
+    env: Arc<RwLock<&mut Env>>
 ) -> Result<SimpleListingState<'token, T>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
@@ -528,7 +552,7 @@ fn relocate_error_with_span<T: MayHaveSpan>(error: AssemblerError, token: &T) ->
 /// Build a processed token based on the base token
 pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
-    env: &mut Env
+    env: Arc<RwLock<&mut Env>>
 ) -> Result<ProcessedToken<'token, T>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
@@ -546,11 +570,18 @@ where
         Some(ProcessedTokenState::If(state))
     }
     else if token.is_include() {
-        // we cannot use the real method onf IncludeState because it modifies env and here wa cannot
-        let fname = token.include_fname();
-        let fname = env.build_fname(fname)?;
-        let options = env.options().parse_options();
-        match get_filename_to_read(fname, options, Some(env)) {
+        let (fname_result, options) = {
+            let mut env_guard = env.write().unwrap();
+            let env: &mut Env = *env_guard;
+
+            let options = env.options().parse_options().clone();
+            let fname = token.include_fname();
+            let fname = env.build_fname(fname)?;
+            (get_filename_to_read(fname, &options, Some(env)), options)
+        };
+        let options = &options;
+
+        match fname_result {
             Ok(fname) => {
                 match read_source(fname.clone(), options) {
                     Ok(content) => {
@@ -563,7 +594,7 @@ where
                             Ok(listing) => {
                                 // Filename has already been added
                                 if token.include_is_standard_include()
-                                    && env.options().show_progress()
+                                    && env.read().unwrap().options().show_progress()
                                 {
                                     Progress::progress().remove_parse(progress::normalize(&fname));
                                 }
@@ -571,7 +602,7 @@ where
                                 let include_state = IncludeStateInnerTryBuilder {
                                     listing,
                                     processed_tokens_builder: |listing: &LocatedListing| {
-                                        build_processed_tokens_list(listing, env)
+                                        build_processed_tokens_list(listing, env.clone())
                                     }
                                 }
                                 .try_build()?;
@@ -656,7 +687,7 @@ where
         );
 
         let passes = match token.assembler_control_get_max_passes() {
-            Some(passes) => Some(env.resolve_expr_must_never_fail(passes)?.int()? as u8),
+            Some(passes) => Some(env.write().unwrap().resolve_expr_must_never_fail(passes)?.int()? as u8),
             None => None
         };
 
@@ -685,7 +716,7 @@ where
         Some(ProcessedTokenState::Switch(SwitchState {
             cases: token
                 .switch_cases()
-                .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env))
+                .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env.clone()))
                 .collect::<Result<Vec<_>, _>>()?,
 
             default: token
@@ -722,17 +753,15 @@ pub fn build_processed_tokens_list<
     T: Visited + Debug + Sync + ListingElement + MayHaveSpan
 >(
     tokens: &'token [T],
-    env: &mut Env
+    env: Arc<RwLock<&mut Env>>
 ) -> Result<Vec<ProcessedToken<'token, T>>, AssemblerError>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
-    let show_progress = env.options().parse_options().show_progress;
+
+    let show_progress = env.read().unwrap().options().parse_options().show_progress;
     if show_progress {
-        // // temporarily deactivate parallel processing while i have not found a way to compile it
-        // #[cfg(not(target_arch = "wasm32"))]
-        // let iter = tokens.par_iter();
-        // #[cfg(target_arch = "wasm32")]
+        let mut env_write = env.write().unwrap();
         let iter = tokens.iter();
 
         // get filename of files that will be read in parallel
@@ -741,8 +770,8 @@ where
             iter.filter(|t| t.include_is_standard_include())
                 .flat_map(|t| {
                     let fname = t.include_fname();
-                    let fname = env.build_fname(fname)?;
-                    get_filename_to_read(fname, env.options().parse_options(), Some(env))
+                    let fname = env_write.build_fname(fname).ok()?;
+                    get_filename_to_read(fname, env_write.options().parse_options(), Some(&*env_write)).ok()
                 })
                 .map(|path| progress::normalize(&path).to_string())
         );
@@ -757,7 +786,7 @@ where
     let iter = tokens.par_iter();
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let iter = tokens.iter();
-    iter.map(|t| build_processed_token(t, env))
+    iter.map(|t| build_processed_token(t, env.clone()))
         .collect::<Result<Vec<_>, _>>()
 }
 
@@ -920,10 +949,14 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             }
         };
 
+        // Only wrap env in Arc when needed for processed tokens list
+        let env_arc = std::sync::Arc::new(std::sync::RwLock::new(&mut *env));
+        let env_arc_macro = env_arc.clone();
         let expand_state = ExpandStateTryBuilder {
             listing,
-            processed_tokens_builder: |listing: &LocatedListing| {
-                build_processed_tokens_list(listing, env)
+            processed_tokens_builder: move |listing: &LocatedListing| {
+                // Minimize lock scope: clone Arc, do not hold lock across call
+                build_processed_tokens_list(listing, env_arc_macro.clone())
             }
         }
         .try_build()?;
@@ -944,7 +977,8 @@ where
     pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
         let possible_span = self.possible_span().cloned();
 
-        let mut really_does_the_job = move |possible_span: Option<&Z80Span>| {
+        // Always work with Arc<RwLock<&mut Env>>
+        let mut really_does_the_job = |possible_span: Option<&Z80Span>| {
             let deferred = self.token.defer_listing_output();
             if !deferred {
                 // dbg!(&self.token, deferred);
@@ -1058,7 +1092,8 @@ where
                             let inner = self.token.function_definition_inner();
                             let params = self.token.function_definition_params();
 
-                            let inner = build_processed_tokens_list(inner, env)?;
+                            // Always use Arc<RwLock<&mut Env>>
+                            let inner = build_processed_tokens_list(inner, Arc::new(RwLock::new(env)))?;
                             let f =
                                 Arc::new(unsafe { FunctionBuilder::new(&name, &params, inner) }?);
                             option.replace(f.clone());
@@ -1206,13 +1241,13 @@ where
 
                     Some(ProcessedTokenState::Include(state)) => {
                         let fname = env.build_fname(self.token.include_fname())?;
-
+                        {let env_arc_include: Arc<RwLock<&mut Env>> = std::sync::Arc::new(std::sync::RwLock::new(env));
                         state.handle(
-                            env,
+                            env_arc_include,
                             &fname,
                             self.token.include_namespace(),
                             self.token.include_once()
-                        )
+                        )}
                     },
 
                     Some(ProcessedTokenState::If(if_state)) => {

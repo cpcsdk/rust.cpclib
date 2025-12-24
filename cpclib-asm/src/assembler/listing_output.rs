@@ -436,7 +436,6 @@ pub struct ListingOutputTrigger {
     pub(crate) builder: Arc<RwLock<ListingOutput>>
 }
 
-unsafe impl Sync for ListingOutputTrigger {}
 
 impl ListingOutputTrigger {
     pub fn write_byte(&mut self, b: u8) {

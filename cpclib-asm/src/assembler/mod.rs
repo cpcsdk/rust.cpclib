@@ -1126,7 +1126,7 @@ impl Env {
 
         // Add an additional pass to build the listing (this way it is built only one time)
         if self.options().assemble_options().output_builder.is_some() {
-            let mut tokens = processed_token::build_processed_tokens_list(tokens, self)
+            let mut tokens = processed_token::build_processed_tokens_list(tokens, std::sync::Arc::new(std::sync::RwLock::new(self)))
                 .expect("No errors must occur here");
             self.pass = AssemblingPass::ListingPass;
             self.start_new_pass()?;
@@ -2346,7 +2346,7 @@ impl Env {
 
                 // I'm really unsure of memory safety in case of bugs
                 let macro_token = Token::MacroCall(label.into(), Default::default());
-                let mut processed_token = build_processed_token(&macro_token, self)?;
+                let mut processed_token = build_processed_token(&macro_token, std::sync::Arc::new(std::sync::RwLock::new(self)))?;
                 processed_token.visited(self)
             }
             else {
@@ -3535,7 +3535,7 @@ where
 {
     let mut env = Env::new(options);
 
-    let mut tokens = match processed_token::build_processed_tokens_list(tokens, &mut env) {
+    let mut tokens = match processed_token::build_processed_tokens_list(tokens, std::sync::Arc::new(std::sync::RwLock::new(&mut env))) {
         Ok(tokens) => tokens,
         Err(e) => return Err((None, env, e))
     };
@@ -7142,7 +7142,7 @@ mod test {
     use super::*;
 
     fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
-        let mut processed = build_processed_token(token, env);
+        let mut processed = build_processed_token(token, std::sync::Arc::new(std::sync::RwLock::new(env)))?;
         processed.visited(env)
     }
 
