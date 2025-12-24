@@ -60,7 +60,7 @@ impl ReturnExpr for LocatedToken {
 #[derive(Debug)]
 pub struct AnyFunction<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -72,7 +72,7 @@ where
 impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> Clone
     for AnyFunction<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -88,7 +88,7 @@ where
 impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> PartialEq
     for AnyFunction<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -100,7 +100,7 @@ where
 impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan> Eq
     for AnyFunction<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -109,7 +109,7 @@ where
 impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + MayHaveSpan>
     AnyFunction<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -129,7 +129,7 @@ where
 impl<'token, T: ListingElement + Visited + ToSimpleToken + Sync + ReturnExpr + MayHaveSpan>
     AnyFunction<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder + Clone
 {
@@ -483,8 +483,8 @@ impl HardCodedFunction {
             HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::UnaryFunction(unary_function) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryFunction(binary_function) => ExpectedNbArgs::Fixed(2)
+            HardCodedFunction::UnaryFunction(_unary_function) => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::BinaryFunction(_binary_function) => ExpectedNbArgs::Fixed(2)
         }
     }
 

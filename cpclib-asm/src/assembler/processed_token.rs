@@ -104,7 +104,7 @@ impl<T: Visited + ListingElement + Debug + Sync> Debug for SimpleListingState<'_
 }
 
 impl<'token, T: Visited + ListingElement + Debug + Sync + MayHaveSpan> SimpleListingState<'token, T>
-where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     fn build(
         tokens: &'token [T],
@@ -306,7 +306,7 @@ struct IfState<'token, T: Visited + Debug + ListingElement + Sync> {
 }
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> IfState<'token, T>
-where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     fn new(token: &'token T) -> Self {
         Self {
@@ -473,7 +473,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
 
 impl<T: Visited + Debug + ListingElement + Sync + ToSimpleToken> ToSimpleToken
     for ProcessedToken<'_, T>
-where <T as ListingElement>::Expr: ExprEvaluationExt
+where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     fn as_simple_token(&self) -> Cow<'_, Token> {
         self.token.as_simple_token()
@@ -494,7 +494,7 @@ fn build_simple_listing_state<'token, T: Visited + Debug + Sync + ListingElement
     env: &mut Env
 ) -> Result<SimpleListingState<'token, T>, AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     SimpleListingState::build(listing, span, env)
 }
@@ -531,7 +531,7 @@ pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement 
     env: &mut Env
 ) -> Result<ProcessedToken<'token, T>, AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     let span = get_token_span(token);
     let state = if token.is_confined() {
@@ -725,7 +725,7 @@ pub fn build_processed_tokens_list<
     env: &mut Env
 ) -> Result<Vec<ProcessedToken<'token, T>>, AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     let show_progress = env.options().parse_options().show_progress;
     if show_progress {
@@ -767,7 +767,7 @@ pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync
     env: &mut Env
 ) -> Result<(), AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -804,7 +804,7 @@ where
 }
 
 impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> MayHaveSpan for ProcessedToken<'_, T>
-where <T as ListingElement>::Expr: ExprEvaluationExt
+where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     fn possible_span(&self) -> Option<&Z80Span> {
         self.token.possible_span()
@@ -820,7 +820,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 }
 
 impl<T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'_, T>
-where <T as ListingElement>::Expr: ExprEvaluationExt
+where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     /// Generate the tokens needed for the macro or the struct
     #[inline]
@@ -936,7 +936,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt
 
 impl<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan> ProcessedToken<'token, T>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder
 {
@@ -1263,7 +1263,7 @@ where
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
 
-                        let result = process_result.map_err(|e| {
+                        let _result = process_result.map_err(|e| {
                             let location = env
                                 .symbols()
                                 .any_value(name)
@@ -1278,7 +1278,7 @@ where
                                 root: Box::new(e),
                                 location
                             };
-                            let caller_span = self.possible_span();
+                            let _caller_span = self.possible_span();
                             relocate_error_with_span(e, self.token)
                         })?;
 

@@ -1,33 +1,12 @@
 #![allow(clippy::cast_lossless)]
 
 use core::str;
-use std::fmt::Debug;
-use std::str::FromStr;
-use std::sync::{Arc, LazyLock};
 
-use choice_nocase::choice_nocase;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use cpclib_common::smallvec::SmallVec;
-use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space0};
-use cpclib_common::winnow::combinator::{
-    alt, cut_err, delimited, eof, not, opt, peek, preceded, terminated
-};
-#[allow(deprecated)]
-use cpclib_common::winnow::error::ErrorKind;
-use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
-use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsChar, Stream, UpdateSlice};
-use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
-use cpclib_common::winnow::{ModalResult, Parser};
 // use crc::*;
-use obtained::LocatedTokenInner;
 
 use super::context::*;
-use super::error::*;
-use super::expression::*;
-use super::instructions::*;
-use super::obtained::*;
-use super::orgams::*;
 use super::*;
 use crate::preamble::*;
 
@@ -66,8 +45,11 @@ pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
 pub mod test {
     use std::ops::Deref;
 
-    use cpclib_common::winnow::combinator::repeat;
-    use cpclib_common::winnow::error::ParseError;
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::ascii::line_ending;
+    use cpclib_common::winnow::combinator::{repeat, terminated};
+    use cpclib_common::winnow::error::{ErrMode, ParseError};
+    use cpclib_common::winnow::stream::AsBStr;
 
     use super::*;
     // stable ticker parsers were moved to directives.rs and re-exported via crate::parser

@@ -1080,7 +1080,7 @@ impl Env {
     ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError>
     where
         T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt + ExprElement,
         ProcessedToken<'token, T>: FunctionBuilder
@@ -1402,8 +1402,8 @@ impl Env {
 
         #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
         let iter = {
-            let can_save_in_parallel = self.free_banks.iter().all(|b| b.1.can_save_in_parallel());
-            CondIterator::new(&self.free_banks, can_save_in_parallel)
+            let can_save_in_parallel = self.free_banks.pages.iter().all(|b| b.1.can_save_in_parallel());
+            CondIterator::new(&self.free_banks.pages, can_save_in_parallel)
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.free_banks.pages.iter();
@@ -3205,7 +3205,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         ProcessedToken<'tokens, T>: FunctionBuilder,
         <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
             ExprEvaluationExt
@@ -3530,8 +3530,8 @@ where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
-        ExprEvaluationExt + ExprElement,
-    ProcessedToken<'token, T>: FunctionBuilder
+        ExprEvaluationExt + ExprElement + Sync,
+    ProcessedToken<'token, T>: FunctionBuilder, <T as cpclib_tokens::ListingElement>::Expr: Sync
 {
     let mut env = Env::new(options);
 
@@ -3884,7 +3884,7 @@ impl Env {
     ) -> Result<(), AssemblerError>
     where
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder
@@ -3906,7 +3906,7 @@ impl Env {
     /// Values is either a list of values or a Expression that represents a list
     pub fn visit_iterate<
         'token,
-        E: ExprEvaluationExt,
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync
     >(
         &mut self,
@@ -3995,7 +3995,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
-        E: ExprEvaluationExt,
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4049,6 +4049,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4103,7 +4104,7 @@ impl Env {
     }
 
     /// Handle the for directive
-    pub fn visit_for<'token, E: ExprEvaluationExt, T>(
+    pub fn visit_for<'token, E, T>(
         &mut self,
         label: &str,
         start: &E,
@@ -4113,6 +4114,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4191,7 +4193,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
-        E: ExprEvaluationExt,
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4240,7 +4242,7 @@ impl Env {
     where
         E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder
@@ -4264,7 +4266,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
-        E: ExprEvaluationExt,
+        E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4330,7 +4332,7 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), AssemblerError>
     where
-        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
         ProcessedToken<'token, T>: FunctionBuilder

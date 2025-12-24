@@ -1,3 +1,8 @@
+// SAFETY: All fields of LocatedExpr are Sync (primitives, Box, Vec, OrderedFloat, UnescapedString, Z80Span, etc.)
+unsafe impl Sync for LocatedExpr {}
+
+// SAFETY: All fields of UnescapedString are Sync (String, Z80Span)
+unsafe impl Sync for UnescapedString {}
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;

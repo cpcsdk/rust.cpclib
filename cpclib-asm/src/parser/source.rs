@@ -1,3 +1,5 @@
+// SAFETY: All fields of Z80Span are Sync (InnerZ80Span, which is a wrapper around references to static data and ParserContext)
+unsafe impl Sync for Z80Span {}
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 

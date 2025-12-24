@@ -3,11 +3,9 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 
-use choice_nocase::choice_nocase;
-use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1, line_ending};
+use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
@@ -24,11 +22,7 @@ use smallvec::SmallVec;
 use smallvec::Array;
 
 use super::error::*;
-use super::instructions::INSTRUCTIONS;
 use super::obtained::*;
-use super::parser::{
-    END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE
-};
 use super::common::parse_comma;
 use super::*;
 
@@ -144,8 +138,8 @@ pub fn parse_expr_bracketed_list(
 pub fn parse_function_arguments(
     input: &mut InnerZ80Span
 ) -> ModalResult<Vec<LocatedExpr>, Z80ParserError> {
-    let input_start = input.checkpoint();
-    let input_offset = input.eof_offset();
+    let _input_start = input.checkpoint();
+    let _input_offset = input.eof_offset();
 
     delimited(
         ("(", (my_space0, opt((line_ending, my_space0)))),
@@ -381,7 +375,7 @@ pub fn parse_labelprefix(input: &mut InnerZ80Span) -> ModalResult<LabelPrefix, Z
 pub fn fold_exprs<R>(
     initial: LocatedExpr,
     remainder: R,
-    span: InnerZ80Span
+    _span: InnerZ80Span
 ) -> LocatedExpr 
 
 

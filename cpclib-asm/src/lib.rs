@@ -245,9 +245,9 @@ pub fn assemble_tokens_with_options<
     options: EnvOptions
 ) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError>
 where
-    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt,
+    <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
-        implementation::expression::ExprEvaluationExt,
+        implementation::expression::ExprEvaluationExt + Sync,
     ProcessedToken<'tokens, T>: FunctionBuilder
 {
     let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)

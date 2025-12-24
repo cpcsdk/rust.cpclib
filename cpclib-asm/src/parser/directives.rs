@@ -2205,9 +2205,9 @@ pub fn parse_assembler_control_max_passes_number(
     ))
     .parse_next(input)?;
 
-    let inner = cut_err((inner_code.context(StrContext::Label(
+    let inner = cut_err(inner_code.context(StrContext::Label(
         "ASMCONTROLENV SET_MAX_NB_OF_PASSES: issue in the content"
-    ))))
+    )) )
     .parse_next(input)?;
 
     let _ = cut_err(

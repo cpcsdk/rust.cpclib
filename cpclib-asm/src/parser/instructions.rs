@@ -33,7 +33,7 @@ pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken
     let token: LocatedToken = preceded(
         my_space0,
         alpha1.verify_map(|word: &[u8]| {
-            match (fnv1a_ascii_upper(word)) {
+            match fnv1a_ascii_upper(word) {
                 h if hashed_choice!(h, word, b"CCF") => Some(Mnemonic::Ccf),
                 h if hashed_choice!(h, word, b"CPD") => Some(Mnemonic::Cpd),
                 h if hashed_choice!(h, word, b"CPDR") => Some(Mnemonic::Cpdr),

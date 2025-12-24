@@ -419,12 +419,16 @@ impl ListingOutput {
     }
 }
 
+
+unsafe impl Send for ListingOutputTrigger {}
+unsafe impl Sync for ListingOutputTrigger {}
+
 /// This structure collects the necessary information to feed the output
 #[derive(Clone)]
 pub struct ListingOutputTrigger {
     /// the token read before collecting the bytes
     /// Because each token can have a different lifespan, we store them using a pointer
-    pub(crate) token: Option<*const LocatedToken>,
+    pub(crate) token: Option<*const LocatedToken>, 
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
     pub(crate) start: u32,

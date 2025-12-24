@@ -9,6 +9,10 @@ use ordered_float::OrderedFloat;
 use crate::ListingElement;
 use crate::tokens::Token;
 
+
+// SAFETY: All fields of Expr are Sync (Vec, Box, SmolStr, primitives, etc.)
+unsafe impl Sync for Expr {}
+
 /// Expression nodes.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 #[allow(missing_docs)]

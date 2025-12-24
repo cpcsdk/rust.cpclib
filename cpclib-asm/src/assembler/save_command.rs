@@ -9,6 +9,9 @@ use crate::progress::{self, Progress};
 
 pub type SaveFile = FileAndSupport;
 
+unsafe impl Send for SaveCommand {}
+unsafe impl Sync for SaveCommand {}
+
 /// Save command information
 /// RMR is already properly set up when executing the instruction
 #[derive(Debug, Clone)]

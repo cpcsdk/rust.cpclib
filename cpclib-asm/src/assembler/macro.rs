@@ -1,13 +1,10 @@
 use std::ops::Deref;
-use std::sync::Arc;
 
 use aho_corasick::{AhoCorasick, MatchKind};
 use cpclib_common::itertools::{EitherOrBoth, Itertools};
-use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::Parser;
 use cpclib_tokens::symbols::{ValueMacro, SourceLocation, Struct};
 use cpclib_tokens::{AssemblerFlavor, MacroParamElement, Token};
-use memchr::memchr;
 
 use crate::Env;
 use crate::error::AssemblerError;
