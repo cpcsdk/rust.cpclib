@@ -6,54 +6,35 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
   build-windows:
+
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust (nightly)
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: "~\\.cargo\\registry"
-          key: windows-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: "~\\.cargo\\git"
-          key: windows-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache target
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: windows-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0.0" --locked
-
-      - name: Build release binaries
-        run: cargo build --bins --release
-
-      - name: Run tests
-        run: cargo test
-
-      - name: Build Tauri app
-        run: cd cpclib-bndbuild-tauri; cargo tauri build
-
-      - name: Publish prerelease artifacts
-        uses: ncipollo/release-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v4
+    - uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
+          profile: minimal
+          target: x86_64-pc-windows-msvc
+    - uses: Swatinem/rust-cache@v2
+    - name: install tauri cli
+      run: cargo install tauri-cli --version "^2.0.0" --locked
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        toolchain: nightly
+        args: --bins --release
+    - uses: actions-rs/cargo@v1
+      with:
+        command: test
+        toolchain: nightly
+    - name: build tauri
+      run: cd cpclib-bndbuild-tauri && cargo tauri build
+    - uses: ncipollo/release-action@v1
+      with:
+          token: "${{ secrets.GITHUB_TOKEN }}"
           allowUpdates: true
           removeArtifacts: false
           prerelease: true
@@ -61,7 +42,5 @@ jobs:
           tag: latest
           name: "Development Build"
           generateReleaseNotes: true
-          artifacts: |
-            target/release/*.exe,
-            target/release/bundle/nsis/*.exe
+          artifacts: "target/release/*.exe,target/release/bundle/nsis/*.exe"
   
