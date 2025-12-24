@@ -5,14 +5,14 @@ use curl::Error;
 use curl::easy::{Easy, Form};
 use custom_error::custom_error;
 use path_absolutize::*;
-use {cpclib_disc as disc, cpclib_sna as sna, path_absolutize};
+use {cpclib_disc as disc, cpclib_sna as sna};
 
 use crate::disc::amsdos::AmsdosFileType;
 use crate::sna::{Snapshot, SnapshotVersion};
 
 custom_error! {#[allow(missing_docs)] pub XferError
-    ConnectionError{source: Error} = "There is a connection error with the Cpc Wifi.",
-    ConnectionError2{source: ureq::Error} = "There is a connection error with the Cpc Wifi.",
+    ConnectionError{source: Box<Error>} = "There is a connection error with the Cpc Wifi.",
+    ConnectionError2{source: Box<ureq::Error>} = "There is a connection error with the Cpc Wifi.",
 
     CdError{from: String, to: String} = @ {
         format!(
@@ -30,8 +30,10 @@ pub struct M4File {
     /// File name
     fname: String,
     /// TODO search what it is
+    #[allow(dead_code)]
     unknown: String,
     /// File size
+    #[allow(dead_code)]
     size: String
 }
 
@@ -142,7 +144,7 @@ impl CpcXfer {
     }
 
     /// Make a simple query
-    fn simple_query(&self, query: &[(&str, &str)]) -> Result<ureq::Response, ureq::Error> {
+    fn simple_query(&self, query: &[(&str, &str)]) -> Result<ureq::Response, Box<ureq::Error>> {
         ureq::get(&self.uri("config.cgi"))
             .query_pairs(query.iter().cloned())
             .set("User-Agent", "User-Agent: cpcxfer")
@@ -293,16 +295,16 @@ impl CpcXfer {
         Ok(())
     }
 
-    pub fn current_folder_content(&self) -> Result<M4FilesList, XferError> {
+    pub fn current_folder_content(&self) -> Result<M4FilesList, Box<XferError>> {
         self.download_dir()
     }
 
-    pub fn current_working_directory(&self) -> Result<String, XferError> {
+    pub fn current_working_directory(&self) -> Result<String, Box<XferError>> {
         let data = self.download_dir()?;
         Ok(data.cwd().clone())
     }
 
-    fn download_dir(&self) -> Result<M4FilesList, XferError> {
+    fn download_dir(&self) -> Result<M4FilesList, Box<XferError>> {
         let mut dst = Vec::new();
         {
             {
@@ -352,7 +354,7 @@ impl CpcXfer {
         }
     }
 
-    fn absolute_path(&self, relative: &str) -> Result<String, XferError> {
+    fn absolute_path(&self, relative: &str) -> Result<String, Box<XferError>> {
         match relative.chars().next() {
             None => {
                 Err(XferError::InternalError {

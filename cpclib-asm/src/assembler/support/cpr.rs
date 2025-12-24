@@ -3,7 +3,7 @@ use cpclib_common::riff::{RiffChunk, RiffCode};
 use cpclib_cpr::{CartridgeBank, Cpr};
 
 use super::banks::DecoratedPages;
-use crate::AssemblerError;
+use crate::error::AssemblerError;
 use crate::page_info::PageInformation;
 use crate::support::banks::Bank;
 

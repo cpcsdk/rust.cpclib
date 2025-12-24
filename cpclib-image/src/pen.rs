@@ -57,11 +57,10 @@ where i32: From<T>
 macro_rules! into_integer {
     ( $($ty:ty),+ ) => {
         $(
-            impl Into<$ty> for Pen {
-                fn into(self) -> $ty {
-                    self.number() as _
+            impl From<Pen> for $ty {
+                fn from(pen: Pen) -> $ty {
+                    pen.number() as _
                 }
-
             }
         )+
     };

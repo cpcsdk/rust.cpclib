@@ -7,7 +7,6 @@ use std::ops::Deref;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
-use cpclib_common::winnow::Parser;
 
 const CODE_BANKS: [&str; 32] = [
     "cb00", "cb01", "cb02", "cb03", "cb04", "cb05", "cb06", "cb07", "cb08", "cb09", "cb10", "cb11",
@@ -35,7 +34,7 @@ impl TryFrom<RiffChunk> for CartridgeBank {
             return Err(format!("{code} is an invalid cartridge bloc id"));
         }
 
-        let nb: u16 = u16::from_str_radix(&code[2..], 10).unwrap_or(0xDEAD);
+        let nb: u16 = code[2..].parse::<u16>().unwrap_or(0xDEAD);
         if nb > 32 {
             return Err(format!("{code} is an invalid cartridge bloc id"));
         }

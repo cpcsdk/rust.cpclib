@@ -4,13 +4,16 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+#[allow(dead_code)]
 const UNARY_FUNCTIONS: &[&[u8]] = &[
     b"ABS", b"ACOS", b"ASIN", b"CEIL", b"CHAR", b"COS", b"EXP", b"FLOOR", b"FRAC", b"HI", b"HIGH",
     b"INT", b"LN", b"LO", b"LOG10", b"LOW", b"MEMORY", b"PEEK", b"SIN", b"SQRT"
 ];
 
+#[allow(dead_code)]
 const NO_ARGS_FUNCTIONS: &[&[u8]] = &[b"RND"];
 
+#[allow(dead_code)]
 const BINARY_FUNCTIONS: &[&[u8]] = &[b"MAX", b"MIN", b"POW"];
 
 // Directive and instruction definitions (must match parser.rs and instructions.rs)

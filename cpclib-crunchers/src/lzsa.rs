@@ -35,11 +35,16 @@ pub enum LzsaMinMatch {
     Val5 = 5
 }
 
+#[derive(Debug)]
+pub enum LzsaError {
+    CompressionFailed,
+}
+
 pub fn compress(
     data: &[u8],
     version: LzsaVersion,
     minmatch: Option<LzsaMinMatch>
-) -> Result<Vec<u8>, ()> {
+) -> Result<Vec<u8>, LzsaError> {
     let p_input_data = data.as_ptr();
 
     let _lenout: libc::c_int = 0;
@@ -65,7 +70,7 @@ pub fn compress(
         );
 
         if n_compressed_size as isize == -1 {
-            Err(())
+            Err(LzsaError::CompressionFailed)
         }
         else {
             let mut compressed =

@@ -294,6 +294,13 @@ impl From<SnapshotError> for AssemblerError {
     }
 }
 
+impl From<Box<AssemblerError>> for AssemblerError {
+    fn from(err: Box<AssemblerError>) -> Self {
+        // Unbox and return the inner error
+        *err
+    }
+}
+
 impl From<SymbolError> for AssemblerError {
     fn from(err: SymbolError) -> Self {
         match err {
@@ -307,7 +314,20 @@ impl From<SymbolError> for AssemblerError {
             },
         }
     }
-}
+    }
+
+    impl From<ExpressionTypeError> for Box<AssemblerError> {
+        fn from(e: ExpressionTypeError) -> Self {
+            Box::new(AssemblerError::ExpressionTypeError(e))
+        }
+    }
+
+    impl From<SymbolError> for Box<AssemblerError> {
+        fn from(err: SymbolError) -> Self {
+            Box::new(AssemblerError::from(err))
+        }
+    }
+
 
 impl From<AmsdosError> for AssemblerError {
     fn from(err: AmsdosError) -> Self {

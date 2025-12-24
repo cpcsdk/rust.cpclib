@@ -26,6 +26,7 @@ pub mod disass;
 pub mod preamble;
 
 pub mod error;
+pub use error::{AssemblerError, ExpressionError};
 
 mod crunchers;
 

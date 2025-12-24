@@ -1,5 +1,4 @@
 /// ! Dummy manual c to rust adaptation of lz49 cruncher of Roudoudou
-
 fn lz49_encode_extended_length(odata: &mut Vec<u8>, mut length: usize) {
     while length >= 255 {
         odata.push(0xFF);
@@ -79,8 +78,7 @@ pub fn lz49_encode_legacy(data: &[u8]) -> Vec<u8> {
     let mut literal = 0;
     let mut literaloffset = 1;
 
-    let mut odata = Vec::new();
-    odata.reserve(data.len() + data.len() / 2 + 10);
+    let mut odata = Vec::with_capacity(data.len() + data.len() / 2 + 10);
 
     // first byte always literal
     let mut current = 0;

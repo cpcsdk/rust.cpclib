@@ -1,3 +1,4 @@
+use crate::error::AssemblerError;
 pub mod control;
 pub mod delayed_command;
 pub mod embedded;
@@ -167,11 +168,11 @@ impl EnvOptions {
 }
 
 /// Add the encoding of an indexed structure
-fn add_index(m: &mut Bytes, idx: i32) -> Result<(), AssemblerError> {
+fn add_index(m: &mut Bytes, idx: i32) -> Result<(), Box<AssemblerError>> {
     //  if idx < -127 || idx > 128 {
     if !(-128..=127).contains(&idx) {
-        // TODO raise a warning to get the line/file
-        eprintln!("Index error {idx}");
+           // TODO raise a warning to get the line/file
+           eprintln!("Index error: {idx}");
     }
     let val = (idx & 0xFF) as u8;
     add_byte(m, val);
@@ -279,17 +280,17 @@ impl AssemblingPass {
 /// it allows to drive the appropriate data vonversion
 pub trait Visited {
     /// Make all the necessary for the given token
-    fn visited(&self, env: &mut Env) -> Result<(), AssemblerError>;
+    fn visited(&self, env: &mut Env) -> Result<(), Box<AssemblerError>>;
 }
 
 impl Visited for Token {
-    fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn visited(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         visit_token(self, env)
     }
 }
 
 impl Visited for LocatedToken {
-    fn visited(&self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn visited(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         // dbg!(env.output_address, self.as_token());
         visit_located_token(self, env).map_err(|e| e.locate(self.span().clone()))
     }
@@ -338,7 +339,7 @@ impl CharsetEncoding {
         self.lut.clear()
     }
 
-    pub fn update(&mut self, spec: &CharsetFormat, env: &mut Env) -> Result<(), AssemblerError> {
+    pub fn update(&mut self, spec: &CharsetFormat, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         match spec {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
@@ -586,7 +587,7 @@ impl Env {
     pub fn build_fname<E: ExprEvaluationExt + Debug>(
         &mut self,
         exp: &E
-    ) -> Result<String, AssemblerError> {
+    ) -> Result<String, Box<AssemblerError>> {
         let fname = match self.resolve_expr_must_never_fail(exp) {
             Ok(fname) => Ok(fname),
             Err(e) => {
@@ -626,14 +627,14 @@ impl Env {
     pub fn resolve_expr_may_fail_in_first_pass<E: ExprEvaluationExt>(
         &mut self,
         exp: &E
-    ) -> Result<ExprResult, AssemblerError> {
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         self.resolve_expr_may_fail_in_first_pass_with_default(exp, 0)
     }
 
     pub fn resolve_index_may_fail_in_first_pass<E: ExprEvaluationExt>(
         &mut self,
         (op, exp): (BinaryOperation, &E)
-    ) -> Result<ExprResult, AssemblerError> {
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         let res = self.resolve_expr_may_fail_in_first_pass(exp)?;
         let res = if op == BinaryOperation::Sub {
             res.neg()?
@@ -651,7 +652,7 @@ impl Env {
         &mut self,
         exp: &E,
         r: R
-    ) -> Result<ExprResult, AssemblerError> {
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         self.track_used_symbols(exp);
 
         match exp.resolve(self) {
@@ -661,7 +662,7 @@ impl Env {
                 if let Some(commands) = self.assembling_control_current_output_commands.last()
                     && !commands.has_remaining_passes()
                 {
-                    return Err(e);
+                    return Err(Box::new(e));
                 }
 
                 if self.pass.is_first_pass() {
@@ -669,7 +670,7 @@ impl Env {
                     Ok(r.into())
                 }
                 else {
-                    Err(e)
+                    Err(Box::new(e))
                 }
             }
         }
@@ -680,7 +681,7 @@ impl Env {
     fn resolve_expr_must_never_fail<E: ExprEvaluationExt>(
         &mut self,
         exp: &E
-    ) -> Result<ExprResult, AssemblerError> {
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         match exp.resolve(self) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -699,7 +700,7 @@ impl Env {
         &mut self,
         symbol: S,
         value: V
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let symbol = symbol.into();
         // // we do not test that, otherwise it is impossible to do recursive functions
         // if self.symbols().contains_symbol(symbol.clone())? {
@@ -718,7 +719,7 @@ impl Env {
         label: &str,
         value: E,
         location: Option<SourceLocation>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let already_present = self.symbols().contains_symbol(label)?;
         let value = value.into();
         let value = ValueAndSource::new(value, location);
@@ -833,7 +834,7 @@ impl Env {
     pub fn add_error_discardable_one_pass(
         &mut self,
         e: AssemblerError
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let repr = SimplerAssemblerError(&e).to_string();
         if self.previous_pass_discarded_errors.contains(&repr) {
             Err(e)
@@ -846,18 +847,18 @@ impl Env {
 }
 /// Namespace handling
 impl Env {
-    fn enter_namespace(&mut self, namespace: &str) -> Result<(), AssemblerError> {
+    fn enter_namespace(&mut self, namespace: &str) -> Result<(), Box<AssemblerError>> {
         if namespace.as_bytes().contains(&b'.') {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!("Invalid namespace \"{namespace}\"")
-            });
+            }));
         }
         self.symbols_mut().enter_namespace(namespace);
         Ok(())
     }
 
-    fn leave_namespace(&mut self) -> Result<Symbol, AssemblerError> {
-        self.symbols_mut().leave_namespace().map_err(|e| e.into())
+    fn leave_namespace(&mut self) -> Result<Symbol, Box<AssemblerError>> {
+        self.symbols_mut().leave_namespace().map_err(|e| Box::new(e.into()))
     }
 }
 
@@ -940,7 +941,7 @@ impl Env {
 
     /// Start a new pass by cleaning up datastructures.
     /// The only thing to keep is the symbol table
-    pub(crate) fn start_new_pass(&mut self) -> Result<(), AssemblerError> {
+    pub(crate) fn start_new_pass(&mut self) -> Result<(), Box<AssemblerError>> {
         if self.options().assemble_options().debug() {
             eprintln!("Start a new pass {}", self.pass());
             let _ = self.handle_print();
@@ -978,9 +979,9 @@ impl Env {
         }
 
         if self.pass().nb_passes_exceeded() {
-            return Err(AssemblerError::MaximumNumberOfPassesReached(
+            return Err(Box::new(AssemblerError::MaximumNumberOfPassesReached(
                 self.pass().nb_passes().unwrap()
-            ));
+            )));
         }
 
         if !self.pass.is_finished() || self.pass.is_listing_pass() {
@@ -1077,7 +1078,7 @@ impl Env {
     pub fn handle_post_actions<'token, T>(
         &mut self,
         tokens: &'token [T]
-    ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), AssemblerError>
+    ) -> Result<(Option<RemuChunk>, Option<WabpChunk>), Box<AssemblerError>>
     where
         T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
@@ -1150,7 +1151,7 @@ impl Env {
     fn handle_sna_symbols(
         &mut self,
         remu: &mut Option<&mut RemuChunk>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let options = self.options().assemble_options().clone();
         if options.get_flag(crate::AssemblingOptionFlags::SnaSymb) {
             let ace_chunk = self.symbols_output.build_ace_snapshot_chunk(self.symbols());
@@ -1172,7 +1173,7 @@ impl Env {
         &mut self,
         remu: &mut Option<&mut RemuChunk>,
         wabp: &mut Option<&mut WabpChunk>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let mut winape_chunk = if self
             .options()
             .assemble_options()
@@ -1236,7 +1237,7 @@ impl Env {
         Ok(())
     }
 
-    fn handle_assert(&mut self) -> Result<(), AssemblerError> {
+    fn handle_assert(&mut self) -> Result<(), Box<AssemblerError>> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -1295,7 +1296,7 @@ impl Env {
         Arc::clone(&self.options().observer)
     }
 
-    pub fn handle_print(&mut self) -> Result<(), AssemblerError> {
+    pub fn handle_print(&mut self) -> Result<(), Box<AssemblerError>> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -1354,7 +1355,7 @@ impl Env {
         }
     }
 
-    fn handle_file_save(&mut self) -> Result<Vec<SavedFile>, AssemblerError> {
+    fn handle_file_save(&mut self) -> Result<Vec<SavedFile>, Box<AssemblerError>> {
         let backup = self.ga_mmr;
 
         // ga values to properly switch the pages
@@ -1416,7 +1417,7 @@ impl Env {
         let iter = self.free_banks.pages.iter();
         let mut saved = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))
-            .collect::<Result<Vec<_>, AssemblerError>>()?;
+            .collect::<Result<Vec<_>, Box<AssemblerError>>>()?;
         for s in &mut saved {
             saved_files.append(s);
         }
@@ -1601,10 +1602,10 @@ impl Env {
 
     /// Output one byte either in the appropriate bank of the snapshot or in the temporary bank
     /// return true if it raised an override warning
-    pub fn output_byte(&mut self, v: u8) -> Result<bool, AssemblerError> {
+    pub fn output_byte(&mut self, v: u8) -> Result<bool, Box<AssemblerError>> {
         //   dbg!(self.logical_output_address(), self.output_address);
         if self.logical_output_address() != self.output_address {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!(
@@ -1612,7 +1613,7 @@ impl Env {
                     self.logical_output_address(),
                     self.output_address
                 )
-            });
+            }));
         }
 
         // dbg!(self.output_address(), &v);
@@ -1624,26 +1625,26 @@ impl Env {
         if self.physical_output_address().address() > self.output_limit_address()
             || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
         {
-            return Err(AssemblerError::OutputExceedsLimits(
+            return Err(Box::new(AssemblerError::OutputExceedsLimits(
                 physical_output_address,
                 self.output_limit_address() as _
-            ));
+            )));
         }
 
         if self.logical_code_address() > self.code_limit_address()
             || (self.active_page_info().fail_next_write_if_zero && self.logical_code_address() == 0)
         {
-            return Err(AssemblerError::OutputExceedsLimits(
+            return Err(Box::new(AssemblerError::OutputExceedsLimits(
                 physical_code_address,
                 self.code_limit_address() as _
-            ));
+            )));
         }
         for protected_area in &self.active_page_info().protected_areas {
             if protected_area.contains(&{ self.logical_code_address() }) {
-                return Err(AssemblerError::OutputProtected {
+                return Err(Box::new(AssemblerError::OutputProtected {
                     area: protected_area.clone(),
                     address: self.logical_code_address() as _
-                });
+                }));
             }
         }
 
@@ -1666,7 +1667,7 @@ impl Env {
             *access
         }
         else {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!(
@@ -1674,7 +1675,7 @@ impl Env {
                     abstract_address,
                     self.written_bytes().len()
                 )
-            });
+            }));
         };
 
         let r#override = if already_used {
@@ -1684,7 +1685,7 @@ impl Env {
                 true
             }
             else {
-                return Err(r#override);
+                return Err(Box::new(r#override));
             }
         }
         else {
@@ -1696,14 +1697,14 @@ impl Env {
         {
             let section = section.read().unwrap();
             if !section.contains(physical_output_address.address()) {
-                return Err(AssemblerError::AssemblingError {
+                return Err(Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "SECTION error: write address 0x{:x} out of range [Ox{:}-Ox{:}]",
                         physical_output_address.address(),
                         section.start,
                         section.stop
                     )
-                });
+                }));
             }
         }
 
@@ -1761,7 +1762,7 @@ impl Env {
     }
 
     /// Write consecutives bytes
-    pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), AssemblerError> {
+    pub fn output_bytes(&mut self, bytes: &[u8]) -> Result<(), Box<AssemblerError>> {
         //        dbg!(self.logical_output_address(), bytes);
 
         let mut previously_overrided = false;
@@ -1841,7 +1842,7 @@ impl Env {
         }
     }
 
-    pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) -> Result<(), AssemblerError> {
+    pub fn poke(&mut self, byte: u8, address: &PhysicalAddress) -> Result<(), Box<AssemblerError>> {
         // need modification to work when the physical address is different
         match self.output_kind() {
             OutputKind::Snapshot => {
@@ -1873,7 +1874,7 @@ impl Env {
     }
 
     /// Evaluate the expression according to the current state of the environment
-    pub fn eval(&mut self, expr: &Expr) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(&mut self, expr: &Expr) -> Result<ExprResult, Box<AssemblerError>> {
         expr.resolve(self)
     }
 
@@ -1889,7 +1890,7 @@ impl Env {
         self.sna().save(fname, self.sna_version())
     }
 
-    pub fn save_cpr<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), AssemblerError> {
+    pub fn save_cpr<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), Box<AssemblerError>> {
         let cpr_asm = self.cpr.as_ref().unwrap();
         let cpr = cpr_asm.build_cpr()?;
         cpr.save(fname)
@@ -1901,7 +1902,7 @@ impl Env {
         &self,
         address: i32,
         opcode_delta: i32
-    ) -> Result<u8, AssemblerError> {
+    ) -> Result<u8, Box<AssemblerError>> {
         match absolute_to_relative(address, opcode_delta, self.symbols()) {
             Ok(value) => Ok(value),
             Err(error) => {
@@ -1935,13 +1936,13 @@ impl Env {
         &mut self,
         address: &E,
         address2: Option<&E>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         // org $ set org to the output address (cf. rasm)
         let code_adr = if address2.is_none() && address.is_label_value("$") {
             if self.start_address().is_none() {
-                return Err(AssemblerError::InvalidArgument {
+                return Err(Box::new(AssemblerError::InvalidArgument {
                     msg: "ORG: $ cannot be used now".into()
-                });
+                }));
             }
             self.logical_output_address() as i32
         }
@@ -1972,7 +1973,7 @@ impl Env {
         &mut self,
         code_adr: u16,
         output_adr: u16
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         // TODO Check overlapping region
         let page_info = {
             let page_info = self.page_info_for_logical_address_mut(output_adr as _);
@@ -2032,7 +2033,7 @@ impl Env {
         name: Option<&E>,
         step: Option<&E>,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let brk = if r#type.is_none()
             && access.is_none()
             && run.is_none()
@@ -2201,7 +2202,7 @@ impl Env {
     pub fn visit_listing<T: ListingElement + Visited + MayHaveSpan>(
         &mut self,
         listing: &[T]
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         for token in listing.iter() {
             token.visited(self)?;
         }
@@ -2210,7 +2211,7 @@ impl Env {
     }
 
     /// TODO set the limit for the current page
-    fn visit_limit<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+    fn visit_limit<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
         let in_crunched_section = self.crunched_section_state.is_some();
 
@@ -2254,7 +2255,7 @@ impl Env {
         Ok(())
     }
 
-    fn visit_map<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+    fn visit_map<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
         let value = self.resolve_expr_must_never_fail(exp)?.int()?;
         self.map_counter = value;
 
@@ -2265,7 +2266,7 @@ impl Env {
     fn handle_global_and_local_labels<'s>(
         &mut self,
         label: &'s str
-    ) -> Result<&'s str, AssemblerError> {
+    ) -> Result<&'s str, Box<AssemblerError>> {
         let label = if let Some(dot_pos) = label[1..].find(".") {
             let global = &label[0..(dot_pos + 1)];
             let local = &label[(dot_pos + 1)..label.len()];
@@ -2285,7 +2286,7 @@ impl Env {
     fn visit_label<S: SourceString + MayHaveSpan>(
         &mut self,
         label_span: S
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let label = self.symbols().normalize_symbol(label_span.as_str());
         let label = label.value();
 
@@ -2371,7 +2372,7 @@ impl Env {
     fn visit_noexport<S: AsRef<str> + Display>(
         &mut self,
         labels: &[S]
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if labels.is_empty() {
             self.symbols_output.forbid_all_symbols();
         }
@@ -2387,7 +2388,7 @@ impl Env {
     fn visit_export<S: AsRef<str> + Display>(
         &mut self,
         labels: &[S]
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if labels.is_empty() {
             self.symbols_output.allow_all_symbols();
         }
@@ -2400,7 +2401,7 @@ impl Env {
         Ok(())
     }
 
-    fn visit_multi_pushes<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), AssemblerError> {
+    fn visit_multi_pushes<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per push; actual size may vary slightly
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
         for bytes in regs.iter().map(assemble_push) {
@@ -2409,7 +2410,7 @@ impl Env {
         self.output_bytes(&result)
     }
 
-    fn visit_multi_pops<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), AssemblerError> {
+    fn visit_multi_pops<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per pop; actual size may vary slightly
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
         for bytes in regs.iter().map(assemble_pop) {
@@ -2426,7 +2427,7 @@ impl Env {
         code: &str,
         source: Option<&Z80Span>,
         flavor: AssemblerFlavor
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         // ignore if it is the very same macro. That can happen with orgams
         if let Some(r#macro) = self.symbols().macro_value(name)? {
             if r#macro.code().trim() == code.trim() {
@@ -2445,9 +2446,9 @@ impl Env {
 
         // raise an error if already exists
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name)? {
-            return Err(AssemblerError::SymbolAlreadyExists {
+            return Err(Box::new(AssemblerError::SymbolAlreadyExists {
                 symbol: name.to_owned()
-            });
+            }));
         }
 
         let location: Option<SourceLocation> = source.map(|s| s.into());
@@ -2470,7 +2471,7 @@ impl Env {
     pub fn visit_waitnops<E: ExprEvaluationExt>(
         &mut self,
         count: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         // TODO really use a clever way
         let bytes = self.assemble_nop(Mnemonic::Nop, Some(count))?;
         self.output_bytes(&bytes)?;
@@ -2489,7 +2490,7 @@ impl Env {
         name: S1,
         content: &[(S2, T)],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name.as_str())? {
             return Err(AssemblerError::SymbolAlreadyExists {
                 symbol: name.as_str().to_owned()
@@ -2512,7 +2513,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_buildcpr(&mut self) -> Result<(), AssemblerError> {
+    pub fn visit_buildcpr(&mut self) -> Result<(), Box<AssemblerError>> {
         if self.pass.is_first_pass() {
             self.cpr = Some(CprAssembler::default());
         }
@@ -2529,7 +2530,7 @@ impl Env {
     pub fn visit_buildsna(
         &mut self,
         version: Option<&SnapshotVersion>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         self.sna_version = version.cloned().unwrap_or(SnapshotVersion::V3);
         self.free_banks.selected_index = None;
         Ok(())
@@ -2539,7 +2540,7 @@ impl Env {
         &mut self,
         cmd: &C,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if cmd.is_restricted_assembling_environment() {
             return Err(AssemblerError::BugInAssembler {
                 file: file!(),
@@ -2572,7 +2573,7 @@ impl Env {
         &mut self,
         boundary: &E,
         fill: Option<&E>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let boundary = self.resolve_expr_must_never_fail(boundary)?.int()? as u16;
         let fill = match fill {
             Some(fill) => self.resolve_expr_may_fail_in_first_pass(fill)?.int()? as u8,
@@ -2595,7 +2596,7 @@ impl Env {
         Ok(())
     }
 
-    fn get_section_description(&self, name: &str) -> Result<Section, AssemblerError> {
+    fn get_section_description(&self, name: &str) -> Result<Section, Box<AssemblerError>> {
         match self.sections.get(name) {
             Some(section) => Ok(section.read().unwrap().clone()),
             None => {
@@ -2606,7 +2607,7 @@ impl Env {
         }
     }
 
-    fn visit_section<S: SourceString>(&mut self, name: S) -> Result<(), AssemblerError> {
+    fn visit_section<S: SourceString>(&mut self, name: S) -> Result<(), Box<AssemblerError>> {
         let section = match self.sections.get(name.as_str()) {
             Some(section) => section,
             None => {
@@ -2659,7 +2660,7 @@ impl Env {
         name: S,
         start: &E,
         stop: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
         let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
         let mmr = self.ga_mmr;
@@ -2698,7 +2699,7 @@ impl Env {
         source: S2,
         delta: Option<&E>,
         can_override: bool
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if !can_override
             && self.symbols.contains_symbol(destination.as_str())?
             && self.pass.is_first_pass()
@@ -2759,7 +2760,7 @@ impl Env {
         }
     }
 
-    fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+    fn visit_skip<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
         let amount = self.resolve_expr_must_never_fail(exp)?.int()?;
 
         // if amount < 0 {
@@ -2789,7 +2790,7 @@ impl Env {
     fn visit_page_or_bank<E: ExprEvaluationExt + Debug>(
         &mut self,
         exp: Option<&E>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
@@ -2864,7 +2865,7 @@ impl Env {
     }
 
     // total switch of page
-    fn visit_pageset<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), AssemblerError> {
+    fn visit_pageset<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
@@ -2876,7 +2877,7 @@ impl Env {
         Ok(())
     }
 
-    fn select_page(&mut self, page: u8) -> Result<(), AssemblerError> {
+    fn select_page(&mut self, page: u8) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
             return Err(AssemblerError::NotAllowed);
         }
@@ -2909,7 +2910,7 @@ impl Env {
     }
 
     /// Remove the given variable from the table of symbols
-    pub fn visit_undef<S: SourceString>(&mut self, label: S) -> Result<(), AssemblerError> {
+    pub fn visit_undef<S: SourceString>(&mut self, label: S) -> Result<(), Box<AssemblerError>> {
         match self.symbols_mut().remove_symbol(label.as_str())? {
             Some(_) => Ok(()),
             None => {
@@ -2928,7 +2929,7 @@ impl Env {
         &mut self,
         start: &E,
         stop: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if self.pass.is_first_pass() {
             let start = self.resolve_expr_must_never_fail(start)?.int()? as u16;
             let stop = self.resolve_expr_must_never_fail(stop)?.int()? as u16;
@@ -2945,7 +2946,7 @@ impl Env {
     fn prepropress_string_formatted_expression(
         &mut self,
         info: &[FormattedExpr]
-    ) -> Result<PreprocessedFormattedString, AssemblerError> {
+    ) -> Result<PreprocessedFormattedString, Box<AssemblerError>> {
         PreprocessedFormattedString::try_new(info, self)
     }
 
@@ -2968,7 +2969,7 @@ impl Env {
             .add_pause_command(span.cloned().into());
     }
 
-    pub fn visit_fail(&mut self, info: Option<&[FormattedExpr]>) -> Result<(), AssemblerError> {
+    pub fn visit_fail(&mut self, info: Option<&[FormattedExpr]>) -> Result<(), Box<AssemblerError>> {
         let repr = info
             .map(|info| self.prepropress_string_formatted_expression(info))
             .unwrap_or_else(|| Ok(Default::default()))?;
@@ -2986,7 +2987,7 @@ impl Env {
         save_type: Option<&SaveType>,
         dsk_fname: Option<&E>,
         _side: Option<&E>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if cfg!(target_arch = "wasm32") {
             return Err(AssemblerError::AssemblingError {
                 msg: "SAVE directive is not allowed in a web-based assembling.".into()
@@ -3140,7 +3141,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn visit_charset(&mut self, format: &CharsetFormat) -> Result<(), AssemblerError> {
+    pub fn visit_charset(&mut self, format: &CharsetFormat) -> Result<(), Box<AssemblerError>> {
         let mut new_charset = CharsetEncoding::new();
         std::mem::swap(&mut new_charset, &mut self.charset_encoding);
         new_charset.update(format, self)?;
@@ -3151,7 +3152,7 @@ impl Env {
     pub fn visit_snainit<E: ExprEvaluationExt + Debug>(
         &mut self,
         fname: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let fname = self.build_fname(fname)?;
 
         if !self.pass.is_first_pass() {
@@ -3180,13 +3181,13 @@ impl Env {
         &mut self,
         flag: &cpclib_sna::SnapshotFlag,
         value: &cpclib_sna::FlagValue
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         self.sna
             .set_value(*flag, value.as_u16().unwrap())
             .map_err(|e| e.into())
     }
 
-    pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), AssemblerError> {
+    pub fn visit_incbin(&mut self, data: &[u8]) -> Result<(), Box<AssemblerError>> {
         self.output_bytes(data)
     }
 
@@ -3213,7 +3214,7 @@ impl Env {
         previous_bytes_to_crunch: &mut Option<Vec<u8>>,
         previous_crunched_bytes: &mut Option<AssemblerCompressionResult>,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         ProcessedToken<'tokens, T>: FunctionBuilder,
@@ -3351,7 +3352,7 @@ impl Env {
         &mut self,
         kind: Mnemonic,
         count: Option<&E>
-    ) -> Result<Bytes, AssemblerError> {
+    ) -> Result<Bytes, Box<AssemblerError>> {
         let count = match count {
             Some(count) => self.resolve_expr_must_never_fail(count)?.int()?,
             None => 1
@@ -3378,7 +3379,7 @@ impl Env {
 // T: 'token + Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan
 // >(
 // tokens: &'token [T]
-// ) -> Result<Env, AssemblerError>
+// ) -> Result<Env, Box<AssemblerError>>
 // where
 // <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
 // <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
@@ -3483,7 +3484,7 @@ impl Env {
 
 // Functions related
 impl Env {
-    pub fn visit_return<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), AssemblerError> {
+    pub fn visit_return<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), Box<AssemblerError>> {
         if self.return_value.is_some() {
             return dbg!(Err(AssemblerError::BugInAssembler {
                 file: file!(),
@@ -3495,7 +3496,7 @@ impl Env {
         Ok(())
     }
 
-    pub fn user_defined_function(&self, name: &str) -> Result<&Function, AssemblerError> {
+    pub fn user_defined_function(&self, name: &str) -> Result<&Function, Box<AssemblerError>> {
         match self.functions.get(name) {
             Some(f) => Ok(f),
             None => Err(AssemblerError::FunctionUnknown(name.to_owned()))
@@ -3505,7 +3506,7 @@ impl Env {
     pub fn any_function<'res>(
         &'res self,
         name: &'res str
-    ) -> Result<&'res Function, AssemblerError> {
+    ) -> Result<&'res Function, Box<AssemblerError>> {
         match HardCodedFunction::by_name(name) {
             Some(f) => Ok(f),
             None => self.user_defined_function(name)
@@ -3516,7 +3517,7 @@ impl Env {
         &'res mut self,
         name: &'res str,
         params: &[ExprResult]
-    ) -> Result<ExprResult, AssemblerError> {
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         let f = match HardCodedFunction::by_name(name) {
             Some(f) => Ok(f),
             None => self.user_defined_function(name)
@@ -3534,7 +3535,7 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     options: EnvOptions
 ) -> Result<
     (Vec<ProcessedToken<'token, T>>, Env),
-    (Option<Vec<ProcessedToken<'token, T>>>, Env, AssemblerError)
+    (Option<Vec<ProcessedToken<'token, T>>>, Env, Box<AssemblerError>)
 >
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
@@ -3585,7 +3586,7 @@ where
 pub fn visit_tokens<T: Visited>(
     tokens: &[T],
     o: Arc<dyn EnvEventObserver>
-) -> Result<Env, AssemblerError> {
+) -> Result<Env, Box<AssemblerError>> {
     visit_tokens_one_pass(tokens, o)
 }
 
@@ -3593,7 +3594,7 @@ pub fn visit_tokens<T: Visited>(
 pub fn visit_tokens_one_pass<T: Visited>(
     tokens: &[T],
     o: Arc<dyn EnvEventObserver>
-) -> Result<Env, AssemblerError> {
+) -> Result<Env, Box<AssemblerError>> {
     let mut opt = EnvOptions::default();
     opt.observer = o;
     let mut env = Env::new(opt);
@@ -3782,7 +3783,7 @@ macro_rules! visit_token_impl {
 pub fn visit_located_token(
     outer_token: &LocatedToken,
     env: &mut Env
-) -> Result<(), AssemblerError> {
+) -> Result<(), Box<AssemblerError>> {
     let nb_warnings = env.warnings.len();
 
     // cheat on the lifetime of tokens
@@ -3829,7 +3830,7 @@ pub fn visit_located_token(
 }
 
 /// Apply the effect of the token
-fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_token(token: &Token, env: &mut Env) -> Result<(), Box<AssemblerError>> {
     let span = None;
     let _res = visit_token_impl!(token, env, span, Token);
 
@@ -3844,7 +3845,7 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
     txt: Option<&Vec<FormattedExpr>>,
     env: &mut Env,
     span: Option<&Z80Span>
-) -> Result<bool, AssemblerError> {
+) -> Result<bool, Box<AssemblerError>> {
     if let Some(commands) = env.assembling_control_current_output_commands.last_mut() {
         commands.store_assert(exp.to_expr().into_owned(), txt.cloned(), span.cloned());
     }
@@ -3895,7 +3896,7 @@ impl Env {
         cond: &E,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
@@ -3928,7 +3929,7 @@ impl Env {
         values: either::Either<&Vec<E>, &E>,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4007,7 +4008,7 @@ impl Env {
         address: &E,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4061,7 +4062,7 @@ impl Env {
         &mut self,
         lst: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4126,7 +4127,7 @@ impl Env {
         step: Option<&E>,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4205,7 +4206,7 @@ impl Env {
         cond: &E,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4231,7 +4232,7 @@ impl Env {
         &mut self,
         start: Option<&E>,
         step: Option<&E>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt
     {
@@ -4252,7 +4253,7 @@ impl Env {
         &mut self,
         opcode: &mut ProcessedToken<'token, T>,
         count: &E
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4278,7 +4279,7 @@ impl Env {
         counter_start: Option<&E>,
         counter_step: Option<&E>,
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         E: ExprEvaluationExt + Sync,
         T: ListingElement<Expr = E> + Visited + MayHaveSpan + Sync,
@@ -4344,7 +4345,7 @@ impl Env {
         iteration: i32,
         code: &mut [ProcessedToken<'token, T>],
         span: Option<&Z80Span>
-    ) -> Result<(), AssemblerError>
+    ) -> Result<(), Box<AssemblerError>>
     where
         <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
@@ -4469,7 +4470,7 @@ impl Env {
         &mut self,
         address: &E,
         ga: Option<&E>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
         if let Some(o) = self.output_trigger.as_mut() {
@@ -4644,7 +4645,7 @@ impl Env {
         &mut self,
         label_span: &S,
         exp: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
             Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
@@ -4691,7 +4692,7 @@ impl Env {
         &mut self,
         label_span: S,
         exp: &E
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
             Err(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
@@ -4737,7 +4738,7 @@ impl Env {
         label: S,
         exp: &E,
         op: Option<&BinaryOperation>
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let label = label.as_ref();
         let value = if let Some(op) = op {
             let new_exp = Expr::BinaryOperation(
@@ -4768,7 +4769,7 @@ impl Env {
 fn visit_defs<E: ExprEvaluationExt>(
     l: &[(E, Option<E>)],
     env: &mut Env
-) -> Result<(), AssemblerError> {
+) -> Result<(), Box<AssemblerError>> {
     for (e, f) in l.iter() {
         let bytes = assemble_defs_item(e, f.as_ref(), env)?;
         env.output_bytes(&bytes)?;
@@ -4776,7 +4777,7 @@ fn visit_defs<E: ExprEvaluationExt>(
     Ok(())
 }
 
-fn visit_end(_env: &mut Env) -> Result<(), AssemblerError> {
+fn visit_end(_env: &mut Env) -> Result<(), Box<AssemblerError>> {
     // eprintln!("END directive is not implemented");
     Ok(())
 }
@@ -4816,7 +4817,7 @@ impl Env {
         &mut self,
         delta: &E1,
         exprs: &[E2]
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let delta = self.resolve_expr_may_fail_in_first_pass(delta)?;
         self.visit_db_or_dw_or_str(DbLikeKind::Defb, exprs, delta)
     }
@@ -4827,14 +4828,14 @@ impl Env {
         kind: DbLikeKind,
         exprs: &[E],
         delta: ExprResult
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let env = self;
 
         let delta = delta.int()?;
 
         let mask = kind.mask();
 
-        fn output(env: &mut Env, val: i32, delta: i32, mask: u16) -> Result<(), AssemblerError> {
+        fn output(env: &mut Env, val: i32, delta: i32, mask: u16) -> Result<(), Box<AssemblerError>> {
             let val: i32 = val + delta;
 
             if mask == 0xFF {
@@ -4854,7 +4855,7 @@ impl Env {
             expr: &ExprResult,
             delta: i32,
             mask: u16
-        ) -> Result<(), AssemblerError> {
+        ) -> Result<(), Box<AssemblerError>> {
             match &expr {
                 ExprResult::Float(_) | ExprResult::Value(_) | ExprResult::Bool(_) => {
                     output(env, expr.int()?, delta, mask)
@@ -4961,7 +4962,7 @@ impl Env {
         variables: Option<&[S]>,
         hidden_lines: Option<&[E]>,
         code: S2
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let bytes = self.assemble_basic(variables, hidden_lines, code)?;
 
         // If the basic directive is the VERY first thing to output,
@@ -4981,7 +4982,7 @@ impl Env {
         variables: Option<&[S]>,
         hidden_lines: Option<&[E]>,
         code: S2
-    ) -> Result<Vec<u8>, AssemblerError> {
+    ) -> Result<Vec<u8>, Box<AssemblerError>> {
         let hidden_lines: Option<Vec<u16>> = if let Some(lines) = hidden_lines {
             let mut resolved = Vec::with_capacity(lines.len());
             for expr in lines {
@@ -5022,7 +5023,7 @@ impl Env {
 
 /// When visiting a repetition, we unroll the loop and stream the tokens
 /// TODO reimplement it in a similar way that the LocatedToken version that is better
-pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), Box<AssemblerError>> {
     let tokens = rept.unroll(env).unwrap()?;
 
     for token in &tokens {
@@ -5039,7 +5040,7 @@ pub fn visit_repeat(rept: &Token, env: &mut Env) -> Result<(), AssemblerError> {
 pub fn visit_stableticker<S: AsRef<str>>(
     ticker: &StableTickerAction<S>,
     env: &mut Env
-) -> Result<(), AssemblerError> {
+) -> Result<(), Box<AssemblerError>> {
     match ticker {
         StableTickerAction::Start(name) => {
             env.stable_counters.add_counter(name)?;
@@ -5074,7 +5075,7 @@ pub fn assemble_defs_item<E: ExprEvaluationExt>(
     expr: &E,
     fill: Option<&E>,
     env: &mut Env
-) -> Result<Bytes, AssemblerError> {
+) -> Result<Bytes, Box<AssemblerError>> {
     let count = match env.resolve_expr_must_never_fail(expr) {
         Ok(amount) => amount.int()?,
         Err(e) => {
@@ -5111,7 +5112,7 @@ pub fn assemble_align(
     expr: &Expr,
     fill: Option<&Expr>,
     env: &mut Env
-) -> Result<Bytes, AssemblerError> {
+) -> Result<Bytes, Box<AssemblerError>> {
     let expression = env.resolve_expr_must_never_fail(expr)?.int()? as u16;
     let current = env.symbols().current_address()?;
     let value = if fill.is_none() {
@@ -5148,7 +5149,7 @@ pub(crate) fn visit_opcode<D: DataAccessElem>(
     arg2: &Option<D>,
     arg3: &Option<Register8>,
     env: &mut Env
-) -> Result<(), AssemblerError>
+) -> Result<(), Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -5170,7 +5171,7 @@ pub fn assemble_opcode<D: DataAccessElem>(
     arg2: &Option<D>,
     arg3: &Option<Register8>,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -5269,7 +5270,7 @@ where
     }
 }
 
-fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, AssemblerError> {
+fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, Box<AssemblerError>> {
     let bytes: &[u8] = match mnemonic {
         Mnemonic::Ldi => &[0xED, 0xA0],
         Mnemonic::Ldd => &[0xED, 0xA8],
@@ -5323,7 +5324,7 @@ fn assemble_inc_dec<D: DataAccessElem>(
     mne: Mnemonic,
     arg1: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -5385,7 +5386,7 @@ where
         }
     }
     else {
-        return Err(AssemblerError::BugInAssembler {
+        return Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!(
@@ -5393,7 +5394,7 @@ where
                 mne.to_string().to_owned(),
                 arg1
             )
-        });
+        }));
     }
     Ok(bytes)
 }
@@ -5403,7 +5404,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
     address: i32,
     opcode_delta: i32,
     sym: T
-) -> Result<u8, AssemblerError> {
+) -> Result<u8, Box<AssemblerError>> {
     match sym.as_ref().current_address() {
         Err(_msg) => Err(AssemblerError::UnknownAssemblingAddress),
         Ok(root) => {
@@ -5421,7 +5422,7 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
     }
 }
 
-fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, AssemblerError> {
+fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, Box<AssemblerError>> {
     let mut bytes = Bytes::new();
 
     if let Some(arg1) = arg1 {
@@ -5430,9 +5431,9 @@ fn assemble_ret<D: DataAccessElem>(arg1: Option<&D>) -> Result<Bytes, AssemblerE
             bytes.push(0b1100_0000 | (flag << 3));
         }
         else {
-            return Err(AssemblerError::InvalidArgument {
+            return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: "RET: wrong argument for ret".to_string()
-            });
+            }));
         }
     }
     else {
@@ -5446,7 +5447,7 @@ fn assemble_rst_fake<D: DataAccessElem>(
     arg1: &D,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -5485,7 +5486,7 @@ where
     )
 }
 
-fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
+fn assemble_rst<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, Box<AssemblerError>>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     let mut bytes = Bytes::new();
     let val = env
@@ -5514,7 +5515,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
     Ok(bytes)
 }
 
-fn assemble_im<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
+fn assemble_im<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, Box<AssemblerError>>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     let mut bytes = Bytes::new();
     let val = env
@@ -5544,7 +5545,7 @@ pub fn assemble_call_jr_or_jp<D: DataAccessElem>(
     arg1: Option<&D>,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -5645,7 +5646,7 @@ where
     Ok(bytes)
 }
 
-fn assemble_djnz<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, AssemblerError>
+fn assemble_djnz<D: DataAccessElem>(arg1: &D, env: &mut Env) -> Result<Bytes, Box<AssemblerError>>
 where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
     if let Some(expr) = arg1.get_expression() {
         let mut bytes = Bytes::new();
@@ -5668,7 +5669,7 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
 
 #[allow(missing_docs)]
 impl Env {
-    pub fn assemble_cp<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, AssemblerError>
+    pub fn assemble_cp<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, Box<AssemblerError>>
     where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
         let mut bytes = Bytes::new();
 
@@ -5720,7 +5721,7 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_sub<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, AssemblerError>
+    pub fn assemble_sub<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, Box<AssemblerError>>
     where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
         let mut bytes = Bytes::new();
 
@@ -5774,7 +5775,7 @@ impl Env {
         &mut self,
         arg1: Option<&D>,
         arg2: &D
-    ) -> Result<Bytes, AssemblerError>
+    ) -> Result<Bytes, Box<AssemblerError>>
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
@@ -5838,7 +5839,7 @@ impl Env {
         mne: Mnemonic,
         target: &D,
         hidden: Option<&D>
-    ) -> Result<Bytes, AssemblerError>
+    ) -> Result<Bytes, Box<AssemblerError>>
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
@@ -5997,7 +5998,7 @@ fn assemble_ld<D: DataAccessElem + Debug>(
     arg1: &D,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -6584,7 +6585,7 @@ fn assemble_in<D: DataAccessElem>(
     arg1: &D,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -6633,7 +6634,7 @@ fn assemble_out<D: DataAccessElem>(
     arg1: &D,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -6678,7 +6679,7 @@ where
     }
 }
 
-fn assemble_pop<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
+fn assemble_pop<D: DataAccessElem>(arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
     let mut bytes = Bytes::new();
 
     if arg1.is_register16() {
@@ -6700,7 +6701,7 @@ fn assemble_pop<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
     Ok(bytes)
 }
 
-fn assemble_push<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
+fn assemble_push<D: DataAccessElem>(arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
     let mut bytes = Bytes::new();
 
     if arg1.is_register16() {
@@ -6726,7 +6727,7 @@ fn assemble_logical_operator<D: DataAccessElem>(
     mnemonic: Mnemonic,
     arg1: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -6806,7 +6807,7 @@ where
     Ok(bytes)
 }
 
-fn assemble_ex_memsp<D: DataAccessElem>(arg1: &D) -> Result<Bytes, AssemblerError> {
+fn assemble_ex_memsp<D: DataAccessElem>(arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
     let mut bytes = Bytes::new();
 
     if let Some(reg) = arg1.get_indexregister16() {
@@ -6822,7 +6823,7 @@ fn assemble_add_or_adc<D: DataAccessElem>(
     arg1: Option<&D>,
     arg2: &D,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
 {
@@ -6969,7 +6970,7 @@ fn assemble_bit_res_or_set<D: DataAccessElem>(
     arg2: &D,
     hidden: Option<&Register8>,
     env: &mut Env
-) -> Result<Bytes, AssemblerError>
+) -> Result<Bytes, Box<AssemblerError>>
 where
     <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt
 {
@@ -7155,13 +7156,13 @@ mod test {
     use super::processed_token::build_processed_token;
     use super::*;
 
-    fn visit_token(token: &Token, env: &mut Env) -> Result<(), AssemblerError> {
+    fn visit_token(token: &Token, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         let mut processed =
             build_processed_token(token, std::sync::Arc::new(std::sync::RwLock::new(env)))?;
         processed.visited(env)
     }
 
-    fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
+    fn visit_tokens(tokens: &[Token]) -> Result<Env, Box<AssemblerError>> {
         let mut env = Env::default();
         for t in tokens {
             visit_token(t, &mut env)?;

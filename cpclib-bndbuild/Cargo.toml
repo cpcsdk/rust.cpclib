@@ -76,7 +76,7 @@ colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
 indicatif = ["cpclib-basm/indicatif"]
-rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon"]
+rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon", "cpclib-imgconverter/rayon"]
 sna-interactive = ["cpclib-sna/interactive"]
 self-update =["self_update"]
 

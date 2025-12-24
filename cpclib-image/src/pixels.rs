@@ -154,6 +154,7 @@ pub mod mode2 {
         res
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn pens_to_byte(
         pen0: Pen,
         pen1: Pen,

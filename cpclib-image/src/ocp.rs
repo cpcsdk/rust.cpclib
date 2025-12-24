@@ -2,7 +2,6 @@ use crate::ga::{Ink, Palette};
 use crate::image::Mode;
 
 /// ! Utility code related to OCP
-
 pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
     eprintln!("[WARNING] OCP compression has never been tested");
 
@@ -81,12 +80,16 @@ pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
 const NB_PAL: usize = 12;
 
 pub struct OcpPalette {
+    #[allow(dead_code)]
     screen_mode: Mode,
+    #[allow(dead_code)]
     cycling: bool,
+    #[allow(dead_code)]
     cycling_delay: u8,
     palettes: [Palette; NB_PAL],
-
+    #[allow(dead_code)]
     excluded: [u8; 16],
+    #[allow(dead_code)]
     projected: [u8; 16]
 }
 
@@ -110,10 +113,10 @@ impl OcpPalette {
 
         let mut palettes: [Palette; NB_PAL] = Default::default(); // arrays::from_iter((0..NB_PAL).into_iter().map(|_| Palette::default())).unwrap();
         for pen in 0..=16i32 {
-            for idx in 0..NB_PAL {
+            for (_idx, palette) in palettes.iter_mut().enumerate().take(NB_PAL) {
                 let ga_ink = data.next().unwrap();
                 let ink = Ink::from_gate_array_color_number(ga_ink);
-                palettes[idx].set(pen, ink);
+                palette.set(pen, ink);
             }
         }
 

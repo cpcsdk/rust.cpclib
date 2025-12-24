@@ -1,6 +1,7 @@
 use cpclib_tokens::ExprResult;
 
-use crate::{AssemblerError, ExpressionError};
+use crate::error::AssemblerError;
+use crate::error::ExpressionError;
 
 pub fn min(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, AssemblerError> {
     Ok(a.min(b).clone())

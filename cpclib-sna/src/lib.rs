@@ -939,11 +939,11 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
             let place = loads[i * 2 + 1];
 
             let address = {
-                if place.starts_with("0x") {
-                    u32::from_str_radix(&place[2..], 16).unwrap()
+                if let Some(stripped) = place.strip_prefix("0x") {
+                    u32::from_str_radix(stripped, 16).unwrap()
                 }
-                else if place.starts_with('0') {
-                    u32::from_str_radix(&place[1..], 8).unwrap()
+                else if let Some(stripped) = place.strip_prefix('0') {
+                    u32::from_str_radix(stripped, 8).unwrap()
                 }
                 else {
                     place.parse::<u32>().unwrap()

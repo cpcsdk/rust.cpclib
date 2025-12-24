@@ -83,11 +83,12 @@ impl Command {
                 use cpclib_common::resolve_path::*;
                 let path = fname.resolve();
                 let path = Utf8Path::from_path(path.as_ref()).unwrap();
-                Snapshot::load(path)
+                let _ = Snapshot::load(path)
                     .map(|s| sna2.replace((fname.clone(), s)))
                     .map_err(|e| {
                         eprintln!("Error while loading {path}. {e}");
                     });
+                    unimplemented!();
             },
             Command::Memory(from, amount) => {
                 let mut output = Pager::new();
@@ -101,10 +102,10 @@ impl Command {
                     sna2.unwrap_memory_chunks();
                     let mem2 = mem_to_string(sna2, from, amount);
                     let diff = diff_lines(&mem, &mem2);
-                    write!(output, "{diff}");
+                    let _ = write!(output, "{diff}");
                 }
                 else {
-                    write!(output, "{mem}");
+                    let _ = write!(output, "{mem}");
                 }
 
                 minus::page_all(output).unwrap();
@@ -136,7 +137,7 @@ impl Command {
     }
 }
 
-fn parse_line<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_line<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -154,7 +155,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     cut_err(alt((
         parse_memory,
@@ -167,7 +168,7 @@ where
     .parse_next(input)
 }
 
-fn parse_memory<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_memory<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -184,7 +185,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     (
         alt((Caseless(&b"MEMORY"[..]), Caseless(&b"MEM"[..]))),
@@ -195,7 +196,7 @@ where
         .parse_next(input)
 }
 
-fn parse_disassemble<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_disassemble<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -212,7 +213,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     (
         alt((
@@ -227,7 +228,7 @@ where
         .parse_next(input)
 }
 
-fn parse_symbols<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_symbols<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -245,7 +246,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     (alt((
         Caseless(&b"SYMBOLS"[..]),
@@ -256,7 +257,7 @@ where
     .parse_next(input)
 }
 
-fn parse_help<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_help<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -272,14 +273,14 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     Caseless(&b"HELP"[..])
         .map(|_| Command::Help)
         .parse_next(input)
 }
 
-fn parse_load2<'i, I, Error: ParserError<I>>(input: &mut I) -> ModalResult<Command, Error>
+fn parse_load2<'i, I, Error>(input: &mut I) -> ModalResult<Command, Error>
 where
     I: 'i
         + Stream<Slice = &'i [u8]>
@@ -297,7 +298,7 @@ where
     <I as Stream>::Token: Clone,
     I: for<'a> Compare<&'a [u8; 2]>,
     I: for<'a> Compare<&'a [u8; 1]>,
-    Error: AddContext<I, winnow::error::StrContext>
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
     // preceded(
     // (
@@ -327,7 +328,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
 
     // `()` can be used when no completer is required
     let mut rl = Editor::<(), _>::new().unwrap();
-    rl.load_history("snapshot.txt").is_err();
+    let _ = rl.load_history("snapshot.txt").is_err();
     loop {
         let fname1 = Utf8Path::new(fname).file_name().unwrap();
         let prompt = if let Some((fname2, _)) = &sna2 {
@@ -341,7 +342,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
         let readline = rl.readline(&prompt);
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
+                let _ = rl.add_history_entry(line.as_str());
 
                 let line = line.as_bytes();
 
@@ -365,8 +366,7 @@ pub fn cli(fname: &str, mut sna: Snapshot) {
                         }
                         eprintln!("^");
                         eprintln!("{}", e.inner());
-                    },
-                    _ => todo!()
+                    }
                 }
             },
             Err(ReadlineError::Interrupted) => break,

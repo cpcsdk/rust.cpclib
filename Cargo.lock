@@ -2469,6 +2469,7 @@ dependencies = [
  "gif-dispose",
  "image",
  "nutype",
+ "rayon",
  "serde",
 ]
 
@@ -2480,6 +2481,7 @@ dependencies = [
  "built 0.7.7",
  "camino-tempfile",
  "cpclib",
+ "cpclib-image",
  "crossbeam-channel",
  "exitcode",
  "notify",

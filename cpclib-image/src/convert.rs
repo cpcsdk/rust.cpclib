@@ -315,7 +315,7 @@ impl CPCScreenDimension {
         Self {
             horizontal_displayed: 80 / 2,
             vertical_displayed: 25,
-            /// Unsure of this value
+            // Unsure of this value
             maximum_raster_address: 7
         }
     }

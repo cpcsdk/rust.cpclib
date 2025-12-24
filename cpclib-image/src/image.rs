@@ -580,12 +580,10 @@ impl ColorMatrix {
         };
 
         // Make the pixels extraction
-        let mut lines = Vec::new();
-        lines.reserve(height as usize);
+        let mut lines = Vec::with_capacity(height as usize);
         for y in 0..height {
             let src_y = y;
-            let mut line = Vec::new();
-            line.reserve(width as usize);
+            let mut line = Vec::with_capacity(width as usize);
             for x in 0..width {
                 let src_x = {
                     match conversion {
@@ -921,6 +919,11 @@ impl ColorMatrixList {
     /// Number of frames in the animation
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// Returns true if the list is empty
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Assume there is one sprite at least and all of them have the same size

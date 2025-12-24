@@ -7,28 +7,25 @@ unsafe extern "C" {
 }
 
 pub fn compress(data: &[u8]) -> Vec<u8> {
-    unsafe {
-        let len = data.len() as libc::c_int;
-        let data = data.as_ptr();
+    let len = data.len() as libc::c_int;
+    let data = data.as_ptr();
 
-        let mut lenout: libc::c_int = 0;
+    let mut lenout: libc::c_int = 0;
 
-        let dataout = unsafe { LZ4_embedded_crunch(data, len, &mut lenout) };
+    let dataout = unsafe { LZ4_embedded_crunch(data, len, &mut lenout) };
 
-        // copy the crunched C bytes in a rust struct
-        let crunched = {
-            let mut crunched = Vec::new();
-            crunched.reserve(lenout as usize);
-            for idx in 0..(lenout as isize) {
-                crunched.push(*dataout.offset(idx));
-            }
-            crunched
-        };
-
-        if lenout > 0 {
-            libc::free(dataout as _);
+    // copy the crunched C bytes in a rust struct
+    let crunched = {
+        let mut crunched = Vec::with_capacity(lenout as usize);
+        for idx in 0..(lenout as isize) {
+            crunched.push(unsafe { *dataout.offset(idx) });
         }
-
         crunched
+    };
+
+    if lenout > 0 {
+        unsafe { libc::free(dataout as _) };
     }
+
+    crunched
 }

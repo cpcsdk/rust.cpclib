@@ -16,7 +16,7 @@ independent = true
 
 [dependencies]
 cpclib = { workspace=true, features = ["cmdline"] }
-
+cpclib-image = { workspace = true, optional = true }
 
 anyhow.workspace = true
 crossbeam-channel.workspace = true
@@ -29,6 +29,7 @@ notify = {workspace = true, optional = true}
 built.workspace = true
 
 [features]
-default = ["xferlib", "watch"]
+default = ["xferlib", "watch", "rayon"]
 xferlib = ["cpclib/xferlib"]
 watch = ["notify", "xferlib"]
+rayon = ["cpclib-image/rayon"]
