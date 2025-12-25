@@ -40,7 +40,7 @@ pub fn list_set(
             let mut s = s.to_string();
             s.replace_range(index..index + 1, &c);
             Ok(ExprResult::String(fix_string(s)))
-        }
+        },
         ExprResult::List(_) => {
             if index >= list.list_len() {
                 return Err(Box::new(AssemblerError::ExpressionError(
@@ -49,7 +49,7 @@ pub fn list_set(
             }
             list.list_set(index, value);
             Ok(list)
-        }
+        },
 
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -57,7 +57,7 @@ pub fn list_set(
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -71,7 +71,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
                 )));
             }
             Ok(ExprResult::Value(s.chars().nth(index).unwrap() as _))
-        }
+        },
         ExprResult::List(_) => {
             if index >= list.list_len() {
                 return Err(Box::new(AssemblerError::ExpressionError(
@@ -79,7 +79,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
                 )));
             }
             Ok(list.list_get(index).clone())
-        }
+        },
 
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -87,7 +87,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -110,7 +110,7 @@ pub fn list_sublist(
                 )));
             }
             Ok(ExprResult::String(s.substring(start, end).into()))
-        }
+        },
         ExprResult::List(l) => {
             if start >= l.len() {
                 return Err(Box::new(AssemblerError::ExpressionError(
@@ -123,7 +123,7 @@ pub fn list_sublist(
                 )));
             }
             Ok(ExprResult::List(l[start..end].to_vec()))
-        }
+        },
 
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
@@ -131,7 +131,7 @@ pub fn list_sublist(
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -145,7 +145,7 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -154,14 +154,14 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, Box<A
         ExprResult::List(mut l) => {
             l.push(elem);
             Ok(ExprResult::List(l))
-        }
+        },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -177,16 +177,16 @@ pub fn list_extend(
                         l.push(item);
                     }
                     Ok(ExprResult::List(l))
-                }
+                },
                 _ => {
                     Err(Box::new(AssemblerError::ExpressionError(
                         ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{list2} is not a list")
                         }))
                     )))
-                }
+                },
             }
-        }
+        },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
@@ -197,20 +197,19 @@ pub fn list_extend(
     }
 }
 
-
 pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match &mut list {
         ExprResult::List(l) => {
             l.sort(); // inplace sort
             Ok(list)
-        }
+        },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -226,14 +225,14 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
 
             let l = argsort(l);
             Ok(ExprResult::List(l))
-        }
+        },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
                 }))
             )))
-        }
+        },
     }
 }
 
@@ -264,7 +263,7 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
                     })
                 })
                 .map(|s| s.into())
-        }
+        },
 
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(

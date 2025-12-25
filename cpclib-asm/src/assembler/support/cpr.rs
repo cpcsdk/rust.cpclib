@@ -35,11 +35,11 @@ impl TryInto<Cpr> for &CprAssembler {
         let mut chunks = Vec::with_capacity(self.codes.len());
 
         for (code, page) in self.codes.iter().zip(self.pages.pages.iter()) {
-                let bank: Bank = page.try_into().map_err(|e: AssemblerError| {
-                    Box::new(AssemblerError::AssemblingError {
-                        msg: format!("Error when building CPR bloc {}. {}", code.1, e)
-                    })
-                })?;
+            let bank: Bank = page.try_into().map_err(|e: AssemblerError| {
+                Box::new(AssemblerError::AssemblingError {
+                    msg: format!("Error when building CPR bloc {}. {}", code.1, e)
+                })
+            })?;
             let riff_code = RiffCode::from(code.1.as_str());
             let riff = RiffChunk::new(riff_code, bank.into());
             let chunk: CartridgeBank = riff.try_into().unwrap();
@@ -137,7 +137,8 @@ impl CprAssembler {
                 return Err(Box::new(AssemblerError::AssemblingError {
                     msg: "Page output limit exceeded".to_owned()
                 }));
-            } else {
+            }
+            else {
                 self.pages
                     .selected_active_page_info_mut()
                     .unwrap()

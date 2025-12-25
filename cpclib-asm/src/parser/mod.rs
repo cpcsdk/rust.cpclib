@@ -14,7 +14,6 @@ pub mod source;
 #[macro_use]
 pub mod macros;
 
-
 pub use common::*;
 pub use context::*;
 pub use directives::*;
@@ -23,6 +22,6 @@ pub use expression::*;
 pub use instructions::*;
 pub use obtained::*;
 pub use orgams::*;
+pub use parser::ctx_and_span;
 pub use registers::*;
 pub use source::*;
-pub use parser::ctx_and_span;

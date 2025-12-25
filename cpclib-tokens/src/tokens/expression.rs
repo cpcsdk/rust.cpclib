@@ -62,131 +62,169 @@ impl<'e> From<&'e Expr> for Cow<'e, Expr> {
     }
 }
 
-impl<T> ExprElement for Box<T> where T: ExprElement {
+impl<T> ExprElement for Box<T>
+where T: ExprElement
+{
+    type Expr = T::Expr;
     type ResultExpr = T::ResultExpr;
     type Token = T::Token;
-    type Expr = T::Expr;
 
     fn to_expr(&self) -> Cow<'_, Expr> {
         self.as_ref().to_expr()
     }
+
     fn is_negated(&self) -> bool {
         self.as_ref().is_negated()
     }
+
     fn is_relative(&self) -> bool {
         self.as_ref().is_relative()
     }
+
     fn relative_delta(&self) -> i8 {
         self.as_ref().relative_delta()
     }
+
     fn is_value(&self) -> bool {
         self.as_ref().is_value()
     }
+
     fn value(&self) -> i32 {
         self.as_ref().value()
     }
+
     fn is_char(&self) -> bool {
         self.as_ref().is_char()
     }
+
     fn char(&self) -> char {
         self.as_ref().char()
     }
+
     fn is_bool(&self) -> bool {
         self.as_ref().is_bool()
     }
+
     fn bool(&self) -> bool {
         self.as_ref().bool()
     }
+
     fn is_string(&self) -> bool {
         self.as_ref().is_string()
     }
+
     fn string(&self) -> &str {
         self.as_ref().string()
     }
+
     fn is_float(&self) -> bool {
         self.as_ref().is_float()
     }
+
     fn float(&self) -> OrderedFloat<f64> {
         self.as_ref().float()
     }
+
     fn is_list(&self) -> bool {
         self.as_ref().is_list()
     }
+
     fn list(&self) -> &[Self::Expr] {
         self.as_ref().list()
     }
+
     fn is_label(&self) -> bool {
         self.as_ref().is_label()
     }
+
     fn label(&self) -> &str {
         self.as_ref().label()
     }
+
     fn is_token_operation(&self) -> bool {
         self.as_ref().is_token_operation()
     }
+
     fn token_operation(&self) -> &UnaryTokenOperation {
         self.as_ref().token_operation()
     }
+
     fn token(&self) -> &Self::Token {
         self.as_ref().token()
     }
+
     fn is_prefix_label(&self) -> bool {
         self.as_ref().is_prefix_label()
     }
+
     fn prefix(&self) -> &LabelPrefix {
         self.as_ref().prefix()
     }
+
     fn is_binary_operation(&self) -> bool {
         self.as_ref().is_binary_operation()
     }
+
     fn binary_operation(&self) -> BinaryOperation {
         self.as_ref().binary_operation()
     }
+
     fn is_unary_operation(&self) -> bool {
         self.as_ref().is_unary_operation()
     }
+
     fn unary_operation(&self) -> UnaryOperation {
         self.as_ref().unary_operation()
     }
+
     fn is_paren(&self) -> bool {
         self.as_ref().is_paren()
     }
+
     fn is_rnd(&self) -> bool {
         self.as_ref().is_rnd()
     }
+
     fn is_any_function(&self) -> bool {
         self.as_ref().is_any_function()
     }
+
     fn function_name(&self) -> &str {
         self.as_ref().function_name()
     }
+
     fn function_args(&self) -> &[Self::Expr] {
         self.as_ref().function_args()
     }
+
     fn arg1(&self) -> &Self::Expr {
         self.as_ref().arg1()
     }
+
     fn arg2(&self) -> &Self::Expr {
         self.as_ref().arg2()
     }
+
     fn neg(&self) -> Self::ResultExpr {
         self.as_ref().neg()
     }
+
     fn not(&self) -> Self::ResultExpr {
         self.as_ref().not()
     }
+
     fn add<E: Into<Self::ResultExpr>>(&self, v: E) -> Self::ResultExpr {
         self.as_ref().add(v)
     }
+
     fn is_context_independant(&self) -> bool {
         self.as_ref().is_context_independant()
     }
+
     fn fix_relative_value(&mut self) {
         self.as_mut().fix_relative_value()
     }
-    
 }
-
 
 /// All methods are unchecked
 pub trait ExprElement: Sized {
@@ -494,9 +532,9 @@ convert_number_to_expr!(i32 i16 i8 u8 u16 u32 usize);
 
 #[allow(missing_docs)]
 impl ExprElement for Expr {
+    type Expr = Expr;
     type ResultExpr = Expr;
     type Token = Token;
-    type Expr = Expr;
 
     fn to_expr(&self) -> Cow<'_, Expr> {
         Cow::Borrowed(self)

@@ -955,7 +955,7 @@ impl SymbolsTable {
     {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
-        
+
         let iter = self.map.iter();
         // eventually add the function frame
         let iter: Box<dyn Iterator<Item = (&Symbol, &ValueAndSource)>> =

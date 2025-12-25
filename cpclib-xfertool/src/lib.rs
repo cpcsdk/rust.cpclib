@@ -130,10 +130,12 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     let xfer = CpcXfer::new(hostname);
 
     if let Some("-r") = matches.subcommand_name() {
-        xfer.reset_m4().map_err(|e| anyhow::Error::msg(e.to_string()))?;
+        xfer.reset_m4()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some("-s") = matches.subcommand_name() {
-        xfer.reset_cpc().map_err(|e| anyhow::Error::msg(e.to_string()))?;
+        xfer.reset_cpc()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
         let fname: &Utf8PathBuf = p_opt.get_one("fname").unwrap();
@@ -171,16 +173,21 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     }
     else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.get_one::<String>("fname").unwrap();
-        xfer.run(fname).map_err(|e| anyhow::Error::msg(e.to_string()))?; // .expect("Unable to launch file on CPC.");
+        xfer.run(fname)
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?; // .expect("Unable to launch file on CPC.");
     }
     else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
-        let content = xfer.current_folder_content().map_err(|e| anyhow::Error::msg(e.to_string()))?;
+        let content = xfer
+            .current_folder_content()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
         for file in content.files() {
             println!("{file:?}");
         }
     }
     else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
-        let cwd = xfer.current_working_directory().map_err(|e| anyhow::Error::msg(e.to_string()))?;
+        let cwd = xfer
+            .current_working_directory()
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
         println!("{cwd}");
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {

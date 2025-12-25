@@ -110,15 +110,14 @@ impl CountedProgress {
         let visible = self.bar.is_some();
 
         if self.nb_done == self.nb_expected {
-            if visible
-                && let Some(bar) = self.bar.as_ref() {
-                    bar.set_message("");
-                    bar.set_position(self.nb_done);
-                    bar.set_length(self.nb_expected);
-                    bar.tick();
-                    // multi.remove(bar);
-                }
-                // self.bar = None;
+            if visible && let Some(bar) = self.bar.as_ref() {
+                bar.set_message("");
+                bar.set_position(self.nb_done);
+                bar.set_length(self.nb_expected);
+                bar.tick();
+                // multi.remove(bar);
+            }
+            // self.bar = None;
         }
         else {
             let content = self.current_items.iter().join(", ");

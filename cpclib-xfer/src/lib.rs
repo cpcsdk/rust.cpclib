@@ -9,7 +9,6 @@ use {cpclib_disc as disc, cpclib_sna as sna};
 use crate::disc::amsdos::AmsdosFileType;
 use crate::sna::{Snapshot, SnapshotVersion};
 
-
 custom_error! {#[allow(missing_docs)] pub XferError
     ConnectionError2{source: Box<dyn custom_error::Error>} = "There is a connection error with the Cpc Wifi.",
 
@@ -152,33 +151,38 @@ impl CpcXfer {
 
     /// Reset the M4
     pub fn reset_m4(&self) -> Result<(), Box<XferError>> {
-        self.simple_query(&[("mres", "")]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
+        self.simple_query(&[("mres", "")])
+            .map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Reset the Cpc
     pub fn reset_cpc(&self) -> Result<(), Box<XferError>> {
-        self.simple_query(&[("cres", "")]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
+        self.simple_query(&[("cres", "")])
+            .map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Run the file from the current selected path
     /// TODO debug this
     pub fn run_rom_current_path(&self, fname: &str) -> Result<(), Box<XferError>> {
-        self.simple_query(&[("run", fname)]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
+        self.simple_query(&[("run", fname)])
+            .map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Run the file whose complete path is provided
     pub fn run(&self, path: &str) -> Result<(), Box<XferError>> {
         let absolute = self.absolute_path(path)?;
-        self.simple_query(&[("run2", &absolute)]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
+        self.simple_query(&[("run2", &absolute)])
+            .map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Remove the file whose complete path is provided
     pub fn rm<S: AsRef<str>>(&self, path: S) -> Result<(), Box<XferError>> {
-        self.simple_query(&[("rm", path.as_ref())]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
+        self.simple_query(&[("rm", path.as_ref())])
+            .map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
@@ -237,9 +241,21 @@ impl CpcXfer {
             .add()
             .unwrap();
         let mut easy = Easy::new();
-        easy.url(&self.uri("files.shtml")).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
-        easy.httppost(form).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
-        easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.url(&self.uri("files.shtml")).map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
+        easy.httppost(form).map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
+        easy.perform().map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
 
         Ok(())
     }
@@ -268,7 +284,11 @@ impl CpcXfer {
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
         std::thread::sleep(std::time::Duration::from_secs(5));
-        temp_path.close().map_err(|e| Box::new(XferError::InternalError { reason: e.to_string() }))
+        temp_path.close().map_err(|e| {
+            Box::new(XferError::InternalError {
+                reason: e.to_string()
+            })
+        })
     }
 
     pub fn upload_and_run<P: AsRef<Utf8Path>>(
@@ -304,13 +324,26 @@ impl CpcXfer {
         {
             {
                 let mut easy = Easy::new();
-                easy.url(&self.uri("sd/m4/dir.txt")).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+                easy.url(&self.uri("sd/m4/dir.txt")).map_err(|e| {
+                    Box::new(XferError::ConnectionError2 {
+                        source: Box::new(e)
+                    })
+                })?;
                 let mut easy = easy.transfer();
                 easy.write_function(|data| {
                     dst.extend_from_slice(data);
                     Ok(data.len())
-                }).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
-                easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+                })
+                .map_err(|e| {
+                    Box::new(XferError::ConnectionError2 {
+                        source: Box::new(e)
+                    })
+                })?;
+                easy.perform().map_err(|e| {
+                    Box::new(XferError::ConnectionError2 {
+                        source: Box::new(e)
+                    })
+                })?;
             }
         }
 
@@ -375,10 +408,22 @@ impl CpcXfer {
     pub fn ls_request(&self, folder: &str) -> Result<(), Box<XferError>> {
         let mut easy = Easy::new();
         let folder = easy.url_encode(folder.as_bytes());
-        easy.get(true).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.get(true).map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
         let url = format!("{}?ls={}", self.uri("config.cgi"), folder);
-        easy.url(&url).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
-        easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.url(&url).map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
+        easy.perform().map_err(|e| {
+            Box::new(XferError::ConnectionError2 {
+                source: Box::new(e)
+            })
+        })?;
         Ok(())
     }
 }

@@ -113,7 +113,8 @@ fn expect_warning_but_success(real_fname: &str) {
 
     let content = if let Some(stripped) = content.strip_prefix(':') {
         stripped
-    } else {
+    }
+    else {
         &content[..]
     };
 
@@ -200,7 +201,8 @@ fn expect_one_line_success(real_fname: &str) {
 
     let content = if let Some(stripped) = content.strip_prefix(':') {
         stripped
-    } else {
+    }
+    else {
         &content[..]
     };
 

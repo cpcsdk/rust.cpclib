@@ -178,7 +178,8 @@ impl DecoratedPages {
             Err(Box::new(AssemblerError::AssemblingError {
                 msg: "There were less banks in previous pass".to_owned()
             }))
-        } else {
+        }
+        else {
             Ok(())
         }
     }

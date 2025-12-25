@@ -108,12 +108,10 @@ impl SourceString for &UnescapedString {
     }
 }
 
-
-
 impl ExprElement for LocatedExpr {
+    type Expr = LocatedExpr;
     type ResultExpr = Expr;
     type Token = LocatedToken;
-    type Expr = LocatedExpr;
 
     fn to_expr(&self) -> Cow<'_, Expr> {
         let expr = match self {
@@ -1454,7 +1452,6 @@ impl ListingElement for LocatedTokenInner {
             },
             Self::While(e, l) => Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing())),
             Self::Iterate(_name, _values, _code) => {
-                
                 todo!()
             },
             Self::Module(..) => todo!(),
@@ -1588,8 +1585,12 @@ impl ListingElement for LocatedTokenInner {
                     mask: mask.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
                     size: size.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
                     value: value.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    value_mask: value_mask.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
-                    condition: condition.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    value_mask: value_mask
+                        .as_ref()
+                        .map(|e| Box::new(e.to_expr().into_owned())),
+                    condition: condition
+                        .as_ref()
+                        .map(|e| Box::new(e.to_expr().into_owned())),
                     name: name.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
                     step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned()))
                 })
@@ -1745,8 +1746,7 @@ pub trait MayHaveSpan {
 }
 
 impl<T> MayHaveSpan for Box<T>
-where
-    T: MayHaveSpan
+where T: MayHaveSpan
 {
     fn possible_span(&self) -> Option<&Z80Span> {
         (**self).possible_span()
@@ -1759,7 +1759,7 @@ where
     fn has_span(&self) -> bool {
         (**self).has_span()
     }
-} 
+}
 
 impl MayHaveSpan for Token {
     fn possible_span(&self) -> Option<&Z80Span> {
@@ -2005,8 +2005,7 @@ pub trait Locate {
 }
 
 impl<T> Locate for Box<T>
-where
-    T: Locate
+where T: Locate
 {
     type Output = T::Output;
 

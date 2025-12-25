@@ -656,24 +656,17 @@ impl HardCodedFunction {
             },
             HardCodedFunction::MatrixGet => {
                 matrix_get(&params[0], params[1].int()? as _, params[2].int()? as _)
-                    
             },
-            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _)
-                ,
-            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _)
-                ,
+            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _),
+            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _),
             HardCodedFunction::MatrixSetRow => {
                 matrix_set_row(params[0].clone(), params[1].int()? as _, &params[2])
-                    
             },
             HardCodedFunction::MatrixSetCol => {
                 matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
-                    
             },
-            HardCodedFunction::MatrixWidth => matrix_width(&params[0])
-                ,
-            HardCodedFunction::MatrixHeight => matrix_height(&params[0])
-                ,
+            HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
+            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
                 let (data, _) = file::load_file((fname, env), env.options().parse_options())?;

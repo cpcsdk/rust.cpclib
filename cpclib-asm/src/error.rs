@@ -1,6 +1,8 @@
 impl From<AmsdosError> for Box<AssemblerError> {
     fn from(e: AmsdosError) -> Self {
-        Box::new(AssemblerError::AssemblingError { msg: format!("Amsdos error: {e:?}") })
+        Box::new(AssemblerError::AssemblingError {
+            msg: format!("Amsdos error: {e:?}")
+        })
     }
 }
 impl From<SnapshotError> for Box<AssemblerError> {
@@ -399,15 +401,15 @@ impl AssemblerError {
     }
 }
 
-    #[allow(unused)]
-    pub(crate) const LD_WRONG_SOURCE: &str = "LD: error in the source";
+#[allow(unused)]
+pub(crate) const LD_WRONG_SOURCE: &str = "LD: error in the source";
 pub(crate) const LD_WRONG_DESTINATION: &str = "LD: error in the destination";
 
 pub(crate) const JP_WRONG_PARAM: &str = "JP: error in the destination";
-    #[allow(unused)]
-    pub(crate) const JR_WRONG_PARAM: &str = "JR: error in the destination";
-    #[allow(unused)]
-    pub(crate) const CALL_WRONG_PARAM: &str = "CALL: error in the destination";
+#[allow(unused)]
+pub(crate) const JR_WRONG_PARAM: &str = "JR: error in the destination";
+#[allow(unused)]
+pub(crate) const CALL_WRONG_PARAM: &str = "CALL: error in the destination";
 
 pub(crate) const SNASET_WRONG_LABEL: &str = "SNASET: error in the option naming";
 pub(crate) const SNASET_MISSING_COMMA: &str = "SNASET: missing comma";

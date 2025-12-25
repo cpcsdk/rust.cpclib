@@ -53,8 +53,7 @@ pub trait ExprEvaluationExt: Display {
 }
 
 impl<T> ExprEvaluationExt for Box<T>
-where
-    T: ExprEvaluationExt + ?Sized,
+where T: ExprEvaluationExt + ?Sized
 {
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
         (**self).resolve(env)

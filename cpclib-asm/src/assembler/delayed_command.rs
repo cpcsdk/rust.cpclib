@@ -37,7 +37,9 @@ pub struct FailedAssertCommand {
 /// Expect an assert error or a exval error
 impl From<AssemblerError> for FailedAssertCommand {
     fn from(failure: AssemblerError) -> Self {
-        Self { failure: Box::new(failure) }
+        Self {
+            failure: Box::new(failure)
+        }
     }
 }
 
@@ -406,7 +408,8 @@ impl DelayedCommands {
     pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>> {
         if self.failed_assert_commands.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(Box::new(AssemblerError::MultipleErrors {
                 errors: self
                     .failed_assert_commands
@@ -446,7 +449,8 @@ impl DelayedCommands {
 
         if errors.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }

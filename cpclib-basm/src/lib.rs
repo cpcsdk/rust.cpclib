@@ -38,7 +38,7 @@ pub mod built_info {
 
 impl From<Box<AssemblerError>> for BasmError {
     fn from(error: Box<AssemblerError>) -> Self {
-        BasmError::AssemblerError { error}
+        BasmError::AssemblerError { error }
     }
 }
 
@@ -111,17 +111,16 @@ impl Display for BasmError {
             BasmError::InvalidArgument(msg) => {
                 write!(f, "Invalid argument: {msg}")
             },
-            BasmError::ErrorWithListing {
-                error,
-                listing: _
-            } => error.fmt(f)
+            BasmError::ErrorWithListing { error, listing: _ } => error.fmt(f)
         }
     }
 }
 
 impl From<AssemblerError> for BasmError {
     fn from(error: AssemblerError) -> Self {
-        BasmError::AssemblerError { error: Box::new(error) }
+        BasmError::AssemblerError {
+            error: Box::new(error)
+        }
     }
 }
 
@@ -136,7 +135,6 @@ impl From<AmsdosError> for BasmError {
         BasmError::AmsdosError(value)
     }
 }
-
 
 /// Parse the given code.
 /// TODO read options to configure the search path
@@ -621,7 +619,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 pub fn process(
     matches: &ArgMatches,
     o: Arc<dyn EnvEventObserver>
-    ) -> Result<(Env, Vec<Box<AssemblerError>>), BasmError> {
+) -> Result<(Env, Vec<Box<AssemblerError>>), BasmError> {
     // Handle the display of embedded files list
     if matches.get_flag("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
@@ -665,8 +663,10 @@ pub fn process(
 
         if warnings.len() > KEPT {
             o.emit_stderr("Warnings are considered to be errors. The first 10 have been kept.");
-        } else {
-            o.deref().emit_stderr("Warnings are considered to be errors.");
+        }
+        else {
+            o.deref()
+                .emit_stderr("Warnings are considered to be errors.");
         }
 
         // keep only the first 10
@@ -674,7 +674,8 @@ pub fn process(
             errors: warnings.into_iter().take(KEPT).collect_vec()
         }
         .into())
-    } else {
+    }
+    else {
         save(matches, &env)?;
         Ok((env, warnings))
     }

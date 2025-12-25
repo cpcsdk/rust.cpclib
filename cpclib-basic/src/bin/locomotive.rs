@@ -14,14 +14,13 @@
 
 use std::fs::File;
 use std::io::{Read, Write};
+use std::path::PathBuf;
 
 use cpclib_basic::{BasicProgram, binary_parser};
 use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
-use cpclib_common::clap::{Command, Arg, ArgAction};
+use cpclib_common::clap::{Arg, ArgAction, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
-
-use std::path::PathBuf;
 
 fn main() -> std::io::Result<()> {
     let matches = Command::new("locomotive")
@@ -80,7 +79,6 @@ fn main() -> std::io::Result<()> {
 
         if let Some(output) = matches.get_one::<PathBuf>("OUTPUT") {
             let mut f = File::create(output)?;
-
 
             // Add header if needed
             if matches.contains_id("HEADER") {

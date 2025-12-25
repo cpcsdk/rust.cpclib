@@ -194,8 +194,12 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 && expanded.starts_with('"')
                 && expanded.ends_with('"')
             {
-                expanded.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(expanded)
-            } else {
+                expanded
+                    .strip_prefix('"')
+                    .and_then(|s| s.strip_suffix('"'))
+                    .unwrap_or(expanded)
+            }
+            else {
                 expanded
             };
             patterns.push(pattern);

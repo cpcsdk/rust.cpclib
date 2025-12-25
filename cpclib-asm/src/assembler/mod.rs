@@ -42,11 +42,11 @@ use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
 use file::AnyFileNameOwned;
 use processed_token::build_processed_token;
+#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+use rayon_cond::CondIterator;
 use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
 use support::sna::SnaAssembler;
-#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use rayon_cond::CondIterator;
 
 use self::control::ControlOutputStore;
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
@@ -1293,7 +1293,8 @@ impl Env {
         // Errors are generated for the others
         if let Some(errors) = assert_failures {
             Err(errors)
-        } else {
+        }
+        else {
             Ok(())
         }
     }
@@ -1312,7 +1313,8 @@ impl Env {
         let observer = self.observer();
 
         let mut handle_page_info = |page: &PageInformation| {
-            let l_errors: Result<(), Box<AssemblerError>> = page.execute_print_or_pause(observer.deref());
+            let l_errors: Result<(), Box<AssemblerError>> =
+                page.execute_print_or_pause(observer.deref());
             match (&mut print_errors, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1355,7 +1357,8 @@ impl Env {
         // Errors are generated for the others
         if let Some(errors) = print_errors {
             Err(errors)
-        } else {
+        }
+        else {
             Ok(())
         }
     }
@@ -1802,7 +1805,8 @@ impl Env {
                             .find(|w| {
                                 if let AssemblerError::OverrideMemory(..) = &***w {
                                     true
-                                } else {
+                                }
+                                else {
                                     false
                                 }
                             })
@@ -3865,7 +3869,7 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
     span: Option<&Z80Span>
 ) -> Result<bool, Box<AssemblerError>>
 where
-    <E as cpclib_tokens::ExprElement>::Expr: crate::implementation::expression::ExprEvaluationExt,
+    <E as cpclib_tokens::ExprElement>::Expr: crate::implementation::expression::ExprEvaluationExt
 {
     if let Some(commands) = env.assembling_control_current_output_commands.last_mut() {
         commands.store_assert(exp.to_expr().into_owned(), txt.cloned(), span.cloned());
@@ -3960,11 +3964,11 @@ impl Env {
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
             return Err(Box::new(AssemblerError::RepeatIssue {
-                error: Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
-                    AssemblerError::AssemblingError {
+                error: Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Counter {counter_name} already exists")
-                    }
-                )))),
+                    })
+                ))),
                 span: span.cloned(),
                 repetition: 0
             }));
@@ -4449,7 +4453,8 @@ impl Env {
     fn to_assert_string<E>(&mut self, exp: &E) -> String
     where
         E: ExprEvaluationExt + ExprElement,
-        <E as ExprElement>::Expr: ExprEvaluationExt {
+        <E as ExprElement>::Expr: ExprEvaluationExt
+    {
         let mut format = |oper, left, right| {
             format!(
                 "0x{:x} {} 0x{:x}",
@@ -7004,7 +7009,6 @@ where
         Ok(bytes)
     }
 }
-
 
 fn assemble_bit_res_or_set<D: DataAccessElem>(
     mnemonic: Mnemonic,

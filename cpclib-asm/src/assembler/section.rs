@@ -1,4 +1,4 @@
-use crate::{Env, ExprResult, AssemblerError};
+use crate::{AssemblerError, Env, ExprResult};
 
 #[derive(Clone, Debug)]
 pub struct Section {
