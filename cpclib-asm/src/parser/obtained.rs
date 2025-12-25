@@ -1454,6 +1454,7 @@ impl ListingElement for LocatedTokenInner {
             },
             Self::While(e, l) => Cow::Owned(Token::While(e.to_expr().into_owned(), l.as_listing())),
             Self::Iterate(_name, _values, _code) => {
+                #[allow(unused)]
                 todo!()
             },
             Self::Module(..) => todo!(),

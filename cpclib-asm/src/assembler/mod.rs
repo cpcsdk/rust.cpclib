@@ -304,6 +304,7 @@ struct CrunchedSectionState {
     /// Start of the crunched section for code assembled from the sources.
     /// None for code assembled from tokens
     // mainly usefull for error messages; nothing more
+    #[allow(unused)]
     crunched_section_start: Option<Z80Span>
 }
 
@@ -4499,7 +4500,9 @@ impl Env {
         }
 
         if self.run_options.is_some() {
+            #[allow(unreachable_code)]
             return Err(Box::new(AssemblerError::RunAlreadySpecified));
+            #[allow(unreachable_code)]
             return Err(Box::new(AssemblerError::RunAlreadySpecified));
         }
         self.sna

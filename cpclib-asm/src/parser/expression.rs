@@ -658,9 +658,12 @@ pub fn comp(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError
 }
 
 // Constants for label validation (orgams-specific)
+#[allow(unused)]
 const STAND_ALONE_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"DB", b"DW", b"DS", b"ORG", b"EQU"];
+#[allow(unused)]
 const START_DIRECTIVE_ORGAMS: &[&[u8]] =
     &[b"REPEAT", b"REPT", b"MACRO", b"IF", b"IFDEF", b"IFNDEF"];
+#[allow(unused)]
 const END_DIRECTIVE_ORGAMS: &[&[u8]] = &[b"UNTIL", b"ENDM", b"ENDR", b"ENDIF"];
 
 // Flag parsing functions
@@ -1095,6 +1098,7 @@ where
             }
 
             #[inline]
+            #[allow(unused)]
             fn increment_borrowed_length(&mut self) {
                 match self {
                     CollectedString::Owned(..) => unreachable!(),
@@ -1105,6 +1109,7 @@ where
             }
 
             #[inline]
+            #[allow(unused)]
             fn as_slice(&self) -> &[u8] {
                 match self {
                     CollectedString::Owned(vec) => vec.as_slice(),

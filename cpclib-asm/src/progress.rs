@@ -43,6 +43,7 @@ struct CountedProgress {
     nb_expected: u64,
     nb_done: u64,
     prefix: &'static str,
+    #[allow(unused)]
     index: usize,
     freeze_amount: bool
 }

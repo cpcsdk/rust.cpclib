@@ -14,6 +14,7 @@ use super::{Env, EnvEventObserver};
 use crate::error::{AssemblerError, build_simple_error_message};
 use crate::preamble::Z80Span;
 
+#[allow(unused)]
 trait DelayedCommand {}
 
 #[derive(Debug, Clone)]

@@ -80,6 +80,7 @@ where
         Self {
             name: self.name.clone(),
             args: self.args.clone(),
+            #[allow(unused)]
             inner: todo!()
         }
     }

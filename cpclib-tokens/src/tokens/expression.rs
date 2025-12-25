@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, Deref, Sub};
+use std::ops::{Add, Sub};
 
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
