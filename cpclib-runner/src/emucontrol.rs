@@ -1715,7 +1715,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             }
 
             if emu_folder.exists() {
-                std::fs::rename(&emu_folder, &backup_folder)?;
+                std::fs::rename(&emu_folder, &backup_folder).map_err(|e| e.to_string())?;
             }
 
             Some((backup_folder, emu_folder))
@@ -1883,7 +1883,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
                 // restore previous
                 if backup_folder.exists() {
-                    let _ = std::fs::rename(&backup_folder, &emu_folder); // handle Result
+                    std::fs::rename(&backup_folder, &emu_folder).map_err(|e| e.to_string())?;
                 }
             }
         }

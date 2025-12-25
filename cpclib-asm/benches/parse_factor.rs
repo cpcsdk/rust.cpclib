@@ -13,11 +13,10 @@ fn bench_parse_factor(c: &mut Criterion) {
         &EXPR,
         |b, &expr| {
             b.iter(|| {
-                // let (_ctx, span) = ctx_and_span(expr); // Removed unresolved usage
-                // let span: cpclib_asm::Z80Span = span.clone(); // Removed unresolved usage
-                // let span: cpclib_asm::InnerZ80Span = span.into(); // Removed unresolved usage
-                // let _ = parse_factor.parse(span).unwrap(); // Removed unresolved usage
-            // TODO: Fix this benchmark after resolving ctx_and_span and span type issues
+                let (_ctx, span) = ctx_and_span(expr);
+                let span: cpclib_asm::Z80Span = span.clone();
+                let span: cpclib_asm::InnerZ80Span = span.into();
+                let _ = parse_factor.parse(span).unwrap();
             });
         }
     );

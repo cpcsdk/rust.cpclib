@@ -199,8 +199,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         alt((
             positive_number,
             parse_bool_value,
-            parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             prefixed_label_expr,
+            parse_label(false).map(|l| LocatedExpr::Label(l.into())),
             negative_number,
             parse_expr_bracketed_list.verify(|_| !is_orgams),
             // manage values
