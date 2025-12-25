@@ -177,7 +177,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         Low,
         LogicalNot,
         BinaryNot
-    };
+    }
 
     let (modifier, modifier_content) = opt(delimited(
         my_space0,

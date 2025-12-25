@@ -108,9 +108,12 @@ impl SourceString for &UnescapedString {
     }
 }
 
+
+
 impl ExprElement for LocatedExpr {
     type ResultExpr = Expr;
     type Token = LocatedToken;
+    type Expr = LocatedExpr;
 
     fn to_expr(&self) -> Cow<'_, Expr> {
         let expr = match self {
@@ -898,17 +901,17 @@ pub enum LocatedTokenInner {
     /// Breakpoints are quite biased toward Ace-Dl representation
     // for each field (span to the filed name, value with potential span)
     Breakpoint {
-        address: Option<LocatedExpr>,
+        address: Option<Box<LocatedExpr>>,
         r#type: Option<RemuBreakPointType>,
         access: Option<RemuBreakPointAccessMode>,
         run: Option<RemuBreakPointRunMode>,
-        mask: Option<LocatedExpr>,
-        size: Option<LocatedExpr>,
-        value: Option<LocatedExpr>,
-        value_mask: Option<LocatedExpr>,
-        condition: Option<LocatedExpr>,
-        name: Option<LocatedExpr>,
-        step: Option<LocatedExpr>
+        mask: Option<Box<LocatedExpr>>,
+        size: Option<Box<LocatedExpr>>,
+        value: Option<Box<LocatedExpr>>,
+        value_mask: Option<Box<LocatedExpr>>,
+        condition: Option<Box<LocatedExpr>>,
+        name: Option<Box<LocatedExpr>>,
+        step: Option<Box<LocatedExpr>>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
@@ -934,10 +937,10 @@ pub enum LocatedTokenInner {
     },
     For {
         label: Z80Span,
-        start: LocatedExpr,
-        stop: LocatedExpr,
-        step: Option<LocatedExpr>,
-        listing: LocatedListing
+        start: Box<LocatedExpr>,
+        stop: Box<LocatedExpr>,
+        step: Option<Box<LocatedExpr>>,
+        listing: Box<LocatedListing>
     },
     Function(Z80Span, Vec<Z80Span>, LocatedListing),
     If(
@@ -1463,10 +1466,10 @@ impl ListingElement for LocatedTokenInner {
             } => {
                 Cow::Owned(Token::For {
                     label: label.into(),
-                    start: start.to_expr().into_owned(),
-                    stop: stop.to_expr().into_owned(),
-                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
-                    listing: listing.as_listing()
+                    start: Box::new(start.to_expr().into_owned()),
+                    stop: Box::new(stop.to_expr().into_owned()),
+                    step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    listing: Box::new(listing.as_listing())
                 })
             },
             Self::Label(label) => Cow::Owned(Token::Label(label.into())),
@@ -1563,6 +1566,33 @@ impl ListingElement for LocatedTokenInner {
             },
 
             Self::Fail(msg) => Cow::Owned(Token::Fail(msg.clone())),
+            Self::Breakpoint {
+                address,
+                r#type,
+                access,
+                run,
+                mask,
+                size,
+                value,
+                value_mask,
+                condition,
+                name,
+                step
+            } => {
+                Cow::Owned(Token::Breakpoint {
+                    address: address.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    r#type: r#type.clone(),
+                    access: access.clone(),
+                    run: run.clone(),
+                    mask: mask.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    size: size.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    value: value.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    value_mask: value_mask.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    condition: condition.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    name: name.as_ref().map(|e| Box::new(e.to_expr().into_owned())),
+                    step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned()))
+                })
+            },
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
@@ -1712,6 +1742,23 @@ pub trait MayHaveSpan {
     fn span(&self) -> &Z80Span;
     fn has_span(&self) -> bool;
 }
+
+impl<T> MayHaveSpan for Box<T>
+where
+    T: MayHaveSpan
+{
+    fn possible_span(&self) -> Option<&Z80Span> {
+        (**self).possible_span()
+    }
+
+    fn span(&self) -> &Z80Span {
+        (**self).span()
+    }
+
+    fn has_span(&self) -> bool {
+        (**self).has_span()
+    }
+} 
 
 impl MayHaveSpan for Token {
     fn possible_span(&self) -> Option<&Z80Span> {
@@ -1954,6 +2001,17 @@ pub trait Locate {
     type Output;
 
     fn locate(self, span: Z80Span, size: usize) -> Self::Output;
+}
+
+impl<T> Locate for Box<T>
+where
+    T: Locate
+{
+    type Output = T::Output;
+
+    fn locate(self, span: Z80Span, size: usize) -> Self::Output {
+        (*self).locate(span, size)
+    }
 }
 // /
 // impl Locate for Token {

@@ -45,11 +45,15 @@ pub use cpclib_image::ga::{Ink, Palette, Pen};
 /// CPC Wifi extension related stuff. Useable
 #[cfg(any(feature = "xferlib", feature = "cpclib-xfer"))]
 pub use cpclib_xfer as xfer;
-pub use {
-    cpclib_asm as asm, cpclib_basic as basic, cpclib_common as common,
-    cpclib_crunchers as crunchers, cpclib_disc as disc, cpclib_image as image, cpclib_sna as sna,
-    cpclib_sprite_compiler as sprite_compiler, cpclib_z80emu as z80emu
-};
+pub use cpclib_asm as asm;
+pub use cpclib_basic as basic;
+pub use cpclib_common as common;
+pub use cpclib_crunchers as crunchers;
+pub use cpclib_disc as disc;
+pub use cpclib_image as image;
+pub use cpclib_sna as sna;
+pub use cpclib_sprite_compiler as sprite_compiler;
+pub use cpclib_z80emu as z80emu;
 
 /// Disk (edsk) manipulation. WIP
 // Some reexports

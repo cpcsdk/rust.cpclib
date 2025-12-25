@@ -3862,7 +3862,10 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
     txt: Option<&Vec<FormattedExpr>>,
     env: &mut Env,
     span: Option<&Z80Span>
-) -> Result<bool, Box<AssemblerError>> {
+) -> Result<bool, Box<AssemblerError>>
+where
+    <E as cpclib_tokens::ExprElement>::Expr: crate::implementation::expression::ExprEvaluationExt,
+{
     if let Some(commands) = env.assembling_control_current_output_commands.last_mut() {
         commands.store_assert(exp.to_expr().into_owned(), txt.cloned(), span.cloned());
     }
@@ -4442,7 +4445,10 @@ impl Env {
 
     /// Generate a string that is helpfull for assertion understanding (i.e. show the operation and evaluate the rest)
     /// Crash if expression cannot be computed
-    fn to_assert_string<E: ExprEvaluationExt + ExprElement>(&mut self, exp: &E) -> String {
+    fn to_assert_string<E>(&mut self, exp: &E) -> String
+    where
+        E: ExprEvaluationExt + ExprElement,
+        <E as ExprElement>::Expr: ExprEvaluationExt {
         let mut format = |oper, left, right| {
             format!(
                 "0x{:x} {} 0x{:x}",
@@ -6866,8 +6872,7 @@ where
         _ => panic!("Impossible case")
     };
 
-    match arg1.as_ref() {
-        None => {
+    if arg1.is_none() || arg1.as_ref().map(|arg1| arg1.is_register_a()).unwrap() {
         if arg2.is_address_in_hl() {
             if is_add {
                 bytes.push(0b1000_0110);
@@ -6923,11 +6928,8 @@ where
                 bytes.push(base | indexregister8_to_code(reg));
             }
         }
-        }
-        Some(arg1_ref) if arg1_ref.is_register_a() => {
-            // ...existing code for register A case...
-        }
-        Some(arg1_ref) if arg1_ref.is_register_hl() => {
+    }
+    else if arg1.as_ref().unwrap().is_register_hl() {
         if arg2.is_register16() {
             let reg = arg2.get_register16().unwrap();
             let base = if is_add {
@@ -6941,9 +6943,8 @@ where
             bytes.push(base | (register16_to_code_with_sp(reg) << 4));
         }
     }
-        }
-        Some(arg1_ref) if arg1_ref.is_indexregister16() => {
-            let reg1 = arg1_ref.get_indexregister16().unwrap();
+    else if arg1.as_ref().unwrap().is_indexregister16() {
+        let reg1 = arg1.as_ref().unwrap().get_indexregister16().unwrap();
         {
             if arg2.is_register16() {
                 let reg2 = arg2.get_register16().unwrap();
@@ -6987,7 +6988,6 @@ where
                 }
             }
         }
-        _ => {}
     }
 
     if bytes.is_empty() {
@@ -7001,6 +7001,7 @@ where
         Ok(bytes)
     }
 }
+
 
 fn assemble_bit_res_or_set<D: DataAccessElem>(
     mnemonic: Mnemonic,

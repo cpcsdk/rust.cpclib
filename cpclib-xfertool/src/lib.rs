@@ -164,7 +164,7 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
                     ..
                 }) = res
                 {
-                    send_and_run_file(&xfer, fname, true);
+                    let _ = send_and_run_file(&xfer, fname, true);
                 }
             }
         }

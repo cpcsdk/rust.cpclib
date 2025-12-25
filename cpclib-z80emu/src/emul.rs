@@ -489,7 +489,7 @@ mod test {
     fn jp_symbol() {
         let mut z80 = Z80::default();
         let mut symbols = SymbolsTableCaseDependent::default();
-        symbols.set_symbol_to_value("LABEL", cpclib_asm::Value::from(0x4000u16));
+        let _ = symbols.set_symbol_to_value("LABEL", cpclib_asm::Value::from(0x4000u16));
         z80.setup_symbol_table(&symbols);
 
         z80.pc_mut().set(0x4000);

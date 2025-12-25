@@ -171,15 +171,14 @@ impl DecoratedPages {
         self.pages.push(DecoratedPage::default());
     }
 
-    pub fn select_next(&mut self) -> Result<(), AssemblerError> {
+    pub fn select_next(&mut self) -> Result<(), Box<AssemblerError>> {
         self.selected_index = self.selected_index.map(|v| v + 1).or(Some(0));
 
         if *self.selected_index.as_ref().unwrap() >= self.pages.len() {
-            Err(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::AssemblingError {
                 msg: "There were less banks in previous pass".to_owned()
-            })
-        }
-        else {
+            }))
+        } else {
             Ok(())
         }
     }

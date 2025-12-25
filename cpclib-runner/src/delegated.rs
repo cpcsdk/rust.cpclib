@@ -469,7 +469,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
             std::fs::create_dir_all(&base_cache).unwrap();
         }
 
-        base_cache.join(self.folder).try_into().unwrap()
+        base_cache.join(self.folder)
     }
 
     pub fn exec_fname(&self) -> Utf8PathBuf {

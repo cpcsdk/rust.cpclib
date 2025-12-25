@@ -2222,6 +2222,7 @@ dependencies = [
  "built 0.7.7",
  "cfg-if",
  "cpclib-common",
+ "cpclib-disc",
  "cpclib-sna",
  "either",
  "paste",

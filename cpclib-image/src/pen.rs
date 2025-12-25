@@ -92,11 +92,11 @@ impl Pen {
         Self::Border
     ];
 
-    pub fn border() -> Self {
+    pub fn new_border() -> Self {
         Self::Border
     }
 
-    pub fn pen<T: Integer>(v: T) -> Self
+    pub fn new_pen<T: Integer>(v: T) -> Self
     where i32: From<T> {
         let mut p = Pen::from(v);
         p.limit(Mode::Zero); // ensure border is not set
@@ -202,7 +202,7 @@ mod test {
     #[test]
     fn pen_add() {
         for i in 0..16 {
-            assert_eq!(Pen::pen(0) + i, Pen::pen(i));
+            assert_eq!(Pen::new_pen(0) + i, Pen::new_pen(i));
         }
     }
 }

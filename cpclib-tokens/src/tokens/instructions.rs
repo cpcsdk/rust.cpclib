@@ -622,17 +622,17 @@ pub enum Token {
     Basic(Option<Vec<SmolStr>>, Option<Vec<Expr>>, String),
     Break,
     Breakpoint {
-        address: Option<Expr>,
+        address: Option<Box<Expr>>,
         r#type: Option<RemuBreakPointType>,
         access: Option<RemuBreakPointAccessMode>,
         run: Option<RemuBreakPointRunMode>,
-        mask: Option<Expr>,
-        size: Option<Expr>,
-        value: Option<Expr>,
-        value_mask: Option<Expr>,
-        condition: Option<Expr>,
-        name: Option<Expr>,
-        step: Option<Expr>
+        mask: Option<Box<Expr>>,
+        size: Option<Box<Expr>>,
+        value: Option<Box<Expr>>,
+        value_mask: Option<Box<Expr>>,
+        condition: Option<Box<Expr>>,
+        name: Option<Box<Expr>>,
+        step: Option<Box<Expr>>
     },
     BuildCpr,
     BuildSna(Option<SnapshotVersion>),
@@ -658,10 +658,10 @@ pub enum Token {
     },
     For {
         label: SmolStr,
-        start: Expr,
-        stop: Expr,
-        step: Option<Expr>,
-        listing: Listing
+        start: Box<Expr>,
+        stop: Box<Expr>,
+        step: Option<Box<Expr>>,
+        listing: Box<Listing>
     },
 
     /// Function embeds a listing with a limited number of possible instructions and return a value

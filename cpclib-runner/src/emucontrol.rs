@@ -428,7 +428,7 @@ pub fn merge_rasm_debug<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Result<Strin
     // collect all of them
     let mut content = String::new();
     for (i, fname) in from.iter().enumerate() {
-        std::fs::File::open(fname.as_ref())?.read_to_string(&mut content);
+        std::fs::File::open(fname.as_ref())?.read_to_string(&mut content)?;
         if i != from.len() - 1 && !content.ends_with(';') {
             content.push(';')
         }
@@ -1332,7 +1332,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
             Basic,
             Loading,
             Loaded
-        };
+        }
 
         // we check a specific pixel that goes from blue to black then purple
         let mut state = State::Basic;
@@ -1715,7 +1715,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             }
 
             if emu_folder.exists() {
-                std::fs::rename(&emu_folder, &backup_folder).unwrap();
+                std::fs::rename(&emu_folder, &backup_folder)?;
             }
 
             Some((backup_folder, emu_folder))
@@ -1883,7 +1883,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
                 // restore previous
                 if backup_folder.exists() {
-                    std::fs::rename(&backup_folder, &emu_folder); //.unwrap();
+                    let _ = std::fs::rename(&backup_folder, &emu_folder); // handle Result
                 }
             }
         }

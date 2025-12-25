@@ -206,12 +206,12 @@ pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Parse
 
     let token = LocatedTokenInner::For {
         label: counter.into(),
-        start,
-        stop,
-        step,
-        listing: inner
-    }
-    .into_located_token_between(&for_start, *input);
+        start: Box::new(start),
+        stop: Box::new(stop),
+        step: step.map(Box::new),
+        listing: Box::new(inner)
+    };
+    let token = token.into_located_token_between(&for_start, *input);
     Ok(token)
 }
 
@@ -1010,7 +1010,7 @@ pub fn parse_breakpoint(
         address: Rc::into_inner(address)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         r#type: Rc::into_inner(r#type)
             .expect("Rc should have single owner")
             .into_inner()
@@ -1026,31 +1026,31 @@ pub fn parse_breakpoint(
         mask: Rc::into_inner(mask)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         size: Rc::into_inner(size)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         value: Rc::into_inner(value)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         value_mask: Rc::into_inner(value_mask)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         condition: Rc::into_inner(condition)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         name: Rc::into_inner(name)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1),
+            .map(|a| Box::new(a.1)),
         step: Rc::into_inner(step)
             .expect("Rc should have single owner")
             .into_inner()
-            .map(|a| a.1)
+            .map(|a| Box::new(a.1))
     };
 
     Ok(brk)

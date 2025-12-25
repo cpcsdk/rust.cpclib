@@ -77,9 +77,9 @@ fn specific_test(folder: &str, fname: &str) {
 #[test]
 #[ignore]
 fn test_roudoudou_generated_code() {
-    std::fs::create_dir("generated_sprites");
+    let _ = std::fs::create_dir("generated_sprites");
     specific_test("tests/asm/roudoudou", "rasm_sprites.asm");
-    std::fs::remove_dir("generated_sprites");
+    let _ = std::fs::remove_dir("generated_sprites");
 }
 
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]

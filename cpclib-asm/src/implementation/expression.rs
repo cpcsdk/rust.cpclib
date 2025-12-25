@@ -52,6 +52,19 @@ pub trait ExprEvaluationExt: Display {
     fn symbols_used(&self) -> Vec<&str>;
 }
 
+impl<T> ExprEvaluationExt for Box<T>
+where
+    T: ExprEvaluationExt + ?Sized,
+{
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
+        (**self).resolve(env)
+    }
+
+    fn symbols_used(&self) -> Vec<&str> {
+        (**self).symbols_used()
+    }
+}
+
 #[macro_export]
 macro_rules! resolve_impl {
 

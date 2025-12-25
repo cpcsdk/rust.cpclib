@@ -79,7 +79,7 @@ impl Completer for XferInteractorHelper<'_> {
 }
 
 // stolen to rustyline ccode as it is not public
-const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
+// const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\'); // Unused constant
 cfg_if::cfg_if! {
     if #[cfg(unix)] {
         // rl_basic_word_break_characters, rl_completer_word_break_characters
@@ -90,7 +90,7 @@ cfg_if::cfg_if! {
         const ESCAPE_CHAR: Option<char> = Some('\\');
         // In double quotes, not all break_chars need to be escaped
         // https://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`'];
+        // const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 4] = [b'"', b'$', b'\\', b'`']; // Unused constant
     } else if #[cfg(windows)] {
         // Remove \ to make file completion works on windows
         const DEFAULT_BREAK_CHARS: [char; 17] = [
@@ -98,11 +98,11 @@ cfg_if::cfg_if! {
             '(', '\0',
         ];
         const ESCAPE_CHAR: Option<char> = None;
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // TODO Validate: only '"' ?
+        // const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 1] = [b'"']; // Unused constant
     } else if #[cfg(target_arch = "wasm32")] {
         const DEFAULT_BREAK_CHARS: [char; 0] = [];
         const ESCAPE_CHAR: Option<char> = None;
-        const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = [];
+        // const DOUBLE_QUOTES_SPECIAL_CHARS: [u8; 0] = []; // Unused constant
     }
 }
 
@@ -321,7 +321,7 @@ ls                  List the files in the current M4 directory.
                 },
 
                 XferCommand::LocalCommand(command) => {
-                    Exec::shell(command).join(); // ignore failure
+                    let _ = Exec::shell(command).join(); // ignore failure
                 },
 
                 XferCommand::Reboot => {
@@ -332,7 +332,7 @@ ls                  List the files in the current M4 directory.
                     self.xfer.reset_cpc().unwrap();
                 },
 
-                _ => unimplemented!()
+                // unreachable pattern arm removed
             }
         }
     }
@@ -378,7 +378,7 @@ ls                  List the files in the current M4 directory.
             match readline {
                 Ok(line) => {
                     self.treat_line(&line);
-                    rl.add_history_entry(line);
+                    let _ = rl.add_history_entry(line);
                 },
                 Err(ReadlineError::Interrupted) => {
                     println!("CTRL-C");

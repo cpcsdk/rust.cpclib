@@ -1,7 +1,6 @@
 use std::fs;
 
 use cpclib_common::camino::Utf8Path;
-use curl::Error;
 use curl::easy::{Easy, Form};
 use custom_error::custom_error;
 use path_absolutize::*;

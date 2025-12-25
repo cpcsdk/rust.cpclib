@@ -171,7 +171,7 @@ impl<'fname> AnyFileName<'fname> {
         &self,
         options: &ParserOptions,
         env: Option<&Env>
-    ) -> Result<Utf8PathBuf, AssemblerError> {
+    ) -> Result<Utf8PathBuf, Box<AssemblerError>> {
         let real_fname = self.base_filename();
 
         let res = options.get_path_for(real_fname, env).map_err(|e| {
@@ -234,7 +234,7 @@ pub fn get_filename_to_read<S: AsRef<str>>(
     fname: S,
     options: &ParserOptions,
     env: Option<&Env>
-) -> Result<Utf8PathBuf, AssemblerError> {
+    ) -> Result<Utf8PathBuf, Box<AssemblerError>> {
     let fname = fname.as_ref();
 
     AnyFileName::from(fname).path_for_base_filename(options, env)
@@ -247,7 +247,7 @@ pub fn get_filename_to_read<S: AsRef<str>>(
 pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
     fname: F,
     options: &ParserOptions
-) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AssemblerError> {
+    ) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), Box<AssemblerError>> {
     let fname = fname.into();
     let true_fname = match &fname.deref() {
         either::Either::Right((p, env)) => get_filename_to_read(p, options, Some(env))?,
@@ -318,7 +318,7 @@ pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
 pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
     fname: F,
     options: &ParserOptions
-) -> Result<Vec<u8>, AssemblerError> {
+    ) -> Result<Vec<u8>, Box<AssemblerError>> {
     let fname = fname.into();
 
     // Retreive fname
@@ -376,12 +376,12 @@ pub fn load_file_raw<'a, 'b, F: Into<Fname<'a, 'b>>>(
 pub fn read_source<P: AsRef<Utf8Path>>(
     fname: P,
     options: &ParserOptions
-) -> Result<String, AssemblerError> {
+    ) -> Result<String, Box<AssemblerError>> {
     let fname = fname.as_ref();
 
     let (mut content, header_removed) = load_file(fname, options)?;
     if let Some(header) = header_removed {
-        return Err(AssemblerError::BugInAssembler {
+        return Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!(
@@ -389,7 +389,7 @@ pub fn read_source<P: AsRef<Utf8Path>>(
                     {header:?}
                     ",
             )
-        });
+        }));
     }
 
     let content = content.make_contiguous();
@@ -400,7 +400,7 @@ pub fn read_source<P: AsRef<Utf8Path>>(
 
 // Never fail
 #[cfg(all(feature = "chardetng", not(target_arch = "wasm32")))]
-pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, AssemblerError> {
+    pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, Box<AssemblerError>> {
     let mut decoder = chardetng::EncodingDetector::new();
     decoder.feed(content, true);
     let encoding = decoder.guess(None, true);
@@ -412,7 +412,7 @@ pub fn handle_source_encoding(_fname: &str, content: &[u8]) -> Result<String, As
 }
 
 #[cfg(any(not(feature = "chardetng"), target_arch = "wasm32"))]
-pub fn handle_source_encoding(_fname: &str, _content: &[u8]) -> Result<String, AssemblerError> {
+    pub fn handle_source_encoding(_fname: &str, _content: &[u8]) -> Result<String, Box<AssemblerError>> {
     unimplemented!(
         "i have deactivated this stuff to speed up everything. Let's consider each source is UTF8!"
     )

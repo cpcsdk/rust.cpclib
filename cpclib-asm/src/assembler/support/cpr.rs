@@ -29,17 +29,17 @@ impl Default for CprAssembler {
 }
 
 impl TryInto<Cpr> for &CprAssembler {
-    type Error = AssemblerError;
+    type Error = Box<AssemblerError>;
 
-    fn try_into(self) -> Result<Cpr, AssemblerError> {
+    fn try_into(self) -> Result<Cpr, Self::Error> {
         let mut chunks = Vec::with_capacity(self.codes.len());
 
         for (code, page) in self.codes.iter().zip(self.pages.pages.iter()) {
-            let bank: Bank = page.try_into().map_err(|e: AssemblerError| {
-                AssemblerError::AssemblingError {
-                    msg: format!("Error when building CPR bloc {}. {}", code.1, e)
-                }
-            })?;
+                let bank: Bank = page.try_into().map_err(|e: AssemblerError| {
+                    Box::new(AssemblerError::AssemblingError {
+                        msg: format!("Error when building CPR bloc {}. {}", code.1, e)
+                    })
+                })?;
             let riff_code = RiffCode::from(code.1.as_str());
             let riff = RiffChunk::new(riff_code, bank.into());
             let chunk: CartridgeBank = riff.try_into().unwrap();
@@ -53,7 +53,7 @@ impl TryInto<Cpr> for &CprAssembler {
 }
 
 impl CprAssembler {
-    pub fn build_cpr(&self) -> Result<Cpr, AssemblerError> {
+    pub fn build_cpr(&self) -> Result<Cpr, Box<AssemblerError>> {
         self.try_into()
     }
 
@@ -127,16 +127,17 @@ impl CprAssembler {
     }
 
     /// Write the byte in the page and save this information in written bytes
-    pub fn set_byte(&mut self, address: u16, byte: u8) -> Result<(), AssemblerError> {
+    pub fn set_byte(&mut self, address: u16, byte: u8) -> Result<(), Box<AssemblerError>> {
         // update the page limit to unsure that 16kb is used at max
 
         if let Some(first) = self.pages.selected_active_page_info().unwrap().startadr {
             let max = (first as u32 + 0x4000).min(0xFFFF) as u16;
             if max > self.pages.selected_active_page_info().unwrap().output_limit {
                 dbg!(max, self.pages.selected_active_page_info());
-                todo!()
-            }
-            else {
+                return Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "Page output limit exceeded".to_owned()
+                }));
+            } else {
                 self.pages
                     .selected_active_page_info_mut()
                     .unwrap()

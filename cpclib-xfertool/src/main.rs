@@ -24,7 +24,7 @@ use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use {anyhow, cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
+use {cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(

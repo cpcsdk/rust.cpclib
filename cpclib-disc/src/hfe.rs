@@ -67,7 +67,7 @@ impl Disc for Hfe {
         track: u8,
         sector_id: u8
     ) -> Option<Vec<u8>> {
-        let hxcfe = Hxcfe::get();
+        let _hxcfe = Hxcfe::get();
 
         let head: i32 = head.into().into();
         assert!(head == 0 || head == 1);
@@ -103,9 +103,9 @@ impl Disc for Hfe {
     }
 
     fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
-        let s = side.into();
-        let access = self.img.sector_access().unwrap();
-        let mut min_sector = std::u8::MAX;
+        let _side = side.into();
+        let _access = self.img.sector_access().unwrap();
+        let mut min_sector = u8::MAX;
         for t in 0..(self.img.nb_tracks()) {
             for s in 0..self.img.nb_sides() {
                 min_sector = self.track_min_sector(s as u8, t as _);
@@ -139,6 +139,9 @@ impl Disc for Hfe {
     }
 
     fn next_position(&self, head: u8, track: u8, sector: u8) -> Option<(u8, u8, u8)> {
+        let _head = head;
+        let _track = track;
+        let _sector = sector;
         unimplemented!()
     }
 }

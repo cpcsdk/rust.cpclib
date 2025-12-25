@@ -350,7 +350,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
     struct CommentInConstruction {
         kind: CommentKind,
         content: String
-    };
+    }
 
     impl CommentInConstruction {
         fn consume(&mut self) -> String {
