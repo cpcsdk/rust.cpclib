@@ -109,7 +109,7 @@ macro_rules! parse_any_register8 {
         pub fn $name(i: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z80ParserError> {
             let span = parse_word($char)(i)?;
 
-            Ok((LocatedDataAccess::Register8($reg, span.into())))
+            Ok(LocatedDataAccess::Register8($reg, span.into()))
         }
     };
 }
@@ -281,7 +281,7 @@ macro_rules! parse_any_indexregister8 {
 
                 let span = input.clone().update_slice(span);
 
-                Ok((LocatedDataAccess::IndexRegister8(IndexRegister8::$reg, span.into())))
+                Ok(LocatedDataAccess::IndexRegister8(IndexRegister8::$reg, span.into()))
             }
         }
     )*}

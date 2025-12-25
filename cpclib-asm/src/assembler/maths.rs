@@ -36,7 +36,7 @@ pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerEr
 
 pub fn high(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     let arg = arg.int().map_err(AssemblerError::ExpressionTypeError)?;
-    Ok(((arg >> 8) & 0xFF).into())
+    Ok((arg >> 8 & 0xFF).into())
 }
 
 pub fn low(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
@@ -59,29 +59,29 @@ pub fn peek(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, Box<Assemb
 }
 
 pub fn floor(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.floor()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.floor().map_err(AssemblerError::ExpressionTypeError)?)
 }
 
 pub fn ceil(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.ceil()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.ceil().map_err(AssemblerError::ExpressionTypeError)?)
 }
 
 pub fn frac(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.frac()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.frac().map_err(AssemblerError::ExpressionTypeError)?)
 }
 
 pub fn int(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg
+    Ok(arg
         .int()
         .map(|i| i.into())
-        .map_err(AssemblerError::ExpressionTypeError)?))
+        .map_err(AssemblerError::ExpressionTypeError)?)
 }
 
 pub fn char(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg
+    Ok(arg
         .char()
         .map(|i| i.into())
-        .map_err(AssemblerError::ExpressionTypeError)?))
+        .map_err(AssemblerError::ExpressionTypeError)?)
 }
 
 pub fn sin(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, Box<AssemblerError>> {
@@ -102,26 +102,26 @@ pub fn sin(arg: &ExprResult, env: &crate::Env) -> Result<ExprResult, Box<Assembl
 }
 
 pub fn cos(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.cos()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.cos().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn asin(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.asin()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.asin().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn acos(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.acos()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.acos().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn abs(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.abs()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.abs().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn ln(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.ln()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.ln().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn log10(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.log10()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.log10().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn exp(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.exp()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.exp().map_err(AssemblerError::ExpressionTypeError)?)
 }
 pub fn sqrt(arg: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok((arg.sqrt()).map_err(AssemblerError::ExpressionTypeError)?)
+    Ok(arg.sqrt().map_err(AssemblerError::ExpressionTypeError)?)
 }

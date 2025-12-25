@@ -2691,7 +2691,7 @@ macro_rules! directive_with_expr {
         pub fn $name(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
             let exp = located_expr.parse_next(input)?;
 
-            Ok((LocatedTokenInner::$enum(exp)))
+            Ok(LocatedTokenInner::$enum(exp))
         }
     };
 }
