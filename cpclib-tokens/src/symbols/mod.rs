@@ -1,7 +1,7 @@
 pub mod address;
-pub mod values;
 pub mod table;
+pub mod values;
 
 pub use address::*;
-pub use values::*;
 pub use table::*;
+pub use values::*;

@@ -968,15 +968,16 @@ impl SymbolsTable {
 
         Ok(iter
             .filter(|(_k, v)| {
-                matches!((v.value(), r#for),
+                matches!(
+                    (v.value(), r#for),
                     (Value::Expr(_), SymbolFor::Number)
-                    | (Value::Expr(_), SymbolFor::Address)
-                    | (Value::Address(_), SymbolFor::Address)
-                    | (Value::Address(_), SymbolFor::Number)
-                    | (Value::Macro(_), SymbolFor::Macro)
-                    | (Value::Struct(_), SymbolFor::Struct)
-                    | (Value::Counter(_), SymbolFor::Counter)
-                    | (_, SymbolFor::Any)
+                        | (Value::Expr(_), SymbolFor::Address)
+                        | (Value::Address(_), SymbolFor::Address)
+                        | (Value::Address(_), SymbolFor::Number)
+                        | (Value::Macro(_), SymbolFor::Macro)
+                        | (Value::Struct(_), SymbolFor::Struct)
+                        | (Value::Counter(_), SymbolFor::Counter)
+                        | (_, SymbolFor::Any)
                 )
             })
             .map(|(k, _v)| k)

@@ -1,3 +1,23 @@
+impl From<AmsdosError> for Box<AssemblerError> {
+    fn from(e: AmsdosError) -> Self {
+        Box::new(AssemblerError::AssemblingError { msg: format!("Amsdos error: {e:?}") })
+    }
+}
+impl From<SnapshotError> for Box<AssemblerError> {
+    fn from(e: SnapshotError) -> Self {
+        Box::new(AssemblerError::AssemblingError {
+            msg: format!("Snapshot error: {e:?}")
+        })
+    }
+}
+
+impl From<BasicError> for Box<AssemblerError> {
+    fn from(e: BasicError) -> Self {
+        Box::new(AssemblerError::AssemblingError {
+            msg: format!("Basic error: {e:?}")
+        })
+    }
+}
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -44,7 +64,7 @@ pub enum AssemblerError {
 
     //#[fail(display = "Several errors arised: {:?}", errors)]
     MultipleErrors {
-        errors: Vec<AssemblerError>
+        errors: Vec<Box<AssemblerError>>
     },
 
     //#[fail(display = "{} cannot be empty.", 0)]
@@ -314,20 +334,19 @@ impl From<SymbolError> for AssemblerError {
             },
         }
     }
-    }
+}
 
-    impl From<ExpressionTypeError> for Box<AssemblerError> {
-        fn from(e: ExpressionTypeError) -> Self {
-            Box::new(AssemblerError::ExpressionTypeError(e))
-        }
+impl From<ExpressionTypeError> for Box<AssemblerError> {
+    fn from(e: ExpressionTypeError) -> Self {
+        Box::new(AssemblerError::ExpressionTypeError(e))
     }
+}
 
-    impl From<SymbolError> for Box<AssemblerError> {
-        fn from(err: SymbolError) -> Self {
-            Box::new(AssemblerError::from(err))
-        }
+impl From<SymbolError> for Box<AssemblerError> {
+    fn from(err: SymbolError) -> Self {
+        Box::new(AssemblerError::from(err))
     }
-
+}
 
 impl From<AmsdosError> for AssemblerError {
     fn from(err: AmsdosError) -> Self {

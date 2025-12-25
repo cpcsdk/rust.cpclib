@@ -71,7 +71,7 @@ pub fn parse_z80(tokens: TokenStream) -> TokenStream {
 
 fn get_listing(
     input: AssemblyMacroInput
-) -> std::result::Result<Listing, cpclib_asm::error::AssemblerError> {
+) -> std::result::Result<Listing, Box<cpclib_asm::error::AssemblerError>> {
     Listing::from_str(&input.code)
 }
 

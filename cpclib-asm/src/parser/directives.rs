@@ -2703,7 +2703,6 @@ directive_with_expr!(parse_return, Return);
 
 #[cfg(test)]
 mod tests {
-    
 
     use super::*;
     use crate::parser::parser::test::parse_test;

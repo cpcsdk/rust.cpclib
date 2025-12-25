@@ -42,7 +42,7 @@ impl SaveCommand {
 
     /// Really make the save - Prerequisit : the page is properly selected
     /// Do not yet handle the ascii format
-    pub fn execute_on(&self, env: &Env) -> Result<SavedFile, AssemblerError> {
+    pub fn execute_on(&self, env: &Env) -> Result<SavedFile, Box<AssemblerError>> {
         assert_eq!(env.ga_mmr, self.ga_mmr);
         if env.options().show_progress() {
             Progress::progress().add_save(progress::normalize(&self.file.filename()));

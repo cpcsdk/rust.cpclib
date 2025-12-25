@@ -119,7 +119,10 @@ pub enum Register8 {
 #[allow(missing_docs)]
 impl Register8 {
     pub fn is_high(self) -> bool {
-        matches!(self, Register8::A | Register8::B | Register8::D | Register8::H)
+        matches!(
+            self,
+            Register8::A | Register8::B | Register8::D | Register8::H
+        )
     }
 
     pub fn is_low(self) -> bool {

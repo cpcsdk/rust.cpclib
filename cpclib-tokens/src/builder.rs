@@ -92,7 +92,7 @@ pub fn assert_str<S: AsRef<str>>(expr: S) -> Token {
     Token::Assert(expr.as_ref().into(), None)
 }
 
-/// Generate a call
+/// Generate a comment
 #[allow(missing_docs)]
 pub fn comment<S: AsRef<str>>(label: S) -> Token {
     Token::Comment(label.as_ref().to_owned())
@@ -419,7 +419,12 @@ pub fn ld_l_mem_ix(expr: Expr) -> Token {
             else {
                 BinaryOperation::Add
             },
-            if expr.is_negated() { expr.negate() } else { expr }
+            if expr.is_negated() {
+                expr.negate()
+            }
+            else {
+                expr
+            }
         )
     )
 }

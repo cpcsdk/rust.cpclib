@@ -133,12 +133,18 @@ where
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
     ProcessedToken<'token, T>: FunctionBuilder + Clone
 {
-    pub fn eval(&self, env: &mut Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(
+        &self,
+        env: &mut Env,
+        params: &[ExprResult]
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         if self.args.len() != params.len() {
-            return Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                self.name.clone(),
-                Either::Left(self.args.len()),
-                params.len()
+            return Err(Box::new(
+                AssemblerError::FunctionWithWrongNumberOfArguments(
+                    self.name.clone(),
+                    Either::Left(self.args.len()),
+                    params.len()
+                )
             ));
         }
 
@@ -158,7 +164,7 @@ where
             for token in inner.iter_mut() {
                 token
                     .visited(env)
-                    .map_err(|e| AssemblerError::FunctionError(self.name.clone(), Box::new(e)))?;
+                    .map_err(|e| AssemblerError::FunctionError(self.name.clone(), e))?;
 
                 if let Some(return_value) = env.return_value.take() {
                     return Ok(return_value);
@@ -185,7 +191,9 @@ where
                 // }
             }
 
-            Err(AssemblerError::FunctionWithoutReturn(self.name.clone()))
+            Err(Box::new(AssemblerError::FunctionWithoutReturn(
+                self.name.clone()
+            )))
         };
 
         env.symbols_mut().enter_function();
@@ -410,15 +418,17 @@ pub enum ExpectedNbArgs {
 
 impl ExpectedNbArgs {
     /// Validate the number of arguments providated to a function
-    pub fn validate(&self, nb_args: usize, func_name: &str) -> Result<(), AssemblerError> {
+    pub fn validate(&self, nb_args: usize, func_name: &str) -> Result<(), Box<AssemblerError>> {
         match self {
             ExpectedNbArgs::Unknown => Ok(()),
             ExpectedNbArgs::Fixed(expected) => {
                 if *expected != nb_args {
-                    Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                        func_name.into(),
-                        Either::Left(*expected),
-                        nb_args
+                    Err(Box::new(
+                        AssemblerError::FunctionWithWrongNumberOfArguments(
+                            func_name.into(),
+                            Either::Left(*expected),
+                            nb_args
+                        )
                     ))
                 }
                 else {
@@ -430,10 +440,12 @@ impl ExpectedNbArgs {
                     Ok(())
                 }
                 else {
-                    Err(AssemblerError::FunctionWithWrongNumberOfArguments(
-                        func_name.into(),
-                        Either::Right(*expected),
-                        nb_args
+                    Err(Box::new(
+                        AssemblerError::FunctionWithWrongNumberOfArguments(
+                            func_name.into(),
+                            Either::Right(*expected),
+                            nb_args
+                        )
                     ))
                 }
             },
@@ -511,7 +523,11 @@ impl HardCodedFunction {
             .unwrap() // Cannot fail by definition
     }
 
-    pub fn eval(&self, env: &Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(
+        &self,
+        env: &Env,
+        params: &[ExprResult]
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         let expected_nb_args = self.expected_nb_args();
         let nb_args = params.len();
 
@@ -639,17 +655,24 @@ impl HardCodedFunction {
             },
             HardCodedFunction::MatrixGet => {
                 matrix_get(&params[0], params[1].int()? as _, params[2].int()? as _)
+                    
             },
-            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _),
-            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _),
+            HardCodedFunction::MatrixCol => matrix_col(&params[0], params[1].int()? as _)
+                ,
+            HardCodedFunction::MatrixRow => matrix_row(&params[0], params[1].int()? as _)
+                ,
             HardCodedFunction::MatrixSetRow => {
                 matrix_set_row(params[0].clone(), params[1].int()? as _, &params[2])
+                    
             },
             HardCodedFunction::MatrixSetCol => {
                 matrix_set_col(params[0].clone(), params[1].int()? as _, &params[2])
+                    
             },
-            HardCodedFunction::MatrixWidth => matrix_width(&params[0]),
-            HardCodedFunction::MatrixHeight => matrix_height(&params[0]),
+            HardCodedFunction::MatrixWidth => matrix_width(&params[0])
+                ,
+            HardCodedFunction::MatrixHeight => matrix_height(&params[0])
+                ,
             HardCodedFunction::Load => {
                 let fname = params[0].string()?;
                 let (data, _) = file::load_file((fname, env), env.options().parse_options())?;
@@ -678,9 +701,9 @@ impl HardCodedFunction {
                     #[cfg(not(target_arch = "wasm32"))]
                     b"LZAPU" => CrunchType::LZAPU,
                     _ => {
-                        return Err(AssemblerError::AssemblingError {
+                        return Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{crunch_type} is not a valid crunch")
-                        });
+                        }));
                     }
                 };
 
@@ -700,30 +723,30 @@ impl HardCodedFunction {
             },
             HardCodedFunction::UnaryFunction(unary_function) => {
                 match unary_function {
-                    UnaryFunction::High => maths::high(&params[0]),
-                    UnaryFunction::Low => maths::low(&params[0]),
-                    UnaryFunction::Char => maths::char(&params[0]),
-                    UnaryFunction::Floor => maths::floor(&params[0]),
-                    UnaryFunction::Ceil => maths::ceil(&params[0]),
-                    UnaryFunction::Frac => maths::frac(&params[0]),
-                    UnaryFunction::Int => maths::int(&params[0]),
-                    UnaryFunction::Sin => maths::sin(&params[0], env),
-                    UnaryFunction::Cos => maths::cos(&params[0]),
-                    UnaryFunction::ASin => maths::asin(&params[0]),
-                    UnaryFunction::ACos => maths::acos(&params[0]),
-                    UnaryFunction::Abs => maths::abs(&params[0]),
-                    UnaryFunction::Ln => maths::ln(&params[0]),
-                    UnaryFunction::Log10 => maths::log10(&params[0]),
-                    UnaryFunction::Exp => maths::exp(&params[0]),
-                    UnaryFunction::Sqrt => maths::sqrt(&params[0]),
-                    UnaryFunction::Peek => maths::peek(&params[0], env)
+                    UnaryFunction::High => Ok(maths::high(&params[0])?),
+                    UnaryFunction::Low => Ok(maths::low(&params[0])?),
+                    UnaryFunction::Char => Ok(maths::char(&params[0])?),
+                    UnaryFunction::Floor => Ok(maths::floor(&params[0])?),
+                    UnaryFunction::Ceil => Ok(maths::ceil(&params[0])?),
+                    UnaryFunction::Frac => Ok(maths::frac(&params[0])?),
+                    UnaryFunction::Int => Ok(maths::int(&params[0])?),
+                    UnaryFunction::Sin => Ok(maths::sin(&params[0], env)?),
+                    UnaryFunction::Cos => Ok(maths::cos(&params[0])?),
+                    UnaryFunction::ASin => Ok(maths::asin(&params[0])?),
+                    UnaryFunction::ACos => Ok(maths::acos(&params[0])?),
+                    UnaryFunction::Abs => Ok(maths::abs(&params[0])?),
+                    UnaryFunction::Ln => Ok(maths::ln(&params[0])?),
+                    UnaryFunction::Log10 => Ok(maths::log10(&params[0])?),
+                    UnaryFunction::Exp => Ok(maths::exp(&params[0])?),
+                    UnaryFunction::Sqrt => Ok(maths::sqrt(&params[0])?),
+                    UnaryFunction::Peek => Ok(maths::peek(&params[0], env)?)
                 }
             },
             HardCodedFunction::BinaryFunction(binary_function) => {
                 match binary_function {
-                    BinaryFunction::Min => maths::min(&params[0], &params[1]),
-                    BinaryFunction::Max => maths::max(&params[0], &params[1]),
-                    BinaryFunction::Pow => maths::pow(&params[0], &params[1])
+                    BinaryFunction::Min => Ok(maths::min(&params[0], &params[1])?),
+                    BinaryFunction::Max => Ok(maths::max(&params[0], &params[1])?),
+                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?)
                 }
             },
         }
@@ -736,12 +759,12 @@ impl Function {
         name: &S1,
         args: &[S2],
         inner: Vec<ProcessedToken<'_, LocatedToken>>
-    ) -> Result<Self, AssemblerError> {
+    ) -> Result<Self, Box<AssemblerError>> {
         unsafe {
             if inner.is_empty() {
-                return Err(AssemblerError::FunctionWithEmptyBody(
+                return Err(Box::new(AssemblerError::FunctionWithEmptyBody(
                     name.as_ref().to_owned()
-                ));
+                )));
             }
 
             let inner = std::mem::transmute(inner);
@@ -754,12 +777,12 @@ impl Function {
         name: &S1,
         args: &[S2],
         inner: Vec<ProcessedToken<'_, Token>>
-    ) -> Result<Self, AssemblerError> {
+    ) -> Result<Self, Box<AssemblerError>> {
         unsafe {
             if inner.is_empty() {
-                return Err(AssemblerError::FunctionWithEmptyBody(
+                return Err(Box::new(AssemblerError::FunctionWithEmptyBody(
                     name.as_ref().to_owned()
-                ));
+                )));
             }
 
             let inner = std::mem::transmute(inner);
@@ -770,7 +793,11 @@ impl Function {
 
     /// Be sure the function lives shorter than inner
 
-    pub fn eval(&self, env: &mut Env, params: &[ExprResult]) -> Result<ExprResult, AssemblerError> {
+    pub fn eval(
+        &self,
+        env: &mut Env,
+        params: &[ExprResult]
+    ) -> Result<ExprResult, Box<AssemblerError>> {
         match self {
             Self::Located(f) => f.eval(env, params),
             Self::Standard(f) => f.eval(env, params),
@@ -784,7 +811,7 @@ pub trait FunctionBuilder {
         name: &S1,
         args: &[S2],
         inner: Vec<Self>
-    ) -> Result<Function, AssemblerError>
+    ) -> Result<Function, Box<AssemblerError>>
     where
         Self: Sized;
 }
@@ -794,7 +821,7 @@ impl FunctionBuilder for ProcessedToken<'_, LocatedToken> {
         name: &S1,
         args: &[S2],
         inner: Vec<Self>
-    ) -> Result<Function, AssemblerError>
+    ) -> Result<Function, Box<AssemblerError>>
     where
         Self: Sized
     {
@@ -807,7 +834,7 @@ impl FunctionBuilder for ProcessedToken<'_, Token> {
         name: &S1,
         args: &[S2],
         inner: Vec<Self>
-    ) -> Result<Function, AssemblerError>
+    ) -> Result<Function, Box<AssemblerError>>
     where
         Self: Sized
     {
@@ -818,14 +845,14 @@ impl FunctionBuilder for ProcessedToken<'_, Token> {
 /// Assemble a simple listing with no directives.
 /// Warning !!! As the env is read only, we cannot assemble directly inside
 /// To overcome that, we use a bank in a copied Env. It has not been deeply tested
-pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, AssemblerError> {
+pub fn assemble(code: ExprResult, base_env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     let code = match code {
         ExprResult::String(code) => code,
         _ => {
-            return Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: "Wrong type. String expected".to_owned()
-                })
+                }))
             )));
         }
     };

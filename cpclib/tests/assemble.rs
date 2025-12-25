@@ -1,16 +1,16 @@
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, RwLock};
+
     use cpclib_asm::assembler::processed_token::build_processed_token;
     use cpclib_asm::preamble::*;
 
-    use std::sync::{Arc, RwLock};
-
-    fn visit_token(token: &Token, env: Arc<RwLock<&mut Env>>) -> Result<(), AssemblerError> {
+    fn visit_token(token: &Token, env: Arc<RwLock<&mut Env>>) -> Result<(), Box<AssemblerError>> {
         let processed = build_processed_token(token, Arc::clone(&env));
         processed?.visited(&mut *env.write().unwrap())
     }
 
-    fn visit_tokens(tokens: &[Token]) -> Result<Env, AssemblerError> {
+    fn visit_tokens(tokens: &[Token]) -> Result<Env, Box<AssemblerError>> {
         let mut env = Env::default();
         let env_arc = Arc::new(RwLock::new(&mut env));
         for t in tokens.iter() {
@@ -27,14 +27,14 @@ mod tests {
         visit_token(
             &Token::Org {
                 val1: Expr::Value(10),
-                val2: None,
+                val2: None
             },
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
         visit_token(
             &Token::Defb(vec![Expr::Value(10), Expr::Value(5)]),
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
         visit_token(
@@ -42,9 +42,9 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
     }
@@ -60,9 +60,9 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::A)),
-                None,
+                None
             ),
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
         assert_eq!(env_arc.read().unwrap().peek(&0x0000.into()), 0x7F);
@@ -72,9 +72,9 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
         assert_eq!(env_arc.read().unwrap().peek(&0x0001.into()), 0x7D);
@@ -84,9 +84,9 @@ mod tests {
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::C)),
                 Some(DataAccess::Register8(Register8::C)),
-                None,
+                None
             ),
-            Arc::clone(&env_arc),
+            Arc::clone(&env_arc)
         )
         .unwrap();
         assert_eq!(env_arc.read().unwrap().peek(&0x0002.into()), 0x49);
@@ -97,13 +97,13 @@ mod tests {
         let tokens = vec![
             Token::Org {
                 val1: Expr::Value(10),
-                val2: None,
+                val2: None
             },
             Token::OpCode(
                 Mnemonic::Ld,
                 Some(DataAccess::Register8(Register8::A)),
                 Some(DataAccess::Register8(Register8::L)),
-                None,
+                None
             ),
         ];
 

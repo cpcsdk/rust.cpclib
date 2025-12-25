@@ -37,7 +37,7 @@ pub fn compress(data: &[u8]) -> Vec<u8> {
 
     if lenout > 0 {
         unsafe { libc::free(dataout as _) };
-        }
+    }
 
     crunched
 }

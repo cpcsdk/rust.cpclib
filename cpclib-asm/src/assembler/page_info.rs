@@ -48,28 +48,23 @@ impl PageInformation {
     delegate::delegate! {
         to self.delayed_commands {
             pub fn add_breakpoint_command(&mut self, command: BreakpointCommand);
-
             pub fn add_save_command(&mut self, command: SaveCommand);
             pub fn add_failed_assert_command(&mut self, command: FailedAssertCommand);
             pub fn add_print_command(&mut self, command: PrintCommand);
             pub fn add_pause_command(&mut self, command: PauseCommand);
             pub fn add_print_or_pause_command(&mut self, command: PrintOrPauseCommand);
-
             pub fn print_commands(&self) -> &[PrintOrPauseCommand];
             pub fn print_commands_mut(&mut self) -> &mut [PrintOrPauseCommand];
-
-            pub fn failed_assert_commands(&self) -> &[FailedAssertCommand] ;
-            pub fn failed_assert_commands_mut(&mut self) -> &mut[FailedAssertCommand] ;
-
+            pub fn failed_assert_commands(&self) -> &[FailedAssertCommand];
+            pub fn failed_assert_commands_mut(&mut self) -> &mut [FailedAssertCommand];
             pub fn can_save_in_parallel(&self) -> bool;
             pub fn get_save_mmrs(&self) -> Vec<u8>;
-            pub fn execute_save(&self, env: &Env, mmr: u8) -> Result<Vec<SavedFile>, AssemblerError>;
+            pub fn execute_save(&self, env: &Env, mmr: u8) -> Result<Vec<SavedFile>, Box<AssemblerError>>;
             pub fn nb_files_to_save(&self) -> usize;
-            pub fn collect_assert_failure(&self) -> Result<(), AssemblerError>;
-            pub fn execute_print_or_pause(&self, o: &dyn EnvEventObserver)-> Result<(), AssemblerError>;
+            pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>>;
+            pub fn execute_print_or_pause(&self, o: &dyn EnvEventObserver)-> Result<(), Box<AssemblerError>>;
             pub fn collect_breakpoints(&self)-> &[BreakpointCommand];
         }
-
     }
 
     /// Properly set the information for a new pass
@@ -83,23 +78,23 @@ impl PageInformation {
         self.delayed_commands.clear();
     }
 
-    pub fn set_limit(&mut self, l: u16) -> Result<(), AssemblerError> {
+    pub fn set_limit(&mut self, l: u16) -> Result<(), Box<AssemblerError>> {
         if l > self.output_limit {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!(
                     "Cannot set a limit of &{:X} as a former limit of &{:X} is already set up",
                     l, self.output_limit
                 )
-            });
+            }));
         }
 
         if l < self.maxadr {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!(
                     "Cannot set a limit of &{:X} as some bytes has been written at &{:X}p",
                     l, self.maxadr
                 )
-            });
+            }));
         }
 
         self.output_limit = l;

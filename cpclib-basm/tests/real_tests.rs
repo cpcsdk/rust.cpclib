@@ -47,7 +47,7 @@ fn manual_cleanup() {
 fn command_for_generated_test(
     fname: &str,
     output: &str
-) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+) -> Result<(Env, Vec<Box<AssemblerError>>), BasmError> {
     let args_parser = build_args_parser();
     let args =
         args_parser.get_matches_from(["basm", "-I", "tests/asm/", "-i", "-o", output, fname]);

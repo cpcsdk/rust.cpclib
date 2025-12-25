@@ -111,7 +111,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
         tokens: &'token [T],
         span: Option<Z80Span>,
         env: Arc<RwLock<&mut Env>>
-    ) -> Result<Self, AssemblerError> {
+    ) -> Result<Self, Box<AssemblerError>> {
         Ok(Self {
             processed_tokens: build_processed_tokens_list(tokens, env)?,
             span
@@ -141,12 +141,12 @@ impl IncludeState {
         &mut self,
         env: Arc<RwLock<&mut Env>>,
         fname: &Utf8PathBuf
-    ) -> Result<&mut IncludeStateInner, AssemblerError> {
+    ) -> Result<&mut IncludeStateInner, Box<AssemblerError>> {
         if cfg!(target_arch = "wasm32") {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: "INCLUDE-like directives are not allowed in a web-based assembling."
                     .to_owned()
-            });
+            }));
         }
 
         // Build the state if needed / retreive it otherwise
@@ -207,7 +207,7 @@ impl IncludeState {
         fname: &str,
         namespace: Option<&str>,
         once: bool
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let fname = {
             let env_guard = env.read().unwrap();
             let options = env_guard.options().parse_options();
@@ -346,7 +346,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
         test: &<T as ListingElement>::TestKind,
         env: &mut Env,
         flag_failure: &cpclib_tokens::ExprResult
-    ) -> Result<Option<bool>, AssemblerError>
+    ) -> Result<Option<bool>, Box<AssemblerError>>
     where
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt
@@ -371,7 +371,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
         token_adr: usize,
         env: &Env,
         request_additional_pass: &mut bool
-    ) -> Result<bool, AssemblerError> {
+    ) -> Result<bool, Box<AssemblerError>> {
         let label = test.label_unchecked();
         let is_used = env.symbols().is_used(label);
         let decision = if test.is_label_used_test() {
@@ -404,7 +404,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
         &self,
         test: &<T as ListingElement>::TestKind,
         env: &Env
-    ) -> Result<bool, AssemblerError> {
+    ) -> Result<bool, Box<AssemblerError>> {
         let label = test.label_unchecked();
         let exists = env.symbols().symbol_exist_in_current_pass(label)?;
         Ok(if test.is_label_exists_test() {
@@ -418,7 +418,7 @@ where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
     fn choose_listing_to_assemble(
         &mut self,
         env: &mut Env
-    ) -> Result<Option<&mut [ProcessedToken<'token, T>]>, AssemblerError>
+    ) -> Result<Option<&mut [ProcessedToken<'token, T>]>, Box<AssemblerError>>
     where
         <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
             ExprEvaluationExt,
@@ -516,7 +516,7 @@ fn build_simple_listing_state<'token, T: Visited + Debug + Sync + ListingElement
     listing: &'token [T],
     span: Option<Z80Span>,
     env: Arc<RwLock<&mut Env>>
-) -> Result<SimpleListingState<'token, T>, AssemblerError>
+) -> Result<SimpleListingState<'token, T>, Box<AssemblerError>>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
@@ -553,7 +553,7 @@ fn relocate_error_with_span<T: MayHaveSpan>(error: AssemblerError, token: &T) ->
 pub fn build_processed_token<'token, T: Visited + Debug + Sync + ListingElement + MayHaveSpan>(
     token: &'token T,
     env: Arc<RwLock<&mut Env>>
-) -> Result<ProcessedToken<'token, T>, AssemblerError>
+) -> Result<ProcessedToken<'token, T>, Box<AssemblerError>>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
@@ -761,7 +761,7 @@ pub fn build_processed_tokens_list<
 >(
     tokens: &'token [T],
     env: Arc<RwLock<&mut Env>>
-) -> Result<Vec<ProcessedToken<'token, T>>, AssemblerError>
+) -> Result<Vec<ProcessedToken<'token, T>>, Box<AssemblerError>>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync
 {
@@ -805,7 +805,7 @@ where
 pub fn visit_processed_tokens<'token, T: Visited + Debug + ListingElement + Sync + MayHaveSpan>(
     tokens: &mut [ProcessedToken<'token, T>],
     env: &mut Env
-) -> Result<(), AssemblerError>
+) -> Result<(), Box<AssemblerError>>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr: ExprEvaluationExt,
@@ -864,8 +864,13 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 {
     /// Generate the tokens needed for the macro or the struct
     #[inline]
-    pub fn update_macro_or_struct_state(&mut self, env: &mut Env) -> Result<(), AssemblerError>
-    where <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt {
+    pub fn update_macro_or_struct_state(
+        &mut self,
+        env: &mut Env
+    ) -> Result<(), Box<AssemblerError>>
+    where
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt
+    {
         let caller = self.token;
         let name = caller.macro_call_name();
         let parameters = caller.macro_call_arguments();
@@ -912,7 +917,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                         .closest_symbol(name, SymbolFor::Macro)?
                         .map(|s| s.into())
                 };
-                return Err(relocate_error_with_span(e, self.token));
+                return Err(Box::new(relocate_error_with_span(e, self.token)));
             }
 
             // get the generated code
@@ -985,7 +990,7 @@ where
     ProcessedToken<'token, T>: FunctionBuilder
 {
     /// Due to the state management, the signature requires mutability
-    pub fn visited(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    pub fn visited(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         let possible_span = self.possible_span().cloned();
 
         // Always work with Arc<RwLock<&mut Env>>
@@ -1140,9 +1145,9 @@ where
                                         "{} seems to be a source code and not a binary file.",
                                         &fname
                                     );
-                                    env.add_warning(dbg!(AssemblerWarning::AssemblingError {
-                                        msg: warning
-                                    }));
+                                    env.add_warning(Box::new(dbg!(
+                                        AssemblerWarning::AssemblingError { msg: warning }
+                                    )));
                                 },
                                 _ => {}
                             }
@@ -1181,7 +1186,7 @@ where
                                     warning
                                 };
 
-                                env.add_warning(warning)
+                                env.add_warning(Box::new(warning))
                             }
 
                             contents
@@ -1325,7 +1330,7 @@ where
 
                             let e = AssemblerError::MacroError {
                                 name: name.into(),
-                                root: Box::new(e),
+                                root: e,
                                 location
                             };
                             let _caller_span = self.possible_span();
@@ -1427,8 +1432,7 @@ where
                                 .clone()
                         };
                         let warning = AssemblerError::AlreadyRenderedError(warning.to_string());
-
-                        env.add_warning(warning);
+                        env.add_warning(Box::new(warning));
                         token.visited(env)
                     },
                     Some(ProcessedTokenState::While(SimpleListingState {
@@ -1467,7 +1471,7 @@ where
                 Some(span) => e.locate(span.clone()),
                 None => e
             };
-            AssemblerError::AlreadyRenderedError(e.to_string())
+            Box::new(AssemblerError::AlreadyRenderedError(e.to_string()))
         })
     }
 }

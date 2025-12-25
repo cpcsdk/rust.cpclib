@@ -16,26 +16,26 @@ pub trait ListingExt {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S
-    ) -> Result<(), AssemblerError>;
+    ) -> Result<(), Box<AssemblerError>>;
 
     /// Assemble the listing (without context) and returns the bytes
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes(&self) -> Result<Vec<u8>, Box<AssemblerError>> {
         let options = EnvOptions::default();
         self.to_bytes_with_options(options)
     }
 
-    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError>;
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, Box<AssemblerError>>;
 
     /// Compute the size of the listing by assembling it.
     /// The listing has a size only if its tokens has a size
-    fn number_of_bytes(&self) -> Result<usize, AssemblerError> {
+    fn number_of_bytes(&self) -> Result<usize, Box<AssemblerError>> {
         Ok(self.to_bytes()?.len())
     }
     fn fallback_number_of_bytes(&self) -> Result<usize, String>;
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
-    fn estimated_duration(&self) -> Result<usize, AssemblerError>;
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>>;
     /// Save the listing on disc in a string version
     fn save<P: AsRef<Utf8Path>>(&self, path: P) -> ::std::io::Result<()> {
         use std::fs::File;
@@ -63,14 +63,14 @@ impl ListingExt for Listing {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         code: S
-    ) -> Result<(), AssemblerError> {
-        parse_z80_str(code.as_ref().trim_end()).map(|local_tokens| {
+    ) -> Result<(), Box<AssemblerError>> {
+        Ok(parse_z80_str(code.as_ref().trim_end()).map(|local_tokens| {
             let mut local_tokens = local_tokens.as_listing().to_vec();
             self.listing_mut().append(&mut local_tokens);
-        })
+        })?)
     }
 
-    fn to_bytes_with_options(&self, options: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes_with_options(&self, options: EnvOptions) -> Result<Vec<u8>, Box<AssemblerError>> {
         let (_, env) =
             crate::assembler::visit_tokens_all_passes_with_options(self.listing(), options)
                 .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
@@ -79,7 +79,7 @@ impl ListingExt for Listing {
 
     /// Get the execution duration.
     /// If field `duration` is set, returns it. Otherwise, compute it
-    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
         if let Some(duration) = self.duration() {
             Ok(duration)
         }
@@ -181,12 +181,12 @@ impl fmt::Display for PrintableListing<'_> {
 
 /// Generate a listing from a string
 pub trait ListingFromStr {
-    fn from_str(s: &str) -> Result<Listing, AssemblerError>;
+    fn from_str(s: &str) -> Result<Listing, Box<AssemblerError>>;
 }
 
 impl ListingFromStr for Listing {
-    fn from_str(s: &str) -> Result<Listing, AssemblerError> {
-        crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())
+    fn from_str(s: &str) -> Result<Listing, Box<AssemblerError>> {
+        Ok(crate::parser::parse_z80_str(s).map(|ll| ll.as_listing())?)
     }
 }
 

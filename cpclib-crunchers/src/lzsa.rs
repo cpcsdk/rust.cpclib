@@ -37,7 +37,7 @@ pub enum LzsaMinMatch {
 
 #[derive(Debug)]
 pub enum LzsaError {
-    CompressionFailed,
+    CompressionFailed
 }
 
 pub fn compress(

@@ -43,7 +43,7 @@ impl AssemblerCompressionResult {
         }
     }
 
-    pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), AssemblerError> {
+    pub fn apply_side_effects(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         let to_be_set = [
             (
                 "BASM_LATEST_CRUNCH_INPUT_DATA_SIZE".to_string(),
@@ -92,17 +92,19 @@ impl AssemblerCompressionResult {
 pub trait Compressor {
     /// Crunch the raw data with the dedicated algorithm.
     /// Fail when there is no data to crunch
-    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, AssemblerError>;
+    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, Box<AssemblerError>>;
 }
 
 impl Compressor for CompressionType {
-    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, AssemblerError> {
+    fn compress(&self, raw: &[u8]) -> Result<AssemblerCompressionResult, Box<AssemblerError>> {
         if raw.is_empty() {
-            return Err(AssemblerError::NoDataToCrunch);
+            return Err(Box::new(AssemblerError::NoDataToCrunch));
         }
 
         let method = match self {
-            CompressionType::LZ48 => Ok::<CompressMethod, AssemblerError>(CompressMethod::Lz48),
+            CompressionType::LZ48 => {
+                Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lz48)
+            },
             CompressionType::LZ49 => Ok(CompressMethod::Lz49),
 
             CompressionType::LZSA1 => {
@@ -158,7 +160,7 @@ impl Compressor for CompressionType {
                                                                * }, */
         }?;
 
-        method
+        Ok(method
             .compress(raw)
             .map(|res| {
                 AssemblerCompressionResult {
@@ -170,6 +172,6 @@ impl Compressor for CompressionType {
                 AssemblerError::AssemblingError {
                     msg: "Error when crunching".to_string()
                 }
-            })
+            })?)
     }
 }

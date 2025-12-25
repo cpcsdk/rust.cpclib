@@ -22,7 +22,7 @@ trait DelayedCommand {}
 pub struct PrintCommand {
     pub(crate) prefix: Option<String>,
     pub(crate) span: Option<Z80Span>,
-    pub(crate) print_or_error: either::Either<PreprocessedFormattedString, AssemblerError>
+    pub(crate) print_or_error: either::Either<PreprocessedFormattedString, Box<AssemblerError>>
 }
 
 impl PrintCommand {
@@ -32,12 +32,18 @@ impl PrintCommand {
 }
 #[derive(Debug, Clone)]
 pub struct FailedAssertCommand {
-    failure: AssemblerError
+    failure: Box<AssemblerError>
 }
 
 /// Expect an assert error or a exval error
 impl From<AssemblerError> for FailedAssertCommand {
     fn from(failure: AssemblerError) -> Self {
+        Self { failure: Box::new(failure) }
+    }
+}
+
+impl From<Box<AssemblerError>> for FailedAssertCommand {
+    fn from(failure: Box<AssemblerError>) -> Self {
         Self { failure }
     }
 }
@@ -48,7 +54,7 @@ impl DelayedCommand for FailedAssertCommand {}
 
 impl PrintCommand {
     #[inline]
-    pub fn string_or_error(&self) -> Result<String, AssemblerError> {
+    pub fn string_or_error(&self) -> Result<String, Box<AssemblerError>> {
         match &self.print_or_error {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
@@ -89,7 +95,7 @@ impl PrintCommand {
 
     // XXX The code is the same than string_or_error
     #[inline]
-    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), Box<AssemblerError>> {
         match &self.print_or_error {
             either::Either::Left(msg) => {
                 // TODO improve printting + integrate z80span information
@@ -144,7 +150,7 @@ impl From<Option<Z80Span>> for PauseCommand {
 
 impl PauseCommand {
     #[inline]
-    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), Box<AssemblerError>> {
         let msg = "PAUSE - press enter to continue.";
         writer.emit_stdout(
             &(if let Some(span) = &self.0 {
@@ -185,7 +191,7 @@ impl From<PauseCommand> for PrintOrPauseCommand {
 }
 
 impl PrintOrPauseCommand {
-    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), AssemblerError> {
+    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), Box<AssemblerError>> {
         match self {
             PrintOrPauseCommand::Print(p) => p.execute(writer),
             PrintOrPauseCommand::Pause(p) => p.execute(writer)
@@ -368,7 +374,11 @@ impl DelayedCommands {
 /// Commands execution
 impl DelayedCommands {
     /// Execute the commands that correspond to the appropriate mmr configuration
-    pub fn execute_save(&self, env: &Env, ga_mmr: u8) -> Result<Vec<SavedFile>, AssemblerError> {
+    pub fn execute_save(
+        &self,
+        env: &Env,
+        ga_mmr: u8
+    ) -> Result<Vec<SavedFile>, Box<AssemblerError>> {
         let cmds = self
             .save_commands
             .iter()
@@ -384,7 +394,7 @@ impl DelayedCommands {
 
         let res = cmds
             .map(|cmd| cmd.execute_on(env))
-            .collect::<Result<Vec<_>, AssemblerError>>()?;
+            .collect::<Result<Vec<_>, Box<AssemblerError>>>()?;
 
         Ok(res)
     }
@@ -394,18 +404,17 @@ impl DelayedCommands {
     }
 
     /// Return Ok if no assertion error, Err otherwise
-    pub fn collect_assert_failure(&self) -> Result<(), AssemblerError> {
+    pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>> {
         if self.failed_assert_commands.is_empty() {
             Ok(())
-        }
-        else {
-            Err(AssemblerError::MultipleErrors {
+        } else {
+            Err(Box::new(AssemblerError::MultipleErrors {
                 errors: self
                     .failed_assert_commands
                     .iter()
                     .map(|a| a.failure.clone())
                     .collect_vec()
-            })
+            }))
         }
     }
 
@@ -413,7 +422,7 @@ impl DelayedCommands {
     pub fn execute_print_or_pause(
         &self,
         writer: &dyn EnvEventObserver
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         let iter = self.print_commands.iter();
 
         let errors = iter
@@ -438,9 +447,8 @@ impl DelayedCommands {
 
         if errors.is_empty() {
             Ok(())
-        }
-        else {
-            Err(AssemblerError::MultipleErrors { errors })
+        } else {
+            Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }
 }

@@ -290,7 +290,8 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                 else {
                     std::fs::write(ams_filename.filename(), file.header_and_content())?;
                 }
-            } else {
+            }
+            else {
                 return Err(DskManagerError::AnyError {
                     msg: format!("missing {filename}")
                 });

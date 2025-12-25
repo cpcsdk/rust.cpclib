@@ -435,7 +435,6 @@ impl From<&BlocIdx> for u8 {
     }
 }
 
-
 #[allow(missing_docs)]
 impl BlocIdx {
     pub fn is_valid(self) -> bool {

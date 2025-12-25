@@ -30,7 +30,8 @@ impl fmt::Display for MacroParam {
         match self {
             Self::RawArgument(s) | Self::EvaluatedArgument(s) => write!(f, "{}", s),
             Self::List(l) => {
-                let inner = l.iter()
+                let inner = l
+                    .iter()
                     .map(|p| p.to_string())
                     .collect::<Vec<_>>()
                     .join(",");
@@ -1258,30 +1259,33 @@ impl Token {
     }
 
     pub fn is_output_opcode(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Token::OpCode(Mnemonic::Out, ..)
-            | Token::OpCode(Mnemonic::Outd, ..)
-            | Token::OpCode(Mnemonic::Outi, ..)
-            | Token::OpCode(Mnemonic::Otdr, ..)
-            | Token::OpCode(Mnemonic::Otir, ..)
+                | Token::OpCode(Mnemonic::Outd, ..)
+                | Token::OpCode(Mnemonic::Outi, ..)
+                | Token::OpCode(Mnemonic::Otdr, ..)
+                | Token::OpCode(Mnemonic::Otir, ..)
         )
     }
 
     pub fn is_input_opcode(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Token::OpCode(Mnemonic::In, ..)
-            | Token::OpCode(Mnemonic::Ind, ..)
-            | Token::OpCode(Mnemonic::Ini, ..)
-            | Token::OpCode(Mnemonic::Indr, ..)
-            | Token::OpCode(Mnemonic::Inir, ..)
+                | Token::OpCode(Mnemonic::Ind, ..)
+                | Token::OpCode(Mnemonic::Ini, ..)
+                | Token::OpCode(Mnemonic::Indr, ..)
+                | Token::OpCode(Mnemonic::Inir, ..)
         )
     }
 
     pub fn is_retlike_opcode(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Token::OpCode(Mnemonic::Ret, ..)
-            | Token::OpCode(Mnemonic::Reti, ..)
-            | Token::OpCode(Mnemonic::Retn, ..)
+                | Token::OpCode(Mnemonic::Reti, ..)
+                | Token::OpCode(Mnemonic::Retn, ..)
         )
     }
 
@@ -1487,15 +1491,16 @@ impl Token {
 
     /// Return true for directives that can emebed some listing information
     pub fn has_at_least_one_listing(&self) -> bool {
-        matches!(self,
+        matches!(
+            self,
             Self::CrunchedSection(..)
-            | Self::Include(..)
-            | Self::If(..)
-            | Self::Repeat(..)
-            | Self::RepeatUntil(..)
-            | Self::Rorg(..)
-            | Self::Switch(..)
-            | Self::While(..)
+                | Self::Include(..)
+                | Self::If(..)
+                | Self::Repeat(..)
+                | Self::RepeatUntil(..)
+                | Self::Rorg(..)
+                | Self::Switch(..)
+                | Self::While(..)
         )
     }
 }

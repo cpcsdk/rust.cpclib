@@ -14,14 +14,14 @@ use crate::{AssemblingOptions, EnvOptions};
 
 /// Needed methods for the Token defined in cpclib_tokens
 pub trait TokenExt: ListingElement + Debug + Visited {
-    fn estimated_duration(&self) -> Result<usize, AssemblerError>;
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>>;
     /// Unroll the tokens when it represents a loop
-    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>>;
+    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, Box<AssemblerError>>>;
 
     /// Generate the listing of opcodes for directives that embed bytes
     fn disassemble_data(&self) -> Result<Listing, String>;
 
-    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes_with_options(&self, option: EnvOptions) -> Result<Vec<u8>, Box<AssemblerError>> {
         let mut env = Env::new(option);
         // we need several passes in case the token is a directive that contains code
         loop {
@@ -69,7 +69,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
 
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
-    fn to_bytes(&self) -> Result<Vec<u8>, AssemblerError> {
+    fn to_bytes(&self) -> Result<Vec<u8>, Box<AssemblerError>> {
         let mut table = SymbolsTableCaseDependent::laxist();
         let table = &mut table;
         self.to_bytes_with_context(table)
@@ -80,7 +80,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     fn to_bytes_with_context(
         &self,
         table: &mut SymbolsTableCaseDependent
-    ) -> Result<Vec<u8>, AssemblerError> {
+    ) -> Result<Vec<u8>, Box<AssemblerError>> {
         let mut options = if table.is_case_sensitive() {
             AssemblingOptions::new_case_sensitive()
         }
@@ -104,15 +104,15 @@ pub trait TokenExt: ListingElement + Debug + Visited {
 // self.deref().disassemble_data()
 // }
 //
-// fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+// fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
 // self.deref().estimated_duration()
 // }
 //
-// fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, AssemblerError> {
+// fn to_bytes_with_options(&self, option: &AssemblingOptions) -> Result<Vec<u8>, Box<AssemblerError>> {
 // self.deref().to_bytes_with_options(option)
 // }
 //
-// fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+// fn unroll(&self, _env: &crate::Env) -> Option<Result<Vec<&Self>, Box<AssemblerError>>> {
 // unimplemented!("signature issue. should be transformed/unused")
 // }
 // }
@@ -120,9 +120,9 @@ pub trait TokenExt: ListingElement + Debug + Visited {
 impl TokenExt for Token {
     /// Unroll the tokens when in a repetition loop
     /// TODO return an iterator in order to not produce the vector each time
-    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, env: &mut crate::Env) -> Option<Result<Vec<&Self>, Box<AssemblerError>>> {
         if let Token::Repeat(expr, tokens, _counter_label, _counter_start) = self {
-            let count: Result<ExprResult, AssemblerError> = expr.resolve(env);
+            let count: Result<ExprResult, Box<AssemblerError>> = expr.resolve(env);
             if count.is_err() {
                 Some(Err(count.err().unwrap()))
             }
@@ -195,7 +195,7 @@ impl TokenExt for Token {
     /// Returns an estimation of the duration.
     /// This estimation may be wrong for instruction having several states.
     #[allow(clippy::match_same_arms)]
-    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
         let duration = match self {
             Token::Assert(..)
             | Token::Breakpoint { .. }
@@ -212,8 +212,8 @@ impl TokenExt for Token {
             // Here, there is a strong limitation => it will works only if no symbols are used
             Token::Defw(_) | Token::Defb(_) | Token::Defs(_) => {
                 self.disassemble_data()
-                    .map_err(|e| AssemblerError::DisassemblerError { msg: e })
-                    .and_then(|lst| lst.estimated_duration())?
+                    .map_err(|e| Box::new(AssemblerError::DisassemblerError { msg: e }))?
+                    .estimated_duration()?
             },
 
             Token::OpCode(mnemonic, arg1, arg2, _arg3) => {
@@ -454,11 +454,11 @@ impl TokenExt for Token {
                 }
             },
             _ => {
-                return Err(AssemblerError::BugInAssembler {
+                return Err(Box::new(AssemblerError::BugInAssembler {
                     file: file!(),
                     line: line!(),
                     msg: format!("Duration computation for {self:?} not yet coded")
-                });
+                }));
             }
         };
         Ok(duration)

@@ -221,7 +221,7 @@ impl AssemblingOptions {
 }
 
 /// Assemble a piece of code and returns the associated list of bytes.
-pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
+pub fn assemble(code: &str) -> Result<Vec<u8>, Box<AssemblerError>> {
     let options = EnvOptions::default();
     // let options = AssemblingOptions::new_with_table(table);
     assemble_with_options(code, options).map(|(bytes, _symbols)| bytes)
@@ -231,7 +231,7 @@ pub fn assemble(code: &str) -> Result<Vec<u8>, AssemblerError> {
 pub fn assemble_with_options(
     code: &str,
     options: EnvOptions
-) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError> {
+) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), Box<AssemblerError>> {
     let builder = options.parse_options().clone().context_builder();
     let tokens = parser::parse_z80_with_context_builder(code, builder)?;
     assemble_tokens_with_options(&tokens, options)
@@ -244,7 +244,7 @@ pub fn assemble_tokens_with_options<
 >(
     tokens: &'tokens [T],
     options: EnvOptions
-) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), AssemblerError>
+) -> Result<(Vec<u8>, cpclib_tokens::symbols::SymbolsTable), Box<AssemblerError>>
 where
     <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + Sync,
     <<T as cpclib_tokens::ListingElement>::TestKind as cpclib_tokens::TestKindElement>::Expr:
@@ -263,7 +263,7 @@ pub fn assemble_to_amsdos_file(
     code: &str,
     amsdos_filename: &str,
     options: EnvOptions
-) -> Result<AmsdosFile, AssemblerError> {
+) -> Result<AmsdosFile, Box<AssemblerError>> {
     let amsdos_filename = AmsdosFileName::try_from(amsdos_filename)?;
 
     let tokens = parser::parse_z80_str(code)?;

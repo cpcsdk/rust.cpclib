@@ -25,7 +25,6 @@ use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
 use simple_logger::{SimpleLogger, set_up_color_terminal};
 #[must_use]
-///
 /// # Panics
 ///
 /// Panics if the string cannot be parsed as a number in the expected format.

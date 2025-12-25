@@ -15,7 +15,12 @@ pub fn tokenize_macro_body<'l, 'p>(
         .enumerate()
         .map(|(idx, p)| {
             let s: &'p str = p.as_ref();
-            let key = if let Some(stripped) = s.strip_prefix("r#") { stripped } else { s };
+            let key = if let Some(stripped) = s.strip_prefix("r#") {
+                stripped
+            }
+            else {
+                s
+            };
             (key, idx)
         })
         .collect();

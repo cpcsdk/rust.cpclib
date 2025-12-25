@@ -10,9 +10,9 @@ use {cpclib_disc as disc, cpclib_sna as sna};
 use crate::disc::amsdos::AmsdosFileType;
 use crate::sna::{Snapshot, SnapshotVersion};
 
+
 custom_error! {#[allow(missing_docs)] pub XferError
-    ConnectionError{source: Box<Error>} = "There is a connection error with the Cpc Wifi.",
-    ConnectionError2{source: Box<ureq::Error>} = "There is a connection error with the Cpc Wifi.",
+    ConnectionError2{source: Box<dyn custom_error::Error>} = "There is a connection error with the Cpc Wifi.",
 
     CdError{from: String, to: String} = @ {
         format!(
@@ -145,41 +145,41 @@ impl CpcXfer {
 
     /// Make a simple query
     fn simple_query(&self, query: &[(&str, &str)]) -> Result<ureq::Response, Box<ureq::Error>> {
-        ureq::get(&self.uri("config.cgi"))
+        Ok(ureq::get(&self.uri("config.cgi"))
             .query_pairs(query.iter().cloned())
             .set("User-Agent", "User-Agent: cpcxfer")
-            .call()
+            .call()?)
     }
 
     /// Reset the M4
-    pub fn reset_m4(&self) -> Result<(), XferError> {
-        self.simple_query(&[("mres", "")])?;
+    pub fn reset_m4(&self) -> Result<(), Box<XferError>> {
+        self.simple_query(&[("mres", "")]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Reset the Cpc
-    pub fn reset_cpc(&self) -> Result<(), XferError> {
-        self.simple_query(&[("cres", "")])?;
+    pub fn reset_cpc(&self) -> Result<(), Box<XferError>> {
+        self.simple_query(&[("cres", "")]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Run the file from the current selected path
     /// TODO debug this
-    pub fn run_rom_current_path(&self, fname: &str) -> Result<(), XferError> {
-        self.simple_query(&[("run", fname)])?;
+    pub fn run_rom_current_path(&self, fname: &str) -> Result<(), Box<XferError>> {
+        self.simple_query(&[("run", fname)]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Run the file whose complete path is provided
-    pub fn run(&self, path: &str) -> Result<(), XferError> {
+    pub fn run(&self, path: &str) -> Result<(), Box<XferError>> {
         let absolute = self.absolute_path(path)?;
-        self.simple_query(&[("run2", &absolute)])?;
+        self.simple_query(&[("run2", &absolute)]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
     /// Remove the file whose complete path is provided
-    pub fn rm<S: AsRef<str>>(&self, path: S) -> Result<(), XferError> {
-        self.simple_query(&[("rm", path.as_ref())])?;
+    pub fn rm<S: AsRef<str>>(&self, path: S) -> Result<(), Box<XferError>> {
+        self.simple_query(&[("rm", path.as_ref())]).map_err(|e| Box::new(XferError::ConnectionError2 { source: e }))?;
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl CpcXfer {
         path: P,
         m4_path: &str,
         header: Option<(AmsdosFileType, u16, u16)>
-    ) -> Result<(), XferError>
+    ) -> Result<(), Box<XferError>>
     where
         P: AsRef<Utf8Path>
     {
@@ -202,7 +202,7 @@ impl CpcXfer {
         path: &Utf8Path,
         m4_path: &str,
         header: Option<(AmsdosFileType, u16, u16)>
-    ) -> Result<(), XferError> {
+    ) -> Result<(), Box<XferError>> {
         let local_fname = path.as_str();
 
         if m4_path.len() > 255 {
@@ -238,15 +238,15 @@ impl CpcXfer {
             .add()
             .unwrap();
         let mut easy = Easy::new();
-        easy.url(&self.uri("files.shtml"))?;
-        easy.httppost(form)?;
-        easy.perform()?;
+        easy.url(&self.uri("files.shtml")).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.httppost(form).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
 
         Ok(())
     }
 
     /// Directly sends the SNA to the M4. SNA is first saved as a V2 version as M4 is unable to read other ones
-    pub fn upload_and_run_sna(&self, sna: &Snapshot) -> Result<(), XferError> {
+    pub fn upload_and_run_sna(&self, sna: &Snapshot) -> Result<(), Box<XferError>> {
         use camino_tempfile::Builder;
         let file = Builder::new()
             .prefix("xfer")
@@ -269,18 +269,14 @@ impl CpcXfer {
 
         // sleep a bit to be sure the file is not deleted BEFORE sending it to CPC
         std::thread::sleep(std::time::Duration::from_secs(5));
-        temp_path.close().map_err(|e| {
-            XferError::InternalError {
-                reason: e.to_string()
-            }
-        })
+        temp_path.close().map_err(|e| Box::new(XferError::InternalError { reason: e.to_string() }))
     }
 
     pub fn upload_and_run<P: AsRef<Utf8Path>>(
         &self,
         path: P,
         header: Option<(AmsdosFileType, u16, u16)>
-    ) -> Result<(), XferError> {
+    ) -> Result<(), Box<XferError>> {
         self.upload_and_run_impl(path.as_ref(), header)
     }
 
@@ -288,7 +284,7 @@ impl CpcXfer {
         &self,
         path: &Utf8Path,
         header: Option<(AmsdosFileType, u16, u16)>
-    ) -> Result<(), XferError> {
+    ) -> Result<(), Box<XferError>> {
         // We are sure it is not a snapshot there
         self.upload_impl(path, "/tmp", header)?;
         self.run(&format!("/tmp/{}", path.file_name().unwrap()))?;
@@ -309,13 +305,13 @@ impl CpcXfer {
         {
             {
                 let mut easy = Easy::new();
-                easy.url(&self.uri("sd/m4/dir.txt"))?;
+                easy.url(&self.uri("sd/m4/dir.txt")).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
                 let mut easy = easy.transfer();
                 easy.write_function(|data| {
                     dst.extend_from_slice(data);
                     Ok(data.len())
-                })?;
-                easy.perform()?;
+                }).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+                easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
             }
         }
 
@@ -326,7 +322,7 @@ impl CpcXfer {
     }
 
     /// Change the current directory
-    pub fn cd(&self, directory: &str) -> Result<(), XferError> {
+    pub fn cd(&self, directory: &str) -> Result<(), Box<XferError>> {
         // Get the absolute directory
         let mut directory = if let Some('/') = directory.chars().next() {
             directory.to_owned()
@@ -347,19 +343,19 @@ impl CpcXfer {
             Ok(())
         }
         else {
-            Err(XferError::CdError {
+            Err(Box::new(XferError::CdError {
                 from: directory,
                 to: cwd
-            })
+            }))
         }
     }
 
     fn absolute_path(&self, relative: &str) -> Result<String, Box<XferError>> {
         match relative.chars().next() {
             None => {
-                Err(XferError::InternalError {
+                Err(Box::new(XferError::InternalError {
                     reason: "No path provided".into()
-                })
+                }))
             },
             Some('/') => Ok(relative.to_owned()),
             _ => {
@@ -377,13 +373,13 @@ impl CpcXfer {
         }
     }
 
-    pub fn ls_request(&self, folder: &str) -> Result<(), XferError> {
+    pub fn ls_request(&self, folder: &str) -> Result<(), Box<XferError>> {
         let mut easy = Easy::new();
         let folder = easy.url_encode(folder.as_bytes());
-        easy.get(true)?;
+        easy.get(true).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
         let url = format!("{}?ls={}", self.uri("config.cgi"), folder);
-        easy.url(&url)?;
-        easy.perform()?;
+        easy.url(&url).map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
+        easy.perform().map_err(|e| Box::new(XferError::ConnectionError2 { source: Box::new(e) }))?;
         Ok(())
     }
 }
@@ -394,7 +390,7 @@ pub fn send_and_run_file<P: AsRef<Utf8Path>>(
     xfer: &CpcXfer,
     fname: P,
     run: bool
-) -> Result<(), XferError> {
+) -> Result<(), Box<XferError>> {
     let mut done = false;
     let fname = fname.as_ref();
     // Snapshot needs to be converted in V2 format and handled differently

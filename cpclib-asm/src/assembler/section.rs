@@ -1,4 +1,4 @@
-use crate::{Env, ExprResult};
+use crate::{Env, ExprResult, AssemblerError};
 
 #[derive(Clone, Debug)]
 pub struct Section {
@@ -50,24 +50,24 @@ impl Section {
 }
 
 /// Returns the address of the beginning of the section
-pub fn section_start(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+pub fn section_start(section_name: &str, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     Ok(env.get_section_description(section_name)?.start.into())
 }
 
-pub fn section_stop(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+pub fn section_stop(section_name: &str, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     Ok(env.get_section_description(section_name)?.stop.into())
 }
 
 /// Returns the number of bytes available  in the section
-pub fn section_length(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+pub fn section_length(section_name: &str, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     Ok(env.get_section_description(section_name)?.length().into())
 }
 
-/// Returns the number of bytes consummed in the section
-pub fn section_used(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+/// Returns the number of bytes consumed in the section
+pub fn section_used(section_name: &str, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     Ok(env.get_section_description(section_name)?.used().into())
 }
 
-pub fn section_mmr(section_name: &str, env: &Env) -> Result<ExprResult, crate::AssemblerError> {
+pub fn section_mmr(section_name: &str, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     Ok(env.get_section_description(section_name)?.mmr.into())
 }

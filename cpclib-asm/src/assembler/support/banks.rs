@@ -26,9 +26,9 @@ use std::ops::{Deref, DerefMut};
 
 use cpclib_common::bitvec::vec::BitVec;
 
-use crate::page_info::PageInformation;
-use crate::error::AssemblerError;
 use crate::MyDefault;
+use crate::error::AssemblerError;
+use crate::page_info::PageInformation;
 
 pub(crate) type Bank = [u8; 0x4000];
 

@@ -88,7 +88,7 @@ impl Command {
                     .map_err(|e| {
                         eprintln!("Error while loading {path}. {e}");
                     });
-                    unimplemented!();
+                unimplemented!();
             },
             Command::Memory(from, amount) => {
                 let mut output = Pager::new();

@@ -16,7 +16,7 @@ pub fn list_new(count: usize, value: ExprResult) -> ExprResult {
 }
 
 /// Create a new string
-pub fn string_new(count: usize, value: ExprResult) -> Result<ExprResult, AssemblerError> {
+pub fn string_new(count: usize, value: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     let value = value.char()?;
     let s = (0..count).map(|_| value).collect::<SmolStr>();
     Ok(ExprResult::String(fix_string(s)))
@@ -27,13 +27,13 @@ pub fn list_set(
     mut list: ExprResult,
     index: usize,
     value: ExprResult
-) -> Result<ExprResult, crate::AssemblerError> {
+) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::String(s) => {
             if index >= s.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), index)
-                ));
+                )));
             }
             let c = value.int()? as u8 as char;
             let c = format!("{c}");
@@ -43,49 +43,49 @@ pub fn list_set(
         },
         ExprResult::List(_) => {
             if index >= list.list_len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(list.list_len(), index)
-                ));
+                )));
             }
             list.list_set(index, value);
             Ok(list)
         },
 
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
 /// Get an item in a list of string
-pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::String(s) => {
             if index >= s.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), index)
-                ));
+                )));
             }
             Ok(ExprResult::Value(s.chars().nth(index).unwrap() as _))
         },
         ExprResult::List(_) => {
             if index >= list.list_len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(list.list_len(), index)
-                ));
+                )));
             }
             Ok(list.list_get(index).clone())
         },
 
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
@@ -96,70 +96,70 @@ pub fn list_sublist(
     list: &ExprResult,
     start: usize,
     end: usize // not included
-) -> Result<ExprResult, crate::AssemblerError> {
+) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::String(s) => {
             if start >= s.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), start)
-                ));
+                )));
             }
             if end > s.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(s.len(), end)
-                ));
+                )));
             }
             Ok(ExprResult::String(s.substring(start, end).into()))
         },
         ExprResult::List(l) => {
             if start >= l.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), start)
-                ));
+                )));
             }
             if end > l.len() {
-                return Err(AssemblerError::ExpressionError(
+                return Err(Box::new(AssemblerError::ExpressionError(
                     ExpressionError::InvalidSize(l.len(), end)
-                ));
+                )));
             }
             Ok(ExprResult::List(l[start..end].to_vec()))
         },
 
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
-pub fn list_len(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => Ok(l.len().into()),
         ExprResult::String(s) => Ok(s.len().into()),
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
-pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(mut l) => {
             l.push(elem);
             Ok(ExprResult::List(l))
         },
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
@@ -168,7 +168,7 @@ pub fn list_push(list: ExprResult, elem: ExprResult) -> Result<ExprResult, crate
 pub fn list_extend(
     list1: ExprResult,
     list2: ExprResult
-) -> Result<ExprResult, crate::AssemblerError> {
+) -> Result<ExprResult, Box<AssemblerError>> {
     match list1 {
         ExprResult::List(mut l) => {
             match list2 {
@@ -179,41 +179,42 @@ pub fn list_extend(
                     Ok(ExprResult::List(l))
                 },
                 _ => {
-                    Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                        Box::new(AssemblerError::AssemblingError {
+                    Err(Box::new(AssemblerError::ExpressionError(
+                        ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{list2} is not a list")
-                        })
+                        }))
                     )))
                 },
             }
         },
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list1} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
-pub fn list_sort(list: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
-    match list {
-        ExprResult::List(mut l) => {
-            l.sort();
-            Ok(ExprResult::List(l))
+
+pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    match &mut list {
+        ExprResult::List(l) => {
+            l.sort(); // inplace sort
+            Ok(list)
         },
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
-pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => {
             // https://stackoverflow.com/questions/69764050/how-to-get-the-indices-that-would-sort-a-vector-in-rust
@@ -227,17 +228,17 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, crate::AssemblerErr
             Ok(ExprResult::List(l))
         },
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
-                })
+                }))
             )))
         },
     }
 }
 
 /// BUG bytes must be enced in utf8
-pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match s1 {
         ExprResult::List(l1) => {
             let bytes = l1
@@ -246,36 +247,36 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, crate::AssemblerEr
                 .map(|(idx, v)| {
                     let v = v.int()?;
                     if !(0..=255).contains(&v) {
-                        Err(AssemblerError::AssemblingError {
+                        Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{v} at {idx} is not a valid byte value")
-                        })
+                        }))
                     }
                     else {
                         Ok(v as u8)
                     }
                 })
-                .collect::<Result<Vec<u8>, AssemblerError>>()?;
+                .collect::<Result<Vec<u8>, Box<AssemblerError>>>()?;
 
             String::from_utf8(bytes)
                 .map_err(|e| {
-                    AssemblerError::AssemblingError {
+                    Box::new(AssemblerError::AssemblingError {
                         msg: format!("Error when generating a string. {e}")
-                    }
+                    })
                 })
                 .map(|s| s.into())
         },
 
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: "string_from_list must take a list as an argument".to_string()
-                })
+                }))
             )))
         },
     }
 }
 
-pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::AssemblerError> {
+pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match (&s1, &s2) {
         (ExprResult::Char(s1), ExprResult::Char(s2)) => {
             let s1 = format!("{}{}", *s1 as char, *s2 as char);
@@ -340,10 +341,10 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, crate::
         },
 
         _ => {
-            Err(AssemblerError::ExpressionError(ExpressionError::OwnError(
-                Box::new(AssemblerError::AssemblingError {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("string_push called with wrong types {s1:?} {s2:?}")
-                })
+                }))
             )))
         },
     }

@@ -11,7 +11,7 @@ use crate::implementation::tokens::TokenExt;
 /// XXX Orgams only handles integer values and strings
 /// TODO call it somewhere in the expression evaluation
 /// because it seesm not use anymore since various refactoring
-pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, AssemblerError> {
+pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Box<AssemblerError>> {
     let e = if env.options().parse_options().is_orgams() {
         match &e {
             ExprResult::Float(_)
@@ -20,9 +20,9 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
             | ExprResult::Bool(_) => ExprResult::Value(e.int()?),
             ExprResult::String(_s) => e,
             _ => {
-                return Err(AssemblerError::AlreadyRenderedError(format!(
+                return Err(Box::new(AssemblerError::AlreadyRenderedError(format!(
                     "Incompatible type with orgams {e:?}"
-                )));
+                ))));
             }
         }
     }
@@ -33,20 +33,20 @@ pub fn ensure_orgams_type(e: ExprResult, env: &Env) -> Result<ExprResult, Assemb
     Ok(e)
 }
 
-/// ! Add all important methods to expresison-like structure sthat are not availalbe in the cpclib_tokens crate.
+/// Add all important methods to expression-like structures that are not available in the cpclib_tokens crate.
 
 /// The result of expression (without taking into account the strings) is either a int (no complex mathematical expression) or a float (division/sinus and so on)
 
 /// Evaluate an expression
 pub trait ExprEvaluationExt: Display {
     /// Simple evaluation without context => can only evaluate number based operations.
-    fn eval(&self) -> Result<ExprResult, AssemblerError> {
+    fn eval(&self) -> Result<ExprResult, Box<AssemblerError>> {
         let mut env = Env::default();
         self.resolve(&mut env)
     }
 
     /// Resolve the expression base on the env context
-    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError>;
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>>;
 
     /// Get all the symbols used
     fn symbols_used(&self) -> Vec<&str>;
@@ -59,7 +59,7 @@ macro_rules! resolve_impl {
         use std::ops::Neg;
         use cpclib_tokens::symbols::SymbolsTableTrait;
 
-        let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, AssemblerError> {
+        let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, Box<AssemblerError>> {
             let res_left = left.resolve($env);
             let res_right = right.resolve($env);
 
@@ -102,25 +102,22 @@ macro_rules! resolve_impl {
                 }
                 (Err(a), Ok(_b)) => {
                     Err(AssemblerError::ExpressionError(ExpressionError::LeftError(
-                        oper, Box::new(a)
+                        oper, a
                     )))
                 }
 
                 (Ok(_a), Err(b)) => {
 
-                    (&b, $env.symbols());
-
-
                     Err(AssemblerError::ExpressionError(
-                        ExpressionError::RightError(oper, Box::new(b))
+                        ExpressionError::RightError(oper, b)
                     ))
                 }
                 (Err(a), Err(b)) => {
                     Err(AssemblerError::ExpressionError(
-                        ExpressionError::LeftAndRightError(oper, Box::new(a), Box::new(b))
+                        ExpressionError::LeftAndRightError(oper, a, b)
                     ))
                 }
-            }
+            }.map_err(|e| Box::new(e))
         };
 
         if $self.is_binary_operation() {
@@ -131,8 +128,8 @@ macro_rules! resolve_impl {
             e.resolve($env)
         }
         else if $self.is_relative() {
-            (Expr::Label("$".into()).resolve($env)? + ExprResult::from($self.relative_delta()))
-                .map_err(|e| AssemblerError::ExpressionTypeError(e))
+            Ok((Expr::Label("$".into()).resolve($env)? + ExprResult::from($self.relative_delta()))
+                .map_err(|e| AssemblerError::ExpressionTypeError(e))?)
         }
         else if $self.is_value(){
             Ok($self.value().into())
@@ -180,7 +177,7 @@ macro_rules! resolve_impl {
                         closest:  $env.symbols().closest_symbol(label, SymbolFor::Number)?.map(|s| s.into()),
                     }
                 })
-            }
+            }.map_err(|e| Box::new(e))
 
         }
         else if $self.is_prefix_label() {
@@ -193,7 +190,7 @@ macro_rules! resolve_impl {
                 Some(val) => Ok(val.into()),
                 None => Err(AssemblerError::AssemblingError {
                     msg: format!("Unable to use prefix {} for {}", prefix, label)
-                })
+                }).map_err(|e| Box::new(e))
             }
         }
 
@@ -227,7 +224,7 @@ macro_rules! resolve_impl {
                         )
                     }
                 }
-            }
+            }.map_err(|e| Box::new(e))
         }
         else if $self.is_unary_operation() {
             let e = $self.arg1();
@@ -248,7 +245,7 @@ macro_rules! resolve_impl {
                         .neg()
                         .map_err(|e| AssemblerError::ExpressionTypeError(e))
                 }
-            }
+            }.map_err(|e| Box::new(e))
         }
 
         else if $self.is_rnd() {
@@ -306,7 +303,7 @@ impl ExprEvaluationExt for Expr {
         }
     }
 
-    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
         resolve_impl!(self, env)
     }
 }

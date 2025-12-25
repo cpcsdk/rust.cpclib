@@ -905,7 +905,8 @@ pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
                 ibb = 0x80;
                 if ib != 0 {
                     ib -= 1
-                } else {
+                }
+                else {
                     debug_assert!(j == bitpos - 1);
                 }
             }

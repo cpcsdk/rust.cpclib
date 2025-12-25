@@ -69,34 +69,34 @@ pub struct ControlOutputStore {
 }
 
 impl ControlAssert {
-    fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         visit_assert(&self.exp, self.txt.as_ref(), env, self.span.as_ref())?;
         Ok(())
     }
 }
 
 impl ControlOutputByte {
-    fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         env.output_byte(self.value)?;
         Ok(())
     }
 }
 
 impl ControlOutputBytes {
-    fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         env.output_bytes(&self.bytes)?;
         Ok(())
     }
 }
 
 impl ControlOrg {
-    fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         env.visit_org_set_arguments(self.code, self.output)
     }
 }
 
 impl ControlOutputCommand {
-    fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         match self {
             ControlOutputCommand::Assert(cmd) => cmd.execute(env),
             ControlOutputCommand::Byte(cmd) => cmd.execute(env),
@@ -149,7 +149,7 @@ impl ControlOutputStore {
         self.remaining_passes > 0
     }
 
-    pub fn execute(&mut self, env: &mut Env) -> Result<(), AssemblerError> {
+    pub fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         for cmd in &mut self.commands {
             cmd.execute(env)?;
         }

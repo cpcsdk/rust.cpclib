@@ -422,9 +422,8 @@ impl ExprElement for LocatedExpr {
 
 impl ExprEvaluationExt for LocatedExpr {
     /// Resolve by adding localisation in case of error
-    fn resolve(&self, env: &mut Env) -> Result<ExprResult, AssemblerError> {
+    fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
         let res = resolve_impl!(self, env).map_err(|e| e.locate(self.span().clone()))?;
-
         ensure_orgams_type(res, env)
     }
 
@@ -1974,11 +1973,11 @@ pub trait Locate {
 // }
 
 impl TokenExt for LocatedToken {
-    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
         self.to_token().estimated_duration()
     }
 
-    fn unroll(&self, _env: &mut crate::Env) -> Option<Result<Vec<&Self>, AssemblerError>> {
+    fn unroll(&self, _env: &mut crate::Env) -> Option<Result<Vec<&Self>, Box<AssemblerError>>> {
         todo!()
     }
 
@@ -2423,21 +2422,21 @@ impl ListingExt for LocatedListing {
     fn add_code<S: AsRef<str> + core::fmt::Display>(
         &mut self,
         _code: S
-    ) -> Result<(), AssemblerError> {
+    ) -> Result<(), Box<AssemblerError>> {
         panic!("Cannot be used in this context");
     }
 
     fn to_bytes_with_options(
         &self,
         options: crate::assembler::EnvOptions
-    ) -> Result<Vec<u8>, AssemblerError> {
+    ) -> Result<Vec<u8>, Box<AssemblerError>> {
         let (_, env) =
             crate::assembler::visit_tokens_all_passes_with_options(self.listing(), options)
                 .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
         Ok(env.produced_bytes())
     }
 
-    fn estimated_duration(&self) -> Result<usize, AssemblerError> {
+    fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
         todo!()
     }
 

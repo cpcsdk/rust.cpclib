@@ -24,10 +24,12 @@ impl StableTickerCounters {
     }
 
     /// Add a new counter if no counter has the same name
-    pub fn add_counter<S: AsRef<str>>(&mut self, name: &S) -> Result<(), AssemblerError> {
+    pub fn add_counter<S: AsRef<str>>(&mut self, name: &S) -> Result<(), Box<AssemblerError>> {
         let name: String = name.as_ref().to_owned();
         if self.has_counter(&name) {
-            return Err(AssemblerError::CounterAlreadyExists { symbol: name });
+            return Err(Box::new(AssemblerError::CounterAlreadyExists {
+                symbol: name
+            }));
         }
         self.order.push(name.clone());
         self.counters.insert(name, 0);

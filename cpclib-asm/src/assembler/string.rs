@@ -47,7 +47,7 @@ impl PreprocessedFormattedExpr {
     pub fn try_new(
         fe: &FormattedExpr,
         env: &mut Env
-    ) -> Result<PreprocessedFormattedExpr, AssemblerError> {
+    ) -> Result<PreprocessedFormattedExpr, Box<AssemblerError>> {
         match fe {
             FormattedExpr::Raw(Expr::String(string)) => {
                 Ok(PreprocessedFormattedExpr::String(string.clone()))
@@ -66,7 +66,7 @@ impl PreprocessedFormattedExpr {
 }
 
 impl PreprocessedFormattedString {
-    pub fn try_new(info: &[FormattedExpr], env: &mut Env) -> Result<Self, AssemblerError> {
+    pub fn try_new(info: &[FormattedExpr], env: &mut Env) -> Result<Self, Box<AssemblerError>> {
         let mut components = Vec::with_capacity(info.len());
         for component in info.iter() {
             components.push(PreprocessedFormattedExpr::try_new(component, env)?);

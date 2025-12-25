@@ -130,20 +130,20 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     let xfer = CpcXfer::new(hostname);
 
     if let Some("-r") = matches.subcommand_name() {
-        xfer.reset_m4()?;
+        xfer.reset_m4().map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some("-s") = matches.subcommand_name() {
-        xfer.reset_cpc()?;
+        xfer.reset_cpc().map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some(p_opt) = matches.subcommand_matches("-p") {
         let fname: &Utf8PathBuf = p_opt.get_one("fname").unwrap();
-        send_and_run_file(&xfer, fname, false);
+        send_and_run_file(&xfer, fname, false).map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some(y_opt) = matches.subcommand_matches("-y") {
         let fname: &Utf8PathBuf = y_opt.get_one("fname").unwrap();
 
         // Simple file sending
-        send_and_run_file(&xfer, fname, true);
+        send_and_run_file(&xfer, fname, true).map_err(|e| anyhow::Error::msg(e.to_string()))?;
 
         #[cfg(feature = "watch")]
         if y_opt.get_flag("WATCH") {
@@ -171,21 +171,21 @@ pub fn process(matches: &clap::ArgMatches) -> anyhow::Result<()> {
     }
     else if let Some(x_opt) = matches.subcommand_matches("-x") {
         let fname = x_opt.get_one::<String>("fname").unwrap();
-        xfer.run(fname)?; // .expect("Unable to launch file on CPC.");
+        xfer.run(fname).map_err(|e| anyhow::Error::msg(e.to_string()))?; // .expect("Unable to launch file on CPC.");
     }
     else if let Some(_ls_opt) = matches.subcommand_matches("--ls") {
-        let content = xfer.current_folder_content()?;
+        let content = xfer.current_folder_content().map_err(|e| anyhow::Error::msg(e.to_string()))?;
         for file in content.files() {
             println!("{file:?}");
         }
     }
     else if let Some(_pwd_opt) = matches.subcommand_matches("--pwd") {
-        let cwd = xfer.current_working_directory()?;
+        let cwd = xfer.current_working_directory().map_err(|e| anyhow::Error::msg(e.to_string()))?;
         println!("{cwd}");
     }
     else if let Some(cd_opt) = matches.subcommand_matches("--cd") {
         xfer.cd(cd_opt.get_one::<String>("directory").unwrap())
-            .expect("Unable to move in the requested folder.");
+            .map_err(|e| anyhow::Error::msg(e.to_string()))?;
     }
     else if let Some(_interactive_opt) = matches.subcommand_matches("--interactive") {
         #[cfg(feature = "interactive")]

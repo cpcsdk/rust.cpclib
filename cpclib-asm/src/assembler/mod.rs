@@ -171,8 +171,8 @@ impl EnvOptions {
 fn add_index(m: &mut Bytes, idx: i32) -> Result<(), Box<AssemblerError>> {
     //  if idx < -127 || idx > 128 {
     if !(-128..=127).contains(&idx) {
-           // TODO raise a warning to get the line/file
-           eprintln!("Index error: {idx}");
+        // TODO raise a warning to get the line/file
+        eprintln!("Index error: {idx}");
     }
     let val = (idx & 0xFF) as u8;
     add_byte(m, val);
@@ -292,7 +292,7 @@ impl Visited for Token {
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         // dbg!(env.output_address, self.as_token());
-        visit_located_token(self, env).map_err(|e| e.locate(self.span().clone()))
+        Ok(visit_located_token(self, env).map_err(|e| e.locate(self.span().clone()))?)
     }
 }
 
@@ -339,7 +339,11 @@ impl CharsetEncoding {
         self.lut.clear()
     }
 
-    pub fn update(&mut self, spec: &CharsetFormat, env: &mut Env) -> Result<(), Box<AssemblerError>> {
+    pub fn update(
+        &mut self,
+        spec: &CharsetFormat,
+        env: &mut Env
+    ) -> Result<(), Box<AssemblerError>> {
         match spec {
             CharsetFormat::Reset => self.reset(),
             CharsetFormat::CharsList(l, s) => {
@@ -451,7 +455,7 @@ pub struct Env {
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
-    warnings: Vec<AssemblerWarning>,
+    warnings: Vec<Box<AssemblerWarning>>,
 
     /// Counter to disable some instruction in rorg stuff
     nested_rorg: usize,
@@ -591,7 +595,7 @@ impl Env {
         let fname = match self.resolve_expr_must_never_fail(exp) {
             Ok(fname) => Ok(fname),
             Err(e) => {
-                match &e {
+                match &*e {
                     // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
                     AssemblerError::UnknownSymbol { symbol, .. }
                     | AssemblerError::RelocatedError {
@@ -662,7 +666,7 @@ impl Env {
                 if let Some(commands) = self.assembling_control_current_output_commands.last()
                     && !commands.has_remaining_passes()
                 {
-                    return Err(Box::new(e));
+                    return Err(e);
                 }
 
                 if self.pass.is_first_pass() {
@@ -670,7 +674,7 @@ impl Env {
                     Ok(r.into())
                 }
                 else {
-                    Err(Box::new(e))
+                    Err(Box::new(*e))
                 }
             }
         }
@@ -726,20 +730,20 @@ impl Env {
 
         match (already_present, self.pass) {
             (true, AssemblingPass::FirstPass) => {
-                Err(AssemblerError::SymbolAlreadyExists {
+                Err(Box::new(AssemblerError::SymbolAlreadyExists {
                     symbol: label.to_string()
-                })
+                }))
             },
             (false, AssemblingPass::SecondPass(_)) => {
                 // here we weaken the test to allow multipass stuff
                 if !self.requested_additional_pass && !*self.request_additional_pass.read().unwrap()
                 {
-                    Err(AssemblerError::IncoherentCode {
+                    Err(Box::new(AssemblerError::IncoherentCode {
                         msg: format!(
                             "Label {} is not present in the symbol table in pass {}. There is an issue with some  conditional code.",
                             label, self.pass
                         )
-                    })
+                    }))
                 }
                 else {
                     self.symbols_mut().set_symbol_to_value(label, value)?;
@@ -747,12 +751,12 @@ impl Env {
                 }
             },
             (false, AssemblingPass::ListingPass) => {
-                Err(AssemblerError::IncoherentCode {
+                Err(Box::new(AssemblerError::IncoherentCode {
                     msg: format!(
                         "Label {} is not present in the symbol table in pass {}. There is an issue with some conditional code.",
                         label, self.pass
                     )
-                })
+                }))
             },
             (false, AssemblingPass::FirstPass) | (false, AssemblingPass::Uninitialized) => {
                 self.symbols_mut().set_symbol_to_value(label, value)?;
@@ -833,7 +837,7 @@ impl Env {
     /// If the error has not been raised at the previous pass, store it and do not propagate it. Otherwise, propagate it
     pub fn add_error_discardable_one_pass(
         &mut self,
-        e: AssemblerError
+        e: Box<AssemblerError>
     ) -> Result<(), Box<AssemblerError>> {
         let repr = SimplerAssemblerError(&e).to_string();
         if self.previous_pass_discarded_errors.contains(&repr) {
@@ -858,7 +862,9 @@ impl Env {
     }
 
     fn leave_namespace(&mut self) -> Result<Symbol, Box<AssemblerError>> {
-        self.symbols_mut().leave_namespace().map_err(|e| Box::new(e.into()))
+        self.symbols_mut()
+            .leave_namespace()
+            .map_err(|e| Box::new(e.into()))
     }
 }
 
@@ -897,7 +903,7 @@ impl Env {
         env
     }
 
-    pub fn warnings(&self) -> &[AssemblerWarning] {
+    pub fn warnings(&self) -> &[Box<AssemblerWarning>] {
         &self.warnings
     }
 
@@ -1243,24 +1249,24 @@ impl Env {
         // ga values to properly switch the pages
         let pages_mmr = MMR_PAGES_SELECTION;
 
-        let mut assert_failures: Option<AssemblerError> = None;
+        let mut assert_failures: Option<Box<AssemblerError>> = None;
 
         let mut handle_page = |page: &PageInformation| {
-            let mut l_errors = page.collect_assert_failure();
-            match (&mut assert_failures, &mut l_errors) {
+            let mut l_errors: Result<(), Box<AssemblerError>> = page.collect_assert_failure();
+            match (&mut assert_failures, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
                 (
-                    Some(AssemblerError::MultipleErrors { errors: e1 }),
-                    Err(AssemblerError::MultipleErrors { errors: e2 })
+                    Some(box AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(box AssemblerError::MultipleErrors { errors: mut e2 })
                 ) => {
-                    e1.append(e2);
+                    e1.append(&mut e2);
                 },
                 (None, Err(l_errors)) => {
-                    assert_failures = Some(l_errors.clone());
+                    assert_failures = Some(l_errors);
                 },
-                _ => unreachable!()
+                _ => unimplemented!()
             }
         };
 
@@ -1285,7 +1291,7 @@ impl Env {
         // All possible messages have been printed.
         // Errors are generated for the others
         if let Some(errors) = assert_failures {
-            Err(errors)
+            return Err(errors);
         }
         else {
             Ok(())
@@ -1302,23 +1308,23 @@ impl Env {
         // ga values to properly switch the pages
         let pages_mmr = MMR_PAGES_SELECTION;
 
-        let mut print_errors: Option<AssemblerError> = None;
+        let mut print_errors: Option<Box<AssemblerError>> = None;
         let observer = self.observer();
 
         let mut handle_page_info = |page: &PageInformation| {
-            let mut l_errors = page.execute_print_or_pause(observer.deref());
-            match (&mut print_errors, &mut l_errors) {
+            let mut l_errors: Result<(), Box<AssemblerError>> = page.execute_print_or_pause(observer.deref());
+            match (&mut print_errors, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
                 (
-                    Some(AssemblerError::MultipleErrors { errors: e1 }),
-                    Err(AssemblerError::MultipleErrors { errors: e2 })
+                    Some(box AssemblerError::MultipleErrors { errors: e1 }),
+                    Err(box AssemblerError::MultipleErrors { errors: mut e2 })
                 ) => {
-                    e1.append(e2);
+                    e1.append(&mut e2);
                 },
                 (None, Err(l_errors)) => {
-                    print_errors = Some(l_errors.clone());
+                    print_errors = Some(l_errors);
                 },
                 _ => unreachable!()
             }
@@ -1348,9 +1354,8 @@ impl Env {
         // All possible messages have been printed.
         // Errors are generated for the others
         if let Some(errors) = print_errors {
-            Err(errors)
-        }
-        else {
+            return Err(errors);
+        } else {
             Ok(())
         }
     }
@@ -1681,7 +1686,7 @@ impl Env {
         let r#override = if already_used {
             let r#override = AssemblerWarning::OverrideMemory(physical_output_address, 1);
             if self.allow_memory_override() {
-                self.add_warning(r#override);
+                self.add_warning(Box::new(r#override));
                 true
             }
             else {
@@ -1772,13 +1777,13 @@ impl Env {
             if self.options().assemble_options().enable_warnings {
                 match (previously_overrided, currently_overrided) {
                     (true, true) => {
-                        // remove the latestwarning as it is a duplicate
+                        // remove the latest warning as it is a duplicate
                         let extra_override_idx = self
                             .warnings
                             .iter_mut()
                             .rev()
                             .position(|w| {
-                                if let AssemblerError::OverrideMemory(..) = w {
+                                if let AssemblerError::OverrideMemory(..) = &**w {
                                     true
                                 }
                                 else {
@@ -1795,17 +1800,16 @@ impl Env {
                             .iter_mut()
                             .rev()
                             .find(|w| {
-                                if let AssemblerError::OverrideMemory(..) = w {
+                                if let AssemblerError::OverrideMemory(..) = &***w {
                                     true
-                                }
-                                else {
+                                } else {
                                     false
                                 }
                             })
                             .unwrap(); // cannot fail by construction
 
                         // increase its size
-                        match r#override {
+                        match &mut **r#override {
                             AssemblerError::OverrideMemory(_, size) => {
                                 *size += 1;
                             },
@@ -1893,8 +1897,9 @@ impl Env {
     pub fn save_cpr<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), Box<AssemblerError>> {
         let cpr_asm = self.cpr.as_ref().unwrap();
         let cpr = cpr_asm.build_cpr()?;
-        cpr.save(fname)
-            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })
+        Ok(cpr
+            .save(fname)
+            .map_err(|e| AssemblerError::IOError { msg: e.to_string() })?)
     }
 
     /// Compute the relative address. Is authorized to fail at first pass
@@ -1910,11 +1915,11 @@ impl Env {
                     Ok(0)
                 }
                 else {
-                    Err(AssemblerError::RelativeAddressUncomputable {
+                    Err(Box::new(AssemblerError::RelativeAddressUncomputable {
                         address,
                         pass: self.pass,
-                        error: Box::new(error)
-                    })
+                        error: Box::new(*error)
+                    }))
                 }
             },
         }
@@ -1923,7 +1928,7 @@ impl Env {
 
 impl Env {
     #[inline(always)]
-    pub fn add_warning(&mut self, warning: AssemblerWarning) {
+    pub fn add_warning(&mut self, warning: Box<AssemblerWarning>) {
         if self.options().assemble_options().enable_warnings {
             self.warnings.push(warning);
         }
@@ -2004,7 +2009,7 @@ impl Env {
         }
 
         if self.logical_output_address() != self.output_address {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!(
@@ -2013,7 +2018,7 @@ impl Env {
                     self.output_address,
                     self.pass
                 )
-            });
+            }));
         }
 
         Ok(())
@@ -2080,7 +2085,7 @@ impl Env {
                     0 => 0,
                     1 => 1,
                     _ => {
-                        return Err(AssemblerError::BugInAssembler {
+                        return Err(Box::new(AssemblerError::BugInAssembler {
                             file: file!(),
                             line: line!(),
                             msg: format!(
@@ -2089,7 +2094,7 @@ impl Env {
                                     .to_memory()
                                     .page()
                             )
-                        });
+                        }));
                     }
                 };
 
@@ -2216,25 +2221,25 @@ impl Env {
         let in_crunched_section = self.crunched_section_state.is_some();
 
         if value <= 0 {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!("It is a nonsense to define a limit of {value}")
-            });
+            }));
         }
 
         if value > 0xFFFF {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!(
                     "It is a nonsense to define a limit of {value} that exceeds hardware limitations."
                 )
-            });
+            }));
         }
 
         if in_crunched_section {
             self.active_page_info_mut().code_limit = value as _;
             if self.code_limit_address() <= self.maximum_address() {
-                return Err(AssemblerError::OutputAlreadyExceedsLimits(
+                return Err(Box::new(AssemblerError::OutputAlreadyExceedsLimits(
                     self.code_limit_address() as _
-                ));
+                )));
             }
             if self.code_limit_address() == 0 {
                 eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
@@ -2243,9 +2248,9 @@ impl Env {
         else {
             self.active_page_info_mut().output_limit = value as _;
             if self.output_limit_address() <= self.maximum_address() {
-                return Err(AssemblerError::OutputAlreadyExceedsLimits(
+                return Err(Box::new(AssemblerError::OutputAlreadyExceedsLimits(
                     self.output_limit_address() as _
-                ));
+                )));
             }
             if self.output_limit_address() == 0 {
                 eprintln!("[WARNING] Do you really want to set a limit of 0 ?");
@@ -2296,7 +2301,7 @@ impl Env {
                 || !(self.symbols().kind(label)? == "address"
                     || self.symbols().kind(label)? == "any"))
         {
-            Err(AssemblerError::AlreadyDefinedSymbol {
+            Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: self
                     .symbols()
                     .extend_local_and_patterns_for_symbol(label)
@@ -2310,7 +2315,7 @@ impl Env {
                     .unwrap()
                     .location()
                     .cloned()
-            })
+            }))
         }
         else {
             // TODO we should make the expansion right now because it is fucked up otherwise
@@ -2333,7 +2338,7 @@ impl Env {
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(AssemblerError::AlreadyDefinedSymbol {
+        if let Err(box AssemblerError::AlreadyDefinedSymbol {
             symbol: _,
             kind,
             here: _
@@ -2346,7 +2351,7 @@ impl Env {
                             .to_owned()
                 };
                 if self.options().assemble_options().force_void() {
-                    return Err(message);
+                    return Err(Box::new(message));
                 }
                 else {
                     // self.add_warning(message);
@@ -2401,7 +2406,10 @@ impl Env {
         Ok(())
     }
 
-    fn visit_multi_pushes<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), Box<AssemblerError>> {
+    fn visit_multi_pushes<D: DataAccessElem>(
+        &mut self,
+        regs: &[D]
+    ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per push; actual size may vary slightly
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
         for bytes in regs.iter().map(assemble_push) {
@@ -2410,7 +2418,10 @@ impl Env {
         self.output_bytes(&result)
     }
 
-    fn visit_multi_pops<D: DataAccessElem>(&mut self, regs: &[D]) -> Result<(), Box<AssemblerError>> {
+    fn visit_multi_pops<D: DataAccessElem>(
+        &mut self,
+        regs: &[D]
+    ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per pop; actual size may vary slightly
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
         for bytes in regs.iter().map(assemble_pop) {
@@ -2440,7 +2451,7 @@ impl Env {
                     .set_diff_only(true)
                     .format();
                 let msg = format!("Macro name `{name}` already exists. {diff}");
-                return Err(AssemblerError::AlreadyRenderedError(msg));
+                return Err(Box::new(AssemblerError::AlreadyRenderedError(msg)));
             }
         }
 
@@ -2492,9 +2503,9 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         if self.pass.is_first_pass() && self.symbols().contains_symbol(name.as_str())? {
-            return Err(AssemblerError::SymbolAlreadyExists {
+            return Err(Box::new(AssemblerError::SymbolAlreadyExists {
                 symbol: name.as_str().to_owned()
-            });
+            }));
         }
 
         let r#struct = Struct::new(name.as_str(), content, span.map(|s| s.into()));
@@ -2542,11 +2553,11 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         if cmd.is_restricted_assembling_environment() {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: "BUG in assembler. This has to be handled in processed_tokens".to_string()
-            });
+            }));
         }
         else if cmd.is_print_at_parse_state() {
             // nothing to do here because printing as alrady been done
@@ -2600,9 +2611,9 @@ impl Env {
         match self.sections.get(name) {
             Some(section) => Ok(section.read().unwrap().clone()),
             None => {
-                Err(AssemblerError::AssemblingError {
+                Err(Box::new(AssemblerError::AssemblingError {
                     msg: format!("Section '{name}' does not exists")
-                })
+                }))
             },
         }
     }
@@ -2611,9 +2622,9 @@ impl Env {
         let section = match self.sections.get(name.as_str()) {
             Some(section) => section,
             None => {
-                return Err(AssemblerError::AssemblingError {
+                return Err(Box::new(AssemblerError::AssemblingError {
                     msg: format!("Section '{name}' does not exists")
-                });
+                }));
             }
         };
 
@@ -2649,7 +2660,7 @@ impl Env {
         }
 
         if let Some(warning) = warning {
-            self.add_warning(warning);
+            self.add_warning(Box::new(warning));
         }
 
         Ok(())
@@ -2672,12 +2683,12 @@ impl Env {
                 || name.as_str() != section.name
                 || mmr != section.mmr
             {
-                return Err(AssemblerError::AssemblingError {
+                return Err(Box::new(AssemblerError::AssemblingError {
                     msg: format!(
                         "Section '{}' is already defined from 0x{:x} to 0x{:x} in 0x{:x}",
                         section.name, section.start, section.stop, section.mmr
                     )
-                });
+                }));
             }
         }
         else {
@@ -2705,11 +2716,11 @@ impl Env {
             && self.pass.is_first_pass()
         {
             let kind = self.symbols().kind(Symbol::from(destination.as_str()))?;
-            return Err(AssemblerError::AlreadyDefinedSymbol {
+            return Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: destination.as_str().into(),
                 kind: kind.into(),
                 here: None
-            });
+            }));
         }
 
         // setup the value
@@ -2792,7 +2803,7 @@ impl Env {
         exp: Option<&E>
     ) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
-            return Err(AssemblerError::NotAllowed);
+            return Err(Box::new(AssemblerError::NotAllowed));
         }
 
         let output_kind = self.output_kind();
@@ -2805,9 +2816,9 @@ impl Env {
 
                 if output_kind == OutputKind::Cpr {
                     if !(0..=31).contains(&exp) {
-                        return Err(AssemblerError::AssemblingError {
+                        return Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("Value {exp} is not compatible. [0-31]")
-                        });
+                        }));
                     }
 
                     if let Some(cpr) = &mut self.cpr {
@@ -2825,7 +2836,7 @@ impl Env {
 
                     let mmr = exp;
                     if !(0xC0..=0xC7).contains(&mmr) {
-                        return Err(AssemblerError::MMRError { value: mmr });
+                        return Err(Box::new(AssemblerError::MMRError { value: mmr }));
                     }
 
                     let mmr = mmr as u8;
@@ -2867,7 +2878,7 @@ impl Env {
     // total switch of page
     fn visit_pageset<E: ExprEvaluationExt>(&mut self, exp: &E) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
-            return Err(AssemblerError::NotAllowed);
+            return Err(Box::new(AssemblerError::NotAllowed));
         }
 
         let page = self.resolve_expr_must_never_fail(exp)?.int()? as u8; // This value MUST be interpretable once executed
@@ -2879,15 +2890,15 @@ impl Env {
 
     fn select_page(&mut self, page: u8) -> Result<(), Box<AssemblerError>> {
         if self.nested_rorg > 0 {
-            return Err(AssemblerError::NotAllowed);
+            return Err(Box::new(AssemblerError::NotAllowed));
         }
 
         if
         // page < 0 ||
         page >= 8 {
-            return Err(AssemblerError::InvalidArgument {
+            return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: format!("{page} is invalid. BANKSET only accept values from 0 to 7")
-            });
+            }));
         }
 
         if page == 0 {
@@ -2914,13 +2925,13 @@ impl Env {
         match self.symbols_mut().remove_symbol(label.as_str())? {
             Some(_) => Ok(()),
             None => {
-                Err(AssemblerError::UnknownSymbol {
+                Err(Box::new(AssemblerError::UnknownSymbol {
                     symbol: label.as_str().into(),
                     closest: self
                         .symbols()
                         .closest_symbol(label.as_str(), SymbolFor::Number)?
                         .map(|s| s.into())
-                })
+                }))
             },
         }
     }
@@ -2947,7 +2958,7 @@ impl Env {
         &mut self,
         info: &[FormattedExpr]
     ) -> Result<PreprocessedFormattedString, Box<AssemblerError>> {
-        PreprocessedFormattedString::try_new(info, self)
+        Ok(PreprocessedFormattedString::try_new(info, self)?)
     }
 
     /// Print the evaluation of the expression in the 2nd pass
@@ -2969,13 +2980,16 @@ impl Env {
             .add_pause_command(span.cloned().into());
     }
 
-    pub fn visit_fail(&mut self, info: Option<&[FormattedExpr]>) -> Result<(), Box<AssemblerError>> {
+    pub fn visit_fail(
+        &mut self,
+        info: Option<&[FormattedExpr]>
+    ) -> Result<(), Box<AssemblerError>> {
         let repr = info
             .map(|info| self.prepropress_string_formatted_expression(info))
             .unwrap_or_else(|| Ok(Default::default()))?;
-        Err(AssemblerError::Fail {
+        Err(Box::new(AssemblerError::Fail {
             msg: repr.to_string()
-        })
+        }))
     }
 
     // TODO better design the token to simplify this code and remove all ambigous cases
@@ -2989,20 +3003,20 @@ impl Env {
         _side: Option<&E>
     ) -> Result<(), Box<AssemblerError>> {
         if cfg!(target_arch = "wasm32") {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: "SAVE directive is not allowed in a web-based assembling.".into()
-            });
+            }));
         }
 
         let from = match address {
             Some(address) => {
                 let address = self.resolve_expr_must_never_fail(address)?.int()?;
                 if address < 0 {
-                    return Err(AssemblerError::AssemblingError {
+                    return Err(Box::new(AssemblerError::AssemblingError {
                         msg: format!(
                             "Cannot SAVE {amsdos_fname} as the address ({address}) is invalid."
                         )
-                    });
+                    }));
                 }
                 Some(address)
             },
@@ -3013,9 +3027,9 @@ impl Env {
             Some(size) => {
                 let size = self.resolve_expr_must_never_fail(size)?.int()?;
                 if size < 0 {
-                    return Err(AssemblerError::AssemblingError {
+                    return Err(Box::new(AssemblerError::AssemblingError {
                         msg: format!("Cannot SAVE {amsdos_fname} as the size ({size}) is invalid.")
-                    });
+                    }));
                 }
                 Some(size)
             },
@@ -3026,12 +3040,12 @@ impl Env {
             && let Some(size) = &size
             && 0x10000 - *from < *size
         {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!(
                     "Cannot SAVE {amsdos_fname} as the address+size (0x{:X}) is out of bounds.",
                     *from + *size
                 )
-            });
+            }));
         }
 
         let amsdos_fname = self.build_fname(amsdos_fname)?;
@@ -3055,42 +3069,42 @@ impl Env {
             match disc {
                 DiscType::Dsk => {
                     if !(lower_fname.ends_with(".dsk") || lower_fname.ends_with(".edsk")) {
-                        return Err(AssemblerError::InvalidArgument {
+                        return Err(Box::new(AssemblerError::InvalidArgument {
                             msg: format!("{dsk_fname} has not a DSK compatible extension")
-                        });
+                        }));
                     }
                 },
                 DiscType::Hfe => {
                     if !lower_fname.ends_with(".hfe") {
-                        return Err(AssemblerError::InvalidArgument {
+                        return Err(Box::new(AssemblerError::InvalidArgument {
                             msg: format!("{dsk_fname} has not a HFE compatible extension")
-                        });
+                        }));
                     }
 
                     #[cfg(not(feature = "hfe"))]
-                    Err(AssemblerError::InvalidArgument {
+                    Err(Box::new(AssemblerError::InvalidArgument {
                         msg: format!(
                             "{dsk_fname} cannot be saved. No HFE support is included with this version of basm"
                         )
-                    })?
+                    }))?
                 },
                 DiscType::Auto => {
                     if !(lower_fname.ends_with(".dsk")
                         || lower_fname.ends_with(".edsk")
                         || lower_fname.ends_with(".hfe"))
                     {
-                        return Err(AssemblerError::InvalidArgument {
+                        return Err(Box::new(AssemblerError::InvalidArgument {
                             msg: format!("{dsk_fname} has not a DSK or HFE compatible extension")
-                        });
+                        }));
                     }
 
                     #[cfg(not(feature = "hfe"))]
                     if lower_fname.ends_with(".hfe") {
-                        Err(AssemblerError::InvalidArgument {
+                        Err(Box::new(AssemblerError::InvalidArgument {
                             msg: format!(
                                 "{dsk_fname} cannot be saved. No HFE support is included with this version of basm"
                             )
-                        })?
+                        }))?
                     }
                 }
             }
@@ -3160,11 +3174,11 @@ impl Env {
         }
 
         if self.byte_written {
-            return Err(AssemblerError::AssemblingError {
+            return Err(Box::new(AssemblerError::AssemblingError {
                 msg: format!(
                     "Some bytes has already been produced; you cannot import the snapshot {fname}."
                 )
-            });
+            }));
         }
         self.sna.sna = Snapshot::load(fname).map_err(|e| {
             AssemblerError::AssemblingError {
@@ -3281,11 +3295,11 @@ impl Env {
                     match span {
                         Some(span) => {
                             AssemblerError::RelocatedError {
-                                error: e.into(),
+                                error: Box::new(*e),
                                 span: span.clone()
                             }
                         },
-                        None => e
+                        None => *e
                     }
                 })?
             }
@@ -3299,11 +3313,11 @@ impl Env {
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
-                        error: e.into(),
+                        error: Box::new(*e),
                         span: span.clone()
                     }
                 },
-                None => e
+                None => *e
             }
         })?;
 
@@ -3315,11 +3329,11 @@ impl Env {
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
-                        error: e.into(),
+                        error: Box::new(*e),
                         span: span.clone()
                     }
                 },
-                None => e
+                None => *e
             }
         })?;
 
@@ -3336,11 +3350,11 @@ impl Env {
         // - no LIMIT/PROTECT has been used in the crunched area
         // - a possible forbidden write has been done (maybe too complex to implement)
         if could_display_warning_message {
-            self.add_warning(
+            self.add_warning(Box::new(
                 AssemblerWarning::AssemblingError{
                     msg: "Memory protection systems are disabled in crunched section. If you want to keep them, explicitely use LIMIT or PROTECT directives in the crunched section.".into()
                 }
-            );
+            ));
         }
 
         Ok(())
@@ -3486,11 +3500,11 @@ impl Env {
 impl Env {
     pub fn visit_return<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), Box<AssemblerError>> {
         if self.return_value.is_some() {
-            return dbg!(Err(AssemblerError::BugInAssembler {
+            return dbg!(Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: "Return value is alread set up".into()
-            }));
+            })));
         }
         self.return_value = Some(self.resolve_expr_must_never_fail(e)?);
         Ok(())
@@ -3499,7 +3513,7 @@ impl Env {
     pub fn user_defined_function(&self, name: &str) -> Result<&Function, Box<AssemblerError>> {
         match self.functions.get(name) {
             Some(f) => Ok(f),
-            None => Err(AssemblerError::FunctionUnknown(name.to_owned()))
+            None => Err(Box::new(AssemblerError::FunctionUnknown(name.to_owned())))
         }
     }
 
@@ -3524,7 +3538,7 @@ impl Env {
         }?;
 
         let f: *const Function = f as *const _; // XXX remove the link with environment
-        unsafe { (*f).eval(self, params) }
+        unsafe { Ok((*f).eval(self, params)?) }
     }
 }
 
@@ -3535,7 +3549,11 @@ pub fn visit_tokens_all_passes_with_options<'token, T>(
     options: EnvOptions
 ) -> Result<
     (Vec<ProcessedToken<'token, T>>, Env),
-    (Option<Vec<ProcessedToken<'token, T>>>, Env, Box<AssemblerError>)
+    (
+        Option<Vec<ProcessedToken<'token, T>>>,
+        Env,
+        Box<AssemblerError>
+    )
 >
 where
     T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
@@ -3768,11 +3786,11 @@ macro_rules! visit_token_impl {
             | $cls::Macro { .. } => panic!("Should be handled by ProcessedToken"),
 
             _ => {
-                Err(AssemblerError::BugInAssembler {
+                Err(Box::new(AssemblerError::BugInAssembler {
                     file: file!(),
                     line: line!(),
                     msg: format!("Directive not handled: {:?}", $token)
-                })
+                }))
             },
         }
     }};
@@ -3798,7 +3816,7 @@ pub fn visit_located_token(
     if outer_token.is_warning() {
         let warning = AssemblerWarning::AlreadyRenderedError(outer_token.warning_message().into());
         let warning = warning.locate(outer_token.span().clone());
-        env.add_warning(warning);
+        env.add_warning(Box::new(warning));
     }
 
     // get the token to handle (after remobing handling wrapping)
@@ -3813,7 +3831,7 @@ pub fn visit_located_token(
     let nb_additional_warnings = env.warnings.len() - nb_warnings;
     for i in 0..nb_additional_warnings {
         let warning = &mut env.warnings[i + nb_warnings];
-        *warning = warning.clone().locate_warning(span.clone());
+        **warning = warning.clone().locate_warning(span.clone());
 
         // TODO check why it has been done this way
         //      maybe source code is not retrained and there are random crashes ?
@@ -3855,23 +3873,22 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
 
         Ok(value) => {
             if !value.bool()? {
-                Err(AssemblerError::AssertionFailed {
-                    msg: /*prefix
-                        +*/ (if txt.is_some() {
-                            env.prepropress_string_formatted_expression(txt.unwrap())?.to_string()
-                        }
-                        else {
-                            "".to_owned()
-                        })
-                        /* .as_str()*/,
+                Err(Box::new(AssemblerError::AssertionFailed {
+                    msg: (if txt.is_some() {
+                        env.prepropress_string_formatted_expression(txt.unwrap())?
+                            .to_string()
+                    }
+                    else {
+                        "".to_owned()
+                    }),
                     test: exp.to_string(),
                     guidance: env.to_assert_string(exp)
-                })
+                }))
             }
             else {
                 Ok(())
             }
-        }
+        },
     };
 
     if let Err(assert_error) = res {
@@ -3879,7 +3896,7 @@ fn visit_assert<E: ExprEvaluationExt + ExprElement>(
             assert_error.locate(span.clone())
         }
         else {
-            assert_error
+            *assert_error
         };
         env.active_page_info_mut()
             .add_failed_assert_command(assert_error.into());
@@ -3908,7 +3925,7 @@ impl Env {
             // generate the bytes
             visit_processed_tokens(code, self).map_err(|e| {
                 AssemblerError::WhileIssue {
-                    error: Box::new(e),
+                    error: Box::new(*e),
                     span: span.cloned()
                 }
             })?;
@@ -3939,16 +3956,15 @@ impl Env {
         let counter_name = format!("{{{counter_name}}}");
         let counter_name = counter_name.as_str();
         if self.symbols().contains_symbol(counter_name)? {
-            return Err(AssemblerError::RepeatIssue {
-                error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
+            return Err(Box::new(AssemblerError::RepeatIssue {
+                error: Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
                         msg: format!("Counter {counter_name} already exists")
                     }
-                )))
-                .into(),
+                )))),
                 span: span.cloned(),
                 repetition: 0
-            });
+            }));
         }
 
         // Get the values (all args or list explosion)
@@ -3958,7 +3974,7 @@ impl Env {
                 for (i, value) in values.iter().enumerate() {
                     let counter_value = self.resolve_expr_must_never_fail(value).map_err(|e| {
                         AssemblerError::RepeatIssue {
-                            error: Box::new(e),
+                            error: e,
                             span: span.cloned(),
                             repetition: i as _
                         }
@@ -3987,9 +4003,9 @@ impl Env {
                     },
 
                     _ => {
-                        return Err(AssemblerError::AssemblingError {
+                        return Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("REPEAT issue: {values} is not a list or a matrix")
-                        });
+                        }));
                     }
                 }
             },
@@ -4023,10 +4039,10 @@ impl Env {
             .map_err(|error| {
                 match span {
                     Some(span) => {
-                        AssemblerError::RelocatedError {
-                            error: Box::new(error),
+                        Box::new(AssemblerError::RelocatedError {
+                            error: Box::new(*error),
                             span: span.clone()
-                        }
+                        })
                     },
                     None => error
                 }
@@ -4084,7 +4100,7 @@ impl Env {
         visit_processed_tokens(lst, &mut confined_env).map_err(|e| {
             match span {
                 Some(span) => e.locate(span.clone()),
-                None => e
+                None => *e
             }
         })?;
 
@@ -4100,8 +4116,8 @@ impl Env {
                 )
             };
             match span {
-                Some(span) => return Err(e.locate(span.clone())),
-                None => return Err(e)
+                Some(span) => return Err(Box::new(e.locate(span.clone()))),
+                None => return Err(Box::new(e))
             }
         }
 
@@ -4138,7 +4154,7 @@ impl Env {
     {
         let counter_name = format!("{{{label}}}");
         if self.symbols().contains_symbol(&counter_name)? {
-            return Err(AssemblerError::ForIssue {
+            return Err(Box::new(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
                         msg: format!("Counter {} already exists", &counter_name)
@@ -4146,7 +4162,7 @@ impl Env {
                 )))
                 .into(),
                 span: span.cloned()
-            });
+            }));
         }
 
         let mut counter_value = self.resolve_expr_must_never_fail(start)?;
@@ -4159,7 +4175,7 @@ impl Env {
         let zero = ExprResult::from(0i32);
 
         if step == zero {
-            return Err(AssemblerError::ForIssue {
+            return Err(Box::new(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
                         msg: "Infinite loop".to_string()
@@ -4167,11 +4183,11 @@ impl Env {
                 )))
                 .into(),
                 span: span.cloned()
-            });
+            }));
         }
 
         if step < zero {
-            return Err(AssemblerError::ForIssue {
+            return Err(Box::new(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
                         msg: "Negative step is not yet handled".to_string()
@@ -4179,7 +4195,7 @@ impl Env {
                 )))
                 .into(),
                 span: span.cloned()
-            });
+            }));
         }
 
         let mut i = 1;
@@ -4299,7 +4315,7 @@ impl Env {
         if let Some(counter_name) = counter_name
             && self.symbols().contains_symbol(counter_name)?
         {
-            return Err(AssemblerError::RepeatIssue {
+            return Err(Box::new(AssemblerError::RepeatIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
                         msg: format!("Counter {counter_name} already exists")
@@ -4308,7 +4324,7 @@ impl Env {
                 .into(),
                 span: span.cloned(),
                 repetition: 0
-            });
+            }));
         }
 
         // get the first value
@@ -4385,7 +4401,7 @@ impl Env {
             let e = if let AssemblerError::RelocatedError {
                 error: box AssemblerError::UnknownSymbol { closest: _, symbol },
                 span
-            } = &e
+            } = &*e
             {
                 if let Some(counter_name) = counter_name {
                     if counter_name == format!("{{{symbol}}}") {
@@ -4398,22 +4414,22 @@ impl Env {
                         }
                     }
                     else {
-                        e
+                        *e.clone()
                     }
                 }
                 else {
-                    e
+                    *e.clone()
                 }
             }
             else {
-                e
+                *e.clone()
             };
 
-            AssemblerError::RepeatIssue {
+            Box::new(AssemblerError::RepeatIssue {
                 error: Box::new(e),
                 span: span.cloned(),
                 repetition: iteration as _
-            }
+            })
         })?;
 
         // handle the end of visibility of unique labels
@@ -4478,7 +4494,8 @@ impl Env {
         }
 
         if self.run_options.is_some() {
-            return Err(AssemblerError::RunAlreadySpecified);
+            return Err(Box::new(AssemblerError::RunAlreadySpecified));
+            return Err(Box::new(AssemblerError::RunAlreadySpecified));
         }
         self.sna
             .set_value(cpclib_sna::SnapshotFlag::Z80_PC, address as _)?;
@@ -4518,8 +4535,8 @@ impl Env {
         while current_warning_idx < self.warnings.len() {
             // Check if we need to fuse successive override memory warnings
             let (new_size, new_span) = match (
-                &self.warnings[previous_warning_idx],
-                &self.warnings[current_warning_idx]
+                &*self.warnings[previous_warning_idx],
+                &*self.warnings[current_warning_idx]
             ) {
                 // we fuse two consecutive override memory warnings
                 (
@@ -4589,14 +4606,14 @@ impl Env {
                     if let AssemblerError::RelocatedWarning {
                         warning: box AssemblerWarning::OverrideMemory(_prev_addr, prev_size),
                         span
-                    } = &mut self.warnings[previous_warning_idx]
+                    } = &mut *self.warnings[previous_warning_idx]
                     {
                         *prev_size = new_size;
                         *span = new_span;
                     }
                 }
                 else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
-                    &mut self.warnings[previous_warning_idx]
+                    &mut *self.warnings[previous_warning_idx]
                 {
                     *prev_size = new_size;
                 }
@@ -4618,12 +4635,12 @@ impl Env {
     fn render_warnings(&mut self) {
         // transform the warnings as strings
         self.warnings.iter_mut().for_each(|w| {
-            if let AssemblerError::AssemblingError { .. } = w {
+            if let AssemblerError::AssemblingError { .. } = &**w {
                 // nothing to do
             }
             else {
-                *w = AssemblerWarning::AssemblingError {
-                    msg: (*w).to_string()
+                **w = AssemblerWarning::AssemblingError {
+                    msg: (**w).to_string()
                 }
             }
         });
@@ -4647,11 +4664,11 @@ impl Env {
         exp: &E
     ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
-            Err(AssemblerError::AlreadyDefinedSymbol {
+            Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
                 here: label_span.possible_span().map(|s| s.into())
-            })
+            }))
         }
         else {
             let label = self.handle_global_and_local_labels(label_span.as_str())?;
@@ -4666,7 +4683,7 @@ impl Env {
                 let warning = AssemblerWarning::AssemblingError {
                     msg: warning.to_string()
                 };
-                self.add_warning(warning);
+                self.add_warning(Box::new(warning));
             }
 
             // XXX Disabled behavior the 12/01/2024
@@ -4694,11 +4711,11 @@ impl Env {
         exp: &E
     ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
-            Err(AssemblerError::AlreadyDefinedSymbol {
+            Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
                 here: None
-            })
+            }))
         }
         else {
             let delta = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
@@ -4709,7 +4726,8 @@ impl Env {
                 if let Some(span) = exp.possible_span() {
                     e = e.locate(span.clone());
                 }
-                return Err(e);
+
+                return Err(Box::new(e));
             }
 
             let label = self.handle_global_and_local_labels(label_span.as_str())?;
@@ -4835,7 +4853,12 @@ impl Env {
 
         let mask = kind.mask();
 
-        fn output(env: &mut Env, val: i32, delta: i32, mask: u16) -> Result<(), Box<AssemblerError>> {
+        fn output(
+            env: &mut Env,
+            val: i32,
+            delta: i32,
+            mask: u16
+        ) -> Result<(), Box<AssemblerError>> {
             let val: i32 = val + delta;
 
             if mask == 0xFF {
@@ -5053,9 +5076,9 @@ pub fn visit_stableticker<S: AsRef<str>>(
                 .unwrap_or_else(|| env.stable_counters.release_last_counter())
             {
                 if !env.pass.is_listing_pass() && env.symbols().contains_symbol(&label)? {
-                    env.add_warning(AssemblerWarning::AlreadyRenderedError(format!(
+                    env.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(format!(
                         "Symbol {label} has been overwritten"
-                    )));
+                    ))));
                 }
 
                 // force the injection of the value
@@ -5064,7 +5087,7 @@ pub fn visit_stableticker<S: AsRef<str>>(
                 Ok(())
             }
             else {
-                Err(AssemblerError::NoActiveCounter)
+                Err(Box::new(AssemblerError::NoActiveCounter))
             }
         }
     }
@@ -5086,9 +5109,9 @@ pub fn assemble_defs_item<E: ExprEvaluationExt>(
     };
 
     if count < 0 {
-        return Err(AssemblerError::AssemblingError {
+        return Err(Box::new(AssemblerError::AssemblingError {
             msg: format!("{count} is an invalid value")
-        });
+        }));
     }
 
     let value = if fill.is_none() {
@@ -5309,11 +5332,11 @@ fn assemble_no_arg(mnemonic: Mnemonic) -> Result<Bytes, Box<AssemblerError>> {
         Mnemonic::Rld => &[0xED, 0x6F],
         Mnemonic::Rrd => &[0xED, 0x67],
         _ => {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!("{mnemonic} not treated")
-            });
+            }));
         }
     };
 
@@ -5406,13 +5429,13 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
     sym: T
 ) -> Result<u8, Box<AssemblerError>> {
     match sym.as_ref().current_address() {
-        Err(_msg) => Err(AssemblerError::UnknownAssemblingAddress),
+        Err(_msg) => Err(Box::new(AssemblerError::UnknownAssemblingAddress)),
         Ok(root) => {
             let delta = (address - i32::from(root)) - opcode_delta;
             if !(-128..=127).contains(&delta) {
-                Err(AssemblerError::InvalidArgument {
+                Err(Box::new(AssemblerError::InvalidArgument {
                     msg: format!("Address 0x{address:x} relative to 0x{root:x} is too far {delta}")
-                })
+                }))
             }
             else {
                 let res = (delta & 0xFF) as u8;
@@ -5458,21 +5481,21 @@ where
     let _p = match val {
         0x38 | 7 | 38 => 0b111,
         _ => {
-            return Err(AssemblerError::InvalidArgument {
+            return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: format!(
                     "Conditionnal RST cannot take {val} as argument. Expected values are 0x38|7|38."
                 )
-            });
+            }));
         }
     };
 
     let flag = arg1.get_flag_test().unwrap();
     if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {
-        return Err(AssemblerError::InvalidArgument {
+        return Err(Box::new(AssemblerError::InvalidArgument {
             msg: format!(
                 "Conditionnal RST cannot take {flag} as flag. Expected values are C|NC|Z|NZ."
             )
-        });
+        }));
     }
 
     assemble_opcode(
@@ -5503,11 +5526,11 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         0x30 | 6 | 30 => 0b110,
         0x38 | 7 | 38 => 0b111,
         _ => {
-            return Err(AssemblerError::InvalidArgument {
+            return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: format!(
                     "RST cannot take {val} as argument. Expected values are 0x00, 0x08|1, 0x10|2|10, 0x18|3|18, 0x20|4|20, 0x28|5|28, 0x30|6|30, 0x38|7|38."
                 )
-            });
+            }));
         }
     };
 
@@ -5527,9 +5550,9 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
         0x01 => 0x56,
         0x02 => 0x5E,
         _ => {
-            return Err(AssemblerError::InvalidArgument {
+            return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: format!("IM cannot take {val} as argument.")
-            });
+            }));
         }
     };
 
@@ -5571,12 +5594,12 @@ where
         match arg1.get_flag_test() {
             Some(test) => Some(flag_test_to_code(test)),
             _ => {
-                return Err(AssemblerError::InvalidArgument {
+                return Err(Box::new(AssemblerError::InvalidArgument {
                     msg: format!(
                         "{}: wrong flag argument",
                         mne.to_string().to_ascii_uppercase()
                     )
-                });
+                }));
             }
         }
     }
@@ -5636,11 +5659,11 @@ where
         add_byte(&mut bytes, 0xE9);
     }
     else {
-        return Err(AssemblerError::BugInAssembler {
+        return Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!("{mne}: parameter {arg2:?} not treated")
-        });
+        }));
     }
 
     Ok(bytes)
@@ -5669,8 +5692,13 @@ where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElemen
 
 #[allow(missing_docs)]
 impl Env {
-    pub fn assemble_cp<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, Box<AssemblerError>>
-    where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+    pub fn assemble_cp<D: DataAccessElem>(
+        &mut self,
+        arg: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
         let mut bytes = Bytes::new();
 
         if arg.is_register8() {
@@ -5721,8 +5749,13 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_sub<D: DataAccessElem>(&mut self, arg: &D) -> Result<Bytes, Box<AssemblerError>>
-    where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+    pub fn assemble_sub<D: DataAccessElem>(
+        &mut self,
+        arg: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
         let mut bytes = Bytes::new();
 
         if arg.is_expression() {
@@ -5936,9 +5969,9 @@ impl Env {
                 }
             }
             else {
-                return Err(AssemblerError::InvalidArgument {
+                return Err(Box::new(AssemblerError::InvalidArgument {
                     msg: format!("{mne} cannot take {target} as argument")
-                });
+                }));
             };
 
             // some hidden opcode modify this byte
@@ -6094,11 +6127,11 @@ where
             }
         }
         else {
-            return Err(AssemblerError::BugInAssembler {
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!("LD: not properly implemented for '{arg1:?}, {arg2:?}'")
-            });
+            }));
         }
     }
     // Destination is 16 bits register
@@ -6570,11 +6603,11 @@ where
     }
 
     if bytes.is_empty() {
-        Err(AssemblerError::BugInAssembler {
+        Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!("LD: not properly implemented for '{arg1:?}, {arg2:?}'")
-        })
+        }))
     }
     else {
         Ok(bytes)
@@ -6619,11 +6652,11 @@ where
     }
 
     if bytes.is_empty() {
-        Err(AssemblerError::BugInAssembler {
+        Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!("IN: not properly implemented for '{arg1:?}, {arg2:?}'")
-        })
+        }))
     }
     else {
         Ok(bytes)
@@ -6668,11 +6701,11 @@ where
     }
 
     if bytes.is_empty() {
-        Err(AssemblerError::BugInAssembler {
+        Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!("OUT: not properly implemented for '{arg1:?}, {arg2:?}'")
-        })
+        }))
     }
     else {
         Ok(bytes)
@@ -6693,9 +6726,9 @@ fn assemble_pop<D: DataAccessElem>(arg1: &D) -> Result<Bytes, Box<AssemblerError
         bytes.push(0xE1);
     }
     else {
-        return Err(AssemblerError::InvalidArgument {
+        return Err(Box::new(AssemblerError::InvalidArgument {
             msg: format!("POP: not implemented for {arg1:?}")
-        });
+        }));
     }
 
     Ok(bytes)
@@ -6715,9 +6748,9 @@ fn assemble_push<D: DataAccessElem>(arg1: &D) -> Result<Bytes, Box<AssemblerErro
         bytes.push(0xE5);
     }
     else {
-        return Err(AssemblerError::InvalidArgument {
+        return Err(Box::new(AssemblerError::InvalidArgument {
             msg: format!("PUSH: not implemented for {arg1:?}")
-        });
+        }));
     }
 
     Ok(bytes)
@@ -6930,9 +6963,9 @@ where
 
                 {
                     if reg1 != reg2 {
-                        return Err(AssemblerError::InvalidArgument {
+                        return Err(Box::new(AssemblerError::InvalidArgument {
                             msg: "Unable to add different indexed registers".into()
-                        });
+                        }));
                     }
 
                     bytes.push(indexed_register16_to_code(reg1));
@@ -6953,11 +6986,11 @@ where
     }
 
     if bytes.is_empty() {
-        Err(AssemblerError::BugInAssembler {
+        Err(Box::new(AssemblerError::BugInAssembler {
             file: file!(),
             line: line!(),
             msg: format!("{mnemonic:?} not implemented for {arg1:?} {arg2:?}")
-        })
+        }))
     }
     else {
         Ok(bytes)
@@ -6981,9 +7014,9 @@ where
         Some(e) => {
             let bit = (env.resolve_expr_may_fail_in_first_pass(e)?.int()? & 0xFF) as u8;
             if bit > 7 {
-                return Err(AssemblerError::InvalidArgument {
+                return Err(Box::new(AssemblerError::InvalidArgument {
                     msg: format!("{mnemonic}: {bit} is an invalid value")
-                });
+                }));
             }
             bit
         },
@@ -7110,8 +7143,7 @@ fn register16_to_code(reg: Register16) -> u8 {
         Register16::Bc => 0b00,
         Register16::De => 0b01,
         Register16::Hl => 0b10,
-        Register16::Sp | Register16::Af => 0b11,
-        _ => panic!("no mapping for {reg:?}")
+        Register16::Sp | Register16::Af => 0b11
     }
 }
 

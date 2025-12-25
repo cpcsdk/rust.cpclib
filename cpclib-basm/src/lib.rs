@@ -36,6 +36,12 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+impl From<Box<AssemblerError>> for BasmError {
+    fn from(error: Box<AssemblerError>) -> Self {
+        BasmError::AssemblerError { error}
+    }
+}
+
 #[derive(Debug)]
 pub enum BasmError {
     //#[fail(display = "IO error: {}", io)]
@@ -46,7 +52,7 @@ pub enum BasmError {
 
     // #[fail(display = "Assembling error: {}", error)]
     AssemblerError {
-        error: AssemblerError
+        error: Box<AssemblerError>
     },
     ErrorWithListing {
         error: Box<BasmError>,
@@ -106,7 +112,7 @@ impl Display for BasmError {
                 write!(f, "Invalid argument: {msg}")
             },
             BasmError::ErrorWithListing {
-                box error,
+                error,
                 listing: _
             } => error.fmt(f)
         }
@@ -115,7 +121,13 @@ impl Display for BasmError {
 
 impl From<AssemblerError> for BasmError {
     fn from(error: AssemblerError) -> Self {
-        BasmError::AssemblerError { error }
+        BasmError::AssemblerError { error: Box::new(error) }
+    }
+}
+
+impl From<Box<AmsdosError>> for BasmError {
+    fn from(value: Box<AmsdosError>) -> Self {
+        BasmError::AmsdosError(*value)
     }
 }
 
@@ -124,6 +136,7 @@ impl From<AmsdosError> for BasmError {
         BasmError::AmsdosError(value)
     }
 }
+
 
 /// Parse the given code.
 /// TODO read options to configure the search path
@@ -275,8 +288,7 @@ pub fn assemble(
                         .map_err(|e| {
                             let _span = token.possible_span().unwrap();
                             let span = token.possible_span().unwrap();
-                            let e: AssemblerError = e;
-                            e.locate(span.clone())
+                            Box::new(e.locate(span.clone()))
                         })
                         .map_err(|e| BasmError::InvalidSymbolFile { msg: e.to_string() })?;
 
@@ -351,7 +363,7 @@ pub fn assemble(
         visit_tokens_all_passes_with_options(listing, options).map_err(|(_t_, mut env, e)| {
             env.handle_print(); // do the prints even if there is an assembling issue
             BasmError::AssemblerError {
-                error: AssemblerError::AlreadyRenderedError(e.to_string())
+                error: Box::new(AssemblerError::AlreadyRenderedError(e.to_string()))
             }
         })?;
 
@@ -386,7 +398,7 @@ pub fn assemble(
         })
         .map_err(|e| {
             BasmError::AssemblerError {
-                error: AssemblerError::AlreadyRenderedError(e.to_string())
+                error: Box::new(AssemblerError::AlreadyRenderedError(e.to_string()))
             }
         })?;
 
@@ -609,7 +621,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
 pub fn process(
     matches: &ArgMatches,
     o: Arc<dyn EnvEventObserver>
-) -> Result<(Env, Vec<AssemblerError>), BasmError> {
+    ) -> Result<(Env, Vec<Box<AssemblerError>>), BasmError> {
     // Handle the display of embedded files list
     if matches.get_flag("LIST_EMBEDDED") {
         use crate::embedded::EmbeddedFiles;
@@ -653,10 +665,8 @@ pub fn process(
 
         if warnings.len() > KEPT {
             o.emit_stderr("Warnings are considered to be errors. The first 10 have been kept.");
-        }
-        else {
-            o.deref()
-                .emit_stderr("Warnings are considered to be errors.");
+        } else {
+            o.deref().emit_stderr("Warnings are considered to be errors.");
         }
 
         // keep only the first 10
@@ -664,8 +674,7 @@ pub fn process(
             errors: warnings.into_iter().take(KEPT).collect_vec()
         }
         .into())
-    }
-    else {
+    } else {
         save(matches, &env)?;
         Ok((env, warnings))
     }

@@ -409,12 +409,10 @@ impl ExprElement for Expr {
     /// When disassembling an instruction with relative expressions, the contained value needs to be transformed as an absolute value
     fn fix_relative_value(&mut self) {
         panic!("i am planning to remove this code, it should not be called");
-        /* 
-        if let Expr::Value(val) = self {
-            let mut new_expr = Expr::RelativeDelta(*val as i8);
-            std::mem::swap(self, &mut new_expr);
-        }
-        */
+        // if let Expr::Value(val) = self {
+        // let mut new_expr = Expr::RelativeDelta(*val as i8);
+        // std::mem::swap(self, &mut new_expr);
+        // }
     }
 
     fn not(&self) -> Self::ResultExpr {
@@ -619,16 +617,35 @@ impl Display for Expr {
             Expr::Char(c) => write!(f, "'{c}'"),
             Expr::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
             Expr::String(string) => write!(f, "\"{string}\""),
-            Expr::List(l) => write!(f, "[{}]", l.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
+            Expr::List(l) => {
+                write!(
+                    f,
+                    "[{}]",
+                    l.iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            },
             Expr::Label(label) => write!(f, "{label}"),
             Expr::PrefixedLabel(prefix, label) => write!(f, "{prefix}{label}"),
             Expr::Paren(expr) => write!(f, "({expr})"),
-            Expr::AnyFunction(name, args) => write!(f, "{}({})", name, args.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(",")),
+            Expr::AnyFunction(name, args) => {
+                write!(
+                    f,
+                    "{}({})",
+                    name,
+                    args.iter()
+                        .map(|e| e.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            },
             Expr::UnaryOperation(op, exp) => write!(f, "{op}{exp}"),
             Expr::UnaryTokenOperation(op, tok) => write!(f, "{op}({tok})"),
             Expr::BinaryOperation(op, exp1, exp2) => write!(f, "({exp1} {op} {exp2})"),
             Expr::RelativeDelta(val) => write!(f, "$ + {val} + 2"),
-            Expr::Rnd => write!(f, "RND()"),
+            Expr::Rnd => write!(f, "RND()")
         }
     }
 }
@@ -1496,18 +1513,20 @@ impl std::cmp::Ord for ExprResult {
             (Self::List(l0), Self::List(r0)) => l0.cmp(r0),
             (Self::List(_), _) | (_, Self::List(_)) => unimplemented!(),
 
-            _ => self.float().unwrap().partial_cmp(&other.float().unwrap()).unwrap()
+            _ => {
+                self.float()
+                    .unwrap()
+                    .partial_cmp(&other.float().unwrap())
+                    .unwrap()
+            },
         }
     }
 }
 
 impl std::cmp::PartialOrd for ExprResult {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-
         Some(self.cmp(other))
     }
-
-
 }
 
 impl std::fmt::Display for ExprResult {

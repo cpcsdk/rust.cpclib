@@ -44,7 +44,6 @@ fn string_to_nb<S: AsRef<str>>(s: S) -> Result<u32, SnapshotError> {
         .map_err(SnapshotError::AnyError)
 }
 
-
 /// ! Re-implementation of createsnapshot by Ramlaid/Arkos
 /// ! in rust by Krusty/Benediction
 /// Original options
