@@ -353,7 +353,7 @@ impl ListingOutput {
         if !self.current_line_bytes.is_empty() || self.current_token_kind.is_displayable() {
             for counter in self.counter_update.iter() {
                 self.writer
-                    .write(format!("{counter}\n").as_bytes())
+                    .write_all(format!("{counter}\n").as_bytes())
                     .unwrap();
             }
             self.counter_update.clear();

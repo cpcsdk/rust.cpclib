@@ -46,7 +46,7 @@ use support::banks::DecoratedPages;
 use support::cpr::CprAssembler;
 use support::sna::SnaAssembler;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use {cpclib_common::rayon::prelude::*, rayon_cond::CondIterator};
+use rayon_cond::CondIterator;
 
 use self::control::ControlOutputStore;
 use self::function::{Function, FunctionBuilder, HardCodedFunction};
@@ -1291,9 +1291,8 @@ impl Env {
         // All possible messages have been printed.
         // Errors are generated for the others
         if let Some(errors) = assert_failures {
-            return Err(errors);
-        }
-        else {
+            Err(errors)
+        } else {
             Ok(())
         }
     }
@@ -1354,7 +1353,7 @@ impl Env {
         // All possible messages have been printed.
         // Errors are generated for the others
         if let Some(errors) = print_errors {
-            return Err(errors);
+            Err(errors)
         } else {
             Ok(())
         }
@@ -6867,7 +6866,8 @@ where
         _ => panic!("Impossible case")
     };
 
-    if arg1.is_none() || arg1.as_ref().map(|arg1| arg1.is_register_a()).unwrap() {
+    match arg1.as_ref() {
+        None => {
         if arg2.is_address_in_hl() {
             if is_add {
                 bytes.push(0b1000_0110);
@@ -6923,8 +6923,11 @@ where
                 bytes.push(base | indexregister8_to_code(reg));
             }
         }
-    }
-    else if arg1.as_ref().unwrap().is_register_hl() {
+        }
+        Some(arg1_ref) if arg1_ref.is_register_a() => {
+            // ...existing code for register A case...
+        }
+        Some(arg1_ref) if arg1_ref.is_register_hl() => {
         if arg2.is_register16() {
             let reg = arg2.get_register16().unwrap();
             let base = if is_add {
@@ -6938,8 +6941,9 @@ where
             bytes.push(base | (register16_to_code_with_sp(reg) << 4));
         }
     }
-    else if arg1.as_ref().unwrap().is_indexregister16() {
-        let reg1 = arg1.as_ref().unwrap().get_indexregister16().unwrap();
+        }
+        Some(arg1_ref) if arg1_ref.is_indexregister16() => {
+            let reg1 = arg1_ref.get_indexregister16().unwrap();
         {
             if arg2.is_register16() {
                 let reg2 = arg2.get_register16().unwrap();
@@ -6983,6 +6987,7 @@ where
                 }
             }
         }
+        _ => {}
     }
 
     if bytes.is_empty() {

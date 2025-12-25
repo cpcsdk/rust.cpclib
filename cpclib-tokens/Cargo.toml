@@ -35,5 +35,5 @@ built.workspace = true
 
 
 [features]
-default = []
+default = ["rayon"]
 rayon = ["cpclib-common/rayon"]

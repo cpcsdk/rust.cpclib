@@ -189,20 +189,14 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         let mut replacements = Vec::with_capacity(capacity);
 
         for (argname, expanded) in self.r#macro.params().iter().zip(&all_expanded) {
-            let pattern = if argname.starts_with("r#") {
-                &argname[2..]
-            }
-            else {
-                argname.as_str()
-            };
+            let pattern = argname.strip_prefix("r#").unwrap_or(argname.as_str());
             let replacement = if argname.starts_with("r#")
-                && expanded.starts_with("\"")
-                && expanded.ends_with("\"")
+                && expanded.starts_with('"')
+                && expanded.ends_with('"')
             {
-                &expanded[1..(expanded.len() - 1)]
-            }
-            else {
-                &expanded[..]
+                expanded.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(expanded)
+            } else {
+                expanded
             };
             patterns.push(pattern);
             replacements.push(replacement);

@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use cpclib_common::rayon::iter::IntoParallelRefIterator;
 use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated

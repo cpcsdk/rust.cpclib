@@ -3,6 +3,8 @@ use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
 
 use ahash::AHashMap as HashMap;
+#[cfg(feature = "rayon")]
+use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
@@ -953,11 +955,9 @@ impl SymbolsTable {
     {
         let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
         let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
-        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-        let iter = self.map.par_iter();
-        #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
+        
         let iter = self.map.iter();
-
+        // eventually add the function frame
         let iter: Box<dyn Iterator<Item = (&Symbol, &ValueAndSource)>> =
             if let Some(frame) = self.functions_stack.current_frame() {
                 Box::new(frame.iter().chain(iter))
@@ -966,8 +966,15 @@ impl SymbolsTable {
                 Box::new(iter)
             };
 
+        #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
+        let iter = {
+            use cpclib_common::itertools::Itertools;
+            let data = iter.collect_vec();
+            data.into_par_iter()
+        };
+
         Ok(iter
-            .filter(|(_k, v)| {
+            .filter(|(_k, v): &(&Symbol, &ValueAndSource)| {
                 matches!(
                     (v.value(), r#for),
                     (Value::Expr(_), SymbolFor::Number)
@@ -981,7 +988,7 @@ impl SymbolsTable {
                 )
             })
             .map(|(k, _v)| k)
-            .map(move |symbol2| {
+            .map(move |symbol2: &Symbol| {
                 let symbol_upper = symbol.value().to_ascii_uppercase();
                 let symbol2_upper = symbol2.value().to_ascii_uppercase();
                 let levenshtein_distance = strsim::levenshtein(symbol2.value(), symbol.value())

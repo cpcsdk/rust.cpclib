@@ -111,10 +111,9 @@ fn expect_warning_but_success(real_fname: &str) {
         content = RE2.replace_all(&content, ":").to_string();
     }
 
-    let content = if content.starts_with(':') {
-        &content[1..]
-    }
-    else {
+    let content = if let Some(stripped) = content.strip_prefix(':') {
+        stripped
+    } else {
         &content[..]
     };
 
@@ -199,10 +198,9 @@ fn expect_one_line_success(real_fname: &str) {
         content = RE2.replace_all(&content, ":").to_string();
     }
 
-    let content = if content.starts_with(':') {
-        &content[1..]
-    }
-    else {
+    let content = if let Some(stripped) = content.strip_prefix(':') {
+        stripped
+    } else {
         &content[..]
     };
 

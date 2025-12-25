@@ -4,7 +4,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::ParallelIterator;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space0};
 use cpclib_common::winnow::combinator::{

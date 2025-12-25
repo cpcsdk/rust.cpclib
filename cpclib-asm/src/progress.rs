@@ -110,15 +110,13 @@ impl CountedProgress {
 
         if self.nb_done == self.nb_expected {
             if visible {
-                self.bar.as_ref().map(|bar| {
+                if let Some(bar) = self.bar.as_ref() {
                     bar.set_message("");
                     bar.set_position(self.nb_done);
                     bar.set_length(self.nb_expected);
-
                     bar.tick();
-
                     // multi.remove(bar);
-                });
+                }
                 // self.bar = None;
             }
         }
@@ -127,22 +125,22 @@ impl CountedProgress {
 
             if !visible {
                 self.bar = Some(multi.add(ProgressBar::new(self.nb_expected)));
-                self.bar.as_ref().map(|bar| {
+                if let Some(bar) = self.bar.as_ref() {
                     bar.set_style(
                         ProgressStyle::with_template(PROGRESS_STYLE)
                             .unwrap()
                             .progress_chars("=> ")
                     );
                     bar.set_prefix(self.prefix);
-                });
+                }
             }
 
-            self.bar.as_ref().map(|bar| {
+            if let Some(bar) = self.bar.as_ref() {
                 bar.set_message(content);
                 bar.set_position(self.nb_done);
                 bar.set_length(self.nb_expected);
                 bar.tick();
-            });
+            }
         }
     }
 }
@@ -338,12 +336,12 @@ impl Progress {
             // todo change pass numbering
         }
 
-        self.pass.as_mut().map(|(pass, bar)| {
+        if let Some((pass, bar)) = self.pass.as_mut() {
             *pass += 1;
             bar.set_prefix(format!("Pass {}", *pass));
             bar.set_position(0);
             bar.set_length(0);
-        });
+        }
     }
 
     #[cfg(not(feature = "indicatif"))]

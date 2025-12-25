@@ -108,8 +108,8 @@ macro_rules! expr_to_orgams {
                         if span.starts_with("0x") || span.starts_with("0X") {
                             format!("&{}", &span[2..])
                         }
-                        else if span.starts_with("#") {
-                            format!("&{}", &span[1..])
+                        else if let Some(stripped) = span.strip_prefix("#") {
+                            format!("&{}", stripped)
                         }
                         else {
                             format!("{}", v)
