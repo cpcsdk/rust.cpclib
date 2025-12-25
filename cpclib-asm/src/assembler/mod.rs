@@ -1253,7 +1253,7 @@ impl Env {
         let mut assert_failures: Option<Box<AssemblerError>> = None;
 
         let mut handle_page = |page: &PageInformation| {
-            let mut l_errors: Result<(), Box<AssemblerError>> = page.collect_assert_failure();
+            let l_errors: Result<(), Box<AssemblerError>> = page.collect_assert_failure();
             match (&mut assert_failures, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -1312,7 +1312,7 @@ impl Env {
         let observer = self.observer();
 
         let mut handle_page_info = |page: &PageInformation| {
-            let mut l_errors: Result<(), Box<AssemblerError>> = page.execute_print_or_pause(observer.deref());
+            let l_errors: Result<(), Box<AssemblerError>> = page.execute_print_or_pause(observer.deref());
             match (&mut print_errors, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -2958,7 +2958,7 @@ impl Env {
         &mut self,
         info: &[FormattedExpr]
     ) -> Result<PreprocessedFormattedString, Box<AssemblerError>> {
-        Ok(PreprocessedFormattedString::try_new(info, self)?)
+        PreprocessedFormattedString::try_new(info, self)
     }
 
     /// Print the evaluation of the expression in the 2nd pass
@@ -3260,7 +3260,7 @@ impl Env {
         }
 
         visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
-            let e = AssemblerError::CrunchedSectionError { error: e.into() };
+            let e = AssemblerError::CrunchedSectionError { error: e };
             match span {
                 Some(span) => {
                     AssemblerError::RelocatedError {
@@ -3538,7 +3538,7 @@ impl Env {
         }?;
 
         let f: *const Function = f as *const _; // XXX remove the link with environment
-        unsafe { Ok((*f).eval(self, params)?) }
+        unsafe { (*f).eval(self, params) }
     }
 }
 
