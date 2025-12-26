@@ -222,9 +222,7 @@ impl BndBuilder {
             self.do_run_tasks();
             for layer in layers.iter() {
                 // Each layer is TaskTargetsForLayer, which contains a set of TaskTargets
-                for task_targets in &layer.tasks {
-                    self.execute_layer(task_targets.targets.clone(), &mut state)?;
-                }
+                self.execute_layer(&layer, &mut state)?;
             }
         }
         self.do_finish();
@@ -234,25 +232,27 @@ impl BndBuilder {
 
     fn execute_layer(
         &self,
-        layer: HashSet<&Utf8Path>,
+        layer: &crate::rules::graph::TaskTargetsForLayer,
         state: &mut ExecutionState
     ) -> Result<(), BndBuilderError> {
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
 
-        // group the paths per rule
-        let mut grouped: HashMap<&Rule, Vec<&Utf8Path>> = HashMap::default();
-        for p in layer.into_iter() {
-            if let Some(r) = self.get_rule(p) {
-                let entry = grouped.entry(r).or_default();
-                entry.push(p);
-            }
-            else {
-                without_rule.push(p);
+        // get the rule of the expected targets
+        let mut grouped: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
+        for task_targets in &layer.tasks {
+            let repr = task_targets.representative_target();
+            if let Some(r) = self.get_rule(repr) {
+                grouped.insert(r, task_targets);
+            } else {
+                // If no rule for the representative target, push the whole TaskTargets reference
+                without_rule.push(task_targets);
             }
         }
+
         // count the files that are not produced
-        for p in without_rule.into_iter() {
+        for targets in without_rule.into_iter() {
+            for p in targets.targets.iter() {
             state.task_count += 1;
             self.start_rule(p, state.task_count, state.nb_deps);
             if !p.exists() {
@@ -263,29 +263,35 @@ impl BndBuilder {
             }
             self.stop_rule(p);
         }
+        }
 
         // execute only one task per group but still count the others
+        // TODO optimize by executing them in parallel
         grouped
-            .into_values()
-            .map(|paths| {
-                let other_paths = if paths.len() > 1 {
-                    Some(&paths[1..])
-                }
-                else {
+            .values()
+            .map(|task_targets| {
+                let mut targets: Vec<_> = task_targets.targets.iter().collect();
+                // Use representative_target as the main one
+                let repr = task_targets.representative_target();
+                // Remove the representative from the list to get the others
+                targets.retain(|&&p| p != repr);
+                let other_paths = if !targets.is_empty() {
+                    Some(targets)
+                } else {
                     None
                 };
 
                 if let Some(ps) = other_paths.as_ref() {
                     ps.iter().for_each(|p| {
                         state.task_count += 1;
-                        self.start_rule(p, state.task_count, state.nb_deps);
+                        self.start_rule(*p, state.task_count, state.nb_deps);
                     });
                 }
-                let res = self.execute_rule(paths[0], state);
+                let res = self.execute_rule(repr, state);
                 if res.is_ok()
-                    && let Some(ps) = other_paths
+                    && let Some(ps) = other_paths.as_ref()
                 {
-                    ps.iter().for_each(|p| self.stop_rule(p));
+                    ps.iter().for_each(|p| self.stop_rule(*p));
                 }
                 res
             })
