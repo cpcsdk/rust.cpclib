@@ -4,10 +4,17 @@ use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
 
+#[cfg(feature = "rayon")]
+use cpclib_common::rayon::iter::{ParallelIterator, ParallelBridge};
+#[cfg(feature = "rayon")]
+use std::sync::RwLock;
+
 use anstyle::{self, Ansi256Color, RgbColor};
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+#[cfg(feature = "rayon")]
+use minijinja::State;
 use minijinja::context;
 
 use crate::BndBuilderError;
@@ -207,11 +214,25 @@ impl BndBuilder {
             task_count: 0
         };
 
-        if state.nb_deps == 0 {
+        let nb_deps = state.nb_deps;
+
+            #[cfg(feature = "rayon")]
+            let state = Arc::new(RwLock::new(state));
+
+            #[cfg(not(feature = "rayon"))]
+            let state = &mut state;
+
+
+
+        if nb_deps == 0 {
             if self.has_rule(p) {
                 self.do_run_tasks();
-                state.nb_deps = 1;
-                self.execute_rule(p, &mut state)?;
+                {
+                    #[cfg(feature = "rayon")]
+                    let mut state = state.write().unwrap();
+                    state.nb_deps = 1;
+                }
+                self.execute_rule(p, state)?;
             }
             else {
                 return Err(BndBuilderError::ExecuteError {
@@ -224,7 +245,7 @@ impl BndBuilder {
             self.do_run_tasks();
             for layer in layers.iter() {
                 // Each layer is TaskTargetsForLayer, which contains a set of TaskTargets
-                self.execute_layer(&layer, &mut state)?;
+                self.execute_layer(&layer, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state)?;
             }
         }
         self.do_finish();
@@ -235,7 +256,10 @@ impl BndBuilder {
     fn execute_layer(
         &self,
         layer: &crate::rules::graph::TaskTargetsForLayer,
-        state: &mut ExecutionState
+        #[cfg(not(feature = "rayon"))]
+        state: &mut ExecutionState,
+        #[cfg(feature = "rayon")]
+        state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
@@ -254,6 +278,9 @@ impl BndBuilder {
 
         // count the files that are not produced
         for targets in without_rule.into_iter() {
+            #[cfg(feature = "rayon")]
+            let mut state = state.write().unwrap();
+
             for p in targets.targets.iter() {
             state.task_count += 1;
             self.start_rule(p, state.task_count, state.nb_deps);
@@ -269,51 +296,72 @@ impl BndBuilder {
 
         // execute only one task per group but still count the others
         // TODO optimize by executing them in parallel
-        grouped
-            .values()
-            .map(|task_targets| {
-                let mut targets: Vec<_> = task_targets.targets.iter().collect();
-                // Use representative_target as the main one
-                let repr = task_targets.representative_target();
-                // Remove the representative from the list to get the others
-                targets.retain(|&&p| p != repr);
-                let other_paths = if !targets.is_empty() {
-                    Some(targets)
-                } else {
-                    None
-                };
+        let tasks = grouped
+            .values();
 
-                if let Some(ps) = other_paths.as_ref() {
-                    ps.iter().for_each(|p| {
-                        state.task_count += 1;
-                        self.start_rule(*p, state.task_count, state.nb_deps);
-                    });
-                }
-                let res = self.execute_rule(repr, state);
-                if res.is_ok()
-                    && let Some(ps) = other_paths.as_ref()
-                {
-                    ps.iter().for_each(|p| self.stop_rule(*p));
-                }
-                res
-            })
+        #[cfg(feature = "rayon")]
+        let mut tasks =  tasks.par_bridge();
+
+        tasks.map(|task_targets| self.execute_task_targets_group(task_targets, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state))
             .collect::<Result<Vec<()>, BndBuilderError>>()?;
         Ok(())
+    }
+
+    fn execute_task_targets_group(
+        &self,
+        task_targets: &crate::rules::graph::TaskTargets,
+        #[cfg(not(feature = "rayon"))]
+        state: &mut ExecutionState,
+        #[cfg(feature = "rayon")]
+        state:Arc<RwLock<ExecutionState>>
+    ) -> Result<(), BndBuilderError> {
+        let mut targets: Vec<_> = task_targets.targets.iter().collect();
+        // Use representative_target as the main one
+        let repr = task_targets.representative_target();
+        // Remove the representative from the list to get the others
+        targets.retain(|&&p| p != repr);
+        let other_paths = if !targets.is_empty() {
+            Some(targets)
+        } else {
+            None
+        };
+
+        if let Some(ps) = other_paths.as_ref() {
+            ps.iter().for_each(|p| {
+                #[cfg(feature = "rayon")]
+                let mut state = state.write().unwrap();
+                state.task_count += 1;
+                self.start_rule(*p, state.task_count, state.nb_deps);
+            });
+        }
+        let res = self.execute_rule(repr, state);
+        if res.is_ok()
+            && let Some(ps) = other_paths.as_ref()
+        {
+            ps.iter().for_each(|p| self.stop_rule(*p));
+        }
+        res
     }
 
     fn execute_rule<'s, P: AsRef<Utf8Path> + 's>(
         &'s self,
         p: P,
-        state: &mut ExecutionState
+        #[cfg(not(feature = "rayon"))]
+        state: &mut ExecutionState,
+        #[cfg(feature = "rayon")]
+        state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
 
         let p: &'static Utf8Path = unsafe { std::mem::transmute(p) };
         let this: &'static Self = unsafe { std::mem::transmute(self) };
 
-        state.task_count += 1;
-
-        self.start_rule(p, state.task_count, state.nb_deps);
+        {
+            #[cfg(feature = "rayon")]
+            let mut state = state.write().unwrap();
+            state.task_count += 1;
+            self.start_rule(p, state.task_count, state.nb_deps);
+        }
 
         if let Some(rule) = this.rule(p) {
             let (disabled, done) = if !rule.is_enabled() {

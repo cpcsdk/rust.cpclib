@@ -2286,6 +2286,7 @@ dependencies = [
 name = "cpclib-bndbuild"
 version = "0.11.0"
 dependencies = [
+ "anstyle",
  "anyhow",
  "assert_cmd",
  "build-deps",
