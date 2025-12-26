@@ -18,7 +18,7 @@ pub enum BndBuilderState<'a> {
     Finish
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BndBuilderEvent<'a> {
     ChangeState(BndBuilderState<'a>),
     StartRule {

@@ -3,6 +3,11 @@ use std::time::SystemTime;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+#[cfg(feature = "rayon")]
+use cpclib_common::rayon::iter::ParallelBridge;
+#[cfg(feature = "rayon")]
+ use cpclib_common::rayon::iter::ParallelIterator;
+
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 
@@ -16,8 +21,12 @@ where D: Deserializer<'de> {
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(s).unwrap_or(vec![]);
-            r.into_iter()
+            let r = shlex::split(s).unwrap_or_else(|| vec![]);
+            let mut r = r.into_iter();
+
+            #[cfg(feature = "rayon")]
+            let mut r = r.par_bridge();
+            r
                 .flat_map(|s| expand_glob(s.as_ref()))
                 .map(|s| {
                     if s.starts_with(r"./") || s.starts_with(r".\") {
@@ -28,7 +37,7 @@ where D: Deserializer<'de> {
                     }
                 })
                 .map(Utf8PathBuf::from)
-                .collect_vec()
+                .collect()
         }
     }
     impl<'de> Visitor<'de> for SequenceOrList {

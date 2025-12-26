@@ -350,46 +350,48 @@ pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
 /// {a,b} expension is always done even if file does not exists
 /// *.a is done only when file exists
 fn expand_glob(p: &str) -> Vec<String> {
-    let expended = if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p)
-    {
-        middle
-            .split(",")
-            .map(|component| format!("{start}{component}{end}"))
-            .collect_vec()
+    // Try to expand {a,b} patterns without allocating intermediate Vecs
+    let mut patterns = Vec::new();
+    if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
+        for component in middle.split(',') {
+            patterns.push(format!("{start}{component}{end}"));
+        }
+    } else {
+        patterns.push(p.to_owned());
     }
-    else {
-        vec![p.to_owned()]
-    };
 
-    expended
-        .into_iter()
-        .flat_map(|p| {
-            globmatch::Builder::new(p.as_str())
-                .build("." /* std::env::current_dir().unwrap() */)
-                .map(|builder| {
-                    builder
-                        .into_iter()
-                        .map(|p2| {
-                            match p2 {
-                                Ok(p) => {
-                                    let p = Utf8PathBuf::from_path_buf(p).unwrap();
-                                    let s = p.to_string();
-                                    if s.starts_with(".\\") {
-                                        s[2..].to_owned()
-                                    }
-                                    else {
-                                        s
-                                    }
-                                },
-                                Err(_e) => p.clone()
+    let mut results = Vec::new();
+    for pat in patterns {
+        if pat.contains('*') || pat.contains('?') || pat.contains('[') {
+            //do this costly stuff only when needed
+            match globmatch::Builder::new(&pat).build(".") {
+                Ok(builder) => {
+                    let mut found = false;
+                    for entry in builder {
+                        match entry {
+                            Ok(path) => {
+                                let s = Utf8PathBuf::from_path_buf(path).unwrap().to_string();
+                                if s.starts_with(".\\") {
+                                    results.push(s[2..].to_owned());
+                                } else {
+                                    results.push(s);
+                                }
+                                found = true;
                             }
-                        })
-                        .collect_vec()
-                })
-                .map(|v| if v.is_empty() { vec![p.clone()] } else { v })
-                .unwrap_or(vec![p])
-        })
-        .collect_vec()
+                            Err(_) => results.push(pat.clone()),
+                        }
+                    }
+                    if !found {
+                        results.push(pat.clone());
+                    }
+                }
+                Err(_) => results.push(pat.clone()),
+            }
+        } else {
+            results.push(pat);
+        }
+    }
+    results
 }
 
 #[derive(Error, Debug)]

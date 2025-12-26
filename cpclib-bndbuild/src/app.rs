@@ -115,8 +115,16 @@ pub struct BndBuilderCommand {
 }
 
 impl BndBuilderCommand {
+        /// Returns true if the command is a help command
+        pub fn is_help(&self) -> bool {
+            matches!(self.deref(), BndBuilderCommandInner::InnerHelp(_))
+        }
     pub fn new(inner: BndBuilderCommandInner, observers: Arc<ListOfBndBuilderObserverRc>) -> Self {
         Self { inner, observers }
+    }
+
+    pub fn clear_observers(&mut self) {
+        self.observers = Arc::new(ListOfBndBuilderObserverRc::default());
     }
 }
 
