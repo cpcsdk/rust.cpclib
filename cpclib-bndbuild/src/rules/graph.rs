@@ -87,12 +87,16 @@ impl<'a> LayeredDependenciesByTask<'a> {
         self.layers.iter()
     }
 
-    pub fn all_ordered(&self) -> impl Iterator<Item = &'a Utf8Path> {
+    pub fn targets_ordered(&self) -> impl Iterator<Item = &'a Utf8Path> {
         self.layers.iter().flat_map(|layer| {
             layer.tasks.iter().flat_map(|task_targets| {
                 task_targets.targets.iter().cloned()
             })
         })
+    }
+
+    pub fn tasks_ordered(&self) -> impl Iterator<Item = &TaskTargets<'a>> {
+        self.layers.iter().flat_map(|layer| layer.tasks.iter())
     }
 }
 
@@ -202,7 +206,7 @@ impl<'r> Graph<'r> {
         }
 
         let dependences = self.get_layered_dependencies_for(&p);
-        let dependencies = dependences.all_ordered().collect_vec();
+        let dependencies = dependences.targets_ordered().collect_vec();
 
         for p in dependencies.into_iter().rev() {
             let res = match self.rule(p) {
