@@ -1,0 +1,15 @@
+# Example bndbuild.yml for layered_dependencies test
+- dependencies: A
+  targets: A1 A2 A3
+  command:
+    - echo build A1, A2, A3 from A
+
+- dependencies: B
+  targets: B1 B2 B3
+  command:
+    - echo build B1, B2, B3 from B
+
+- dependencies: B2 A3
+  targets: C
+  command:
+    - echo build C from B2, A3

@@ -220,8 +220,11 @@ impl BndBuilder {
         }
         else {
             self.do_run_tasks();
-            for layer in layers.into_iter() {
-                self.execute_layer(layer, &mut state)?;
+            for layer in layers.iter() {
+                // Each layer is TaskTargetsForLayer, which contains a set of TaskTargets
+                for task_targets in &layer.tasks {
+                    self.execute_layer(task_targets.targets.clone(), &mut state)?;
+                }
             }
         }
         self.do_finish();
@@ -366,7 +369,7 @@ impl BndBuilder {
     }
 
     #[inline]
-    pub fn get_layered_dependencies(&self) -> Vec<HashSet<&Utf8Path>> {
+    pub fn get_layered_dependencies(&self) -> crate::rules::graph::LayeredDependenciesByTask<'_> {
         self.inner.borrow_dependent().get_layered_dependencies()
     }
 
@@ -374,7 +377,7 @@ impl BndBuilder {
     pub fn get_layered_dependencies_for<'a, P: AsRef<Utf8Path>>(
         &'a self,
         p: &'a P
-    ) -> Vec<HashSet<&'a Utf8Path>> {
+    ) -> crate::rules::graph::LayeredDependenciesByTask<'a> {
         self.inner
             .borrow_dependent()
             .get_layered_dependencies_for(p)
