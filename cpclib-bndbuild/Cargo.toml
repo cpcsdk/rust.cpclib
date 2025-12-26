@@ -31,6 +31,7 @@ cpclib-disc = { workspace = true, features = ["cmdline"] }
 cpclib-imgconverter = { workspace = true, features = ["xferlib"] }
 cpclib-xfertool.workspace = true
 
+anstyle = "1.0.13"
 anyhow = "1.0.100"
 camino = { workspace = true, features = ["serde1"] }
 camino-tempfile.workspace = true

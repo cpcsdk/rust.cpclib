@@ -4,6 +4,8 @@ use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
 
+use anstyle::{self, Ansi256Color, RgbColor};
+
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use minijinja::context;
@@ -344,7 +346,18 @@ impl BndBuilder {
             if !disabled {
                 let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
                 if !wrong_files.is_empty() {
-                    self.emit_stderr(format!("The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n"));
+                    let orange = anstyle::Style::new().fg_color(Some(anstyle::Color::Rgb(RgbColor(255,165,0))));
+                    self.emit_stderr(
+
+                            format!(
+                                "{}The following target(s) have not been generated: {wrong_files}. There is probably an error in your build file.\n{}",  
+                            
+                            orange.render(),
+                            orange.render_reset()
+                            )
+                    
+
+                    );
                 }
             }
         }
