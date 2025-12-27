@@ -6,7 +6,7 @@ use std::sync::{LazyLock, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_tokens::{
-    CrunchType, Expr, ExprResult, ListingElement, TestKindElement, ToSimpleToken, Token
+    CrunchType, Expr, ExprResult, ExpressionTypeError, ListingElement, TestKindElement, ToSimpleToken, Token
 };
 use either::Either;
 
@@ -701,11 +701,18 @@ impl HardCodedFunction {
                     }
                 };
 
-                let data = params[0]
+                let (oks, errs): (Vec<u8>, Vec<ExpressionTypeError>) = params[0]
                     .list_content()
                     .iter()
                     .map(|item| item.int().map(|v| v as u8))
-                    .collect::<Result<Vec<u8>, _>>()?;
+                    .partition_map(|res| match res {
+                        Ok(val) => either::Either::Left(val),
+                        Err(e) => either::Either::Right(e),
+                    });
+                if !errs.is_empty() {
+                    return Err(Box::new(AssemblerError::MultipleErrors { errors: errs.into_iter().map(|e| Box::new(AssemblerError::ExpressionTypeError(e))).collect() }));
+                }
+                let data = oks;
 
                 let data = crunch_type.compress(&data)?;
                 let data = ExprResult::from(data.as_slice());

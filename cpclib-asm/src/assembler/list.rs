@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::ExprResult;
 use substring::Substring;
-
+use cpclib_common::itertools::Itertools;
 use crate::error::{AssemblerError, ExpressionError};
 
 pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
@@ -240,7 +240,8 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
 pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match s1 {
         ExprResult::List(l1) => {
-            let bytes = l1
+            use either::Either;
+            let (oks, errs): (Vec<_>, Vec<_>) = l1
                 .iter()
                 .enumerate()
                 .map(|(idx, v)| {
@@ -254,9 +255,14 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
                         Ok(v as u8)
                     }
                 })
-                .collect::<Result<Vec<u8>, Box<AssemblerError>>>()?;
-
-            String::from_utf8(bytes)
+                .partition_map(|res| match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e),
+                });
+            if !errs.is_empty() {
+                return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+            }
+            String::from_utf8(oks)
                 .map_err(|e| {
                     Box::new(AssemblerError::AssemblingError {
                         msg: format!("Error when generating a string. {e}")
@@ -264,7 +270,6 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
                 })
                 .map(|s| s.into())
         },
-
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {

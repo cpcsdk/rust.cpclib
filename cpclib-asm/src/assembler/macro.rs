@@ -67,13 +67,16 @@ fn expand_param<'p, P: MacroParamElement>(
     }
     else {
         let l = m.list_argument();
-        beef::lean::Cow::owned(
-            l.iter()
-                .map(|p| expand_param(p.deref(), env))
-                .collect::<Result<Vec<_>, Box<AssemblerError>>>()?
-                .join(",")
-                .to_string()
-        )
+        let (oks, errs): (Vec<_>, Vec<_>) = l.iter()
+            .map(|p| expand_param(p.deref(), env))
+            .partition_map(|res| match res {
+                Ok(val) => either::Either::Left(val),
+                Err(e) => either::Either::Right(e),
+            });
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
+        beef::lean::Cow::owned(oks.join(",").to_string())
     };
 
     Ok(extended)
@@ -182,13 +185,20 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             .args
             .iter()
             .map(|argvalue| expand_param(argvalue, env))
-            .collect::<Result<Vec<_>, Box<AssemblerError>>>()?;
+            .partition_map(|res| match res {
+                Ok(val) => either::Either::Left(val),
+                Err(e) => either::Either::Right(e),
+            });
+        let (oks, errs): (Vec<_>, Vec<_>) = all_expanded;
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
 
         let capacity: usize = self.args.len();
         let mut patterns = Vec::with_capacity(capacity);
         let mut replacements = Vec::with_capacity(capacity);
 
-        for (argname, expanded) in self.r#macro.params().iter().zip(&all_expanded) {
+        for (argname, expanded) in self.r#macro.params().iter().zip(&oks) {
             let pattern = argname.strip_prefix("r#").unwrap_or(argname.as_str());
             let replacement = if argname.starts_with("r#")
                 && expanded.starts_with('"')

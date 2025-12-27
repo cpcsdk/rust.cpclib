@@ -30,6 +30,7 @@ use std::time::Instant;
 
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
+use cpclib_common::itertools::Itertools;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::chars::{Charset, char_to_amscii};
 use cpclib_common::event::EventObserver;
@@ -40,6 +41,7 @@ use cpclib_disc::built_info;
 use cpclib_files::{FileType, StorageSupport};
 use cpclib_sna::*;
 use cpclib_tokens::ToSimpleToken;
+use either::Either;
 use file::AnyFileNameOwned;
 use processed_token::build_processed_token;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
@@ -1423,19 +1425,19 @@ impl Env {
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.free_banks.pages.iter();
-        let (mut saved, errors): (Vec<_>, Vec<_>) = iter
+        let (mut saved, errors): (Vec<Vec<SavedFile>>, Vec<Box<AssemblerError>>) = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))
-            .partition(Result::is_ok);
+            .partition_map(|res| match res {
+                Ok(val) => Either::Left(val),
+                Err(e) => Either::Right(e),
+            });
         if !errors.is_empty() {
             return Err(Box::new(AssemblerError::MultipleErrors {
-                errors: errors
-                    .into_iter()
-                    .map(|e| e.err().unwrap())
-                    .collect::<Vec<_>>()
+                errors
             }));
         }
-        for s in &mut saved {
-            saved_files.append(s.as_mut().unwrap());
+        for mut s in saved {
+            saved_files.append(&mut s);
         }
 
         if self.options().show_progress() {
@@ -2423,9 +2425,19 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per push; actual size may vary slightly
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
+            .iter()
+            .map(assemble_push)
+            .partition_map(|res| match res {
+                Ok(val) => Either::Left(val),
+                Err(e) => Either::Right(e),
+            });
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
-        for bytes in regs.iter().map(assemble_push) {
-            result.extend_from_slice(&bytes?);
+        for ok in oks {
+            result.extend_from_slice(&ok);
         }
         self.output_bytes(&result)
     }
@@ -2435,9 +2447,19 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per pop; actual size may vary slightly
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
+            .iter()
+            .map(assemble_pop)
+            .partition_map(|res| match res {
+                Ok(val) => Either::Left(val),
+                Err(e) => Either::Right(e),
+            });
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
         let mut result = Vec::with_capacity(regs.len().saturating_mul(2));
-        for bytes in regs.iter().map(assemble_pop) {
-            result.extend_from_slice(&bytes?);
+        for ok in oks {
+            result.extend_from_slice(&ok);
         }
         self.output_bytes(&result)
     }

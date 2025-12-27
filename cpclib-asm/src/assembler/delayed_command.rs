@@ -393,11 +393,18 @@ impl DelayedCommands {
         //#[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let cmds = cmds.iter();
 
-        let res = cmds
+        use either::Either;
+        let (oks, errs): (Vec<_>, Vec<_>) = cmds
             .map(|cmd| cmd.execute_on(env))
-            .collect::<Result<Vec<_>, Box<AssemblerError>>>()?;
-
-        Ok(res)
+            .partition_map(|res| match res {
+                Ok(val) => Either::Left(val),
+                Err(e) => Either::Right(e),
+            });
+        if !errs.is_empty() {
+            Err(Box::new(AssemblerError::MultipleErrors { errors: errs }))
+        } else {
+            Ok(oks)
+        }
     }
 
     pub fn nb_files_to_save(&self) -> usize {
@@ -408,15 +415,9 @@ impl DelayedCommands {
     pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>> {
         if self.failed_assert_commands.is_empty() {
             Ok(())
-        }
-        else {
-            Err(Box::new(AssemblerError::MultipleErrors {
-                errors: self
-                    .failed_assert_commands
-                    .iter()
-                    .map(|a| a.failure.clone())
-                    .collect_vec()
-            }))
+        } else {
+            let errors = self.failed_assert_commands.iter().map(|a| a.failure.clone()).collect_vec();
+            Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }
 
@@ -427,15 +428,14 @@ impl DelayedCommands {
     ) -> Result<(), Box<AssemblerError>> {
         let iter = self.print_commands.iter();
 
-        let errors = iter
+        let errors: Vec<Box<AssemblerError>> = iter
             .filter_map(|c| {
                 match c {
                     PrintOrPauseCommand::Print(p) => {
                         if p.is_print() {
                             let _ = p.execute(writer);
                             None
-                        }
-                        else {
+                        } else {
                             Some(p.print_or_error.as_ref().right().unwrap().clone())
                         }
                     },
@@ -445,12 +445,11 @@ impl DelayedCommands {
                     }
                 }
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         if errors.is_empty() {
             Ok(())
-        }
-        else {
+        } else {
             Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }

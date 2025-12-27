@@ -720,12 +720,18 @@ where
     }
     else if token.is_switch() {
         // todo setup properly the spans
+        let (cases, errs): (Vec<_>, Vec<_>) = token
+            .switch_cases()
+            .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env.clone()))
+            .partition_map(|res| match res {
+                Ok(val) => either::Either::Left(val),
+                Err(e) => either::Either::Right(e),
+            });
+        if !errs.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+        }
         Some(ProcessedTokenState::Switch(SwitchState {
-            cases: token
-                .switch_cases()
-                .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env.clone()))
-                .collect::<Result<Vec<_>, _>>()?,
-
+            cases,
             default: token
                 .switch_default()
                 .map(|l| build_simple_listing_state(l, span.clone(), env))
@@ -797,8 +803,16 @@ where
     let iter = tokens.par_iter();
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
     let iter = tokens.iter();
-    iter.map(|t| build_processed_token(t, env.clone()))
-        .collect::<Result<Vec<_>, _>>()
+    let (oks, errs): (Vec<_>, Vec<_>) = iter
+        .map(|t| build_processed_token(t, env.clone()))
+        .partition_map(|res| match res {
+            Ok(val) => either::Either::Left(val),
+            Err(e) => either::Either::Right(e),
+        });
+    if !errs.is_empty() {
+        return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
+    }
+    Ok(oks)
 }
 
 /// Visit all the tokens until an error occurs
