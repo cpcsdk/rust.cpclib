@@ -396,6 +396,8 @@ fn expand_glob(p: &str) -> Vec<String> {
 
 #[derive(Error, Debug)]
 pub enum BndBuilderError {
+    #[error("Rendering template error: {0}")]
+    TemplateError(String),
     #[error("Multiple errors occurred: {0:?}")]
     MultipleErrors(Vec<BndBuilderError>),
     #[error("Unable to access file {fname}: {error}.")]

@@ -36,6 +36,7 @@ anyhow = "1.0.100"
 camino = { workspace = true, features = ["serde1"] }
 camino-tempfile.workspace = true
 clap = { workspace = true, features = ["derive"] }
+codespan-reporting.workspace = true
 delegate.workspace = true
 dot-writer = "0.1.4"
 either.workspace = true
@@ -44,7 +45,7 @@ globmatch = "0.3"
 hostname = "0.4.2"
 lazy-regex = "3.4.2"
 memchr.workspace = true
-minijinja = { workspace = true, features = ["loader"] }
+minijinja = { workspace = true, features = ["loader", "debug"] }
 paste.workspace = true
 self_cell = "1.2.1"
 self_update = {workspace = true, optional = true}

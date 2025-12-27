@@ -4,6 +4,8 @@ use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
 
+use codespan_reporting::term::Chars;
+use codespan_reporting::term::termcolor::Buffer;
 #[cfg(feature = "rayon")]
 use cpclib_common::rayon::iter::{ParallelIterator, ParallelBridge};
 #[cfg(feature = "rayon")]
@@ -26,6 +28,9 @@ use crate::event::{
 };
 use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::files::SimpleFile;
+use codespan_reporting::term::{emit, termcolor::{ColorChoice, StandardStream}, Config};
 
 pub const EXPECTED_FILENAMES: &[&str] = &[
     "bndbuild.yml",
@@ -145,7 +150,9 @@ impl BndBuilder {
         let working_directory = if path.is_dir() { Some(path) } else { None };
 
         let rdr = BufReader::new(file);
-        Self::decode_from_reader(rdr, working_directory, definitions).map(|s| (fname.to_owned(), s))
+        // Pass the filename as a string to decode_from_reader
+        Self::decode_from_reader(rdr, working_directory, definitions, &path)
+            .map(|s| (fname.to_owned(), s))
     }
 
     pub fn save<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<()> {
@@ -156,7 +163,8 @@ impl BndBuilder {
     pub fn decode_from_reader<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         mut rdr: impl Read,
         working_directory: Option<P>,
-        definitions: &[(S1, S2)]
+        definitions: &[(S1, S2)],
+        filename: &Utf8Path
     ) -> Result<String, BndBuilderError> {
         // XXX here it is problematic to modify work dir
         if let Some(working_directory) = &working_directory {
@@ -179,7 +187,36 @@ impl BndBuilder {
 
         // generate the template
         env.render_str(&content, context!())
-            .map_err(|e| BndBuilderError::AnyError(e.to_string()))
+            .map_err(|e| {
+                let src = e.template_source().unwrap();
+                let range = e.range().unwrap();
+                let message = e.detail().unwrap();
+
+                // Use the provided filename for SimpleFile
+                let file = SimpleFile::new(filename, src);
+                let diagnostic = Diagnostic::error()
+                    .with_message(e.kind().to_string())
+                    .with_labels(vec![
+                        Label::primary((), range)
+                            .with_message(message)
+                    ]);
+                let mut rendered = Vec::new();
+                {
+                    let (config, mut buffer) = if cfg!(feature = "colored_errors") {
+                        (codespan_reporting::term::Config::default(), Buffer::ansi())
+                    }
+                    else {
+                        let mut conf = codespan_reporting::term::Config::default();
+                        conf.chars = Chars::ascii();
+                        (conf, Buffer::no_color())
+                    };
+                    let _ = emit(&mut buffer, &config, &file, &diagnostic);
+                    rendered = buffer.into_inner();
+                }
+                let report = String::from_utf8_lossy(&rendered).to_string();
+
+                BndBuilderError::TemplateError(report)
+            })
     }
 
     pub fn from_string(content: String) -> Result<Self, BndBuilderError> {
