@@ -435,7 +435,7 @@ impl BndBuilderCommand {
             cmd.to_string()
         };
 
-        let task: Task = serde_yaml::from_str(&cmd).map_err(BndBuilderError::ParseError)?;
+        let task: Task = serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::ParseError(e.to_string()))?; // TODO generate the appropriate error message
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }

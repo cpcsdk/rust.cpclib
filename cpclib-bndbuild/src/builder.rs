@@ -222,7 +222,11 @@ impl BndBuilder {
     pub fn from_string(content: String) -> Result<Self, BndBuilderError> {
         // extract information from the file
         let rules: rules::Rules =
-            serde_yaml::from_str(&content).map_err(BndBuilderError::ParseError)?;
+            serde_yaml::from_str(&content).map_err(|e: serde_yaml::Error| {
+               BndBuilderError::from((e, content.as_str()))
+            })
+            
+            ?;
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 
