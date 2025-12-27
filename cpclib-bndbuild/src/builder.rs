@@ -349,7 +349,15 @@ impl BndBuilder {
                 }
             });
         if !errs.is_empty() {
-            return Err(BndBuilderError::MultipleErrors(errs));
+            let errs = errs.into_iter()
+                .enumerate()
+                .map(|(i, e)| 
+                format!("Error {}:\n{}", 
+                    i + 1,
+                    e.to_string()
+                ))
+                .join("\n");
+            return Err(BndBuilderError::AnyError(errs));
         }
         Ok(())
     }

@@ -443,8 +443,6 @@ impl From<(serde_yaml::Error, &str)> for BndBuilderError {
 pub enum BndBuilderError {
     #[error("Rendering template error: {0}")]
     TemplateError(String),
-    #[error("Multiple errors occurred: {0:?}")]
-    MultipleErrors(Vec<BndBuilderError>),
     #[error("Unable to access file {fname}: {error}.")]
     InputFileError {
         fname: String,
