@@ -1,6 +1,6 @@
 [package]
 name = "cpclib-bndbuild-ratatui"
-version = "0.7.0"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,5 +8,6 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-ratatui.workspace = true
+ratatui = "0.30.0"
 cpclib-bndbuild.workspace = true
+anstyle = "1.0"

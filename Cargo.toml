@@ -6,6 +6,7 @@ members = [
   "cpclib-basm", "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-bndbuild-ratatui",
   "cpclib-bndbuild-tauri/src-tauri",
   "cpclib-rasm-basm-tests",
   "cpclib-python",
