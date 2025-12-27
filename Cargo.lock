@@ -2340,6 +2340,7 @@ dependencies = [
  "cpclib-xfertool",
  "delegate",
  "dot-writer",
+ "either",
  "fancy-duration",
  "fancy-regex 0.14.0",
  "globmatch",

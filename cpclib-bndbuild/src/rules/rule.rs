@@ -183,18 +183,25 @@ impl<'de> Deserialize<'de> for Rule {
 
 impl Rule {
     fn replace_automatic_variables(&mut self) -> Result<(), String> {
-        // TODO here we copy, but ther eare no reasons to do that
-        // fin a copy less way
         let first_dep = self.dependencies.first().cloned();
         let first_dep = first_dep.as_ref().map(|p| p.as_path());
-
         let first_tgt = self.targets.first().cloned();
         let first_tgt = first_tgt.as_ref().map(|p| p.as_path());
 
-        self.commands
+        use cpclib_common::itertools::Itertools;
+        use either::Either;
+
+        let (_, errs): ((), Vec<_>) = self.commands
             .iter_mut()
             .map(|t| t.replace_automatic_variables(first_dep, first_tgt))
-            .collect::<Result<Vec<_>, _>>()?;
+            .partition_map(|res| match res {
+                Ok(val) => Either::Left(val),
+                Err(e) => Either::Right(e),
+            });
+
+        if !errs.is_empty() {
+            return Err(errs.join(" "));
+        }
         Ok(())
     }
 }

@@ -302,8 +302,14 @@ impl BndBuilder {
         #[cfg(feature = "rayon")]
         let mut tasks =  tasks.par_bridge();
 
-        tasks.map(|task_targets| self.execute_task_targets_group(task_targets, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state))
-            .collect::<Result<Vec<()>, BndBuilderError>>()?;
+        let (_, errs): ((), Vec<BndBuilderError>) = tasks.map(|task_targets| self.execute_task_targets_group(task_targets, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state))
+            .partition_map(|res| match res {
+                Ok(val) => either::Either::Left(val),
+                Err(e) => either::Either::Right(e),
+            });
+        if !errs.is_empty() {
+            return Err(BndBuilderError::MultipleErrors(errs));
+        }
         Ok(())
     }
 
