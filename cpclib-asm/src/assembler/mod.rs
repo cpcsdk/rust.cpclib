@@ -1423,11 +1423,19 @@ impl Env {
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.free_banks.pages.iter();
-        let mut saved = iter
+        let (mut saved, errors): (Vec<_>, Vec<_>) = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))
-            .collect::<Result<Vec<_>, Box<AssemblerError>>>()?;
+            .partition(Result::is_ok);
+        if !errors.is_empty() {
+            return Err(Box::new(AssemblerError::MultipleErrors {
+                errors: errors
+                    .into_iter()
+                    .map(|e| e.err().unwrap())
+                    .collect::<Vec<_>>()
+            }));
+        }
         for s in &mut saved {
-            saved_files.append(s);
+            saved_files.append(s.as_mut().unwrap());
         }
 
         if self.options().show_progress() {

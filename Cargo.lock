@@ -2345,6 +2345,7 @@ dependencies = [
  "globmatch",
  "hostname",
  "lazy-regex",
+ "memchr",
  "minijinja",
  "paste",
  "self_cell",

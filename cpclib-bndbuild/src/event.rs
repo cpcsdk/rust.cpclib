@@ -10,6 +10,7 @@ use cpclib_asm::EnvEventObserver;
 use cpclib_runner::event::EventObserver;
 
 use crate::task::Task;
+use memchr::memchr;
 
 #[derive(Clone, Debug)]
 pub enum BndBuilderState<'a> {
@@ -344,6 +345,23 @@ impl EventObserver for BndBuilderDefaultObserver {
     }
 }
 
+static ERROR_TXT_STYLE: anstyle::Style = anstyle::Style::new().fg_color(Some(anstyle::Color::Ansi(anstyle::AnsiColor::Red)));
+static OK_TXT_STYLE: anstyle::Style = anstyle::Style::new().fg_color(Some(anstyle::Color::Ansi(anstyle::AnsiColor::Green)));
+
+#[inline]
+pub fn line_contains_ansi_escapes(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let mut start = 0;
+    while let Some(pos) = memchr(0x1B, &bytes[start..]) {
+        let idx = start + pos;
+        if idx + 1 < bytes.len() && bytes[idx + 1] == b'[' {
+            return true;
+        }
+        start = idx + 1;
+    }
+    false
+}
+
 impl BndBuilderObserver for BndBuilderDefaultObserver {
     fn update(&mut self, event: BndBuilderEvent) {
         match event {
@@ -372,12 +390,23 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             },
             BndBuilderEvent::TaskStdout(tgt, _task, txt) => {
                 for line in txt.lines() {
-                    println!("[{tgt}]\t{line}")
+                    if line_contains_ansi_escapes(line) {
+                        
+                        println!("[{tgt}]\t{line}");
+                    }
+                    else {
+                        println!("[{tgt}]\t{}{line}{}", OK_TXT_STYLE.render(), OK_TXT_STYLE.render_reset())
+                    }
                 }
             },
             BndBuilderEvent::TaskStderr(tgt, _task, txt) => {
                 for line in txt.lines() {
-                    eprintln!("[{tgt}]\t{line}")
+                    if line_contains_ansi_escapes(line) {
+                        eprintln!("[{tgt}]\t{line}");
+                    }
+                    else {
+                        eprintln!("[{tgt}]\t{}{line}{}", ERROR_TXT_STYLE.render(), ERROR_TXT_STYLE.render_reset());
+                    }
                 }
             },
             BndBuilderEvent::Stdout(s) => print!("{s}"),
