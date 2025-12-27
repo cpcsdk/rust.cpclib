@@ -46,7 +46,7 @@ jobs:
         toolchain: nightly
         args: --bins --release --features hfe
     - name: build tauri
-      run: cd cpclib-bndbuild-tauri && cargo tauri build --features hfe
+      run: cd cpclib-bndbuild-tauri && cargo tauri build
     - uses: ncipollo/release-action@v1
       with:
           token: "${{ secrets.GITHUB_TOKEN }}"
