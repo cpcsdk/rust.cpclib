@@ -364,8 +364,7 @@ impl BndBuilder {
         }
 
         if let Some(rule) = this.rule(p) {
-            let (disabled, done) = if !rule.is_enabled() {
-                // return Err(BndBuilderError::DisabledTarget(p.to_string())); // Finally we ignore it
+            let (disabled, done) = if rule.is_disabled() {
                 self.emit_stderr(format!("The target {p} is disabled and ignored."));
                 (true, true)
             }
@@ -391,7 +390,7 @@ impl BndBuilder {
             }
 
             // check if all the targets have been created
-            if !disabled {
+            if !disabled && !rule.is_phony() {
                 let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
                 if !wrong_files.is_empty() {
                     let orange = anstyle::Style::new().fg_color(Some(anstyle::Color::Rgb(RgbColor(255,165,0))));

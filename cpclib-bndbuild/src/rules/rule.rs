@@ -374,4 +374,8 @@ impl Rule {
             true
         }
     }
+
+    pub fn is_disabled(&self) -> bool {
+        !self.is_enabled()
+    }
 }
