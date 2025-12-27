@@ -67,11 +67,14 @@ fn expand_param<'p, P: MacroParamElement>(
     }
     else {
         let l = m.list_argument();
-        let (oks, errs): (Vec<_>, Vec<_>) = l.iter()
+        let (oks, errs): (Vec<_>, Vec<_>) = l
+            .iter()
             .map(|p| expand_param(p.deref(), env))
-            .partition_map(|res| match res {
-                Ok(val) => either::Either::Left(val),
-                Err(e) => either::Either::Right(e),
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => either::Either::Left(val),
+                    Err(e) => either::Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
@@ -185,9 +188,11 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             .args
             .iter()
             .map(|argvalue| expand_param(argvalue, env))
-            .partition_map(|res| match res {
-                Ok(val) => either::Either::Left(val),
-                Err(e) => either::Either::Right(e),
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => either::Either::Left(val),
+                    Err(e) => either::Either::Right(e)
+                }
             });
         let (oks, errs): (Vec<_>, Vec<_>) = all_expanded;
         if !errs.is_empty() {

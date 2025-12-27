@@ -1,7 +1,8 @@
 #[test]
 fn test_layered_dependencies_multiple_targets_grouping() {
-    use cpclib_bndbuild::rules::graph::{TaskTargetsForLayer, TaskTargets};
     use std::collections::HashSet;
+
+    use cpclib_bndbuild::rules::graph::{TaskTargets, TaskTargetsForLayer};
     use cpclib_common::camino::Utf8Path;
 
     let mut builder_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -54,7 +55,9 @@ fn test_layered_dependencies_multiple_targets_grouping() {
     assert_eq!(tasks_ordered.len(), 3);
 
     // Check that one TaskTargets contains only C
-    let c_task = tasks_ordered.iter().find(|tt| tt.targets().iter().any(|t| t.as_str() == "C"));
+    let c_task = tasks_ordered
+        .iter()
+        .find(|tt| tt.targets().iter().any(|t| t.as_str() == "C"));
     assert!(c_task.is_some());
     assert_eq!(c_task.unwrap().targets().len(), 1);
     assert!(c_task.unwrap().targets().iter().any(|t| t.as_str() == "C"));
@@ -76,9 +79,12 @@ fn test_layered_dependencies_multiple_targets_grouping() {
     assert!(found_a, "Should find a TaskTargets with A1, A2, A3");
     assert!(found_b, "Should find a TaskTargets with B1, B2, B3");
 }
-use cpclib_bndbuild::{BndBuilder, rules::graph::LayeredDependenciesByTask};
+use std::collections::HashSet;
+use std::path::PathBuf;
+
+use cpclib_bndbuild::BndBuilder;
+use cpclib_bndbuild::rules::graph::LayeredDependenciesByTask;
 use cpclib_common::camino::Utf8Path;
-use std::{collections::HashSet, path::PathBuf};
 
 #[test]
 fn test_layered_dependencies_multiple_targets() {

@@ -115,10 +115,11 @@ pub struct BndBuilderCommand {
 }
 
 impl BndBuilderCommand {
-        /// Returns true if the command is a help command
-        pub fn is_help(&self) -> bool {
-            matches!(self.deref(), BndBuilderCommandInner::InnerHelp(_))
-        }
+    /// Returns true if the command is a help command
+    pub fn is_help(&self) -> bool {
+        matches!(self.deref(), BndBuilderCommandInner::InnerHelp(_))
+    }
+
     pub fn new(inner: BndBuilderCommandInner, observers: Arc<ListOfBndBuilderObserverRc>) -> Self {
         Self { inner, observers }
     }
@@ -435,7 +436,8 @@ impl BndBuilderCommand {
             cmd.to_string()
         };
 
-        let task: Task = serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::from((e, cmd.as_str())))?; // TODO generate the appropriate error message
+        let task: Task =
+            serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::from((e, cmd.as_str())))?; // TODO generate the appropriate error message
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }

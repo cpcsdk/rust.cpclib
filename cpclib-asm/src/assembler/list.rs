@@ -1,9 +1,10 @@
 use std::borrow::Borrow;
 
+use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::ExprResult;
 use substring::Substring;
-use cpclib_common::itertools::Itertools;
+
 use crate::error::{AssemblerError, ExpressionError};
 
 pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
@@ -255,9 +256,11 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
                         Ok(v as u8)
                     }
                 })
-                .partition_map(|res| match res {
-                    Ok(val) => Either::Left(val),
-                    Err(e) => Either::Right(e),
+                .partition_map(|res| {
+                    match res {
+                        Ok(val) => Either::Left(val),
+                        Err(e) => Either::Right(e)
+                    }
                 });
             if !errs.is_empty() {
                 return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));

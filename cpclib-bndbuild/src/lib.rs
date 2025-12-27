@@ -8,8 +8,8 @@ use app::BndBuilderApp;
 use clap_complete::Shell;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
-use codespan_reporting::term::{Chars, emit};
 use codespan_reporting::term::termcolor::Buffer;
+use codespan_reporting::term::{Chars, emit};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
@@ -360,14 +360,15 @@ fn expand_glob(p: &str) -> Vec<String> {
         for component in middle.split(',') {
             patterns.push(format!("{start}{component}{end}"));
         }
-    } else {
+    }
+    else {
         patterns.push(p.to_owned());
     }
 
     let mut results = Vec::new();
     for pat in patterns {
         if pat.contains('*') || pat.contains('?') || pat.contains('[') {
-            //do this costly stuff only when needed
+            // do this costly stuff only when needed
             match globmatch::Builder::new(&pat).build(".") {
                 Ok(builder) => {
                     let mut found = false;
@@ -377,21 +378,23 @@ fn expand_glob(p: &str) -> Vec<String> {
                                 let s = Utf8PathBuf::from_path_buf(path).unwrap().to_string();
                                 if s.starts_with(".\\") {
                                     results.push(s[2..].to_owned());
-                                } else {
+                                }
+                                else {
                                     results.push(s);
                                 }
                                 found = true;
-                            }
-                            Err(_) => results.push(pat.clone()),
+                            },
+                            Err(_) => results.push(pat.clone())
                         }
                     }
                     if !found {
                         results.push(pat.clone());
                     }
-                }
-                Err(_) => results.push(pat.clone()),
+                },
+                Err(_) => results.push(pat.clone())
             }
-        } else {
+        }
+        else {
             results.push(pat);
         }
     }
@@ -400,44 +403,41 @@ fn expand_glob(p: &str) -> Vec<String> {
 
 impl From<(serde_yaml::Error, &str)> for BndBuilderError {
     fn from((e, src): (serde_yaml::Error, &str)) -> Self {
-                let location = e.location();
-                let (range, message) = if let Some(loc) = location {
-                    let start = loc.index();
-                    let end = start +1;
-                    (start..end, e.to_string())
-                } else {
-                    (0..src.len(), e.to_string())
-                };
+        let location = e.location();
+        let (range, message) = if let Some(loc) = location {
+            let start = loc.index();
+            let end = start + 1;
+            (start..end, e.to_string())
+        }
+        else {
+            (0..src.len(), e.to_string())
+        };
 
-                // Use the filename "build file" since we don't have a real filename here
-                let file = SimpleFile::new("generated build file", src);
-                let diagnostic = Diagnostic::error()
-                    .with_message("bndbuild parse error")
-                    .with_labels(vec![
-                        Label::primary((), range)
-                            .with_message(message)
-                    ]);
-                let mut rendered = Vec::new();
-                {
-                    let (mut config, mut buffer) = if cfg!(feature = "colored_errors") {
-                        (codespan_reporting::term::Config::default(), Buffer::ansi())
-                    }
-                    else {
-                        let mut conf = codespan_reporting::term::Config::default();
-                        conf.chars = Chars::ascii();
-                        (conf, Buffer::no_color())
-                    };
-                    config.start_context_lines = 2;
-                    config.end_context_lines = 2;
-                    let _ = emit(&mut buffer, &config, &file, &diagnostic);
-                    rendered = buffer.into_inner();
-                }
-                let report = String::from_utf8_lossy(&rendered).to_string();
+        // Use the filename "build file" since we don't have a real filename here
+        let file = SimpleFile::new("generated build file", src);
+        let diagnostic = Diagnostic::error()
+            .with_message("bndbuild parse error")
+            .with_labels(vec![Label::primary((), range).with_message(message)]);
+        let mut rendered = Vec::new();
+        {
+            let (mut config, mut buffer) = if cfg!(feature = "colored_errors") {
+                (codespan_reporting::term::Config::default(), Buffer::ansi())
+            }
+            else {
+                let mut conf = codespan_reporting::term::Config::default();
+                conf.chars = Chars::ascii();
+                (conf, Buffer::no_color())
+            };
+            config.start_context_lines = 2;
+            config.end_context_lines = 2;
+            let _ = emit(&mut buffer, &config, &file, &diagnostic);
+            rendered = buffer.into_inner();
+        }
+        let report = String::from_utf8_lossy(&rendered).to_string();
 
-                BndBuilderError::ParseError(report)
+        BndBuilderError::ParseError(report)
     }
 }
-
 
 #[derive(Error, Debug)]
 pub enum BndBuilderError {

@@ -6,8 +6,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(feature = "rayon")]
 use cpclib_common::rayon::iter::ParallelBridge;
 #[cfg(feature = "rayon")]
- use cpclib_common::rayon::iter::ParallelIterator;
-
+use cpclib_common::rayon::iter::ParallelIterator;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer};
 
@@ -21,13 +20,12 @@ where D: Deserializer<'de> {
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(s).unwrap_or_else(|| vec![]);
-            let mut r = r.into_iter();
+            let r = shlex::split(s).unwrap_or_else(std::vec::Vec::new);
+            let r = r.into_iter();
 
             #[cfg(feature = "rayon")]
-            let mut r = r.par_bridge();
-            r
-                .flat_map(|s| expand_glob(s.as_ref()))
+            let r = r.par_bridge();
+            r.flat_map(|s| expand_glob(s.as_ref()))
                 .map(|s| {
                     if s.starts_with(r"./") || s.starts_with(r".\") {
                         s[2..].to_owned()
@@ -191,12 +189,15 @@ impl Rule {
         use cpclib_common::itertools::Itertools;
         use either::Either;
 
-        let (_, errs): ((), Vec<_>) = self.commands
+        let (_, errs): ((), Vec<_>) = self
+            .commands
             .iter_mut()
             .map(|t| t.replace_automatic_variables(first_dep, first_tgt))
-            .partition_map(|res| match res {
-                Ok(val) => Either::Left(val),
-                Err(e) => Either::Right(e),
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e)
+                }
             });
 
         if !errs.is_empty() {

@@ -723,9 +723,11 @@ where
         let (cases, errs): (Vec<_>, Vec<_>) = token
             .switch_cases()
             .map(|(_v, l, _b)| build_simple_listing_state(l, span.clone(), env.clone()))
-            .partition_map(|res| match res {
-                Ok(val) => either::Either::Left(val),
-                Err(e) => either::Either::Right(e),
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => either::Either::Left(val),
+                    Err(e) => either::Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
@@ -805,9 +807,11 @@ where
     let iter = tokens.iter();
     let (oks, errs): (Vec<_>, Vec<_>) = iter
         .map(|t| build_processed_token(t, env.clone()))
-        .partition_map(|res| match res {
-            Ok(val) => either::Either::Left(val),
-            Err(e) => either::Either::Right(e),
+        .partition_map(|res| {
+            match res {
+                Ok(val) => either::Either::Left(val),
+                Err(e) => either::Either::Right(e)
+            }
         });
     if !errs.is_empty() {
         return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));

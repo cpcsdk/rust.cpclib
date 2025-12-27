@@ -330,8 +330,7 @@ ls                  List the files in the current M4 directory.
 
                 XferCommand::Reset => {
                     self.xfer.reset_cpc().unwrap();
-                }
-                // unreachable pattern arm removed
+                } // unreachable pattern arm removed
             }
         }
     }

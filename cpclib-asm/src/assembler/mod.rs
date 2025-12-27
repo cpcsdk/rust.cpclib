@@ -30,10 +30,10 @@ use std::time::Instant;
 
 use cpclib_basic::*;
 use cpclib_common::bitvec::prelude::BitVec;
-use cpclib_common::itertools::Itertools;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::chars::{Charset, char_to_amscii};
 use cpclib_common::event::EventObserver;
+use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::stream::UpdateSlice;
@@ -1425,16 +1425,16 @@ impl Env {
         };
         #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
         let iter = self.free_banks.pages.iter();
-        let (mut saved, errors): (Vec<Vec<SavedFile>>, Vec<Box<AssemblerError>>) = iter
+        let (saved, errors): (Vec<Vec<SavedFile>>, Vec<Box<AssemblerError>>) = iter
             .map(|bank| bank.1.execute_save(self, self.ga_mmr))
-            .partition_map(|res| match res {
-                Ok(val) => Either::Left(val),
-                Err(e) => Either::Right(e),
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e)
+                }
             });
         if !errors.is_empty() {
-            return Err(Box::new(AssemblerError::MultipleErrors {
-                errors
-            }));
+            return Err(Box::new(AssemblerError::MultipleErrors { errors }));
         }
         for mut s in saved {
             saved_files.append(&mut s);
@@ -2425,12 +2425,12 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per push; actual size may vary slightly
-        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
-            .iter()
-            .map(assemble_push)
-            .partition_map(|res| match res {
-                Ok(val) => Either::Left(val),
-                Err(e) => Either::Right(e),
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) =
+            regs.iter().map(assemble_push).partition_map(|res| {
+                match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));
@@ -2447,12 +2447,12 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per pop; actual size may vary slightly
-        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
-            .iter()
-            .map(assemble_pop)
-            .partition_map(|res| match res {
-                Ok(val) => Either::Left(val),
-                Err(e) => Either::Right(e),
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) =
+            regs.iter().map(assemble_pop).partition_map(|res| {
+                match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             return Err(Box::new(AssemblerError::MultipleErrors { errors: errs }));

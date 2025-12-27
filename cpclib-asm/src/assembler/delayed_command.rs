@@ -394,15 +394,17 @@ impl DelayedCommands {
         let cmds = cmds.iter();
 
         use either::Either;
-        let (oks, errs): (Vec<_>, Vec<_>) = cmds
-            .map(|cmd| cmd.execute_on(env))
-            .partition_map(|res| match res {
-                Ok(val) => Either::Left(val),
-                Err(e) => Either::Right(e),
+        let (oks, errs): (Vec<_>, Vec<_>) =
+            cmds.map(|cmd| cmd.execute_on(env)).partition_map(|res| {
+                match res {
+                    Ok(val) => Either::Left(val),
+                    Err(e) => Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             Err(Box::new(AssemblerError::MultipleErrors { errors: errs }))
-        } else {
+        }
+        else {
             Ok(oks)
         }
     }
@@ -415,8 +417,13 @@ impl DelayedCommands {
     pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>> {
         if self.failed_assert_commands.is_empty() {
             Ok(())
-        } else {
-            let errors = self.failed_assert_commands.iter().map(|a| a.failure.clone()).collect_vec();
+        }
+        else {
+            let errors = self
+                .failed_assert_commands
+                .iter()
+                .map(|a| a.failure.clone())
+                .collect_vec();
             Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }
@@ -435,7 +442,8 @@ impl DelayedCommands {
                         if p.is_print() {
                             let _ = p.execute(writer);
                             None
-                        } else {
+                        }
+                        else {
                             Some(p.print_or_error.as_ref().right().unwrap().clone())
                         }
                     },
@@ -449,7 +457,8 @@ impl DelayedCommands {
 
         if errors.is_empty() {
             Ok(())
-        } else {
+        }
+        else {
             Err(Box::new(AssemblerError::MultipleErrors { errors }))
         }
     }

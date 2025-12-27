@@ -1,22 +1,20 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{BufReader, Read};
 use std::ops::Deref;
 use std::sync::Arc;
-
-use codespan_reporting::term::Chars;
-use codespan_reporting::term::termcolor::Buffer;
-#[cfg(feature = "rayon")]
-use cpclib_common::rayon::iter::{ParallelIterator, ParallelBridge};
 #[cfg(feature = "rayon")]
 use std::sync::RwLock;
 
-use anstyle::{self, Ansi256Color, RgbColor};
-
+use anstyle::{self, RgbColor};
+use codespan_reporting::diagnostic::{Diagnostic, Label};
+use codespan_reporting::files::SimpleFile;
+use codespan_reporting::term::termcolor::Buffer;
+use codespan_reporting::term::{Chars, emit};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 #[cfg(feature = "rayon")]
-use minijinja::State;
+use cpclib_common::rayon::iter::{ParallelBridge, ParallelIterator};
 use minijinja::context;
 
 use crate::BndBuilderError;
@@ -28,9 +26,6 @@ use crate::event::{
 };
 use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
-use codespan_reporting::diagnostic::{Diagnostic, Label};
-use codespan_reporting::files::SimpleFile;
-use codespan_reporting::term::{emit, termcolor::{ColorChoice, StandardStream}, Config};
 
 pub const EXPECTED_FILENAMES: &[&str] = &[
     "bndbuild.yml",
@@ -151,7 +146,7 @@ impl BndBuilder {
 
         let rdr = BufReader::new(file);
         // Pass the filename as a string to decode_from_reader
-        Self::decode_from_reader(rdr, working_directory, definitions, &path)
+        Self::decode_from_reader(rdr, working_directory, definitions, path)
             .map(|s| (fname.to_owned(), s))
     }
 
@@ -186,47 +181,39 @@ impl BndBuilder {
         let env = create_template_env(working_directory.as_ref(), definitions);
 
         // generate the template
-        env.render_str(&content, context!())
-            .map_err(|e| {
-                let src = e.template_source().unwrap();
-                let range = e.range().unwrap();
-                let message = e.detail().unwrap();
+        env.render_str(&content, context!()).map_err(|e| {
+            let src = e.template_source().unwrap();
+            let range = e.range().unwrap();
+            let message = e.detail().unwrap();
 
-                // Use the provided filename for SimpleFile
-                let file = SimpleFile::new(filename, src);
-                let diagnostic = Diagnostic::error()
-                    .with_message(e.kind().to_string())
-                    .with_labels(vec![
-                        Label::primary((), range)
-                            .with_message(message)
-                    ]);
-                let mut rendered = Vec::new();
-                {
-                    let (config, mut buffer) = if cfg!(feature = "colored_errors") {
-                        (codespan_reporting::term::Config::default(), Buffer::ansi())
-                    }
-                    else {
-                        let mut conf = codespan_reporting::term::Config::default();
-                        conf.chars = Chars::ascii();
-                        (conf, Buffer::no_color())
-                    };
-                    let _ = emit(&mut buffer, &config, &file, &diagnostic);
-                    rendered = buffer.into_inner();
+            // Use the provided filename for SimpleFile
+            let file = SimpleFile::new(filename, src);
+            let diagnostic = Diagnostic::error()
+                .with_message(e.kind().to_string())
+                .with_labels(vec![Label::primary((), range).with_message(message)]);
+            let mut rendered = Vec::new();
+            {
+                let (config, mut buffer) = if cfg!(feature = "colored_errors") {
+                    (codespan_reporting::term::Config::default(), Buffer::ansi())
                 }
-                let report = String::from_utf8_lossy(&rendered).to_string();
+                else {
+                    let mut conf = codespan_reporting::term::Config::default();
+                    conf.chars = Chars::ascii();
+                    (conf, Buffer::no_color())
+                };
+                let _ = emit(&mut buffer, &config, &file, &diagnostic);
+                rendered = buffer.into_inner();
+            }
+            let report = String::from_utf8_lossy(&rendered).to_string();
 
-                BndBuilderError::TemplateError(report)
-            })
+            BndBuilderError::TemplateError(report)
+        })
     }
 
     pub fn from_string(content: String) -> Result<Self, BndBuilderError> {
         // extract information from the file
-        let rules: rules::Rules =
-            serde_yaml::from_str(&content).map_err(|e: serde_yaml::Error| {
-               BndBuilderError::from((e, content.as_str()))
-            })
-            
-            ?;
+        let rules: rules::Rules = serde_yaml::from_str(&content)
+            .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, content.as_str())))?;
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 
@@ -250,20 +237,18 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        let mut state = ExecutionState {
+        let state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };
 
         let nb_deps = state.nb_deps;
 
-            #[cfg(feature = "rayon")]
-            let state = Arc::new(RwLock::new(state));
+        #[cfg(feature = "rayon")]
+        let state = Arc::new(RwLock::new(state));
 
-            #[cfg(not(feature = "rayon"))]
-            let state = &mut state;
-
-
+        #[cfg(not(feature = "rayon"))]
+        let state = &mut state;
 
         if nb_deps == 0 {
             if self.has_rule(p) {
@@ -286,7 +271,13 @@ impl BndBuilder {
             self.do_run_tasks();
             for layer in layers.iter() {
                 // Each layer is TaskTargetsForLayer, which contains a set of TaskTargets
-                self.execute_layer(&layer, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state)?;
+                self.execute_layer(
+                    layer,
+                    #[cfg(feature = "rayon")]
+                    state.clone(),
+                    #[cfg(not(feature = "rayon"))]
+                    state
+                )?;
             }
         }
         self.do_finish();
@@ -297,10 +288,8 @@ impl BndBuilder {
     fn execute_layer(
         &self,
         layer: &crate::rules::graph::TaskTargetsForLayer,
-        #[cfg(not(feature = "rayon"))]
-        state: &mut ExecutionState,
-        #[cfg(feature = "rayon")]
-        state: Arc<RwLock<ExecutionState>>
+        #[cfg(not(feature = "rayon"))] state: &mut ExecutionState,
+        #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
@@ -311,7 +300,8 @@ impl BndBuilder {
             let repr = task_targets.representative_target();
             if let Some(r) = self.get_rule(repr) {
                 grouped.insert(r, task_targets);
-            } else {
+            }
+            else {
                 // If no rule for the representative target, push the whole TaskTargets reference
                 without_rule.push(task_targets);
             }
@@ -323,30 +313,40 @@ impl BndBuilder {
             let mut state = state.write().unwrap();
 
             for p in targets.targets.iter() {
-            state.task_count += 1;
-            self.start_rule(p, state.task_count, state.nb_deps);
-            if !p.exists() {
-                return Err(BndBuilderError::ExecuteError {
-                    fname: p.to_string(),
-                    msg: "no rule to build it".to_owned()
-                });
+                state.task_count += 1;
+                self.start_rule(p, state.task_count, state.nb_deps);
+                if !p.exists() {
+                    return Err(BndBuilderError::ExecuteError {
+                        fname: p.to_string(),
+                        msg: "no rule to build it".to_owned()
+                    });
+                }
+                self.stop_rule(p);
             }
-            self.stop_rule(p);
-        }
         }
 
         // execute only one task per group but still count the others
         // TODO optimize by executing them in parallel
-        let tasks = grouped
-            .values();
+        let tasks = grouped.values();
 
         #[cfg(feature = "rayon")]
-        let mut tasks =  tasks.par_bridge();
+        let tasks = tasks.par_bridge();
 
-        let (_, errs): ((), Vec<BndBuilderError>) = tasks.map(|task_targets| self.execute_task_targets_group(task_targets, #[cfg(feature = "rayon")] state.clone(), #[cfg(not(feature = "rayon"))] state))
-            .partition_map(|res| match res {
-                Ok(val) => either::Either::Left(val),
-                Err(e) => either::Either::Right(e),
+        let (_, errs): ((), Vec<BndBuilderError>) = tasks
+            .map(|task_targets| {
+                self.execute_task_targets_group(
+                    task_targets,
+                    #[cfg(feature = "rayon")]
+                    state.clone(),
+                    #[cfg(not(feature = "rayon"))]
+                    state
+                )
+            })
+            .partition_map(|res| {
+                match res {
+                    Ok(val) => either::Either::Left(val),
+                    Err(e) => either::Either::Right(e)
+                }
             });
         if !errs.is_empty() {
             return Err(BndBuilderError::MultipleErrors(errs));
@@ -357,10 +357,8 @@ impl BndBuilder {
     fn execute_task_targets_group(
         &self,
         task_targets: &crate::rules::graph::TaskTargets,
-        #[cfg(not(feature = "rayon"))]
-        state: &mut ExecutionState,
-        #[cfg(feature = "rayon")]
-        state:Arc<RwLock<ExecutionState>>
+        #[cfg(not(feature = "rayon"))] state: &mut ExecutionState,
+        #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
         let mut targets: Vec<_> = task_targets.targets.iter().collect();
         // Use representative_target as the main one
@@ -369,7 +367,8 @@ impl BndBuilder {
         targets.retain(|&&p| p != repr);
         let other_paths = if !targets.is_empty() {
             Some(targets)
-        } else {
+        }
+        else {
             None
         };
 
@@ -393,10 +392,8 @@ impl BndBuilder {
     fn execute_rule<'s, P: AsRef<Utf8Path> + 's>(
         &'s self,
         p: P,
-        #[cfg(not(feature = "rayon"))]
-        state: &mut ExecutionState,
-        #[cfg(feature = "rayon")]
-        state: Arc<RwLock<ExecutionState>>
+        #[cfg(not(feature = "rayon"))] state: &mut ExecutionState,
+        #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
         let p = p.as_ref();
 
@@ -440,7 +437,8 @@ impl BndBuilder {
             if !disabled && !rule.is_phony() {
                 let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
                 if !wrong_files.is_empty() {
-                    let orange = anstyle::Style::new().fg_color(Some(anstyle::Color::Rgb(RgbColor(255,165,0))));
+                    let orange = anstyle::Style::new()
+                        .fg_color(Some(anstyle::Color::Rgb(RgbColor(255, 165, 0))));
                     self.emit_stderr(
 
                             format!(

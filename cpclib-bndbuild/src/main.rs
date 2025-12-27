@@ -10,12 +10,7 @@ fn main() {
         Ok(_) => {},
         Err(e) => {
             let red = Style::new().fg_color(Some(AnsiColor::Red.into()));
-            eprintln!(
-                "{}Failure\n{}{}",
-                red.render(),
-                e,
-                red.render_reset()
-            );
+            eprintln!("{}Failure\n{}{}", red.render(), e, red.render_reset());
             std::process::exit(-1);
         }
     }
