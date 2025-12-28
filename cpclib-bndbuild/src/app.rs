@@ -20,6 +20,7 @@ use crate::env::create_template_env;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
+use crate::rules::Rule;
 use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::disc::DiscManagerRunner;
@@ -383,7 +384,9 @@ impl BndBuilderCommand {
     }
 
     fn execute_list<O: BndBuilderObserver>(builder: BndBuilder, observers: O) {
-        for rule in builder.rules() {
+        let ordered_rules = builder.rules().iter()
+            .sorted_by_cached_key(|r| r.targets().iter().map(|f| f.to_string()).join(" "));
+        for rule in ordered_rules.into_iter() {
             builder.emit_stdout(format!(
                 "{}{}: {}\n",
                 if rule.is_enabled() { "" } else { "[disabled] " },

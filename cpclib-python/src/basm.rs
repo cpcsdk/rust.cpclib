@@ -1,6 +1,6 @@
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
+use pyo3::exceptions::PyRuntimeError;
 
 /// Assemble a Z80 assembly string and return the produced bytes as Python `bytes`.
 #[pyfunction]

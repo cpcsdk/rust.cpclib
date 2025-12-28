@@ -34,7 +34,7 @@ fn test_dummy_phony() {
     use cpclib_common::itertools::Itertools;
 
     let builder_fname = "tests/dummy/bndbuild.yml";
-    let (_, builder) = BndBuilder::from_path(builder_fname).unwrap();
+    let (_, builder) = BndBuilder::from_path(builder_fname, false).unwrap();
 
     println!(
         "{:#?}",

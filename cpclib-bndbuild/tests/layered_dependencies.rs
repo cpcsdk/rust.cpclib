@@ -9,7 +9,7 @@ fn test_layered_dependencies_multiple_targets_grouping() {
     builder_path.push("tests/layered_targets.yml");
     let builder_fname = builder_path.to_str().unwrap();
 
-    let (_, builder) = BndBuilder::from_path(builder_fname).unwrap();
+    let (_, builder) = BndBuilder::from_path(builder_fname, false).unwrap();
     let layered = builder.get_layered_dependencies();
 
     // There should be 2 layers: [A1,A2,A3,B1,B2,B3] -> [C]
@@ -93,7 +93,7 @@ fn test_layered_dependencies_multiple_targets() {
     let mut builder_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     builder_path.push("tests/dummy/bndbuild.yml");
     let builder_fname = builder_path.to_str().unwrap();
-    let (_, builder) = BndBuilder::from_path(builder_fname).unwrap();
+    let (_, builder) = BndBuilder::from_path(builder_fname, false).unwrap();
 
     // Get the dependency layers
     let layered = builder.get_layered_dependencies();
@@ -112,7 +112,7 @@ fn test_layered_dependencies_for_specific_target() {
     let mut builder_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     builder_path.push("tests/dummy/bndbuild.yml");
     let builder_fname = builder_path.to_str().unwrap();
-    let (_, builder) = BndBuilder::from_path(builder_fname).unwrap();
+    let (_, builder) = BndBuilder::from_path(builder_fname, false).unwrap();
     let target = Utf8Path::new("dummy_logo.o");
     let layered = builder.get_layered_dependencies_for(&target);
     for i in 0..layered.nb_layers() {
