@@ -304,6 +304,10 @@ impl Rule {
         }
     }
 
+    pub fn is_parallelizable(&self) -> bool {
+        self.commands().iter().all(|c| c.is_parallelizable())
+    }
+
     pub fn is_up_to_date<P: AsRef<Utf8Path>>(
         &self,
         last_build: Option<SystemTime>,

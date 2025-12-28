@@ -747,6 +747,16 @@ impl InnerTask {
             .replace_automatic_variables(first_dep, first_tgt)
     }
 
+    /// Indicates whether this task can be launched in parallel with other tasks.
+    /// For now, only BndBuild tasks are considered non-parallelizable because they
+    /// modify the current working directory.
+    pub fn is_parallelizable(&self) -> bool {
+        match self {
+            InnerTask::BndBuild(..)=> false,
+            _ => true
+        }
+    }
+
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)

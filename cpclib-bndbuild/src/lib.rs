@@ -168,8 +168,17 @@ pub fn build_args_parser() -> clap::Command {
                 .default_value("bndbuild")
                 .num_args(0..=1)
                 .help("Show the help of the given subcommand CMD.")
-        )
-        .arg(
+        );
+
+        #[cfg(feature = "rayon")]
+        let cmd = cmd.arg(
+            Arg::new("serial")
+                .long("serial")
+                .action(ArgAction::SetTrue)
+                .help("Force serial (non-parallel) execution of tasks, even if parallelisation is available.")
+        );
+
+        let cmd = cmd.arg(
             Arg::new("direct")
             .action(ArgAction::SetTrue)
             .long("direct")

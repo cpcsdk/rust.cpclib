@@ -291,6 +291,9 @@ impl BndBuilder {
         #[cfg(not(feature = "rayon"))] state: &mut ExecutionState,
         #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
+
+        //compile_error!("Review this function for parallel execution: non parallelizable taks must be handled independently");
+
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
 

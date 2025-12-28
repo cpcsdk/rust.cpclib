@@ -714,6 +714,23 @@ impl BndBuilderApp {
     }
 
     pub fn from_matches(matches: ArgMatches) -> Self {
+        #[cfg(feature = "rayon")]
+        if matches.get_flag("serial") {
+            use cpclib_common::rayon;
+
+            eprintln!("--> Forcing serial execution\n");
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build_global()
+                .unwrap(); // unwrap is here to be sure we call it one time only
+        } else {
+            use cpclib_common::rayon;
+
+            let num_cpus = rayon::current_num_threads();
+            if num_cpus != 1 {
+                eprintln!("--> Using {} threads for parallel execution\n", num_cpus);
+            }
+        }
         Self {
             matches,
             observers: Arc::new(Vec::with_capacity(1).into())

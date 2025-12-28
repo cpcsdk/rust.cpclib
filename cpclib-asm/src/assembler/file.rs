@@ -270,7 +270,7 @@ pub fn load_file<'a, 'b, F: Into<Fname<'a, 'b>>>(
 
             // XXX previously, I was checking the file name validity, but it is a
             //     bad heursitic as orgams does not respect that
-            if (header.file_length() + 128) as usize == data.len() {
+            if (header.file_length() as usize + 128) == data.len() {
                 data.drain(..128);
                 Some(header)
             }
