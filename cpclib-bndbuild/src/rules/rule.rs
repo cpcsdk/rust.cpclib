@@ -20,7 +20,7 @@ where D: Deserializer<'de> {
 
     impl SequenceOrList {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(s).unwrap_or_else(std::vec::Vec::new);
+            let r = shlex::split(s).unwrap_or_default();
             let r = r.into_iter();
 
             #[cfg(feature = "rayon")]

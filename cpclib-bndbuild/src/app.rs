@@ -20,7 +20,6 @@ use crate::env::create_template_env;
 use crate::event::{
     BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc
 };
-use crate::rules::Rule;
 use crate::runners::assembler::{BasmRunner, OrgamsRunner};
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::disc::DiscManagerRunner;

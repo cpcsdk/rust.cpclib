@@ -232,12 +232,11 @@ impl BndBuilder {
                         .for_each(|c| {
                             use crate::task::InnerTask;
 
-                            if let InnerTask::BndBuild(args) = &mut c.inner {
-                                if ! args.args.contains("--serial") {
+                            if let InnerTask::BndBuild(args) = &mut c.inner
+                                && ! args.args.contains("--serial") {
                                     // BUG --serial is detected even if not part of bndbuild arguments
                                     args.args = format!("--serial {}", args.args);
                                 }
-                            }
                         })
                 );
             }
@@ -249,7 +248,7 @@ impl BndBuilder {
             inner,
             observers: Default::default(),
             #[cfg(feature = "rayon")]
-            force_serial: force_serial,
+            force_serial,
         })
     }
 
@@ -267,7 +266,7 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        let mut state = ExecutionState {
+        let state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };
@@ -407,7 +406,7 @@ impl BndBuilder {
                 .map(|(i, e)| 
                 format!("Error {}:\n{}", 
                     i + 1,
-                    e.to_string()
+                    e
                 ))
                 .join("\n");
             return Err(BndBuilderError::AnyError(errs));
