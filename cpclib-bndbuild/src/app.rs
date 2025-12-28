@@ -886,7 +886,7 @@ impl BndBuilderApp {
                 ));
             }
 
-            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()), self.force_serial)?;
+            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()), #[cfg(feature = "rayon")]self.force_serial)?;
             for observer in self.observers.iter() {
                 builder.add_observer(observer.clone());
             }

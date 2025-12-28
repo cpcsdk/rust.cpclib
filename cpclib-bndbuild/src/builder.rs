@@ -103,9 +103,9 @@ impl BndBuilder {
         }
     }
 
-    pub fn from_path<P: AsRef<Utf8Path>>(fname: P, force_serial: bool) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
+    pub fn from_path<P: AsRef<Utf8Path>>(fname: P, #[cfg(feature = "rayon")] force_serial: bool) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
         let (p, content) = Self::decode_from_fname(fname)?;
-        Self::from_string(content, Some(p.as_ref()), force_serial).map(|build| (p, build))
+        Self::from_string(content, Some(p.as_ref()), #[cfg(feature = "rayon")] force_serial).map(|build| (p, build))
     }
 
     pub fn decode_from_fname<P: AsRef<Utf8Path>>(
@@ -217,7 +217,7 @@ impl BndBuilder {
         })
     }
 
-    pub fn from_string(content: String, filename: Option<&Utf8Path>, force_serial: bool) -> Result<Self, BndBuilderError> {
+    pub fn from_string(content: String, filename: Option<&Utf8Path>, #[cfg(feature = "rayon")] force_serial: bool) -> Result<Self, BndBuilderError> {
         // extract information from the file
         let rules: rules::Rules = serde_yaml::from_str(&content)
             .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, filename.unwrap_or_else(|| Utf8Path::new("<string>")), content.as_str())))?;
@@ -246,7 +246,7 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        let state = ExecutionState {
+        let mut state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };
@@ -310,7 +310,13 @@ impl BndBuilder {
         for task_targets in &layer.tasks {
             let repr = task_targets.representative_target();
             if let Some(r) = self.get_rule(repr) {
-                if r.is_parallelizable() && !self.force_serial {
+
+                #[cfg(feature = "rayon")]
+                let parallelisze = r.is_parallelizable() && !self.force_serial;
+                #[cfg(not(feature = "rayon"))]
+                let parallelisze = r.is_parallelizable();
+
+                if parallelisze {
                     parallel_tasks.insert(r, task_targets);
                 }
                 else {
