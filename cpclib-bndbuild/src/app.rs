@@ -248,6 +248,7 @@ impl BndBuilderCommand {
         builder: BndBuilder,
         observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
+
         let targets_provided = init_targets.is_some();
 
         // get the list of targets
@@ -282,6 +283,10 @@ impl BndBuilderCommand {
             Some(SystemTime::now())
         }
         else {
+            observers.emit_stdout(&format!(
+                "Target {} is already up to date.\n",
+                tgt
+            ));
             None
         };
 
