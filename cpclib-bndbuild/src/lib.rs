@@ -410,8 +410,8 @@ fn expand_glob(p: &str) -> Vec<String> {
     results
 }
 
-impl From<(serde_yaml::Error, &str)> for BndBuilderError {
-    fn from((e, src): (serde_yaml::Error, &str)) -> Self {
+impl From<(serde_yaml::Error, &Utf8Path, &str)> for BndBuilderError {
+    fn from((e, fname, src): (serde_yaml::Error, &Utf8Path, &str)) -> Self {
         let location = e.location();
         let (range, message) = if let Some(loc) = location {
             let start = loc.index();
@@ -423,7 +423,7 @@ impl From<(serde_yaml::Error, &str)> for BndBuilderError {
         };
 
         // Use the filename "build file" since we don't have a real filename here
-        let file = SimpleFile::new("generated build file", src);
+        let file = SimpleFile::new(format!("Expanded: {}", fname), src);
         let diagnostic = Diagnostic::error()
             .with_message("bndbuild parse error")
             .with_labels(vec![Label::primary((), range).with_message(message)]);

@@ -437,7 +437,7 @@ impl BndBuilderCommand {
         };
 
         let task: Task =
-            serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::from((e, cmd.as_str())))?; // TODO generate the appropriate error message
+            serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::from((e, "<direct>".into(), cmd.as_str())))?; // TODO generate the appropriate error message
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }
@@ -887,7 +887,7 @@ impl BndBuilderApp {
                 ));
             }
 
-            let mut builder = BndBuilder::from_string(content)?;
+            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()))?;
             for observer in self.observers.iter() {
                 builder.add_observer(observer.clone());
             }

@@ -98,7 +98,7 @@ impl BndBuilder {
 
     pub fn from_path<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
         let (p, content) = Self::decode_from_fname(fname)?;
-        Self::from_string(content).map(|build| (p, build))
+        Self::from_string(content, Some(p.as_ref())).map(|build| (p, build))
     }
 
     pub fn decode_from_fname<P: AsRef<Utf8Path>>(
@@ -210,10 +210,10 @@ impl BndBuilder {
         })
     }
 
-    pub fn from_string(content: String) -> Result<Self, BndBuilderError> {
+    pub fn from_string(content: String, filename: Option<&Utf8Path>) -> Result<Self, BndBuilderError> {
         // extract information from the file
         let rules: rules::Rules = serde_yaml::from_str(&content)
-            .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, content.as_str())))?;
+            .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, filename.unwrap_or_else(|| Utf8Path::new("<string>")), content.as_str())))?;
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 
