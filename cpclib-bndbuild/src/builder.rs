@@ -54,12 +54,17 @@ self_cell::self_cell! {
 
 pub struct BndBuilder {
     inner: BndBuilderInner,
-    observers: Arc<ListOfBndBuilderObserverRc>
+    observers: Arc<ListOfBndBuilderObserverRc>,
+    #[cfg(feature = "rayon")]
+    force_serial: bool,
 }
 
 impl Debug for BndBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BndBuilder").finish()
+        let mut dbg = f.debug_struct("BndBuilder");
+        #[cfg(feature = "rayon")]
+        dbg.field("force_serial", &self.force_serial);
+        dbg.finish()
     }
 }
 
@@ -92,13 +97,15 @@ impl BndBuilder {
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps()).unwrap();
         BndBuilder {
             inner,
-            observers: Default::default()
+            observers: Default::default(),
+            #[cfg(feature = "rayon")]
+            force_serial: self.force_serial,
         }
     }
 
-    pub fn from_path<P: AsRef<Utf8Path>>(fname: P) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
+    pub fn from_path<P: AsRef<Utf8Path>>(fname: P, force_serial: bool) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
         let (p, content) = Self::decode_from_fname(fname)?;
-        Self::from_string(content, Some(p.as_ref())).map(|build| (p, build))
+        Self::from_string(content, Some(p.as_ref()), force_serial).map(|build| (p, build))
     }
 
     pub fn decode_from_fname<P: AsRef<Utf8Path>>(
@@ -210,7 +217,7 @@ impl BndBuilder {
         })
     }
 
-    pub fn from_string(content: String, filename: Option<&Utf8Path>) -> Result<Self, BndBuilderError> {
+    pub fn from_string(content: String, filename: Option<&Utf8Path>, force_serial: bool) -> Result<Self, BndBuilderError> {
         // extract information from the file
         let rules: rules::Rules = serde_yaml::from_str(&content)
             .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, filename.unwrap_or_else(|| Utf8Path::new("<string>")), content.as_str())))?;
@@ -219,7 +226,9 @@ impl BndBuilder {
 
         Ok(BndBuilder {
             inner,
-            observers: Default::default()
+            observers: Default::default(),
+            #[cfg(feature = "rayon")]
+            force_serial: force_serial,
         })
     }
 
@@ -301,7 +310,7 @@ impl BndBuilder {
         for task_targets in &layer.tasks {
             let repr = task_targets.representative_target();
             if let Some(r) = self.get_rule(repr) {
-                if r.is_parallelizable() {
+                if r.is_parallelizable() && !self.force_serial {
                     parallel_tasks.insert(r, task_targets);
                 }
                 else {
@@ -360,7 +369,7 @@ impl BndBuilder {
         // Serial tasks: always sequential
         let serial_errs = launch_tasks!(serial_tasks.values());
 
-        // Parallel tasks: parallel if rayon, else sequential
+        // Parallel tasks: parallel if rayon, else sequential, or forced serial
         #[cfg(feature = "rayon")]
         let parallel_errs = {
             use cpclib_common::rayon::prelude::*;

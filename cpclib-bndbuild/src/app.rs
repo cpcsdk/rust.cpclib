@@ -39,7 +39,9 @@ use crate::{
 
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
-    observers: Arc<ListOfBndBuilderObserverRc>
+    observers: Arc<ListOfBndBuilderObserverRc>,
+    #[cfg(feature = "rayon")]
+    force_serial: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -715,25 +717,22 @@ impl BndBuilderApp {
 
     pub fn from_matches(matches: ArgMatches) -> Self {
         #[cfg(feature = "rayon")]
-        if matches.get_flag("serial") {
+        let force_serial = matches.get_flag("serial");
+        #[cfg(feature = "rayon")]
+        {
             use cpclib_common::rayon;
-
-            eprintln!("--> Forcing serial execution\n");
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .build_global()
-                .unwrap(); // unwrap is here to be sure we call it one time only
-        } else {
-            use cpclib_common::rayon;
-
             let num_cpus = rayon::current_num_threads();
-            if num_cpus != 1 {
+            if force_serial {
+                eprintln!("--> Forcing serial execution of bndbuild. Other tools still have access to {} threads\n", num_cpus);
+            } else if num_cpus != 1 {
                 eprintln!("--> Using {} threads for parallel execution\n", num_cpus);
             }
         }
         Self {
             matches,
-            observers: Arc::new(Vec::with_capacity(1).into())
+            observers: Arc::new(Vec::with_capacity(1).into()),
+            #[cfg(feature = "rayon")]
+            force_serial,
         }
     }
 
@@ -887,7 +886,7 @@ impl BndBuilderApp {
                 ));
             }
 
-            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()))?;
+            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()), self.force_serial)?;
             for observer in self.observers.iter() {
                 builder.add_observer(observer.clone());
             }
