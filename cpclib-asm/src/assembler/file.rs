@@ -179,7 +179,7 @@ impl<'fname> AnyFileName<'fname> {
                 either::Either::Left(asm) => asm,
                 either::Either::Right(tested) => {
                     AssemblerError::AssemblingError {
-                        msg: format!("{} not found. Tested {:?}", self.base_filename(), tested)
+                        msg: format!("File `{}` not found. Tested at the following locations: {}.", self.base_filename(), tested.join(", "))
                     }
                 },
             }

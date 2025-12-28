@@ -701,7 +701,7 @@ impl BndBuilderApp {
     /// - Return a wrapped None if help has been displayed (TODO check if this case happens really)
     /// - Return an error in case of arguments error
     pub fn new() -> Result<Option<Self>, clap::error::Error> {
-        let cmd = crate::build_args_parser();
+        let cmd = crate::build_args_parser().color(clap::ColorChoice::Always);
 
         match cmd.clone().try_get_matches() {
             Result::Ok(matches) => Ok(Some(Self::from_matches(matches))),
