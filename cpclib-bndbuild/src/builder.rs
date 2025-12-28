@@ -351,12 +351,6 @@ impl BndBuilder {
         }
 
 
-        dbg!(
-            parallel_tasks.len(),
-            serial_tasks.len(),
-            without_rule.len()
-        );
-
         // count the files that are not produced
         for targets in without_rule.into_iter() {
             #[cfg(feature = "rayon")]
