@@ -1189,7 +1189,7 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                                 .help("Screen height in number of chars")
                                 .long("r6")
                                 .alias("vertical-displayed-character-number")
-                                .alias("width")
+                                .alias("height")
                                 .value_parser(clap::value_parser!(u8))
                         )
                         .arg(
