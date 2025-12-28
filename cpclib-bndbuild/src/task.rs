@@ -77,7 +77,7 @@ pub enum InnerTask {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Task {
-    inner: InnerTask,
+    pub(crate) inner: InnerTask,
     id: usize
 }
 
@@ -871,7 +871,7 @@ impl InnerTask {
 
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct StandardTaskArguments {
-    args: String,
+    pub(crate) args: String,
     ignore_error: bool
 }
 

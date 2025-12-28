@@ -219,8 +219,29 @@ impl BndBuilder {
 
     pub fn from_string(content: String, filename: Option<&Utf8Path>, #[cfg(feature = "rayon")] force_serial: bool) -> Result<Self, BndBuilderError> {
         // extract information from the file
-        let rules: rules::Rules = serde_yaml::from_str(&content)
+        let mut rules: rules::Rules = serde_yaml::from_str(&content)
             .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, filename.unwrap_or_else(|| Utf8Path::new("<string>")), content.as_str())))?;
+
+
+        // force --serial argument in bndbuild tasks if required
+        #[cfg(feature = "rayon")]
+        {
+            if force_serial {
+                rules.iter_mut().for_each(|r| 
+                    r.commands_mut().iter_mut()
+                        .for_each(|c| {
+                            use crate::task::InnerTask;
+
+                            if let InnerTask::BndBuild(args) = &mut c.inner {
+                                if ! args.args.contains("--serial") {
+                                    // BUG --serial is detected even if not part of bndbuild arguments
+                                    args.args = format!("--serial {}", args.args);
+                                }
+                            }
+                        })
+                );
+            }
+        }
 
         let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())?;
 

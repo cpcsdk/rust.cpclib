@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
-use std::ops::Sub;
+use std::ops::{Deref, DerefMut, Sub};
 
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
@@ -281,5 +281,19 @@ impl Rules {
         }
 
         String::from_utf8_lossy(&output_bytes).into_owned()
+    }
+}
+
+impl Deref for Rules {
+    type Target = Vec<Rule>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.rules
+    }
+}
+
+impl DerefMut for Rules {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.rules
     }
 }

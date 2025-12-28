@@ -290,6 +290,10 @@ impl Rule {
         &self.commands
     }
 
+    pub(crate) fn commands_mut(&mut self) -> &mut Vec<Task> {
+        &mut self.commands
+    }
+
     /// Phony commands do not generate files and need to be launched each time (except in watch sessions)
     pub fn is_phony(&self) -> bool {
         if let Some(phony) = self.phony.as_ref() {
