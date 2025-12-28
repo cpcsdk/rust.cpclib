@@ -292,17 +292,21 @@ impl BndBuilder {
         #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
 
-        //compile_error!("Review this function for parallel execution: non parallelizable taks must be handled independently");
-
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
 
         // get the rule of the expected targets
-        let mut grouped: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
+        let mut parallel_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
+        let mut serial_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
         for task_targets in &layer.tasks {
             let repr = task_targets.representative_target();
             if let Some(r) = self.get_rule(repr) {
-                grouped.insert(r, task_targets);
+                if r.is_parallelizable() {
+                    parallel_tasks.insert(r, task_targets);
+                }
+                else {
+                    serial_tasks.insert(r, task_targets);
+                }
             }
             else {
                 // If no rule for the representative target, push the whole TaskTargets reference
@@ -328,29 +332,38 @@ impl BndBuilder {
             }
         }
 
-        // execute only one task per group but still count the others
-        // TODO optimize by executing them in parallel
-        let tasks = grouped.values();
 
+        // Helper closure to execute a group and collect errors from any iterator
+        macro_rules! launch_tasks {
+            ($iter: expr) => {
+                $iter.map(|task_targets| {
+                    self.execute_task_targets_group(
+                        task_targets,
+                        #[cfg(feature = "rayon")]
+                        state.clone(),
+                        #[cfg(not(feature = "rayon"))]
+                        state
+                    )
+                })
+                .filter_map(Result::err)
+                .collect::<Vec<BndBuilderError>>()
+            }
+        };
+
+        // Serial tasks: always sequential
+        let serial_errs = launch_tasks!(serial_tasks.values());
+
+        // Parallel tasks: parallel if rayon, else sequential
         #[cfg(feature = "rayon")]
-        let tasks = tasks.par_bridge();
+        let parallel_errs = {
+            use cpclib_common::rayon::prelude::*;
+            launch_tasks!(parallel_tasks.values().par_bridge())
+        };
+        #[cfg(not(feature = "rayon"))]
+        let parallel_errs = launch_tasks!(parallel_tasks.values());
 
-        let (_, errs): ((), Vec<BndBuilderError>) = tasks
-            .map(|task_targets| {
-                self.execute_task_targets_group(
-                    task_targets,
-                    #[cfg(feature = "rayon")]
-                    state.clone(),
-                    #[cfg(not(feature = "rayon"))]
-                    state
-                )
-            })
-            .partition_map(|res| {
-                match res {
-                    Ok(val) => either::Either::Left(val),
-                    Err(e) => either::Either::Right(e)
-                }
-            });
+        let mut errs = serial_errs;
+        errs.extend(parallel_errs);
         if !errs.is_empty() {
             let errs = errs.into_iter()
                 .enumerate()
