@@ -1,3 +1,97 @@
+use std::f64;
+
+// fmod(n,m) calcule le modulo m de n
+pub fn fmod(n: &ExprResult, m: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let n = n.float()?;
+    let m = m.float()?;
+    Ok((n % m).into())
+}
+
+// atan2(y,x) calcule l'arc tangente de y/x
+pub fn atan2(y: &ExprResult, x: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let y = y.float()?;
+    let x = x.float()?;
+    Ok(y.atan2(x).into())
+}
+
+// hypot(x,y) calcule l'hypothénuse du triangle rectangle de côté x et y
+pub fn hypot(x: &ExprResult, y: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let x = x.float()?;
+    let y = y.float()?;
+    Ok(x.hypot(y).into())
+}
+
+// ldexp(x,exp) calcule x * 2 puissance exp
+pub fn ldexp(x: &ExprResult, exp: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let x = x.float()?;
+    let exp = exp.int()?;
+    Ok((x * 2f64.powi(exp as i32)).into())
+}
+
+// fdim(x,y) renvoie la différence positive de x-y, résultat toujours positif ou nul
+pub fn fdim(x: &ExprResult, y: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let x = x.float()?;
+    let y = y.float()?;
+    Ok((x - y).max(0.0).into())
+}
+
+// fstep(n,v) si n>=v alors renvoie 1 sinon 0
+pub fn fstep(n: &ExprResult, v: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let n = n.float()?;
+    let v = v.float()?;
+    Ok((if n >= v { 1.0 } else { 0.0 }).into())
+}
+
+// fmax(a,b) renvoie le maximum des deux valeurs
+pub fn fmax(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let a = a.float()?;
+    let b = b.float()?;
+    Ok(a.max(b).into())
+}
+
+// fmin(a,b) renvoie le minimum des deux valeurs
+pub fn fmin(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let a = a.float()?;
+    let b = b.float()?;
+    Ok(a.min(b).into())
+}
+
+// clamp(n,min,max) retourne la valeur n en la forçant dans l'intervale min:max
+pub fn clamp(n: &ExprResult, min: &ExprResult, max: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let n = n.float()?;
+    let min = min.float()?;
+    let max = max.float()?;
+    Ok(n.max(min).min(max).into())
+}
+
+// lerp(i1,i2,n) calcule i1+n*(i2-i1)
+pub fn lerp(i1: &ExprResult, i2: &ExprResult, n: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let i1 = i1.float()?;
+    let i2 = i2.float()?;
+    let n = n.float()?;
+    Ok((i1 + n * (i2 - i1)).into())
+}
+
+// isgreater(v,seuil) si v est supérieur strict au seuil, renvoie 1 sinon 0
+pub fn isgreater(v: &ExprResult, seuil: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let v = v.float()?;
+    let seuil = seuil.float()?;
+    Ok((if v > seuil { 1.0 } else { 0.0 }).into())
+}
+
+// isless(v,seuil) si v est inférieur strict au seuil, renvoie 1 sinon 0
+pub fn isless(v: &ExprResult, seuil: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let v = v.float()?;
+    let seuil = seuil.float()?;
+    Ok((if v < seuil { 1.0 } else { 0.0 }).into())
+}
+
+// fremain(n,d) calcule le reste du quotient de n et d
+pub fn fremain(n: &ExprResult, d: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let n = n.float()?;
+    let d = d.float()?;
+    Ok((n - d * (n / d).floor()).into())
+}
 use cpclib_tokens::ExprResult;
 
 use crate::error::{AssemblerError, ExpressionError};

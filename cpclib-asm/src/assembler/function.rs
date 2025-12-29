@@ -284,6 +284,18 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "peek": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Peek)),
         "sin": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sin)),
         "sqrt": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sqrt)),
+        "fmod": Function::HardCoded(HardCodedFunction::Fmod),
+        "atan2": Function::HardCoded(HardCodedFunction::Atan2),
+        "hypot": Function::HardCoded(HardCodedFunction::Hypot),
+        "ldexp": Function::HardCoded(HardCodedFunction::Ldexp),
+        "fdim": Function::HardCoded(HardCodedFunction::Fdim),
+        "fstep": Function::HardCoded(HardCodedFunction::Fstep),
+        "fmax": Function::HardCoded(HardCodedFunction::Fmax),
+        "fmin": Function::HardCoded(HardCodedFunction::Fmin),
+        "clamp": Function::HardCoded(HardCodedFunction::Clamp),
+        "isgreater": Function::HardCoded(HardCodedFunction::IsGreater),
+        "isless": Function::HardCoded(HardCodedFunction::IsLess),
+        "fremain": Function::HardCoded(HardCodedFunction::Fremain),
     "max": Function::HardCoded(HardCodedFunction::Max),
     "min": Function::HardCoded(HardCodedFunction::Min),
     "pow": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Pow)),
@@ -292,8 +304,20 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HardCodedFunction {
-        Min,
-        Max,
+    Min,
+    Max,
+    Fmod,
+    Atan2,
+    Hypot,
+    Ldexp,
+    Fdim,
+    Fstep,
+    Fmax,
+    Fmin,
+    Clamp,
+    IsGreater,
+    IsLess,
+    Fremain,
     Mode0ByteToPenAt,
     Mode1ByteToPenAt,
     Mode2ByteToPenAt,
@@ -412,8 +436,8 @@ impl Display for BinaryFunction {
 pub enum ExpectedNbArgs {
     Unknown,
     Fixed(usize), // can be 0
-    Variable(&'static [usize]),
-    AtLeast(usize),
+    AtLeast(usize), // at least n arguments
+    Variable(&'static [usize])
 }
 
 impl ExpectedNbArgs {
@@ -430,14 +454,16 @@ impl ExpectedNbArgs {
                             nb_args
                         )
                     ))
-                } else {
+                }
+                else {
                     Ok(())
                 }
             },
             ExpectedNbArgs::Variable(expected) => {
                 if expected.contains(&nb_args) {
                     Ok(())
-                } else {
+                }
+                else {
                     Err(Box::new(
                         AssemblerError::FunctionWithWrongNumberOfArguments(
                             func_name.into(),
@@ -467,6 +493,18 @@ impl ExpectedNbArgs {
 impl HardCodedFunction {
     pub fn expected_nb_args(&self) -> ExpectedNbArgs {
         match self {
+            HardCodedFunction::Fmod => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Atan2 => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Hypot => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Ldexp => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Fdim => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Fstep => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Fmax => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Fmin => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Clamp => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::IsGreater => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::IsLess => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::Fremain => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Min => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Max => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -486,30 +524,30 @@ impl HardCodedFunction {
             HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::StringConcat => ExpectedNbArgs::Unknown,
-            HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]),
-            HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(4),
+            HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Unknown,
+            HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::MatrixRow => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixSetRow => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixSetCol => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixWidth => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::MatrixHeight => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStart => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionStop => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionLength => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionUsed => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(0),
+            HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringConcat => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::UnaryFunction(_unary_function) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryFunction(_binary_function) => ExpectedNbArgs::Fixed(2)
+            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2),
         }
     }
 
@@ -547,6 +585,19 @@ impl HardCodedFunction {
         expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
+            HardCodedFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
+            HardCodedFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
+            HardCodedFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
+            HardCodedFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
+            HardCodedFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
+            HardCodedFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
+            HardCodedFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
+            HardCodedFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
+            HardCodedFunction::Clamp => Ok(maths::clamp(&params[0], &params[1], &params[2])?),
+            HardCodedFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
+            HardCodedFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
+            HardCodedFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
+            // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
                 Ok(
                     cpclib_image::pixels::mode0::byte_to_pens(params[0].int()? as _)
