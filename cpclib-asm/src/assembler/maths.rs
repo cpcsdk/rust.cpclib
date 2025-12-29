@@ -69,7 +69,8 @@ pub fn lerp(i1: &ExprResult, i2: &ExprResult, n: &ExprResult) -> Result<ExprResu
     let i1 = i1.float()?;
     let i2 = i2.float()?;
     let n = n.float()?;
-    Ok((i1 + n * (i2 - i1)).into())
+    // Linear interpolation between a and b by t
+    Ok((i1 * (1.0 - n) + i2 * n).into())
 }
 
 // isgreater(v,seuil) si v est supérieur strict au seuil, renvoie 1 sinon 0

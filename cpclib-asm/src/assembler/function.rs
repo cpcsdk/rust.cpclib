@@ -284,18 +284,18 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "peek": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Peek)),
         "sin": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sin)),
         "sqrt": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sqrt)),
-        "fmod": Function::HardCoded(HardCodedFunction::Fmod),
-        "atan2": Function::HardCoded(HardCodedFunction::Atan2),
-        "hypot": Function::HardCoded(HardCodedFunction::Hypot),
-        "ldexp": Function::HardCoded(HardCodedFunction::Ldexp),
-        "fdim": Function::HardCoded(HardCodedFunction::Fdim),
-        "fstep": Function::HardCoded(HardCodedFunction::Fstep),
-        "fmax": Function::HardCoded(HardCodedFunction::Fmax),
-        "fmin": Function::HardCoded(HardCodedFunction::Fmin),
+        "fmod": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fmod)),
+        "atan2": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Atan2)),
+        "hypot": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Hypot)),
+        "ldexp": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Ldexp)),
+        "fdim": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fdim)),
+        "fstep": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fstep)),
+        "fmax": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fmax)),
+        "fmin": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fmin)),
         "clamp": Function::HardCoded(HardCodedFunction::Clamp),
-        "isgreater": Function::HardCoded(HardCodedFunction::IsGreater),
-        "isless": Function::HardCoded(HardCodedFunction::IsLess),
-        "fremain": Function::HardCoded(HardCodedFunction::Fremain),
+        "isgreater": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::IsGreater)),
+        "isless": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::IsLess)),
+        "fremain": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Fremain)),
     "max": Function::HardCoded(HardCodedFunction::Max),
     "min": Function::HardCoded(HardCodedFunction::Min),
     "pow": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Pow)),
@@ -306,18 +306,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
 pub enum HardCodedFunction {
     Min,
     Max,
-    Fmod,
-    Atan2,
-    Hypot,
-    Ldexp,
-    Fdim,
-    Fstep,
-    Fmax,
-    Fmin,
     Clamp,
-    IsGreater,
-    IsLess,
-    Fremain,
     Mode0ByteToPenAt,
     Mode1ByteToPenAt,
     Mode2ByteToPenAt,
@@ -421,13 +410,35 @@ impl Display for UnaryFunction {
 /// Function with two arguments
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BinaryFunction {
-    Pow
+    Pow,
+    Fmod,
+    Atan2,
+    Hypot,
+    Ldexp,
+    Fdim,
+    Fstep,
+    Fmax,
+    Fmin,
+    IsGreater,
+    IsLess,
+    Fremain,
 }
 
 impl Display for BinaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
-            BinaryFunction::Pow => "pow"
+            BinaryFunction::Pow => "pow",
+            BinaryFunction::Fmod => "fmod",
+            BinaryFunction::Atan2 => "atan2",
+            BinaryFunction::Hypot => "hypot",
+            BinaryFunction::Ldexp => "ldexp",
+            BinaryFunction::Fdim => "fdim",
+            BinaryFunction::Fstep => "fstep",
+            BinaryFunction::Fmax => "fmax",
+            BinaryFunction::Fmin => "fmin",
+            BinaryFunction::IsGreater => "isgreater",
+            BinaryFunction::IsLess => "isless",
+            BinaryFunction::Fremain => "fremain",
         };
         write!(format, "{repr}")
     }
@@ -493,18 +504,8 @@ impl ExpectedNbArgs {
 impl HardCodedFunction {
     pub fn expected_nb_args(&self) -> ExpectedNbArgs {
         match self {
-            HardCodedFunction::Fmod => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Atan2 => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Hypot => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Ldexp => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Fdim => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Fstep => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Fmax => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Fmin => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Clamp => ExpectedNbArgs::Fixed(3),
-            HardCodedFunction::IsGreater => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::IsLess => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::Fremain => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Min => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Max => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -525,7 +526,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixNew => ExpectedNbArgs::Unknown,
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1,3]),
             HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
@@ -585,18 +586,21 @@ impl HardCodedFunction {
         expected_nb_args.validate(nb_args, self.name())?;
 
         match self {
-            HardCodedFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
-            HardCodedFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
-            HardCodedFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
-            HardCodedFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
-            HardCodedFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
-            HardCodedFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
-            HardCodedFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
-            HardCodedFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
             HardCodedFunction::Clamp => Ok(maths::clamp(&params[0], &params[1], &params[2])?),
-            HardCodedFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
-            HardCodedFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
-            HardCodedFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
+            HardCodedFunction::BinaryFunction(bf) => match bf {
+                BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
+                BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
+                BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
+                BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
+                BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
+                BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
+                BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
+                BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
+                BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
+                BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
+                BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
+                BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
+            },
             // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
                 Ok(
@@ -817,7 +821,18 @@ impl HardCodedFunction {
             HardCodedFunction::Max => Ok(maths::max(&params)?),
             HardCodedFunction::BinaryFunction(binary_function) => {
                 match binary_function {
-                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?)
+                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
+                    BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
+                    BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
+                    BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
+                    BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
+                    BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
+                    BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
+                    BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
+                    BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
+                    BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
+                    BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
+                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
                 }
             },
         }
