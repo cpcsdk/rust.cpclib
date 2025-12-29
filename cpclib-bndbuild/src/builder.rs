@@ -284,7 +284,14 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        let state = ExecutionState {
+        #[cfg(feature = "rayon")]
+        let state;
+
+        #[cfg(not(feature = "rayon"))]
+        let mut state;
+
+        
+        state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };
@@ -295,7 +302,7 @@ impl BndBuilder {
         let state = Arc::new(RwLock::new(state));
 
         #[cfg(not(feature = "rayon"))]
-        let state = &mut state;
+        let mut state = &mut state;
 
         if nb_deps == 0 {
             if self.has_rule(p) {
