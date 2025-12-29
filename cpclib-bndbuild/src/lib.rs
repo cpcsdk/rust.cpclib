@@ -157,20 +157,19 @@ pub fn build_args_parser() -> clap::Command {
                 .exclusive(true)
         );
 
-    let cmd = cmd
-        .arg(
-            Arg::new("help")
-                .long("help")
-                .short('h')
-                .value_name("CMD")
-                .value_parser(commands_list.clone())
-                .default_missing_value_os("bndbuild")
-                .default_value("bndbuild")
-                .num_args(0..=1)
-                .help("Show the help of the given subcommand CMD.")
-        );
+    let cmd = cmd.arg(
+        Arg::new("help")
+            .long("help")
+            .short('h')
+            .value_name("CMD")
+            .value_parser(commands_list.clone())
+            .default_missing_value_os("bndbuild")
+            .default_value("bndbuild")
+            .num_args(0..=1)
+            .help("Show the help of the given subcommand CMD.")
+    );
 
-        #[cfg(feature = "rayon")]
+    #[cfg(feature = "rayon")]
         let cmd = cmd.arg(
             Arg::new("serial")
                 .long("serial")
@@ -178,7 +177,7 @@ pub fn build_args_parser() -> clap::Command {
                 .help("Force serial (non-parallel) execution of tasks, even if parallelisation is available.")
         );
 
-        let cmd = cmd.arg(
+    let cmd = cmd.arg(
             Arg::new("direct")
             .action(ArgAction::SetTrue)
             .long("direct")

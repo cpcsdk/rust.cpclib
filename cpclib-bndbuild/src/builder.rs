@@ -56,7 +56,7 @@ pub struct BndBuilder {
     inner: BndBuilderInner,
     observers: Arc<ListOfBndBuilderObserverRc>,
     #[cfg(feature = "rayon")]
-    force_serial: bool,
+    force_serial: bool
 }
 
 impl Debug for BndBuilder {
@@ -99,13 +99,22 @@ impl BndBuilder {
             inner,
             observers: Default::default(),
             #[cfg(feature = "rayon")]
-            force_serial: self.force_serial,
+            force_serial: self.force_serial
         }
     }
 
-    pub fn from_path<P: AsRef<Utf8Path>>(fname: P, #[cfg(feature = "rayon")] force_serial: bool) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
+    pub fn from_path<P: AsRef<Utf8Path>>(
+        fname: P,
+        #[cfg(feature = "rayon")] force_serial: bool
+    ) -> Result<(Utf8PathBuf, Self), BndBuilderError> {
         let (p, content) = Self::decode_from_fname(fname)?;
-        Self::from_string(content, Some(p.as_ref()), #[cfg(feature = "rayon")] force_serial).map(|build| (p, build))
+        Self::from_string(
+            content,
+            Some(p.as_ref()),
+            #[cfg(feature = "rayon")]
+            force_serial
+        )
+        .map(|build| (p, build))
     }
 
     pub fn decode_from_fname<P: AsRef<Utf8Path>>(
@@ -217,28 +226,37 @@ impl BndBuilder {
         })
     }
 
-    pub fn from_string(content: String, filename: Option<&Utf8Path>, #[cfg(feature = "rayon")] force_serial: bool) -> Result<Self, BndBuilderError> {
+    pub fn from_string(
+        content: String,
+        filename: Option<&Utf8Path>,
+        #[cfg(feature = "rayon")] force_serial: bool
+    ) -> Result<Self, BndBuilderError> {
         // extract information from the file
-        let mut rules: rules::Rules = serde_yaml::from_str(&content)
-            .map_err(|e: serde_yaml::Error| BndBuilderError::from((e, filename.unwrap_or_else(|| Utf8Path::new("<string>")), content.as_str())))?;
-
+        let mut rules: rules::Rules =
+            serde_yaml::from_str(&content).map_err(|e: serde_yaml::Error| {
+                BndBuilderError::from((
+                    e,
+                    filename.unwrap_or_else(|| Utf8Path::new("<string>")),
+                    content.as_str()
+                ))
+            })?;
 
         // force --serial argument in bndbuild tasks if required
         #[cfg(feature = "rayon")]
         {
             if force_serial {
-                rules.iter_mut().for_each(|r| 
-                    r.commands_mut().iter_mut()
-                        .for_each(|c| {
-                            use crate::task::InnerTask;
+                rules.iter_mut().for_each(|r| {
+                    r.commands_mut().iter_mut().for_each(|c| {
+                        use crate::task::InnerTask;
 
-                            if let InnerTask::BndBuild(args) = &mut c.inner
-                                && ! args.args.contains("--serial") {
-                                    // BUG --serial is detected even if not part of bndbuild arguments
-                                    args.args = format!("--serial {}", args.args);
-                                }
-                        })
-                );
+                        if let InnerTask::BndBuild(args) = &mut c.inner
+                            && !args.args.contains("--serial")
+                        {
+                            // BUG --serial is detected even if not part of bndbuild arguments
+                            args.args = format!("--serial {}", args.args);
+                        }
+                    })
+                });
             }
         }
 
@@ -248,7 +266,7 @@ impl BndBuilder {
             inner,
             observers: Default::default(),
             #[cfg(feature = "rayon")]
-            force_serial,
+            force_serial
         })
     }
 
@@ -320,17 +338,17 @@ impl BndBuilder {
         #[cfg(not(feature = "rayon"))] state: &mut ExecutionState,
         #[cfg(feature = "rayon")] state: Arc<RwLock<ExecutionState>>
     ) -> Result<(), BndBuilderError> {
-
         // Store the files without rules. They are most probably existing files
         let mut without_rule = Vec::new();
 
         // get the rule of the expected targets
-        let mut parallel_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
-        let mut serial_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> = HashMap::default();
+        let mut parallel_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> =
+            HashMap::default();
+        let mut serial_tasks: HashMap<&Rule, &crate::rules::graph::TaskTargets> =
+            HashMap::default();
         for task_targets in &layer.tasks {
             let repr = task_targets.representative_target();
             if let Some(r) = self.get_rule(repr) {
-
                 #[cfg(feature = "rayon")]
                 let parallelisze = r.is_parallelizable() && !self.force_serial;
                 #[cfg(not(feature = "rayon"))]
@@ -348,7 +366,6 @@ impl BndBuilder {
                 without_rule.push(task_targets);
             }
         }
-
 
         // count the files that are not produced
         for targets in without_rule.into_iter() {
@@ -368,22 +385,22 @@ impl BndBuilder {
             }
         }
 
-
         // Helper closure to execute a group and collect errors from any iterator
         macro_rules! launch_tasks {
-            ($iter: expr) => {
-                $iter.map(|task_targets| {
-                    self.execute_task_targets_group(
-                        task_targets,
-                        #[cfg(feature = "rayon")]
-                        state.clone(),
-                        #[cfg(not(feature = "rayon"))]
-                        state
-                    )
-                })
-                .filter_map(Result::err)
-                .collect::<Vec<BndBuilderError>>()
-            }
+            ($iter:expr) => {
+                $iter
+                    .map(|task_targets| {
+                        self.execute_task_targets_group(
+                            task_targets,
+                            #[cfg(feature = "rayon")]
+                            state.clone(),
+                            #[cfg(not(feature = "rayon"))]
+                            state
+                        )
+                    })
+                    .filter_map(Result::err)
+                    .collect::<Vec<BndBuilderError>>()
+            };
         };
 
         // Serial tasks: always sequential
@@ -401,13 +418,10 @@ impl BndBuilder {
         let mut errs = serial_errs;
         errs.extend(parallel_errs);
         if !errs.is_empty() {
-            let errs = errs.into_iter()
+            let errs = errs
+                .into_iter()
                 .enumerate()
-                .map(|(i, e)| 
-                format!("Error {}:\n{}", 
-                    i + 1,
-                    e
-                ))
+                .map(|(i, e)| format!("Error {}:\n{}", i + 1, e))
                 .join("\n");
             return Err(BndBuilderError::AnyError(errs));
         }

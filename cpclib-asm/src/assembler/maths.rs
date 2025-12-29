@@ -2,12 +2,34 @@ use cpclib_tokens::ExprResult;
 
 use crate::error::{AssemblerError, ExpressionError};
 
-pub fn min(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok(a.min(b).clone())
+pub fn min(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+    if args.len() < 2 {
+        return Err(Box::new(AssemblerError::FunctionWithWrongNumberOfArguments(
+            "min".to_string(),
+            either::Either::Left(2),
+            args.len(),
+        )));
+    }
+    let mut min = &args[0];
+    for arg in &args[1..] {
+        min = min.min(arg);
+    }
+    Ok(min.clone())
 }
 
-pub fn max(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
-    Ok(a.max(b).clone())
+pub fn max(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+    if args.len() < 2 {
+        return Err(Box::new(AssemblerError::FunctionWithWrongNumberOfArguments(
+            "max".to_string(),
+            either::Either::Left(2),
+            args.len(),
+        )));
+    }
+    let mut max = &args[0];
+    for arg in &args[1..] {
+        max = max.max(arg);
+    }
+    Ok(max.clone())
 }
 
 pub fn pow(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {

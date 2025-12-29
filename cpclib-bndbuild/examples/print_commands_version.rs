@@ -21,7 +21,8 @@ const YAML_RULES: &str = "
 fn main() {
     let observer = BndBuilderObserverRc::new_default();
 
-    let mut builder = BndBuilder::from_string(YAML_RULES.into(), None, false).expect("Unable to read yaml");
+    let mut builder =
+        BndBuilder::from_string(YAML_RULES.into(), None, false).expect("Unable to read yaml");
     builder.add_observer(observer);
 
     println!("Show version of commands");

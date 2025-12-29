@@ -284,15 +284,16 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "peek": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Peek)),
         "sin": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sin)),
         "sqrt": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Sqrt)),
-
-        "max": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Max)),
-        "min": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Min)),
-        "pow": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Pow)),
+    "max": Function::HardCoded(HardCodedFunction::Max),
+    "min": Function::HardCoded(HardCodedFunction::Min),
+    "pow": Function::HardCoded(HardCodedFunction::BinaryFunction(BinaryFunction::Pow)),
     }
 });
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HardCodedFunction {
+        Min,
+        Max,
     Mode0ByteToPenAt,
     Mode1ByteToPenAt,
     Mode2ByteToPenAt,
@@ -396,16 +397,12 @@ impl Display for UnaryFunction {
 /// Function with two arguments
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum BinaryFunction {
-    Min,
-    Max,
     Pow
 }
 
 impl Display for BinaryFunction {
     fn fmt(&self, format: &mut Formatter<'_>) -> fmt::Result {
         let repr = match self {
-            BinaryFunction::Min => "min",
-            BinaryFunction::Max => "max",
             BinaryFunction::Pow => "pow"
         };
         write!(format, "{repr}")
@@ -415,7 +412,8 @@ impl Display for BinaryFunction {
 pub enum ExpectedNbArgs {
     Unknown,
     Fixed(usize), // can be 0
-    Variable(&'static [usize])
+    Variable(&'static [usize]),
+    AtLeast(usize),
 }
 
 impl ExpectedNbArgs {
@@ -432,20 +430,31 @@ impl ExpectedNbArgs {
                             nb_args
                         )
                     ))
-                }
-                else {
+                } else {
                     Ok(())
                 }
             },
             ExpectedNbArgs::Variable(expected) => {
                 if expected.contains(&nb_args) {
                     Ok(())
-                }
-                else {
+                } else {
                     Err(Box::new(
                         AssemblerError::FunctionWithWrongNumberOfArguments(
                             func_name.into(),
                             Either::Right(*expected),
+                            nb_args
+                        )
+                    ))
+                }
+            },
+            ExpectedNbArgs::AtLeast(min) => {
+                if nb_args >= *min {
+                    Ok(())
+                } else {
+                    Err(Box::new(
+                        AssemblerError::FunctionWithWrongNumberOfArguments(
+                            func_name.into(),
+                            Either::Left(*min),
                             nb_args
                         )
                     ))
@@ -458,6 +467,8 @@ impl ExpectedNbArgs {
 impl HardCodedFunction {
     pub fn expected_nb_args(&self) -> ExpectedNbArgs {
         match self {
+            HardCodedFunction::Min => ExpectedNbArgs::AtLeast(2),
+            HardCodedFunction::Max => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Mode1ByteToPenAt => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Mode2ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -751,10 +762,10 @@ impl HardCodedFunction {
                     UnaryFunction::Peek => Ok(maths::peek(&params[0], env)?)
                 }
             },
+            HardCodedFunction::Min => Ok(maths::min(&params)?),
+            HardCodedFunction::Max => Ok(maths::max(&params)?),
             HardCodedFunction::BinaryFunction(binary_function) => {
                 match binary_function {
-                    BinaryFunction::Min => Ok(maths::min(&params[0], &params[1])?),
-                    BinaryFunction::Max => Ok(maths::max(&params[0], &params[1])?),
                     BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?)
                 }
             },

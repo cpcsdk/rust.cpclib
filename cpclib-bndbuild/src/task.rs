@@ -752,7 +752,7 @@ impl InnerTask {
     /// modify the current working directory.
     pub fn is_parallelizable(&self) -> bool {
         match self {
-            InnerTask::BndBuild(..)=> false,
+            InnerTask::BndBuild(..) => false,
             _ => true
         }
     }

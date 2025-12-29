@@ -41,7 +41,7 @@ pub struct BndBuilderApp {
     matches: clap::ArgMatches,
     observers: Arc<ListOfBndBuilderObserverRc>,
     #[cfg(feature = "rayon")]
-    force_serial: bool,
+    force_serial: bool
 }
 
 #[derive(Debug, Clone)]
@@ -248,7 +248,6 @@ impl BndBuilderCommand {
         builder: BndBuilder,
         observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
-
         let targets_provided = init_targets.is_some();
 
         // get the list of targets
@@ -283,10 +282,7 @@ impl BndBuilderCommand {
             Some(SystemTime::now())
         }
         else {
-            observers.emit_stdout(&format!(
-                "Target {} is already up to date.\n",
-                tgt
-            ));
+            observers.emit_stdout(&format!("Target {} is already up to date.\n", tgt));
             None
         };
 
@@ -383,7 +379,9 @@ impl BndBuilderCommand {
     }
 
     fn execute_list<O: BndBuilderObserver>(builder: BndBuilder, observers: O) {
-        let ordered_rules = builder.rules().iter()
+        let ordered_rules = builder
+            .rules()
+            .iter()
             .sorted_by_cached_key(|r| r.targets().iter().map(|f| f.to_string()).join(" "));
         for rule in ordered_rules.into_iter() {
             builder.emit_stdout(format!(
@@ -445,8 +443,8 @@ impl BndBuilderCommand {
             cmd.to_string()
         };
 
-        let task: Task =
-            serde_yaml::from_str(&cmd).map_err(|e| BndBuilderError::from((e, "<direct>".into(), cmd.as_str())))?; // TODO generate the appropriate error message
+        let task: Task = serde_yaml::from_str(&cmd)
+            .map_err(|e| BndBuilderError::from((e, "<direct>".into(), cmd.as_str())))?; // TODO generate the appropriate error message
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }
@@ -730,8 +728,12 @@ impl BndBuilderApp {
             use cpclib_common::rayon;
             let num_cpus = rayon::current_num_threads();
             if force_serial {
-                eprintln!("--> Forcing serial execution of bndbuild. Other tools still have access to {} threads\n", num_cpus);
-            } else if num_cpus != 1 {
+                eprintln!(
+                    "--> Forcing serial execution of bndbuild. Other tools still have access to {} threads\n",
+                    num_cpus
+                );
+            }
+            else if num_cpus != 1 {
                 eprintln!("--> Using {} threads for parallel execution\n", num_cpus);
             }
         }
@@ -739,7 +741,7 @@ impl BndBuilderApp {
             matches,
             observers: Arc::new(Vec::with_capacity(1).into()),
             #[cfg(feature = "rayon")]
-            force_serial,
+            force_serial
         }
     }
 
@@ -893,7 +895,12 @@ impl BndBuilderApp {
                 ));
             }
 
-            let mut builder = BndBuilder::from_string(content, Some(fname.as_ref()), #[cfg(feature = "rayon")]self.force_serial)?;
+            let mut builder = BndBuilder::from_string(
+                content,
+                Some(fname.as_ref()),
+                #[cfg(feature = "rayon")]
+                self.force_serial
+            )?;
             for observer in self.observers.iter() {
                 builder.add_observer(observer.clone());
             }
