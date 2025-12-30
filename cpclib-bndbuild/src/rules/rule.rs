@@ -16,29 +16,38 @@ use crate::task::{InnerTask, Task};
 
 fn deserialize_path_list<'de, D>(deserializer: D) -> Result<Vec<Utf8PathBuf>, D::Error>
 where D: Deserializer<'de> {
-    struct SequenceOrList;
+    struct SequenceOrStr;
 
-    impl SequenceOrList {
+    impl SequenceOrStr {
         fn paths_form_str(&self, s: &str) -> Vec<Utf8PathBuf> {
-            let r = shlex::split(s).unwrap_or_default();
-            let r = r.into_iter();
+            let r: Vec<String> = shlex::split(s).unwrap_or_default();
+            let r = r.into_iter().enumerate();
 
             #[cfg(feature = "rayon")]
             let r = r.par_bridge();
-            r.flat_map(|s| expand_glob(s.as_ref()))
-                .map(|s| {
-                    if s.starts_with(r"./") || s.starts_with(r".\") {
+            let r: Vec<(usize, String)> = r.flat_map(|(idx, s)| {
+                    expand_glob(s.as_ref()).into_iter()
+                        .map(|s| (idx, s))
+                        .collect_vec()
+                })
+                .map(|(idx, s)| {
+                    let s = if s.starts_with(r"./") || s.starts_with(r".\") {
                         s[2..].to_owned()
                     }
                     else {
                         s
-                    }
-                })
-                .map(Utf8PathBuf::from)
+                    };
+                    (idx, s)
+                }).collect();
+            let r = r.into_iter()
+                .sorted_by_key(|(idx, _)| *idx);
+                r
+                .into_iter()
+                .map(|(_, s)| Utf8PathBuf::from(s))
                 .collect()
         }
     }
-    impl<'de> Visitor<'de> for SequenceOrList {
+    impl<'de> Visitor<'de> for SequenceOrStr {
         type Value = Vec<Utf8PathBuf>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -53,17 +62,19 @@ where D: Deserializer<'de> {
 
         fn visit_seq<A>(self, seq: A) -> Result<Self::Value, A::Error>
         where A: serde::de::SeqAccess<'de> {
-            let res: Vec<&str> =
+            let res: Vec<String> =
                 Deserialize::deserialize(serde::de::value::SeqAccessDeserializer::new(seq))?;
             let res = res
                 .into_iter()
-                .flat_map(|s| self.paths_form_str(s))
+                .flat_map(|s| {
+                    self.paths_form_str(&s.to_owned())
+                })
                 .collect::<Vec<_>>();
             Ok(res)
         }
     }
 
-    deserializer.deserialize_any(SequenceOrList)
+    deserializer.deserialize_any(SequenceOrStr)
 }
 
 impl Display for Rule {
@@ -171,11 +182,10 @@ impl From<DeserializedRule> for Rule {
 impl<'de> Deserialize<'de> for Rule {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where D: Deserializer<'de> {
-        DeserializedRule::deserialize(deserializer).map(|t| {
-            let mut r: Rule = t.into();
-            r.replace_automatic_variables();
-            r
-        })
+        let d: DeserializedRule = DeserializedRule::deserialize(deserializer)?;
+        let mut r: Rule = d.into();
+        r.replace_automatic_variables().expect("Failed to replace automatic variables"); // Handle properly by returing error
+        Ok(r)
     }
 }
 
@@ -394,4 +404,50 @@ impl Rule {
     pub fn is_disabled(&self) -> bool {
         !self.is_enabled()
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_yaml;
+
+
+use camino::Utf8PathBuf;
+use serde::de::value::StrDeserializer;
+use serde::de::IntoDeserializer;
+
+#[test]
+fn test_deserialize_path_list_single() {
+    let input = "foo.txt";
+    let deserializer = StrDeserializer::<serde::de::value::Error>::new(input);
+    let result = deserialize_path_list(deserializer).unwrap();
+    assert_eq!(result, vec![Utf8PathBuf::from("foo.txt")]);
+}
+
+#[test]
+fn test_deserialize_path_list_multiple_space() {
+    let input = "foo.txt bar.txt baz.txt";
+    let deserializer = StrDeserializer::<serde::de::value::Error>::new(input);
+    let result = deserialize_path_list(deserializer).unwrap();
+    assert_eq!(result, vec![Utf8PathBuf::from("foo.txt"), Utf8PathBuf::from("bar.txt"), Utf8PathBuf::from("baz.txt")]);
+}
+
+#[test]
+fn test_deserialize_path_list_quoted() {
+    let input = "'foo bar.txt' baz.txt";
+    let deserializer = StrDeserializer::<serde::de::value::Error>::new(input);
+    let result = deserialize_path_list(deserializer).unwrap();
+    assert_eq!(result, vec![Utf8PathBuf::from("foo bar.txt"), Utf8PathBuf::from("baz.txt")]);
+}
+
+#[test]
+fn test_deserialize_path_list_seq() {
+    use serde::de::value::SeqDeserializer;
+    let input = vec!["foo.txt", "bar.txt"];
+    let deserializer = SeqDeserializer::<_, serde::de::value::Error>::new(input.into_iter());
+    let result = deserialize_path_list(deserializer).unwrap();
+    assert_eq!(result, vec![Utf8PathBuf::from("foo.txt"), Utf8PathBuf::from("bar.txt")]);
+}
+
 }

@@ -1,0 +1,8 @@
+
+- dep: A B C
+  tgt: E10 E20 E30
+  cmd: extern touch $@ E20 E30
+
+- dep: E10 E20 E30
+  tgt: E40 E35 E33
+  cmd: extern touch $@ E35 E33
