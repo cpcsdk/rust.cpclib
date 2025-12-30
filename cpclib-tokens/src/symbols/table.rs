@@ -28,8 +28,9 @@ pub trait SymbolsTableTrait {
     where
         Symbol: From<S>,
         S: AsRef<str>;
+
     /// Add a symbol to the list of used symbols
-    fn use_symbol<S>(&mut self, symbol: S)
+    fn use_symbol<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>;
@@ -607,13 +608,14 @@ impl SymbolsTableTrait for SymbolsTable {
     }
 
     #[inline]
-    fn use_symbol<S>(&mut self, symbol: S)
+    fn use_symbol<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>
     {
-        let symbol = self.extend_readable_symbol(symbol).unwrap();
+        let symbol = self.extend_readable_symbol(symbol)?;
         self.used_symbols.insert(symbol);
+        Ok(())
     }
 }
 
@@ -1251,7 +1253,7 @@ impl SymbolsTableTrait for SymbolsTableCaseDependent {
     }
 
     #[inline]
-    fn use_symbol<S>(&mut self, symbol: S)
+    fn use_symbol<S>(&mut self, symbol: S) -> Result<(), SymbolError>
     where
         Symbol: From<S>,
         S: AsRef<str>

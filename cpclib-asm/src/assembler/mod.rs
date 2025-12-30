@@ -36,6 +36,7 @@ use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
+use cpclib_common::winnow::Parser;
 use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_files::{FileType, StorageSupport};
@@ -779,10 +780,14 @@ impl Env {
     }
 
     /// Track the symbols for an expression that has been properly executed
-    fn track_used_symbols<E: ExprEvaluationExt>(&mut self, e: &E) {
+    fn track_used_symbols<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), AssemblerError> {
         e.symbols_used()
             .into_iter()
-            .for_each(|symbol| self.symbols.use_symbol(symbol))
+            .map(|symbol| self.symbols.use_symbol(symbol))
+            .filter_map(Result::err)
+            .map(|e| Result::Err(Box::new(AssemblerError::from(e))))
+            .collect::<Result<(), Box<AssemblerError>>>()?;
+        Ok(())
     }
 }
 /// Report handling
