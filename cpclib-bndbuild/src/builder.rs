@@ -198,7 +198,7 @@ impl BndBuilder {
 
         // generate the template
         env.render_str(&content, context!()).map_err(|e| {
-            let src = e.template_source().unwrap();
+            let src = e.template_source().unwrap_or(&content); //e.template_source().unwrap();
             let range = e.range().unwrap();
             let message = e.detail().unwrap();
 
