@@ -630,6 +630,145 @@ impl CslInstruction {
     }
 }
 
+impl CslInstruction {
+    // Builder pattern factory methods for common instructions
+
+    /// Create a DiskDir instruction
+    pub fn disk_dir(dir: Utf8PathBuf) -> Self {
+        Self::DiskDir(dir)
+    }
+
+    /// Create a DiskInsert instruction
+    pub fn disk_insert(drive: Drive, filename: Utf8PathBuf) -> Self {
+        Self::DiskInsert { drive, filename }
+    }
+
+    /// Create a TapeDir instruction
+    pub fn tape_dir(dir: Utf8PathBuf) -> Self {
+        Self::TapeDir(dir)
+    }
+
+    /// Create a TapeInsert instruction
+    pub fn tape_insert(filename: Utf8PathBuf) -> Self {
+        Self::TapeInsert(filename)
+    }
+
+    /// Create a SnapshotDir instruction
+    pub fn snapshot_dir(dir: Utf8PathBuf) -> Self {
+        Self::SnapshotDir(dir)
+    }
+
+    /// Create a SnapshotLoad instruction
+    pub fn snapshot_load(filename: Utf8PathBuf) -> Self {
+        Self::SnapshotLoad(filename)
+    }
+
+    /// Create a SnapshotName instruction
+    pub fn snapshot_name(name: Utf8PathBuf) -> Self {
+        Self::SnapshotName(name)
+    }
+
+    /// Create a Snapshot instruction
+    pub fn snapshot(wait_vsync: bool) -> Self {
+        Self::Snapshot { wait_vsync }
+    }
+
+    /// Create a KeyOutput instruction
+    pub fn key_output(output: KeyOutput) -> Self {
+        Self::KeyOutput(output)
+    }
+
+    /// Create a KeyFromFile instruction
+    pub fn key_from_file(filename: Utf8PathBuf) -> Self {
+        Self::KeyFromFile(filename)
+    }
+
+    /// Create a KeyDelay instruction
+    pub fn key_delay(delay: u64, delay_after_cr: Option<u64>, delay_after_key: Option<u64>) -> Self {
+        Self::KeyDelay { delay, delay_after_cr, delay_after_key }
+    }
+
+    /// Create a MemoryExp instruction
+    pub fn memory_exp(expansion: MemoryExpansion) -> Self {
+        Self::MemoryExp(expansion)
+    }
+
+    /// Create a CrtcSelect instruction
+    pub fn crtc_select(model: CrtcModel) -> Self {
+        Self::CrtcSelect(model)
+    }
+
+    /// Create a GateArray instruction
+    pub fn gate_array(model: GateArrayModel) -> Self {
+        Self::GateArray(model)
+    }
+
+    /// Create a CpcModel instruction
+    pub fn cpc_model(model: CpcModel) -> Self {
+        Self::CpcModel(model)
+    }
+
+    /// Create a Reset instruction
+    pub fn reset(reset_type: ResetType) -> Self {
+        Self::Reset(reset_type)
+    }
+
+    /// Create a Wait instruction
+    pub fn wait(time: u64) -> Self {
+        Self::Wait(time)
+    }
+
+    /// Create a WaitDriveOnOff instruction
+    pub fn wait_drive_on_off(count: u32) -> Self {
+        Self::WaitDriveOnOff(count)
+    }
+
+    /// Create a ScreenshotName instruction
+    pub fn screenshot_name(name: Utf8PathBuf) -> Self {
+        Self::ScreenshotName(name)
+    }
+
+    /// Create a ScreenshotDir instruction
+    pub fn screenshot_dir(dir: Utf8PathBuf) -> Self {
+        Self::ScreenshotDir(dir)
+    }
+
+    /// Create a Screenshot instruction
+    pub fn screenshot(wait_vsync: bool) -> Self {
+        Self::Screenshot { wait_vsync }
+    }
+
+    /// Create a RomDir instruction
+    pub fn rom_dir(dir: Utf8PathBuf) -> Self {
+        Self::RomDir(dir)
+    }
+
+    /// Create a RomConfig instruction
+    pub fn rom_config(rom_type: RomType, num: u8, filename: Utf8PathBuf) -> Self {
+        Self::RomConfig(RomConfig { rom_type, num, filename })
+    }
+
+    /// Create a CslLoad instruction
+    pub fn csl_load(filename: Utf8PathBuf) -> Self {
+        Self::CslLoad(filename)
+    }
+
+    /// Create a CslVersion instruction
+    pub fn csl_version(major: u8, minor: u8) -> Self {
+        Self::CslVersion(CslVersion { major, minor })
+    }
+
+    /// Create a Comment instruction
+    pub fn comment<S: Into<String>>(text: S) -> Self {
+        Self::Comment(text.into())
+    }
+
+    /// Create an Empty instruction
+    pub fn empty() -> Self {
+        Self::Empty
+    }
+}
+
 /// CSL script representation
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScript {
@@ -658,6 +797,75 @@ impl CslScript {
                 None
             }
         })
+    }
+
+    // Builder pattern methods for fluent script construction
+
+    /// Add an instruction and return self for chaining (builder pattern)
+    pub fn with_instruction(mut self, instruction: CslInstruction) -> Self {
+        self.instructions.push(instruction);
+        self
+    }
+
+    /// Conditionally add an instruction (builder pattern)
+    pub fn with_instruction_if<F>(mut self, condition: bool, f: F) -> Self
+    where
+        F: FnOnce() -> CslInstruction
+    {
+        if condition {
+            self.instructions.push(f());
+        }
+        self
+    }
+
+    /// Add a disk directory instruction
+    pub fn with_disk_dir(self, dir: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::DiskDir(dir))
+    }
+
+    /// Add a disk insert instruction
+    pub fn with_disk_insert(self, drive: Drive, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::DiskInsert { drive, filename })
+    }
+
+    /// Add a snapshot directory instruction
+    pub fn with_snapshot_dir(self, dir: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::SnapshotDir(dir))
+    }
+
+    /// Add a snapshot load instruction
+    pub fn with_snapshot_load(self, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::SnapshotLoad(filename))
+    }
+
+    /// Add a key output instruction
+    pub fn with_key_output(self, output: KeyOutput) -> Self {
+        self.with_instruction(CslInstruction::KeyOutput(output))
+    }
+
+    /// Add a key from file instruction
+    pub fn with_key_from_file(self, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::KeyFromFile(filename))
+    }
+
+    /// Add a memory expansion instruction
+    pub fn with_memory_exp(self, expansion: MemoryExpansion) -> Self {
+        self.with_instruction(CslInstruction::MemoryExp(expansion))
+    }
+
+    /// Add a CRTC select instruction
+    pub fn with_crtc_select(self, model: CrtcModel) -> Self {
+        self.with_instruction(CslInstruction::CrtcSelect(model))
+    }
+
+    /// Add a reset instruction
+    pub fn with_reset(self, reset_type: ResetType) -> Self {
+        self.with_instruction(CslInstruction::Reset(reset_type))
+    }
+
+    /// Add a wait instruction
+    pub fn with_wait(self, frames: u64) -> Self {
+        self.with_instruction(CslInstruction::Wait(frames))
     }
 }
 
@@ -762,6 +970,51 @@ mod tests {
             let parsed2 = parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
+    }
+
+    #[test]
+    fn test_builder_pattern() {
+        use crate::{CslScript, CslInstruction, Drive, MemoryExpansion, CrtcModel, ResetType};
+
+        // Test fluent builder pattern with helper methods
+        let script = CslScript::new()
+            .with_disk_dir("disks".into())
+            .with_disk_insert(Drive::A, "game.dsk".into())
+            .with_memory_exp(MemoryExpansion::Kb512DkTronics)
+            .with_crtc_select(CrtcModel::Type1)
+            .with_reset(ResetType::Hard)
+            .with_wait(50);
+
+        assert_eq!(script.instructions.len(), 6);
+        
+        // Test using CslInstruction factory methods
+        let script2 = CslScript::new()
+            .with_instruction(CslInstruction::disk_dir("disks".into()))
+            .with_instruction(CslInstruction::disk_insert(Drive::A, "game.dsk".into()))
+            .with_instruction(CslInstruction::snapshot_load("game.sna".into()))
+            .with_instruction(CslInstruction::memory_exp(MemoryExpansion::Kb512DkTronics));
+
+        assert_eq!(script2.instructions.len(), 4);
+        
+        // Test conditional builder with factory methods
+        let with_snapshot = true;
+        let script3 = CslScript::new()
+            .with_disk_insert(Drive::A, "test.dsk".into())
+            .with_instruction_if(with_snapshot, || {
+                CslInstruction::snapshot_load("game.sna".into())
+            });
+
+        assert_eq!(script3.instructions.len(), 2);
+        
+        // Test without snapshot
+        let without_snapshot = false;
+        let script4 = CslScript::new()
+            .with_disk_insert(Drive::A, "test.dsk".into())
+            .with_instruction_if(without_snapshot, || {
+                CslInstruction::snapshot_load("game.sna".into())
+            });
+
+        assert_eq!(script4.instructions.len(), 1);
     }
 
     #[test]

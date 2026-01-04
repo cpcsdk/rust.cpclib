@@ -83,6 +83,30 @@ impl FromStr for Crtc {
     }
 }
 
+impl Crtc {
+    /// Convert to CSL CrtcModel
+    pub fn to_csl_model(self) -> cpclib_csl::CrtcModel {
+        match self {
+            Crtc::Zero => cpclib_csl::CrtcModel::Type0,
+            Crtc::One => cpclib_csl::CrtcModel::Type1,
+            Crtc::Two => cpclib_csl::CrtcModel::Type2,
+            Crtc::Three => cpclib_csl::CrtcModel::Type3,
+            Crtc::Four => cpclib_csl::CrtcModel::Type4,
+        }
+    }
+}
+
+/// Convert memory size (in KB) to CSL MemoryExpansion
+fn memory_to_csl_expansion(memory: u32) -> cpclib_csl::MemoryExpansion {
+    match memory {
+        128 => cpclib_csl::MemoryExpansion::Kb128,
+        256 => cpclib_csl::MemoryExpansion::Kb256Standard,
+        512 => cpclib_csl::MemoryExpansion::Kb512DkTronics,
+        4096 => cpclib_csl::MemoryExpansion::Mb4,
+        _ => cpclib_csl::MemoryExpansion::Kb128, // default
+    }
+}
+
 type EmuScreenShot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 #[derive(Debug)]
@@ -683,67 +707,61 @@ impl EmulatorConf {
 
 impl From<EmulatorConf> for cpclib_csl::CslScript {
     fn from(conf: EmulatorConf) -> Self {
-        let mut instructions = Vec::new();
+        use cpclib_csl::{CslScript, CslInstruction, Drive, MemoryExpansion, CrtcModel, KeyOutput};
+        use cpclib_common::camino::Utf8PathBuf;
 
-        // Map drive_a to DiskInsert(Drive::A, filename)
+        let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
+        let mut script = CslScript::new();
+
+        // Set disk directory if any disk is configured
+        if conf.drive_a.is_some() || conf.drive_b.is_some() {
+            script = script.with_instruction(CslInstruction::disk_dir(cwd.clone()));
+        }
+
+        // Insert disks if configured
         if let Some(drive_a) = conf.drive_a {
-            instructions.push(cpclib_csl::CslInstruction::DiskInsert {
-                drive: cpclib_csl::Drive::A,
-                filename: drive_a
-            });
+            script = script.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a));
         }
-
-        // Map drive_b to DiskInsert(Drive::B, filename)
+        
         if let Some(drive_b) = conf.drive_b {
-            instructions.push(cpclib_csl::CslInstruction::DiskInsert {
-                drive: cpclib_csl::Drive::B,
-                filename: drive_b
-            });
+            script = script.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b));
         }
 
-        // Map snapshot to SnapshotLoad(filename)
+        // Set snapshot directory and load if configured
         if let Some(snapshot) = conf.snapshot {
-            instructions.push(cpclib_csl::CslInstruction::SnapshotLoad(snapshot));
+            script = script
+                .with_instruction(CslInstruction::snapshot_dir(cwd))
+                .with_instruction(CslInstruction::snapshot_load(snapshot));
         }
 
-        // Map auto_run to KeyOutput with RUN"<value>\(RET)
+        // Add auto-run command if configured
         if let Some(auto_run) = conf.auto_run {
             let key_string = format!("RUN\"{}\n", auto_run);
-            if let Ok(key_output) = cpclib_csl::KeyOutput::try_from(key_string.as_str()) {
-                instructions.push(cpclib_csl::CslInstruction::KeyOutput(key_output));
+            if let Ok(key_output) = KeyOutput::try_from(key_string.as_str()) {
+                script = script.with_instruction(CslInstruction::key_output(key_output));
             }
         }
 
-        // Map memory to MemoryExp
-        if let Some(memory) = conf.memory {
-            let mem_exp = match memory {
-                128 => cpclib_csl::MemoryExpansion::Kb128,
-                256 => cpclib_csl::MemoryExpansion::Kb256Standard,
-                512 => cpclib_csl::MemoryExpansion::Kb512DkTronics,
-                4096 => cpclib_csl::MemoryExpansion::Mb4,
-                _ => cpclib_csl::MemoryExpansion::Kb128,  // default to 128k
-            };
-            instructions.push(cpclib_csl::CslInstruction::MemoryExp(mem_exp));
-        }
-
-        // Map crtc to CrtcSelect
-        if let Some(crtc) = conf.crtc {
-            let crtc_model = match crtc {
-                Crtc::Zero => cpclib_csl::CrtcModel::Type0,
-                Crtc::One => cpclib_csl::CrtcModel::Type1,
-                Crtc::Two => cpclib_csl::CrtcModel::Type2,
-                Crtc::Three => cpclib_csl::CrtcModel::Type3,
-                Crtc::Four => cpclib_csl::CrtcModel::Type4,
-            };
-            instructions.push(cpclib_csl::CslInstruction::CrtcSelect(crtc_model));
-        }
-
-        // Map auto_type to KeyFromFile
+        // Add auto-type file if configured
         if let Some(auto_type) = conf.auto_type {
-            instructions.push(cpclib_csl::CslInstruction::KeyFromFile(auto_type));
+            script = script.with_instruction(CslInstruction::key_from_file(auto_type));
         }
 
-        cpclib_csl::CslScript { instructions }
+        // Configure memory expansion if specified
+        if let Some(memory) = conf.memory {
+            script = script.with_instruction(
+                CslInstruction::memory_exp(memory_to_csl_expansion(memory))
+            );
+        }
+
+        // Configure CRTC model if specified
+        if let Some(crtc) = conf.crtc {
+            script = script.with_instruction(
+                CslInstruction::crtc_select(crtc.to_csl_model())
+            );
+        }
+
+        script
     }
 }
 
@@ -1984,11 +2002,20 @@ mod tests {
 
         let script = cpclib_csl::CslScript::from(conf);
 
-        // Check that we have 7 instructions (disk_a, disk_b, snapshot, auto_run, memory, crtc, auto_type)
-        assert_eq!(script.instructions.len(), 7);
+        // Check that we have 9 instructions:
+        // 1. DiskDir, 2. DiskInsert A, 3. DiskInsert B, 4. SnapshotDir,
+        // 5. SnapshotLoad, 6. KeyOutput (auto_run), 7. KeyFromFile (auto_type),
+        // 8. MemoryExp, 9. CrtcSelect
+        assert_eq!(script.instructions.len(), 9);
+
+        // Verify DiskDir
+        match &script.instructions[0] {
+            cpclib_csl::CslInstruction::DiskDir(_) => {},
+            _ => panic!("Expected DiskDir")
+        }
 
         // Verify the instructions are in the expected order and type
-        match &script.instructions[0] {
+        match &script.instructions[1] {
             cpclib_csl::CslInstruction::DiskInsert { drive, filename } => {
                 assert_eq!(*drive, cpclib_csl::Drive::A);
                 assert_eq!(filename, &Utf8PathBuf::from("test.dsk"));
@@ -1996,7 +2023,7 @@ mod tests {
             _ => panic!("Expected DiskInsert for drive A")
         }
 
-        match &script.instructions[1] {
+        match &script.instructions[2] {
             cpclib_csl::CslInstruction::DiskInsert { drive, filename } => {
                 assert_eq!(*drive, cpclib_csl::Drive::B);
                 assert_eq!(filename, &Utf8PathBuf::from("data.dsk"));
@@ -2004,30 +2031,21 @@ mod tests {
             _ => panic!("Expected DiskInsert for drive B")
         }
 
-        match &script.instructions[2] {
+        match &script.instructions[3] {
+            cpclib_csl::CslInstruction::SnapshotDir(_) => {},
+            _ => panic!("Expected SnapshotDir")
+        }
+
+        match &script.instructions[4] {
             cpclib_csl::CslInstruction::SnapshotLoad(path) => {
                 assert_eq!(path, &Utf8PathBuf::from("game.sna"));
             },
             _ => panic!("Expected SnapshotLoad")
         }
 
-        match &script.instructions[3] {
+        match &script.instructions[5] {
             cpclib_csl::CslInstruction::KeyOutput(_) => {},
             _ => panic!("Expected KeyOutput for auto_run")
-        }
-
-        match &script.instructions[4] {
-            cpclib_csl::CslInstruction::MemoryExp(mem) => {
-                assert_eq!(*mem, cpclib_csl::MemoryExpansion::Kb512DkTronics);
-            },
-            _ => panic!("Expected MemoryExp")
-        }
-
-        match &script.instructions[5] {
-            cpclib_csl::CslInstruction::CrtcSelect(crtc) => {
-                assert_eq!(*crtc, cpclib_csl::CrtcModel::Type1);
-            },
-            _ => panic!("Expected CrtcSelect")
         }
 
         match &script.instructions[6] {
@@ -2035,6 +2053,20 @@ mod tests {
                 assert_eq!(path, &Utf8PathBuf::from("commands.txt"));
             },
             _ => panic!("Expected KeyFromFile")
+        }
+
+        match &script.instructions[7] {
+            cpclib_csl::CslInstruction::MemoryExp(mem) => {
+                assert_eq!(*mem, cpclib_csl::MemoryExpansion::Kb512DkTronics);
+            },
+            _ => panic!("Expected MemoryExp")
+        }
+
+        match &script.instructions[8] {
+            cpclib_csl::CslInstruction::CrtcSelect(crtc) => {
+                assert_eq!(*crtc, cpclib_csl::CrtcModel::Type1);
+            },
+            _ => panic!("Expected CrtcSelect")
         }
     }
 }
