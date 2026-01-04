@@ -7,6 +7,8 @@
 //! simulating user actions. It uses a simple text format with one instruction per line.
 //! Semicolons are used for comments.
 
+use std::fmt;
+
 /// CSL language version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CslVersion {
@@ -35,6 +37,15 @@ impl Default for ResetType {
     }
 }
 
+impl fmt::Display for ResetType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Soft => write!(f, "S"),
+            Self::Hard => write!(f, "H")
+        }
+    }
+}
+
 /// CRTC model selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CrtcModel {
@@ -47,12 +58,36 @@ pub enum CrtcModel {
     Type4
 }
 
+impl fmt::Display for CrtcModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Type0 => write!(f, "0"),
+            Self::Type1 => write!(f, "1"),
+            Self::Type1A => write!(f, "1A"),
+            Self::Type1B => write!(f, "1B"),
+            Self::Type2 => write!(f, "2"),
+            Self::Type3 => write!(f, "3"),
+            Self::Type4 => write!(f, "4")
+        }
+    }
+}
+
 /// Gate Array model
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateArrayModel {
     Model40007,
     Model40008,
     Model40010
+}
+
+impl fmt::Display for GateArrayModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Model40007 => write!(f, "40007"),
+            Self::Model40008 => write!(f, "40008"),
+            Self::Model40010 => write!(f, "40010")
+        }
+    }
 }
 
 /// CPC model selection
@@ -64,6 +99,19 @@ pub enum CpcModel {
     Cpc6128Plus, // 4
     Cpc464Plus,  // 5
     GX4000    // 6
+}
+
+impl fmt::Display for CpcModel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Cpc464 => write!(f, "0"),
+            Self::Cpc664 => write!(f, "1"),
+            Self::Cpc6128 => write!(f, "2"),
+            Self::Cpc6128Plus => write!(f, "4"),
+            Self::Cpc464Plus => write!(f, "5"),
+            Self::GX4000 => write!(f, "6")
+        }
+    }
 }
 
 /// Memory expansion configuration
@@ -81,6 +129,18 @@ pub enum MemoryExpansion {
     Kb512DkTronics
 }
 
+impl fmt::Display for MemoryExpansion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Kb128 => write!(f, "128"),
+            Self::Kb256Standard => write!(f, "256"),
+            Self::Kb256Silicon => write!(f, "256S"),
+            Self::Mb4 => write!(f, "4M"),
+            Self::Kb512DkTronics => write!(f, "512")
+        }
+    }
+}
+
 /// ROM type configuration
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RomType {
@@ -92,6 +152,17 @@ pub enum RomType {
     Cartridge,
     /// Multiface 2
     Multiface2
+}
+
+impl fmt::Display for RomType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Upper => write!(f, "U"),
+            Self::Lower => write!(f, "L"),
+            Self::Cartridge => write!(f, "C"),
+            Self::Multiface2 => write!(f, "M")
+        }
+    }
 }
 
 /// ROM configuration
@@ -115,12 +186,31 @@ impl Default for Drive {
     }
 }
 
+impl fmt::Display for Drive {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::A => write!(f, "A"),
+            Self::B => write!(f, "B")
+        }
+    }
+}
+
 /// Snapshot version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapshotVersion {
     V1,
     V2,
     V3
+}
+
+impl fmt::Display for SnapshotVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::V1 => write!(f, "1"),
+            Self::V2 => write!(f, "2"),
+            Self::V3 => write!(f, "3")
+        }
+    }
 }
 
 /// Special key codes for key_output
@@ -201,6 +291,22 @@ pub enum KeyElement {
     Special(SpecialKey),
     /// Simultaneous key group: {abcd}
     Simultaneous(Vec<KeyElement>)
+}
+
+impl fmt::Display for KeyElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Character(c) => write!(f, "{}", c),
+            Self::Special(key) => write!(f, "{}", key.escape_sequence()),
+            Self::Simultaneous(elements) => {
+                write!(f, "{{") ?;
+                for elem in elements {
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "}}")
+            }
+        }
+    }
 }
 
 /// All CSL instructions as defined in the specification
@@ -317,6 +423,74 @@ pub enum CslInstruction {
     Empty
 }
 
+impl fmt::Display for CslInstruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CslVersion(v) => write!(f, "csl_version {}.{}", v.major, v.minor),
+            Self::Reset(reset_type) => write!(f, "reset {}", reset_type),
+            Self::CrtcSelect(model) => write!(f, "crtc_select {}", model),
+            Self::GateArray(model) => write!(f, "gate_array {}", model),
+            Self::CpcModel(model) => write!(f, "cpc_model {}", model),
+            Self::MemoryExp(exp) => write!(f, "memory_exp {}", exp),
+            Self::RomDir(dir) => write!(f, "rom_dir '{}'", dir),
+            Self::RomConfig(config) => write!(f, "rom_config {} {} '{}'", config.rom_type, config.num, config.filename),
+            Self::DiskInsert { drive, filename } => write!(f, "disk_insert {} '{}'", drive, filename),
+            Self::DiskDir(dir) => write!(f, "disk_dir '{}'", dir),
+            Self::TapeInsert(file) => write!(f, "tape_insert '{}'", file),
+            Self::TapeDir(dir) => write!(f, "tape_dir '{}'", dir),
+            Self::TapePlay => write!(f, "tape_play"),
+            Self::TapeStop => write!(f, "tape_stop"),
+            Self::TapeRewind => write!(f, "tape_rewind"),
+            Self::SnapshotLoad(file) => write!(f, "snapshot_load '{}'", file),
+            Self::SnapshotDir(dir) => write!(f, "snapshot_dir '{}'", dir),
+            Self::KeyDelay { delay, delay_after_cr, delay_after_key } => {
+                write!(f, "key_delay {}", delay)?;
+                if let Some(cr) = delay_after_cr {
+                    write!(f, " {}", cr)?;
+                    if let Some(key) = delay_after_key {
+                        write!(f, " {}", key)?;
+                    }
+                }
+                Ok(())
+            },
+            Self::KeyOutput(elements) => {
+                write!(f, "key_output '")?;
+                for elem in elements {
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "'")
+            },
+            Self::KeyFromFile(file) => write!(f, "key_from_file '{}'", file),
+            Self::InstructionWithComment(instruction, comment) => write!(f, "{} ;{}", instruction, comment),
+            Self::Wait(time) => write!(f, "wait {}", time),
+            Self::WaitDriveOnOff(n) => write!(f, "wait_driveonoff {}", n),
+            Self::WaitVsyncOffOn => write!(f, "wait_vsyncoffon"),
+            Self::WaitSsm0000 => write!(f, "wait_ssm0000"),
+            Self::ScreenshotName(name) => write!(f, "screenshot_name '{}'", name),
+            Self::ScreenshotDir(dir) => write!(f, "screenshot_dir '{}'", dir),
+            Self::Screenshot { wait_vsync } => {
+                if *wait_vsync {
+                    write!(f, "screenshot V")
+                } else {
+                    write!(f, "screenshot")
+                }
+            },
+            Self::SnapshotName(name) => write!(f, "snapshot_name '{}'", name),
+            Self::Snapshot { wait_vsync } => {
+                if *wait_vsync {
+                    write!(f, "snapshot V")
+                } else {
+                    write!(f, "snapshot")
+                }
+            },
+            Self::SnapshotVersion(v) => write!(f, "snapshot_version {}", v),
+            Self::CslLoad(file) => write!(f, "csl_load '{}'", file),
+            Self::Comment(text) => write!(f, ";{}", text),
+            Self::Empty => write!(f, "")
+        }
+    }
+}
+
 impl CslInstruction {
     /// Check if this instruction is a v1.1 feature
     pub fn is_v1_1_feature(&self) -> bool {
@@ -408,6 +582,15 @@ impl Default for CslScript {
     }
 }
 
+impl fmt::Display for CslScript {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for instruction in &self.instructions {
+            writeln!(f, "{}", instruction)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,5 +620,105 @@ mod tests {
         let version = CslVersion::new(1, 1);
         assert_eq!(version.major, 1);
         assert_eq!(version.minor, 1);
+    }
+
+    #[test]
+    fn test_display_reset() {
+        assert_eq!(CslInstruction::Reset(ResetType::Soft).to_string(), "reset S");
+        assert_eq!(CslInstruction::Reset(ResetType::Hard).to_string(), "reset H");
+    }
+
+    #[test]
+    fn test_display_wait() {
+        assert_eq!(CslInstruction::Wait(1000).to_string(), "wait 1000");
+    }
+
+    #[test]
+    fn test_display_key_delay() {
+        assert_eq!(
+            CslInstruction::KeyDelay { delay: 70000, delay_after_cr: Some(70000), delay_after_key: Some(400000) }.to_string(),
+            "key_delay 70000 70000 400000"
+        );
+        assert_eq!(
+            CslInstruction::KeyDelay { delay: 50000, delay_after_cr: None, delay_after_key: None }.to_string(),
+            "key_delay 50000"
+        );
+    }
+
+    #[test]
+    fn test_display_instruction_with_comment() {
+        let instruction = CslInstruction::InstructionWithComment(
+            Box::new(CslInstruction::Wait(800000)),
+            " fin affichage".to_string()
+        );
+        assert_eq!(instruction.to_string(), "wait 800000 ; fin affichage");
+    }
+
+    #[test]
+    fn test_roundtrip_simple_instructions() {
+        use crate::csl_parser::parse_csl;
+        
+        let test_cases = vec![
+            "reset H",
+            "reset S",
+            "wait 1000000",
+            "tape_play",
+            "tape_stop",
+            "wait_vsyncoffon",
+            "crtc_select 1",
+            "gate_array 40010",
+            "cpc_model 2",
+        ];
+
+        for case in test_cases {
+            let script1 = format!("{}\n", case);
+            let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
+            let generated = parsed1.to_string();
+            let parsed2 = parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+            assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_with_parameters() {
+        use crate::csl_parser::parse_csl;
+        
+        let test_cases = vec![
+            "disk_insert A 'test.dsk'",
+            "key_delay 70000 70000 400000",
+            "snapshot_name 'mysnap'",
+            "csl_load 'other.csl'",
+            "rom_config U 7 'Amsdos.rom'",
+        ];
+
+        for case in test_cases {
+            let script1 = format!("{}\n", case);
+            let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
+            let generated = parsed1.to_string();
+            let parsed2 = parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+            assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_with_comments() {
+        use crate::csl_parser::parse_csl;
+        
+        let script1 = "wait 800000 ; fin affichage\n";
+        let parsed1 = parse_csl(script1).expect("Failed to parse");
+        let generated = parsed1.to_string();
+        let parsed2 = parse_csl(&generated).expect("Failed to parse generated");
+        assert_eq!(parsed1, parsed2, "Roundtrip failed with comments");
+    }
+
+    #[test]
+    fn test_roundtrip_full_script() {
+        use crate::csl_parser::parse_csl;
+        
+        let script = "csl_version 1.0\nreset H\nwait 1000000\ntape_play\nwait 500000\n";
+        let parsed1 = parse_csl(script).expect("Failed to parse script");
+        let generated = parsed1.to_string();
+        let parsed2 = parse_csl(&generated).expect("Failed to parse generated script");
+        assert_eq!(parsed1, parsed2, "Full script roundtrip failed");
     }
 }
