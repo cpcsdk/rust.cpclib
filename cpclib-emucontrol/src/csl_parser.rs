@@ -40,6 +40,13 @@ fn quoted_string<'a>(input: &mut &'a str) -> ParseResult<'a, String> {
     .parse_next(input)
 }
 
+/// Parse a quoted path string and convert to Utf8PathBuf
+fn quoted_path<'a>(input: &mut &'a str) -> ParseResult<'a, cpclib_common::camino::Utf8PathBuf> {
+    quoted_string
+        .map(cpclib_common::camino::Utf8PathBuf::from)
+        .parse_next(input)
+}
+
 /// Parse optional inline comment (after an instruction, before line ending)
 /// Returns Some(comment) if a comment is present, None otherwise
 fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, Option<String>> {
@@ -205,7 +212,7 @@ fn parse_memory_exp<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> 
 fn parse_rom_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("rom_dir", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::RomDir)
     .context(StrContext::Label("rom_dir"))
@@ -231,7 +238,7 @@ fn parse_rom_config<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> 
         (
             parse_rom_type,
             preceded(ws1, dec_uint::<_, u8, _>),
-            preceded(ws1, quoted_string)
+            preceded(ws1, quoted_path)
         )
     )
     .map(|(rom_type, num, filename)| {
@@ -261,7 +268,7 @@ fn parse_disk_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
         ("disk_insert", ws1),
         (
             opt(terminated(parse_drive, ws1)),
-            quoted_string
+            quoted_path
         )
     )
     .map(|(drive, filename)| {
@@ -278,7 +285,7 @@ fn parse_disk_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
 fn parse_disk_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("disk_dir", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::DiskDir)
     .context(StrContext::Label("disk_dir"))
@@ -289,7 +296,7 @@ fn parse_disk_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 fn parse_tape_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("tape_insert", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::TapeInsert)
     .context(StrContext::Label("tape_insert"))
@@ -300,7 +307,7 @@ fn parse_tape_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
 fn parse_tape_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("tape_dir", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::TapeDir)
     .context(StrContext::Label("tape_dir"))
@@ -335,7 +342,7 @@ fn parse_tape_rewind<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
 fn parse_snapshot_load<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("snapshot_load", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::SnapshotLoad)
     .context(StrContext::Label("snapshot_load"))
@@ -346,7 +353,7 @@ fn parse_snapshot_load<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstructio
 fn parse_snapshot_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("snapshot_dir", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::SnapshotDir)
     .context(StrContext::Label("snapshot_dir"))
@@ -442,12 +449,13 @@ fn parse_simultaneous_keys<'a>(input: &mut &'a str) -> ParseResult<'a, KeyElemen
 }
 
 /// Parse key output text
-fn parse_key_output_content<'a>(input: &mut &'a str) -> ParseResult<'a, Vec<KeyElement>> {
+pub fn parse_key_output_content<'a>(input: &mut &'a str) -> ParseResult<'a, crate::csl::KeyOutput> {
     delimited(
         '\'',
         repeat(0.., alt((parse_simultaneous_keys, parse_key_element))),
         '\''
     )
+    .map(crate::csl::KeyOutput::from_elements)
     .context(StrContext::Label("Key output content"))
     .parse_next(input)
 }
@@ -467,7 +475,7 @@ fn parse_key_output<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> 
 fn parse_key_from_file<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("key_from_file", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::KeyFromFile)
     .context(StrContext::Label("key_from_file"))
@@ -516,7 +524,7 @@ fn parse_wait_ssm0000<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction
 fn parse_screenshot_name<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("screenshot_name", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::ScreenshotName)
     .context(StrContext::Label("screenshot_name"))
@@ -527,7 +535,7 @@ fn parse_screenshot_name<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruct
 fn parse_screenshot_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("screenshot_dir", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::ScreenshotDir)
     .context(StrContext::Label("screenshot_dir"))
@@ -551,7 +559,7 @@ fn parse_screenshot<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> 
 fn parse_snapshot_name<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("snapshot_name", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::SnapshotName)
     .context(StrContext::Label("snapshot_name"))
@@ -597,7 +605,7 @@ fn parse_snapshot_version<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruc
 fn parse_csl_load<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
         ("csl_load", ws1),
-        quoted_string
+        quoted_path
     )
     .map(CslInstruction::CslLoad)
     .context(StrContext::Label("csl_load"))
@@ -757,8 +765,8 @@ mod tests {
     fn test_parse_key_output() {
         let result = parse_line.parse("key_output 'RUN \"SHAKE25A\"\\(RET)'\n");
         assert!(result.is_ok());
-        if let Ok(CslInstruction::KeyOutput(keys)) = result {
-            assert_eq!(keys.len(), 15); // R U N space " S H A K E 2 5 A " \(RET)
+        if let Ok(CslInstruction::KeyOutput(key_output)) = result {
+            assert_eq!(key_output.elements().len(), 15); // R U N space " S H A K E 2 5 A " \(RET)
         }
     }
 

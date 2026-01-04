@@ -8,7 +8,8 @@
 //! Semicolons are used for comments.
 
 use std::fmt;
-
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::itertools::Itertools;
 /// CSL language version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CslVersion {
@@ -170,7 +171,7 @@ impl fmt::Display for RomType {
 pub struct RomConfig {
     pub rom_type: RomType,
     pub num: u8,
-    pub filename: String
+    pub filename: Utf8PathBuf
 }
 
 /// Drive selection (A or B)
@@ -308,7 +309,95 @@ impl fmt::Display for KeyElement {
         }
     }
 }
+/// Check if a string is already pre-escaped (wrapped in single quotes)
+/// This indicates the string already contains proper CSL escape sequences.
+fn is_pre_escaped(s: &str) -> bool {
+    s.starts_with('\'') && s.ends_with('\'')
+}
 
+/// Key output text - newtype wrapper for key output elements
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyOutput(pub Vec<KeyElement>);
+
+impl KeyOutput {
+    /// Create a new empty KeyOutput
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Create a KeyOutput from a vector of elements
+    pub fn from_elements(elements: Vec<KeyElement>) -> Self {
+        Self(elements)
+    }
+
+    /// Get a reference to the inner elements
+    pub fn elements(&self) -> &[KeyElement] {
+        &self.0
+    }
+}
+
+impl Default for KeyOutput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for KeyOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for elem in &self.0 {
+            write!(f, "{}", elem)?;
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<&str> for KeyOutput {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        use crate::csl_parser::parse_key_output_content;
+        use cpclib_common::winnow::Parser;
+
+		// replace newlines by \RET
+		let s = s.split('\n').join(r"\RET");
+
+        // Wrap the input with quotes as the parser expects quoted strings
+        let quoted = if is_pre_escaped(&s) {
+			// here we assume everything is already escaped properly
+            s
+        } else {
+			// Do escaping ourselves
+			// Need to escape: ', {, }, and \ (but not when \ is followed by ()
+			let mut escaped = String::new();
+			let chars: Vec<char> = s.chars().collect();
+			let mut i = 0;
+			while i < chars.len() {
+				match chars[i] {
+					'\'' => escaped.push_str(r"\(')"),
+					'{' => escaped.push_str(r"\({)"),
+					'}' => escaped.push_str(r"\(})"),
+					'\\' => {
+						// Only escape backslash if NOT followed by (
+						if i + 1 < chars.len() && chars[i + 1] == '(' {
+							escaped.push('\\');
+						} else {
+							escaped.push_str(r"\(\)");
+						}
+					}
+					c => escaped.push(c),
+				}
+				i += 1;
+			}
+            format!("'{}'", escaped)
+        };
+        let mut input = quoted.as_str();
+        
+        match parse_key_output_content.parse_next(&mut input) {
+            Ok(key_output) => Ok(key_output),
+            Err(e) => Err(format!("Failed to parse key output: {:?}", e))
+        }
+    }
+}
 /// All CSL instructions as defined in the specification
 #[derive(Debug, Clone, PartialEq)]
 pub enum CslInstruction {
@@ -333,23 +422,23 @@ pub enum CslInstruction {
     MemoryExp(MemoryExpansion),
     
     /// Specify ROM directory (v1.1)
-    RomDir(String),
+    RomDir(Utf8PathBuf),
     
     /// Configure a ROM (v1.1)
     RomConfig(RomConfig),
 
     // Media
     /// Insert a disk file into a drive
-    DiskInsert { drive: Drive, filename: String },
+    DiskInsert { drive: Drive, filename: Utf8PathBuf },
     
     /// Specify disk directory
-    DiskDir(String),
+    DiskDir(Utf8PathBuf),
     
     /// Insert a tape file
-    TapeInsert(String),
+    TapeInsert(Utf8PathBuf),
     
     /// Specify tape directory
-    TapeDir(String),
+    TapeDir(Utf8PathBuf),
     
     /// Start tape playback
     TapePlay,
@@ -361,10 +450,10 @@ pub enum CslInstruction {
     TapeRewind,
     
     /// Load a snapshot file
-    SnapshotLoad(String),
+    SnapshotLoad(Utf8PathBuf),
     
     /// Specify snapshot directory
-    SnapshotDir(String),
+    SnapshotDir(Utf8PathBuf),
 
     // Key strokes
     /// Set delay between keystrokes (in microseconds)
@@ -372,10 +461,10 @@ pub enum CslInstruction {
     KeyDelay { delay: u64, delay_after_cr: Option<u64>, delay_after_key: Option<u64> },
     
     /// Send text as key strokes
-    KeyOutput(Vec<KeyElement>),
+    KeyOutput(KeyOutput),
     
     /// Send characters from file as key strokes
-    KeyFromFile(String),
+    KeyFromFile(Utf8PathBuf),
 
     // Meta instruction
     /// An instruction followed by an inline comment on the same line
@@ -396,16 +485,16 @@ pub enum CslInstruction {
 
     // Exports
     /// Specify name for next screenshot (without extension)
-    ScreenshotName(String),
+    ScreenshotName(Utf8PathBuf),
     
     /// Specify screenshot directory
-    ScreenshotDir(String),
+    ScreenshotDir(Utf8PathBuf),
     
     /// Take a screenshot (optionally wait for vsync)
     Screenshot { wait_vsync: bool },
     
     /// Specify name for next snapshot (without extension)
-    SnapshotName(String),
+    SnapshotName(Utf8PathBuf),
     
     /// Take a snapshot (optionally wait for vsync)
     Snapshot { wait_vsync: bool },
@@ -414,7 +503,7 @@ pub enum CslInstruction {
     SnapshotVersion(SnapshotVersion),
     
     /// Load and run another CSL file
-    CslLoad(String),
+    CslLoad(Utf8PathBuf),
 
     // Comments (for completeness)
     Comment(String),
@@ -453,12 +542,8 @@ impl fmt::Display for CslInstruction {
                 }
                 Ok(())
             },
-            Self::KeyOutput(elements) => {
-                write!(f, "key_output '")?;
-                for elem in elements {
-                    write!(f, "{}", elem)?;
-                }
-                write!(f, "'")
+            Self::KeyOutput(key_output) => {
+                write!(f, "key_output '{}'" , key_output)
             },
             Self::KeyFromFile(file) => write!(f, "key_from_file '{}'", file),
             Self::InstructionWithComment(instruction, comment) => write!(f, "{} ;{}", instruction, comment),
@@ -689,6 +774,7 @@ mod tests {
             "snapshot_name 'mysnap'",
             "csl_load 'other.csl'",
             "rom_config U 7 'Amsdos.rom'",
+            "key_output 'Hello\\(RET)'",
         ];
 
         for case in test_cases {
@@ -720,5 +806,48 @@ mod tests {
         let generated = parsed1.to_string();
         let parsed2 = parse_csl(&generated).expect("Failed to parse generated script");
         assert_eq!(parsed1, parsed2, "Full script roundtrip failed");
+    }
+
+    #[test]
+    fn test_key_output_try_from() {
+        // Test simple text
+        let result = KeyOutput::try_from("Hello");
+        assert!(result.is_ok());
+        let key_output = result.unwrap();
+        assert_eq!(key_output.elements().len(), 5);
+        assert_eq!(key_output.to_string(), "Hello");
+
+        // Test with special key
+        let result = KeyOutput::try_from("Test\\(RET)");
+        assert!(result.is_ok());
+        let key_output = dbg!(result.unwrap());
+        assert_eq!(key_output.elements().len(), 5); // T e s t \(RET)
+
+        // Test empty string
+        let result = KeyOutput::try_from("");
+        assert!(result.is_ok());
+        let key_output = result.unwrap();
+        assert_eq!(key_output.elements().len(), 0);
+    }
+
+    #[test]
+    fn test_key_output_display() {
+        let key_output = KeyOutput::from_elements(vec![
+            KeyElement::Character('H'),
+            KeyElement::Character('i'),
+            KeyElement::Special(SpecialKey::Return)
+        ]);
+        assert_eq!(key_output.to_string(), "Hi\\(RET)");
+    }
+
+    #[test]
+    fn test_is_pre_escaped() {
+        assert!(is_pre_escaped("'Hello'"));
+        assert!(is_pre_escaped("'Test\\(RET)'"));
+        assert!(is_pre_escaped("''"));
+        assert!(!is_pre_escaped("Hello"));
+        assert!(!is_pre_escaped("'Hello"));
+        assert!(!is_pre_escaped("Hello'"));
+        assert!(!is_pre_escaped(""));
     }
 }
