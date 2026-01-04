@@ -10,6 +10,7 @@ homepage.workspace = true
 [dependencies]
 cpclib-runner.workspace = true
 cpclib-common.workspace = true
+cpclib-csl.workspace = true
 clap = {workspace=true, features=["derive"]}
 glob.workspace = true
 

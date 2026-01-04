@@ -2460,6 +2460,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-csl"
+version = "0.11.0"
+dependencies = [
+ "cpclib-common",
+ "test-generator",
+]
+
+[[package]]
 name = "cpclib-disc"
 version = "0.11.0"
 dependencies = [
@@ -2488,6 +2496,7 @@ dependencies = [
  "assert_cmd",
  "clap 4.5.53",
  "cpclib-common",
+ "cpclib-csl",
  "cpclib-runner",
  "glob",
  "ntest",
@@ -2580,6 +2589,7 @@ dependencies = [
  "clap 4.5.53",
  "cpclib-asm",
  "cpclib-common",
+ "cpclib-csl",
  "delegate",
  "directories",
  "enigo",

@@ -1,6 +1,6 @@
 //! Integration tests for parsing real CSL files
 
-use cpclib_emucontrol::csl_parser::parse_csl;
+use cpclib_csl::parse_csl;
 use std::fs;
 use std::path::PathBuf;
 
@@ -122,7 +122,7 @@ fn test_parse_specific_module_a_file() {
     
     // Count non-empty, non-comment instructions
     let real_instructions: Vec<_> = script.instructions.iter()
-        .filter(|i| !matches!(i, cpclib_emucontrol::csl::CslInstruction::Comment(_) | cpclib_emucontrol::csl::CslInstruction::Empty))
+        .filter(|i| !matches!(i, cpclib_csl::CslInstruction::Comment(_) | cpclib_csl::CslInstruction::Empty))
         .collect();
     
     assert!(real_instructions.len() > 10, "Should have multiple real instructions");

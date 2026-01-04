@@ -479,30 +479,30 @@ pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
 
 #[derive(Debug, Clone, bon::Builder)]
 pub struct EmulatorConf {
-    pub(crate) drive_a: Option<Utf8PathBuf>,
-    pub(crate) drive_b: Option<Utf8PathBuf>,
-    pub(crate) snapshot: Option<Utf8PathBuf>,
+    pub drive_a: Option<Utf8PathBuf>,
+    pub drive_b: Option<Utf8PathBuf>,
+    pub snapshot: Option<Utf8PathBuf>,
 
     #[builder(default)]
-    pub(crate) roms_configuration: HashSet<AmstradRom>,
+    pub roms_configuration: HashSet<AmstradRom>,
 
     #[builder(default)]
-    pub(crate) debug_files: Vec<Utf8PathBuf>,
-    pub(crate) break_on_bad_vbl: bool,
-    pub(crate) break_on_bad_hbl: bool,
+    pub debug_files: Vec<Utf8PathBuf>,
+    pub break_on_bad_vbl: bool,
+    pub break_on_bad_hbl: bool,
 
     /// The file name to launch automatically
-    pub(crate) auto_run: Option<String>,
+    pub auto_run: Option<String>,
 
     /// The file that contains the command to automaticall type
-    pub(crate) auto_type: Option<Utf8PathBuf>,
+    pub auto_type: Option<Utf8PathBuf>,
 
-    pub(crate) memory: Option<u32>,
+    pub memory: Option<u32>,
 
-    pub(crate) crtc: Option<Crtc>,
+    pub crtc: Option<Crtc>,
 
     /// Do not display the window
-    pub(crate) transparent: bool
+    pub transparent: bool
 }
 
 impl EmulatorConf {
@@ -678,6 +678,72 @@ impl EmulatorConf {
 
         dbg!(&args);
         Ok(args)
+    }
+}
+
+impl From<EmulatorConf> for cpclib_csl::CslScript {
+    fn from(conf: EmulatorConf) -> Self {
+        let mut instructions = Vec::new();
+
+        // Map drive_a to DiskInsert(Drive::A, filename)
+        if let Some(drive_a) = conf.drive_a {
+            instructions.push(cpclib_csl::CslInstruction::DiskInsert {
+                drive: cpclib_csl::Drive::A,
+                filename: drive_a
+            });
+        }
+
+        // Map drive_b to DiskInsert(Drive::B, filename)
+        if let Some(drive_b) = conf.drive_b {
+            instructions.push(cpclib_csl::CslInstruction::DiskInsert {
+                drive: cpclib_csl::Drive::B,
+                filename: drive_b
+            });
+        }
+
+        // Map snapshot to SnapshotLoad(filename)
+        if let Some(snapshot) = conf.snapshot {
+            instructions.push(cpclib_csl::CslInstruction::SnapshotLoad(snapshot));
+        }
+
+        // Map auto_run to KeyOutput with RUN"<value>\(RET)
+        if let Some(auto_run) = conf.auto_run {
+            let key_string = format!("RUN\"{}\n", auto_run);
+            if let Ok(key_output) = cpclib_csl::KeyOutput::try_from(key_string.as_str()) {
+                instructions.push(cpclib_csl::CslInstruction::KeyOutput(key_output));
+            }
+        }
+
+        // Map memory to MemoryExp
+        if let Some(memory) = conf.memory {
+            let mem_exp = match memory {
+                128 => cpclib_csl::MemoryExpansion::Kb128,
+                256 => cpclib_csl::MemoryExpansion::Kb256Standard,
+                512 => cpclib_csl::MemoryExpansion::Kb512DkTronics,
+                4096 => cpclib_csl::MemoryExpansion::Mb4,
+                _ => cpclib_csl::MemoryExpansion::Kb128,  // default to 128k
+            };
+            instructions.push(cpclib_csl::CslInstruction::MemoryExp(mem_exp));
+        }
+
+        // Map crtc to CrtcSelect
+        if let Some(crtc) = conf.crtc {
+            let crtc_model = match crtc {
+                Crtc::Zero => cpclib_csl::CrtcModel::Type0,
+                Crtc::One => cpclib_csl::CrtcModel::Type1,
+                Crtc::Two => cpclib_csl::CrtcModel::Type2,
+                Crtc::Three => cpclib_csl::CrtcModel::Type3,
+                Crtc::Four => cpclib_csl::CrtcModel::Type4,
+            };
+            instructions.push(cpclib_csl::CslInstruction::CrtcSelect(crtc_model));
+        }
+
+        // Map auto_type to KeyFromFile
+        if let Some(auto_type) = conf.auto_type {
+            instructions.push(cpclib_csl::CslInstruction::KeyFromFile(auto_type));
+        }
+
+        cpclib_csl::CslScript { instructions }
     }
 }
 
@@ -1892,4 +1958,83 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     }
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cpclib_common::camino::Utf8PathBuf;
+
+    #[test]
+    fn test_from_emulator_conf() {
+        let conf = EmulatorConf {
+            drive_a: Some(Utf8PathBuf::from("test.dsk")),
+            drive_b: Some(Utf8PathBuf::from("data.dsk")),
+            snapshot: Some(Utf8PathBuf::from("game.sna")),
+            auto_run: Some("DISC".to_string()),
+            auto_type: Some(Utf8PathBuf::from("commands.txt")),
+            memory: Some(512),
+            crtc: Some(Crtc::One),
+            roms_configuration: Default::default(),
+            debug_files: Vec::new(),
+            break_on_bad_vbl: false,
+            break_on_bad_hbl: false,
+            transparent: false,
+        };
+
+        let script = cpclib_csl::CslScript::from(conf);
+
+        // Check that we have 7 instructions (disk_a, disk_b, snapshot, auto_run, memory, crtc, auto_type)
+        assert_eq!(script.instructions.len(), 7);
+
+        // Verify the instructions are in the expected order and type
+        match &script.instructions[0] {
+            cpclib_csl::CslInstruction::DiskInsert { drive, filename } => {
+                assert_eq!(*drive, cpclib_csl::Drive::A);
+                assert_eq!(filename, &Utf8PathBuf::from("test.dsk"));
+            },
+            _ => panic!("Expected DiskInsert for drive A")
+        }
+
+        match &script.instructions[1] {
+            cpclib_csl::CslInstruction::DiskInsert { drive, filename } => {
+                assert_eq!(*drive, cpclib_csl::Drive::B);
+                assert_eq!(filename, &Utf8PathBuf::from("data.dsk"));
+            },
+            _ => panic!("Expected DiskInsert for drive B")
+        }
+
+        match &script.instructions[2] {
+            cpclib_csl::CslInstruction::SnapshotLoad(path) => {
+                assert_eq!(path, &Utf8PathBuf::from("game.sna"));
+            },
+            _ => panic!("Expected SnapshotLoad")
+        }
+
+        match &script.instructions[3] {
+            cpclib_csl::CslInstruction::KeyOutput(_) => {},
+            _ => panic!("Expected KeyOutput for auto_run")
+        }
+
+        match &script.instructions[4] {
+            cpclib_csl::CslInstruction::MemoryExp(mem) => {
+                assert_eq!(*mem, cpclib_csl::MemoryExpansion::Kb512DkTronics);
+            },
+            _ => panic!("Expected MemoryExp")
+        }
+
+        match &script.instructions[5] {
+            cpclib_csl::CslInstruction::CrtcSelect(crtc) => {
+                assert_eq!(*crtc, cpclib_csl::CrtcModel::Type1);
+            },
+            _ => panic!("Expected CrtcSelect")
+        }
+
+        match &script.instructions[6] {
+            cpclib_csl::CslInstruction::KeyFromFile(path) => {
+                assert_eq!(path, &Utf8PathBuf::from("commands.txt"));
+            },
+            _ => panic!("Expected KeyFromFile")
+        }
+    }
 }

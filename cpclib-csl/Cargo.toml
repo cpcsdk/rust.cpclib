@@ -1,0 +1,16 @@
+[package]
+name = "cpclib-csl"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+description = "CSL (CPC Script Language) parser and types for Amstrad CPC emulator control"
+
+[dependencies]
+cpclib-common.workspace = true
+
+[dev-dependencies]
+test-generator.workspace = true

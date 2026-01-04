@@ -1,3 +1,2 @@
-pub mod csl;
-pub mod csl_parser;
-
+// Re-export CSL functionality from cpclib-csl
+pub use cpclib_csl::*;
