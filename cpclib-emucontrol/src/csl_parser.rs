@@ -41,7 +41,8 @@ fn quoted_string<'a>(input: &mut &'a str) -> ParseResult<'a, String> {
 }
 
 /// Parse optional inline comment (after an instruction, before line ending)
-fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, ()> {
+/// Returns Some(comment) if a comment is present, None otherwise
+fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, Option<String>> {
     opt(preceded(
         ws0,
         preceded(
@@ -49,7 +50,7 @@ fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, ()> {
             take_till(0.., |c| c == '\n' || c == '\r')
         )
     ))
-    .void()
+    .map(|opt_str: Option<&str>| opt_str.map(|s| s.to_string()))
     .parse_next(input)
 }
 
@@ -663,10 +664,16 @@ pub fn parse_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     alt((
         parse_empty_line,
         terminated(
-            terminated(
-                parse_instruction,
-                inline_comment  // Consume inline comments after instruction
-            ),
+            (parse_instruction, inline_comment)
+                .map(|(instruction, comment)| {
+                    match comment {
+                        Some(comment_text) => CslInstruction::InstructionWithComment(
+                            Box::new(instruction),
+                            comment_text
+                        ),
+                        None => instruction
+                    }
+                }),
             opt(line_ending)  // Make line ending optional for last line
         )
     ))
@@ -799,7 +806,14 @@ wait 100000
         let input = "wait 800000\t\t\t; fin affichage 1er ecran\n";
         let result = parse_line.parse(input);
         assert!(result.is_ok(), "Failed to parse inline comment: {:?}", result);
-        assert!(matches!(result.unwrap(), CslInstruction::Wait(800000)));
+        
+        match result.unwrap() {
+            CslInstruction::InstructionWithComment(boxed_instruction, comment) => {
+                assert!(matches!(*boxed_instruction, CslInstruction::Wait(800000)));
+                assert_eq!(comment, " fin affichage 1er ecran");
+            },
+            other => panic!("Expected InstructionWithComment, got {:?}", other)
+        }
     }
 
     #[test]
@@ -808,6 +822,8 @@ wait 100000
         let mut input_mut = input;
         let result = parse_line.parse_next(&mut input_mut);
         assert!(result.is_ok(), "Failed to parse with trailing space: {:?}", result);
+        // Verify no comment wrapper when there's no comment
+        assert!(matches!(result.unwrap(), CslInstruction::Wait(3000000)));
     }
 
     #[test]
@@ -822,6 +838,27 @@ wait 100000
         let result = parse_line.parse("\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Empty);
+    }
+
+    #[test]
+    fn test_parse_instruction_with_and_without_comment() {
+        // Test instruction without comment - should NOT be wrapped
+        let input_no_comment = "wait 1000\n";
+        let result_no_comment = parse_line.parse(input_no_comment);
+        assert!(result_no_comment.is_ok());
+        assert!(matches!(result_no_comment.unwrap(), CslInstruction::Wait(1000)));
+        
+        // Test instruction with comment - should be wrapped
+        let input_with_comment = "wait 2000 ; a comment\n";
+        let result_with_comment = parse_line.parse(input_with_comment);
+        assert!(result_with_comment.is_ok());
+        match result_with_comment.unwrap() {
+            CslInstruction::InstructionWithComment(boxed, comment) => {
+                assert!(matches!(*boxed, CslInstruction::Wait(2000)));
+                assert_eq!(comment, " a comment");
+            },
+            other => panic!("Expected InstructionWithComment, got {:?}", other)
+        }
     }
 
     #[test]

@@ -271,6 +271,10 @@ pub enum CslInstruction {
     /// Send characters from file as key strokes
     KeyFromFile(String),
 
+    // Meta instruction
+    /// An instruction followed by an inline comment on the same line
+    InstructionWithComment(Box<CslInstruction>, String),
+
     // Synchronization
     /// Wait for a delay in microseconds (emulated time)
     Wait(u64),
@@ -346,6 +350,7 @@ impl CslInstruction {
             Self::TapeRewind => "tape_rewind",
             Self::SnapshotLoad(_) => "snapshot_load",
             Self::SnapshotDir(_) => "snapshot_dir",
+            Self::InstructionWithComment(instruction, _) => instruction.instruction_name(),
             Self::KeyDelay { .. } => "key_delay",
             Self::KeyOutput(_) => "key_output",
             Self::KeyFromFile(_) => "key_from_file",
