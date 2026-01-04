@@ -40,6 +40,19 @@ fn quoted_string<'a>(input: &mut &'a str) -> ParseResult<'a, String> {
     .parse_next(input)
 }
 
+/// Parse optional inline comment (after an instruction, before line ending)
+fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, ()> {
+    opt(preceded(
+        ws0,
+        preceded(
+            ';',
+            take_till(0.., |c| c == '\n' || c == '\r')
+        )
+    ))
+    .void()
+    .parse_next(input)
+}
+
 /// Parse a semicolon comment (everything after ; until end of line)
 fn comment<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     preceded(
@@ -345,13 +358,15 @@ fn parse_key_delay<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
         ("key_delay", ws1),
         (
             dec_uint::<_, u64, _>,
+            opt(preceded(ws1, dec_uint::<_, u64, _>)),
             opt(preceded(ws1, dec_uint::<_, u64, _>))
         )
     )
-    .map(|(delay, delay_after_cr)| {
+    .map(|(delay, delay_after_cr, delay_after_key)| {
         CslInstruction::KeyDelay {
             delay,
-            delay_after_cr
+            delay_after_cr,
+            delay_after_key
         }
     })
     .context(StrContext::Label("key_delay"))
@@ -643,13 +658,16 @@ pub fn parse_instruction<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruct
     .parse_next(input)
 }
 
-/// Parse a single line (instruction + optional line ending)
+/// Parse a single line (instruction + optional inline comment + optional line ending)
 pub fn parse_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
     alt((
         parse_empty_line,
         terminated(
-            parse_instruction,
-            line_ending
+            terminated(
+                parse_instruction,
+                inline_comment  // Consume inline comments after instruction
+            ),
+            opt(line_ending)  // Make line ending optional for last line
         )
     ))
     .parse_next(input)
@@ -657,14 +675,24 @@ pub fn parse_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 
 /// Parse a complete CSL script
 pub fn parse_csl_script<'a>(input: &mut &'a str) -> ParseResult<'a, CslScript> {
-    repeat(0.., parse_line)
-        .map(|instructions| CslScript { instructions })
-        .parse_next(input)
+    terminated(
+        repeat(0.., parse_line),
+        ws0  // Allow trailing whitespace at end of file
+    )
+    .map(|instructions| CslScript { instructions })
+    .parse_next(input)
 }
 
 /// Parse a CSL script from a string
 pub fn parse_csl(input: &str) -> Result<CslScript, ContextError<StrContext>> {
-    parse_csl_script.parse(input).map_err(|e| e.into_inner())
+    // Use parse_next instead of parse to allow unconsumed input
+    let mut input_mut = input;
+    let result = parse_csl_script.parse_next(&mut input_mut);
+    
+    result.map_err(|e| match e.into_inner() {
+        Some(inner) => inner,
+        None => ContextError::new()
+    })
 }
 
 #[cfg(test)]
@@ -748,6 +776,45 @@ wait 100000
         assert!(result.is_ok());
         let script = result.unwrap();
         assert!(script.instructions.len() > 0);
+    }
+
+    #[test]
+    fn test_parse_windows_line_endings() {
+        let input = ";comment\r\ncsl_version 1.0\r\nreset\r\nwait 1000\r\n";
+        let result = parse_csl(input);
+        assert!(result.is_ok(), "Failed to parse with Windows line endings: {:?}", result);
+        let script = result.unwrap();
+        assert_eq!(script.instructions.len(), 4);
+    }
+
+    #[test]
+    fn test_parse_with_trailing_content() {
+        let input = "csl_version 1.0\nreset\n;";
+        let result = parse_csl(input);
+        assert!(result.is_ok(), "Failed to parse with trailing semicolon: {:?}", result);
+    }
+
+    #[test]
+    fn test_parse_inline_comment() {
+        let input = "wait 800000\t\t\t; fin affichage 1er ecran\n";
+        let result = parse_line.parse(input);
+        assert!(result.is_ok(), "Failed to parse inline comment: {:?}", result);
+        assert!(matches!(result.unwrap(), CslInstruction::Wait(800000)));
+    }
+
+    #[test]
+    fn test_parse_trailing_space() {
+        let input = "wait 3000000 \n";
+        let mut input_mut = input;
+        let result = parse_line.parse_next(&mut input_mut);
+        assert!(result.is_ok(), "Failed to parse with trailing space: {:?}", result);
+    }
+
+    #[test]
+    fn test_parse_key_output_space() {
+        let input = "key_output ' '\n";
+        let result = parse_line.parse(input);
+        assert!(result.is_ok(), "Failed to parse key_output with space: {:?}", result);
     }
 
     #[test]

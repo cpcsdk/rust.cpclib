@@ -647,7 +647,9 @@ impl EmulatorConf {
                         return Err(format!("`{ftype}` should end by .txt"));
                     }
                 },
-                _ => unimplemented!()
+                _ => eprintln!(
+                    "Auto type file is currently ignored for this emulator {:?}", emu
+                )
             }
         }
 

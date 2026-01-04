@@ -262,8 +262,8 @@ pub enum CslInstruction {
 
     // Key strokes
     /// Set delay between keystrokes (in microseconds)
-    /// First param: delay between keys, Second param (optional): delay after CR
-    KeyDelay { delay: u64, delay_after_cr: Option<u64> },
+    /// First param: delay between keys, Second param (optional): delay after CR, Third param (optional): delay after special key
+    KeyDelay { delay: u64, delay_after_cr: Option<u64>, delay_after_key: Option<u64> },
     
     /// Send text as key strokes
     KeyOutput(Vec<KeyElement>),
