@@ -25,18 +25,15 @@ impl CslVersion {
 
 /// Reset type for the emulator
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ResetType {
     /// Memory cleared by ROM, only 64K central RAM
     Soft,
     /// Power on/off, all components reset
+    #[default]
     Hard
 }
 
-impl Default for ResetType {
-    fn default() -> Self {
-        Self::Hard
-    }
-}
 
 impl fmt::Display for ResetType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -176,16 +173,13 @@ pub struct RomConfig {
 
 /// Drive selection (A or B)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Drive {
+    #[default]
     A,
     B
 }
 
-impl Default for Drive {
-    fn default() -> Self {
-        Self::A
-    }
-}
 
 impl fmt::Display for Drive {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -971,7 +965,7 @@ impl CslScriptBuilder {
         let mut last_version = None;
         self.script.instructions.retain(|inst| {
             if let CslInstruction::CslVersion(v) = inst {
-                last_version = Some(v.clone());
+                last_version = Some(*v);
                 false // Remove this instruction
             } else {
                 true // Keep non-version instructions
@@ -994,11 +988,10 @@ impl CslScriptBuilder {
         }
 
         if let Some(CslInstruction::KeyFromFile(file)) = self.script.instructions.iter()
-            .find(|inst| matches!(inst, CslInstruction::KeyFromFile(_))) {
-                if !file.is_absolute() {
+            .find(|inst| matches!(inst, CslInstruction::KeyFromFile(_)))
+                && !file.is_absolute() {
                     return Err("key_from_file instruction requires an absolute file path".to_string());
                 }
-            }
         Ok(self.script)
     }
 

@@ -116,7 +116,7 @@ impl<'a> IntoIterator for LayeredDependenciesByTask<'a> {
     }
 }
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use camino::Utf8PathBuf;

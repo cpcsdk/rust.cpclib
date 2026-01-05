@@ -795,7 +795,7 @@ pub fn parse_csl_with_rich_errors(input: &str, filename: Option<String>) -> Resu
         let base_offset = input.len() - located_input.len();
         
         // Create a copy to check whitespace
-        let remaining_with_ws: &str = &*located_input;
+        let remaining_with_ws: &str = &located_input;
         let trimmed = remaining_with_ws.trim_start();
         let whitespace_skipped = remaining_with_ws.len() - trimmed.len();
         
@@ -869,11 +869,10 @@ pub fn parse_csl_with_rich_errors(input: &str, filename: Option<String>) -> Resu
         if let Some(ctx_error) = inner {
             // Try to extract context information
             let contexts: Vec<_> = ctx_error.context().collect();
-            if !contexts.is_empty() {
-                if let Some(StrContext::Label(label)) = contexts.last() {
+            if !contexts.is_empty()
+                && let Some(StrContext::Label(label)) = contexts.last() {
                     message = format!("Invalid CSL syntax: expected {}", label);
                 }
-            }
         }
         
         // Check if this looks like an instruction name error

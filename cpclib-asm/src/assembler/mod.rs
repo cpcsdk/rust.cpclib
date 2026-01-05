@@ -784,9 +784,7 @@ impl Env {
         e.symbols_used()
             .into_iter()
             .map(|symbol| self.symbols.use_symbol(symbol))
-            .filter_map(Result::err)
-            .map(|e| Result::Err(Box::new(AssemblerError::from(e))))
-            .collect::<Result<(), Box<AssemblerError>>>()?;
+            .filter_map(Result::err).try_for_each(|e| Result::Err(Box::new(AssemblerError::from(e))))?;
         Ok(())
     }
 }

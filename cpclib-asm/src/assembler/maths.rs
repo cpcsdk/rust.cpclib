@@ -25,7 +25,7 @@ pub fn hypot(x: &ExprResult, y: &ExprResult) -> Result<ExprResult, Box<Assembler
 pub fn ldexp(x: &ExprResult, exp: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     let x = x.float()?;
     let exp = exp.int()?;
-    Ok((x * 2f64.powi(exp as i32)).into())
+    Ok((x * 2f64.powi(exp)).into())
 }
 
 // fdim(x,y) renvoie la différence positive de x-y, résultat toujours positif ou nul

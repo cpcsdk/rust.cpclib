@@ -817,8 +817,8 @@ impl HardCodedFunction {
                     UnaryFunction::Peek => Ok(maths::peek(&params[0], env)?)
                 }
             },
-            HardCodedFunction::Min => Ok(maths::min(&params)?),
-            HardCodedFunction::Max => Ok(maths::max(&params)?),
+            HardCodedFunction::Min => Ok(maths::min(params)?),
+            HardCodedFunction::Max => Ok(maths::max(params)?),
             HardCodedFunction::BinaryFunction(binary_function) => {
                 match binary_function {
                     BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
