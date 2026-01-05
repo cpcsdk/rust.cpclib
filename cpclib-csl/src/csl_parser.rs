@@ -5,31 +5,32 @@
 use crate::csl::*;
 use cpclib_common::winnow::ascii::{dec_uint, line_ending};
 use cpclib_common::winnow::combinator::{
-    alt, delimited, opt, preceded, repeat, terminated
+    alt, delimited, opt, preceded, repeat, terminated, cut_err
 };
 use cpclib_common::winnow::error::{ContextError, StrContext};
+use cpclib_common::winnow::stream::LocatingSlice;
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 
-/// Parse result type
+/// Parse result type with Located input
 type ParseResult<'a, T> = ModalResult<T, ContextError<StrContext>>;
 
 /// Parse whitespace (spaces and tabs)
-fn ws0<'a>(input: &mut &'a str) -> ParseResult<'a, ()> {
+fn ws0<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, ()> {
     take_while(0.., [' ', '\t'])
         .void()
         .parse_next(input)
 }
 
 /// Parse whitespace (at least one)
-fn ws1<'a>(input: &mut &'a str) -> ParseResult<'a, ()> {
+fn ws1<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, ()> {
     take_while(1.., [' ', '\t'])
         .void()
         .parse_next(input)
 }
 
 /// Parse a quoted string (with single quotes)
-fn quoted_string<'a>(input: &mut &'a str) -> ParseResult<'a, String> {
+fn quoted_string<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, String> {
     delimited(
         '\'',
         take_until(0.., '\''),
@@ -41,7 +42,7 @@ fn quoted_string<'a>(input: &mut &'a str) -> ParseResult<'a, String> {
 }
 
 /// Parse a quoted path string and convert to Utf8PathBuf
-fn quoted_path<'a>(input: &mut &'a str) -> ParseResult<'a, cpclib_common::camino::Utf8PathBuf> {
+fn quoted_path<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, cpclib_common::camino::Utf8PathBuf> {
     quoted_string
         .map(cpclib_common::camino::Utf8PathBuf::from)
         .parse_next(input)
@@ -49,7 +50,7 @@ fn quoted_path<'a>(input: &mut &'a str) -> ParseResult<'a, cpclib_common::camino
 
 /// Parse optional inline comment (after an instruction, before line ending)
 /// Returns Some(comment) if a comment is present, None otherwise
-fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, Option<String>> {
+fn inline_comment<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Option<String>> {
     opt(preceded(
         ws0,
         preceded(
@@ -62,7 +63,7 @@ fn inline_comment<'a>(input: &mut &'a str) -> ParseResult<'a, Option<String>> {
 }
 
 /// Parse a semicolon comment (everything after ; until end of line)
-fn comment<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn comment<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     preceded(
         ';',
         take_till(0.., ['\n', '\r'])
@@ -72,7 +73,7 @@ fn comment<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 }
 
 /// Parse CSL version number (e.g., "1.0" or "1.1")
-fn csl_version_number<'a>(input: &mut &'a str) -> ParseResult<'a, CslVersion> {
+fn csl_version_number<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslVersion> {
     (dec_uint::<_, u8, _>, '.', dec_uint::<_, u8, _>)
         .map(|(major, _, minor)| CslVersion::new(major, minor))
         .context(StrContext::Label("Version number"))
@@ -80,18 +81,21 @@ fn csl_version_number<'a>(input: &mut &'a str) -> ParseResult<'a, CslVersion> {
 }
 
 /// Parse csl_version instruction
-fn parse_csl_version<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("csl_version", ws1),
+fn parse_csl_version<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("csl_version", ws1)
+        .context(StrContext::Label("csl_version"))
+        .parse_next(input)?;
+    
+    cut_err(
         csl_version_number
+            .context(StrContext::Label("version number (e.g. 1.1)"))
     )
     .map(CslInstruction::CslVersion)
-    .context(StrContext::Label("csl_version"))
     .parse_next(input)
 }
 
 /// Parse reset type
-fn parse_reset_type<'a>(input: &mut &'a str) -> ParseResult<'a, ResetType> {
+fn parse_reset_type<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, ResetType> {
     alt((
         "soft".value(ResetType::Soft),
         "hard".value(ResetType::Hard)
@@ -101,18 +105,21 @@ fn parse_reset_type<'a>(input: &mut &'a str) -> ParseResult<'a, ResetType> {
 }
 
 /// Parse reset instruction
-fn parse_reset<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("reset", ws0),
+fn parse_reset<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("reset", ws0)
+        .context(StrContext::Label("reset"))
+        .parse_next(input)?;
+    
+    cut_err(
         opt(parse_reset_type)
+            .context(StrContext::Label("reset type (soft or hard)"))
     )
     .map(|t| CslInstruction::Reset(t.unwrap_or(ResetType::Hard)))
-    .context(StrContext::Label("reset"))
     .parse_next(input)
 }
 
 /// Parse CRTC model
-fn parse_crtc_model<'a>(input: &mut &'a str) -> ParseResult<'a, CrtcModel> {
+fn parse_crtc_model<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CrtcModel> {
     alt((
         "0".value(CrtcModel::Type0),
         "1A".value(CrtcModel::Type1A),
@@ -127,18 +134,21 @@ fn parse_crtc_model<'a>(input: &mut &'a str) -> ParseResult<'a, CrtcModel> {
 }
 
 /// Parse crtc_select instruction
-fn parse_crtc_select<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("crtc_select", ws1),
+fn parse_crtc_select<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("crtc_select", ws1)
+        .context(StrContext::Label("crtc_select"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_crtc_model
+            .context(StrContext::Label("CRTC model (0, 1, 1A, 1B, 2, 3, 4)"))
     )
     .map(CslInstruction::CrtcSelect)
-    .context(StrContext::Label("crtc_select"))
     .parse_next(input)
 }
 
 /// Parse gate array model
-fn parse_gate_array_model<'a>(input: &mut &'a str) -> ParseResult<'a, GateArrayModel> {
+fn parse_gate_array_model<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, GateArrayModel> {
     alt((
         "40007".value(GateArrayModel::Model40007),
         "40008".value(GateArrayModel::Model40008),
@@ -149,18 +159,21 @@ fn parse_gate_array_model<'a>(input: &mut &'a str) -> ParseResult<'a, GateArrayM
 }
 
 /// Parse gate_array instruction
-fn parse_gate_array<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("gate_array", ws1),
+fn parse_gate_array<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("gate_array", ws1)
+        .context(StrContext::Label("gate_array"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_gate_array_model
+            .context(StrContext::Label("gate array model (40007, 40008, 40010)"))
     )
     .map(CslInstruction::GateArray)
-    .context(StrContext::Label("gate_array"))
     .parse_next(input)
 }
 
 /// Parse CPC model
-fn parse_cpc_model<'a>(input: &mut &'a str) -> ParseResult<'a, CpcModel> {
+fn parse_cpc_model<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CpcModel> {
     alt((
         "0".value(CpcModel::Cpc464),
         "1".value(CpcModel::Cpc664),
@@ -174,18 +187,21 @@ fn parse_cpc_model<'a>(input: &mut &'a str) -> ParseResult<'a, CpcModel> {
 }
 
 /// Parse cpc_model instruction
-fn parse_cpc_model_instr<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("cpc_model", ws1),
+fn parse_cpc_model_instr<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("cpc_model", ws1)
+        .context(StrContext::Label("cpc_model"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_cpc_model
+            .context(StrContext::Label("CPC model (0=464, 1=664, 2=6128, 4=6128+, 5=464+, 6=GX4000)"))
     )
     .map(CslInstruction::CpcModel)
-    .context(StrContext::Label("cpc_model"))
     .parse_next(input)
 }
 
 /// Parse memory expansion
-fn parse_memory_expansion<'a>(input: &mut &'a str) -> ParseResult<'a, MemoryExpansion> {
+fn parse_memory_expansion<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, MemoryExpansion> {
     alt((
         "0".value(MemoryExpansion::Kb128),
         "1".value(MemoryExpansion::Kb256Standard),
@@ -198,29 +214,35 @@ fn parse_memory_expansion<'a>(input: &mut &'a str) -> ParseResult<'a, MemoryExpa
 }
 
 /// Parse memory_exp instruction
-fn parse_memory_exp<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("memory_exp", ws1),
+fn parse_memory_exp<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("memory_exp", ws1)
+        .context(StrContext::Label("memory_exp"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_memory_expansion
+            .context(StrContext::Label("memory expansion (0-4)"))
     )
     .map(CslInstruction::MemoryExp)
-    .context(StrContext::Label("memory_exp"))
     .parse_next(input)
 }
 
 /// Parse rom_dir instruction
-fn parse_rom_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("rom_dir", ws1),
+fn parse_rom_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("rom_dir", ws1)
+        .context(StrContext::Label("rom_dir"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("ROM directory path (quoted)"))
     )
     .map(CslInstruction::RomDir)
-    .context(StrContext::Label("rom_dir"))
     .parse_next(input)
 }
 
 /// Parse ROM type
-fn parse_rom_type<'a>(input: &mut &'a str) -> ParseResult<'a, RomType> {
+fn parse_rom_type<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, RomType> {
     alt((
         "U".value(RomType::Upper),
         "L".value(RomType::Lower),
@@ -232,13 +254,19 @@ fn parse_rom_type<'a>(input: &mut &'a str) -> ParseResult<'a, RomType> {
 }
 
 /// Parse rom_config instruction
-fn parse_rom_config<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("rom_config", ws1),
+fn parse_rom_config<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("rom_config", ws1)
+        .context(StrContext::Label("rom_config"))
+        .parse_next(input)?;
+    
+    cut_err(
         (
-            parse_rom_type,
-            preceded(ws1, dec_uint::<_, u8, _>),
+            parse_rom_type
+                .context(StrContext::Label("ROM type (U=Upper, L=Lower, C=Cartridge, M=Multiface2)")),
+            preceded(ws1, dec_uint::<_, u8, _>)
+                .context(StrContext::Label("ROM number (0-255)")),
             preceded(ws1, quoted_path)
+                .context(StrContext::Label("ROM file path (quoted)"))
         )
     )
     .map(|(rom_type, num, filename)| {
@@ -248,12 +276,11 @@ fn parse_rom_config<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> 
             filename
         })
     })
-    .context(StrContext::Label("rom_config"))
     .parse_next(input)
 }
 
 /// Parse drive letter
-fn parse_drive<'a>(input: &mut &'a str) -> ParseResult<'a, Drive> {
+fn parse_drive<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Drive> {
     alt((
         "A".value(Drive::A),
         "B".value(Drive::B)
@@ -263,12 +290,16 @@ fn parse_drive<'a>(input: &mut &'a str) -> ParseResult<'a, Drive> {
 }
 
 /// Parse disk_insert instruction
-fn parse_disk_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("disk_insert", ws1),
+fn parse_disk_insert<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("disk_insert", ws1)
+        .context(StrContext::Label("disk_insert"))
+        .parse_next(input)?;
+    
+    cut_err(
         (
             opt(terminated(parse_drive, ws1)),
             quoted_path
+                .context(StrContext::Label("disk file path (quoted)"))
         )
     )
     .map(|(drive, filename)| {
@@ -277,45 +308,53 @@ fn parse_disk_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
             filename
         }
     })
-    .context(StrContext::Label("disk_insert"))
     .parse_next(input)
 }
 
 /// Parse disk_dir instruction
-fn parse_disk_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("disk_dir", ws1),
+fn parse_disk_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("disk_dir", ws1)
+        .context(StrContext::Label("disk_dir"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("disk directory path (quoted)"))
     )
     .map(CslInstruction::DiskDir)
-    .context(StrContext::Label("disk_dir"))
     .parse_next(input)
 }
 
 /// Parse tape_insert instruction
-fn parse_tape_insert<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("tape_insert", ws1),
+fn parse_tape_insert<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("tape_insert", ws1)
+        .context(StrContext::Label("tape_insert"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("tape file path (quoted)"))
     )
     .map(CslInstruction::TapeInsert)
-    .context(StrContext::Label("tape_insert"))
     .parse_next(input)
 }
 
 /// Parse tape_dir instruction
-fn parse_tape_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("tape_dir", ws1),
+fn parse_tape_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("tape_dir", ws1)
+        .context(StrContext::Label("tape_dir"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("tape directory path (quoted)"))
     )
     .map(CslInstruction::TapeDir)
-    .context(StrContext::Label("tape_dir"))
     .parse_next(input)
 }
 
 /// Parse tape_play instruction
-fn parse_tape_play<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_tape_play<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     "tape_play"
         .value(CslInstruction::TapePlay)
         .context(StrContext::Label("tape_play"))
@@ -323,7 +362,7 @@ fn parse_tape_play<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 }
 
 /// Parse tape_stop instruction
-fn parse_tape_stop<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_tape_stop<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     "tape_stop"
         .value(CslInstruction::TapeStop)
         .context(StrContext::Label("tape_stop"))
@@ -331,7 +370,7 @@ fn parse_tape_stop<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 }
 
 /// Parse tape_rewind instruction
-fn parse_tape_rewind<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_tape_rewind<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     "tape_rewind"
         .value(CslInstruction::TapeRewind)
         .context(StrContext::Label("tape_rewind"))
@@ -339,35 +378,47 @@ fn parse_tape_rewind<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction>
 }
 
 /// Parse snapshot_load instruction
-fn parse_snapshot_load<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("snapshot_load", ws1),
+fn parse_snapshot_load<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("snapshot_load", ws1)
+        .context(StrContext::Label("snapshot_load"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("snapshot file path (quoted)"))
     )
     .map(CslInstruction::SnapshotLoad)
-    .context(StrContext::Label("snapshot_load"))
     .parse_next(input)
 }
 
 /// Parse snapshot_dir instruction
-fn parse_snapshot_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("snapshot_dir", ws1),
+fn parse_snapshot_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("snapshot_dir", ws1)
+        .context(StrContext::Label("snapshot_dir"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("snapshot directory path (quoted)"))
     )
     .map(CslInstruction::SnapshotDir)
-    .context(StrContext::Label("snapshot_dir"))
     .parse_next(input)
 }
 
 /// Parse key_delay instruction
-fn parse_key_delay<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("key_delay", ws1),
+fn parse_key_delay<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("key_delay", ws1)
+        .context(StrContext::Label("key_delay"))
+        .parse_next(input)?;
+    
+    cut_err(
         (
-            dec_uint::<_, u64, _>,
-            opt(preceded(ws1, dec_uint::<_, u64, _>)),
+            dec_uint::<_, u64, _>
+                .context(StrContext::Label("delay value")),
             opt(preceded(ws1, dec_uint::<_, u64, _>))
+                .context(StrContext::Label("optional delay_after_cr")),
+            opt(preceded(ws1, dec_uint::<_, u64, _>))
+                .context(StrContext::Label("optional delay_after_key"))
         )
     )
     .map(|(delay, delay_after_cr, delay_after_key)| {
@@ -377,12 +428,11 @@ fn parse_key_delay<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
             delay_after_key
         }
     })
-    .context(StrContext::Label("key_delay"))
     .parse_next(input)
 }
 
 /// Parse special key escape sequence
-fn parse_special_key<'a>(input: &mut &'a str) -> ParseResult<'a, SpecialKey> {
+fn parse_special_key<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, SpecialKey> {
     delimited(
         "\\(",
         alt((
@@ -427,7 +477,7 @@ fn parse_special_key<'a>(input: &mut &'a str) -> ParseResult<'a, SpecialKey> {
 }
 
 /// Parse a key element (character or special key)
-fn parse_key_element<'a>(input: &mut &'a str) -> ParseResult<'a, KeyElement> {
+fn parse_key_element<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, KeyElement> {
     alt((
         parse_special_key.map(KeyElement::Special),
         one_of(|c: char| c != '\'' && c != '\\' && c != '{' && c != '}')
@@ -437,7 +487,7 @@ fn parse_key_element<'a>(input: &mut &'a str) -> ParseResult<'a, KeyElement> {
 }
 
 /// Parse simultaneous key group: {keys}
-fn parse_simultaneous_keys<'a>(input: &mut &'a str) -> ParseResult<'a, KeyElement> {
+fn parse_simultaneous_keys<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, KeyElement> {
     delimited(
         '{',
         repeat(1.., parse_key_element),
@@ -449,7 +499,7 @@ fn parse_simultaneous_keys<'a>(input: &mut &'a str) -> ParseResult<'a, KeyElemen
 }
 
 /// Parse key output text
-pub fn parse_key_output_content<'a>(input: &mut &'a str) -> ParseResult<'a, crate::csl::KeyOutput> {
+pub fn parse_key_output_content<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, crate::csl::KeyOutput> {
     delimited(
         '\'',
         repeat(0.., alt((parse_simultaneous_keys, parse_key_element))),
@@ -461,51 +511,63 @@ pub fn parse_key_output_content<'a>(input: &mut &'a str) -> ParseResult<'a, crat
 }
 
 /// Parse key_output instruction
-fn parse_key_output<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("key_output", ws1),
+fn parse_key_output<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("key_output", ws1)
+        .context(StrContext::Label("key_output"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_key_output_content
+            .context(StrContext::Label("key output content (quoted text with optional special keys)"))
     )
     .map(CslInstruction::KeyOutput)
-    .context(StrContext::Label("key_output"))
     .parse_next(input)
 }
 
 /// Parse key_from_file instruction
-fn parse_key_from_file<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("key_from_file", ws1),
+fn parse_key_from_file<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("key_from_file", ws1)
+        .context(StrContext::Label("key_from_file"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("key input file path (quoted)"))
     )
     .map(CslInstruction::KeyFromFile)
-    .context(StrContext::Label("key_from_file"))
     .parse_next(input)
 }
 
 /// Parse wait instruction
-fn parse_wait<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("wait", ws1),
+fn parse_wait<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("wait", ws1)
+        .context(StrContext::Label("wait"))
+        .parse_next(input)?;
+    
+    cut_err(
         dec_uint::<_, u64, _>
+            .context(StrContext::Label("wait duration (number of cycles)"))
     )
     .map(CslInstruction::Wait)
-    .context(StrContext::Label("wait"))
     .parse_next(input)
 }
 
 /// Parse wait_driveonoff instruction
-fn parse_wait_driveonoff<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("wait_driveonoff", ws0),
+fn parse_wait_driveonoff<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("wait_driveonoff", ws0)
+        .context(StrContext::Label("wait_driveonoff"))
+        .parse_next(input)?;
+    
+    cut_err(
         opt(preceded(ws1, dec_uint::<_, u32, _>))
+            .context(StrContext::Label("optional count (default 1)"))
     )
     .map(|n| CslInstruction::WaitDriveOnOff(n.unwrap_or(1)))
-    .context(StrContext::Label("wait_driveonoff"))
     .parse_next(input)
 }
 
 /// Parse wait_vsyncoffon instruction
-fn parse_wait_vsyncoffon<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_wait_vsyncoffon<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     "wait_vsyncoffon"
         .value(CslInstruction::WaitVsyncOffOn)
         .context(StrContext::Label("wait_vsyncoffon"))
@@ -513,7 +575,7 @@ fn parse_wait_vsyncoffon<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruct
 }
 
 /// Parse wait_ssm0000 instruction
-fn parse_wait_ssm0000<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_wait_ssm0000<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     "wait_ssm0000"
         .value(CslInstruction::WaitSsm0000)
         .context(StrContext::Label("wait_ssm0000"))
@@ -521,66 +583,81 @@ fn parse_wait_ssm0000<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction
 }
 
 /// Parse screenshot_name instruction
-fn parse_screenshot_name<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("screenshot_name", ws1),
+fn parse_screenshot_name<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("screenshot_name", ws1)
+        .context(StrContext::Label("screenshot_name"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("screenshot file path (quoted)"))
     )
     .map(CslInstruction::ScreenshotName)
-    .context(StrContext::Label("screenshot_name"))
     .parse_next(input)
 }
 
 /// Parse screenshot_dir instruction
-fn parse_screenshot_dir<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("screenshot_dir", ws1),
+fn parse_screenshot_dir<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("screenshot_dir", ws1)
+        .context(StrContext::Label("screenshot_dir"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("screenshot directory path (quoted)"))
     )
     .map(CslInstruction::ScreenshotDir)
-    .context(StrContext::Label("screenshot_dir"))
     .parse_next(input)
 }
 
 /// Parse screenshot instruction
-fn parse_screenshot<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("screenshot", ws0),
+fn parse_screenshot<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("screenshot", ws0)
+        .context(StrContext::Label("screenshot"))
+        .parse_next(input)?;
+    
+    cut_err(
         opt(preceded(ws1, "vsync"))
+            .context(StrContext::Label("optional 'vsync' flag"))
     )
     .map(|vsync| CslInstruction::Screenshot {
         wait_vsync: vsync.is_some()
     })
-    .context(StrContext::Label("screenshot"))
     .parse_next(input)
 }
 
 /// Parse snapshot_name instruction
-fn parse_snapshot_name<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("snapshot_name", ws1),
+fn parse_snapshot_name<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("snapshot_name", ws1)
+        .context(StrContext::Label("snapshot_name"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("snapshot file path (quoted)"))
     )
     .map(CslInstruction::SnapshotName)
-    .context(StrContext::Label("snapshot_name"))
     .parse_next(input)
 }
 
 /// Parse snapshot instruction
-fn parse_snapshot<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("snapshot", ws0),
+fn parse_snapshot<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("snapshot", ws0)
+        .context(StrContext::Label("snapshot"))
+        .parse_next(input)?;
+    
+    cut_err(
         opt(preceded(ws1, "vsync"))
+            .context(StrContext::Label("optional 'vsync' flag"))
     )
     .map(|vsync| CslInstruction::Snapshot {
         wait_vsync: vsync.is_some()
     })
-    .context(StrContext::Label("snapshot"))
     .parse_next(input)
 }
 
 /// Parse snapshot version
-fn parse_snapshot_version_num<'a>(input: &mut &'a str) -> ParseResult<'a, SnapshotVersion> {
+fn parse_snapshot_version_num<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, SnapshotVersion> {
     alt((
         "1".value(SnapshotVersion::V1),
         "2".value(SnapshotVersion::V2),
@@ -591,36 +668,42 @@ fn parse_snapshot_version_num<'a>(input: &mut &'a str) -> ParseResult<'a, Snapsh
 }
 
 /// Parse snapshot_version instruction
-fn parse_snapshot_version<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("snapshot_version", ws1),
+fn parse_snapshot_version<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("snapshot_version", ws1)
+        .context(StrContext::Label("snapshot_version"))
+        .parse_next(input)?;
+    
+    cut_err(
         parse_snapshot_version_num
+            .context(StrContext::Label("snapshot version (1, 2, or 3)"))
     )
     .map(CslInstruction::SnapshotVersion)
-    .context(StrContext::Label("snapshot_version"))
     .parse_next(input)
 }
 
 /// Parse csl_load instruction
-fn parse_csl_load<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
-    preceded(
-        ("csl_load", ws1),
+fn parse_csl_load<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("csl_load", ws1)
+        .context(StrContext::Label("csl_load"))
+        .parse_next(input)?;
+    
+    cut_err(
         quoted_path
+            .context(StrContext::Label("CSL script file path (quoted)"))
     )
     .map(CslInstruction::CslLoad)
-    .context(StrContext::Label("csl_load"))
     .parse_next(input)
 }
 
 /// Parse empty line (whitespace + line ending)
-fn parse_empty_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+fn parse_empty_line<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     terminated(ws0, line_ending)
         .value(CslInstruction::Empty)
         .parse_next(input)
 }
 
 /// Parse any CSL instruction
-pub fn parse_instruction<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+pub fn parse_instruction<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     preceded(
         ws0,
         alt((
@@ -668,7 +751,7 @@ pub fn parse_instruction<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruct
 }
 
 /// Parse a single line (instruction + optional inline comment + optional line ending)
-pub fn parse_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
+pub fn parse_line<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
     alt((
         parse_empty_line,
         terminated(
@@ -689,7 +772,7 @@ pub fn parse_line<'a>(input: &mut &'a str) -> ParseResult<'a, CslInstruction> {
 }
 
 /// Parse a complete CSL script
-pub fn parse_csl_script<'a>(input: &mut &'a str) -> ParseResult<'a, CslScript> {
+pub fn parse_csl_script<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslScript> {
     terminated(
         repeat(0.., parse_line),
         ws0  // Allow trailing whitespace at end of file
@@ -698,11 +781,135 @@ pub fn parse_csl_script<'a>(input: &mut &'a str) -> ParseResult<'a, CslScript> {
     .parse_next(input)
 }
 
-/// Parse a CSL script from a string
+/// Parse a CSL script from a string with enhanced error reporting
+pub fn parse_csl_with_rich_errors(input: &str, filename: Option<String>) -> Result<CslScript, crate::error::CslError> {
+    use crate::error::{CslError, suggest_instruction};
+    use cpclib_common::winnow::error::ErrMode;
+    
+    let mut located_input = LocatingSlice::new(input);
+    let result = parse_csl_script.parse_next(&mut located_input);
+    
+    // Check if there's unparsed content (other than whitespace)
+    if result.is_ok() && !located_input.is_empty() {
+        // There's unparsed content - try to parse it to get the actual error position
+        let base_offset = input.len() - located_input.len();
+        
+        // Create a copy to check whitespace
+        let remaining_with_ws: &str = &*located_input;
+        let trimmed = remaining_with_ws.trim_start();
+        let whitespace_skipped = remaining_with_ws.len() - trimmed.len();
+        
+        // Try to parse the remaining content as a line to get precise error location
+        let mut remaining_located = LocatingSlice::new(trimmed);
+        let parse_result = parse_line.parse_next(&mut remaining_located);
+        
+        // Calculate the actual error offset within the remaining content
+        let error_offset_in_remaining = match parse_result {
+            Err(ErrMode::Backtrack(_)) | Err(ErrMode::Cut(_)) => {
+                // Get how much was consumed before the error
+                trimmed.len() - remaining_located.len()
+            },
+            _ => 0, // If it's incomplete or succeeded somehow, use start
+        };
+        
+        let actual_offset = base_offset + whitespace_skipped + error_offset_in_remaining;
+        let span = actual_offset..actual_offset.saturating_add(1);
+        
+        // Extract the problematic token at the error position
+        let error_context = &trimmed[error_offset_in_remaining..];
+        let word_end = error_context.find(|c: char| c.is_whitespace() || c == '\n')
+            .unwrap_or(error_context.len().min(20));
+        let word = &error_context[..word_end];
+        
+        let message = "Invalid CSL syntax: unexpected content".to_string();
+        let mut notes = Vec::new();
+        
+        // Only suggest instruction names if the word itself isn't already a known instruction
+        // (the error might be in the arguments, not the instruction name)
+        if let Some(suggestion) = suggest_instruction(word) {
+            // Check if the suggestion is different from the word
+            if suggestion != word {
+                notes.push(format!("Did you mean '{}'?", suggestion));
+            }
+        }
+        
+        let mut error = CslError::new(
+            input.to_string(),
+            span,
+            message,
+        );
+        
+        if let Some(fname) = filename.clone() {
+            error = error.with_filename(fname);
+        }
+        
+        for note in notes {
+            error = error.with_note(note);
+        }
+        
+        return Err(error);
+    }
+    
+    result.map_err(|e: ErrMode<ContextError<StrContext>>| {
+        // Convert ErrMode to ParseError to get location info
+        let (offset, inner) = match e {
+            ErrMode::Incomplete(_) => (0, None),
+            ErrMode::Backtrack(err) | ErrMode::Cut(err) => {
+                // Use the current offset from located_input
+                (input.len().saturating_sub(located_input.len()), Some(err))
+            }
+        };
+        
+        let span = offset..offset.saturating_add(1);
+        
+        // Try to extract a meaningful error message from the context
+        let mut message = "Parse error".to_string();
+        let mut notes = Vec::new();
+        
+        if let Some(ctx_error) = inner {
+            // Try to extract context information
+            let contexts: Vec<_> = ctx_error.context().collect();
+            if !contexts.is_empty() {
+                if let Some(StrContext::Label(label)) = contexts.last() {
+                    message = format!("Invalid CSL syntax: expected {}", label);
+                }
+            }
+        }
+        
+        // Check if this looks like an instruction name error
+        if offset < input.len() {
+            let remaining = &input[offset..];
+            if let Some(word_end) = remaining.find(|c: char| c.is_whitespace() || c == '\n') {
+                let word = &remaining[..word_end];
+                if let Some(suggestion) = suggest_instruction(word) {
+                    notes.push(format!("Did you mean '{}'?", suggestion));
+                }
+            }
+        }
+        
+        let mut error = CslError::new(
+            input.to_string(),
+            span,
+            message,
+        );
+        
+        if let Some(fname) = filename {
+            error = error.with_filename(fname);
+        }
+        
+        for note in notes {
+            error = error.with_note(note);
+        }
+        
+        error
+    })
+}
+
+/// Parse a CSL script from a string (legacy interface)
 pub fn parse_csl(input: &str) -> Result<CslScript, ContextError<StrContext>> {
-    // Use parse_next instead of parse to allow unconsumed input
-    let mut input_mut = input;
-    let result = parse_csl_script.parse_next(&mut input_mut);
+    // Wrap input in LocatingSlice to track positions
+    let mut located_input = LocatingSlice::new(input);
+    let result = parse_csl_script.parse_next(&mut located_input);
     
     result.map_err(|e| match e.into_inner() {
         Some(inner) => inner,
@@ -714,9 +921,21 @@ pub fn parse_csl(input: &str) -> Result<CslScript, ContextError<StrContext>> {
 mod tests {
     use super::*;
 
+    // Helper function for tests that wraps input in LocatingSlice
+    fn parse_test<'a, O>(
+        mut parser: impl Parser<LocatingSlice<&'a str>, O, ContextError<StrContext>>,
+        input: &'a str
+    ) -> Result<O, ContextError<StrContext>> {
+        let mut located_input = LocatingSlice::new(input);
+        parser.parse_next(&mut located_input).map_err(|e| match e.into_inner() {
+            Some(inner) => inner,
+            None => ContextError::new()
+        })
+    }
+
     #[test]
     fn test_parse_comment() {
-        let result = parse_line.parse("; This is a comment\n");
+        let result = parse_test(parse_line, "; This is a comment\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::Comment(text)) = result {
             assert_eq!(text, " This is a comment");
@@ -725,7 +944,7 @@ mod tests {
 
     #[test]
     fn test_parse_csl_version() {
-        let result = parse_line.parse("csl_version 1.1\n");
+        let result = parse_test(parse_line, "csl_version 1.1\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::CslVersion(v)) = result {
             assert_eq!(v.major, 1);
@@ -735,25 +954,25 @@ mod tests {
 
     #[test]
     fn test_parse_reset() {
-        let result = parse_line.parse("reset soft\n");
+        let result = parse_test(parse_line, "reset soft\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Reset(ResetType::Soft));
 
-        let result = parse_line.parse("reset\n");
+        let result = parse_test(parse_line, "reset\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Reset(ResetType::Hard));
     }
 
     #[test]
     fn test_parse_disk_insert() {
-        let result = parse_line.parse("disk_insert 'SHAKER25.DSK'\n");
+        let result = parse_test(parse_line, "disk_insert 'SHAKER25.DSK'\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::DiskInsert { drive, filename }) = result {
             assert_eq!(drive, Drive::A);
             assert_eq!(filename, "SHAKER25.DSK");
         }
 
-        let result = parse_line.parse("disk_insert B 'AMAZING.DSK'\n");
+        let result = parse_test(parse_line, "disk_insert B 'AMAZING.DSK'\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::DiskInsert { drive, filename }) = result {
             assert_eq!(drive, Drive::B);
@@ -763,7 +982,7 @@ mod tests {
 
     #[test]
     fn test_parse_key_output() {
-        let result = parse_line.parse("key_output 'RUN \"SHAKE25A\"\\(RET)'\n");
+        let result = parse_test(parse_line, "key_output 'RUN \"SHAKE25A\"\\(RET)'\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::KeyOutput(key_output)) = result {
             assert_eq!(key_output.elements().len(), 15); // R U N space " S H A K E 2 5 A " \(RET)
@@ -772,7 +991,7 @@ mod tests {
 
     #[test]
     fn test_parse_wait() {
-        let result = parse_line.parse("wait 1300455\n");
+        let result = parse_test(parse_line, "wait 1300455\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Wait(1300455));
     }
@@ -812,7 +1031,7 @@ wait 100000
     #[test]
     fn test_parse_inline_comment() {
         let input = "wait 800000\t\t\t; fin affichage 1er ecran\n";
-        let result = parse_line.parse(input);
+        let result = parse_test(parse_line, input);
         assert!(result.is_ok(), "Failed to parse inline comment: {:?}", result);
         
         match result.unwrap() {
@@ -827,7 +1046,7 @@ wait 100000
     #[test]
     fn test_parse_trailing_space() {
         let input = "wait 3000000 \n";
-        let mut input_mut = input;
+        let mut input_mut = LocatingSlice::new(input);
         let result = parse_line.parse_next(&mut input_mut);
         assert!(result.is_ok(), "Failed to parse with trailing space: {:?}", result);
         // Verify no comment wrapper when there's no comment
@@ -837,13 +1056,13 @@ wait 100000
     #[test]
     fn test_parse_key_output_space() {
         let input = "key_output ' '\n";
-        let result = parse_line.parse(input);
+        let result = parse_test(parse_line, input);
         assert!(result.is_ok(), "Failed to parse key_output with space: {:?}", result);
     }
 
     #[test]
     fn test_parse_empty_line() {
-        let result = parse_line.parse("\n");
+        let result = parse_test(parse_line, "\n");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), CslInstruction::Empty);
     }
@@ -852,13 +1071,13 @@ wait 100000
     fn test_parse_instruction_with_and_without_comment() {
         // Test instruction without comment - should NOT be wrapped
         let input_no_comment = "wait 1000\n";
-        let result_no_comment = parse_line.parse(input_no_comment);
+        let result_no_comment = parse_test(parse_line, input_no_comment);
         assert!(result_no_comment.is_ok());
         assert!(matches!(result_no_comment.unwrap(), CslInstruction::Wait(1000)));
         
         // Test instruction with comment - should be wrapped
         let input_with_comment = "wait 2000 ; a comment\n";
-        let result_with_comment = parse_line.parse(input_with_comment);
+        let result_with_comment = parse_test(parse_line, input_with_comment);
         assert!(result_with_comment.is_ok());
         match result_with_comment.unwrap() {
             CslInstruction::InstructionWithComment(boxed, comment) => {
@@ -871,12 +1090,57 @@ wait 100000
 
     #[test]
     fn test_parse_rom_config() {
-        let result = parse_line.parse("rom_config U 7 'Amsdos.rom'\n");
+        let result = parse_test(parse_line, "rom_config U 7 'Amsdos.rom'\n");
         assert!(result.is_ok());
         if let Ok(CslInstruction::RomConfig(config)) = result {
             assert_eq!(config.rom_type, RomType::Upper);
             assert_eq!(config.num, 7);
             assert_eq!(config.filename, "Amsdos.rom");
         }
+    }
+
+    #[test]
+    fn test_parse_csl_with_rich_errors_invalid_instruction() {
+        // Test 1: Malformed quoted string - should NOT suggest instruction name
+        let input = "disk_insert 'missing_end_quote\n";
+        let result = parse_csl_with_rich_errors(input, Some("test.csl".to_string()));
+        assert!(result.is_err(), "Expected error for malformed quoted string");
+        
+        let error = result.unwrap_err();
+        assert!(!error.source.is_empty());
+        assert_eq!(error.filename, Some("test.csl".to_string()));
+        // Should NOT have "Did you mean" since "disk_insert" is correct
+        let formatted = error.format_error();
+        assert!(!formatted.contains("Did you mean"), 
+                "Should not suggest instruction name when instruction is correct: {}", formatted);
+        
+        // Test 2: Incomplete instruction - should NOT suggest instruction name
+        let input2 = "disk_insert ";
+        let result2 = parse_csl_with_rich_errors(input2, Some("test2.csl".to_string()));
+        assert!(result2.is_err(), "Expected error for incomplete instruction");
+        
+        let error2 = result2.unwrap_err();
+        assert!(!error2.source.is_empty());
+        assert_eq!(error2.filename, Some("test2.csl".to_string()));
+        let formatted2 = error2.format_error();
+        assert!(!formatted2.contains("Did you mean"),
+                "Should not suggest instruction name when instruction is correct: {}", formatted2);
+        
+        // Test 3: Misspelled instruction - SHOULD suggest correct name
+        let input3 = "disk_inser 'test.dsk'\n";
+        let result3 = parse_csl_with_rich_errors(input3, Some("test3.csl".to_string()));
+        assert!(result3.is_err(), "Expected error for misspelled instruction");
+        
+        let error3 = result3.unwrap_err();
+        let formatted3 = error3.format_error();
+        assert!(formatted3.contains("Did you mean 'disk_insert'?"),
+                "Should suggest correct instruction name for typo: {}", formatted3);
+    }
+
+    #[test]
+    fn test_parse_csl_with_rich_errors_valid_script() {
+        let input = "csl_version 1.1\nreset\nwait 1000\n";
+        let result = parse_csl_with_rich_errors(input, None);
+        assert!(result.is_ok());
     }
 }

@@ -2463,6 +2463,7 @@ dependencies = [
 name = "cpclib-csl"
 version = "0.11.0"
 dependencies = [
+ "codespan-reporting 0.11.1",
  "cpclib-common",
  "test-generator",
 ]
