@@ -92,7 +92,7 @@ impl Crtc {
             Crtc::One => cpclib_csl::CrtcModel::Type1,
             Crtc::Two => cpclib_csl::CrtcModel::Type2,
             Crtc::Three => cpclib_csl::CrtcModel::Type3,
-            Crtc::Four => cpclib_csl::CrtcModel::Type4,
+            Crtc::Four => cpclib_csl::CrtcModel::Type4
         }
     }
 }
@@ -104,7 +104,7 @@ fn memory_to_csl_expansion(memory: u32) -> cpclib_csl::MemoryExpansion {
         256 => cpclib_csl::MemoryExpansion::Kb256Standard,
         512 => cpclib_csl::MemoryExpansion::Kb512DkTronics,
         4096 => cpclib_csl::MemoryExpansion::Mb4,
-        _ => cpclib_csl::MemoryExpansion::Kb128, // default
+        _ => cpclib_csl::MemoryExpansion::Kb128 // default
     }
 }
 
@@ -677,9 +677,12 @@ impl EmulatorConf {
                         return Err(format!("`{ftype}` should end by .txt"));
                     }
                 },
-                _ => eprintln!(
-                    "Auto type file is currently ignored for this emulator {:?}", emu
-                )
+                _ => {
+                    eprintln!(
+                        "Auto type file is currently ignored for this emulator {:?}",
+                        emu
+                    )
+                },
             }
         }
 
@@ -714,39 +717,43 @@ impl EmulatorConf {
     fn args_for_emu_amspirit_with_csl(&self, emu: &Emulator) -> Result<Vec<String>, String> {
         // Generate CSL script from configuration
         let csl_script: cpclib_csl::CslScript = self.clone().into();
-        
+
         // Convert to string
         let csl_content = csl_script.to_string();
-        
+
         // Save to temporary file
         let tempfile = camino_tempfile::Builder::new()
             .suffix(".csl")
             .tempfile()
             .map_err(|e| format!("Failed to create temporary CSL file: {}", e))?;
-        
+
         // Get the path as Utf8PathBuf before writing
         let temp_path_utf8 = tempfile.path().to_owned();
-        
+
         std::fs::write(&temp_path_utf8, csl_content)
             .map_err(|e| format!("Failed to write CSL file: {}", e))?;
-        
+
         // Keep the temporary file (prevent automatic deletion)
-        let _kept = tempfile.into_temp_path().keep()
+        let _kept = tempfile
+            .into_temp_path()
+            .keep()
             .map_err(|e| format!("Failed to keep temporary CSL file: {}", e))?;
-        
+
         // Ensure we have an absolute path
         let absolute_path = if temp_path_utf8.is_absolute() {
             temp_path_utf8
-        } else {
-            let canonical = temp_path_utf8.canonicalize()
+        }
+        else {
+            let canonical = temp_path_utf8
+                .canonicalize()
                 .map_err(|e| format!("Failed to canonicalize CSL file path: {}", e))?;
             Utf8PathBuf::from_path_buf(canonical)
                 .map_err(|p| format!("Invalid UTF-8 in canonical path: {:?}", p))?
         };
-        
+
         // Get wine-compatible absolute path if needed
         let csl_path = emu.wine_compatible_fname(&absolute_path)?;
-        
+
         // Return args with CSL file using absolute path
         dbg!(Ok(vec![format!("--csl={}", csl_path)]))
     }
@@ -754,8 +761,8 @@ impl EmulatorConf {
 
 impl From<EmulatorConf> for cpclib_csl::CslScript {
     fn from(conf: EmulatorConf) -> Self {
-        use cpclib_csl::{CslScriptBuilder, CslInstruction, Drive, KeyOutput};
         use cpclib_common::camino::Utf8PathBuf;
+        use cpclib_csl::{CslInstruction, CslScriptBuilder, Drive, KeyOutput};
 
         let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
         // Start with builder with version 1.0
@@ -770,23 +777,20 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
         if let Some(drive_a) = conf.drive_a {
             builder = builder.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a));
         }
-        
+
         if let Some(drive_b) = conf.drive_b {
             builder = builder.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b));
         }
 
         // Configure memory expansion if specified
         if let Some(memory) = conf.memory {
-            builder = builder.with_instruction(
-                CslInstruction::memory_exp(memory_to_csl_expansion(memory))
-            );
+            builder = builder
+                .with_instruction(CslInstruction::memory_exp(memory_to_csl_expansion(memory)));
         }
 
         // Configure CRTC model if specified
         if let Some(crtc) = conf.crtc {
-            builder = builder.with_instruction(
-                CslInstruction::crtc_select(crtc.to_csl_model())
-            );
+            builder = builder.with_instruction(CslInstruction::crtc_select(crtc.to_csl_model()));
         }
 
         if conf.crtc.is_some() || conf.memory.is_some() {
@@ -800,10 +804,13 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
                 .with_instruction(CslInstruction::snapshot_load(snapshot));
         }
 
-
         if conf.auto_run.is_some() || conf.auto_type.is_some() {
-            builder = builder.with_instruction(CslInstruction::wait(19968*50));
-            builder = builder.with_instruction(CslInstruction::key_delay(70000, Some(70000), Some(400000)));
+            builder = builder.with_instruction(CslInstruction::wait(19968 * 50));
+            builder = builder.with_instruction(CslInstruction::key_delay(
+                70000,
+                Some(70000),
+                Some(400000)
+            ));
         }
 
         // Add auto-run command if configured
@@ -818,16 +825,15 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
         if let Some(auto_type) = conf.auto_type {
             if false {
                 builder = builder.with_instruction(CslInstruction::key_from_file(auto_type));
-            } else {
-                let content = std::fs::read_to_string(&auto_type)
-                    .expect("Failed to read auto-type file");
+            }
+            else {
+                let content =
+                    std::fs::read_to_string(&auto_type).expect("Failed to read auto-type file");
                 let key_output = KeyOutput::try_from(content.as_str())
                     .expect("Failed to convert auto-type content to KeyOutput");
                 builder = builder.with_instruction(CslInstruction::key_output(key_output));
             }
         }
-
-
 
         // Build the final script with version first
         builder.build().expect("Failed to build CSL script")
@@ -2049,8 +2055,9 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use cpclib_common::camino::Utf8PathBuf;
+
+    use super::*;
 
     #[test]
     fn test_from_emulator_conf() {
@@ -2066,7 +2073,7 @@ mod tests {
             debug_files: Vec::new(),
             break_on_bad_vbl: false,
             break_on_bad_hbl: false,
-            transparent: false,
+            transparent: false
         };
 
         let script = cpclib_csl::CslScript::from(conf);

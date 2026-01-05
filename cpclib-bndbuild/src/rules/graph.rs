@@ -44,7 +44,9 @@ impl Hash for TaskTargets<'_> {
 
 impl<'a> TaskTargets<'a> {
     pub fn new<T: Into<Vec<&'a Utf8Path>>>(targets: T) -> Self {
-        TaskTargets { targets: targets.into() }
+        TaskTargets {
+            targets: targets.into()
+        }
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, &'a Utf8Path> {
@@ -160,14 +162,7 @@ impl<'r> Graph<'r> {
             .rules()
             .iter()
             .filter(|rule| rule.dependencies().is_empty())
-            .map(|r| {
-                TaskTargets::new(
-                    r.targets()
-                        .iter()
-                        .map(|p| p.as_path())
-                        .collect::<Vec<_>>()
-                )
-            })
+            .map(|r| TaskTargets::new(r.targets().iter().map(|p| p.as_path()).collect::<Vec<_>>()))
             .collect::<Vec<_>>();
         if !orphans.is_empty() {
             res.push(TaskTargetsForLayer::new(orphans));

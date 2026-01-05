@@ -23,7 +23,7 @@ pub struct CslError {
     /// Optional context/label for the error location
     pub label: Option<String>,
     /// Additional notes to help fix the error
-    pub notes: Vec<String>,
+    pub notes: Vec<String>
 }
 
 impl CslError {
@@ -35,7 +35,7 @@ impl CslError {
             span,
             message,
             label: None,
-            notes: Vec::new(),
+            notes: Vec::new()
         }
     }
 
@@ -67,7 +67,7 @@ impl CslError {
     pub fn line_col(&self) -> (usize, usize) {
         let mut line = 1;
         let mut col = 1;
-        
+
         for (i, ch) in self.source.chars().enumerate() {
             if i >= self.span.start {
                 break;
@@ -75,11 +75,12 @@ impl CslError {
             if ch == '\n' {
                 line += 1;
                 col = 1;
-            } else {
+            }
+            else {
                 col += 1;
             }
         }
-        
+
         (line, col)
     }
 
@@ -89,9 +90,7 @@ impl CslError {
         let filename = self.filename.as_deref().unwrap_or("<input>");
         let file_id = files.add(filename, &self.source);
 
-        let mut labels = vec![
-            Label::primary(file_id, self.span.clone())
-        ];
+        let mut labels = vec![Label::primary(file_id, self.span.clone())];
 
         if let Some(label) = &self.label {
             labels[0] = labels[0].clone().with_message(label);
@@ -112,7 +111,7 @@ impl CslError {
             styles: Default::default(),
             chars: Chars::ascii(),
             start_context_lines: 2,
-            end_context_lines: 1,
+            end_context_lines: 1
         };
 
         term::emit(&mut buffer, &config, &files, &diagnostic).unwrap();
@@ -161,14 +160,14 @@ pub fn suggest_instruction(input: &str) -> Option<String> {
         "snapshot_name",
         "snapshot",
         "snapshot_version",
-        "csl_load",
+        "csl_load"
     ];
 
     let input_lower = input.to_lowercase();
-    
+
     // Find closest match using simple Levenshtein-like logic
     let mut best_match: Option<(&str, usize)> = None;
-    
+
     for &instruction in INSTRUCTIONS {
         let distance = levenshtein_distance(&input_lower, instruction);
         if distance <= 2 {
@@ -176,7 +175,7 @@ pub fn suggest_instruction(input: &str) -> Option<String> {
                 None => best_match = Some((instruction, distance)),
                 Some((_, best_dist)) if distance < best_dist => {
                     best_match = Some((instruction, distance));
-                }
+                },
                 _ => {}
             }
         }
@@ -189,37 +188,45 @@ pub fn suggest_instruction(input: &str) -> Option<String> {
 fn levenshtein_distance(s1: &str, s2: &str) -> usize {
     let len1 = s1.chars().count();
     let len2 = s2.chars().count();
-    
+
     if len1 == 0 {
         return len2;
     }
     if len2 == 0 {
         return len1;
     }
-    
+
     let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
-    
+
     for i in 0..=len1 {
         matrix[i][0] = i;
     }
     for j in 0..=len2 {
         matrix[0][j] = j;
     }
-    
+
     let s1_chars: Vec<char> = s1.chars().collect();
     let s2_chars: Vec<char> = s2.chars().collect();
-    
+
     for i in 1..=len1 {
         for j in 1..=len2 {
-            let cost = if s1_chars[i - 1] == s2_chars[j - 1] { 0 } else { 1 };
+            let cost = if s1_chars[i - 1] == s2_chars[j - 1] {
+                0
+            }
+            else {
+                1
+            };
             matrix[i][j] = *[
-                matrix[i - 1][j] + 1,      // deletion
-                matrix[i][j - 1] + 1,      // insertion
-                matrix[i - 1][j - 1] + cost, // substitution
-            ].iter().min().unwrap();
+                matrix[i - 1][j] + 1,        // deletion
+                matrix[i][j - 1] + 1,        // insertion
+                matrix[i - 1][j - 1] + cost  // substitution
+            ]
+            .iter()
+            .min()
+            .unwrap();
         }
     }
-    
+
     matrix[len1][len2]
 }
 
@@ -233,7 +240,7 @@ mod tests {
         let error = CslError::new(
             source,
             16..20, // "rset"
-            "Unknown instruction".to_string(),
+            "Unknown instruction".to_string()
         )
         .with_label("invalid instruction name".to_string())
         .with_note("Did you mean 'reset'?".to_string());
@@ -246,8 +253,14 @@ mod tests {
     #[test]
     fn test_suggest_instruction() {
         assert_eq!(suggest_instruction("rset"), Some("reset".to_string()));
-        assert_eq!(suggest_instruction("disk_inser"), Some("disk_insert".to_string()));
-        assert_eq!(suggest_instruction("snapshoot"), Some("snapshot".to_string()));
+        assert_eq!(
+            suggest_instruction("disk_inser"),
+            Some("disk_insert".to_string())
+        );
+        assert_eq!(
+            suggest_instruction("snapshoot"),
+            Some("snapshot".to_string())
+        );
         assert_eq!(suggest_instruction("completely_wrong_name"), None);
     }
 

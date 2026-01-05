@@ -57,7 +57,11 @@ pub fn fmin(a: &ExprResult, b: &ExprResult) -> Result<ExprResult, Box<AssemblerE
 }
 
 // clamp(n,min,max) retourne la valeur n en la forçant dans l'intervale min:max
-pub fn clamp(n: &ExprResult, min: &ExprResult, max: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn clamp(
+    n: &ExprResult,
+    min: &ExprResult,
+    max: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
     let n = n.float()?;
     let min = min.float()?;
     let max = max.float()?;
@@ -65,7 +69,11 @@ pub fn clamp(n: &ExprResult, min: &ExprResult, max: &ExprResult) -> Result<ExprR
 }
 
 // lerp(i1,i2,n) calcule i1+n*(i2-i1)
-pub fn lerp(i1: &ExprResult, i2: &ExprResult, n: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn lerp(
+    i1: &ExprResult,
+    i2: &ExprResult,
+    n: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
     let i1 = i1.float()?;
     let i2 = i2.float()?;
     let n = n.float()?;
@@ -99,11 +107,13 @@ use crate::error::{AssemblerError, ExpressionError};
 
 pub fn min(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
     if args.len() < 2 {
-        return Err(Box::new(AssemblerError::FunctionWithWrongNumberOfArguments(
-            "min".to_string(),
-            either::Either::Left(2),
-            args.len(),
-        )));
+        return Err(Box::new(
+            AssemblerError::FunctionWithWrongNumberOfArguments(
+                "min".to_string(),
+                either::Either::Left(2),
+                args.len()
+            )
+        ));
     }
     let mut min = &args[0];
     for arg in &args[1..] {
@@ -114,11 +124,13 @@ pub fn min(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
 
 pub fn max(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
     if args.len() < 2 {
-        return Err(Box::new(AssemblerError::FunctionWithWrongNumberOfArguments(
-            "max".to_string(),
-            either::Either::Left(2),
-            args.len(),
-        )));
+        return Err(Box::new(
+            AssemblerError::FunctionWithWrongNumberOfArguments(
+                "max".to_string(),
+                either::Either::Left(2),
+                args.len()
+            )
+        ));
     }
     let mut max = &args[0];
     for arg in &args[1..] {

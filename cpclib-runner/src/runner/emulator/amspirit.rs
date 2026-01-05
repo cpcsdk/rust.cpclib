@@ -16,7 +16,7 @@ pub enum AmspiritVersion {
     V2_03b,
     V2RC2,
     V2RC1,
-    Rc1_01,
+    Rc1_01
 }
 
 impl InternetStaticCompiledApplication for AmspiritVersion {}

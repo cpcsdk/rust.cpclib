@@ -10,15 +10,19 @@ fn test_max_multi_arg_equ() {
     assert!(bin.contains(&0x32));
 }
 
-
 #[test]
 fn test_max_multi_arg_missing_data() {
     let src = include_str!("test_max_multi_arg_missing_file.asm");
     let result = cpclib_asm::assemble(src);
-    assert!(result.is_err(), "Assembler should have failed but succeeded");
+    assert!(
+        result.is_err(),
+        "Assembler should have failed but succeeded"
+    );
 
     let msg = result.err().unwrap().to_string();
-    eprintln!("Error: {}",&msg);
-    assert!(msg.contains("not found"), "Error message does not mention missing file");
+    eprintln!("Error: {}", &msg);
+    assert!(
+        msg.contains("not found"),
+        "Error message does not mention missing file"
+    );
 }
-

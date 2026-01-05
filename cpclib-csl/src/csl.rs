@@ -8,6 +8,7 @@
 //! Semicolons are used for comments.
 
 use std::fmt;
+
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::itertools::Itertools;
 /// CSL language version
@@ -24,8 +25,7 @@ impl CslVersion {
 }
 
 /// Reset type for the emulator
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ResetType {
     /// Memory cleared by ROM, only 64K central RAM
     Soft,
@@ -33,7 +33,6 @@ pub enum ResetType {
     #[default]
     Hard
 }
-
 
 impl fmt::Display for ResetType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -91,12 +90,12 @@ impl fmt::Display for GateArrayModel {
 /// CPC model selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpcModel {
-    Cpc464,   // 0
-    Cpc664,   // 1
-    Cpc6128,  // 2
+    Cpc464,      // 0
+    Cpc664,      // 1
+    Cpc6128,     // 2
     Cpc6128Plus, // 4
     Cpc464Plus,  // 5
-    GX4000    // 6
+    GX4000       // 6
 }
 
 impl fmt::Display for CpcModel {
@@ -172,14 +171,12 @@ pub struct RomConfig {
 }
 
 /// Drive selection (A or B)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Drive {
     #[default]
     A,
     B
 }
-
 
 impl fmt::Display for Drive {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -211,35 +208,35 @@ impl fmt::Display for SnapshotVersion {
 /// Special key codes for key_output
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpecialKey {
-    Esc,        // \(ESC)
-    Tab,        // \(TAB)
-    CapsLock,   // \(CAP)
-    Shift,      // \(SHI)
-    Ctrl,       // \(CTR)
-    Copy,       // \(COP)
-    Clr,        // \(CLR)
-    Del,        // \(DEL)
-    Return,     // \(RET)
-    Enter,      // \(ENT)
-    ArrowLeft,  // \(ARL)
-    ArrowRight, // \(ARR)
-    ArrowUp,    // \(ARU)
-    ArrowDown,  // \(ARD)
-    F0,         // \(FN0)
-    F1,         // \(FN1)
-    F2,         // \(FN2)
-    F3,         // \(FN3)
-    F4,         // \(FN4)
-    F5,         // \(FN5)
-    F6,         // \(FN6)
-    F7,         // \(FN7)
-    F8,         // \(FN8)
-    F9,         // \(FN9)
-    LeftBrace,  // \({)
-    RightBrace, // \(})
-    Backslash,  // \(\)
-    Quote,      // \(')
-    NoDelayNextKey // \(KOF) - No delay for next key
+    Esc,            // \(ESC)
+    Tab,            // \(TAB)
+    CapsLock,       // \(CAP)
+    Shift,          // \(SHI)
+    Ctrl,           // \(CTR)
+    Copy,           // \(COP)
+    Clr,            // \(CLR)
+    Del,            // \(DEL)
+    Return,         // \(RET)
+    Enter,          // \(ENT)
+    ArrowLeft,      // \(ARL)
+    ArrowRight,     // \(ARR)
+    ArrowUp,        // \(ARU)
+    ArrowDown,      // \(ARD)
+    F0,             // \(FN0)
+    F1,             // \(FN1)
+    F2,             // \(FN2)
+    F3,             // \(FN3)
+    F4,             // \(FN4)
+    F5,             // \(FN5)
+    F6,             // \(FN6)
+    F7,             // \(FN7)
+    F8,             // \(FN8)
+    F9,             // \(FN9)
+    LeftBrace,      // \({)
+    RightBrace,     // \(})
+    Backslash,      // \(\)
+    Quote,          // \(')
+    NoDelayNextKey  // \(KOF) - No delay for next key
 }
 
 impl SpecialKey {
@@ -294,7 +291,7 @@ impl fmt::Display for KeyElement {
             Self::Character(c) => write!(f, "{}", c),
             Self::Special(key) => write!(f, "{}", key.escape_sequence()),
             Self::Simultaneous(elements) => {
-                write!(f, "{{") ?;
+                write!(f, "{{")?;
                 for elem in elements {
                     write!(f, "{}", elem)?;
                 }
@@ -349,43 +346,46 @@ impl TryFrom<&str> for KeyOutput {
     type Error = String;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        use crate::csl_parser::parse_key_output_content;
         use cpclib_common::winnow::Parser;
 
-		// replace newlines by \RET
-		let s = s.split('\n').join(r"\(RET)");
+        use crate::csl_parser::parse_key_output_content;
+
+        // replace newlines by \RET
+        let s = s.split('\n').join(r"\(RET)");
 
         // Wrap the input with quotes as the parser expects quoted strings
         let quoted = if is_pre_escaped(&s) {
-			// here we assume everything is already escaped properly
+            // here we assume everything is already escaped properly
             s
-        } else {
-			// Do escaping ourselves
-			// Need to escape: ', {, }, and \ (but not when \ is followed by ()
-			let mut escaped = String::new();
-			let chars: Vec<char> = s.chars().collect();
-			let mut i = 0;
-			while i < chars.len() {
-				match chars[i] {
-					'\'' => escaped.push_str(r"\(')"),
-					'{' => escaped.push_str(r"\({)"),
-					'}' => escaped.push_str(r"\(})"),
-					'\\' => {
-						// Only escape backslash if NOT followed by (
-						if i + 1 < chars.len() && chars[i + 1] == '(' {
-							escaped.push('\\');
-						} else {
-							escaped.push_str(r"\(\)");
-						}
-					}
-					c => escaped.push(c),
-				}
-				i += 1;
-			}
+        }
+        else {
+            // Do escaping ourselves
+            // Need to escape: ', {, }, and \ (but not when \ is followed by ()
+            let mut escaped = String::new();
+            let chars: Vec<char> = s.chars().collect();
+            let mut i = 0;
+            while i < chars.len() {
+                match chars[i] {
+                    '\'' => escaped.push_str(r"\(')"),
+                    '{' => escaped.push_str(r"\({)"),
+                    '}' => escaped.push_str(r"\(})"),
+                    '\\' => {
+                        // Only escape backslash if NOT followed by (
+                        if i + 1 < chars.len() && chars[i + 1] == '(' {
+                            escaped.push('\\');
+                        }
+                        else {
+                            escaped.push_str(r"\(\)");
+                        }
+                    },
+                    c => escaped.push(c)
+                }
+                i += 1;
+            }
             format!("'{}'", escaped)
         };
         let mut input = cpclib_common::winnow::stream::LocatingSlice::new(quoted.as_str());
-        
+
         match parse_key_output_content.parse_next(&mut input) {
             Ok(key_output) => Ok(key_output),
             Err(e) => Err(format!("Failed to parse key output: {:?}", e))
@@ -398,65 +398,72 @@ pub enum CslInstruction {
     // Miscellaneous
     /// Indicates the version of the CSL format
     CslVersion(CslVersion),
-    
+
     /// Reset the emulator (soft or hard)
     Reset(ResetType),
 
     // Machine configuration
     /// Select a CRTC model
     CrtcSelect(CrtcModel),
-    
+
     /// Select a Gate Array model (v1.1)
     GateArray(GateArrayModel),
-    
+
     /// Select a CPC model (v1.1)
     CpcModel(CpcModel),
-    
+
     /// Select memory expansion (v1.1)
     MemoryExp(MemoryExpansion),
-    
+
     /// Specify ROM directory (v1.1)
     RomDir(Utf8PathBuf),
-    
+
     /// Configure a ROM (v1.1)
     RomConfig(RomConfig),
 
     // Media
     /// Insert a disk file into a drive
-    DiskInsert { drive: Drive, filename: Utf8PathBuf },
-    
+    DiskInsert {
+        drive: Drive,
+        filename: Utf8PathBuf
+    },
+
     /// Specify disk directory
     DiskDir(Utf8PathBuf),
-    
+
     /// Insert a tape file
     TapeInsert(Utf8PathBuf),
-    
+
     /// Specify tape directory
     TapeDir(Utf8PathBuf),
-    
+
     /// Start tape playback
     TapePlay,
-    
+
     /// Stop tape playback
     TapeStop,
-    
+
     /// Rewind tape to beginning
     TapeRewind,
-    
+
     /// Load a snapshot file
     SnapshotLoad(Utf8PathBuf),
-    
+
     /// Specify snapshot directory
     SnapshotDir(Utf8PathBuf),
 
     // Key strokes
     /// Set delay between keystrokes (in microseconds)
     /// First param: delay between keys, Second param (optional): delay after CR, Third param (optional): delay after special key
-    KeyDelay { delay: u64, delay_after_cr: Option<u64>, delay_after_key: Option<u64> },
-    
+    KeyDelay {
+        delay: u64,
+        delay_after_cr: Option<u64>,
+        delay_after_key: Option<u64>
+    },
+
     /// Send text as key strokes
     KeyOutput(KeyOutput),
-    
+
     /// Send characters from file as key strokes
     KeyFromFile(Utf8PathBuf),
 
@@ -467,41 +474,45 @@ pub enum CslInstruction {
     // Synchronization
     /// Wait for a delay in microseconds (emulated time)
     Wait(u64),
-    
+
     /// Wait for drive motor to start and stop N times
     WaitDriveOnOff(u32),
-    
+
     /// Wait for vsync signal to switch from off to on
     WaitVsyncOffOn,
-    
+
     /// Wait for SSM Code 0000 (ED 00 ED 00)
     WaitSsm0000,
 
     // Exports
     /// Specify name for next screenshot (without extension)
     ScreenshotName(Utf8PathBuf),
-    
+
     /// Specify screenshot directory
     ScreenshotDir(Utf8PathBuf),
-    
+
     /// Take a screenshot (optionally wait for vsync)
-    Screenshot { wait_vsync: bool },
-    
+    Screenshot {
+        wait_vsync: bool
+    },
+
     /// Specify name for next snapshot (without extension)
     SnapshotName(Utf8PathBuf),
-    
+
     /// Take a snapshot (optionally wait for vsync)
-    Snapshot { wait_vsync: bool },
-    
+    Snapshot {
+        wait_vsync: bool
+    },
+
     /// Select snapshot version
     SnapshotVersion(SnapshotVersion),
-    
+
     /// Load and run another CSL file
     CslLoad(Utf8PathBuf),
 
     // Comments (for completeness)
     Comment(String),
-    
+
     // Empty line
     Empty
 }
@@ -509,23 +520,25 @@ pub enum CslInstruction {
 /// Helper function to normalize paths for CSL output
 /// On Linux, paths with Z: drive have their forward slashes replaced with backslashes
 #[cfg(target_os = "linux")]
-fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
+fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir: bool) -> String {
     let path_str = path.as_str();
-    
+
     // Replace forward slashes with backslashes
     let path_str = path_str.replace('/', "\\");
-    
+
     // If path starts with \ (was an absolute Linux path), prepend Z:
     let path_str = if path_str.starts_with('\\') {
         format!("Z:{}", path_str)
-    } else {
+    }
+    else {
         path_str
     };
-    
+
     // Ensure directories end with \
     if is_dir {
         normalize_path_for_csl_windows(path_str)
-    } else {
+    }
+    else {
         path_str
     }
 }
@@ -533,18 +546,20 @@ fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
 /// Helper function to normalize paths for CSL output
 /// On non-Linux, paths are returned as-is
 #[cfg(not(target_os = "linux"))]
-fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
+fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir: bool) -> String {
     let path = path.as_str().to_string();
     if is_dir {
         normalize_path_for_csl_windows(path)
-    } else {
+    }
+    else {
         path
     }
 }
 fn normalize_path_for_csl_windows(path: String) -> String {
     if !path.ends_with("\\") {
         format!("{}\\", path.as_str())
-    } else {
+    }
+    else {
         path
     }
 }
@@ -559,17 +574,42 @@ impl fmt::Display for CslInstruction {
             Self::CpcModel(model) => write!(f, "cpc_model {}", model),
             Self::MemoryExp(exp) => write!(f, "memory_exp {}", exp),
             Self::RomDir(dir) => write!(f, "rom_dir '{}'", normalize_path_for_csl(dir, true)),
-            Self::RomConfig(config) => write!(f, "rom_config {} {} '{}'", config.rom_type, config.num, normalize_path_for_csl(&config.filename, false)),
-            Self::DiskInsert { drive, filename } => write!(f, "disk_insert {} '{}'", drive, normalize_path_for_csl(filename, false)),
+            Self::RomConfig(config) => {
+                write!(
+                    f,
+                    "rom_config {} {} '{}'",
+                    config.rom_type,
+                    config.num,
+                    normalize_path_for_csl(&config.filename, false)
+                )
+            },
+            Self::DiskInsert { drive, filename } => {
+                write!(
+                    f,
+                    "disk_insert {} '{}'",
+                    drive,
+                    normalize_path_for_csl(filename, false)
+                )
+            },
             Self::DiskDir(dir) => write!(f, "disk_dir '{}'", normalize_path_for_csl(dir, true)),
-            Self::TapeInsert(file) => write!(f, "tape_insert '{}'", normalize_path_for_csl(file, false)),
+            Self::TapeInsert(file) => {
+                write!(f, "tape_insert '{}'", normalize_path_for_csl(file, false))
+            },
             Self::TapeDir(dir) => write!(f, "tape_dir '{}'", normalize_path_for_csl(dir, true)),
             Self::TapePlay => write!(f, "tape_play"),
             Self::TapeStop => write!(f, "tape_stop"),
             Self::TapeRewind => write!(f, "tape_rewind"),
-            Self::SnapshotLoad(file) => write!(f, "snapshot_load '{}'", normalize_path_for_csl(file, false)),
-            Self::SnapshotDir(dir) => write!(f, "snapshot_dir '{}'", normalize_path_for_csl(dir, true)),
-            Self::KeyDelay { delay, delay_after_cr, delay_after_key } => {
+            Self::SnapshotLoad(file) => {
+                write!(f, "snapshot_load '{}'", normalize_path_for_csl(file, false))
+            },
+            Self::SnapshotDir(dir) => {
+                write!(f, "snapshot_dir '{}'", normalize_path_for_csl(dir, true))
+            },
+            Self::KeyDelay {
+                delay,
+                delay_after_cr,
+                delay_after_key
+            } => {
                 write!(f, "key_delay {}", delay)?;
                 if let Some(cr) = delay_after_cr {
                     write!(f, " {}", cr)?;
@@ -580,20 +620,27 @@ impl fmt::Display for CslInstruction {
                 Ok(())
             },
             Self::KeyOutput(key_output) => {
-                write!(f, "key_output '{}'" , key_output)
+                write!(f, "key_output '{}'", key_output)
             },
-            Self::KeyFromFile(file) => write!(f, "key_from_file '{}'", normalize_path_for_csl(file, false)),
-            Self::InstructionWithComment(instruction, comment) => write!(f, "{} ;{}", instruction, comment),
+            Self::KeyFromFile(file) => {
+                write!(f, "key_from_file '{}'", normalize_path_for_csl(file, false))
+            },
+            Self::InstructionWithComment(instruction, comment) => {
+                write!(f, "{} ;{}", instruction, comment)
+            },
             Self::Wait(time) => write!(f, "wait {}", time),
             Self::WaitDriveOnOff(n) => write!(f, "wait_driveonoff {}", n),
             Self::WaitVsyncOffOn => write!(f, "wait_vsyncoffon"),
             Self::WaitSsm0000 => write!(f, "wait_ssm0000"),
             Self::ScreenshotName(name) => write!(f, "screenshot_name '{}'", name),
-            Self::ScreenshotDir(dir) => write!(f, "screenshot_dir '{}'", normalize_path_for_csl(dir, true)),
+            Self::ScreenshotDir(dir) => {
+                write!(f, "screenshot_dir '{}'", normalize_path_for_csl(dir, true))
+            },
             Self::Screenshot { wait_vsync } => {
                 if *wait_vsync {
                     write!(f, "screenshot V")
-                } else {
+                }
+                else {
                     write!(f, "screenshot")
                 }
             },
@@ -601,7 +648,8 @@ impl fmt::Display for CslInstruction {
             Self::Snapshot { wait_vsync } => {
                 if *wait_vsync {
                     write!(f, "snapshot V")
-                } else {
+                }
+                else {
                     write!(f, "snapshot")
                 }
             },
@@ -719,19 +767,33 @@ impl CslInstruction {
     /// The filename is canonicalized to an absolute path
     pub fn key_from_file(filename: Utf8PathBuf) -> Self {
         let filename = if !filename.is_absolute() {
-            let filename = filename.canonicalize()
+            let filename = filename
+                .canonicalize()
                 .map(|p| Utf8PathBuf::from_path_buf(p).unwrap_or(filename.clone()))
                 .unwrap_or(filename);
-            filename.as_str().strip_prefix(r"\\?\").unwrap_or(filename.as_str()).into()
-        } else {
+            filename
+                .as_str()
+                .strip_prefix(r"\\?\")
+                .unwrap_or(filename.as_str())
+                .into()
+        }
+        else {
             filename
         };
         Self::KeyFromFile(filename)
     }
 
     /// Create a KeyDelay instruction
-    pub fn key_delay(delay: u64, delay_after_cr: Option<u64>, delay_after_key: Option<u64>) -> Self {
-        Self::KeyDelay { delay, delay_after_cr, delay_after_key }
+    pub fn key_delay(
+        delay: u64,
+        delay_after_cr: Option<u64>,
+        delay_after_key: Option<u64>
+    ) -> Self {
+        Self::KeyDelay {
+            delay,
+            delay_after_cr,
+            delay_after_key
+        }
     }
 
     /// Create a MemoryExp instruction
@@ -791,7 +853,11 @@ impl CslInstruction {
 
     /// Create a RomConfig instruction
     pub fn rom_config(rom_type: RomType, num: u8, filename: Utf8PathBuf) -> Self {
-        Self::RomConfig(RomConfig { rom_type, num, filename })
+        Self::RomConfig(RomConfig {
+            rom_type,
+            num,
+            filename
+        })
     }
 
     /// Create a CslLoad instruction
@@ -839,7 +905,8 @@ impl CslScript {
         self.instructions.iter().find_map(|i| {
             if let CslInstruction::CslVersion(v) = i {
                 Some(*v)
-            } else {
+            }
+            else {
                 None
             }
         })
@@ -855,9 +922,7 @@ impl CslScript {
 
     /// Conditionally add an instruction (builder pattern)
     pub fn with_instruction_if<F>(mut self, condition: bool, f: F) -> Self
-    where
-        F: FnOnce() -> CslInstruction
-    {
+    where F: FnOnce() -> CslInstruction {
         if condition {
             self.instructions.push(f());
         }
@@ -919,19 +984,23 @@ impl CslScript {
     /// If none exists, a default version 1.0 will be added.
     pub fn ensure_version_first(mut self) -> Self {
         // Find and remove any existing version instruction
-        let version = self.instructions.iter()
+        let version = self
+            .instructions
+            .iter()
             .position(|inst| matches!(inst, CslInstruction::CslVersion(_)))
             .and_then(|pos| {
                 if let CslInstruction::CslVersion(v) = self.instructions.remove(pos) {
                     Some(v)
-                } else {
+                }
+                else {
                     None
                 }
             })
             .unwrap_or(CslVersion::new(1, 0));
 
         // Insert version at the beginning
-        self.instructions.insert(0, CslInstruction::CslVersion(version));
+        self.instructions
+            .insert(0, CslInstruction::CslVersion(version));
         self
     }
 }
@@ -967,7 +1036,8 @@ impl CslScriptBuilder {
             if let CslInstruction::CslVersion(v) = inst {
                 last_version = Some(*v);
                 false // Remove this instruction
-            } else {
+            }
+            else {
                 true // Keep non-version instructions
             }
         });
@@ -976,22 +1046,28 @@ impl CslScriptBuilder {
         let version = last_version.unwrap_or(CslVersion::new(1, 0));
 
         // Insert version at the beginning
-        self.script.instructions.insert(0, CslInstruction::CslVersion(version));
-        
+        self.script
+            .instructions
+            .insert(0, CslInstruction::CslVersion(version));
+
         // Validate that version is indeed first
         if self.script.instructions.is_empty() {
             return Err("CSL script is empty".to_string());
         }
-        
+
         if !matches!(self.script.instructions[0], CslInstruction::CslVersion(_)) {
             return Err("CSL script must start with version instruction".to_string());
         }
 
-        if let Some(CslInstruction::KeyFromFile(file)) = self.script.instructions.iter()
+        if let Some(CslInstruction::KeyFromFile(file)) = self
+            .script
+            .instructions
+            .iter()
             .find(|inst| matches!(inst, CslInstruction::KeyFromFile(_)))
-                && !file.is_absolute() {
-                    return Err("key_from_file instruction requires an absolute file path".to_string());
-                }
+            && !file.is_absolute()
+        {
+            return Err("key_from_file instruction requires an absolute file path".to_string());
+        }
         Ok(self.script)
     }
 
@@ -1005,9 +1081,7 @@ impl CslScriptBuilder {
 
     /// Conditionally add an instruction
     pub fn with_instruction_if<F>(mut self, condition: bool, f: F) -> Self
-    where
-        F: FnOnce() -> CslInstruction
-    {
+    where F: FnOnce() -> CslInstruction {
         if condition {
             self.script.instructions.push(f());
         }
@@ -1088,9 +1162,11 @@ impl std::ops::DerefMut for CslScriptBuilder {
 impl fmt::Display for CslScript {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Ensure version instruction is output first
-        let version_inst = self.instructions.iter()
+        let version_inst = self
+            .instructions
+            .iter()
             .find(|inst| matches!(inst, CslInstruction::CslVersion(_)));
-        
+
         if let Some(version) = version_inst {
             writeln!(f, "{}", version)?;
         }
@@ -1118,9 +1194,15 @@ mod tests {
 
     #[test]
     fn test_instruction_names() {
-        assert_eq!(CslInstruction::Reset(ResetType::Soft).instruction_name(), "reset");
+        assert_eq!(
+            CslInstruction::Reset(ResetType::Soft).instruction_name(),
+            "reset"
+        );
         assert_eq!(CslInstruction::TapePlay.instruction_name(), "tape_play");
-        assert_eq!(CslInstruction::WaitVsyncOffOn.instruction_name(), "wait_vsyncoffon");
+        assert_eq!(
+            CslInstruction::WaitVsyncOffOn.instruction_name(),
+            "wait_vsyncoffon"
+        );
     }
 
     #[test]
@@ -1138,8 +1220,14 @@ mod tests {
 
     #[test]
     fn test_display_reset() {
-        assert_eq!(CslInstruction::Reset(ResetType::Soft).to_string(), "reset S");
-        assert_eq!(CslInstruction::Reset(ResetType::Hard).to_string(), "reset H");
+        assert_eq!(
+            CslInstruction::Reset(ResetType::Soft).to_string(),
+            "reset S"
+        );
+        assert_eq!(
+            CslInstruction::Reset(ResetType::Hard).to_string(),
+            "reset H"
+        );
     }
 
     #[test]
@@ -1150,11 +1238,21 @@ mod tests {
     #[test]
     fn test_display_key_delay() {
         assert_eq!(
-            CslInstruction::KeyDelay { delay: 70000, delay_after_cr: Some(70000), delay_after_key: Some(400000) }.to_string(),
+            CslInstruction::KeyDelay {
+                delay: 70000,
+                delay_after_cr: Some(70000),
+                delay_after_key: Some(400000)
+            }
+            .to_string(),
             "key_delay 70000 70000 400000"
         );
         assert_eq!(
-            CslInstruction::KeyDelay { delay: 50000, delay_after_cr: None, delay_after_key: None }.to_string(),
+            CslInstruction::KeyDelay {
+                delay: 50000,
+                delay_after_cr: None,
+                delay_after_key: None
+            }
+            .to_string(),
             "key_delay 50000"
         );
     }
@@ -1171,7 +1269,7 @@ mod tests {
     #[test]
     fn test_roundtrip_simple_instructions() {
         use crate::csl_parser::parse_csl;
-        
+
         let test_cases = vec![
             "reset H",
             "reset S",
@@ -1188,14 +1286,15 @@ mod tests {
             let script1 = format!("{}\n", case);
             let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
-            let parsed2 = parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+            let parsed2 =
+                parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
 
     #[test]
     fn test_builder_pattern() {
-        use crate::{CslScript, CslInstruction, Drive, MemoryExpansion, CrtcModel, ResetType};
+        use crate::{CrtcModel, CslInstruction, CslScript, Drive, MemoryExpansion, ResetType};
 
         // Test fluent builder pattern with helper methods
         let script = CslScript::new()
@@ -1207,7 +1306,7 @@ mod tests {
             .with_wait(50);
 
         assert_eq!(script.instructions.len(), 6);
-        
+
         // Test using CslInstruction factory methods
         let script2 = CslScript::new()
             .with_instruction(CslInstruction::disk_dir("disks".into()))
@@ -1216,7 +1315,7 @@ mod tests {
             .with_instruction(CslInstruction::memory_exp(MemoryExpansion::Kb512DkTronics));
 
         assert_eq!(script2.instructions.len(), 4);
-        
+
         // Test conditional builder with factory methods
         let with_snapshot = true;
         let script3 = CslScript::new()
@@ -1226,7 +1325,7 @@ mod tests {
             });
 
         assert_eq!(script3.instructions.len(), 2);
-        
+
         // Test without snapshot
         let without_snapshot = false;
         let script4 = CslScript::new()
@@ -1241,7 +1340,7 @@ mod tests {
     #[test]
     fn test_roundtrip_with_parameters() {
         use crate::csl_parser::parse_csl;
-        
+
         let test_cases = vec![
             "disk_insert A 'test.dsk'",
             "key_delay 70000 70000 400000",
@@ -1255,7 +1354,8 @@ mod tests {
             let script1 = format!("{}\n", case);
             let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
-            let parsed2 = parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+            let parsed2 =
+                parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
@@ -1263,7 +1363,7 @@ mod tests {
     #[test]
     fn test_roundtrip_with_comments() {
         use crate::csl_parser::parse_csl;
-        
+
         let script1 = "wait 800000 ; fin affichage\n";
         let parsed1 = parse_csl(script1).expect("Failed to parse");
         let generated = parsed1.to_string();
@@ -1274,7 +1374,7 @@ mod tests {
     #[test]
     fn test_roundtrip_full_script() {
         use crate::csl_parser::parse_csl;
-        
+
         let script = "csl_version 1.0\nreset H\nwait 1000000\ntape_play\nwait 500000\n";
         let parsed1 = parse_csl(script).expect("Failed to parse script");
         let generated = parsed1.to_string();
@@ -1309,7 +1409,7 @@ mod tests {
         let key_output = KeyOutput::from_elements(vec![
             KeyElement::Character('H'),
             KeyElement::Character('i'),
-            KeyElement::Special(SpecialKey::Return)
+            KeyElement::Special(SpecialKey::Return),
         ]);
         assert_eq!(key_output.to_string(), "Hi\\(RET)");
     }
@@ -1334,7 +1434,10 @@ mod tests {
             .ensure_version_first();
 
         assert_eq!(script.instructions.len(), 3);
-        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(_)));
+        assert!(matches!(
+            script.instructions[0],
+            CslInstruction::CslVersion(_)
+        ));
 
         // Test ensure_version_first moves existing version to front
         let script = CslScript::new()
@@ -1344,7 +1447,9 @@ mod tests {
             .ensure_version_first();
 
         assert_eq!(script.instructions.len(), 3);
-        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1));
+        assert!(
+            matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1)
+        );
 
         // Test Display outputs version first
         let script = CslScript::new()
@@ -1354,7 +1459,11 @@ mod tests {
 
         let output = script.to_string();
         let lines: Vec<&str> = output.lines().collect();
-        assert!(lines[0].starts_with("csl_version"), "First line should be version, got: {}", lines[0]);
+        assert!(
+            lines[0].starts_with("csl_version"),
+            "First line should be version, got: {}",
+            lines[0]
+        );
     }
 
     #[test]
@@ -1370,12 +1479,28 @@ mod tests {
         let output = script.to_string();
 
         eprint!("{}", &output);
-        
+
         // Verify Z: paths use backslashes
-        assert!(output.contains(r"disk_dir 'Z:\path\to\disks\'"), "Expected Z: path with backslashes, got: {}", output);
-        assert!(output.contains(r"disk_insert A 'Z:\path\to\game.dsk'"), "Expected Z: path with backslashes, got: {}", output);
-        assert!(output.contains(r"snapshot_dir 'Z:\snapshots\dir\'"), "Expected Z: path with backslashes, got: {}", output);
-        assert!(output.contains(r"snapshot_load 'Z:\snapshots\game.sna'"), "Expected Z: path with backslashes, got: {}", output);
+        assert!(
+            output.contains(r"disk_dir 'Z:\path\to\disks\'"),
+            "Expected Z: path with backslashes, got: {}",
+            output
+        );
+        assert!(
+            output.contains(r"disk_insert A 'Z:\path\to\game.dsk'"),
+            "Expected Z: path with backslashes, got: {}",
+            output
+        );
+        assert!(
+            output.contains(r"snapshot_dir 'Z:\snapshots\dir\'"),
+            "Expected Z: path with backslashes, got: {}",
+            output
+        );
+        assert!(
+            output.contains(r"snapshot_load 'Z:\snapshots\game.sna'"),
+            "Expected Z: path with backslashes, got: {}",
+            output
+        );
     }
 
     #[test]
@@ -1387,10 +1512,18 @@ mod tests {
             .with_disk_insert(Drive::B, "relative/path/game.dsk".into());
 
         let output = script.to_string();
-        
+
         // Verify non-Z: paths use forward slashes
-        assert!(output.contains(r"disk_dir 'Z:\home\user\disks\'"), "Expected regular path unchanged, got: {}", output);
-        assert!(output.contains("disk_insert B 'relative\\path\\game.dsk'"), "Expected regular path unchanged, got: {}", output);
+        assert!(
+            output.contains(r"disk_dir 'Z:\home\user\disks\'"),
+            "Expected regular path unchanged, got: {}",
+            output
+        );
+        assert!(
+            output.contains("disk_insert B 'relative\\path\\game.dsk'"),
+            "Expected regular path unchanged, got: {}",
+            output
+        );
     }
 
     #[test]
@@ -1403,10 +1536,13 @@ mod tests {
         let result = builder.build();
         assert!(result.is_ok());
         let script = result.unwrap();
-        
+
         // Should have 3 instructions: version (added automatically), reset, wait
         assert_eq!(script.instructions.len(), 3);
-        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(_)));
+        assert!(matches!(
+            script.instructions[0],
+            CslInstruction::CslVersion(_)
+        ));
 
         // Test builder moves version to front
         let builder = CslScriptBuilder::new(1, 0)
@@ -1417,9 +1553,11 @@ mod tests {
         let result = builder.build();
         assert!(result.is_ok());
         let script = result.unwrap();
-        
+
         assert_eq!(script.instructions.len(), 3);
-        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1));
+        assert!(
+            matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1)
+        );
 
         // Test Deref works
         let mut builder = CslScriptBuilder::new(1, 0);

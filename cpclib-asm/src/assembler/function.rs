@@ -421,7 +421,7 @@ pub enum BinaryFunction {
     Fmin,
     IsGreater,
     IsLess,
-    Fremain,
+    Fremain
 }
 
 impl Display for BinaryFunction {
@@ -438,7 +438,7 @@ impl Display for BinaryFunction {
             BinaryFunction::Fmin => "fmin",
             BinaryFunction::IsGreater => "isgreater",
             BinaryFunction::IsLess => "isless",
-            BinaryFunction::Fremain => "fremain",
+            BinaryFunction::Fremain => "fremain"
         };
         write!(format, "{repr}")
     }
@@ -446,7 +446,7 @@ impl Display for BinaryFunction {
 
 pub enum ExpectedNbArgs {
     Unknown,
-    Fixed(usize), // can be 0
+    Fixed(usize),   // can be 0
     AtLeast(usize), // at least n arguments
     Variable(&'static [usize])
 }
@@ -487,7 +487,8 @@ impl ExpectedNbArgs {
             ExpectedNbArgs::AtLeast(min) => {
                 if nb_args >= *min {
                     Ok(())
-                } else {
+                }
+                else {
                     Err(Box::new(
                         AssemblerError::FunctionWithWrongNumberOfArguments(
                             func_name.into(),
@@ -526,7 +527,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1,3]),
+            HardCodedFunction::MatrixNew => ExpectedNbArgs::Variable(&[1, 3]),
             HardCodedFunction::MatrixSet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
@@ -548,7 +549,7 @@ impl HardCodedFunction {
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2)
         }
     }
 
@@ -587,19 +588,21 @@ impl HardCodedFunction {
 
         match self {
             HardCodedFunction::Clamp => Ok(maths::clamp(&params[0], &params[1], &params[2])?),
-            HardCodedFunction::BinaryFunction(bf) => match bf {
-                BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
-                BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
-                BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
-                BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
-                BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
-                BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
-                BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
-                BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
-                BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
-                BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
-                BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
-                BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
+            HardCodedFunction::BinaryFunction(bf) => {
+                match bf {
+                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
+                    BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
+                    BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
+                    BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
+                    BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
+                    BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
+                    BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
+                    BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
+                    BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
+                    BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
+                    BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
+                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?)
+                }
             },
             // ...existing code...
             HardCodedFunction::Mode0ByteToPenAt => {
@@ -832,7 +835,7 @@ impl HardCodedFunction {
                     BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
                     BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
                     BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
-                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?),
+                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?)
                 }
             },
         }
