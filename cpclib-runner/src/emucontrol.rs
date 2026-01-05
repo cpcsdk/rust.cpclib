@@ -11,6 +11,7 @@ use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
 use cpclib_common::winnow::stream::AsChar;
+use cpclib_csl::ResetType;
 use delegate;
 use enigo::{Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
@@ -532,6 +533,11 @@ pub struct EmulatorConf {
 impl EmulatorConf {
     /// Generate the args for the corresponding emulator
     pub fn args_for_emu(&self, emu: &Emulator) -> Result<Vec<String>, String> {
+        // Use CSL script for Amspirit emulator
+        if let Emulator::Amspirit(_) = emu {
+            return self.args_for_emu_amspirit_with_csl(emu);
+        }
+
         let mut args = Vec::default();
 
         if let Some(drive_a) = &self.drive_a {
@@ -703,65 +709,128 @@ impl EmulatorConf {
         dbg!(&args);
         Ok(args)
     }
+
+    /// Generate args for Amspirit emulator using CSL script
+    fn args_for_emu_amspirit_with_csl(&self, emu: &Emulator) -> Result<Vec<String>, String> {
+        // Generate CSL script from configuration
+        let csl_script: cpclib_csl::CslScript = self.clone().into();
+        
+        // Convert to string
+        let csl_content = csl_script.to_string();
+        
+        // Save to temporary file
+        let tempfile = camino_tempfile::Builder::new()
+            .suffix(".csl")
+            .tempfile()
+            .map_err(|e| format!("Failed to create temporary CSL file: {}", e))?;
+        
+        // Get the path as Utf8PathBuf before writing
+        let temp_path_utf8 = tempfile.path().to_owned();
+        
+        std::fs::write(&temp_path_utf8, csl_content)
+            .map_err(|e| format!("Failed to write CSL file: {}", e))?;
+        
+        // Keep the temporary file (prevent automatic deletion)
+        let _kept = tempfile.into_temp_path().keep()
+            .map_err(|e| format!("Failed to keep temporary CSL file: {}", e))?;
+        
+        // Ensure we have an absolute path
+        let absolute_path = if temp_path_utf8.is_absolute() {
+            temp_path_utf8
+        } else {
+            let canonical = temp_path_utf8.canonicalize()
+                .map_err(|e| format!("Failed to canonicalize CSL file path: {}", e))?;
+            Utf8PathBuf::from_path_buf(canonical)
+                .map_err(|p| format!("Invalid UTF-8 in canonical path: {:?}", p))?
+        };
+        
+        // Get wine-compatible absolute path if needed
+        let csl_path = emu.wine_compatible_fname(&absolute_path)?;
+        
+        // Return args with CSL file using absolute path
+        dbg!(Ok(vec![format!("--csl={}", csl_path)]))
+    }
 }
 
 impl From<EmulatorConf> for cpclib_csl::CslScript {
     fn from(conf: EmulatorConf) -> Self {
-        use cpclib_csl::{CslScript, CslInstruction, Drive, MemoryExpansion, CrtcModel, KeyOutput};
+        use cpclib_csl::{CslScriptBuilder, CslInstruction, Drive, KeyOutput};
         use cpclib_common::camino::Utf8PathBuf;
 
         let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
-        let mut script = CslScript::new();
+        // Start with builder with version 1.0
+        let mut builder = CslScriptBuilder::new(1, 0);
 
         // Set disk directory if any disk is configured
         if conf.drive_a.is_some() || conf.drive_b.is_some() {
-            script = script.with_instruction(CslInstruction::disk_dir(cwd.clone()));
+            builder = builder.with_instruction(CslInstruction::disk_dir(cwd.clone()));
         }
 
         // Insert disks if configured
         if let Some(drive_a) = conf.drive_a {
-            script = script.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a));
+            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a));
         }
         
         if let Some(drive_b) = conf.drive_b {
-            script = script.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b));
-        }
-
-        // Set snapshot directory and load if configured
-        if let Some(snapshot) = conf.snapshot {
-            script = script
-                .with_instruction(CslInstruction::snapshot_dir(cwd))
-                .with_instruction(CslInstruction::snapshot_load(snapshot));
-        }
-
-        // Add auto-run command if configured
-        if let Some(auto_run) = conf.auto_run {
-            let key_string = format!("RUN\"{}\n", auto_run);
-            if let Ok(key_output) = KeyOutput::try_from(key_string.as_str()) {
-                script = script.with_instruction(CslInstruction::key_output(key_output));
-            }
-        }
-
-        // Add auto-type file if configured
-        if let Some(auto_type) = conf.auto_type {
-            script = script.with_instruction(CslInstruction::key_from_file(auto_type));
+            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b));
         }
 
         // Configure memory expansion if specified
         if let Some(memory) = conf.memory {
-            script = script.with_instruction(
+            builder = builder.with_instruction(
                 CslInstruction::memory_exp(memory_to_csl_expansion(memory))
             );
         }
 
         // Configure CRTC model if specified
         if let Some(crtc) = conf.crtc {
-            script = script.with_instruction(
+            builder = builder.with_instruction(
                 CslInstruction::crtc_select(crtc.to_csl_model())
             );
         }
 
-        script
+        if conf.crtc.is_some() || conf.memory.is_some() {
+            builder = builder.with_reset(ResetType::Hard);
+        }
+
+        // Set snapshot directory and load if configured
+        if let Some(snapshot) = conf.snapshot {
+            builder = builder
+                .with_instruction(CslInstruction::snapshot_dir(cwd))
+                .with_instruction(CslInstruction::snapshot_load(snapshot));
+        }
+
+
+        if conf.auto_run.is_some() || conf.auto_type.is_some() {
+            builder = builder.with_instruction(CslInstruction::wait(19968*50));
+            builder = builder.with_instruction(CslInstruction::key_delay(70000, Some(70000), Some(400000)));
+        }
+
+        // Add auto-run command if configured
+        if let Some(auto_run) = conf.auto_run {
+            let key_string = format!("RUN\"{}\n", auto_run);
+            if let Ok(key_output) = KeyOutput::try_from(key_string.as_str()) {
+                builder = builder.with_instruction(CslInstruction::key_output(key_output));
+            }
+        }
+
+        // Add auto-type file if configured
+        if let Some(auto_type) = conf.auto_type {
+            if false {
+                builder = builder.with_instruction(CslInstruction::key_from_file(auto_type));
+            } else {
+                let content = std::fs::read_to_string(&auto_type)
+                    .expect("Failed to read auto-type file");
+                let key_output = KeyOutput::try_from(content.as_str())
+                    .expect("Failed to convert auto-type content to KeyOutput");
+                builder = builder.with_instruction(CslInstruction::key_output(key_output));
+            }
+        }
+
+
+
+        // Build the final script with version first
+        builder.build().expect("Failed to build CSL script")
     }
 }
 

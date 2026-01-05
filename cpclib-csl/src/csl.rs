@@ -359,7 +359,7 @@ impl TryFrom<&str> for KeyOutput {
         use cpclib_common::winnow::Parser;
 
 		// replace newlines by \RET
-		let s = s.split('\n').join(r"\RET");
+		let s = s.split('\n').join(r"\(RET)");
 
         // Wrap the input with quotes as the parser expects quoted strings
         let quoted = if is_pre_escaped(&s) {
@@ -512,6 +512,50 @@ pub enum CslInstruction {
     Empty
 }
 
+/// Helper function to normalize paths for CSL output
+/// On Linux, paths with Z: drive have their forward slashes replaced with backslashes
+#[cfg(target_os = "linux")]
+fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
+
+    dbg!(&path);
+
+    
+    let path_str = path.as_str().replace('/', "\\");
+
+    dbg!(&path_str);
+
+    let path = if path_str.len() >= 2 && !path_str[0..2].eq_ignore_ascii_case("z:") && is_dir {
+        format!("z:\\{}", path_str)
+    } else {
+        path_str
+    };
+
+    if is_dir {
+        normalize_path_for_csl_windows(path)
+    } else {
+        path
+    }
+}
+
+/// Helper function to normalize paths for CSL output
+/// On non-Linux, paths are returned as-is
+#[cfg(not(target_os = "linux"))]
+fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
+    let path = path.as_str().to_string();
+    if is_dir {
+        normalize_path_for_csl_windows(path)
+    } else {
+        path
+    }
+}
+fn normalize_path_for_csl_windows(path: String) -> String {
+    if !path.ends_with("\\") {
+        format!("{}\\", path.as_str())
+    } else {
+        path
+    }
+}
+
 impl fmt::Display for CslInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -521,17 +565,17 @@ impl fmt::Display for CslInstruction {
             Self::GateArray(model) => write!(f, "gate_array {}", model),
             Self::CpcModel(model) => write!(f, "cpc_model {}", model),
             Self::MemoryExp(exp) => write!(f, "memory_exp {}", exp),
-            Self::RomDir(dir) => write!(f, "rom_dir '{}'", dir),
-            Self::RomConfig(config) => write!(f, "rom_config {} {} '{}'", config.rom_type, config.num, config.filename),
-            Self::DiskInsert { drive, filename } => write!(f, "disk_insert {} '{}'", drive, filename),
-            Self::DiskDir(dir) => write!(f, "disk_dir '{}'", dir),
-            Self::TapeInsert(file) => write!(f, "tape_insert '{}'", file),
-            Self::TapeDir(dir) => write!(f, "tape_dir '{}'", dir),
+            Self::RomDir(dir) => write!(f, "rom_dir '{}'", normalize_path_for_csl(dir, true)),
+            Self::RomConfig(config) => write!(f, "rom_config {} {} '{}'", config.rom_type, config.num, normalize_path_for_csl(&config.filename, false)),
+            Self::DiskInsert { drive, filename } => write!(f, "disk_insert {} '{}'", drive, normalize_path_for_csl(filename, false)),
+            Self::DiskDir(dir) => write!(f, "disk_dir '{}'", normalize_path_for_csl(dir, true)),
+            Self::TapeInsert(file) => write!(f, "tape_insert '{}'", normalize_path_for_csl(file, false)),
+            Self::TapeDir(dir) => write!(f, "tape_dir '{}'", normalize_path_for_csl(dir, true)),
             Self::TapePlay => write!(f, "tape_play"),
             Self::TapeStop => write!(f, "tape_stop"),
             Self::TapeRewind => write!(f, "tape_rewind"),
-            Self::SnapshotLoad(file) => write!(f, "snapshot_load '{}'", file),
-            Self::SnapshotDir(dir) => write!(f, "snapshot_dir '{}'", dir),
+            Self::SnapshotLoad(file) => write!(f, "snapshot_load '{}'", normalize_path_for_csl(file, false)),
+            Self::SnapshotDir(dir) => write!(f, "snapshot_dir '{}'", normalize_path_for_csl(dir, true)),
             Self::KeyDelay { delay, delay_after_cr, delay_after_key } => {
                 write!(f, "key_delay {}", delay)?;
                 if let Some(cr) = delay_after_cr {
@@ -545,14 +589,14 @@ impl fmt::Display for CslInstruction {
             Self::KeyOutput(key_output) => {
                 write!(f, "key_output '{}'" , key_output)
             },
-            Self::KeyFromFile(file) => write!(f, "key_from_file '{}'", file),
+            Self::KeyFromFile(file) => write!(f, "key_from_file '{}'", normalize_path_for_csl(file, false)),
             Self::InstructionWithComment(instruction, comment) => write!(f, "{} ;{}", instruction, comment),
             Self::Wait(time) => write!(f, "wait {}", time),
             Self::WaitDriveOnOff(n) => write!(f, "wait_driveonoff {}", n),
             Self::WaitVsyncOffOn => write!(f, "wait_vsyncoffon"),
             Self::WaitSsm0000 => write!(f, "wait_ssm0000"),
             Self::ScreenshotName(name) => write!(f, "screenshot_name '{}'", name),
-            Self::ScreenshotDir(dir) => write!(f, "screenshot_dir '{}'", dir),
+            Self::ScreenshotDir(dir) => write!(f, "screenshot_dir '{}'", normalize_path_for_csl(dir, true)),
             Self::Screenshot { wait_vsync } => {
                 if *wait_vsync {
                     write!(f, "screenshot V")
@@ -569,7 +613,7 @@ impl fmt::Display for CslInstruction {
                 }
             },
             Self::SnapshotVersion(v) => write!(f, "snapshot_version {}", v),
-            Self::CslLoad(file) => write!(f, "csl_load '{}'", file),
+            Self::CslLoad(file) => write!(f, "csl_load '{}'", normalize_path_for_csl(file, false)),
             Self::Comment(text) => write!(f, ";{}", text),
             Self::Empty => write!(f, "")
         }
@@ -679,7 +723,16 @@ impl CslInstruction {
     }
 
     /// Create a KeyFromFile instruction
-    pub fn key_from_file(filename: Utf8PathBuf) -> Self {
+    /// The filename is canonicalized to an absolute path
+    pub fn key_from_file(mut filename: Utf8PathBuf) -> Self {
+        let filename = if !filename.is_absolute() {
+            let filename = filename.canonicalize()
+                .map(|p| Utf8PathBuf::from_path_buf(p).unwrap_or(filename.clone()))
+                .unwrap_or(filename);
+            filename.as_str().strip_prefix(r"\\?\").unwrap_or(filename.as_str()).into()
+        } else {
+            filename
+        };
         Self::KeyFromFile(filename)
     }
 
@@ -867,6 +920,27 @@ impl CslScript {
     pub fn with_wait(self, frames: u64) -> Self {
         self.with_instruction(CslInstruction::Wait(frames))
     }
+
+    /// Ensure the script starts with a version instruction.
+    /// If one exists elsewhere, it will be moved to the front.
+    /// If none exists, a default version 1.0 will be added.
+    pub fn ensure_version_first(mut self) -> Self {
+        // Find and remove any existing version instruction
+        let version = self.instructions.iter()
+            .position(|inst| matches!(inst, CslInstruction::CslVersion(_)))
+            .and_then(|pos| {
+                if let CslInstruction::CslVersion(v) = self.instructions.remove(pos) {
+                    Some(v)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(CslVersion::new(1, 0));
+
+        // Insert version at the beginning
+        self.instructions.insert(0, CslInstruction::CslVersion(version));
+        self
+    }
 }
 
 impl Default for CslScript {
@@ -875,10 +949,165 @@ impl Default for CslScript {
     }
 }
 
+/// Builder for CSL scripts that ensures version is always first
+#[derive(Debug, Clone, PartialEq)]
+pub struct CslScriptBuilder {
+    script: CslScript
+}
+
+impl CslScriptBuilder {
+    /// Create a new CSL script builder with the given version
+    pub fn new(major: u8, minor: u8) -> Self {
+        Self {
+            script: CslScript {
+                instructions: vec![CslInstruction::CslVersion(CslVersion::new(major, minor))]
+            }
+        }
+    }
+
+    /// Build the final CSL script, ensuring version is first
+    /// Returns an error if the script is invalid
+    pub fn build(mut self) -> Result<CslScript, String> {
+        // Find and remove all version instructions, keeping the last one
+        let mut last_version = None;
+        self.script.instructions.retain(|inst| {
+            if let CslInstruction::CslVersion(v) = inst {
+                last_version = Some(v.clone());
+                false // Remove this instruction
+            } else {
+                true // Keep non-version instructions
+            }
+        });
+
+        // Use the last version found, or default to 1.0
+        let version = last_version.unwrap_or(CslVersion::new(1, 0));
+
+        // Insert version at the beginning
+        self.script.instructions.insert(0, CslInstruction::CslVersion(version));
+        
+        // Validate that version is indeed first
+        if self.script.instructions.is_empty() {
+            return Err("CSL script is empty".to_string());
+        }
+        
+        if !matches!(self.script.instructions[0], CslInstruction::CslVersion(_)) {
+            return Err("CSL script must start with version instruction".to_string());
+        }
+
+        if let Some(CslInstruction::KeyFromFile(file)) = self.script.instructions.iter()
+            .find(|inst| matches!(inst, CslInstruction::KeyFromFile(_))) {
+                if !file.is_absolute() {
+                    return Err("key_from_file instruction requires an absolute file path".to_string());
+                }
+            }
+        Ok(self.script)
+    }
+
+    // Builder pattern wrapper methods that return CslScriptBuilder
+
+    /// Add an instruction and return self for chaining
+    pub fn with_instruction(mut self, instruction: CslInstruction) -> Self {
+        self.script.instructions.push(instruction);
+        self
+    }
+
+    /// Conditionally add an instruction
+    pub fn with_instruction_if<F>(mut self, condition: bool, f: F) -> Self
+    where
+        F: FnOnce() -> CslInstruction
+    {
+        if condition {
+            self.script.instructions.push(f());
+        }
+        self
+    }
+
+    /// Add a disk directory instruction
+    pub fn with_disk_dir(self, dir: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::DiskDir(dir))
+    }
+
+    /// Add a disk insert instruction
+    pub fn with_disk_insert(self, drive: Drive, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::DiskInsert { drive, filename })
+    }
+
+    /// Add a snapshot directory instruction
+    pub fn with_snapshot_dir(self, dir: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::SnapshotDir(dir))
+    }
+
+    /// Add a snapshot load instruction
+    pub fn with_snapshot_load(self, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::SnapshotLoad(filename))
+    }
+
+    /// Add a key output instruction
+    pub fn with_key_output(self, output: KeyOutput) -> Self {
+        self.with_instruction(CslInstruction::KeyOutput(output))
+    }
+
+    /// Add a key from file instruction
+    pub fn with_key_from_file(self, filename: Utf8PathBuf) -> Self {
+        self.with_instruction(CslInstruction::KeyFromFile(filename))
+    }
+
+    /// Add a memory expansion instruction
+    pub fn with_memory_exp(self, expansion: MemoryExpansion) -> Self {
+        self.with_instruction(CslInstruction::MemoryExp(expansion))
+    }
+
+    /// Add a CRTC select instruction
+    pub fn with_crtc_select(self, model: CrtcModel) -> Self {
+        self.with_instruction(CslInstruction::CrtcSelect(model))
+    }
+
+    /// Add a reset instruction
+    pub fn with_reset(self, reset_type: ResetType) -> Self {
+        self.with_instruction(CslInstruction::Reset(reset_type))
+    }
+
+    /// Add a wait instruction
+    pub fn with_wait(self, frames: u64) -> Self {
+        self.with_instruction(CslInstruction::Wait(frames))
+    }
+}
+
+impl Default for CslScriptBuilder {
+    fn default() -> Self {
+        Self::new(1, 0)
+    }
+}
+
+impl std::ops::Deref for CslScriptBuilder {
+    type Target = CslScript;
+
+    fn deref(&self) -> &Self::Target {
+        &self.script
+    }
+}
+
+impl std::ops::DerefMut for CslScriptBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.script
+    }
+}
+
 impl fmt::Display for CslScript {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Ensure version instruction is output first
+        let version_inst = self.instructions.iter()
+            .find(|inst| matches!(inst, CslInstruction::CslVersion(_)));
+        
+        if let Some(version) = version_inst {
+            writeln!(f, "{}", version)?;
+        }
+
+        // Output all other instructions (excluding version)
         for instruction in &self.instructions {
-            writeln!(f, "{}", instruction)?;
+            if !matches!(instruction, CslInstruction::CslVersion(_)) {
+                writeln!(f, "{}", instruction)?;
+            }
         }
         Ok(())
     }
@@ -1102,5 +1331,108 @@ mod tests {
         assert!(!is_pre_escaped("'Hello"));
         assert!(!is_pre_escaped("Hello'"));
         assert!(!is_pre_escaped(""));
+    }
+
+    #[test]
+    fn test_version_is_first() {
+        // Test ensure_version_first adds version if missing
+        let script = CslScript::new()
+            .with_reset(ResetType::Hard)
+            .with_wait(1000)
+            .ensure_version_first();
+
+        assert_eq!(script.instructions.len(), 3);
+        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(_)));
+
+        // Test ensure_version_first moves existing version to front
+        let script = CslScript::new()
+            .with_reset(ResetType::Hard)
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .with_wait(1000)
+            .ensure_version_first();
+
+        assert_eq!(script.instructions.len(), 3);
+        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1));
+
+        // Test Display outputs version first
+        let script = CslScript::new()
+            .with_reset(ResetType::Hard)
+            .with_wait(1000)
+            .with_instruction(CslInstruction::csl_version(1, 0));
+
+        let output = script.to_string();
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(lines[0].starts_with("csl_version"), "First line should be version, got: {}", lines[0]);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_path_normalization_z_drive() {
+        // Test that Z: drive paths have forward slashes replaced with backslashes on Linux
+        let script = CslScript::new()
+            .with_disk_dir("Z:/path/to/disks".into())
+            .with_disk_insert(Drive::A, "Z:/path/to/game.dsk".into())
+            .with_snapshot_dir("Z:/snapshots/dir".into())
+            .with_snapshot_load("Z:/snapshots/game.sna".into());
+
+        let output = script.to_string();
+        
+        // Verify Z: paths use backslashes
+        assert!(output.contains(r"disk_dir 'Z:\path\to\disks'"), "Expected Z: path with backslashes, got: {}", output);
+        assert!(output.contains(r"disk_insert A 'Z:\path\to\game.dsk'"), "Expected Z: path with backslashes, got: {}", output);
+        assert!(output.contains(r"snapshot_dir 'Z:\snapshots\dir'"), "Expected Z: path with backslashes, got: {}", output);
+        assert!(output.contains(r"snapshot_load 'Z:\snapshots\game.sna'"), "Expected Z: path with backslashes, got: {}", output);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_path_normalization_regular_paths() {
+        // Test that non-Z: paths are left unchanged
+        let script = CslScript::new()
+            .with_disk_dir("/home/user/disks".into())
+            .with_disk_insert(Drive::B, "relative/path/game.dsk".into());
+
+        let output = script.to_string();
+        
+        // Verify non-Z: paths use forward slashes
+        assert!(output.contains("disk_dir '/home/user/disks'"), "Expected regular path unchanged, got: {}", output);
+        assert!(output.contains("disk_insert B 'relative/path/game.dsk'"), "Expected regular path unchanged, got: {}", output);
+    }
+
+    #[test]
+    fn test_csl_script_builder() {
+        // Test builder with build() method
+        let builder = CslScriptBuilder::new(1, 0)
+            .with_reset(ResetType::Hard)
+            .with_wait(1000);
+
+        let result = builder.build();
+        assert!(result.is_ok());
+        let script = result.unwrap();
+        
+        // Should have 3 instructions: version (added automatically), reset, wait
+        assert_eq!(script.instructions.len(), 3);
+        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(_)));
+
+        // Test builder moves version to front
+        let builder = CslScriptBuilder::new(1, 0)
+            .with_reset(ResetType::Hard)
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .with_wait(1000);
+
+        let result = builder.build();
+        assert!(result.is_ok());
+        let script = result.unwrap();
+        
+        assert_eq!(script.instructions.len(), 3);
+        assert!(matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1));
+
+        // Test Deref works
+        let mut builder = CslScriptBuilder::new(1, 0);
+        builder.add_instruction(CslInstruction::reset(ResetType::Soft));
+        assert_eq!(builder.instructions.len(), 2); // version + reset
+
+        let script = builder.build().unwrap();
+        assert_eq!(script.instructions.len(), 2); // version + reset
     }
 }
