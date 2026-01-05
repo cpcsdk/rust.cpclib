@@ -516,32 +516,23 @@ pub enum CslInstruction {
 /// On Linux, paths with Z: drive have their forward slashes replaced with backslashes
 #[cfg(target_os = "linux")]
 fn normalize_path_for_csl(path: &Utf8PathBuf, is_dir:bool) -> String {
-
-    dbg!(&path);
-
-    let path = if is_dir && !path.as_str().starts_with('/') {
-        format!("{}/{}", std::env::current_dir().unwrap().to_str().unwrap(), path.as_str())
-    } else if !is_dir && path.as_str().starts_with('/') {
-        format!("{}/{}", std::env::current_dir().unwrap().to_str().unwrap(), path.as_str())
-    } else {
-        path.as_str().to_string()   
-    };
-
+    let path_str = path.as_str();
     
-    let path_str = path.as_str().replace('/', "\\");
-
-    dbg!(&path_str);
-
-    let path = if (path_str.len() >= 2 && !path_str[0..2].eq_ignore_ascii_case("z:") && is_dir) || path.starts_with('\\') {
+    // Replace forward slashes with backslashes
+    let path_str = path_str.replace('/', "\\");
+    
+    // If path starts with \ (was an absolute Linux path), prepend Z:
+    let path_str = if path_str.starts_with('\\') {
         format!("Z:{}", path_str)
     } else {
         path_str
     };
-
+    
+    // Ensure directories end with \
     if is_dir {
-        normalize_path_for_csl_windows(path)
+        normalize_path_for_csl_windows(path_str)
     } else {
-        path
+        path_str
     }
 }
 
@@ -1395,7 +1386,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     #[cfg(target_os = "linux")]
     fn test_path_normalization_regular_paths() {
         // Test that non-Z: paths are left unchanged
