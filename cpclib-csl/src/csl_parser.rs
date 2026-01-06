@@ -9,7 +9,7 @@ use cpclib_common::winnow::combinator::{
 use cpclib_common::winnow::error::{ContextError, StrContext};
 use cpclib_common::winnow::stream::LocatingSlice;
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
-use cpclib_common::winnow::{ModalResult, Parser};
+use cpclib_common::winnow::{ModalParser, ModalResult, Parser};
 
 use crate::csl::*;
 
@@ -841,8 +841,8 @@ pub fn parse_csl(input: &str) -> Result<CslScript, ContextError<StrContext>> {
 
     result.map_err(|e| {
         match e.into_inner() {
-            Some(inner) => inner,
-            None => ContextError::new()
+            Ok(inner) => inner,
+            Err(_) => ContextError::new()
         }
     })
 }
@@ -853,14 +853,14 @@ mod tests {
 
     // Helper function for tests that wraps input in LocatingSlice
     fn parse_test<'a, O>(
-        mut parser: impl Parser<LocatingSlice<&'a str>, O, ContextError<StrContext>>,
+        mut parser: impl ModalParser<LocatingSlice<&'a str>, O, ContextError<StrContext>>,
         input: &'a str
     ) -> Result<O, ContextError<StrContext>> {
         let mut located_input = LocatingSlice::new(input);
         parser.parse_next(&mut located_input).map_err(|e| {
             match e.into_inner() {
-                Some(inner) => inner,
-                None => ContextError::new()
+                Ok(inner) => inner,
+                Err(_) => ContextError::new()
             }
         })
     }
