@@ -1329,37 +1329,26 @@ pub fn parse_snaset(
             parse_word(b"SNASET").parse_next(input)?;
         }
 
-        let input_start = input.checkpoint();
-        let flagname = cut_err(parse_label(false).context(SNASET_WRONG_LABEL)).parse_next(input)?;
-        let _ = cut_err(parse_comma.context(SNASET_MISSING_COMMA)).parse_next(input)?;
-
-        let values: Vec<_> = cut_err(separated(
-            1..,
-            parse_flag_value_inner.context(StrContext::Label("SNASET: wrong flag value")),
-            delimited(my_space0, parse_comma, my_space0)
-        ))
+        let flag = cut_err(
+            (parse_label(false), opt((':', parse_value)))
+                .take()
+                .verify_map(|bytes: &[u8]| {
+                    let s = unsafe { std::str::from_utf8_unchecked(bytes) };
+                    SnapshotFlag::from_str(s).ok()
+                })
+                .context(StrContext::Label(
+                    "SNASET: Invalid flag"
+                ))
+        )
         .parse_next(input)?;
 
-        let flagname = flagname.as_bstr();
-        let flagname = unsafe { std::str::from_utf8_unchecked(flagname) };
-        let (flagname, value) = if values.len() == 1 {
-            (Cow::Borrowed(flagname), values[0].clone())
-        }
-        else {
-            (
-                Cow::Owned(format!("{}:{}", flagname, values[0].as_u16().unwrap())),
-                values[1].clone()
-            )
-        };
+        let _ = cut_err(parse_comma.context(SNASET_MISSING_COMMA)).parse_next(input)?;
 
-        let flag = SnapshotFlag::from_str(flagname.as_ref()).map_err(|_e| {
-            input.reset(&input_start);
-            ErrMode::Backtrack(Z80ParserError::from_input(input).add_context(
-                input,
-                &input_start,
-                "Wrong flag"
-            ))
-        })?;
+        let value = cut_err(
+            parse_flag_value_inner.context(StrContext::Label("SNASET: wrong flag value"))
+        )
+        .parse_next(input)?;
+
         Ok(LocatedTokenInner::SnaSet(flag, value))
     }
 }

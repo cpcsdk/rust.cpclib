@@ -74,6 +74,9 @@ pub enum LocatedExpr {
     UnaryTokenOperation(UnaryTokenOperation, Box<LocatedToken>, Z80Span),
     BinaryOperation(BinaryOperation, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
 
+    /// Ternary conditional: condition ? true_value : false_value
+    Ternary(Box<LocatedExpr>, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
+
     /// Function supposely coded by the user
     AnyFunction(Z80Span, Vec<LocatedExpr>, Z80Span),
 
@@ -139,6 +142,13 @@ impl ExprElement for LocatedExpr {
                     *o,
                     Box::new(e1.to_expr().into_owned()),
                     Box::new(e2.to_expr().into_owned())
+                )
+            },
+            LocatedExpr::Ternary(box cond, box true_expr, box false_expr, _) => {
+                Expr::Ternary(
+                    Box::new(cond.to_expr().into_owned()),
+                    Box::new(true_expr.to_expr().into_owned()),
+                    Box::new(false_expr.to_expr().into_owned())
                 )
             },
             LocatedExpr::AnyFunction(n, a, _) => {
@@ -354,6 +364,31 @@ impl ExprElement for LocatedExpr {
         }
     }
 
+    fn is_ternary(&self) -> bool {
+        matches!(self, Self::Ternary(..))
+    }
+
+    fn ternary_condition(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(cond, _, _, _) => cond.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn ternary_true(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(_, true_expr, _, _) => true_expr.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn ternary_false(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(_, _, false_expr, _) => false_expr.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
     fn is_unary_operation(&self) -> bool {
         match self {
             Self::UnaryOperation(..) => true,
@@ -459,6 +494,14 @@ impl ExprEvaluationExt for LocatedExpr {
             LocatedExpr::UnaryTokenOperation(_, box _t, _) => {
                 eprintln!("symbols_used is not implemented for UnaryTokenOperation");
                 vec![]
+            },
+
+            LocatedExpr::Ternary(box cond, box true_expr, box false_expr, _) => {
+                cond.symbols_used()
+                    .into_iter()
+                    .chain(true_expr.symbols_used())
+                    .chain(false_expr.symbols_used())
+                    .collect_vec()
             }
         }
     }
@@ -488,6 +531,7 @@ impl MayHaveSpan for LocatedExpr {
             | LocatedExpr::UnaryOperation(_, _, span)
             | LocatedExpr::UnaryTokenOperation(_, _, span)
             | LocatedExpr::BinaryOperation(_, _, _, span)
+            | LocatedExpr::Ternary(_, _, _, span)
             | LocatedExpr::AnyFunction(_, _, span)
             | LocatedExpr::Rnd(span) => span
         }

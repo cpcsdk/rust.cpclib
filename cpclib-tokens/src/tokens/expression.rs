@@ -43,6 +43,9 @@ pub enum Expr {
     UnaryTokenOperation(UnaryTokenOperation, Box<Token>),
     BinaryOperation(BinaryOperation, Box<Expr>, Box<Expr>),
 
+    /// Ternary conditional: condition ? true_value : false_value
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
+
     /// Function supposely coded by the user
     AnyFunction(SmolStr, Vec<Expr>),
 
@@ -169,6 +172,22 @@ where T: ExprElement
         self.as_ref().binary_operation()
     }
 
+    fn is_ternary(&self) -> bool {
+        self.as_ref().is_ternary()
+    }
+
+    fn ternary_condition(&self) -> &Self::Expr {
+        self.as_ref().ternary_condition()
+    }
+
+    fn ternary_true(&self) -> &Self::Expr {
+        self.as_ref().ternary_true()
+    }
+
+    fn ternary_false(&self) -> &Self::Expr {
+        self.as_ref().ternary_false()
+    }
+
     fn is_unary_operation(&self) -> bool {
         self.as_ref().is_unary_operation()
     }
@@ -271,6 +290,11 @@ pub trait ExprElement: Sized {
 
     fn is_binary_operation(&self) -> bool;
     fn binary_operation(&self) -> BinaryOperation;
+
+    fn is_ternary(&self) -> bool;
+    fn ternary_condition(&self) -> &Self::Expr;
+    fn ternary_true(&self) -> &Self::Expr;
+    fn ternary_false(&self) -> &Self::Expr;
 
     fn is_unary_operation(&self) -> bool;
     fn unary_operation(&self) -> UnaryOperation;
@@ -703,6 +727,31 @@ impl ExprElement for Expr {
         }
     }
 
+    fn is_ternary(&self) -> bool {
+        matches!(self, Self::Ternary(..))
+    }
+
+    fn ternary_condition(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(cond, _, _) => cond.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn ternary_true(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(_, true_expr, _) => true_expr.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
+    fn ternary_false(&self) -> &Self::Expr {
+        match self {
+            Self::Ternary(_, _, false_expr) => false_expr.as_ref(),
+            _ => unreachable!()
+        }
+    }
+
     fn is_unary_operation(&self) -> bool {
         matches!(self, Self::UnaryOperation(..))
     }
@@ -810,6 +859,9 @@ impl Display for Expr {
             Expr::UnaryOperation(op, exp) => write!(f, "{op}{exp}"),
             Expr::UnaryTokenOperation(op, tok) => write!(f, "{op}({tok})"),
             Expr::BinaryOperation(op, exp1, exp2) => write!(f, "({exp1} {op} {exp2})"),
+            Expr::Ternary(cond, true_expr, false_expr) => {
+                write!(f, "({cond} ? {true_expr} : {false_expr})")
+            },
             Expr::RelativeDelta(val) => write!(f, "$ + {val} + 2"),
             Expr::Rnd => write!(f, "RND()")
         }

@@ -1494,21 +1494,36 @@ impl Env {
         }
     }
 
-    fn page_info_for_logical_address_mut(&mut self, address: u16) -> &mut PageInformation {
+    fn page_info_for_logical_address_mut(&mut self, address: u16) -> Result<&mut PageInformation, Box<AssemblerError>> {
         match self.output_kind() {
             OutputKind::Snapshot => {
                 let active_page =
                     self.logical_to_physical_address(address).to_memory().page() as usize;
-                &mut self.sna.pages_info[active_page]
+                Ok(&mut self.sna.pages_info[active_page])
             },
             OutputKind::Cpr => {
-                self.cpr
+                let cpr = self.cpr
                     .as_mut()
-                    .unwrap()
-                    .selected_active_page_info_mut()
-                    .unwrap()
+                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
+                        file: file!(),
+                        line: line!(),
+                        msg: "CPR is None when output_kind is Cpr".to_string()
+                    }))?;
+                cpr.selected_active_page_info_mut()
+                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
+                        file: file!(),
+                        line: line!(),
+                        msg: "No active page info in CPR".to_string()
+                    }))
             },
-            OutputKind::FreeBank => self.free_banks.selected_active_page_info_mut().unwrap()
+            OutputKind::FreeBank => {
+                self.free_banks.selected_active_page_info_mut()
+                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
+                        file: file!(),
+                        line: line!(),
+                        msg: "No active page info in free banks".to_string()
+                    }))
+            }
         }
     }
 
@@ -1999,7 +2014,7 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         // TODO Check overlapping region
         let page_info = {
-            let page_info = self.page_info_for_logical_address_mut(output_adr as _);
+            let page_info = self.page_info_for_logical_address_mut(output_adr as _)?;
             page_info.logical_outputadr = output_adr as _;
             page_info.logical_codeadr = code_adr as _;
             page_info.fail_next_write_if_zero = false;

@@ -135,6 +135,14 @@ macro_rules! resolve_impl {
         if $self.is_binary_operation() {
             binary_operation($self.arg1(), $self.arg2(), $self.binary_operation())
         }
+        else if $self.is_ternary() {
+            let condition = $self.ternary_condition().resolve($env)?;
+            if condition.bool()? {
+                $self.ternary_true().resolve($env)
+            } else {
+                $self.ternary_false().resolve($env)
+            }
+        }
         else if $self.is_paren() {
             let e = $self.arg1();
             e.resolve($env)

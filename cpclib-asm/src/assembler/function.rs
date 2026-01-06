@@ -543,7 +543,7 @@ impl HardCodedFunction {
             HardCodedFunction::SectionMmr => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(0),
             HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::StringConcat => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),

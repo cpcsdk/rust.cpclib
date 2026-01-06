@@ -22,6 +22,7 @@ where
     #[repr(u32)]
     enum EncodingKind {
         Hex = 16,
+        Oct = 8,
         Bin = 2,
         Dec = 10,
 
@@ -35,6 +36,7 @@ where
     let encoding = opt(terminated(
         alt((
             alt((b"0x", b"0X", b"#", b"$", b"&")).value(EncodingKind::Hex), // hexadecimal number
+            alt((b"0o", b"0O", b"@")).value(EncodingKind::Oct), // octal number
             alt((b"0b", b"0B")).value(EncodingKind::AmbiguousBinHex),
             b"%".value(EncodingKind::Bin) // binary number
         )),
@@ -48,6 +50,8 @@ where
         take_while(1.., (('0'..='9'), ('a'..='f'), ('A'..='F'), '_'))
             .context(StrContext::Label("Read hexadecimal digits"))
     };
+    let mut oct_digits_and_sep =
+        take_while(1.., (('0'..='7'), '_')).context(StrContext::Label("Read octal digits"));
     let mut dec_digits_and_sep =
         take_while(1.., (('0'..='9'), '_')).context(StrContext::Label("Read decimal digits"));
     let mut bin_digits_and_sep =
@@ -55,6 +59,7 @@ where
 
     let (encoding, digits) = match encoding {
         EncodingKind::Hex => (EncodingKind::Hex, hex_digits_and_sep().parse_next(input)?),
+        EncodingKind::Oct => (EncodingKind::Oct, oct_digits_and_sep.parse_next(input)?),
         EncodingKind::Bin => (EncodingKind::Bin, bin_digits_and_sep.parse_next(input)?),
         EncodingKind::Dec => unreachable!("No prefix exist for decimal kind"),
         EncodingKind::AmbiguousBinHex => {

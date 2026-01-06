@@ -11,9 +11,10 @@ use cpclib_common::winnow::combinator::{
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
-use cpclib_common::winnow::token::{none_of, one_of, take_while};
+use cpclib_common::winnow::token::{none_of, one_of, take, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
+use cpclib_tokens::ordered_float::OrderedFloat;
 use cpclib_tokens::{
     AssemblerFlavor, BinaryOperation, DataAccessElem, Expr, ExprElement, FlagTest, LabelPrefix,
     Register16, UnaryOperation, UnaryTokenOperation
@@ -71,6 +72,54 @@ pub fn parse_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
 
     let span = (*input).update_slice(span);
     Ok(LocatedExpr::Value(val as i32, span.into()))
+}
+
+/// Parse a floating point number (integer followed by '.' and optional fractional part)
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_float(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+    let input_start = input.checkpoint();
+    let input_offset = input.eof_offset();
+    
+    // Parse integer part (can be any numeric base)
+    let int_part = cpclib_common::parse_value.parse_next(input)?;
+    
+    // Must be followed by '.'
+    '.'.parse_next(input)?;
+    
+    // Parse fractional part (decimal digits)
+    let frac_str = opt(take_while(1.., ('0'..='9', '_'))).parse_next(input)?;
+    
+    // Optionally parse scientific notation (e or E followed by optional sign and digits)
+    let exp_str = opt((
+        one_of(['e', 'E']),
+        opt(one_of(['+', '-'])),
+        take_while(1.., ('0'..='9', '_'))
+    )).parse_next(input)?;
+    
+    // Build the float string
+    let mut float_str = format!("{}", int_part);
+    float_str.push('.');
+    if let Some(frac) = frac_str {
+        let frac_str = std::str::from_utf8(frac).unwrap_or("");
+        float_str.push_str(&frac_str.replace('_', ""));
+    }
+    if let Some((e, sign, exp)) = exp_str {
+        float_str.push(e as char);
+        if let Some(s) = sign {
+            float_str.push(s as char);
+        }
+        let exp_str = std::str::from_utf8(exp).unwrap_or("");
+        float_str.push_str(&exp_str.replace('_', ""));
+    }
+    
+    // Parse to f64
+    let float_val = float_str.parse::<f64>().map_err(|_| {
+        ErrMode::Backtrack(Z80ParserError::from_input(input))
+    })?;
+    
+    let span = build_span(input_offset, &input_start, *input);
+    Ok(LocatedExpr::Float(OrderedFloat(float_val), span.into()))
 }
 
 /// Parse a repetition counter
@@ -319,17 +368,21 @@ pub fn negative_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let v = preceded(b'-', number)
-        .map(|exp| {
-            match exp {
-                LocatedExpr::Value(v, _) => -v,
-                _ => unreachable!()
-            }
-        })
-        .parse_next(input)?;
+    let exp = preceded(b'-', number).parse_next(input)?;
+    
+    let result = match exp {
+        LocatedExpr::Value(v, _) => {
+            let span = build_span(input_offset, &input_start, *input);
+            LocatedExpr::Value(-v, span.into())
+        },
+        LocatedExpr::Float(f, _) => {
+            let span = build_span(input_offset, &input_start, *input);
+            LocatedExpr::Float(OrderedFloat(-f.0), span.into())
+        },
+        _ => unreachable!()
+    };
 
-    let span = build_span(input_offset, &input_start, *input);
-    Ok(LocatedExpr::Value(v, span.into()))
+    Ok(result)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -338,17 +391,31 @@ pub fn number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserErr
     let _input_start = input.checkpoint();
     let _input_offset = input.eof_offset();
 
-    terminated(
-        parse_value,
-        not(one_of((
-            b'A'..=b'Z',
-            b'a'..=b'z',
-            b'0'..=b'9',
-            b'#',
-            b'@',
-            b'_'
-        )))
-    )
+    // Try float first (since it contains integer part), then integer
+    alt((
+        terminated(
+            parse_float,
+            not(one_of((
+                b'A'..=b'Z',
+                b'a'..=b'z',
+                b'0'..=b'9',
+                b'#',
+                b'@',
+                b'_'
+            )))
+        ),
+        terminated(
+            parse_value,
+            not(one_of((
+                b'A'..=b'Z',
+                b'a'..=b'z',
+                b'0'..=b'9',
+                b'#',
+                b'@',
+                b'_'
+            )))
+        )
+    ))
     .parse_next(input)
 }
 
@@ -537,8 +604,27 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     )
     .parse_next(input)?;
 
-    let span = build_span(input_offset, &input_start, *input);
-    Ok(fold_exprs(initial, remainder, span))
+    let mut result = fold_exprs(initial, remainder, build_span(input_offset, &input_start, *input));
+
+    // Parse ternary operator: condition ? true_expr : false_expr
+    if let Some(_) = opt(preceded(my_space0, '?')).parse_next(input)? {
+        let _ = my_space0(input)?;
+        let true_expr = expr2(input)?;
+        let _ = my_space0(input)?;
+        let _ = ':'.parse_next(input)?;
+        let _ = my_space0(input)?;
+        let false_expr = expr2(input)?;
+        
+        let span = build_span(input_offset, &input_start, *input);
+        result = LocatedExpr::Ternary(
+            Box::new(result),
+            Box::new(true_expr),
+            Box::new(false_expr),
+            span.into()
+        );
+    }
+
+    Ok(result)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -928,6 +1014,9 @@ pub fn parse_label(
             ))
         }
         else {
+            // Note: obtained_label is &[u8] from .take()
+            // update_slice() creates a new span with these bytes but current input's location
+            // This is a known limitation - the span will point to current position, not start
             Ok((*input).update_slice(obtained_label))
         }
     }

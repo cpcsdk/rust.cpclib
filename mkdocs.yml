@@ -5,6 +5,8 @@ nav:
     - Command line: 'basm/cmdline.md'
     - Syntax: 'basm/syntax.md'
     - Directives: 'basm/directives.md'
+    - Functions: 'basm/functions.md'
+    - Expression Types: 'basm/expression-types.md'
   - BNDBUILD:
     - BNDBUILD: 'bndbuild/index.md'
     - Recipes: 'bndbuild/recipes.md'

@@ -24,7 +24,7 @@ The user base being quite small, lots of bugs can remain. Do note hesitate to fi
 - Rare directives and functions (e.g. `ld a, opcode(xor a)`).
 - Macros definition and usage (e.g. `MY_MACRO_WITH_TWO_ARGS 1, "string"`).
 - Function definition and usage (e.g. `db 5, my_function(3)`).
-- Expressions able to handle numbers, strings, lists, matrices.
+- Expressions able to handle numbers, strings, lists, matrices - see [expression types](expression-types.md).
 - Handling of Amstrad CPC snapshots.
 - Possibility to execute directly the assembled project in the Amstrad CPC thanks to the M4/CPC WIFI card.
 - Multi-pass (in fact, `BASM` uses as many passes as needed).
