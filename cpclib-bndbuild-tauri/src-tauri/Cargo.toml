@@ -1,4 +1,4 @@
-cargo-features = ["profile-rustflags", "trim-paths", "edition2024"]
+cargo-features = ["profile-rustflags", "trim-paths" ]
 
 [package]
 name = "cpclib-bndbuild-tauri"

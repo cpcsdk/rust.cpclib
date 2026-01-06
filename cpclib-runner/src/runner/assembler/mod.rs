@@ -43,27 +43,28 @@ impl ExternAssembler {
 #[cfg(test)]
 mod test {
     use super::RasmVersion;
-    use crate::delegated::{GithubInformation, StaticInformation, cpclib_download};
+    use crate::delegated::{GithubInformation, StaticInformation};
+    use cpclib_common::network;
     use crate::runner::assembler::{SjasmplusVersion, VasmVersion};
 
     #[test]
     fn test_download_rasm() {
         let urls = RasmVersion::default().github_download_urls().unwrap();
-        assert!(cpclib_download(dbg!(&urls.linux.unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(&urls.windows.unwrap())).is_ok());
+        assert!(network::download(dbg!(&urls.linux.unwrap())).is_ok());
+        assert!(network::download(dbg!(&urls.windows.unwrap())).is_ok());
     }
 
     #[test]
     fn test_download_sjasmplus() {
         let urls = SjasmplusVersion::default().github_download_urls().unwrap();
-        assert!(cpclib_download(dbg!(&urls.linux.unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(&urls.windows.unwrap())).is_ok());
+        assert!(network::download(dbg!(&urls.linux.unwrap())).is_ok());
+        assert!(network::download(dbg!(&urls.windows.unwrap())).is_ok());
     }
 
     #[test]
     fn test_download_vasm() {
         let urls = VasmVersion::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 }

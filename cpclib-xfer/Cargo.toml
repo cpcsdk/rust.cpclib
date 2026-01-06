@@ -1,4 +1,3 @@
-cargo-features = ["edition2024"]
 [package]
 
 name = "cpclib-xfer"
@@ -17,7 +16,7 @@ independent = true
 [dependencies]
 cpclib-disc.workspace = true
 cpclib-sna.workspace = true
-cpclib-common.workspace = true
+cpclib-common = {workspace = true, features=["network"]}
 
 camino-tempfile.workspace = true
 arrayref.workspace = true
@@ -28,11 +27,9 @@ either.workspace = true
 getset.workspace = true
 #memchr.workspace = true
 serde.workspace = true
-http.workspace = true
 
 path-absolutize = { workspace = true, optional = false }
 curl = { workspace = true, optional = false }
-ureq = { workspace = true}
 
 
 [build-dependencies]

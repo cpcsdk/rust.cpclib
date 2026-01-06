@@ -33,6 +33,8 @@ strsim.workspace = true
 time = { workspace = true, optional = true }
 semver = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+ureq = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rayon = {workspace = true, optional = true }
@@ -41,3 +43,4 @@ rayon = {workspace = true, optional = true }
 [features]
 cmdline = ["time", "semver", "clap"]
 rayon = ["dep:rayon"]
+network = ["dep:ureq", "dep:http"]

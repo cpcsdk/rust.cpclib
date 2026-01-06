@@ -1,4 +1,3 @@
-cargo-features = ["edition2024"]
 [package]
 name = "cpclib-asm"
 version.workspace = true
@@ -46,7 +45,7 @@ paste.workspace = true
 regex.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 serde = { workspace = true, features = ["derive"] }
-smallvec = {workspace = true, features = ["const_generics"]}
+smallvec = {workspace = true}
 #smartstring.workspace = true
 substring.workspace = true
 velcro.workspace = true

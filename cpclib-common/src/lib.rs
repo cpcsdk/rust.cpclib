@@ -1,6 +1,8 @@
 pub mod chars;
 pub mod clap_extra;
 pub mod event;
+#[cfg(feature = "network")]
+pub mod network;
 pub mod parse;
 pub mod riff;
 

@@ -153,35 +153,36 @@ impl Emulator {
 mod test {
     use super::{SugarBoxV2Version, WinapeVersion};
     use crate::delegated::{
-        DynamicUrlInformation, GithubInformation, StaticInformation, cpclib_download
+        DynamicUrlInformation, GithubInformation, StaticInformation
     };
+    use cpclib_common::network;
     use crate::runner::emulator::{AceVersion, AmspiritVersion};
 
     #[test]
     fn test_download_ace() {
         let urls = AceVersion::default().dynamic_download_urls().unwrap();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
     #[test]
     fn test_download_sugarbox() {
         let urls = SugarBoxV2Version::default().github_download_urls().unwrap();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
     #[test]
     fn test_download_winape() {
         let urls = WinapeVersion::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
     #[test]
     fn test_download_amspirit() {
         let urls = AmspiritVersion::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 }

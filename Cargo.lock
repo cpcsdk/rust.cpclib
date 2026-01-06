@@ -2395,6 +2395,7 @@ dependencies = [
  "bitvec",
  "camino",
  "clap",
+ "http",
  "itertools 0.14.0",
  "num",
  "num-bigint",
@@ -2405,6 +2406,7 @@ dependencies = [
  "smol_str 0.3.4",
  "strsim",
  "time",
+ "ureq",
  "winnow 0.7.14",
 ]
 
@@ -2587,7 +2589,6 @@ dependencies = [
  "flate2",
  "fs_extra",
  "glob",
- "http",
  "rust-embed",
  "rust-ini",
  "scraper",
@@ -2595,7 +2596,6 @@ dependencies = [
  "shlex",
  "tar",
  "transparent",
- "ureq",
  "utf8-chars",
  "wmctrl",
  "xcap",
@@ -2703,10 +2703,8 @@ dependencies = [
  "delegate",
  "either",
  "getset",
- "http",
  "path-absolutize",
  "serde",
- "ureq",
 ]
 
 [[package]]

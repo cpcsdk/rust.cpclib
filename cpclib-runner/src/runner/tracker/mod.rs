@@ -78,22 +78,23 @@ impl SongConverter {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{StaticInformation, cpclib_download};
+    use crate::delegated::{StaticInformation};
     use crate::runner::tracker::at3::At3Version;
     use crate::runner::tracker::chipnsfx::ChipnsfxVersion;
+    use cpclib_common::network;
 
     #[test]
     fn test_download_at3() {
         let urls = At3Version::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 
     #[test]
     #[ignore]
     fn test_download_chipnsfx() {
         let urls = ChipnsfxVersion::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 }

@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
 use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::network;
 use directories::BaseDirs;
 use scraper::{Html, Selector};
 
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, DynamicUrlInformation, ExecutableInformation,
-    InternetDynamicCompiledApplication, MutiplatformUrls, cpclib_download
+    InternetDynamicCompiledApplication, MutiplatformUrls
 };
 
 pub const ACE_CMD: &str = "ace";
@@ -36,7 +37,7 @@ impl DynamicUrlInformation for AceVersion {
     fn dynamic_download_urls(&self) -> Result<MutiplatformUrls, String> {
         match self {
             Self::UnknownLastVersion => {
-                let mut content = cpclib_download(ACE_URL)?;
+                let mut content = network::download(ACE_URL)?;
                 let mut html = String::new();
                 content
                     .read_to_string(&mut html)

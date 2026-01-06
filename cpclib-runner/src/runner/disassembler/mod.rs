@@ -26,13 +26,14 @@ impl ExternDisassembler {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{StaticInformation, cpclib_download};
+    use crate::delegated::{StaticInformation};
     use crate::runner::disassembler::disark::DisarkVersion;
+    use cpclib_common::network;
 
     #[test]
     fn test_download_disark() {
         let urls = DisarkVersion::default().static_download_urls();
-        assert!(cpclib_download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
-        assert!(cpclib_download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
     }
 }

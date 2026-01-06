@@ -7,37 +7,17 @@ use std::rc::Rc;
 use bon::Builder;
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
+use cpclib_common::network;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use scraper::{Html, Selector};
 use tar::Archive;
-use ureq;
 use xz2::read::XzDecoder;
 
 use crate::event::EventObserver;
 use crate::runner::runner::{ExternRunner, RunInDir, Runner};
 
 static GITHUB_URL: &str = "https://github.com/";
-
-/// Download a HTTP ressource
-pub fn cpclib_download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
-    let mut response = ureq::get(url)
-        .header("Cache-Control", "max-age=1")
-        .header("From", "krusty.benediction@gmail.com")
-        .header("User-Agent", "cpclib")
-        .call()
-        .map_err(|e| e.to_string())?;
-    
-    // Read body into bytes with large limit (ureq 3.x API - default is 10MB)
-    // Set to 1GB for large downloads like emulators and tools
-    let bytes = response
-        .body_mut()
-        .with_config()
-        .limit(1024 * 1024 * 1024) // 1GB limit for large downloads
-        .read_to_vec()
-        .map_err(|e| e.to_string())?;
-    Ok(Box::new(Cursor::new(bytes)))
-}
 
 /// From the full release url page, get the url for the given release
 pub fn github_get_assets_for_version_url<GI: GithubInformation>(
@@ -50,7 +30,7 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
     ));
 
     // obtain the base dowload page
-    let mut content = cpclib_download(&url)?;
+    let mut content = network::download(&url)?;
     let mut html = String::new();
     content
         .read_to_string(&mut html)
@@ -208,7 +188,7 @@ pub trait GithubInformation: DownloadableInformation + Display + Clone + 'static
     }
 
     fn github_download_urls(&self) -> Result<MutiplatformUrls, String> {
-        let mut content = cpclib_download(&github_get_assets_for_version_url(self)?)?;
+        let mut content = network::download(&github_get_assets_for_version_url(self)?)?;
         let mut html = String::default();
         content
             .read_to_string(&mut html)
@@ -498,19 +478,9 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         // get the file
         let dest = self.cache_folder();
 
-        let resp = self
+        let mut input = self
             .download(o)
             .map_err(|e| format!("Unable to download the expected file. {e}"))?;
-        
-        // Read body into bytes with large limit (ureq 3.x API - default is 10MB)
-        // Set to 1GB for large downloads like emulators and tools
-        let bytes = resp
-            .into_body()
-            .with_config()
-            .limit(1024 * 1024 * 1024) // 1GB limit for large downloads
-            .read_to_vec()
-            .map_err(|e| e.to_string())?;
-        let mut input = Cursor::new(bytes);
 
         // uncompress it
         match self.archive_format {
@@ -579,10 +549,10 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }
     }
 
-    fn download(&self, o: &E) -> Result<http::Response<ureq::Body>, String> {
+    fn download(&self, o: &E) -> Result<Box<dyn Read + Send + Sync>, String> {
         let url = self.download_fn_url.deref()()?;
         o.emit_stdout(&format!(">> Download file {url}\n"));
-        ureq::get(&url).call().map_err(|e| e.to_string())
+        network::download(&url)
     }
 }
 

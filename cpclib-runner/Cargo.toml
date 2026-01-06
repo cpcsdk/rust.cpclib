@@ -1,4 +1,3 @@
-cargo-features = ["edition2024"]
 [package]
 name = "cpclib-runner"
 version.workspace = true
@@ -12,7 +11,7 @@ resolver = "2"
 description = "Dependency for various cpclib crates to help running external applications (mostly assemblers or emulators)"
 
 [dependencies]
-cpclib-common.workspace=true
+cpclib-common = {workspace=true, features=["network"]}
 cpclib-asm.workspace=true
 cpclib-csl.workspace=true
 
@@ -22,8 +21,6 @@ delegate.workspace = true
 enigo = {workspace = true, features = ["x11rb"]}
 sevenz-rust.workspace = true
 shlex.workspace = true
-ureq.workspace = true
-http.workspace = true
 utf8-chars.workspace = true
 xcap.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
@@ -39,9 +36,6 @@ transparent.workspace = true
 xz2 = "0.1.7"
 wmctrl = "0.1.8"
 zip-extract.workspace = true
-
-[dev-dependencies]
-ureq.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 fs_extra = "1.3.0"
