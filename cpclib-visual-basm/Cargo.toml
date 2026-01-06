@@ -1,3 +1,4 @@
+cargo-features = ["edition2024"]
 [package]
 name = "visual-basm"
 version.workspace = true
@@ -20,8 +21,8 @@ claui.workspace = true
 eframe.workspace = true
 
 [build-dependencies]
-built = { version = "0.7.7", features = ["chrono"] }
-static_vcruntime = "2.0"
+built = { version = "0.8.0", features = ["chrono"] }
+static_vcruntime = "3.0"
 
 [[bin]]
 name = "visual-basm"

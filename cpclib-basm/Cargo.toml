@@ -1,3 +1,4 @@
+cargo-features = ["edition2024"]
 [package]
 name = "cpclib-basm"
 version.workspace = true
@@ -33,12 +34,12 @@ regex.workspace = true
 serial_test.workspace = true
 parking_lot.workspace = true
 glob.workspace = true
-criterion = "0.5.1"
+criterion = "0.8.1"
 strip-ansi-escapes = "0.2.1"
 walkdir = "2.5"
 
 [build-dependencies]
-built = { version = "0.7.7", features = ["chrono"] }
+built = { version = "0.8.0", features = ["chrono"] }
 build-deps = "0.1.4"
 #static_vcruntime = "2.0"
 

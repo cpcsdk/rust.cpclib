@@ -89,7 +89,7 @@ impl PyBndTask {
     ///  - `PyBndTask("basm toto.asm -o toto.o")` (single string, YAML-like parse)
     ///  - `PyBndTask("basm", ["toto.asm", "-o", "toto.o"])` (command + args list)
     #[new]
-    pub fn new(task: &PyAny, args: Option<&PyAny>) -> PyResult<Self> {
+    pub fn new(task: &Bound<'_, PyAny>, args: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
         match args {
             None => {
                 let task_str: &str = task
@@ -142,7 +142,7 @@ impl PyBndTask {
         observer: Arc<PyConsoleObserver>
     ) -> PyResult<()> {
         // Execute the task without holding the GIL.
-        py.allow_threads(|| {
+        py.detach(|| {
             let guard = self.inner.lock().unwrap();
             guard.execute(&observer)
         })
@@ -152,7 +152,7 @@ impl PyBndTask {
 
 /// Factory function to create a `PyBndTask` from a task string.
 #[pyfunction]
-pub fn create_bndbuild_task(task: &PyAny, py: Python) -> PyResult<PyObject> {
+pub fn create_bndbuild_task(task: &Bound<'_, PyAny>, py: Python) -> PyResult<Py<PyAny>> {
     let task_str: &str = task
         .extract()
         .map_err(pyo3::exceptions::PyValueError::new_err)?;
@@ -163,5 +163,5 @@ pub fn create_bndbuild_task(task: &PyAny, py: Python) -> PyResult<PyObject> {
             inner: Mutex::new(t)
         }
     )?;
-    Ok(obj.into_py(py))
+    Ok(obj.into_any())
 }

@@ -1,3 +1,4 @@
+cargo-features = ["edition2024"]
 [package]
 name = "cpclib-cprcli"
 version.workspace = true
@@ -11,7 +12,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-colored = "2.2.0"
+colored = "3.0.0"
 
 cpclib-common ={ workspace=true, features=["cmdline"] }
 cpclib-cpr.workspace = true

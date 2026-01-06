@@ -12,7 +12,6 @@ use flate2::read::GzDecoder;
 use scraper::{Html, Selector};
 use tar::Archive;
 use ureq;
-use ureq::Response;
 use xz2::read::XzDecoder;
 
 use crate::event::EventObserver;
@@ -22,13 +21,22 @@ static GITHUB_URL: &str = "https://github.com/";
 
 /// Download a HTTP ressource
 pub fn cpclib_download(url: &str) -> Result<Box<dyn Read + Send + Sync>, String> {
-    Ok(ureq::get(url)
-        .set("Cache-Control", "max-age=1")
-        .set("From", "krusty.benediction@gmail.com")
-        .set("User-Agent", "cpclib")
+    let mut response = ureq::get(url)
+        .header("Cache-Control", "max-age=1")
+        .header("From", "krusty.benediction@gmail.com")
+        .header("User-Agent", "cpclib")
         .call()
-        .map_err(|e| e.to_string())?
-        .into_reader())
+        .map_err(|e| e.to_string())?;
+    
+    // Read body into bytes with large limit (ureq 3.x API - default is 10MB)
+    // Set to 1GB for large downloads like emulators and tools
+    let bytes = response
+        .body_mut()
+        .with_config()
+        .limit(1024 * 1024 * 1024) // 1GB limit for large downloads
+        .read_to_vec()
+        .map_err(|e| e.to_string())?;
+    Ok(Box::new(Cursor::new(bytes)))
 }
 
 /// From the full release url page, get the url for the given release
@@ -493,7 +501,16 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         let resp = self
             .download(o)
             .map_err(|e| format!("Unable to download the expected file. {e}"))?;
-        let mut input = resp.into_reader();
+        
+        // Read body into bytes with large limit (ureq 3.x API - default is 10MB)
+        // Set to 1GB for large downloads like emulators and tools
+        let bytes = resp
+            .into_body()
+            .with_config()
+            .limit(1024 * 1024 * 1024) // 1GB limit for large downloads
+            .read_to_vec()
+            .map_err(|e| e.to_string())?;
+        let mut input = Cursor::new(bytes);
 
         // uncompress it
         match self.archive_format {
@@ -562,7 +579,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         }
     }
 
-    fn download(&self, o: &E) -> Result<Response, String> {
+    fn download(&self, o: &E) -> Result<http::Response<ureq::Body>, String> {
         let url = self.download_fn_url.deref()()?;
         o.emit_stdout(&format!(">> Download file {url}\n"));
         ureq::get(&url).call().map_err(|e| e.to_string())

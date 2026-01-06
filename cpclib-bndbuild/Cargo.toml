@@ -1,3 +1,4 @@
+cargo-features = ["edition2024"]
 [package]
 name = "cpclib-bndbuild"
 version.workspace = true
@@ -52,11 +53,11 @@ self_update = {workspace = true, optional = true}
 serde_yaml = "0.9.34"
 serde.workspace = true
 shlex.workspace = true
-thiserror = "1.0"
+thiserror = "2.0"
 topologic = "1.1.0"
 clap_complete = "4.5.64"
 utf8-chars = "3.0.6"
-fancy-regex = "0.14.0"
+fancy-regex = "0.17.0"
 
 [build-dependencies]
 built.workspace = true

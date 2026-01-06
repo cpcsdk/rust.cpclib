@@ -883,13 +883,13 @@ impl ColorMatrixList {
 
         let mut matrix_list = ColorMatrixList(Vec::new());
         while let Some(frame) = decoder.read_next_frame()? {
-            screen.blit_frame(frame)?;
+            screen.blit_frame(&frame)?;
 
             let content = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
-                screen.pixels.width() as u32,
-                screen.pixels.height() as u32,
+                screen.pixels().width() as u32,
+                screen.pixels().height() as u32,
                 screen
-                    .pixels
+                    .pixels()
                     .buf()
                     .iter()
                     .flat_map(|pix| [pix.r, pix.g, pix.b].to_vec())

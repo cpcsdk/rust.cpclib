@@ -1,3 +1,4 @@
+cargo-features = ["edition2024"]
 [package]
 name = "cpclib-runner"
 version.workspace = true
@@ -22,17 +23,18 @@ enigo = {workspace = true, features = ["x11rb"]}
 sevenz-rust.workspace = true
 shlex.workspace = true
 ureq.workspace = true
+http.workspace = true
 utf8-chars.workspace = true
 xcap.workspace = true
 rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 
 bon.workspace = true
-directories = "5.0.1"
+directories = "6.0.0"
 flate2 = "1.1.5"
 glob.workspace = true
 tar = "0.4.44"
 rust-ini.workspace = true
-scraper = "0.20.0"
+scraper = "0.25.0"
 transparent.workspace = true
 xz2 = "0.1.7"
 wmctrl = "0.1.8"

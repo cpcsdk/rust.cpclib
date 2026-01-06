@@ -142,10 +142,10 @@ impl CpcXfer {
     }
 
     /// Make a simple query
-    fn simple_query(&self, query: &[(&str, &str)]) -> Result<ureq::Response, Box<ureq::Error>> {
+    fn simple_query(&self, query: &[(&str, &str)]) -> Result<http::Response<ureq::Body>, Box<ureq::Error>> {
         Ok(ureq::get(&self.uri("config.cgi"))
             .query_pairs(query.iter().cloned())
-            .set("User-Agent", "User-Agent: cpcxfer")
+            .header("User-Agent", "cpcxfer")
             .call()?)
     }
 

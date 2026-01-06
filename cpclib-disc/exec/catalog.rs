@@ -23,7 +23,7 @@ use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use log::{error, info};
-use simple_logger::{SimpleLogger, set_up_color_terminal};
+use simple_logger::SimpleLogger;
 #[must_use]
 /// # Panics
 ///
@@ -64,7 +64,6 @@ fn main() -> std::io::Result<()> {
     // ColorChoice::Auto
     // )
     // .expect("Unable to build logger");
-    set_up_color_terminal();
     let logger = SimpleLogger::new();
     log::set_max_level(log::LevelFilter::Debug);
     log::set_boxed_logger(Box::new(logger)).unwrap();
