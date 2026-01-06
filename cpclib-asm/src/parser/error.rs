@@ -1,8 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
-#[allow(deprecated)]
-use cpclib_common::winnow::error::ErrorKind;
-use cpclib_common::winnow::error::{AddContext, ParserError, StrContext};
+use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::Stream;
 
 use super::obtained::LocatedListing;
@@ -57,35 +55,37 @@ impl Z80ParserError {
         Self(vec![(*input, Z80ParserErrorKind::Inner { listing, error })])
     }
 
-    #[allow(deprecated)]
+    /// Create a new error from input - convenience method that delegates to the trait method
     pub fn from_input(input: &InnerZ80Span) -> Self {
-        Self::from_error_kind(input, ErrorKind::Fail)
+        <Self as ParserError<InnerZ80Span>>::from_input(input)
     }
 }
 
 impl ParserError<InnerZ80Span> for Z80ParserError {
-    #[allow(deprecated)]
-    fn from_error_kind(input: &InnerZ80Span, _kind: ErrorKind) -> Self {
+    type Inner = Self;
+
+    fn from_input(input: &InnerZ80Span) -> Self {
         Self(vec![(*input, Z80ParserErrorKind::Winnow)])
     }
 
-    #[allow(deprecated)]
     fn append(
         mut self,
         input: &InnerZ80Span,
-        _token_start: &<InnerZ80Span as Stream>::Checkpoint,
-        _kind: ErrorKind
+        _token_start: &<InnerZ80Span as Stream>::Checkpoint
     ) -> Self {
         self.0.push((*input, Z80ParserErrorKind::Winnow));
         self
+    }
+
+    fn into_inner(self) -> Result<Self::Inner, Self> {
+        Ok(self)
     }
 
     fn assert(input: &InnerZ80Span, _message: &'static str) -> Self {
         #[cfg(debug_assertions)]
         panic!("assert `{_message}` failed at {input:#?}");
         #[cfg(not(debug_assertions))]
-        #[allow(deprecated)]
-        Self::from_error_kind(input, ErrorKind::Assert)
+        Self::from_input(input)
     }
 
     fn or(self, other: Self) -> Self {

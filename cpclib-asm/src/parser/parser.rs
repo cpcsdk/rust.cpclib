@@ -79,7 +79,7 @@ pub mod test {
         }
     }
 
-    pub fn parse_test<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+    pub fn parse_test<O, P: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>>(
         mut parser: P,
         code: &'static str
     ) -> TestResult<O>
@@ -89,15 +89,16 @@ pub mod test {
         let (ctx, span) = ctx_and_span(code);
         let res = parser.parse(span.0);
         if let Err(e) = &res {
-            let e = e.inner();
-            let e = AssemblerError::SyntaxError { error: e.clone() };
+            // Extract the inner Z80ParserError from ParseError
+            let inner_error = e.clone().into_inner();
+            let e = AssemblerError::SyntaxError { error: inner_error };
             eprintln!("Parse error: {}", e);
         }
 
         TestResult { ctx, span, res }
     }
 
-    fn parse_test_rest<O, P: Parser<InnerZ80Span, O, Z80ParserError>>(
+    fn parse_test_rest<O, P: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>>(
         mut parser: P,
         code: &'static str,
         next: &str

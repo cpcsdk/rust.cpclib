@@ -1,5 +1,4 @@
-use winnow::ascii::escaped;
-use winnow::combinator::{alt, terminated};
+use winnow::combinator::{alt, delimited, repeat};
 use winnow::stream::UpdateSlice;
 use winnow::token::{none_of, one_of};
 use winnow::{BStr, LocatingSlice, ModalResult, Parser, Stateful};
@@ -7,26 +6,16 @@ use winnow::{BStr, LocatingSlice, ModalResult, Parser, Stateful};
 fn parse_string<'src>(
     input: &mut Stateful<LocatingSlice<&'src BStr>, ()>
 ) -> ModalResult<Stateful<LocatingSlice<&'src BStr>, ()>> {
-    let mut first = '"';
-    let last = first;
-    let normal = none_of(('\\', '"'));
-    let escapable = one_of(('\\', '"'));
+    let normal = none_of(('\\', '"')).void();
+    let escaped = ('\\', one_of(('\\', '"'))).void();
+    
+    let content = delimited(
+        '"',
+        repeat::<_, _, (), _, _>(0.., alt((normal, escaped))).take(),
+        '"'
+    ).parse_next(input)?;
 
-    first.parse_next(input)?;
-    let content = alt((
-        last.recognize(), // to be removed if any
-        terminated(escaped(normal, '\\', escapable), last)
-    ))
-    .parse_next(input)?;
-
-    let string = if content.len() == 1 && first == (content[0] as char) {
-        &content[..0] // we remove " (it is not present for the others)
-    }
-    else {
-        content
-    };
-
-    let string = (*input).update_slice(string);
+    let string = (*input).update_slice(content);
     Ok(string)
 }
 

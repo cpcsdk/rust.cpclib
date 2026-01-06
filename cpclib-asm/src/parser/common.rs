@@ -8,8 +8,6 @@ use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, terminated
 };
-#[allow(deprecated)]
-use cpclib_common::winnow::error::ErrorKind;
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
@@ -307,7 +305,7 @@ pub fn parse_z80_str<S: Into<String>>(code: S) -> Result<LocatedListing, Assembl
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_many0_nocollect<O, E, F>(mut f: F) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<(), E>
 where
-    F: Parser<InnerZ80Span, O, E>,
+    F: Parser<InnerZ80Span, O, ErrMode<E>>,
     E: ParserError<InnerZ80Span>
 {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -340,8 +338,8 @@ pub fn my_many_till_nocollect<O, P, E, F, G>(
     mut g: G
 ) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<((), P), E>
 where
-    F: Parser<InnerZ80Span, O, E>,
-    G: Parser<InnerZ80Span, P, E>,
+    F: Parser<InnerZ80Span, O, ErrMode<E>>,
+    G: Parser<InnerZ80Span, P, ErrMode<E>>,
     E: ParserError<InnerZ80Span>
 {
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -356,8 +354,7 @@ where
                     match f.parse_next(i) {
                         Err(ErrMode::Backtrack(_err)) => {
                             i.reset(&start_i);
-                            #[allow(deprecated)]
-                            return Err(ErrMode::Backtrack(e.append(i, &start_i, ErrorKind::Many)));
+                            return Err(ErrMode::Backtrack(e.append(i, &start_i)));
                         },
                         Err(e) => return Err(e),
                         Ok(_o) => {
@@ -744,7 +741,7 @@ pub fn parse_line(
         else {
             let comment = opt(parse_comment).parse_next(input)?;
 
-            alt((eof::<_, Z80ParserError>, line_ending))
+            alt((eof, line_ending))
                 .value(())
                 .context(StrContext::Label("Line ending expected"))
                 .parse_next(input)?;
@@ -897,11 +894,11 @@ pub fn my_space0(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80Parse
         .parse_next(input)
 }
 
-pub fn my_repeat1<I, O, C, E, F>(mut f: F) -> impl Parser<I, C, E>
+pub fn my_repeat1<I, O, C, E, F>(mut f: F) -> impl Parser<I, C, ErrMode<E>>
 where
     I: Stream,
     C: Accumulate<O>,
-    F: Parser<I, O, E>,
+    F: Parser<I, O, ErrMode<E>>,
     E: ParserError<I>
 {
     move |i: &mut I| my_repeat1_(&mut f, i)
@@ -913,13 +910,12 @@ fn my_repeat1_<I, O, C, E, F>(f: &mut F, i: &mut I) -> ModalResult<C, E>
 where
     I: Stream,
     C: Accumulate<O>,
-    F: Parser<I, O, E>,
+    F: Parser<I, O, ErrMode<E>>,
     E: ParserError<I>
 {
     let start = i.checkpoint();
     match f.parse_next(i) {
-        #[allow(deprecated)]
-        Err(e) => Err(e.append(i, &start, ErrorKind::Many)),
+        Err(e) => Err(e.append(i, &start)),
         Ok(o) => {
             let mut acc = C::initial(None);
             acc.accumulate(o);

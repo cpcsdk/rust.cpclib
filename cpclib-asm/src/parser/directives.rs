@@ -592,7 +592,7 @@ pub enum RunEnt {
     Ent
 }
 
-pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, Z80ParserError> {
+pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, ErrMode<Z80ParserError>> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let exp = cut_err(located_expr.context(match &kind {
             RunEnt::Run => "RUN expects at least one expression (e.g. RUN $)",
@@ -2457,7 +2457,7 @@ pub fn parse_macro_or_struct_call_inner(
         .parse_next(input)?
         .is_some();
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
-            eof::<_, Z80ParserError>.value(()),
+            eof.value(()),
             parse_comment.value(()),
             '\n'.value(()),
             ':'.value(())
