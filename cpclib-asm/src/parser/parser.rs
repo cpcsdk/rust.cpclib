@@ -678,10 +678,10 @@ MEND";
         let res = parse_test(parse_snaset(false), "SNASET Z80_SP, 0x500");
         assert!(res.is_ok(), "{:?}", &res);
 
-        let res = parse_test(parse_snaset(false), "SNASET GA_PAL, 0, 30");
+        let res = parse_test(parse_snaset(false), "SNASET GA_PAL:0, 30");
         assert!(res.is_ok(), "{:?}", &res);
 
-        let res = parse_test(parse_snaset(false), "SNASET CRTC_REG, 1, 48");
+        let res = parse_test(parse_snaset(false), "SNASET CRTC_REG:1, 48");
         assert!(res.is_ok(), "{:?}", &res);
     }
 
