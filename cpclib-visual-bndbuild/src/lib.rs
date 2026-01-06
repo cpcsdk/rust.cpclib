@@ -178,7 +178,9 @@ impl<'builder> From<&'builder BndBuilder> for Layers<'builder> {
                 .get_layered_dependencies()
                 .into_iter()
                 .map(|set| {
-                    let mut vec = set.into_iter().collect_vec();
+                    let mut vec: Vec<&Utf8Path> = set.iter()
+                        .flat_map(|task_targets| task_targets.iter().copied())
+                        .collect();
                     vec.sort();
                     vec
                 })
@@ -194,13 +196,16 @@ impl<'builder> From<&'builder BndBuilder> for DependencyOf {
         let targets: Vec<&'builder Utf8Path> = builder.targets();
         for task in targets.iter() {
             let deps = builder.get_layered_dependencies_for(task);
-            let deps = deps.into_iter().flatten();
-            for dep in deps {
-                // println!("{} highlight {}", dep.display(), task.display());
-                dep_of
-                    .entry(dep.to_path_buf())
-                    .or_default()
-                    .insert(task.to_path_buf());
+            for layer in deps.into_iter() {
+                for task_targets in layer.iter() {
+                    for dep in task_targets.targets() {
+                        // println!("{} highlight {}", dep.display(), task.display());
+                        dep_of
+                            .entry(dep.to_path_buf())
+                            .or_default()
+                            .insert(task.to_path_buf());
+                    }
+                }
             }
         }
 

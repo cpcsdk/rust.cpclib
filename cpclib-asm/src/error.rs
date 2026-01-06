@@ -519,7 +519,7 @@ impl AssemblerError {
 
                                 let mut writer = buffer();
                                 let config = config();
-                                term::emit(&mut writer, &config, &source_files, &diagnostic)
+                                term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic)
                                     .unwrap();
 
                                 std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
@@ -954,7 +954,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 
     let mut writer = buffer();
     let config = config();
-    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+    term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
@@ -996,7 +996,7 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
     if severity == Severity::Note {
         config.display_style = DisplayStyle::Short;
     }
-    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+    term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }
@@ -1038,7 +1038,7 @@ fn build_simple_error_message_with_notes(
 
     let mut writer = buffer();
     let config = config();
-    term::emit(&mut writer, &config, &source_files, &diagnostic).unwrap();
+    term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic).unwrap();
 
     std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
 }

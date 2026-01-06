@@ -570,7 +570,7 @@ impl BndbuildState {
     pub async fn load<P: Into<Utf8PathBuf>>(path: P, app: &AppHandle) -> Self {
         let fname = path.into();
 
-        match cpclib_bndbuild::BndBuilder::from_path(&fname) {
+        match cpclib_bndbuild::BndBuilder::from_path(&fname, false) {
             Ok((fname, builder)) => {
                 match CachedBndBuilder::new(builder, app).await {
                     Ok(builder) => {

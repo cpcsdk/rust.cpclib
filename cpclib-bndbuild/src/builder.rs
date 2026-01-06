@@ -284,11 +284,7 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        #[cfg(feature = "rayon")]
-        #[cfg(not(feature = "rayon"))]
-        let mut state;
-
-        let state = ExecutionState {
+        let mut state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };

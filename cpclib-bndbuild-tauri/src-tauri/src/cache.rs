@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -7,9 +6,8 @@ use cpclib_bndbuild::cpclib_common::event::EventObserver;
 use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc};
 use log;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandEvent;
 
 #[derive(Debug)]
