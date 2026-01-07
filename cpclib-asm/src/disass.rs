@@ -2058,7 +2058,7 @@ mod test {
             let mut env = Env::default();
             if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
                 let obtained_bytes =
-                    assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
+                    env.assemble_opcode_impl(*mnemonic, arg1, arg2, arg3).unwrap();
                 assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
             }
             else {
@@ -2135,7 +2135,7 @@ mod test {
                 // relative addresses are not properly managed
                 if !(mnemonic.is_djnz() || mnemonic.is_jr()) {
                     let obtained_bytes =
-                        assemble_opcode(*mnemonic, arg1, arg2, arg3, &mut env).unwrap();
+                        env.assemble_opcode_impl(*mnemonic, arg1, arg2, arg3).unwrap();
                     assert_eq!(
                         &bytes[..],
                         &obtained_bytes[..],

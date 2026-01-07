@@ -1,6 +1,6 @@
 use cpclib_tokens::{Expr, FormattedExpr};
 
-use super::{Env, visit_assert};
+use super::Env;
 use crate::error::AssemblerError;
 use crate::preamble::Z80Span;
 
@@ -70,7 +70,7 @@ pub struct ControlOutputStore {
 
 impl ControlAssert {
     fn execute(&mut self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
-        visit_assert(&self.exp, self.txt.as_ref(), env, self.span.as_ref())?;
+        env.visit_assert(&self.exp, self.txt.as_ref(), self.span.as_ref())?;
         Ok(())
     }
 }

@@ -329,13 +329,12 @@ Truc
 
     #[test]
     fn test_size() {
-        let mut env = Default::default();
+        let mut env: Env = Default::default();
         dbg!(
-            assemble_call_jr_or_jp(
+            env.assemble_call_jr_or_jp(
                 Mnemonic::Jp,
                 None,
-                &DataAccess::Expression(Expr::Value(0)),
-                &mut env
+                &DataAccess::Expression(Expr::Value(0))
             )
             .unwrap()
         );

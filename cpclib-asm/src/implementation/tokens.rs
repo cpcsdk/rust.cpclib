@@ -6,7 +6,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::symbols::*;
 use cpclib_tokens::tokens::*;
 
-use crate::assembler::{Env, Visited, assemble_defs_item};
+use crate::assembler::{Env, Visited};
 use crate::error::*;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::listing::ListingExt;
@@ -165,9 +165,10 @@ impl TokenExt for Token {
 
         match self {
             Token::Defs(l) => {
+                let mut env = Env::default();
                 l.iter()
                     .map(|(e, f)| {
-                        assemble_defs_item(e, f.as_ref(), &mut Env::default())
+                        env.assemble_defs_item(e, f.as_ref())
                             .map_err(|err| format!("Unable to assemble {self}: {err:?}"))
                     })
                     .fold_ok(SmallVec::<[u8; 4]>::new(), |mut acc, v| {
