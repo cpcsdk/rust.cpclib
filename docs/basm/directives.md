@@ -35,7 +35,7 @@ Example:
 Synopsis:
 
 ```
-ALIGN boundary
+ALIGN boundary [, FILL]
 ```
 
 Description:
@@ -45,6 +45,23 @@ Example:
 
 ```z80
 --8<-- "cpclib-basm/tests/asm/good_document_align.asm"
+```
+
+### EVEN
+
+Synopsis:
+
+```
+EVEN
+```
+
+Description:
+Align to an even address. Shorthand for ALIGN 2. Ensures the next byte is at an even memory address.
+
+Example:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_even.asm"
 ```
 
 
@@ -660,6 +677,23 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_document_fail.asm"
 ```
 
+### WARNING
+
+Synopsis:
+
+```
+WARNING [message [, expressions...]]
+```
+
+Description:
+Emit a warning message without stopping assembly. Unlike FAIL, assembly continues after a WARNING. Useful for highlighting potential issues or deprecated features while still producing output.
+
+Example:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_warning.asm"
+```
+
 ### STOP, END
 
 Synopsis:
@@ -927,6 +961,23 @@ Example:
 ```
 
 ## Data saving and export
+
+### OUTPUT
+
+Synopsis:
+
+```
+OUTPUT "filename"
+```
+
+Description:
+Set the output filename for the assembled code. This directive allows you to specify where the assembled binary should be written.
+
+Example:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_output.asm"
+```
 
 ### EXPORT, NOEXPORT
 

@@ -480,3 +480,104 @@ fn test_at2_akm() {
 
     process(&args, Arc::new(())).expect("Error while assembling AT2/AKM");
 }
+
+#[test]
+fn test_output_directive() {
+    let _lock = LOCK.lock();
+    manual_cleanup();
+
+    // Clean up any pre-existing testoutput.bin
+    let output_path = std::path::Path::new("testoutput.bin");
+    if output_path.exists() {
+        std::fs::remove_file(output_path).unwrap();
+    }
+
+    let fname = "tests/asm/good_document_output.asm";
+    
+    // Use basm command directly to assemble the file
+    let res = Command::new("../target/debug/basm")
+        .args(["-I", "tests/asm/", "-i", fname])
+        .output()
+        .expect("Unable to launch basm");
+
+    assert!(
+        res.status.success(),
+        "Assembly failed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+
+    // Check that the OUTPUT directive created the file
+    assert!(
+        output_path.exists(),
+        "OUTPUT directive did not create testoutput.bin file"
+    );
+
+    // Verify the file has content (should have assembled code)
+    let file_content = std::fs::read(output_path).expect("Unable to read testoutput.bin");
+    assert!(
+        !file_content.is_empty(),
+        "testoutput.bin should not be empty"
+    );
+
+    // Clean up
+    std::fs::remove_file(output_path).unwrap();
+}
+
+#[test]
+fn test_output_directive_with_command_line() {
+    let _lock = LOCK.lock();
+    manual_cleanup();
+
+    // Clean up any pre-existing files
+    let directive_path = std::path::Path::new("testoutput.bin");
+    let cmdline_path = std::path::Path::new("cmdline_output.bin");
+    
+    if directive_path.exists() {
+        std::fs::remove_file(directive_path).unwrap();
+    }
+    if cmdline_path.exists() {
+        std::fs::remove_file(cmdline_path).unwrap();
+    }
+
+    let fname = "tests/asm/good_document_output.asm";
+    
+    // Use basm with both OUTPUT directive and -o command-line argument
+    let res = Command::new("../target/debug/basm")
+        .args(["-I", "tests/asm/", "-i", fname, "-o", "cmdline_output.bin"])
+        .output()
+        .expect("Unable to launch basm");
+
+    assert!(
+        res.status.success(),
+        "Assembly failed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+
+    // Check that BOTH files were created
+    assert!(
+        directive_path.exists(),
+        "OUTPUT directive file (testoutput.bin) was not created"
+    );
+    assert!(
+        cmdline_path.exists(),
+        "Command-line output file (cmdline_output.bin) was not created"
+    );
+
+    // Verify both files have the same content
+    let directive_content = std::fs::read(directive_path).expect("Unable to read testoutput.bin");
+    let cmdline_content = std::fs::read(cmdline_path).expect("Unable to read cmdline_output.bin");
+    
+    assert_eq!(
+        directive_content, cmdline_content,
+        "Both output files should have the same content"
+    );
+    assert!(
+        !directive_content.is_empty(),
+        "Output files should not be empty"
+    );
+
+    // Clean up
+    std::fs::remove_file(directive_path).unwrap();
+    std::fs::remove_file(cmdline_path).unwrap();
+}
+

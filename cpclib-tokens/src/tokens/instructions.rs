@@ -649,6 +649,8 @@ pub enum Token {
         label: SmolStr,
         expr: Expr
     },
+    /// Align to even address (shorthand for ALIGN 2)
+    Even,
     Export(Vec<SmolStr>),
 
     Fail(Option<Vec<FormattedExpr>>),
@@ -723,6 +725,8 @@ pub enum Token {
         val1: Expr,
         val2: Option<Expr>
     },
+    /// Set output filename  
+    OutputFile(Expr),
     Pause,
     Print(Vec<FormattedExpr>),
     Protect(Expr, Expr),
@@ -784,6 +788,8 @@ pub enum Token {
 
     Undef(SmolStr),
     WaitNops(Expr),
+    /// Emit a warning message (like PRINT but not fatal)
+    Warning(Option<Vec<FormattedExpr>>),
     While(Expr, Listing)
 }
 // impl Clone for Token {

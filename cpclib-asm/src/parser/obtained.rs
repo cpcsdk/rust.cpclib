@@ -970,6 +970,7 @@ pub enum LocatedTokenInner {
         label: Z80Span,
         expr: LocatedExpr
     },
+    Even,
     Export(Vec<Z80Span>),
 
     Fail(Option<Vec<FormattedExpr>>),
@@ -1042,6 +1043,7 @@ pub enum LocatedTokenInner {
         val1: LocatedExpr,
         val2: Option<LocatedExpr>
     },
+    OutputFile(LocatedExpr),
     Pause,
     Print(Vec<FormattedExpr>),
     Protect(LocatedExpr, LocatedExpr),
@@ -1096,6 +1098,7 @@ pub enum LocatedTokenInner {
     Undef(Z80Span),
 
     WaitNops(LocatedExpr),
+    Warning(Option<Vec<FormattedExpr>>),
     WarningWrapper(Box<Self>, String),
     While(LocatedExpr, LocatedListing)
 }
@@ -1592,6 +1595,7 @@ impl ListingElement for LocatedTokenInner {
                     expr: expr.to_expr().into_owned()
                 })
             },
+            Self::Even => Cow::Borrowed(&Token::Even),
             Self::SetN {
                 label: _,
                 source: _,
@@ -1608,6 +1612,8 @@ impl ListingElement for LocatedTokenInner {
             },
 
             Self::Fail(msg) => Cow::Owned(Token::Fail(msg.clone())),
+            Self::Warning(msg) => Cow::Owned(Token::Warning(msg.clone())),
+            Self::OutputFile(filename) => Cow::Owned(Token::OutputFile(filename.to_expr().into_owned())),
             Self::Breakpoint {
                 address,
                 r#type,

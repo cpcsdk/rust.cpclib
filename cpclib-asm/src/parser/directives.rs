@@ -471,6 +471,14 @@ pub fn parse_include(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner,
     ))
 }
 
+pub fn parse_output(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    let filename = cut_err(located_expr.context(StrContext::Label("OUTPUT: error in filename")))
+        .parse_next(input)?;
+
+    Ok(LocatedTokenInner::OutputFile(filename))
+}
+
+
 pub fn parse_incbin(
     transformation: BinaryTransformation
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
@@ -758,6 +766,21 @@ pub fn parse_fail(
     }
 }
 
+pub fn parse_warning(
+    directive_name_parsed: bool
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
+        if !directive_name_parsed {
+            parse_word(b"WARNING").parse_next(input)?;
+        }
+
+        opt(parse_print_inner)
+            .map(LocatedTokenInner::Warning)
+            .parse_next(input)
+    }
+}
+
+
 pub fn parse_print_inner(
     input: &mut InnerZ80Span
 ) -> ModalResult<Vec<FormattedExpr>, Z80ParserError> {
@@ -801,6 +824,8 @@ fn formatted_expr(input: &mut InnerZ80Span) -> ModalResult<FormattedExpr, Z80Par
     Ok(FormattedExpr::Formatted(format, exp))
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_align(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let boundary = located_expr.parse_next(input)?;
     let fill = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
@@ -808,6 +833,17 @@ pub fn parse_align(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z
     Ok(LocatedTokenInner::Align(boundary, fill))
 }
 
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_even(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    // EVEN is equivalent to ALIGN 2
+    Ok(LocatedTokenInner::Even)
+}
+
+
+
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_breakpoint(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
@@ -1508,6 +1544,7 @@ fn parse_directive_of_size_7(
         h if hashed_choice!(h, word, b"PROTECT") => parse_protect.parse_next(input),
         h if hashed_choice!(h, word, b"SECTION") => parse_section.parse_next(input),
         h if hashed_choice!(h, word, b"SNAINIT") => parse_snainit.parse_next(input),
+        h if hashed_choice!(h, word, b"WARNING") => parse_warning(true).parse_next(input),
         #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCUPKR") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
@@ -1570,6 +1607,7 @@ fn parse_directive_of_size_6(
             parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
         },
 
+        h if hashed_choice!(h, word, b"OUTPUT") => parse_output.parse_next(input),
         h if hashed_choice!(h, word, b"RETURN") => parse_return.parse_next(input),
         h if hashed_choice!(h, word, b"SNASET") => parse_snaset(true).parse_next(input),
 
@@ -1637,6 +1675,7 @@ fn parse_directive_of_size_4(
         h if hashed_choice!(h, word, b"FILL", b"DEFS", b"RMEM") => parse_defs.parse_next(input),
 
         h if hashed_choice!(h, word, b"BANK") => parse_bank.parse_next(input),
+        h if hashed_choice!(h, word, b"EVEN") => parse_even.parse_next(input),
         h if hashed_choice!(h, word, b"FAIL") => parse_fail(true).parse_next(input),
         h if hashed_choice!(h, word, b"LIST") => Ok(LocatedTokenInner::List),
         h if hashed_choice!(h, word, b"READ") => parse_include.parse_next(input),

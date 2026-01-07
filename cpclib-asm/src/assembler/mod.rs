@@ -487,6 +487,9 @@ pub struct Env {
     repeat_start: ExprResult,
     repeat_step: ExprResult,
 
+    // Output filename if set by OUTPUT directive
+    output_filename: Option<String>,
+
     // temporary stuff
     extra_print_from_function: RwLock<Vec<PrintOrPauseCommand>>,
     extra_failed_assert_from_function: RwLock<Vec<FailedAssertCommand>>,
@@ -560,6 +563,8 @@ impl Clone for Env {
 
             repeat_start: self.repeat_start.clone(),
             repeat_step: self.repeat_step.clone(),
+
+            output_filename: self.output_filename.clone(),
 
             assembling_control_current_output_commands: self
                 .assembling_control_current_output_commands
@@ -2226,6 +2231,11 @@ impl Env {
 
 #[allow(missing_docs)]
 impl Env {
+    /// Get the output filename set by the OUTPUT directive
+    pub fn output_filename(&self) -> Option<&str> {
+        self.output_filename.as_deref()
+    }
+
     /// Write in w the list of symbols
     pub fn generate_symbols_output<W: Write>(
         &self,
@@ -3045,6 +3055,40 @@ impl Env {
         }))
     }
 
+    pub fn visit_warning(
+        &mut self,
+        info: Option<&[FormattedExpr]>
+    ) -> Result<(), Box<AssemblerError>> {
+        let repr = info
+            .map(|info| self.prepropress_string_formatted_expression(info))
+            .unwrap_or_else(|| Ok(Default::default()))?;
+        let warning = AssemblerWarning::AlreadyRenderedError(format!("Warning: {}", repr.to_string()));
+        self.add_warning(Box::new(warning));
+        Ok(())
+    }
+
+    pub fn visit_output_file<E: ExprEvaluationExt>(
+        &mut self,
+        filename: &E
+    ) -> Result<(), Box<AssemblerError>> {
+        // Evaluate the filename expression
+        let fname_result = self.resolve_expr_must_never_fail(filename)?;
+        let fname = match fname_result {
+            ExprResult::String(s) => s,
+            ExprResult::Value(v) => v.to_string().into(),
+            _ => {
+                return Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "OUTPUT directive expects a string or value for the filename".into()
+                }))
+            }
+        };
+        
+        // Store the output filename in the environment
+        // This will be used later when saving the assembled output
+        self.output_filename = Some(fname.to_string());
+        Ok(())
+    }
+
     // TODO better design the token to simplify this code and remove all ambigous cases
     pub fn visit_save<E: ExprEvaluationExt + Debug>(
         &mut self,
@@ -3514,6 +3558,8 @@ impl Env {
             repeat_start: 1.into(),
             repeat_step: 1.into(),
 
+            output_filename: None,
+
             assembling_control_current_output_commands: Vec::new()
         };
 
@@ -3737,8 +3783,10 @@ macro_rules! visit_token_impl {
             $cls::End => visit_end($env),
             $cls::Export(labels) => $env.visit_export(labels.as_slice()),
             $cls::Equ { label, expr } => $env.visit_equ(&label, expr),
+            $cls::Even => $env.visit_even(),
 
             $cls::Fail(exp) => $env.visit_fail(exp.as_ref().map(|v| v.as_slice())),
+            $cls::Warning(exp) => $env.visit_warning(exp.as_ref().map(|v| v.as_slice())),
             $cls::Field { label, expr, .. } => $env.visit_field(label, expr),
 
             $cls::Label(label) => $env.visit_label(label),
@@ -3768,6 +3816,7 @@ macro_rules! visit_token_impl {
             },
 
             $cls::Org { val1, val2 } => $env.visit_org(val1, val2.as_ref()),
+            $cls::OutputFile(filename) => $env.visit_output_file(filename),
             $cls::OpCode(mnemonic, arg1, arg2, arg3) => {
                 visit_opcode(*mnemonic, &arg1, &arg2, &arg3, $env)?;
                 // Compute duration only if it is necessary
@@ -4762,6 +4811,12 @@ impl Env {
                 label_span.possible_span().map(|s| s.into())
             )
         }
+    }
+
+    pub fn visit_even(&mut self) -> Result<(), Box<AssemblerError>> {
+        // EVEN is shorthand for ALIGN 2
+        let boundary = Expr::Value(2);
+        self.visit_align(&boundary, None)
     }
 
     fn visit_field<

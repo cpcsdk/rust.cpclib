@@ -42,6 +42,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"DEFSECTION",
     b"DM",
     b"DS",
+    b"EVEN",
     b"FOR",
     b"DW",
     b"ELSE",
@@ -82,6 +83,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"NOLIST",
     b"NOP",
     b"ORG",
+    b"OUTPUT",
     b"PAUSE",
     b"PRINT",
     b"PROTECT",
@@ -106,6 +108,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
     b"UNDEF",
     b"UNTIL",
     b"WAITNOPS",
+    b"WARNING",
     b"WORD",
     b"WRITE DIRECT",
     b"WRITE"
