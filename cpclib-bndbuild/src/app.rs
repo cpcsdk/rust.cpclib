@@ -633,6 +633,8 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         let update_all = |can_install| -> Result<(), BndBuilderError> {
             #[cfg(feature = "self-update")]
             update_self()?;
+
+            let mut failures = Vec::new();
             for cmd in
                 ALL_APPLICATIONS.iter().filter_map(
                     |(cmd, clearable)| {
@@ -640,9 +642,29 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                     }
                 )
             {
-                update_command(cmd, can_install)?;
+                let res = update_command(cmd, can_install);
+                if let Err(e) = res {
+                    observers.emit_stderr(&format!(">> Failure when updating {cmd}\n"));
+                    observers.emit_stderr(&format!("   {e}\n"));
+                    failures.push((cmd.to_string(), e));
+                }
             }
-            Ok(())
+
+            if failures.is_empty() {
+                observers.emit_stdout(">> All applications updated successfully\n");
+                Ok(())
+            }
+            else {
+                Err(BndBuilderError::AnyError(format!(
+                    "{} application(s) failed to update ({}).",
+                    failures.len(),
+                    failures
+                        .iter()
+                        .map(|(cmd, _)| cmd.as_str())
+                        .collect::<Vec<&str>>()
+                        .join(", ")
+                )))
+            }
         };
 
         if let Some(cmd) = cmd {
