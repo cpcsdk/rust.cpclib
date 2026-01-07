@@ -3471,18 +3471,41 @@ impl Env {
             t.enter_crunched_section()
         }
 
-        visit_processed_tokens(lst, &mut crunched_env).map_err(|e| {
-            let e = AssemblerError::CrunchedSectionError { error: e };
-            match span {
-                Some(span) => {
-                    AssemblerError::RelocatedError {
-                        error: e.into(),
-                        span: span.clone()
-                    }
-                },
-                None => e
-            }
-        })?;
+        // Try to assemble the crunched section
+        let assembly_result = visit_processed_tokens(lst, &mut crunched_env);
+        
+        // Handle errors: some errors (like unknown symbols) can be deferred to next pass
+        match assembly_result {
+            Err(e) => {
+                // Check if this is a recoverable error that might be resolved in a later pass
+                let is_recoverable = matches!(
+                    &*e,
+                    AssemblerError::UnknownSymbol { .. }
+                    | AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { .. }, .. }
+                );
+                
+                // In first pass or if error is recoverable, defer it and request additional pass
+                if crunched_env.pass.is_first_pass() || is_recoverable {
+                    // Mark that we need another pass to resolve this
+                    *self.request_additional_pass.write().unwrap() = true;
+                    *crunched_env.request_additional_pass.write().unwrap() = true;
+                    // Continue with empty bytes for now - will be computed in next pass
+                } else {
+                    // Truly unrecoverable error - propagate it
+                    let e = AssemblerError::CrunchedSectionError { error: e };
+                    return Err(Box::new(match span {
+                        Some(span) => {
+                            AssemblerError::RelocatedError {
+                                error: e.into(),
+                                span: span.clone()
+                            }
+                        },
+                        None => e
+                    }));
+                }
+            },
+            Ok(_) => {}
+        }
 
         if let Some(t) = self.output_trigger.as_mut() {
             t.leave_crunched_section()
