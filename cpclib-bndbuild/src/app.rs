@@ -743,12 +743,24 @@ impl BndBuilderApp {
     }
 
     pub fn from_matches(matches: ArgMatches) -> Self {
+        let should_not_display_cpu = [
+            "help",
+            "version",
+            "init",
+            "update",
+            "clear",
+            "direct",
+            "completion"
+        ].into_iter()
+        .any(|id| matches.contains_id(id));
+
         #[cfg(feature = "rayon")]
         let force_serial = matches.get_flag("serial");
         #[cfg(feature = "rayon")]
-        {
+        if !should_not_display_cpu {
             use cpclib_common::rayon;
             let num_cpus = rayon::current_num_threads();
+           
             if force_serial {
                 eprintln!(
                     "--> Forcing serial execution of bndbuild. Other tools still have access to {} threads\n",
