@@ -69,3 +69,6 @@ strip = true # Ensures debug symbols are removed.
 trim-paths = "all" # Removes potentially privileged information from your binaries.
 rustflags = ["-Cdebuginfo=0", "-Zthreads=8"] # Better compile performance.
 
+[features]
+default = []
+rayon = ["cpclib-bndbuild/rayon"] # in fact i don't wont to accept it, it is jsut a workaround to avoid linter to force rayon specific arguments...
