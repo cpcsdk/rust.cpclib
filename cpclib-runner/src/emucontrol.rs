@@ -909,7 +909,7 @@ fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
     let windows = xcap::Window::all().unwrap();
     let mut windows = windows
         .into_iter()
-        .filter(|win| emu.window_name_corresponds(win.title()))
+        .filter(|win| emu.window_name_corresponds(&win.title().unwrap()))
         .collect_vec();
 
     let window = match windows.len() {
