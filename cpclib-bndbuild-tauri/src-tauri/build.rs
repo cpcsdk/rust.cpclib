@@ -3,6 +3,7 @@
 fn get_graphviz_resources() {
     use std::io::Cursor;
     use std::path::Path;
+    use std::io::Read;
 
     use ureq;
 
@@ -10,11 +11,12 @@ fn get_graphviz_resources() {
     let dst = Path::new("resources/Graphviz-12.2.1-win64");
 
     if !dst.exists() {
-        let mut content = ureq::get(url)
-            .set("Cache-Control", "max-age=1")
+        let res = ureq::get(url)
+            .header("Cache-Control", "max-age=1")
             .call()
-            .expect("Unable to download graphviz/windows")
-            .into_reader();
+            .expect("Unable to download graphviz/windows");
+        let (_, mut body) = res.into_parts();
+        let mut content = body.as_reader();
 
         let mut buffer = Vec::new();
         content.read_to_end(&mut buffer).unwrap();
