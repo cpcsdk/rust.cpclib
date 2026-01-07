@@ -456,9 +456,9 @@ pub enum CslInstruction {
     /// Set delay between keystrokes (in microseconds)
     /// First param: delay between keys, Second param (optional): delay after CR, Third param (optional): delay after special key
     KeyDelay {
-        delay: u64,
+        press_delay: u64,
+        delay_after_key: u64,
         delay_after_cr: Option<u64>,
-        delay_after_key: Option<u64>
     },
 
     /// Send text as key strokes
@@ -606,16 +606,13 @@ impl fmt::Display for CslInstruction {
                 write!(f, "snapshot_dir '{}'", normalize_path_for_csl(dir, true))
             },
             Self::KeyDelay {
-                delay,
+                press_delay ,
+                delay_after_key,
                 delay_after_cr,
-                delay_after_key
             } => {
-                write!(f, "key_delay {}", delay)?;
+                write!(f, "key_delay {} {}", press_delay, delay_after_key)?;
                 if let Some(cr) = delay_after_cr {
                     write!(f, " {}", cr)?;
-                    if let Some(key) = delay_after_key {
-                        write!(f, " {}", key)?;
-                    }
                 }
                 Ok(())
             },
@@ -786,13 +783,13 @@ impl CslInstruction {
     /// Create a KeyDelay instruction
     pub fn key_delay(
         delay: u64,
+        delay_after_key: u64,
         delay_after_cr: Option<u64>,
-        delay_after_key: Option<u64>
     ) -> Self {
         Self::KeyDelay {
-            delay,
+            press_delay: delay,
+            delay_after_key,
             delay_after_cr,
-            delay_after_key
         }
     }
 
@@ -1239,21 +1236,21 @@ mod tests {
     fn test_display_key_delay() {
         assert_eq!(
             CslInstruction::KeyDelay {
-                delay: 70000,
-                delay_after_cr: Some(70000),
-                delay_after_key: Some(400000)
+                press_delay: 70000,
+                delay_after_key: 70000,
+                delay_after_cr: Some(400000)
             }
             .to_string(),
             "key_delay 70000 70000 400000"
         );
         assert_eq!(
             CslInstruction::KeyDelay {
-                delay: 50000,
+                press_delay: 50000,
                 delay_after_cr: None,
-                delay_after_key: None
+                delay_after_key: 50000
             }
             .to_string(),
-            "key_delay 50000"
+            "key_delay 50000 50000"
         );
     }
 

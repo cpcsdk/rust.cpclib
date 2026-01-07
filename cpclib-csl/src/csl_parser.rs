@@ -363,17 +363,17 @@ fn parse_key_delay<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Cs
         .parse_next(input)?;
 
     cut_err((
-        dec_uint::<_, u64, _>.context(StrContext::Label("delay value")),
+        dec_uint::<_, u64, _>.context(StrContext::Label("press delay ")),
+        dec_uint::<_, u64, _>
+            .context(StrContext::Label("delay_after_key")),
         opt(preceded(ws1, dec_uint::<_, u64, _>))
-            .context(StrContext::Label("optional delay_after_cr")),
-        opt(preceded(ws1, dec_uint::<_, u64, _>))
-            .context(StrContext::Label("optional delay_after_key"))
-    ))
-    .map(|(delay, delay_after_cr, delay_after_key)| {
+            .context(StrContext::Label("optional delay_after_cr"))
+            ))
+    .map(|(delay, delay_after_key, delay_after_cr)| {
         CslInstruction::KeyDelay {
-            delay,
-            delay_after_cr,
-            delay_after_key
+            press_delay: delay,
+            delay_after_key,
+            delay_after_cr
         }
     })
     .parse_next(input)
