@@ -29,15 +29,6 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result<(), String> {
-    if matches.get_flag("help") {
-        cmd.clone().print_long_help().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-
-    if matches.get_flag("version") {
-        todo!()
-    }
-
     let inputs = matches.get_many::<String>("input").expect("required");
     let output = matches.get_one::<String>("output").expect("required");
 
@@ -71,45 +62,66 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
 
     let output = std::path::Path::new(output);
 
-    let mut docs = inputs
-        .map(|input| DocumentationPage::for_file(&input))
-        .map(|page| page.map(|page| page.to_markdown()))
-        .map(|res| {
-            match res {
-                Ok(md) => md,
-                Err(e) => format!("**Error generating documentation:**\n\n```\n{}\n```\n", e)
-            }
-        });
-    let md = docs.join("\n\n---\n\n");
-
     if let Some(ext) = output.extension() {
         let is_md = ext.eq_ignore_ascii_case("md");
+        let is_html = ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm");
 
-        let md_fname = if is_md {
-            output.to_owned()
+        if is_html {
+            // Generate HTML directly using minijinja
+            let mut docs = inputs
+                .map(|input| DocumentationPage::for_file(&input))
+                .map(|page| page.map(|page| page.to_html()))
+                .map(|res| {
+                    match res {
+                        Ok(html) => html,
+                        Err(e) => format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
+                    }
+                });
+            let html = docs.join("\n\n<hr>\n\n");
+            
+            // Save the HTML file directly
+            std::fs::write(output, html)
+                .map_err(|e| format!("Unable to write {} file. {e}", output.display()))?;
         }
         else {
-            output.with_extension(".md") // TODO create a temp file instead?
-        };
+            // Generate markdown (for .md or PDF)
+            let mut docs = inputs
+                .map(|input| DocumentationPage::for_file(&input))
+                .map(|page| page.map(|page| page.to_markdown()))
+                .map(|res| {
+                    match res {
+                        Ok(md) => md,
+                        Err(e) => format!("**Error generating documentation:**\n\n```\n{}\n```\n", e)
+                    }
+                });
+            let md = docs.join("\n\n---\n\n");
 
-        // save the markdown file
-        std::fs::write(&md_fname, md)
-            .map_err(|e| format!("Unable to write {} file. {e}", md_fname.display()))?;
+            let md_fname = if is_md {
+                output.to_owned()
+            }
+            else {
+                output.with_extension(".md") // TODO create a temp file instead?
+            };
 
-        // export to the final output if needed
-        if !is_md {
-            let mut pandoc = pandoc::new();
-            pandoc.add_input(&md_fname);
-            pandoc.set_output(pandoc::OutputKind::File(output.into()));
-            pandoc.add_option(pandoc::PandocOption::Standalone);
-            pandoc.add_option(pandoc::PandocOption::TableOfContents);
-            pandoc
-                .execute()
-                .map_err(|e| format!("Pandoc error: {}", e))?;
+            // save the markdown file
+            std::fs::write(&md_fname, md)
+                .map_err(|e| format!("Unable to write {} file. {e}", md_fname.display()))?;
+
+            // export to the final output if needed (PDF)
+            if !is_md {
+                let mut pandoc = pandoc::new();
+                pandoc.add_input(&md_fname);
+                pandoc.set_output(pandoc::OutputKind::File(output.into()));
+                pandoc.add_option(pandoc::PandocOption::Standalone);
+                pandoc.add_option(pandoc::PandocOption::TableOfContents);
+                pandoc
+                    .execute()
+                    .map_err(|e| format!("Pandoc error: {}", e))?;
+            }
         }
     }
     else {
-        return Err("Output file must have .md extension".to_string());
+        return Err("Output file must have .md, .html, or PDF extension".to_string());
     }
 
     Ok(())

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - {{page.file_name}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar (Table of Contents) */
+        .sidebar {
+            width: 300px;
+            background-color: #fff;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+        }
+
+        .sidebar h1 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+
+        .sidebar h2 {
+            font-size: 0.95em;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .sidebar li {
+            margin: 4px 0;
+        }
+
+        .sidebar a {
+            color: #3498db;
+            text-decoration: none;
+            display: block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s, color 0.2s;
+            font-size: 0.9em;
+        }
+
+        .sidebar a:hover {
+            background-color: #e8f4f8;
+            color: #2980b9;
+        }
+
+        .sidebar a code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.9em;
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: 300px;
+            flex: 1;
+            padding: 40px 60px;
+            background-color: #fff;
+            max-width: calc(100% - 300px);
+        }
+
+        .main-content h1 {
+            font-size: 2.5em;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .main-content h2 {
+            font-size: 2em;
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+
+        .main-content h3 {
+            font-size: 1.5em;
+            color: #555;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        .main-content h4 {
+            font-size: 1.2em;
+            color: #666;
+            margin-top: 25px;
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #3498db;
+            border-radius: 3px;
+        }
+
+        .main-content code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            background-color: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+
+        .main-content pre {
+            background-color: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .main-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #333;
+        }
+
+        .main-content p {
+            margin-bottom: 15px;
+        }
+
+        .main-content ul, .main-content ol {
+            margin-left: 25px;
+            margin-bottom: 15px;
+        }
+
+        .main-content li {
+            margin-bottom: 8px;
+        }
+
+        .file-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .file-header h1 {
+            border: none;
+            color: white;
+            margin: 0;
+        }
+
+        .file-name {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-top: 10px;
+        }
+
+        .section {
+            margin-top: 40px;
+        }
+
+        .item {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #fafafa;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .item h4 {
+            margin-top: 0;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 250px;
+            }
+
+            .main-content {
+                margin-left: 250px;
+                padding: 20px 30px;
+                max-width: calc(100% - 250px);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                position: relative;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .main-content {
+                margin-left: 0;
+                max-width: 100%;
+                padding: 20px;
+            }
+        }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Anchor offset for fixed sidebar */
+        .anchor-offset {
+            padding-top: 20px;
+            margin-top: -20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar with Table of Contents -->
+        <aside class="sidebar">
+            <h1>📚 Documentation</h1>
+            <div class="file-name">{{ page.file_name }}</div>
+
+            {% if page.has_labels() %}
+            <h2>Labels</h2>
+            <ul>
+                {% for item in page.labels %}
+                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if page.has_macros() %}
+            <h2>Macros</h2>
+            <ul>
+                {% for item in page.macros %}
+                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if page.has_equ() %}
+            <h2>Equs</h2>
+            <ul>
+                {% for item in page.equs %}
+                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </aside>
+
+        <!-- Main content -->
+        <main class="main-content">
+            <div class="file-header">
+                <h1>Assembly Documentation</h1>
+                <div class="file-name">File: {{ page.file_name }}</div>
+            </div>
+
+            <!-- Labels section -->
+            {% if page.has_labels() %}
+            <section class="section">
+                <h2 id="labels-section" class="anchor-offset">Labels</h2>
+                {% for item in page.labels %}
+                <div class="item">
+                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <div>{{ item.doc }}</div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Macros section -->
+            {% if page.has_macros() %}
+            <section class="section">
+                <h2 id="macros-section" class="anchor-offset">Macros</h2>
+                {% for item in page.macros %}
+                <div class="item">
+                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <div>{{ item.doc }}</div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Equs section -->
+            {% if page.has_equ() %}
+            <section class="section">
+                <h2 id="equs-section" class="anchor-offset">Equs</h2>
+                {% for item in page.equs %}
+                <div class="item">
+                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <div>{{ item.doc }}</div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

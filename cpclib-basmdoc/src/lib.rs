@@ -159,7 +159,7 @@ impl Object for DocumentationPage {
                     .cloned()
                     .map(Value::from_object)
                     .collect::<Vec<_>>();
-                let labels = Value::from_object(dbg!(labels));
+                let labels = Value::from_object(labels);
                 Some(labels)
             },
             Some("macros") => {
@@ -168,7 +168,7 @@ impl Object for DocumentationPage {
                     .cloned()
                     .map(Value::from_object)
                     .collect::<Vec<_>>();
-                let macros = Value::from_object(dbg!(macros));
+                let macros = Value::from_object(macros);
                 Some(macros)
             },
             Some("equs") => {
@@ -177,7 +177,7 @@ impl Object for DocumentationPage {
                     .cloned()
                     .map(Value::from_object)
                     .collect::<Vec<_>>();
-                let equs = Value::from_object(dbg!(equs));
+                let equs = Value::from_object(equs);
                 Some(equs)
             },
             _ => None
@@ -210,7 +210,7 @@ impl DocumentationPage {
         let code = std::fs::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
-        let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
+        let doc = aggregate_documentation_on_tokens(&tokens);
 
         Ok(build_documentation_page_from_aggregates(fname, doc))
     }
@@ -250,6 +250,23 @@ impl DocumentationPage {
         env.add_template(TMPL_NAME, tmpl_src).unwrap();
 
         let tmpl = env.get_template("markdown_documentation.jinja").unwrap();
+        tmpl.render(context! {
+            page
+        })
+        .unwrap()
+    }
+
+    /// Return a string that encode the documentation page in HTML
+    pub fn to_html(&self) -> String {
+        let page = Value::from_object(self.clone());
+
+        let mut env = Environment::new();
+        const TMPL_NAME: &str = "html_documentation.jinja";
+        let tmpl_src = Templates::get(TMPL_NAME).expect("Template not found").data;
+        let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();
+        env.add_template(TMPL_NAME, tmpl_src).unwrap();
+
+        let tmpl = env.get_template("html_documentation.jinja").unwrap();
         tmpl.render(context! {
             page
         })
