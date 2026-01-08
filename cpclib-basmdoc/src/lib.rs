@@ -289,6 +289,24 @@ impl DocumentationPage {
         let page = Value::from_object(self.clone());
 
         let mut env = Environment::new();
+        
+        // Add a custom filter to convert markdown to HTML
+        env.add_filter("markdown_to_html", |value: String| -> Result<String, minijinja::Error> {
+            use pulldown_cmark::{Parser, Options, html};
+            
+            let mut options = Options::empty();
+            options.insert(Options::ENABLE_TABLES);
+            options.insert(Options::ENABLE_FOOTNOTES);
+            options.insert(Options::ENABLE_STRIKETHROUGH);
+            options.insert(Options::ENABLE_TASKLISTS);
+            
+            let parser = Parser::new_ext(&value, options);
+            let mut html_output = String::new();
+            html::push_html(&mut html_output, parser);
+            
+            Ok(html_output)
+        });
+        
         const TMPL_NAME: &str = "html_documentation.jinja";
         let tmpl_src = Templates::get(TMPL_NAME).expect("Template not found").data;
         let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();

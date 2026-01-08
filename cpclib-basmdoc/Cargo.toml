@@ -19,6 +19,7 @@ rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
 serde.workspace = true
 
 pandoc = {version="0.8"}
+pulldown-cmark = "0.12"
 
 [lints]
 workspace = true

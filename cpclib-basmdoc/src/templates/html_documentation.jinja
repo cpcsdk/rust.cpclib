@@ -162,6 +162,68 @@
             margin-bottom: 8px;
         }
 
+        /* Tables from markdown */
+        .main-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .main-content table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #2980b9;
+        }
+
+        .main-content table td {
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .main-content table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        .main-content table tr:hover {
+            background-color: #e8f4f8;
+        }
+
+        /* Markdown content inside items */
+        .item > div h1,
+        .item > div h2,
+        .item > div h3 {
+            font-size: 1.1em;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            color: #555;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+
+        .item > div h1:first-child,
+        .item > div h2:first-child,
+        .item > div h3:first-child {
+            margin-top: 0;
+        }
+
+        .item > div ul,
+        .item > div ol {
+            margin-left: 20px;
+        }
+
+        .item > div blockquote {
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #666;
+            font-style: italic;
+        }
+
         .file-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -294,7 +356,7 @@
                 {% for item in page.labels %}
                 <div class="item">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
-                    <div>{{ item.doc }}</div>
+                    <div>{{ item.doc | markdown_to_html | safe }}</div>
                 </div>
                 {% endfor %}
             </section>
@@ -307,7 +369,7 @@
                 {% for item in page.macros %}
                 <div class="item">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
-                    <div>{{ item.doc }}</div>
+                    <div>{{ item.doc | markdown_to_html | safe }}</div>
                 </div>
                 {% endfor %}
             </section>
@@ -320,7 +382,7 @@
                 {% for item in page.equs %}
                 <div class="item">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
-                    <div>{{ item.doc }}</div>
+                    <div>{{ item.doc | markdown_to_html | safe }}</div>
                 </div>
                 {% endfor %}
             </section>
