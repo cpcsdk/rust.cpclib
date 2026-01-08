@@ -766,72 +766,79 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
 
         let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
         // Start with builder with version 1.0
-        let mut builder = CslScriptBuilder::new(1, 0);
+        let mut builder = CslScriptBuilder::new();
 
         // Set disk directory if any disk is configured
         if conf.drive_a.is_some() || conf.drive_b.is_some() {
-            builder = builder.with_instruction(CslInstruction::disk_dir(cwd.clone()));
+            builder = builder.with_instruction(CslInstruction::disk_dir(cwd.clone()))
+                .expect("There is a bug there");
         }
 
         // Insert disks if configured
         if let Some(drive_a) = conf.drive_a {
-            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a));
+            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a))
+                .expect("There is a bug there");
         }
 
         if let Some(drive_b) = conf.drive_b {
-            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b));
+            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b))
+                .expect("There is a bug there");
         }
 
         // Configure memory expansion if specified
         if let Some(memory) = conf.memory {
             builder = builder
-                .with_instruction(CslInstruction::memory_exp(memory_to_csl_expansion(memory)));
+                .with_instruction(CslInstruction::memory_exp(memory_to_csl_expansion(memory)))
+                .expect("There is a bug there");
         }
 
         // Configure CRTC model if specified
         if let Some(crtc) = conf.crtc {
-            builder = builder.with_instruction(CslInstruction::crtc_select(crtc.to_csl_model()));
+            builder = builder.with_instruction(CslInstruction::crtc_select(crtc.to_csl_model()))
+                .expect("There is a bug there");
         }
 
         if conf.crtc.is_some() || conf.memory.is_some() {
-            builder = builder.with_reset(ResetType::Hard);
+            builder = builder.with_reset(ResetType::Hard).expect("There is a bug there");
         }
 
         // Set snapshot directory and load if configured
         if let Some(snapshot) = conf.snapshot {
             builder = builder
                 .with_instruction(CslInstruction::snapshot_dir(cwd))
-                .with_instruction(CslInstruction::snapshot_load(snapshot));
+                .expect("There is a bug there")
+                .with_instruction(CslInstruction::snapshot_load(snapshot))
+                .expect("There is a bug there");
         }
 
         if conf.auto_run.is_some() || conf.auto_type.is_some() {
-            builder = builder.with_instruction(CslInstruction::wait(19968 * 50));
+            builder = builder.with_instruction(CslInstruction::wait(19968 * 50)).expect("There is a bug there");
             builder = builder.with_instruction(CslInstruction::key_delay(
                 70000,
                 Some(70000),
                 Some(400000)
-            ));
+            )).expect("There is a bug there");
         }
 
         // Add auto-run command if configured
         if let Some(auto_run) = conf.auto_run {
             let key_string = format!("RUN\"{}\n", auto_run);
             if let Ok(key_output) = KeyOutput::try_from(key_string.as_str()) {
-                builder = builder.with_instruction(CslInstruction::key_output(key_output));
+                builder = builder.with_instruction(CslInstruction::key_output(key_output)).expect("Ther is a bug there");
             }
         }
 
         // Add auto-type file if configured
         if let Some(auto_type) = conf.auto_type {
             if false {
-                builder = builder.with_instruction(CslInstruction::key_from_file(auto_type));
+                builder = builder.with_instruction(CslInstruction::key_from_file(auto_type)).expect("There is a bug there");
             }
             else {
                 let content =
                     std::fs::read_to_string(&auto_type).expect("Failed to read auto-type file");
                 let key_output = KeyOutput::try_from(content.as_str())
                     .expect("Failed to convert auto-type content to KeyOutput");
-                builder = builder.with_instruction(CslInstruction::key_output(key_output));
+                builder = builder.with_instruction(CslInstruction::key_output(key_output)).expect("There is a bug there");
             }
         }
 

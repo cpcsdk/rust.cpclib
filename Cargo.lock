@@ -2501,6 +2501,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-cslcli"
+version = "0.11.0"
+dependencies = [
+ "cpclib-common",
+ "cpclib-csl",
+]
+
+[[package]]
 name = "cpclib-disc"
 version = "0.11.0"
 dependencies = [
