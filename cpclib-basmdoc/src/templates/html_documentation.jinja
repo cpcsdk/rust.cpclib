@@ -373,9 +373,55 @@
             padding-top: 20px;
             margin-top: -20px;
         }
+
+        /* Search box */
+        .search-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .search-box {
+            width: 300px;
+            padding: 10px 15px;
+            border: 2px solid #3498db;
+            border-radius: 20px;
+            font-size: 0.95em;
+            outline: none;
+            transition: box-shadow 0.2s;
+            background-color: white;
+        }
+
+        .search-box:focus {
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+        }
+
+        .search-box::placeholder {
+            color: #999;
+        }
+
+        .item.hidden {
+            display: none;
+        }
+
+        .no-results {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            display: none;
+        }
+
+        .no-results.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
+    <div class="search-container">
+        <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search documentation..." />
+    </div>
     <div class="container">
         <!-- Sidebar with Table of Contents -->
         <aside class="sidebar">
@@ -508,6 +554,59 @@
                 button.classList.add('active');
             }
         }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchBox = document.getElementById('searchBox');
+            const items = document.querySelectorAll('.item');
+            const sections = document.querySelectorAll('.section');
+            
+            searchBox.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase().trim();
+                
+                sections.forEach(section => {
+                    let visibleCount = 0;
+                    const sectionItems = section.querySelectorAll('.item');
+                    
+                    sectionItems.forEach(item => {
+                        const title = item.querySelector('h4').textContent.toLowerCase();
+                        const content = item.textContent.toLowerCase();
+                        
+                        if (searchTerm === '' || title.includes(searchTerm) || content.includes(searchTerm)) {
+                            item.classList.remove('hidden');
+                            visibleCount++;
+                        } else {
+                            item.classList.add('hidden');
+                        }
+                    });
+                    
+                    // Show/hide section based on whether it has visible items
+                    if (visibleCount === 0 && searchTerm !== '') {
+                        section.style.display = 'none';
+                    } else {
+                        section.style.display = 'block';
+                    }
+                });
+                
+                // Check if any items are visible
+                const visibleItems = document.querySelectorAll('.item:not(.hidden)');
+                const noResultsMsg = document.querySelector('.no-results');
+                
+                if (visibleItems.length === 0 && searchTerm !== '') {
+                    if (!noResultsMsg) {
+                        const msg = document.createElement('div');
+                        msg.className = 'no-results visible';
+                        msg.textContent = 'No results found for "' + searchTerm + '"';
+                        document.querySelector('.main-content').appendChild(msg);
+                    } else {
+                        noResultsMsg.textContent = 'No results found for "' + searchTerm + '"';
+                        noResultsMsg.classList.add('visible');
+                    }
+                } else if (noResultsMsg) {
+                    noResultsMsg.classList.remove('visible');
+                }
+            });
+        });
     </script>
 </body>
 </html>
