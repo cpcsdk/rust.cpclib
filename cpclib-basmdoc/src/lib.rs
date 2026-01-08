@@ -215,39 +215,42 @@ impl Object for DocumentationPage {
         match name.as_str() {
             Some("file_name") => Some(Value::from(self.fname.clone())),
             Some("labels") => {
-                let labels = self
+                let mut labels = self
                     .label_iter()
                     .cloned()
-                    .map(Value::from_object)
                     .collect::<Vec<_>>();
+                labels.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                let labels = labels.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let labels = Value::from_object(labels);
                 Some(labels)
             },
             Some("macros") => {
-                let macros = self
+                let mut macros = self
                     .macro_iter()
                     .cloned()
-                    .map(Value::from_object)
                     .collect::<Vec<_>>();
+                macros.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                let macros = macros.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let macros = Value::from_object(macros);
                 Some(macros)
             },
             Some("equs") => {
-                let equs = self
+                let mut equs = self
                     .equ_iter()
                     .cloned()
-                    .map(Value::from_object)
                     .collect::<Vec<_>>();
+                equs.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                let equs = equs.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let equs = Value::from_object(equs);
                 Some(equs)
             },
             Some("functions") => {
-                let functions = self
+                let mut functions = self
                     .function_iter()
                     .cloned()
-                    .map(Value::from_object)
-                    .sorted().into_iter()
                     .collect::<Vec<_>>();
+                functions.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                let functions = functions.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let functions = Value::from_object(functions);
                 Some(functions)
             },
@@ -417,11 +420,11 @@ pub fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
         && !token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
 }
 
-pub fn is_documentable<T: ListingElement>(token: &T) -> bool {
+pub fn is_documentable<T: ListingElement + ToString>(token: &T) -> bool {
     documentation_type(token, None).is_some()
 }
 
-pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Option<&str>) -> Option<DocumentedItem> {
+pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_label: Option<&str>) -> Option<DocumentedItem> {
     if token.is_label() {
         let label = token.label_symbol().to_string();
         // Handle local labels (starting with ".")
@@ -452,7 +455,7 @@ pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Optio
                 .iter()
                 .map(|a| a.to_string())
                 .collect(),
-            content: token.function_definition_inner().iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join("\n")
+            content: token.to_string()
         })
     }
     else if token.is_macro_definition() {
@@ -471,7 +474,7 @@ pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Optio
     }
 }
 
-pub fn build_documentation_page_from_aggregates<T: ListingElement>(
+pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
     fname: &str,
     agg: Vec<(String, Option<&T>, Option<String>)>
 ) -> DocumentationPage {
@@ -504,7 +507,7 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement>(
 
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
 /// Also tracks the last global label to handle local labels (starting with ".")
-pub fn aggregate_documentation_on_tokens<T: ListingElement>(
+pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
     tokens: &[T]
 ) -> Vec<(String, Option<&T>, Option<String>)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
