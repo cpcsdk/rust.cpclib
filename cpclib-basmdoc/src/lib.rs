@@ -28,7 +28,7 @@ pub enum DocumentedItem {
     File(String),
     Label(String),
     Equ(String, String),
-    Macro(String, Vec<String>, String),
+    Macro { name: String, arguments: Vec<String>, content: String },
     Function
 }
 
@@ -42,7 +42,7 @@ impl DocumentedItem {
     }
 
     pub fn is_macro(&self) -> bool {
-        matches!(self, DocumentedItem::Macro(_, _, _))
+        matches!(self, DocumentedItem::Macro { .. })
     }
 
     pub fn is_function(&self) -> bool {
@@ -59,8 +59,8 @@ impl DocumentedItem {
                 format!("equ_{}", l)
             },
 
-            DocumentedItem::Macro(n, _, _) => {
-                format!("macro_{}", n)
+            DocumentedItem::Macro { name, .. } => {
+                format!("macro_{}", name)
             },
 
             _ => String::from("unknown_item")
@@ -91,7 +91,7 @@ impl ItemDocumentation {
     /// Get the source code of a macro, or empty string for other items
     pub fn macro_source(&self) -> String {
         match &self.item {
-            DocumentedItem::Macro(_, _, source) => source.clone(),
+            DocumentedItem::Macro { content, .. } => content.clone(),
             _ => String::new()
         }
     }
@@ -115,9 +115,9 @@ impl ItemDocumentation {
                 format!("{l} EQU {v}")
             },
 
-            DocumentedItem::Macro(n, args, _) => {
-                let args = args.join(",");
-                format!("MACRO {n}({args})")
+            DocumentedItem::Macro { name, arguments, .. } => {
+                let args = arguments.join(",");
+                format!("MACRO {name}({args})")
             },
 
             _ => String::from("Unknown item")
@@ -132,8 +132,8 @@ impl ItemDocumentation {
                 l.clone()
             },
 
-            DocumentedItem::Macro(n, args, _) => {
-                n.clone()
+            DocumentedItem::Macro { name, .. } => {
+                name.clone()
             },
 
             _ => String::from("Unknown item")
@@ -152,9 +152,9 @@ impl ItemDocumentation {
                 md += &format!("## {l} EQU {v} \n\n");
             },
 
-            DocumentedItem::Macro(n, args, _) => {
-                let args = args.join(",");
-                md += &format!("## MACRO {n}({args}) \n\n");
+            DocumentedItem::Macro { name, arguments, .. } => {
+                let args = arguments.join(",");
+                md += &format!("## MACRO {name}({args}) \n\n");
             },
 
             _ => {
@@ -394,15 +394,15 @@ pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Optio
         Some(DocumentedItem::Function)
     }
     else if token.is_macro_definition() {
-        Some(DocumentedItem::Macro(
-            token.macro_definition_name().to_string(),
-            token
+        Some(DocumentedItem::Macro {
+            name: token.macro_definition_name().to_string(),
+            arguments: token
                 .macro_definition_arguments()
                 .iter()
                 .map(|a| a.to_string())
                 .collect(),
-            token.macro_definition_code().to_string()
-        ))
+            content: token.macro_definition_code().to_string()
+        })
     }
     else {
         None
