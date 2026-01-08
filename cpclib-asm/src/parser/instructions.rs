@@ -8,22 +8,39 @@ use cpclib_common::winnow::error::{ErrMode, StrContext};
 use cpclib_common::winnow::stream::{Stream, UpdateSlice};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_tokens::{DataAccessElem, ExprElement, FlagTest, Mnemonic};
+use crate::parse_value;
+use crate::{LocatedExpr, parse_register_bc};
+use crate::parse_register_c;
+use crate::parse_flag_test;
+use crate::parse_register_iy;
+use crate::parse_register_ix;
 
-use super::error::*;
-use super::obtained::*;
-use super::*;
-use crate::hashed_choice;
+use crate::{
+    InnerZ80Span, LocatedToken, LocatedTokenInner, Z80ParserError, 
+    hashed_choice, my_space0, my_space1, parse_comma, 
+    parse_register_a, parse_register_af, parse_word,
+    parse_register_ixh, parse_register_ixl, parse_register_iyh, parse_register_iyl
+};
 
-// Instruction mnemonics constant - used to forbid label naming conflicts
-pub const INSTRUCTIONS: &[&[u8]] = &[
-    b"ADC", b"ADD", b"AND", b"BIT", b"CALL", b"CCF", b"CP", b"CPD", b"CPDR", b"CPI", b"CPIR",
-    b"CPL", b"DAA", b"DEC", b"DI", b"DJNZ", b"EI", b"EX", b"EXX", b"HALT", b"IM", b"IN", b"INC",
-    b"IND", b"INDR", b"INI", b"INIR", b"JP", b"JR", b"LD", b"LDD", b"LDDR", b"LDI", b"LDIR",
-    b"NEG", b"NOP", b"OR", b"OTDR", b"OTIR", b"OUT", b"OUTD", b"OUTI", b"POP", b"PUSH", b"RES",
-    b"RET", b"RETI", b"RETN", b"RL", b"RLA", b"RLC", b"RLCA", b"RLD", b"RR", b"RRA", b"RRC",
-    b"RRCA", b"RRD", b"RST", b"SBC", b"SCF", b"SET", b"SLA", b"SRA", b"SRL", b"SUB", b"XOR",
-    b"SL1", b"SLL", b"EXA", b"EXD"
-];
+// Import from common module
+use super::common::{eq_ascii_nocase, fnv1a_ascii_upper};
+
+// Import from obtained module - types
+use super::obtained::LocatedDataAccess;
+
+// Import from expression module
+use super::expression::{
+    located_expr, parse_address, parse_hl_address, parse_expr,
+    parse_indexregister_address, parse_reg_address
+};
+
+// Import from registers module
+use super::registers::{
+    parse_indexregister16, parse_indexregister8, parse_indexregister_with_index,
+    parse_register8, parse_register16, parse_register_de, parse_register_hl,
+    parse_register_i, parse_register_r, parse_register_sp
+};
+
 
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {

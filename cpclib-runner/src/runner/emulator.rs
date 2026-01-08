@@ -19,7 +19,7 @@ pub use sugarbox::*;
 pub use winape::*;
 
 use crate::delegated::{
-    DelegateApplicationDescription, GithubCompilableApplication, GithubCompiledApplication,
+    DelegateApplicationDescription, GithubCompiledApplication,
     InternetDynamicCompiledApplication, InternetStaticCompiledApplication
 };
 

@@ -378,6 +378,25 @@ fn generate_forbidden_names() {
     println!("cargo:rerun-if-changed=build.rs");
 }
 
+
+pub fn generate_instructions_names() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest_path = Path::new(&out_dir).join("instructions_names_generated.rs");
+    let file = File::create(&dest_path).unwrap();
+    let mut file = BufWriter::new(file);
+
+    writeln!(file, "pub const INSTRUCTIONS: &[&[u8]] = &[").unwrap();
+    for instruction in INSTRUCTIONS {
+        writeln!(
+            file,
+            "    b\"{}\",",
+            std::str::from_utf8(instruction).unwrap()
+        )
+        .unwrap();
+    }
+    writeln!(file, "];").unwrap();
+}
+
 pub fn generate_orgams_directive_names() {
     generate_directive_names_file(
         STAND_ALONE_DIRECTIVE_ORGAMS,
@@ -389,6 +408,8 @@ pub fn generate_orgams_directive_names() {
         "END_DIRECTIVE_ORGAMS"
     );
 }
+
+
 
 pub fn generate_basm_directive_names() {
     generate_directive_names_file(
@@ -469,4 +490,5 @@ fn main() {
     generate_forbidden_names();
     generate_basm_directive_names();
     generate_orgams_directive_names();
+    generate_instructions_names();
 }

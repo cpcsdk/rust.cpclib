@@ -10,7 +10,6 @@ use clap::{ArgAction, Command, CommandFactory, Parser, Subcommand, ValueEnum, va
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse_value;
-use cpclib_common::winnow::stream::AsChar;
 use cpclib_csl::ResetType;
 use delegate;
 use enigo::{Enigo, Key, Keyboard, Settings};

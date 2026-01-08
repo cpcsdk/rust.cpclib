@@ -16,7 +16,7 @@ use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
-use crate::event::{BndBuilderObserved, BndBuilderObserver};
+use crate::event::BndBuilderObserver;
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
 use crate::runners::basmdoc::BasmDocRunner;

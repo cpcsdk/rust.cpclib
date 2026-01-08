@@ -30,7 +30,7 @@ use cpclib_runner::runner::tracker::at3::extra::{
 };
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
 use fancy_regex::Regex;
-use serde::de::{Error, Visitor};
+use serde::de::Visitor;
 use serde::{Deserialize, Deserializer};
 
 use crate::event::BndBuilderObserver;

@@ -2406,6 +2406,7 @@ name = "cpclib-bndbuild-tauri"
 version = "0.11.0"
 dependencies = [
  "camino",
+ "cfg-if",
  "cpclib-bndbuild",
  "gag",
  "log",

@@ -3,15 +3,13 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-use cpclib_common::rayon::iter::IntoParallelRefIterator;
 use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
-use cpclib_common::winnow::token::{none_of, one_of, take, take_while};
+use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_sna::FlagValue;
 use cpclib_tokens::ordered_float::OrderedFloat;
@@ -21,10 +19,17 @@ use cpclib_tokens::{
 };
 use smallvec::{Array, SmallVec};
 
-use super::common::parse_comma;
-use super::error::*;
-use super::obtained::*;
-use super::*;
+// Import from parser submodules
+use super::common::{
+    build_span, build_span_covering, my_line_ending, my_space0, my_space1,
+    parse_comma, parse_comma_multiline, parse_token, parse_word
+};
+use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};
+use super::registers::{parse_indexregister16, parse_register16, parse_register_hl};
+use super::orgams::parse_orgams_expression;
+use super::source::SourceString;
+use super::error::Z80ParserError;
+use crate::InnerZ80Span;
 
 // Include build-time generated forbidden names
 include!(concat!(env!("OUT_DIR"), "/forbidden_names_generated.rs"));

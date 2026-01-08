@@ -1,5 +1,4 @@
 // Directives module - contains directive-related constants and parsing functions
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -835,7 +834,7 @@ pub fn parse_align(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_even(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+pub fn parse_even(_input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     // EVEN is equivalent to ALIGN 2
     Ok(LocatedTokenInner::Even)
 }

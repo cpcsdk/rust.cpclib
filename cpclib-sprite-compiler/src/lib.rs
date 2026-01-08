@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use bon::Builder;
 use cpclib_asm::{
-    IfBuilder, Listing, ListingBuilder, ListingExt, ListingFromStr, ListingSelector, Register8,
+    IfBuilder, Listing, ListingBuilder, ListingFromStr, ListingSelector, Register8,
     Register16, TestKind, dec_e, dec_l, inc_e, inc_l
 };
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
@@ -59,7 +59,7 @@ impl RegistersStore {
             // if possible build a 16 bits number
             let second = first.neighbourg().unwrap();
             if let Some(idx) = available_registers.iter().position(|v| **v == second) {
-                let second = available_registers.swap_remove(idx);
+                let _second = available_registers.swap_remove(idx);
                 let complete = first.complete();
                 let value = self.value_for_r16(complete).unwrap();
                 lst = lst.ld_r16_expr(complete, value);
@@ -75,7 +75,7 @@ impl RegistersStore {
     }
 
     pub fn register_for(&self, val: u8) -> Option<Register8> {
-        self.regs.iter().find(|(r, v)| **v == val).map(|(r, v)| *r)
+        self.regs.iter().find(|(_r, v)| **v == val).map(|(r, _v)| *r)
     }
 
     pub fn value_for_r8(&self, r: Register8) -> Option<u8> {
@@ -188,8 +188,8 @@ impl Compiler {
         let stats = Self::build_stats(spr, msk);
         let mut retained = stats
             .into_iter()
-            .filter(|(k, v)| *v > 3)
-            .sorted_by_key(|(k, v)| *v)
+            .filter(|(_k, v)| *v > 3)
+            .sorted_by_key(|(_k, v)| *v)
             .collect_vec();
 
         // prefetch registers with most used values
@@ -230,7 +230,7 @@ impl Compiler {
         // let mut restore_data = Vec::new();
         // let mut restore_address = None;
 
-        let nb_moves = 0;
+        let _nb_moves = 0;
         self.emit_line_header(line_idx);
 
         let mut lst = ListingBuilder::default();
@@ -535,7 +535,7 @@ impl Bc26 {
 
     pub fn execute(&self) -> Listing {
         match self {
-            Bc26::Compute16KbC000 { r1 } | Bc26::Compute16KbUniversal { r1 } => {
+            Bc26::Compute16KbC000 { r1: _r1 } | Bc26::Compute16KbUniversal { r1: _r1 } => {
                 ListingBuilder::default().call(self.label()).build()
             },
         }
@@ -628,12 +628,12 @@ pub fn standard_sprite_compiler(
 
 pub fn standard_sprite_with_background_backup_and_restore_compiler(
     label: &str,
-    spr: &SpriteOutput,
-    msk: &SpriteOutput,
+    _spr: &SpriteOutput,
+    _msk: &SpriteOutput,
     r1: u8
 ) -> Listing {
-    let spr = spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
-    let msk = msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    let spr = _spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
+    let msk = _msk.with_encoding(SpriteEncoding::LeftToRightToLeft);
 
     todo!(
         "XXX Nothing is finished here. Cannot be used without fixes. Restore code is not stored  BTW"

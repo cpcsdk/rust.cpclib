@@ -18,7 +18,6 @@ use cpclib_common::camino::Utf8Path;
 use cpclib_common::clap;
 use cpclib_common::clap::builder::{PossibleValue, PossibleValuesParser};
 use cpclib_common::clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, ValueHint};
-use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::Parser;
 use cpclib_common::winnow::combinator::alt;

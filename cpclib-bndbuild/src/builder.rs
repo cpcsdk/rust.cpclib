@@ -13,15 +13,13 @@ use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::{Chars, emit_to_io_write};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-#[cfg(feature = "rayon")]
-use cpclib_common::rayon::iter::{ParallelBridge, ParallelIterator};
 use minijinja::context;
 
 use crate::BndBuilderError;
 use crate::app::WatchState;
 use crate::env::create_template_env;
 use crate::event::{
-    BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
+    BndBuilderObserved, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
     RuleTaskEventDispatcher
 };
 use crate::rules::{self, Graph, Rule};

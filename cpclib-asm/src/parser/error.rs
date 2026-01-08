@@ -1,6 +1,6 @@
 #![allow(clippy::cast_lossless)]
 
-use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
+use cpclib_common::winnow::error::{AddContext, ParserError, StrContext};
 use cpclib_common::winnow::stream::Stream;
 
 use super::obtained::LocatedListing;

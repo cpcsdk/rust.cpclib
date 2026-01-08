@@ -10,9 +10,14 @@ use either::Either;
 use regex::Regex;
 
 use super::line_col::LineColLookup;
+use super::obtained::LocatedTokenInner;
+use super::source::Z80Span;
 use crate::LocatedToken;
+use crate::assembler::Env;
 use crate::error::AssemblerError;
-use crate::preamble::*;
+use crate::implementation::tokens::TokenExt;
+use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
+use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
 
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

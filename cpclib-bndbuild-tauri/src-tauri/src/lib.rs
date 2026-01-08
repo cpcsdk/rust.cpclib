@@ -570,7 +570,9 @@ impl BndbuildState {
     pub async fn load<P: Into<Utf8PathBuf>>(path: P, app: &AppHandle) -> Self {
         let fname = path.into();
 
-        match cpclib_bndbuild::BndBuilder::from_path(&fname, #[cfg(feature = "rayon")] false) {
+        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, false);
+
+        match from_path_result {
             Ok((fname, builder)) => {
                 match CachedBndBuilder::new(builder, app).await {
                     Ok(builder) => {
@@ -597,7 +599,7 @@ impl BndbuildState {
             Err(err) => {
                 Self::LoadError(BndbuildStateLoadError {
                     fname,
-                    error: err.to_string()
+                    error: format!("{}", err)
                 })
             },
         }

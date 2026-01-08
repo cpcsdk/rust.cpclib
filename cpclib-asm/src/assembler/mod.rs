@@ -36,7 +36,6 @@ use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::Parser;
 use cpclib_common::winnow::stream::UpdateSlice;
 use cpclib_disc::built_info;
 use cpclib_files::{FileType, StorageSupport};
