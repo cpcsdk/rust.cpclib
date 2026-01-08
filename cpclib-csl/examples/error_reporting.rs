@@ -18,10 +18,7 @@ wait 1000000
 
     match parse_csl_with_rich_errors(valid_script, Some("valid.csl".to_string())) {
         Ok(script) => {
-            println!(
-                "✓ Successfully parsed {} instructions\n",
-                script.len()
-            )
+            println!("✓ Successfully parsed {} instructions\n", script.len())
         },
         Err(e) => println!("✗ Error: {}\n", e.format_error())
     }
@@ -57,10 +54,7 @@ snapshot
 
     match parse_csl_with_rich_errors(complex_script, Some("complex.csl".to_string())) {
         Ok(script) => {
-            println!(
-                "✓ Successfully parsed {} instructions:",
-                script.len()
-            );
+            println!("✓ Successfully parsed {} instructions:", script.len());
             for (i, instr) in script.iter().enumerate() {
                 println!("  {}. {:?}", i + 1, instr);
             }

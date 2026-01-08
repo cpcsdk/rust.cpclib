@@ -2057,8 +2057,9 @@ mod test {
 
             let mut env = Env::default();
             if let Token::OpCode(mnemonic, arg1, arg2, arg3) = &obtained.listing()[0] {
-                let obtained_bytes =
-                    env.assemble_opcode_impl(*mnemonic, arg1, arg2, arg3).unwrap();
+                let obtained_bytes = env
+                    .assemble_opcode_impl(*mnemonic, arg1, arg2, arg3)
+                    .unwrap();
                 assert_eq!(&expected_bytes[..], &obtained_bytes[..]);
             }
             else {

@@ -54,11 +54,7 @@ fn test_parse_all_csl_files() {
             Ok(content) => {
                 match parse_csl_with_rich_errors(&content, Some(file_name.to_string())) {
                     Ok(script) => {
-                        println!(
-                            "✓ {} ({} instructions)",
-                            file_name,
-                            script.len()
-                        );
+                        println!("✓ {} ({} instructions)", file_name, script.len());
                         success_count += 1;
                     },
                     Err(e) => {
@@ -67,10 +63,7 @@ fn test_parse_all_csl_files() {
                         if debug_content.len() > 500 {
                             debug_content.truncate(500);
                         }
-                        let error_msg = format!(
-                            "✗ {}: Parse error: {}",
-                            file_name, e
-                        );
+                        let error_msg = format!("✗ {}: Parse error: {}", file_name, e);
                         eprintln!("{}", error_msg);
                         errors.push((file_name.to_string(), error_msg));
                     }
@@ -129,7 +122,8 @@ fn test_parse_specific_module_a_file() {
         }
     }
 
-    let script = parse_csl_with_rich_errors(&content, Some("SHAKE26A-0.CSL".to_string())).expect("Failed to parse SHAKE26A-0.CSL");
+    let script = parse_csl_with_rich_errors(&content, Some("SHAKE26A-0.CSL".to_string()))
+        .expect("Failed to parse SHAKE26A-0.CSL");
 
     // Verify it has instructions
     assert!(script.len() > 0);

@@ -177,7 +177,8 @@ impl<'builder> From<&'builder BndBuilder> for Layers<'builder> {
                 .get_layered_dependencies()
                 .into_iter()
                 .map(|set| {
-                    let mut vec: Vec<&Utf8Path> = set.iter()
+                    let mut vec: Vec<&Utf8Path> = set
+                        .iter()
                         .flat_map(|task_targets| task_targets.iter().copied())
                         .collect();
                     vec.sort();

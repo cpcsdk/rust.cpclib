@@ -19,8 +19,7 @@ use crate::BndBuilderError;
 use crate::app::WatchState;
 use crate::env::create_template_env;
 use crate::event::{
-    BndBuilderObserved, BndBuilderObserverRc, ListOfBndBuilderObserverRc,
-    RuleTaskEventDispatcher
+    BndBuilderObserved, BndBuilderObserverRc, ListOfBndBuilderObserverRc, RuleTaskEventDispatcher
 };
 use crate::rules::{self, Graph, Rule};
 use crate::task::Task;
@@ -198,7 +197,10 @@ impl BndBuilder {
         env.render_str(&content, context!()).map_err(|e| {
             let src = e.template_source().unwrap_or(&content); //e.template_source().unwrap();
             let range = e.range().unwrap();
-            let message = e.detail().map(|d| d.to_string()).unwrap_or(e.kind().to_string());
+            let message = e
+                .detail()
+                .map(|d| d.to_string())
+                .unwrap_or(e.kind().to_string());
 
             // Use the provided filename for SimpleFile
             let file = SimpleFile::new(filename, src);

@@ -1,7 +1,7 @@
+use std::{fs, process};
+
 use cpclib_common::clap::{Arg, ArgAction, Command};
 use cpclib_csl::parse_csl_with_rich_errors;
-use std::fs;
-use std::process;
 
 fn main() {
     let matches = Command::new("cpclib-cslcli")
@@ -44,7 +44,7 @@ fn main() {
             // Output the parsed script to stdout
             print!("{}", script);
             process::exit(0);
-        }
+        },
         Err(e) => {
             // Output error to stderr
             eprintln!("{}", e);

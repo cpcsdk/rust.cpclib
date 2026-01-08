@@ -42,9 +42,10 @@ impl ExternAssembler {
 }
 #[cfg(test)]
 mod test {
+    use cpclib_common::network;
+
     use super::RasmVersion;
     use crate::delegated::{GithubInformation, StaticInformation};
-    use cpclib_common::network;
     use crate::runner::assembler::{SjasmplusVersion, VasmVersion};
 
     #[test]

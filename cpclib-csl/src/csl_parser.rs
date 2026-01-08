@@ -2,6 +2,8 @@
 //!
 //! This module provides parsing capabilities for CSL script files.
 
+#[cfg(test)]
+use cpclib_common::winnow::ModalParser;
 use cpclib_common::winnow::ascii::{dec_uint, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
@@ -10,8 +12,6 @@ use cpclib_common::winnow::error::{ContextError, StrContext};
 use cpclib_common::winnow::stream::LocatingSlice;
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
-#[cfg(test)]
-use cpclib_common::winnow::ModalParser;
 
 use crate::csl::*;
 
@@ -369,11 +369,10 @@ fn parse_key_delay<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Cs
 
     cut_err((
         dec_uint::<_, u64, _>.context(StrContext::Label("press delay ")),
-        opt(preceded(ws1, dec_uint::<_, u64, _>)
-            .context(StrContext::Label("delay_after_key"))),
+        opt(preceded(ws1, dec_uint::<_, u64, _>).context(StrContext::Label("delay_after_key"))),
         opt(preceded(ws1, dec_uint::<_, u64, _>))
             .context(StrContext::Label("optional delay_after_cr"))
-            ))
+    ))
     .map(|(delay, delay_after_key, delay_after_cr)| {
         CslInstruction::KeyDelay {
             press_delay: delay,
@@ -501,9 +500,11 @@ fn parse_keyboard_write<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
             preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
             preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
             preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
-            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>)
         )
-        .context(StrContext::Label("10 comma-separated byte values (row0 to row9)"))
+            .context(StrContext::Label(
+                "10 comma-separated byte values (row0 to row9)"
+            ))
     )
     .map(|(r0, r1, r2, r3, r4, r5, r6, r7, r8, r9)| {
         CslInstruction::KeyboardWrite([r0, r1, r2, r3, r4, r5, r6, r7, r8, r9])
@@ -649,7 +650,7 @@ fn parse_snapshot_version<'a>(
 
 /// Parse csl_load instruction
 fn parse_csl_load<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
-    ( alt(("csl_load", "cls_load")), ws1) // XXX cls_load is kept for compatability with wrong shaker files
+    (alt(("csl_load", "cls_load")), ws1) // XXX cls_load is kept for compatability with wrong shaker files
         .context(StrContext::Label("csl_load"))
         .parse_next(input)?;
 
@@ -738,30 +739,32 @@ pub fn parse_line<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Csl
 /// Parse a complete CSL script
 pub fn parse_csl_script<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslScript> {
     use cpclib_common::winnow::error::ErrMode;
-    
+
     // Use the builder pattern to construct and validate the script as we parse
     let mut builder = CslScriptBuilder::new();
-    
+
     // Parse lines one by one, adding them to the builder for immediate validation
     loop {
         // Skip whitespace/newlines
         let _ = take_while(0.., [' ', '\t', '\n', '\r']).parse_next(input)?;
-        
+
         // Check if we've reached end of input
         if input.is_empty() {
             break;
         }
-        
+
         // Parse next instruction
         let instruction = parse_line(input)?;
-        
+
         // Add instruction to builder with validation
-        builder = builder.with_instruction(instruction)
+        builder = builder
+            .with_instruction(instruction)
             .map_err(|_| ErrMode::Cut(ContextError::new()))?;
     }
-    
+
     // Build final script
-    builder.build()
+    builder
+        .build()
         .map_err(|_| ErrMode::Cut(ContextError::new()))
 }
 
@@ -773,28 +776,33 @@ pub fn parse_csl_with_rich_errors(
     use crate::error::CslError;
 
     let mut located_input = LocatingSlice::new(input);
-    
+
     // Parse with builder to catch validation errors
     let mut builder = CslScriptBuilder::new();
     loop {
         // Skip whitespace/newlines
-        let _ = take_while(0.., [' ', '\t', '\n', '\r']).parse_next(&mut located_input)
-            .map_err(|_e| convert_parse_error_to_csl_error(input, &located_input, _e, filename.clone()))?;
-        
+        let _ = take_while(0.., [' ', '\t', '\n', '\r'])
+            .parse_next(&mut located_input)
+            .map_err(|_e| {
+                convert_parse_error_to_csl_error(input, &located_input, _e, filename.clone())
+            })?;
+
         // Check if we've reached end of input
         if located_input.is_empty() {
             break;
         }
-        
+
         // Get current offset before parsing
         let offset_before = input.len() - located_input.len();
-        
+
         // Parse next instruction
-        let instruction = parse_line(&mut located_input)
-            .map_err(|e| convert_parse_error_to_csl_error(input, &located_input, e, filename.clone()))?;
-        
+        let instruction = parse_line(&mut located_input).map_err(|e| {
+            convert_parse_error_to_csl_error(input, &located_input, e, filename.clone())
+        })?;
+
         // Add instruction to builder with validation - capture validation errors
-        builder = builder.with_instruction(instruction)
+        builder = builder
+            .with_instruction(instruction)
             .map_err(|validation_err| {
                 // Create a rich error for validation failures
                 let span = offset_before..offset_before.saturating_add(1);
@@ -805,18 +813,17 @@ pub fn parse_csl_with_rich_errors(
                 error
             })?;
     }
-    
+
     // Build final script
-    builder.build()
-        .map_err(|validation_err| {
-            // Create error for build-time validation failures
-            let span = 0..1;
-            let mut error = CslError::new(input.to_string(), span, validation_err);
-            if let Some(fname) = filename.clone() {
-                error = error.with_filename(fname);
-            }
-            error
-        })
+    builder.build().map_err(|validation_err| {
+        // Create error for build-time validation failures
+        let span = 0..1;
+        let mut error = CslError::new(input.to_string(), span, validation_err);
+        if let Some(fname) = filename.clone() {
+            error = error.with_filename(fname);
+        }
+        error
+    })
 }
 
 // Helper to convert parse errors to CSL errors
@@ -827,18 +834,19 @@ fn convert_parse_error_to_csl_error(
     filename: Option<String>
 ) -> crate::error::CslError {
     use cpclib_common::winnow::error::ErrMode;
+
     use crate::error::{CslError, suggest_instruction};
-    
+
     let offset = input.len().saturating_sub(located_input.len());
     let span = offset..offset.saturating_add(1);
-    
+
     // Try to extract a meaningful error message from the context
     let mut message = "Parse error".to_string();
     let mut notes = Vec::new();
 
     let inner = match e {
         ErrMode::Incomplete(_) => None,
-        ErrMode::Backtrack(err) | ErrMode::Cut(err) => Some(err),
+        ErrMode::Backtrack(err) | ErrMode::Cut(err) => Some(err)
     };
 
     if let Some(ctx_error) = inner {
@@ -1148,15 +1156,16 @@ wait 100000
     #[test]
     fn test_parse_csl_with_rich_errors_version_compatibility() {
         // Test v1.0 with v1.2 feature - should report error
-        let input = "csl_version 1.0\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let input =
+            "csl_version 1.0\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result = parse_csl_with_rich_errors(input, Some("test_v10_v12.csl".to_string()));
-        
+
         assert!(result.is_err(), "Expected error for v1.0 with v1.2 feature");
-        
+
         let error = result.unwrap_err();
         assert_eq!(error.filename, Some("test_v10_v12.csl".to_string()));
         assert!(!error.source.is_empty());
-        
+
         let formatted = error.format_error();
         // Should mention the incompatibility
         assert!(
@@ -1168,12 +1177,15 @@ wait 100000
         // Test v1.0 with v1.1 feature
         let input2 = "csl_version 1.0\ngate_array 40010\n";
         let result2 = parse_csl_with_rich_errors(input2, Some("test_v10_v11.csl".to_string()));
-        
-        assert!(result2.is_err(), "Expected error for v1.0 with v1.1 feature");
-        
+
+        assert!(
+            result2.is_err(),
+            "Expected error for v1.0 with v1.1 feature"
+        );
+
         let error2 = result2.unwrap_err();
         assert_eq!(error2.filename, Some("test_v10_v11.csl".to_string()));
-        
+
         let formatted2 = error2.format_error();
         eprintln!("{}", formatted2);
         assert!(
@@ -1183,15 +1195,19 @@ wait 100000
         );
 
         // Test v1.1 with v1.2 feature
-        let input3 = "csl_version 1.1\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let input3 =
+            "csl_version 1.1\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result3 = parse_csl_with_rich_errors(input3, Some("test_v11_v12.csl".to_string()));
-        
-        assert!(result3.is_err(), "Expected error for v1.1 with v1.2 feature");
+
+        assert!(
+            result3.is_err(),
+            "Expected error for v1.1 with v1.2 feature"
+        );
 
         // Test valid v1.2 with v1.2 feature - should succeed
         let input4 = "csl_version 1.2\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result4 = parse_csl_with_rich_errors(input4, None);
-        
+
         assert!(result4.is_ok(), "v1.2 with v1.2 feature should succeed");
     }
 }

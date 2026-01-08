@@ -19,8 +19,8 @@ pub use sugarbox::*;
 pub use winape::*;
 
 use crate::delegated::{
-    DelegateApplicationDescription, GithubCompiledApplication,
-    InternetDynamicCompiledApplication, InternetStaticCompiledApplication
+    DelegateApplicationDescription, GithubCompiledApplication, InternetDynamicCompiledApplication,
+    InternetStaticCompiledApplication
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -151,11 +151,10 @@ impl Emulator {
 
 #[cfg(test)]
 mod test {
-    use super::{SugarBoxV2Version, WinapeVersion};
-    use crate::delegated::{
-        DynamicUrlInformation, GithubInformation, StaticInformation
-    };
     use cpclib_common::network;
+
+    use super::{SugarBoxV2Version, WinapeVersion};
+    use crate::delegated::{DynamicUrlInformation, GithubInformation, StaticInformation};
     use crate::runner::emulator::{AceVersion, AmspiritVersion};
 
     #[test]

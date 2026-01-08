@@ -378,7 +378,6 @@ fn generate_forbidden_names() {
     println!("cargo:rerun-if-changed=build.rs");
 }
 
-
 pub fn generate_instructions_names() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("instructions_names_generated.rs");
@@ -408,8 +407,6 @@ pub fn generate_orgams_directive_names() {
         "END_DIRECTIVE_ORGAMS"
     );
 }
-
-
 
 pub fn generate_basm_directive_names() {
     generate_directive_names_file(

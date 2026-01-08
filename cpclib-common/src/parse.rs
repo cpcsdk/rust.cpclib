@@ -36,7 +36,7 @@ where
     let encoding = opt(terminated(
         alt((
             alt((b"0x", b"0X", b"#", b"$", b"&")).value(EncodingKind::Hex), // hexadecimal number
-            alt((b"0o", b"0O", b"@")).value(EncodingKind::Oct), // octal number
+            alt((b"0o", b"0O", b"@")).value(EncodingKind::Oct),             // octal number
             alt((b"0b", b"0B")).value(EncodingKind::AmbiguousBinHex),
             b"%".value(EncodingKind::Bin) // binary number
         )),

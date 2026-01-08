@@ -11,15 +11,12 @@ include!(concat!(
 
 // const CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISCSI);
 
-use crate::{ParserContext, ParserContextBuilder, Z80Span};
-
-
-
 // Import register-related functions
 pub use super::registers::{
     parse_indexregister_with_index, parse_indexregister8, parse_indexregister16, parse_register_i,
     parse_register_ix, parse_register_iy, parse_register_r, parse_register8, parse_register16
 };
+use crate::{ParserContext, ParserContextBuilder, Z80Span};
 
 // MIGRATED: string_expr -> expression.rs
 
@@ -41,36 +38,31 @@ pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
 pub mod test {
     use std::ops::Deref;
 
-    use crate::{InnerZ80Span, Z80ParserError};
-    use cpclib_common::winnow::ModalResult;
-    use cpclib_tokens::{
-        DataAccess, Expr, IndexRegister8, IndexRegister16, LabelPrefix, Mnemonic, Register8,
-        Register16, Token
-    };
-    use cpclib_common::winnow::Parser;
     use cpclib_common::winnow::ascii::line_ending;
     use cpclib_common::winnow::combinator::{repeat, terminated};
     use cpclib_common::winnow::error::{ErrMode, ParseError};
     use cpclib_common::winnow::stream::AsBStr;
-    use cpclib_tokens::ListingElement;
+    use cpclib_common::winnow::{ModalResult, Parser};
+    use cpclib_tokens::{
+        BinaryOperation, DataAccess, Expr, ExprFormat, FormattedExpr, IndexRegister8,
+        IndexRegister16, LabelPrefix, ListingElement, MacroParam, Mnemonic, Register8, Register16,
+        ToSimpleToken, Token
+    };
 
     use super::*;
-    use crate::{AssemblerError, parse_directive, parse_z80_str};
     use crate::parser::{
-        comp, expr, expr2, expr_list, inner_code, located_expr, my_space1, parse_address,
-        parse_argname_and_value, parse_argname_to_assign,
-        parse_assembler_control_max_passes_number, parse_breakpoint,
-        parse_breakpoint_argument, parse_breakpoint_type_value, parse_buildsna,
-        parse_comment, parse_conditional, parse_conditional_condition, parse_expr,
-        parse_expr_bracketed_list, parse_factor, parse_fname, parse_include, parse_label,
-        parse_labelprefix, parse_ld, parse_ld_normal, parse_line, parse_line_component,
-        parse_macro, parse_macro_arg, parse_multiline_comment,
-        parse_optional_argname_and_value, parse_print, parse_register_ixl,
-        parse_register_iyl, parse_repeat, parse_run, parse_snaset, parse_stable_ticker_start,
-        parse_string, parse_token, parse_word, parse_z80_line_complete, shift, term,
-        KindOfConditional, LocatedTokenInner, RunEnt
+        KindOfConditional, LocatedTokenInner, RunEnt, comp, expr, expr_list, expr2, inner_code,
+        located_expr, my_space1, parse_address, parse_argname_and_value, parse_argname_to_assign,
+        parse_assembler_control_max_passes_number, parse_breakpoint, parse_breakpoint_argument,
+        parse_breakpoint_type_value, parse_buildsna, parse_comment, parse_conditional,
+        parse_conditional_condition, parse_expr, parse_expr_bracketed_list, parse_factor,
+        parse_fname, parse_include, parse_label, parse_labelprefix, parse_ld, parse_ld_normal,
+        parse_line, parse_line_component, parse_macro, parse_macro_arg, parse_multiline_comment,
+        parse_optional_argname_and_value, parse_print, parse_register_ixl, parse_register_iyl,
+        parse_repeat, parse_run, parse_snaset, parse_stable_ticker_start, parse_string,
+        parse_token, parse_word, parse_z80_line_complete, shift, term
     };
-    use cpclib_tokens::{BinaryOperation, ExprFormat, FormattedExpr, MacroParam, ToSimpleToken};
+    use crate::{AssemblerError, InnerZ80Span, Z80ParserError, parse_directive, parse_z80_str};
 
     #[derive(Debug)]
     pub struct TestResult<O: std::fmt::Debug> {

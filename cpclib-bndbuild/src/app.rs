@@ -751,7 +751,8 @@ impl BndBuilderApp {
             "clear",
             "direct",
             "completion"
-        ].into_iter()
+        ]
+        .into_iter()
         .any(|id| matches.contains_id(id));
 
         #[cfg(feature = "rayon")]
@@ -760,7 +761,7 @@ impl BndBuilderApp {
         if !should_not_display_cpu {
             use cpclib_common::rayon;
             let num_cpus = rayon::current_num_threads();
-           
+
             if force_serial {
                 eprintln!(
                     "--> Forcing serial execution of bndbuild. Other tools still have access to {} threads\n",

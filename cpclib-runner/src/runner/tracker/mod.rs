@@ -78,10 +78,11 @@ impl SongConverter {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{StaticInformation};
+    use cpclib_common::network;
+
+    use crate::delegated::StaticInformation;
     use crate::runner::tracker::at3::At3Version;
     use crate::runner::tracker::chipnsfx::ChipnsfxVersion;
-    use cpclib_common::network;
 
     #[test]
     fn test_download_at3() {

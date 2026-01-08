@@ -678,7 +678,7 @@ impl EmulatorConf {
                         "Auto type file is currently ignored for this emulator {:?}",
                         emu
                     )
-                },
+                }
             }
         }
 
@@ -766,18 +766,21 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
 
         // Set disk directory if any disk is configured
         if conf.drive_a.is_some() || conf.drive_b.is_some() {
-            builder = builder.with_instruction(CslInstruction::disk_dir(cwd.clone()))
+            builder = builder
+                .with_instruction(CslInstruction::disk_dir(cwd.clone()))
                 .expect("There is a bug there");
         }
 
         // Insert disks if configured
         if let Some(drive_a) = conf.drive_a {
-            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::A, drive_a))
+            builder = builder
+                .with_instruction(CslInstruction::disk_insert(Drive::A, drive_a))
                 .expect("There is a bug there");
         }
 
         if let Some(drive_b) = conf.drive_b {
-            builder = builder.with_instruction(CslInstruction::disk_insert(Drive::B, drive_b))
+            builder = builder
+                .with_instruction(CslInstruction::disk_insert(Drive::B, drive_b))
                 .expect("There is a bug there");
         }
 
@@ -790,12 +793,15 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
 
         // Configure CRTC model if specified
         if let Some(crtc) = conf.crtc {
-            builder = builder.with_instruction(CslInstruction::crtc_select(crtc.to_csl_model()))
+            builder = builder
+                .with_instruction(CslInstruction::crtc_select(crtc.to_csl_model()))
                 .expect("There is a bug there");
         }
 
         if conf.crtc.is_some() || conf.memory.is_some() {
-            builder = builder.with_reset(ResetType::Hard).expect("There is a bug there");
+            builder = builder
+                .with_reset(ResetType::Hard)
+                .expect("There is a bug there");
         }
 
         // Set snapshot directory and load if configured
@@ -808,33 +814,39 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
         }
 
         if conf.auto_run.is_some() || conf.auto_type.is_some() {
-            builder = builder.with_instruction(CslInstruction::wait(19968 * 50)).expect("There is a bug there");
-            builder = builder.with_instruction(CslInstruction::key_delay(
-                70000,
-                Some(70000),
-                Some(400000)
-            )).expect("There is a bug there");
+            builder = builder
+                .with_instruction(CslInstruction::wait(19968 * 50))
+                .expect("There is a bug there");
+            builder = builder
+                .with_instruction(CslInstruction::key_delay(70000, Some(70000), Some(400000)))
+                .expect("There is a bug there");
         }
 
         // Add auto-run command if configured
         if let Some(auto_run) = conf.auto_run {
             let key_string = format!("RUN\"{}\n", auto_run);
             if let Ok(key_output) = KeyOutput::try_from(key_string.as_str()) {
-                builder = builder.with_instruction(CslInstruction::key_output(key_output)).expect("Ther is a bug there");
+                builder = builder
+                    .with_instruction(CslInstruction::key_output(key_output))
+                    .expect("Ther is a bug there");
             }
         }
 
         // Add auto-type file if configured
         if let Some(auto_type) = conf.auto_type {
             if false {
-                builder = builder.with_instruction(CslInstruction::key_from_file(auto_type)).expect("There is a bug there");
+                builder = builder
+                    .with_instruction(CslInstruction::key_from_file(auto_type))
+                    .expect("There is a bug there");
             }
             else {
                 let content =
                     std::fs::read_to_string(&auto_type).expect("Failed to read auto-type file");
                 let key_output = KeyOutput::try_from(content.as_str())
                     .expect("Failed to convert auto-type content to KeyOutput");
-                builder = builder.with_instruction(CslInstruction::key_output(key_output)).expect("There is a bug there");
+                builder = builder
+                    .with_instruction(CslInstruction::key_output(key_output))
+                    .expect("There is a bug there");
             }
         }
 
@@ -2082,11 +2094,18 @@ mod tests {
         let script = cpclib_csl::CslScript::from(conf);
 
         // Check that we have at least the expected instructions (may have more auto-generated ones)
-        assert!(script.instructions().len() >= 8, "Expected at least 8 instructions, got {}", script.instructions().len());
+        assert!(
+            script.instructions().len() >= 8,
+            "Expected at least 8 instructions, got {}",
+            script.instructions().len()
+        );
 
         // Verify DiskDir exists
         assert!(
-            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::DiskDir(_))),
+            script
+                .instructions()
+                .iter()
+                .any(|inst| matches!(inst, cpclib_csl::CslInstruction::DiskDir(_))),
             "Expected DiskDir instruction"
         );
 
@@ -2110,7 +2129,10 @@ mod tests {
 
         // Verify SnapshotDir exists
         assert!(
-            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::SnapshotDir(_))),
+            script
+                .instructions()
+                .iter()
+                .any(|inst| matches!(inst, cpclib_csl::CslInstruction::SnapshotDir(_))),
             "Expected SnapshotDir instruction"
         );
 
@@ -2125,7 +2147,10 @@ mod tests {
 
         // Verify KeyOutput for auto_run
         assert!(
-            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::KeyOutput(_))),
+            script
+                .instructions()
+                .iter()
+                .any(|inst| matches!(inst, cpclib_csl::CslInstruction::KeyOutput(_))),
             "Expected KeyOutput for auto_run"
         );
 

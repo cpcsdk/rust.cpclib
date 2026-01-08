@@ -463,7 +463,7 @@ pub enum CslInstruction {
     KeyDelay {
         press_delay: u64,
         delay_after_key: Option<u64>,
-        delay_after_cr: Option<u64>,
+        delay_after_cr: Option<u64>
     },
 
     /// Send text as key strokes
@@ -615,9 +615,9 @@ impl fmt::Display for CslInstruction {
                 write!(f, "snapshot_dir '{}'", normalize_path_for_csl(dir, true))
             },
             Self::KeyDelay {
-                press_delay ,
+                press_delay,
                 delay_after_key,
-                delay_after_cr,
+                delay_after_cr
             } => {
                 write!(f, "key_delay {}", press_delay)?;
                 if let Some(delay) = delay_after_key {
@@ -636,7 +636,11 @@ impl fmt::Display for CslInstruction {
                 write!(f, "key_from_file '{}'", normalize_path_for_csl(file, false))
             },
             Self::KeyboardWrite(rows) => {
-                write!(f, "keyboard_write {}", rows.iter().map(|b| b.to_string()).join(","))
+                write!(
+                    f,
+                    "keyboard_write {}",
+                    rows.iter().map(|b| b.to_string()).join(",")
+                )
             },
             Self::InstructionWithComment(instruction, comment) => {
                 write!(f, "{} ;{}", instruction, comment)
@@ -812,12 +816,12 @@ impl CslInstruction {
     pub fn key_delay(
         delay: u64,
         delay_after_key: Option<u64>,
-        delay_after_cr: Option<u64>,
+        delay_after_cr: Option<u64>
     ) -> Self {
         Self::KeyDelay {
             press_delay: delay,
             delay_after_key,
-            delay_after_cr,
+            delay_after_cr
         }
     }
 
@@ -919,7 +923,6 @@ impl CslScript {
             instructions: Vec::new()
         }
     }
-
 
     pub fn instructions(&self) -> &[CslInstruction] {
         &self.instructions
@@ -1064,14 +1067,14 @@ impl Default for CslScript {
 /// Builder for CSL scripts that validates instructions as they are added
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScriptBuilder {
-    instructions: Vec<CslInstruction>,
+    instructions: Vec<CslInstruction>
 }
 
 impl CslScriptBuilder {
     /// Create a new CSL script builder without a version (will default to latest)
     pub fn new() -> Self {
         Self {
-            instructions: Vec::new(),
+            instructions: Vec::new()
         }
     }
 
@@ -1082,7 +1085,8 @@ impl CslScriptBuilder {
             .find_map(|inst| {
                 if let CslInstruction::CslVersion(v) = inst {
                     Some(*v)
-                } else {
+                }
+                else {
                     None
                 }
             })
@@ -1094,7 +1098,11 @@ impl CslScriptBuilder {
         // Special validation for CslVersion instruction
         if let CslInstruction::CslVersion(_) = instruction {
             // Check if version is already set
-            if self.instructions.iter().any(|i| matches!(i, CslInstruction::CslVersion(_))) {
+            if self
+                .instructions
+                .iter()
+                .any(|i| matches!(i, CslInstruction::CslVersion(_)))
+            {
                 return Err("CSL version can only be set once".to_string());
             }
             // Check if there are any substantial instructions already (comments/empty lines are OK)
@@ -1103,37 +1111,40 @@ impl CslScriptBuilder {
             }
             return Ok(());
         }
-        
+
         let version = self.current_version();
-        
+
         // Check v1.2 features
         if instruction.is_v1_2_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 2)) {
-                return Err(format!(
-                    "Instruction '{}' requires CSL version 1.2 or higher, but script uses version {}.{}",
-                    instruction.instruction_name(),
-                    version.major,
-                    version.minor
-                ));
-            }
-        
+            && (version.major < 1 || (version.major == 1 && version.minor < 2))
+        {
+            return Err(format!(
+                "Instruction '{}' requires CSL version 1.2 or higher, but script uses version {}.{}",
+                instruction.instruction_name(),
+                version.major,
+                version.minor
+            ));
+        }
+
         // Check v1.1 features
         if instruction.is_v1_1_feature()
-            && (version.major < 1 || (version.major == 1 && version.minor < 1)) {
-                return Err(format!(
-                    "Instruction '{}' requires CSL version 1.1 or higher, but script uses version {}.{}",
-                    instruction.instruction_name(),
-                    version.major,
-                    version.minor
-                ));
-            }
-        
+            && (version.major < 1 || (version.major == 1 && version.minor < 1))
+        {
+            return Err(format!(
+                "Instruction '{}' requires CSL version 1.1 or higher, but script uses version {}.{}",
+                instruction.instruction_name(),
+                version.major,
+                version.minor
+            ));
+        }
+
         // Special validation for key_from_file
         if let CslInstruction::KeyFromFile(file) = instruction
-            && !file.is_absolute() {
-                return Err("key_from_file instruction requires an absolute file path".to_string());
-            }
-        
+            && !file.is_absolute()
+        {
+            return Err("key_from_file instruction requires an absolute file path".to_string());
+        }
+
         Ok(())
     }
 
@@ -1152,7 +1163,7 @@ impl CslScriptBuilder {
     pub fn with_instruction(mut self, instruction: CslInstruction) -> Result<Self, String> {
         // Validate instruction before adding
         self.validate_instruction(&instruction)?;
-        
+
         // Add instruction to the list
         self.instructions.push(instruction);
         Ok(self)
@@ -1163,7 +1174,8 @@ impl CslScriptBuilder {
     where F: FnOnce() -> CslInstruction {
         if condition {
             self.with_instruction(f())
-        } else {
+        }
+        else {
             Ok(self)
         }
     }
@@ -1355,10 +1367,11 @@ mod tests {
 
         for case in test_cases {
             let script1 = format!("{}\n", case);
-            let parsed1 = parse_csl_with_rich_errors(&script1, None).expect(&format!("Failed to parse: {}", case));
+            let parsed1 = parse_csl_with_rich_errors(&script1, None)
+                .expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
-            let parsed2 =
-                parse_csl_with_rich_errors(&generated, None).expect(&format!("Failed to parse generated: {}", generated));
+            let parsed2 = parse_csl_with_rich_errors(&generated, None)
+                .expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
@@ -1423,10 +1436,11 @@ mod tests {
 
         for case in test_cases {
             let script1 = format!("{}\n", case);
-            let parsed1 = parse_csl_with_rich_errors(&script1, None).expect(&format!("Failed to parse: {}", case));
+            let parsed1 = parse_csl_with_rich_errors(&script1, None)
+                .expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
-            let parsed2 =
-                parse_csl_with_rich_errors(&generated, None).expect(&format!("Failed to parse generated: {}", generated));
+            let parsed2 = parse_csl_with_rich_errors(&generated, None)
+                .expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
@@ -1438,7 +1452,8 @@ mod tests {
         let script1 = "wait 800000 ; fin affichage\n";
         let parsed1 = parse_csl_with_rich_errors(script1, None).expect("Failed to parse");
         let generated = parsed1.to_string();
-        let parsed2 = parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated");
+        let parsed2 =
+            parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated");
         assert_eq!(parsed1, parsed2, "Roundtrip failed with comments");
     }
 
@@ -1449,7 +1464,8 @@ mod tests {
         let script = "csl_version 1.0\nreset H\nwait 1000000\ntape_play\nwait 500000\n";
         let parsed1 = parse_csl_with_rich_errors(script, None).expect("Failed to parse script");
         let generated = parsed1.to_string();
-        let parsed2 = parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated script");
+        let parsed2 =
+            parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated script");
         assert_eq!(parsed1, parsed2, "Full script roundtrip failed");
     }
 
@@ -1505,10 +1521,7 @@ mod tests {
             .ensure_version_first();
 
         assert_eq!(script.len(), 3);
-        assert!(matches!(
-            script.get(0),
-            Some(CslInstruction::CslVersion(_))
-        ));
+        assert!(matches!(script.get(0), Some(CslInstruction::CslVersion(_))));
 
         // Test ensure_version_first moves existing version to front
         let script = CslScript::new()
@@ -1601,9 +1614,12 @@ mod tests {
     fn test_csl_script_builder() {
         // Test builder with build() method
         let builder = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
-            .with_reset(ResetType::Hard).unwrap()
-            .with_wait(1000).unwrap();
+            .with_instruction(CslInstruction::csl_version(1, 0))
+            .unwrap()
+            .with_reset(ResetType::Hard)
+            .unwrap()
+            .with_wait(1000)
+            .unwrap();
 
         let result = builder.build();
         assert!(result.is_ok());
@@ -1611,16 +1627,16 @@ mod tests {
 
         // Should have 3 instructions: version (at front), reset, wait
         assert_eq!(script.len(), 3);
-        assert!(matches!(
-            script.get(0),
-            Some(CslInstruction::CslVersion(_))
-        ));
+        assert!(matches!(script.get(0), Some(CslInstruction::CslVersion(_))));
 
         // Test builder with version specified
         let builder = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
-            .with_reset(ResetType::Hard).unwrap()
-            .with_wait(1000).unwrap();
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .unwrap()
+            .with_reset(ResetType::Hard)
+            .unwrap()
+            .with_wait(1000)
+            .unwrap();
 
         let result = builder.build();
         assert!(result.is_ok());
@@ -1638,90 +1654,110 @@ mod tests {
 
         // Test parsing keyboard_write instruction
         let script_text = "keyboard_write 255,255,255,255,255,255,239,255,255,255\n";
-        let parsed = parse_csl_with_rich_errors(script_text, None).expect("Failed to parse keyboard_write");
-        
+        let parsed =
+            parse_csl_with_rich_errors(script_text, None).expect("Failed to parse keyboard_write");
+
         assert_eq!(parsed.len(), 1);
-        
+
         if let Some(CslInstruction::KeyboardWrite(rows)) = parsed.get(0) {
             assert_eq!(rows.len(), 10);
             assert_eq!(rows[0], 255);
             assert_eq!(rows[6], 239);
             assert_eq!(rows[9], 255);
-        } else {
+        }
+        else {
             panic!("Expected KeyboardWrite instruction");
         }
-        
+
         // Test Display implementation
         let output = parsed.to_string();
-        assert_eq!(output, "keyboard_write 255,255,255,255,255,255,239,255,255,255\n");
-        
+        assert_eq!(
+            output,
+            "keyboard_write 255,255,255,255,255,255,239,255,255,255\n"
+        );
+
         // Test roundtrip
-        let parsed2 = parse_csl_with_rich_errors(&output, None).expect("Failed to parse generated output");
-        assert_eq!(parsed.len(), parsed2.len(), "Roundtrip failed for keyboard_write");
+        let parsed2 =
+            parse_csl_with_rich_errors(&output, None).expect("Failed to parse generated output");
+        assert_eq!(
+            parsed.len(),
+            parsed2.len(),
+            "Roundtrip failed for keyboard_write"
+        );
     }
 
     #[test]
     fn test_version_compatibility_validation() {
         // Test v1.0 with v1.1 feature should fail
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 0))
+            .unwrap()
             .with_gate_array(GateArrayModel::Model40010);
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("requires CSL version 1.1"));
-        
+
         // Test v1.0 with v1.2 feature should fail
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 0))
+            .unwrap()
             .with_instruction(CslInstruction::KeyboardWrite([255; 10]));
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("requires CSL version 1.2"));
-        
+
         // Test v1.1 with v1.2 feature should fail
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .unwrap()
             .with_instruction(CslInstruction::KeyboardWrite([255; 10]));
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("requires CSL version 1.2"));
-        
+
         // Test v1.1 with v1.1 feature should succeed
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
-            .with_gate_array(GateArrayModel::Model40010).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .unwrap()
+            .with_gate_array(GateArrayModel::Model40010)
+            .unwrap()
             .build();
-        
+
         assert!(result.is_ok());
-        
+
         // Test v1.2 with v1.2 feature should succeed
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
-            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 2))
+            .unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10]))
+            .unwrap()
             .build();
-        
+
         assert!(result.is_ok());
-        
+
         // Test v1.2 with v1.1 feature should succeed
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
-            .with_gate_array(GateArrayModel::Model40010).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 2))
+            .unwrap()
+            .with_gate_array(GateArrayModel::Model40010)
+            .unwrap()
             .build();
-        
+
         assert!(result.is_ok());
-        
+
         // Test no version (defaults to latest) with v1.2 feature should succeed
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10]))
+            .unwrap()
             .build();
-        
+
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_parse_validates_version_compatibility() {
         use crate::csl_parser::parse_csl_with_rich_errors;
-        
+
         // Test v1.0 with v1.2 feature should fail during parsing
         let script = "csl_version 1.0\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result = parse_csl_with_rich_errors(script, None);
@@ -1730,18 +1766,21 @@ mod tests {
         // Test no version with v1.2 feature should succeed (defaults to latest)
         let script = "keyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result = parse_csl_with_rich_errors(script, None);
-        assert!(result.is_ok(), "No version (defaults to latest) with v1.2 feature should succeed");
+        assert!(
+            result.is_ok(),
+            "No version (defaults to latest) with v1.2 feature should succeed"
+        );
 
         // Test v1.2 with v1.2 feature should succeed
         let script = "csl_version 1.2\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
         let result = parse_csl_with_rich_errors(script, None);
         assert!(result.is_ok(), "v1.2 with v1.2 feature should succeed");
-        
+
         // Test v1.0 with v1.1 feature should fail
         let script = "csl_version 1.0\ngate_array 40010\n";
         let result = parse_csl_with_rich_errors(script, None);
         assert!(result.is_err(), "v1.0 with v1.1 feature should fail");
-        
+
         // Test v1.1 with v1.1 feature should succeed
         let script = "csl_version 1.1\ngate_array 40010\n";
         let result = parse_csl_with_rich_errors(script, None);
@@ -1752,47 +1791,70 @@ mod tests {
     fn test_version_placement_validation() {
         // Test that version can only be set once
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 0))
+            .unwrap()
             .with_instruction(CslInstruction::csl_version(1, 1));
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("can only be set once"));
-        
+
         // Test that version must be before substantial instructions
         let result = CslScriptBuilder::new()
-            .with_reset(ResetType::Hard).unwrap()
+            .with_reset(ResetType::Hard)
+            .unwrap()
             .with_instruction(CslInstruction::csl_version(1, 0));
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("must be the first instruction"));
-        
+        assert!(
+            result
+                .unwrap_err()
+                .contains("must be the first instruction")
+        );
+
         // Test that version can come after comments
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::comment("This is a comment")).unwrap()
-            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
-            .with_reset(ResetType::Hard).unwrap()
+            .with_instruction(CslInstruction::comment("This is a comment"))
+            .unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .unwrap()
+            .with_reset(ResetType::Hard)
+            .unwrap()
             .build();
-        
+
         assert!(result.is_ok(), "Version should be allowed after comments");
-        
+
         // Test that version can come after empty lines
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::empty()).unwrap()
-            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
-            .with_reset(ResetType::Hard).unwrap()
+            .with_instruction(CslInstruction::empty())
+            .unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1))
+            .unwrap()
+            .with_reset(ResetType::Hard)
+            .unwrap()
             .build();
-        
-        assert!(result.is_ok(), "Version should be allowed after empty lines");
-        
+
+        assert!(
+            result.is_ok(),
+            "Version should be allowed after empty lines"
+        );
+
         // Test that version can come after both comments and empty lines
         let result = CslScriptBuilder::new()
-            .with_instruction(CslInstruction::comment("Header comment")).unwrap()
-            .with_instruction(CslInstruction::empty()).unwrap()
-            .with_instruction(CslInstruction::comment("Another comment")).unwrap()
-            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
-            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .with_instruction(CslInstruction::comment("Header comment"))
+            .unwrap()
+            .with_instruction(CslInstruction::empty())
+            .unwrap()
+            .with_instruction(CslInstruction::comment("Another comment"))
+            .unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 2))
+            .unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10]))
+            .unwrap()
             .build();
-        
-        assert!(result.is_ok(), "Version should be allowed after comments and empty lines");
+
+        assert!(
+            result.is_ok(),
+            "Version should be allowed after comments and empty lines"
+        );
     }
 }

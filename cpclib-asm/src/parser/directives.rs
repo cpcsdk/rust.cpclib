@@ -477,7 +477,6 @@ pub fn parse_output(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, 
     Ok(LocatedTokenInner::OutputFile(filename))
 }
 
-
 pub fn parse_incbin(
     transformation: BinaryTransformation
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
@@ -599,7 +598,9 @@ pub enum RunEnt {
     Ent
 }
 
-pub fn parse_run(kind: RunEnt) -> impl Parser<InnerZ80Span, LocatedTokenInner, ErrMode<Z80ParserError>> {
+pub fn parse_run(
+    kind: RunEnt
+) -> impl Parser<InnerZ80Span, LocatedTokenInner, ErrMode<Z80ParserError>> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let exp = cut_err(located_expr.context(match &kind {
             RunEnt::Run => "RUN expects at least one expression (e.g. RUN $)",
@@ -779,7 +780,6 @@ pub fn parse_warning(
     }
 }
 
-
 pub fn parse_print_inner(
     input: &mut InnerZ80Span
 ) -> ModalResult<Vec<FormattedExpr>, Z80ParserError> {
@@ -838,8 +838,6 @@ pub fn parse_even(_input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z
     // EVEN is equivalent to ALIGN 2
     Ok(LocatedTokenInner::Even)
 }
-
-
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -1371,18 +1369,15 @@ pub fn parse_snaset(
                     let s = unsafe { std::str::from_utf8_unchecked(bytes) };
                     SnapshotFlag::from_str(s).ok()
                 })
-                .context(StrContext::Label(
-                    "SNASET: Invalid flag"
-                ))
+                .context(StrContext::Label("SNASET: Invalid flag"))
         )
         .parse_next(input)?;
 
         let _ = cut_err(parse_comma.context(SNASET_MISSING_COMMA)).parse_next(input)?;
 
-        let value = cut_err(
-            parse_flag_value_inner.context(StrContext::Label("SNASET: wrong flag value"))
-        )
-        .parse_next(input)?;
+        let value =
+            cut_err(parse_flag_value_inner.context(StrContext::Label("SNASET: wrong flag value")))
+                .parse_next(input)?;
 
         Ok(LocatedTokenInner::SnaSet(flag, value))
     }

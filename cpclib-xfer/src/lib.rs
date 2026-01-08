@@ -142,7 +142,13 @@ impl CpcXfer {
     }
 
     /// Make a simple query
-    fn simple_query(&self, query: &[(&str, &str)]) -> Result<cpclib_common::network::http::Response<cpclib_common::network::ureq::Body>, Box<cpclib_common::network::ureq::Error>> {
+    fn simple_query(
+        &self,
+        query: &[(&str, &str)]
+    ) -> Result<
+        cpclib_common::network::http::Response<cpclib_common::network::ureq::Body>,
+        Box<cpclib_common::network::ureq::Error>
+    > {
         Ok(cpclib_common::network::ureq::get(&self.uri("config.cgi"))
             .query_pairs(query.iter().cloned())
             .header("User-Agent", "cpcxfer")

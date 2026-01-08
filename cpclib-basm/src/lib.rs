@@ -473,18 +473,15 @@ fn save_binary_to_file(
     if any_fname.use_image() {
         // BUG here we are not able to handle ASCII files. will do it only if needed
         let disc_filename = any_fname.image_filename().unwrap();
-        let mut disc = open_disc(disc_filename, false).map_err(|msg| {
-            AssemblerError::AlreadyRenderedError(format!("Disc error: {msg}"))
-        })?;
+        let mut disc = open_disc(disc_filename, false)
+            .map_err(|msg| AssemblerError::AlreadyRenderedError(format!("Disc error: {msg}")))?;
 
         let head = Head::A;
         let system = false;
         let read_only = false;
 
-        let amsdos_file = AmsdosFile::from_header_and_buffer(
-            AmsdosHeader::from_buffer(&header),
-            binary
-        )?;
+        let amsdos_file =
+            AmsdosFile::from_header_and_buffer(AmsdosHeader::from_buffer(&header), binary)?;
         disc.add_amsdos_file(
             &amsdos_file,
             head,
@@ -602,7 +599,10 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             }
         }
     }
-    else if matches.contains_id("OUTPUT") || matches.get_flag("DB_LIST") || env.output_filename().is_some() {
+    else if matches.contains_id("OUTPUT")
+        || matches.get_flag("DB_LIST")
+        || env.output_filename().is_some()
+    {
         // Collect the produced bytes
         let binary = env.produced_bytes();
 
@@ -620,12 +620,12 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
             // Collect filenames from both command-line and OUTPUT directive
             let cmd_filename = matches.get_one::<String>("OUTPUT").map(|s| s.as_str());
             let directive_filename = env.output_filename();
-            
+
             // Save to OUTPUT directive filename if present
             if let Some(directive_fname) = directive_filename {
                 save_binary_to_file(directive_fname, &binary, matches, env)?;
             }
-            
+
             // Save to command-line filename if present and different from directive
             if let Some(cmd_fname) = cmd_filename {
                 // Only save if it's different from the directive filename (avoid saving twice to same file)

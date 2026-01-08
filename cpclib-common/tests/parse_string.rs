@@ -8,12 +8,13 @@ fn parse_string<'src>(
 ) -> ModalResult<Stateful<LocatingSlice<&'src BStr>, ()>> {
     let normal = none_of(('\\', '"')).void();
     let escaped = ('\\', one_of(('\\', '"'))).void();
-    
+
     let content = delimited(
         '"',
         repeat::<_, _, (), _, _>(0.., alt((normal, escaped))).take(),
         '"'
-    ).parse_next(input)?;
+    )
+    .parse_next(input)?;
 
     let string = (*input).update_slice(content);
     Ok(string)

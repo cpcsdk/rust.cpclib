@@ -21,14 +21,14 @@ use smallvec::{Array, SmallVec};
 
 // Import from parser submodules
 use super::common::{
-    build_span, build_span_covering, my_line_ending, my_space0,
-    parse_comma, parse_comma_multiline, parse_token, parse_word
+    build_span, build_span_covering, my_line_ending, my_space0, parse_comma, parse_comma_multiline,
+    parse_token, parse_word
 };
-use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};
-use super::registers::{parse_indexregister16, parse_register16, parse_register_hl};
-use super::orgams::parse_orgams_expression;
-use super::source::SourceString;
 use super::error::Z80ParserError;
+use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};
+use super::orgams::parse_orgams_expression;
+use super::registers::{parse_indexregister16, parse_register_hl, parse_register16};
+use super::source::SourceString;
 use crate::InnerZ80Span;
 
 // Include build-time generated forbidden names
@@ -85,23 +85,24 @@ pub fn parse_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
 pub fn parse_float(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
-    
+
     // Parse integer part (can be any numeric base)
     let int_part = cpclib_common::parse_value.parse_next(input)?;
-    
+
     // Must be followed by '.'
     '.'.parse_next(input)?;
-    
+
     // Parse fractional part (decimal digits)
     let frac_str = opt(take_while(1.., ('0'..='9', '_'))).parse_next(input)?;
-    
+
     // Optionally parse scientific notation (e or E followed by optional sign and digits)
     let exp_str = opt((
         one_of(['e', 'E']),
         opt(one_of(['+', '-'])),
         take_while(1.., ('0'..='9', '_'))
-    )).parse_next(input)?;
-    
+    ))
+    .parse_next(input)?;
+
     // Build the float string
     let mut float_str = format!("{}", int_part);
     float_str.push('.');
@@ -117,12 +118,12 @@ pub fn parse_float(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
         let exp_str = std::str::from_utf8(exp).unwrap_or("");
         float_str.push_str(&exp_str.replace('_', ""));
     }
-    
+
     // Parse to f64
-    let float_val = float_str.parse::<f64>().map_err(|_| {
-        ErrMode::Backtrack(Z80ParserError::from_input(input))
-    })?;
-    
+    let float_val = float_str
+        .parse::<f64>()
+        .map_err(|_| ErrMode::Backtrack(Z80ParserError::from_input(input)))?;
+
     let span = build_span(input_offset, &input_start, *input);
     Ok(LocatedExpr::Float(OrderedFloat(float_val), span.into()))
 }
@@ -374,7 +375,7 @@ pub fn negative_number(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80
     let input_offset = input.eof_offset();
 
     let exp = preceded(b'-', number).parse_next(input)?;
-    
+
     let result = match exp {
         LocatedExpr::Value(v, _) => {
             let span = build_span(input_offset, &input_start, *input);
@@ -609,7 +610,11 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     )
     .parse_next(input)?;
 
-    let mut result = fold_exprs(initial, remainder, build_span(input_offset, &input_start, *input));
+    let mut result = fold_exprs(
+        initial,
+        remainder,
+        build_span(input_offset, &input_start, *input)
+    );
 
     // Parse ternary operator: condition ? true_expr : false_expr
     if let Some(_) = opt(preceded(my_space0, '?')).parse_next(input)? {
@@ -619,7 +624,7 @@ pub fn located_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         let _ = ':'.parse_next(input)?;
         let _ = my_space0(input)?;
         let false_expr = expr2(input)?;
-        
+
         let span = build_span(input_offset, &input_start, *input);
         result = LocatedExpr::Ternary(
             Box::new(result),

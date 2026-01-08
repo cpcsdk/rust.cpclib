@@ -75,7 +75,12 @@ pub enum LocatedExpr {
     BinaryOperation(BinaryOperation, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
 
     /// Ternary conditional: condition ? true_value : false_value
-    Ternary(Box<LocatedExpr>, Box<LocatedExpr>, Box<LocatedExpr>, Z80Span),
+    Ternary(
+        Box<LocatedExpr>,
+        Box<LocatedExpr>,
+        Box<LocatedExpr>,
+        Z80Span
+    ),
 
     /// Function supposely coded by the user
     AnyFunction(Z80Span, Vec<LocatedExpr>, Z80Span),
@@ -370,14 +375,14 @@ impl ExprElement for LocatedExpr {
 
     fn ternary_condition(&self) -> &Self::Expr {
         match self {
-            Self::Ternary(cond, _, _, _) => cond.as_ref(),
+            Self::Ternary(cond, ..) => cond.as_ref(),
             _ => unreachable!()
         }
     }
 
     fn ternary_true(&self) -> &Self::Expr {
         match self {
-            Self::Ternary(_, true_expr, _, _) => true_expr.as_ref(),
+            Self::Ternary(_, true_expr, ..) => true_expr.as_ref(),
             _ => unreachable!()
         }
     }
@@ -502,7 +507,7 @@ impl ExprEvaluationExt for LocatedExpr {
                     .chain(true_expr.symbols_used())
                     .chain(false_expr.symbols_used())
                     .collect_vec()
-            }
+            },
         }
     }
 }
@@ -1613,7 +1618,9 @@ impl ListingElement for LocatedTokenInner {
 
             Self::Fail(msg) => Cow::Owned(Token::Fail(msg.clone())),
             Self::Warning(msg) => Cow::Owned(Token::Warning(msg.clone())),
-            Self::OutputFile(filename) => Cow::Owned(Token::OutputFile(filename.to_expr().into_owned())),
+            Self::OutputFile(filename) => {
+                Cow::Owned(Token::OutputFile(filename.to_expr().into_owned()))
+            },
             Self::Breakpoint {
                 address,
                 r#type,

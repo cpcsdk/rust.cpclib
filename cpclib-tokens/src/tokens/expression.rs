@@ -733,7 +733,7 @@ impl ExprElement for Expr {
 
     fn ternary_condition(&self) -> &Self::Expr {
         match self {
-            Self::Ternary(cond, _, _) => cond.as_ref(),
+            Self::Ternary(cond, ..) => cond.as_ref(),
             _ => unreachable!()
         }
     }

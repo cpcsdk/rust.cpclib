@@ -26,9 +26,10 @@ impl ExternDisassembler {
 
 #[cfg(test)]
 mod test {
-    use crate::delegated::{StaticInformation};
-    use crate::runner::disassembler::disark::DisarkVersion;
     use cpclib_common::network;
+
+    use crate::delegated::StaticInformation;
+    use crate::runner::disassembler::disark::DisarkVersion;
 
     #[test]
     fn test_download_disark() {

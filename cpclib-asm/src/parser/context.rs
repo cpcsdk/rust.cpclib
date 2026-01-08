@@ -6,6 +6,8 @@ use std::sync::{LazyLock, RwLock};
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::winnow::BStr;
+use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
+use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
 use either::Either;
 use regex::Regex;
 
@@ -15,8 +17,6 @@ use super::source::Z80Span;
 use crate::LocatedToken;
 use crate::assembler::Env;
 use crate::error::AssemblerError;
-use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
-use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
 
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

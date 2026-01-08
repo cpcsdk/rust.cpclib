@@ -1,9 +1,8 @@
 /// Windows users may not be able to installa graphivz, so let's provide it
 #[cfg(target_os = "windows")]
 fn get_graphviz_resources() {
-    use std::io::Cursor;
+    use std::io::{Cursor, Read};
     use std::path::Path;
-    use std::io::Read;
 
     use ureq;
 

@@ -293,7 +293,9 @@ impl Visited for Token {
 impl Visited for LocatedToken {
     fn visited(&self, env: &mut Env) -> Result<(), Box<AssemblerError>> {
         // dbg!(env.output_address, self.as_token());
-        Ok(env.visit_located_token(self).map_err(|e| e.locate(self.span().clone()))?)
+        Ok(env
+            .visit_located_token(self)
+            .map_err(|e| e.locate(self.span().clone()))?)
     }
 }
 
@@ -583,11 +585,10 @@ impl fmt::Debug for Env {
 
 /// Symbols handling
 impl Env {
-
     pub fn assemble_rst_fake<D: DataAccessElem>(
         &mut self,
         arg1: &D,
-        arg2: &D,
+        arg2: &D
     ) -> Result<Bytes, Box<AssemblerError>>
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
@@ -595,7 +596,7 @@ impl Env {
         let val = self
             .resolve_expr_may_fail_in_first_pass(arg2.get_expression().unwrap())?
             .int()?;
-    
+
         let _p = match val {
             0x38 | 7 | 38 => 0b111,
             _ => {
@@ -606,16 +607,20 @@ impl Env {
                 }));
             }
         };
-    
+
         let flag = arg1.get_flag_test().unwrap();
-        if flag != FlagTest::NZ && flag != FlagTest::Z && flag != FlagTest::NC && flag != FlagTest::C {
+        if flag != FlagTest::NZ
+            && flag != FlagTest::Z
+            && flag != FlagTest::NC
+            && flag != FlagTest::C
+        {
             return Err(Box::new(AssemblerError::InvalidArgument {
                 msg: format!(
                     "Conditionnal RST cannot take {flag} as flag. Expected values are C|NC|Z|NZ."
                 )
             }));
         }
-    
+
         self.assemble_opcode_impl(
             Mnemonic::Jr,
             &Some(DataAccess::from(flag)),
@@ -626,13 +631,18 @@ impl Env {
         )
     }
 
-    pub fn assemble_rst<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>>
-    where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+    pub fn assemble_rst<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
         let mut bytes = Bytes::new();
         let val = self
             .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
             .int()?;
-    
+
         let p = match val {
             0x00 => 0b000,
             0x08 | 1 => 0b001,
@@ -652,8 +662,13 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_im<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>>
-    where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+    pub fn assemble_im<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
         let mut bytes = Bytes::new();
         let val = self
             .resolve_expr_may_fail_in_first_pass(arg1.get_expression().unwrap())?
@@ -1613,7 +1628,10 @@ impl Env {
         }
     }
 
-    fn page_info_for_logical_address_mut(&mut self, address: u16) -> Result<&mut PageInformation, Box<AssemblerError>> {
+    fn page_info_for_logical_address_mut(
+        &mut self,
+        address: u16
+    ) -> Result<&mut PageInformation, Box<AssemblerError>> {
         match self.output_kind() {
             OutputKind::Snapshot => {
                 let active_page =
@@ -1621,28 +1639,32 @@ impl Env {
                 Ok(&mut self.sna.pages_info[active_page])
             },
             OutputKind::Cpr => {
-                let cpr = self.cpr
-                    .as_mut()
-                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
+                let cpr = self.cpr.as_mut().ok_or_else(|| {
+                    Box::new(AssemblerError::BugInAssembler {
                         file: file!(),
                         line: line!(),
                         msg: "CPR is None when output_kind is Cpr".to_string()
-                    }))?;
-                cpr.selected_active_page_info_mut()
-                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
+                    })
+                })?;
+                cpr.selected_active_page_info_mut().ok_or_else(|| {
+                    Box::new(AssemblerError::BugInAssembler {
                         file: file!(),
                         line: line!(),
                         msg: "No active page info in CPR".to_string()
-                    }))
+                    })
+                })
             },
             OutputKind::FreeBank => {
-                self.free_banks.selected_active_page_info_mut()
-                    .ok_or_else(|| Box::new(AssemblerError::BugInAssembler {
-                        file: file!(),
-                        line: line!(),
-                        msg: "No active page info in free banks".to_string()
-                    }))
-            }
+                self.free_banks
+                    .selected_active_page_info_mut()
+                    .ok_or_else(|| {
+                        Box::new(AssemblerError::BugInAssembler {
+                            file: file!(),
+                            line: line!(),
+                            msg: "No active page info in free banks".to_string()
+                        })
+                    })
+            },
         }
     }
 
@@ -2568,8 +2590,10 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per push; actual size may vary slightly
-        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) =
-            regs.iter().map(|reg| self.assemble_push(reg)).partition_map(|res| {
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
+            .iter()
+            .map(|reg| self.assemble_push(reg))
+            .partition_map(|res| {
                 match res {
                     Ok(val) => Either::Left(val),
                     Err(e) => Either::Right(e)
@@ -2590,8 +2614,10 @@ impl Env {
         regs: &[D]
     ) -> Result<(), Box<AssemblerError>> {
         // pre-size assuming 2 bytes per pop; actual size may vary slightly
-        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) =
-            regs.iter().map(|reg| self.assemble_pop(reg)).partition_map(|res| {
+        let (oks, errs): (Vec<Bytes>, Vec<Box<AssemblerError>>) = regs
+            .iter()
+            .map(|reg| self.assemble_pop(reg))
+            .partition_map(|res| {
                 match res {
                     Ok(val) => Either::Left(val),
                     Err(e) => Either::Right(e)
@@ -3193,10 +3219,10 @@ impl Env {
             _ => {
                 return Err(Box::new(AssemblerError::AssemblingError {
                     msg: "OUTPUT directive expects a string or value for the filename".into()
-                }))
-            }
+                }));
+            },
         };
-        
+
         // Store the output filename in the environment
         // This will be used later when saving the assembled output
         self.output_filename = Some(fname.to_string());
@@ -3472,7 +3498,7 @@ impl Env {
 
         // Try to assemble the crunched section
         let assembly_result = visit_processed_tokens(lst, &mut crunched_env);
-        
+
         // Handle errors: some errors (like unknown symbols) can be deferred to next pass
         if let Err(e) = assembly_result {
             // Check if this is a recoverable error that might be resolved in a later pass
@@ -3481,14 +3507,15 @@ impl Env {
                 AssemblerError::UnknownSymbol { .. }
                 | AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { .. }, .. }
             );
-            
+
             // In first pass or if error is recoverable, defer it and request additional pass
             if crunched_env.pass.is_first_pass() || is_recoverable {
                 // Mark that we need another pass to resolve this
                 *self.request_additional_pass.write().unwrap() = true;
                 *crunched_env.request_additional_pass.write().unwrap() = true;
                 // Continue with empty bytes for now - will be computed in next pass
-            } else {
+            }
+            else {
                 // Truly unrecoverable error - propagate it
                 let e = AssemblerError::CrunchedSectionError { error: e };
                 return Err(Box::new(match span {
@@ -5344,10 +5371,10 @@ impl Env {
         mnemonic: Mnemonic,
         arg1: &Option<D>,
         arg2: &Option<D>,
-        arg3: &Option<Register8>,
+        arg3: &Option<Register8>
     ) -> Result<(), Box<AssemblerError>>
     where
-        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement,
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
         // TODO update $ in the symbol table
         let bytes = self.assemble_opcode_impl(mnemonic, arg1, arg2, arg3)?;
@@ -5380,7 +5407,9 @@ impl Env {
             },
             Mnemonic::Cp => self.assemble_cp(arg1.as_ref().unwrap()),
             Mnemonic::ExMemSp => self.assemble_ex_memsp(arg1.as_ref().unwrap()),
-            Mnemonic::Dec | Mnemonic::Inc => self.assemble_inc_dec(mnemonic, arg1.as_ref().unwrap()),
+            Mnemonic::Dec | Mnemonic::Inc => {
+                self.assemble_inc_dec(mnemonic, arg1.as_ref().unwrap())
+            },
             Mnemonic::Djnz => self.assemble_djnz(arg1.as_ref().unwrap()),
             Mnemonic::In => self.assemble_in(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
             Mnemonic::Ld => self.assemble_ld(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
@@ -5430,7 +5459,7 @@ impl Env {
                     mnemonic,
                     arg1.as_ref().unwrap(),
                     arg2.as_ref().unwrap(),
-                    arg3.as_ref(),
+                    arg3.as_ref()
                 )
             },
             Mnemonic::Ret => self.assemble_ret(arg1.as_ref()),
@@ -5540,8 +5569,6 @@ pub fn absolute_to_relative<T: AsRef<SymbolsTable>>(
         }
     }
 }
-
-
 
 #[allow(missing_docs)]
 impl Env {
@@ -5879,7 +5906,10 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_ex_memsp<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
+    pub fn assemble_ex_memsp<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>> {
         let mut bytes = Bytes::new();
 
         if let Some(reg) = arg1.get_indexregister16() {
@@ -5890,7 +5920,10 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_pop<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
+    pub fn assemble_pop<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>> {
         let mut bytes = Bytes::new();
 
         if arg1.is_register16() {
@@ -5912,7 +5945,10 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_push<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>> {
+    pub fn assemble_push<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>> {
         let mut bytes = Bytes::new();
 
         if arg1.is_register16() {
@@ -5978,11 +6014,14 @@ impl Env {
             {
                 bytes.push(indexed_register16_to_code(reg.complete()));
                 bytes.push(
-                    if is_inc { 0b0000_0100 } else { 0b0000_0101 } | (indexregister8_to_code(reg) << 3)
+                    if is_inc { 0b0000_0100 } else { 0b0000_0101 }
+                        | (indexregister8_to_code(reg) << 3)
                 );
             }
         }
-        else if arg1.is_address_in_register16() && arg1.get_register16().unwrap() == Register16::Hl {
+        else if arg1.is_address_in_register16()
+            && arg1.get_register16().unwrap() == Register16::Hl
+        {
             {
                 bytes.push(if is_inc { 0x34 } else { 0x35 });
             }
@@ -6013,8 +6052,13 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_djnz<D: DataAccessElem>(&mut self, arg1: &D) -> Result<Bytes, Box<AssemblerError>>
-    where <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement {
+    pub fn assemble_djnz<D: DataAccessElem>(
+        &mut self,
+        arg1: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
         if let Some(expr) = arg1.get_expression() {
             let mut bytes = Bytes::new();
             let address = self.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
@@ -6646,7 +6690,8 @@ impl Env {
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                    let val =
+                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
                     add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
                     add_word(&mut bytes, val);
                 }
@@ -6676,16 +6721,18 @@ impl Env {
                     )?);
                 }
                 else {
-                    let bytes_high = self.assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::Register8(src.high().unwrap())
-                    )
-                    .unwrap();
-                    let bytes_low = self.assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::Register8(src.low().unwrap())
-                    )
-                    .unwrap();
+                    let bytes_high = self
+                        .assemble_ld(
+                            &DataAccess::Register8(dst.high().unwrap()),
+                            &DataAccess::Register8(src.high().unwrap())
+                        )
+                        .unwrap();
+                    let bytes_low = self
+                        .assemble_ld(
+                            &DataAccess::Register8(dst.low().unwrap()),
+                            &DataAccess::Register8(src.low().unwrap())
+                        )
+                        .unwrap();
 
                     bytes.extend_from_slice(&bytes_low);
                     bytes.extend_from_slice(&bytes_high);
@@ -6694,7 +6741,8 @@ impl Env {
             else if arg2.is_memory() {
                 let expr = arg2.get_expression().unwrap();
                 {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xFFFF) as u16;
+                    let val =
+                        (self.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xFFFF) as u16;
 
                     if let Register16::Hl = dst {
                         add_byte(&mut bytes, 0x2A);
@@ -6764,7 +6812,8 @@ impl Env {
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                    let val =
+                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
                     add_byte(&mut bytes, code);
                     add_byte(&mut bytes, 0x21);
                     add_word(&mut bytes, val);
@@ -6774,7 +6823,8 @@ impl Env {
                 let exp = arg2.get_expression().unwrap();
 
                 {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                    let val =
+                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
                     add_byte(&mut bytes, code);
                     add_byte(&mut bytes, 0x2A);
                     add_word(&mut bytes, val);
@@ -6795,7 +6845,8 @@ impl Env {
                     }
                     else if arg2.is_expression() {
                         let exp = arg2.get_expression().unwrap();
-                        let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                        let val =
+                            (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
                         bytes.push(0x36);
                         bytes.push(val);
                     }
@@ -6840,7 +6891,8 @@ impl Env {
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let value = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                    let value =
+                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
                     add_byte(&mut bytes, 0x36);
                     add_byte(&mut bytes, delta);
                     add_byte(&mut bytes, value);
@@ -6982,7 +7034,11 @@ impl Env {
                 {
                     bytes.extend(self.assemble_ld(
                         &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::IndexRegister16WithIndex(src, idx.0, idx.1.to_expr().into_owned())
+                        &DataAccess::IndexRegister16WithIndex(
+                            src,
+                            idx.0,
+                            idx.1.to_expr().into_owned()
+                        )
                     )?);
                     bytes.extend(self.assemble_ld(
                         &DataAccess::Register8(dst.high().unwrap()),
@@ -6994,7 +7050,6 @@ impl Env {
                     )?);
                 }
             }
-
             else if arg1.is_indexregister_with_index() && arg2.is_register16() {
                 let dst = arg1.get_indexregister16().unwrap();
                 let index = arg1.get_index().unwrap();
@@ -7063,10 +7118,9 @@ impl Env {
                     .iter()
                     .cloned()
                 );
-                bytes.extend(self.assemble_inc_dec(
-                    Mnemonic::Inc,
-                    &DataAccess::Register16(Register16::Hl)
-                )?);
+                bytes.extend(
+                    self.assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl))?
+                );
                 bytes.extend(
                     self.assemble_ld(
                         &DataAccess::MemoryRegister16(Register16::Hl),
@@ -7075,10 +7129,9 @@ impl Env {
                     .iter()
                     .cloned()
                 );
-                bytes.extend(self.assemble_inc_dec(
-                    Mnemonic::Dec,
-                    &DataAccess::Register16(Register16::Hl)
-                )?);
+                bytes.extend(
+                    self.assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register16(Register16::Hl))?
+                );
             }
         }
 
@@ -7101,7 +7154,8 @@ impl Env {
         span: Option<&Z80Span>
     ) -> Result<bool, Box<AssemblerError>>
     where
-        <E as cpclib_tokens::ExprElement>::Expr: crate::implementation::expression::ExprEvaluationExt
+        <E as cpclib_tokens::ExprElement>::Expr:
+            crate::implementation::expression::ExprEvaluationExt
     {
         if let Some(commands) = self.assembling_control_current_output_commands.last_mut() {
             commands.store_assert(exp.to_expr().into_owned(), txt.cloned(), span.cloned());
@@ -7149,8 +7203,7 @@ impl Env {
     pub fn visit_stableticker<S: AsRef<str>>(
         &mut self,
         stable: &StableTickerAction<S>
-    ) -> Result<(), Box<AssemblerError>>
-    {
+    ) -> Result<(), Box<AssemblerError>> {
         match stable {
             StableTickerAction::Start(name) => {
                 self.stable_counters.add_counter(name)?;
@@ -7163,9 +7216,9 @@ impl Env {
                     .unwrap_or_else(|| self.stable_counters.release_last_counter())
                 {
                     if !self.pass.is_listing_pass() && self.symbols().contains_symbol(&label)? {
-                        self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(format!(
-                            "Symbol {label} has been overwritten"
-                        ))));
+                        self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(
+                            format!("Symbol {label} has been overwritten")
+                        )));
                     }
 
                     // force the injection of the value
@@ -7327,12 +7380,13 @@ mod test {
     #[test]
     fn test_jump() {
         let mut env = Env::default();
-        let res = env.assemble_call_jr_or_jp(
-            Mnemonic::Jp,
-            Some(&DataAccess::FlagTest(FlagTest::Z)),
-            &DataAccess::Expression(Expr::Value(0x1234))
-        )
-        .unwrap();
+        let res = env
+            .assemble_call_jr_or_jp(
+                Mnemonic::Jp,
+                Some(&DataAccess::FlagTest(FlagTest::Z)),
+                &DataAccess::Expression(Expr::Value(0x1234))
+            )
+            .unwrap();
         assert_eq!(res.len(), 3);
         assert_eq!(res[0], 0b1100_1010);
         assert_eq!(res[1], 0x34);
@@ -7386,13 +7440,15 @@ mod test {
     #[test]
     pub fn test_inc_dec() {
         let mut env = Env::default();
-        let res =
-            env.assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De)).unwrap();
+        let res = env
+            .assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::De))
+            .unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x13);
 
-        let res =
-            env.assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register8(Register8::B)).unwrap();
+        let res = env
+            .assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register8(Register8::B))
+            .unwrap();
         assert_eq!(res.len(), 1);
         assert_eq!(res[0], 0x05);
     }
@@ -7400,57 +7456,62 @@ mod test {
     #[test]
     pub fn test_res() {
         let mut env = Env::default();
-        let res = env.assemble_bit_res_or_set(
-            Mnemonic::Res,
-            &DataAccess::Expression(0.into()),
-            &DataAccess::Register8(Register8::B),
-            None
-        )
-        .unwrap();
+        let res = env
+            .assemble_bit_res_or_set(
+                Mnemonic::Res,
+                &DataAccess::Expression(0.into()),
+                &DataAccess::Register8(Register8::B),
+                None
+            )
+            .unwrap();
 
         assert_eq!(res.as_ref(), &[0xCB, 0b10000000]);
 
         let mut env = Env::default();
-        let res = env.assemble_bit_res_or_set(
-            Mnemonic::Res,
-            &DataAccess::Expression(2.into()),
-            &DataAccess::Register8(Register8::C),
-            None
-        )
-        .unwrap();
+        let res = env
+            .assemble_bit_res_or_set(
+                Mnemonic::Res,
+                &DataAccess::Expression(2.into()),
+                &DataAccess::Register8(Register8::C),
+                None
+            )
+            .unwrap();
 
         assert_eq!(res.as_ref(), &[0xCB, 0b10010001]);
 
         let mut env = Env::default();
-        let res = env.assemble_bit_res_or_set(
-            Mnemonic::Res,
-            &DataAccess::Expression(2.into()),
-            &DataAccess::MemoryRegister16(Register16::Hl),
-            None
-        )
-        .unwrap();
+        let res = env
+            .assemble_bit_res_or_set(
+                Mnemonic::Res,
+                &DataAccess::Expression(2.into()),
+                &DataAccess::MemoryRegister16(Register16::Hl),
+                None
+            )
+            .unwrap();
 
         assert_eq!(res.as_ref(), &[0xCB, 0b10010110]);
 
         let mut env = Env::default();
-        let res = env.assemble_bit_res_or_set(
-            Mnemonic::Res,
-            &DataAccess::Expression(2.into()),
-            &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()),
-            None
-        )
-        .unwrap();
+        let res = env
+            .assemble_bit_res_or_set(
+                Mnemonic::Res,
+                &DataAccess::Expression(2.into()),
+                &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()),
+                None
+            )
+            .unwrap();
 
         assert_eq!(res.as_ref(), &[DD, 0xCB, 3, 0b10010110]);
 
         let mut env = Env::default();
-        let res = env.assemble_bit_res_or_set(
-            Mnemonic::Res,
-            &DataAccess::Expression(2.into()),
-            &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()),
-            Some(&Register8::B)
-        )
-        .unwrap();
+        let res = env
+            .assemble_bit_res_or_set(
+                Mnemonic::Res,
+                &DataAccess::Expression(2.into()),
+                &DataAccess::IndexRegister16WithIndex(IndexRegister16::Ix, 3.into()),
+                Some(&Register8::B)
+            )
+            .unwrap();
 
         assert_eq!(res.as_ref(), &[DD, 0xCB, 3, 0b10010000]);
     }
@@ -7458,11 +7519,12 @@ mod test {
     #[test]
     pub fn test_ld() {
         let mut env = Env::default();
-        let res = env.assemble_ld(
-            &DataAccess::Register16(Register16::De),
-            &DataAccess::Expression(Expr::Value(0x1234))
-        )
-        .unwrap();
+        let res = env
+            .assemble_ld(
+                &DataAccess::Register16(Register16::De),
+                &DataAccess::Expression(Expr::Value(0x1234))
+            )
+            .unwrap();
         assert_eq!(res.len(), 3);
         assert_eq!(res[0], 0x11);
         assert_eq!(res[1], 0x34);
@@ -7472,11 +7534,12 @@ mod test {
     #[test]
     #[should_panic]
     pub fn test_ld_fail() {
-        let _res = Env::default().assemble_ld(
-            &DataAccess::Register16(Register16::Af),
-            &DataAccess::Expression(Expr::Value(0x1234))
-        )
-        .unwrap();
+        let _res = Env::default()
+            .assemble_ld(
+                &DataAccess::Register16(Register16::Af),
+                &DataAccess::Expression(Expr::Value(0x1234))
+            )
+            .unwrap();
     }
 
     #[test]
@@ -7668,8 +7731,8 @@ mod test {
         let bytes = env.memory(0, 2);
         assert_eq!(
             bytes[1],
-            env.assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl)).unwrap()
-                [0]
+            env.assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl))
+                .unwrap()[0]
         );
     }
 

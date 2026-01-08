@@ -493,7 +493,7 @@ fn test_output_directive() {
     }
 
     let fname = "tests/asm/good_document_output.asm";
-    
+
     // Use basm command directly to assemble the file
     let res = Command::new("../target/debug/basm")
         .args(["-I", "tests/asm/", "-i", fname])
@@ -531,7 +531,7 @@ fn test_output_directive_with_command_line() {
     // Clean up any pre-existing files
     let directive_path = std::path::Path::new("testoutput.bin");
     let cmdline_path = std::path::Path::new("cmdline_output.bin");
-    
+
     if directive_path.exists() {
         std::fs::remove_file(directive_path).unwrap();
     }
@@ -540,7 +540,7 @@ fn test_output_directive_with_command_line() {
     }
 
     let fname = "tests/asm/good_document_output.asm";
-    
+
     // Use basm with both OUTPUT directive and -o command-line argument
     let res = Command::new("../target/debug/basm")
         .args(["-I", "tests/asm/", "-i", fname, "-o", "cmdline_output.bin"])
@@ -566,7 +566,7 @@ fn test_output_directive_with_command_line() {
     // Verify both files have the same content
     let directive_content = std::fs::read(directive_path).expect("Unable to read testoutput.bin");
     let cmdline_content = std::fs::read(cmdline_path).expect("Unable to read cmdline_output.bin");
-    
+
     assert_eq!(
         directive_content, cmdline_content,
         "Both output files should have the same content"
@@ -580,4 +580,3 @@ fn test_output_directive_with_command_line() {
     std::fs::remove_file(directive_path).unwrap();
     std::fs::remove_file(cmdline_path).unwrap();
 }
-

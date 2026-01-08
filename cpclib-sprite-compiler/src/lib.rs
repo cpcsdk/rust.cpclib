@@ -1,11 +1,10 @@
-
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 
 use bon::Builder;
 use cpclib_asm::{
-    IfBuilder, Listing, ListingBuilder, ListingFromStr, ListingSelector, Register8,
-    Register16, TestKind, dec_e, dec_l, inc_e, inc_l
+    IfBuilder, Listing, ListingBuilder, ListingFromStr, ListingSelector, Register8, Register16,
+    TestKind, dec_e, dec_l, inc_e, inc_l
 };
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use itertools::Itertools;
@@ -75,7 +74,10 @@ impl RegistersStore {
     }
 
     pub fn register_for(&self, val: u8) -> Option<Register8> {
-        self.regs.iter().find(|(_r, v)| **v == val).map(|(r, _v)| *r)
+        self.regs
+            .iter()
+            .find(|(_r, v)| **v == val)
+            .map(|(r, _v)| *r)
     }
 
     pub fn value_for_r8(&self, r: Register8) -> Option<u8> {

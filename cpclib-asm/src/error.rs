@@ -519,8 +519,13 @@ impl AssemblerError {
 
                                 let mut writer = buffer();
                                 let config = config();
-                                term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic)
-                                    .unwrap();
+                                term::emit_to_write_style(
+                                    &mut writer,
+                                    &config,
+                                    &source_files,
+                                    &diagnostic
+                                )
+                                .unwrap();
 
                                 std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
                             },
