@@ -67,17 +67,18 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         let is_html = ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm");
 
         if is_html {
-            // Generate HTML directly using minijinja
-            let mut docs = inputs
+            // Generate HTML directly using minijinja - merge all pages into one
+            let pages: Result<Vec<_>, String> = inputs
                 .map(|input| DocumentationPage::for_file(&input))
-                .map(|page| page.map(|page| page.to_html()))
-                .map(|res| {
-                    match res {
-                        Ok(html) => html,
-                        Err(e) => format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
-                    }
-                });
-            let html = docs.join("\n\n<hr>\n\n");
+                .collect();
+            
+            let html = match pages {
+                Ok(pages) => {
+                    let merged_page = DocumentationPage::merge(pages);
+                    merged_page.to_html()
+                },
+                Err(e) => format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
+            };
             
             // Save the HTML file directly
             std::fs::write(output, html)

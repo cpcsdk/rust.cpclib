@@ -215,6 +215,34 @@ impl DocumentationPage {
         Ok(build_documentation_page_from_aggregates(fname, doc))
     }
 
+    /// Merge multiple documentation pages into a single page
+    pub fn merge(pages: Vec<Self>) -> Self {
+        if pages.is_empty() {
+            return Self {
+                fname: String::from("Empty documentation"),
+                content: Vec::new()
+            };
+        }
+
+        if pages.len() == 1 {
+            return pages.into_iter().next().unwrap();
+        }
+
+        let fnames = pages.iter()
+            .map(|p| p.fname.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        
+        let content = pages.into_iter()
+            .flat_map(|p| p.content)
+            .collect();
+
+        Self {
+            fname: fnames,
+            content
+        }
+    }
+
     pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
         self.content.iter().filter(|item| item.is_label())
     }
