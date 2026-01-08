@@ -281,11 +281,11 @@ impl Object for DocumentationPage {
 }
 impl DocumentationPage {
     // TODO handle errors
-    pub fn for_file(fname: &str) -> Result<Self, String> {
+    pub fn for_file(fname: &str, include_undocumented: bool) -> Result<Self, String> {
         let code = std::fs::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
         Ok(build_documentation_page_from_aggregates(fname, doc))
     }
@@ -508,7 +508,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
 /// Also tracks the last global label to handle local labels (starting with ".")
 pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
-    tokens: &[T]
+    tokens: &[T],
+    include_undocumented: bool
 ) -> Vec<(String, Option<&T>, Option<String>)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
@@ -633,6 +634,10 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
                 };
                 doc.push((in_process_comment.consume(), documented, last_global_label.clone()));
             }
+            else if include_undocumented && (token.is_macro_definition() || token.is_function_definition()) {
+                // Include undocumented macros and functions if flag is set
+                doc.push((String::new(), Some(token), last_global_label.clone()));
+            }
             else {
                 // we add no comment, so we do nothing
             }
@@ -682,7 +687,7 @@ mod test {
             Token::Comment(";;; This file is commented, not the function!".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, false);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, "This file is commented, not the function!");
         assert!(doc[0].1.is_none());
@@ -695,7 +700,7 @@ mod test {
             Token::Comment(";;; And this comment is a top file comment.".into()),
             Token::Comment("; This is not a documentation, just a comment".into())
         ];
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, false);
         assert_eq!(doc.len(), 1);
         assert_eq!(
             &doc[0].0,
@@ -710,7 +715,7 @@ mod test {
             Token::Comment(";; This function does something".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, false);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, "This function does something");
         assert!(doc[0].1.is_some());
@@ -723,7 +728,7 @@ mod test {
             Token::Comment(";; ... on two lines".into()),
             Token::Label("my_function".into())
         ];
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, false);
         assert_eq!(doc.len(), 1);
         assert_eq!(
             &doc[0].0,
@@ -744,7 +749,7 @@ mod test {
                 flavor: cpclib_asm::AssemblerFlavor::Basm
             }
         ];
-        let doc = aggregate_documentation_on_tokens(&tokens);
+        let doc = aggregate_documentation_on_tokens(&tokens, false);
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, "This macro does something");
         assert!(doc[0].1.is_some());

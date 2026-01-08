@@ -5,7 +5,7 @@ use cpclib_basmdoc::{aggregate_documentation_on_tokens, build_documentation_page
 fn test_local_labels() {
     let code = std::fs::read_to_string("tests/local_labels.asm").unwrap();
     let tokens = parse_z80_str(&code).unwrap();
-    let doc = aggregate_documentation_on_tokens(&tokens);
+    let doc = aggregate_documentation_on_tokens(&tokens, false);
     
     let page = build_documentation_page_from_aggregates("tests/local_labels.asm", doc);
     

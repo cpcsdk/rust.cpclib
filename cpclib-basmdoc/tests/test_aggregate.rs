@@ -7,7 +7,7 @@ const FILENAME: &str = "tests/simple_code.asm";
 fn test_simple_aggregate() {
     let code = std::fs::read_to_string(FILENAME).unwrap();
     let tokens = dbg!(parse_z80_str(&code).unwrap());
-    let doc = dbg!(aggregate_documentation_on_tokens(&tokens));
+    let doc = dbg!(aggregate_documentation_on_tokens(&tokens, false));
 
     assert_eq!(doc.len(), 5);
 

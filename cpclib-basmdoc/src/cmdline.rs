@@ -26,6 +26,13 @@ pub fn build_args_parser() -> clap::Command {
                 .long("output")
                 .required(true)
         )
+        .arg(
+            clap::Arg::new("undocumented")
+                .help("Include undocumented macros and functions")
+                .short('u')
+                .long("undocumented")
+                .action(clap::ArgAction::SetTrue)
+        )
 }
 
 pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result<(), String> {
@@ -61,6 +68,7 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
     let inputs = inputs.into_iter();
 
     let output = std::path::Path::new(output);
+    let include_undocumented = matches.get_flag("undocumented");
 
     if let Some(ext) = output.extension() {
         let is_md = ext.eq_ignore_ascii_case("md");
@@ -69,7 +77,7 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         if is_html {
             // Generate HTML directly using minijinja - merge all pages into one
             let pages: Result<Vec<_>, String> = inputs
-                .map(|input| DocumentationPage::for_file(&input))
+                .map(|input| DocumentationPage::for_file(&input, include_undocumented))
                 .collect();
             
             let html = match pages {
@@ -87,7 +95,7 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         else {
             // Generate markdown (for .md or PDF)
             let mut docs = inputs
-                .map(|input| DocumentationPage::for_file(&input))
+                .map(|input| DocumentationPage::for_file(&input, include_undocumented))
                 .map(|page| page.map(|page| page.to_markdown()))
                 .map(|res| {
                     match res {

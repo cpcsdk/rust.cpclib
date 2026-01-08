@@ -47,3 +47,17 @@ endm
 	WAIT_VSYNC("blabla blabal")
 
 
+macro UNDOCUMENTED_MACRO
+	fail "This macro is not documented. why are you using it?"
+endm
+
+;;
+;; Compute the square of a value
+function square(v)
+	return v*v
+endf
+
+
+function undocumented_function()
+	return memory(6128)
+endf
