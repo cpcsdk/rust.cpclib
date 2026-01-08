@@ -47,6 +47,10 @@
 {% if page.has_macros() %}
 {{  items_familly_summary("Macros", page.macros) }}
 {% endif %}
+
+{% if page.has_functions() %}
+{{  items_familly_summary("Functions", page.functions) }}
+{% endif %}
     
 {%  if page.has_equ() %}
 {{  items_familly_summary("Equs", page.equs) }}
@@ -61,6 +65,10 @@
 
 {% if page.has_macros() %}
 {{  items_familly_description("Macros", page.macros) }}
+{% endif %}
+
+{% if page.has_functions() %}
+{{  items_familly_description("Functions", page.functions) }}
 {% endif %}
 
 {%  if page.has_equ() %}

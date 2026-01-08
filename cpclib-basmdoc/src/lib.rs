@@ -3,6 +3,7 @@ pub mod cmdline;
 use std::sync::Arc;
 
 use cpclib_asm::{ListingElement, parse_z80_str};
+use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
 use minijinja::{Environment, ErrorKind, Value, context};
 use rust_embed::Embed;
@@ -29,7 +30,7 @@ pub enum DocumentedItem {
     Label(String),
     Equ(String, String),
     Macro { name: String, arguments: Vec<String>, content: String },
-    Function
+    Function { name: String, arguments: Vec<String>, content: String }
 }
 
 impl DocumentedItem {
@@ -46,7 +47,7 @@ impl DocumentedItem {
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(self, DocumentedItem::Function)
+        matches!(self, DocumentedItem::Function { .. })
     }
 
     pub fn item_key(&self) -> String {
@@ -61,6 +62,10 @@ impl DocumentedItem {
 
             DocumentedItem::Macro { name, .. } => {
                 format!("macro_{}", name)
+            },
+
+            DocumentedItem::Function { name, .. } => {
+                format!("function_{}", name)
             },
 
             _ => String::from("unknown_item")
@@ -81,7 +86,15 @@ impl Object for ItemDocumentation {
             Some("summary") => Some(Value::from(self.item_long_summary())),
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key())),
-            Some("source") => Some(Value::from(self.macro_source())),
+            Some("source") => {
+                if self.is_macro() {
+                    Some(Value::from(self.macro_source()))
+                } else if self.is_function() {
+                    Some(Value::from(self.function_source()))
+                } else {
+                    Some(Value::from(String::new()))
+                }
+            },
             _ => None
         }
     }
@@ -92,6 +105,14 @@ impl ItemDocumentation {
     pub fn macro_source(&self) -> String {
         match &self.item {
             DocumentedItem::Macro { content, .. } => content.clone(),
+            _ => String::new()
+        }
+    }
+
+    /// Get the source code of a function, or empty string for other items
+    pub fn function_source(&self) -> String {
+        match &self.item {
+            DocumentedItem::Function { content, .. } => content.clone(),
             _ => String::new()
         }
     }
@@ -120,6 +141,11 @@ impl ItemDocumentation {
                 format!("MACRO {name}({args})")
             },
 
+            DocumentedItem::Function { name, arguments, .. } => {
+                let args = arguments.join(",");
+                format!("FUNCTION {name}({args})")
+            },
+
             _ => String::from("Unknown item")
         }
     }
@@ -133,6 +159,10 @@ impl ItemDocumentation {
             },
 
             DocumentedItem::Macro { name, .. } => {
+                name.clone()
+            },
+
+            DocumentedItem::Function { name, .. } => {
                 name.clone()
             },
 
@@ -155,6 +185,11 @@ impl ItemDocumentation {
             DocumentedItem::Macro { name, arguments, .. } => {
                 let args = arguments.join(",");
                 md += &format!("## MACRO {name}({args}) \n\n");
+            },
+
+            DocumentedItem::Function { name, arguments, .. } => {
+                let args = arguments.join(",");
+                md += &format!("## FUNCTION {name}({args}) \n\n");
             },
 
             _ => {
@@ -206,6 +241,16 @@ impl Object for DocumentationPage {
                 let equs = Value::from_object(equs);
                 Some(equs)
             },
+            Some("functions") => {
+                let functions = self
+                    .function_iter()
+                    .cloned()
+                    .map(Value::from_object)
+                    .sorted().into_iter()
+                    .collect::<Vec<_>>();
+                let functions = Value::from_object(functions);
+                Some(functions)
+            },
             _ => None
         }
     }
@@ -220,6 +265,7 @@ impl Object for DocumentationPage {
             "has_labels" => Ok(Value::from(self.has_labels())),
             "has_macros" => Ok(Value::from(self.has_macros())),
             "has_equ" => Ok(Value::from(self.has_equ())),
+            "has_functions" => Ok(Value::from(self.has_functions())),
 
             _ => {
                 Err(minijinja::Error::new(
@@ -281,6 +327,10 @@ impl DocumentationPage {
         self.content.iter().filter(|item| item.is_equ())
     }
 
+    pub fn function_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
+        self.content.iter().filter(|item| item.is_function())
+    }
+
     pub fn has_labels(&self) -> bool {
         self.label_iter().next().is_some()
     }
@@ -291,6 +341,10 @@ impl DocumentationPage {
 
     pub fn has_equ(&self) -> bool {
         self.equ_iter().next().is_some()
+    }
+
+    pub fn has_functions(&self) -> bool {
+        self.function_iter().next().is_some()
     }
 
     /// Return a string that encode the documentation page in markdown
@@ -391,7 +445,15 @@ pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Optio
         ))
     }
     else if token.is_function_definition() {
-        Some(DocumentedItem::Function)
+        Some(DocumentedItem::Function {
+            name: token.function_definition_name().to_string(),
+            arguments: token
+                .function_definition_params()
+                .iter()
+                .map(|a| a.to_string())
+                .collect(),
+            content: token.function_definition_inner().iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join("\n")
+        })
     }
     else if token.is_macro_definition() {
         Some(DocumentedItem::Macro {

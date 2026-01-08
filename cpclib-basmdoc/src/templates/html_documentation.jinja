@@ -400,6 +400,15 @@
             </ul>
             {% endif %}
 
+            {% if page.has_functions() %}
+            <h2>Functions</h2>
+            <ul>
+                {% for item in page.functions %}
+                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
             {% if page.has_equ() %}
             <h2>Equs</h2>
             <ul>
@@ -435,6 +444,27 @@
             <section class="section">
                 <h2 id="macros-section" class="anchor-offset">Macros</h2>
                 {% for item in page.macros %}
+                <div class="item">
+                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <div>{{ item.doc | markdown_to_html | safe }}</div>
+                    {% if item.source %}
+                    <div class="macro-source">
+                        <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
+                        <div id="{{item.key}}_source" class="macro-source-content">
+                            <pre><code>{{ item.source }}</code></pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Functions section -->
+            {% if page.has_functions() %}
+            <section class="section">
+                <h2 id="functions-section" class="anchor-offset">Functions</h2>
+                {% for item in page.functions %}
                 <div class="item">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
