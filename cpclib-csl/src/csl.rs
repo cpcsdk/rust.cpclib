@@ -920,9 +920,9 @@ impl CslScript {
         }
     }
 
-    /// Create a CslScript from a vector of instructions (used by parser, bypasses validation)
-    pub(crate) fn from_instructions(instructions: Vec<CslInstruction>) -> Self {
-        Self { instructions }
+
+    pub fn instructions(&self) -> &[CslInstruction] {
+        &self.instructions
     }
 
     /// Add an instruction to the script

@@ -6,10 +6,12 @@ use cpclib_common::winnow::ascii::{dec_uint, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
 };
-use cpclib_common::winnow::error::{AddContext, ContextError, StrContext};
+use cpclib_common::winnow::error::{ContextError, StrContext};
 use cpclib_common::winnow::stream::LocatingSlice;
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
-use cpclib_common::winnow::{ModalParser, ModalResult, Parser};
+use cpclib_common::winnow::{ModalResult, Parser};
+#[cfg(test)]
+use cpclib_common::winnow::ModalParser;
 
 use crate::csl::*;
 
@@ -755,12 +757,12 @@ pub fn parse_csl_script<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'
         
         // Add instruction to builder with validation
         builder = builder.with_instruction(instruction)
-            .map_err(|_validation_err| ErrMode::Cut(ContextError::new()))?;
+            .map_err(|_| ErrMode::Cut(ContextError::new()))?;
     }
     
     // Build final script
     builder.build()
-        .map_err(|_validation_err| ErrMode::Cut(ContextError::new()))
+        .map_err(|_| ErrMode::Cut(ContextError::new()))
 }
 
 /// Parse a CSL script from a string with enhanced error reporting
@@ -768,9 +770,7 @@ pub fn parse_csl_with_rich_errors(
     input: &str,
     filename: Option<String>
 ) -> Result<CslScript, crate::error::CslError> {
-    use cpclib_common::winnow::error::ErrMode;
-
-    use crate::error::{CslError, suggest_instruction};
+    use crate::error::CslError;
 
     let mut located_input = LocatingSlice::new(input);
     
@@ -779,7 +779,7 @@ pub fn parse_csl_with_rich_errors(
     loop {
         // Skip whitespace/newlines
         let _ = take_while(0.., [' ', '\t', '\n', '\r']).parse_next(&mut located_input)
-            .map_err(|e| convert_parse_error_to_csl_error(input, &located_input, e, filename.clone()))?;
+            .map_err(|_e| convert_parse_error_to_csl_error(input, &located_input, _e, filename.clone()))?;
         
         // Check if we've reached end of input
         if located_input.is_empty() {

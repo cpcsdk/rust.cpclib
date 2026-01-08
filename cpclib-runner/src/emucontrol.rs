@@ -2086,17 +2086,17 @@ mod tests {
         let script = cpclib_csl::CslScript::from(conf);
 
         // Check that we have at least the expected instructions (may have more auto-generated ones)
-        assert!(script.instructions.len() >= 8, "Expected at least 8 instructions, got {}", script.instructions.len());
+        assert!(script.instructions().len() >= 8, "Expected at least 8 instructions, got {}", script.instructions().len());
 
         // Verify DiskDir exists
         assert!(
-            script.instructions.iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::DiskDir(_))),
+            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::DiskDir(_))),
             "Expected DiskDir instruction"
         );
 
         // Verify DiskInsert for drive A
         assert!(
-            script.instructions.iter().any(|inst| {
+            script.instructions().iter().any(|inst| {
                 matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
                     if *drive == cpclib_csl::Drive::A && filename == &Utf8PathBuf::from("test.dsk"))
             }),
@@ -2105,7 +2105,7 @@ mod tests {
 
         // Verify DiskInsert for drive B
         assert!(
-            script.instructions.iter().any(|inst| {
+            script.instructions().iter().any(|inst| {
                 matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
                     if *drive == cpclib_csl::Drive::B && filename == &Utf8PathBuf::from("data.dsk"))
             }),
@@ -2114,13 +2114,13 @@ mod tests {
 
         // Verify SnapshotDir exists
         assert!(
-            script.instructions.iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::SnapshotDir(_))),
+            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::SnapshotDir(_))),
             "Expected SnapshotDir instruction"
         );
 
         // Verify SnapshotLoad
         assert!(
-            script.instructions.iter().any(|inst| {
+            script.instructions().iter().any(|inst| {
                 matches!(inst, cpclib_csl::CslInstruction::SnapshotLoad(path) 
                     if path == &Utf8PathBuf::from("game.sna"))
             }),
@@ -2129,13 +2129,13 @@ mod tests {
 
         // Verify KeyOutput for auto_run
         assert!(
-            script.instructions.iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::KeyOutput(_))),
+            script.instructions().iter().any(|inst| matches!(inst, cpclib_csl::CslInstruction::KeyOutput(_))),
             "Expected KeyOutput for auto_run"
         );
 
         // Verify MemoryExp
         assert!(
-            script.instructions.iter().any(|inst| {
+            script.instructions().iter().any(|inst| {
                 matches!(inst, cpclib_csl::CslInstruction::MemoryExp(mem) 
                     if *mem == cpclib_csl::MemoryExpansion::Kb512DkTronics)
             }),
@@ -2144,7 +2144,7 @@ mod tests {
 
         // Verify CrtcSelect
         assert!(
-            script.instructions.iter().any(|inst| {
+            script.instructions().iter().any(|inst| {
                 matches!(inst, cpclib_csl::CslInstruction::CrtcSelect(crtc) 
                     if *crtc == cpclib_csl::CrtcModel::Type1)
             }),

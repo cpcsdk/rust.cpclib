@@ -257,8 +257,8 @@ cpclib-z80emu = { path = "./cpclib-z80emu/" }
 opt-level = 0
 
 [profile.release]
-strip = false
-lto = false
-codegen-units = 1
-opt-level = 3
-debug = 1
+opt-level = 'z'     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+panic = 'abort'     # Abort on panic
+strip = true        # Strip symbols from binary*
