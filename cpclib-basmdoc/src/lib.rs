@@ -466,7 +466,7 @@ pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_l
                 .iter()
                 .map(|a| a.to_string())
                 .collect(),
-            content: token.macro_definition_code().to_string()
+            content: token.to_string() /*token.macro_definition_code().to_string()*/
         })
     }
     else {
