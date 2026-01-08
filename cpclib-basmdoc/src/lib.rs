@@ -28,7 +28,7 @@ pub enum DocumentedItem {
     File(String),
     Label(String),
     Equ(String, String),
-    Macro(String, Vec<String>),
+    Macro(String, Vec<String>, String),
     Function
 }
 
@@ -42,7 +42,7 @@ impl DocumentedItem {
     }
 
     pub fn is_macro(&self) -> bool {
-        matches!(self, DocumentedItem::Macro(_, _))
+        matches!(self, DocumentedItem::Macro(_, _, _))
     }
 
     pub fn is_function(&self) -> bool {
@@ -59,7 +59,7 @@ impl DocumentedItem {
                 format!("equ_{}", l)
             },
 
-            DocumentedItem::Macro(n, _) => {
+            DocumentedItem::Macro(n, _, _) => {
                 format!("macro_{}", n)
             },
 
@@ -78,14 +78,24 @@ impl Object for ItemDocumentation {
     fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
         match key.as_str() {
             Some("doc") => Some(Value::from(self.doc.clone())),
-            Some("summary") => Some(Value::from(self.item_summary())),
+            Some("summary") => Some(Value::from(self.item_long_summary())),
+            Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key())),
+            Some("source") => Some(Value::from(self.macro_source())),
             _ => None
         }
     }
 }
 
 impl ItemDocumentation {
+    /// Get the source code of a macro, or empty string for other items
+    pub fn macro_source(&self) -> String {
+        match &self.item {
+            DocumentedItem::Macro(_, _, source) => source.clone(),
+            _ => String::new()
+        }
+    }
+
     delegate::delegate! {
         to self.item {
             pub fn is_label(&self) -> bool;
@@ -97,7 +107,7 @@ impl ItemDocumentation {
         }
     }
 
-    pub fn item_summary(&self) -> String {
+    pub fn item_long_summary(&self) -> String {
         match &self.item {
             DocumentedItem::Label(l) => l.to_string(),
 
@@ -105,9 +115,25 @@ impl ItemDocumentation {
                 format!("{l} EQU {v}")
             },
 
-            DocumentedItem::Macro(n, args) => {
+            DocumentedItem::Macro(n, args, _) => {
                 let args = args.join(",");
                 format!("MACRO {n}({args})")
+            },
+
+            _ => String::from("Unknown item")
+        }
+    }
+
+    pub fn item_short_summary(&self) -> String {
+        match &self.item {
+            DocumentedItem::Label(l) => l.to_string(),
+
+            DocumentedItem::Equ(l, v) => {
+                l.clone()
+            },
+
+            DocumentedItem::Macro(n, args, _) => {
+                n.clone()
             },
 
             _ => String::from("Unknown item")
@@ -126,7 +152,7 @@ impl ItemDocumentation {
                 md += &format!("## {l} EQU {v} \n\n");
             },
 
-            DocumentedItem::Macro(n, args) => {
+            DocumentedItem::Macro(n, args, _) => {
                 let args = args.join(",");
                 md += &format!("## MACRO {n}({args}) \n\n");
             },
@@ -338,12 +364,25 @@ pub fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
 }
 
 pub fn is_documentable<T: ListingElement>(token: &T) -> bool {
-    documentation_type(token).is_some()
+    documentation_type(token, None).is_some()
 }
 
-pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem> {
+pub fn documentation_type<T: ListingElement>(token: &T, last_global_label: Option<&str>) -> Option<DocumentedItem> {
     if token.is_label() {
-        Some(DocumentedItem::Label(token.label_symbol().to_string()))
+        let label = token.label_symbol().to_string();
+        // Handle local labels (starting with ".")
+        if label.starts_with('.') {
+            // If we have a parent global label, prepend it
+            if let Some(parent) = last_global_label {
+                Some(DocumentedItem::Label(format!("{}{}", parent, label)))
+            } else {
+                // No parent label, skip this local label
+                None
+            }
+        } else {
+            // Regular global label
+            Some(DocumentedItem::Label(label))
+        }
     }
     else if token.is_equ() {
         Some(DocumentedItem::Equ(
@@ -361,7 +400,8 @@ pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem
                 .macro_definition_arguments()
                 .iter()
                 .map(|a| a.to_string())
-                .collect()
+                .collect(),
+            token.macro_definition_code().to_string()
         ))
     }
     else {
@@ -371,22 +411,25 @@ pub fn documentation_type<T: ListingElement>(token: &T) -> Option<DocumentedItem
 
 pub fn build_documentation_page_from_aggregates<T: ListingElement>(
     fname: &str,
-    agg: Vec<(String, Option<&T>)>
+    agg: Vec<(String, Option<&T>, Option<String>)>
 ) -> DocumentationPage {
     let content = agg
         .into_iter()
-        .map(|(doc, t)| {
+        .filter_map(|(doc, t, last_global_label)| {
             if let Some(t) = t {
-                ItemDocumentation {
-                    item: documentation_type(t).unwrap(),
-                    doc
-                }
+                // Try to create a documented item, passing the parent label context
+                documentation_type(t, last_global_label.as_deref()).map(|item| {
+                    ItemDocumentation {
+                        item,
+                        doc
+                    }
+                })
             }
             else {
-                ItemDocumentation {
+                Some(ItemDocumentation {
                     item: DocumentedItem::File(fname.to_string()),
                     doc
-                }
+                })
             }
         })
         .collect();
@@ -398,9 +441,10 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement>(
 }
 
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
+/// Also tracks the last global label to handle local labels (starting with ".")
 pub fn aggregate_documentation_on_tokens<T: ListingElement>(
     tokens: &[T]
-) -> Vec<(String, Option<&T>)> {
+) -> Vec<(String, Option<&T>, Option<String>)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
         #[default]
@@ -475,6 +519,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
     let mut doc = Vec::new();
 
     let mut in_process_comment = CommentInConstruction::default();
+    let mut last_global_label: Option<String> = None;
 
     for token in tokens {
         let (current_is_doc, current_is_documentable) = if is_global_documentation(token) {
@@ -489,7 +534,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
         else if is_local_documentation(token) {
             if in_process_comment.is_global() {
                 // here we can release the global comment
-                doc.push((in_process_comment.consume(), None));
+                doc.push((in_process_comment.consume(), None, last_global_label.clone()));
             }
             in_process_comment.set_kind(CommentKind::Local);
             (true, false)
@@ -503,6 +548,14 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
             in_process_comment.add_comment(token.comment());
         }
         else if current_is_documentable {
+            // Track the last global label for local label resolution
+            if token.is_label() {
+                let label = token.label_symbol().to_string();
+                if !label.starts_with('.') {
+                    last_global_label = Some(label);
+                }
+            }
+            
             if !in_process_comment.is_unspecified() {
                 // we comment an item if any
                 let documented = if in_process_comment.is_global() {
@@ -513,7 +566,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
                     // but we do for a local comment
                     Some(token)
                 };
-                doc.push((in_process_comment.consume(), documented));
+                doc.push((in_process_comment.consume(), documented, last_global_label.clone()));
             }
             else {
                 // we add no comment, so we do nothing
@@ -522,7 +575,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
         else {
             // this is not a doc or a documentable, so we can eventually treat a global
             if in_process_comment.is_global() {
-                doc.push((in_process_comment.consume(), None));
+                doc.push((in_process_comment.consume(), None, last_global_label.clone()));
             }
             else if in_process_comment.is_local() {
                 // comment is lost as there is nothing else to comment
@@ -533,7 +586,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement>(
 
     // The last comment can only be a global comment
     if in_process_comment.is_global() {
-        doc.push((in_process_comment.consume(), None));
+        doc.push((in_process_comment.consume(), None, last_global_label.clone()));
     }
 
     doc

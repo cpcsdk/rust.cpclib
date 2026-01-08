@@ -262,6 +262,74 @@
             margin-top: 0;
         }
 
+        /* Collapsible source code */
+        .macro-source {
+            margin-top: 15px;
+        }
+
+        .macro-source-toggle {
+            background-color: #3498db;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .macro-source-toggle:hover {
+            background-color: #2980b9;
+        }
+
+        .macro-source-toggle::before {
+            content: "▶";
+            display: inline-block;
+            transition: transform 0.2s;
+        }
+
+        .macro-source-toggle.active::before {
+            transform: rotate(90deg);
+        }
+
+        .macro-source-content {
+            display: none;
+            margin-top: 10px;
+            background-color: #282c34;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .macro-source-content.show {
+            display: block;
+        }
+
+        .macro-source-content pre {
+            margin: 0;
+            padding: 15px;
+            background-color: transparent;
+            border: none;
+            color: #abb2bf;
+            font-size: 0.85em;
+            line-height: 1.5;
+        }
+
+        .macro-source-content code {
+            color: #abb2bf;
+            background-color: transparent;
+        }
+
+        /* Override main-content code styling for macro source */
+        .macro-source-content pre code {
+            color: #abb2bf !important;
+            background-color: transparent !important;
+            padding: 0;
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .sidebar {
@@ -318,7 +386,7 @@
             <h2>Labels</h2>
             <ul>
                 {% for item in page.labels %}
-                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
                 {% endfor %}
             </ul>
             {% endif %}
@@ -327,7 +395,7 @@
             <h2>Macros</h2>
             <ul>
                 {% for item in page.macros %}
-                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
                 {% endfor %}
             </ul>
             {% endif %}
@@ -336,7 +404,7 @@
             <h2>Equs</h2>
             <ul>
                 {% for item in page.equs %}
-                <li><a href="#{{item.key}}"><code>{{ item.summary }}</code></a></li>
+                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
                 {% endfor %}
             </ul>
             {% endif %}
@@ -370,6 +438,14 @@
                 <div class="item">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
+                    {% if item.source %}
+                    <div class="macro-source">
+                        <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
+                        <div id="{{item.key}}_source" class="macro-source-content">
+                            <pre><code>{{ item.source }}</code></pre>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </section>
@@ -389,5 +465,19 @@
             {% endif %}
         </main>
     </div>
+    <script>
+        function toggleSource(id) {
+            const content = document.getElementById(id);
+            const button = event.target;
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                button.classList.remove('active');
+            } else {
+                content.classList.add('show');
+                button.classList.add('active');
+            }
+        }
+    </script>
 </body>
 </html>
