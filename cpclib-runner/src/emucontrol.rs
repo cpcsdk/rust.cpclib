@@ -344,8 +344,7 @@ impl WindowEventsManager {
                 Self::wait_a_bit();
                 enigo.key(extra, enigo::Direction::Release).unwrap();
                 Self::wait_a_bit();
-            },
-            _ => unreachable!()
+            }
         }
     }
 
@@ -396,9 +395,7 @@ impl WindowEventsManager {
                 Self::wait_a_bit();
                 enigo.key(key, enigo::Direction::Release).unwrap();
                 Self::wait_a_bit();
-            },
-
-            _ => unreachable!()
+            }
         }
     }
 

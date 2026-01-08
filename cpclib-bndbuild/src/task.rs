@@ -255,8 +255,7 @@ impl Display for InnerTask {
             Self::Snapshot(s) => (SNA_CMDS[0], s),
             Self::SongConverter(t, s) => (t.get_command(), s),
             Self::Tracker(t, s) => (t.get_command(), s),
-            Self::Xfer(s) => (XFER_CMDS[0], s),
-            Self::Snapshot(s) => (SNA_CMDS[0], s)
+            Self::Xfer(s) => (XFER_CMDS[0], s)
         };
 
         write!(

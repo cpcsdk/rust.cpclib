@@ -10,7 +10,7 @@ use anstyle::{self, RgbColor};
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::{Chars, emit};
+use codespan_reporting::term::{Chars, emit_to_io_write};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
 #[cfg(feature = "rayon")]
@@ -217,7 +217,7 @@ impl BndBuilder {
                     conf.chars = Chars::ascii();
                     (conf, Buffer::no_color())
                 };
-                let _ = emit(&mut buffer, &config, &file, &diagnostic);
+                let _ = emit_to_io_write(&mut buffer, &config, &file, &diagnostic);
                 rendered = buffer.into_inner();
             }
             let report = String::from_utf8_lossy(&rendered).to_string();

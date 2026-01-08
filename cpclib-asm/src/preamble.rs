@@ -1,9 +1,11 @@
 pub use cpclib_tokens::builder::*;
 pub use cpclib_tokens::symbols::*;
 pub use cpclib_tokens::tokens::instructions::*;
+#[allow(ambiguous_glob_reexports)]
 pub use cpclib_tokens::tokens::*;
 pub use cpclib_tokens::{builder, symbols, tokens};
 
+#[allow(ambiguous_glob_reexports)]
 pub use crate::assembler::*;
 pub use crate::error::*;
 pub use crate::implementation::expression::*;

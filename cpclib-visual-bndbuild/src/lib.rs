@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 #![feature(const_trait_impl)]
 
 use std::collections::HashSet;
@@ -305,14 +304,14 @@ impl BndBuildApp {
                 ui.disable();
             }
 
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui
                         .add(Button::new("Open").shortcut_text(ctx.format_shortcut(&CTRL_O)))
                         .clicked()
                     {
                         self.request_open = true;
-                        ui.close_menu();
+                        ui.close();
                     };
 
                     if !self.recent_files.is_empty() {
@@ -326,7 +325,7 @@ impl BndBuildApp {
                                     .clicked()
                                 {
                                     self.load(fname);
-                                    ui.close_menu();
+                                    ui.close();
                                     self.logs.clear();
                                 }
                             }
@@ -339,7 +338,7 @@ impl BndBuildApp {
                             .clicked()
                     {
                         self.request_reload = true;
-                        ui.close_menu();
+                        ui.close();
                     }
                     ui.separator();
 
@@ -491,7 +490,7 @@ impl BndBuildApp {
                                             self.file_error = Some(e.to_string());
                                         }
                                     };
-                                    ui.close_menu();
+                                    ui.close();
                                 }
 
                                 if let Some(watched) = self.watched.as_ref()
@@ -499,12 +498,12 @@ impl BndBuildApp {
                                 {
                                     if ui.button("Unwatch").clicked() {
                                         self.watched.take();
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                 }
                                 else if ui.button("Watch").clicked() {
                                     self.watched = Some(tgt.to_path_buf());
-                                    ui.close_menu();
+                                    ui.close();
                                 }
                             });
                         }

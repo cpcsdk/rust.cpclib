@@ -781,7 +781,7 @@ impl Env {
         exp: &E,
         r: R
     ) -> Result<ExprResult, Box<AssemblerError>> {
-        self.track_used_symbols(exp);
+        self.track_used_symbols(exp)?;
 
         match exp.resolve(self) {
             Ok(value) => Ok(value),

@@ -10,7 +10,7 @@ use clap_complete::Shell;
 use codespan_reporting::diagnostic::{Diagnostic, Label};
 use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::termcolor::Buffer;
-use codespan_reporting::term::{Chars, emit};
+use codespan_reporting::term::{Chars, emit_to_io_write};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::*;
@@ -439,7 +439,7 @@ impl From<(serde_yaml::Error, &Utf8Path, &str)> for BndBuilderError {
             };
             config.start_context_lines = 2;
             config.end_context_lines = 2;
-            let _ = emit(&mut buffer, &config, &file, &diagnostic);
+            let _ = emit_to_io_write(&mut buffer, &config, &file, &diagnostic);
             rendered = buffer.into_inner();
         }
         let report = String::from_utf8_lossy(&rendered).to_string();

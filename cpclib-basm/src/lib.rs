@@ -359,7 +359,7 @@ pub fn assemble(
 
     let (_tokens, mut env) =
         visit_tokens_all_passes_with_options(listing, options).map_err(|(_t_, mut env, e)| {
-            env.handle_print(); // do the prints even if there is an assembling issue
+            let _ = env.handle_print(); // do the prints even if there is an assembling issue
             BasmError::AssemblerError {
                 error: Box::new(AssemblerError::AlreadyRenderedError(e.to_string()))
             }

@@ -67,7 +67,7 @@ impl Grafx2Version {
                     let mut perms = std::fs::metadata(&app_image).unwrap().permissions();
                     let mode = perms.mode() | 0o100; // Add execution mode
                     perms.set_mode(mode);
-                    std::fs::set_permissions(&app_image, perms);
+                    let _ = std::fs::set_permissions(&app_image, perms);
                     Ok(())
                 }
             );

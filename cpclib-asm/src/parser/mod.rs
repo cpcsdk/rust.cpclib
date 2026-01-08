@@ -14,6 +14,7 @@ pub mod source;
 #[macro_use]
 pub mod macros;
 
+#[allow(ambiguous_glob_reexports)]
 pub use common::*;
 pub use context::*;
 pub use directives::*;

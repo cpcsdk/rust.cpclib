@@ -507,6 +507,7 @@ impl HardCodedFunction {
         match self {
             HardCodedFunction::Clamp => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Min => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Max => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::Mode0ByteToPenAt => ExpectedNbArgs::Fixed(2),
@@ -547,9 +548,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryFunction(_) => ExpectedNbArgs::Fixed(2)
+            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2)
         }
     }
 
@@ -821,23 +820,7 @@ impl HardCodedFunction {
                 }
             },
             HardCodedFunction::Min => Ok(maths::min(params)?),
-            HardCodedFunction::Max => Ok(maths::max(params)?),
-            HardCodedFunction::BinaryFunction(binary_function) => {
-                match binary_function {
-                    BinaryFunction::Pow => Ok(maths::pow(&params[0], &params[1])?),
-                    BinaryFunction::Fmod => Ok(maths::fmod(&params[0], &params[1])?),
-                    BinaryFunction::Atan2 => Ok(maths::atan2(&params[0], &params[1])?),
-                    BinaryFunction::Hypot => Ok(maths::hypot(&params[0], &params[1])?),
-                    BinaryFunction::Ldexp => Ok(maths::ldexp(&params[0], &params[1])?),
-                    BinaryFunction::Fdim => Ok(maths::fdim(&params[0], &params[1])?),
-                    BinaryFunction::Fstep => Ok(maths::fstep(&params[0], &params[1])?),
-                    BinaryFunction::Fmax => Ok(maths::fmax(&params[0], &params[1])?),
-                    BinaryFunction::Fmin => Ok(maths::fmin(&params[0], &params[1])?),
-                    BinaryFunction::IsGreater => Ok(maths::isgreater(&params[0], &params[1])?),
-                    BinaryFunction::IsLess => Ok(maths::isless(&params[0], &params[1])?),
-                    BinaryFunction::Fremain => Ok(maths::fremain(&params[0], &params[1])?)
-                }
-            },
+            HardCodedFunction::Max => Ok(maths::max(params)?)
         }
     }
 }
