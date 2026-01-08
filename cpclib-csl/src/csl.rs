@@ -457,7 +457,7 @@ pub enum CslInstruction {
     /// First param: delay between keys, Second param (optional): delay after CR, Third param (optional): delay after special key
     KeyDelay {
         press_delay: u64,
-        delay_after_key: u64,
+        delay_after_key: Option<u64>,
         delay_after_cr: Option<u64>,
     },
 
@@ -466,6 +466,10 @@ pub enum CslInstruction {
 
     /// Send characters from file as key strokes
     KeyFromFile(Utf8PathBuf),
+
+    /// Send 10 bytes values for keyboard matrix (v1.2)
+    /// Bit n.row n=1 means key not pressed
+    KeyboardWrite([u8; 10]),
 
     // Meta instruction
     /// An instruction followed by an inline comment on the same line
@@ -610,7 +614,11 @@ impl fmt::Display for CslInstruction {
                 delay_after_key,
                 delay_after_cr,
             } => {
-                write!(f, "key_delay {} {}", press_delay, delay_after_key)?;
+                write!(f, "key_delay {}", press_delay)?;
+                if let Some(delay) = delay_after_key {
+                    write!(f, " {}", delay)?;
+                }
+
                 if let Some(cr) = delay_after_cr {
                     write!(f, " {}", cr)?;
                 }
@@ -621,6 +629,9 @@ impl fmt::Display for CslInstruction {
             },
             Self::KeyFromFile(file) => {
                 write!(f, "key_from_file '{}'", normalize_path_for_csl(file, false))
+            },
+            Self::KeyboardWrite(rows) => {
+                write!(f, "keyboard_write {}", rows.iter().map(|b| b.to_string()).join(","))
             },
             Self::InstructionWithComment(instruction, comment) => {
                 write!(f, "{} ;{}", instruction, comment)
@@ -671,6 +682,11 @@ impl CslInstruction {
         )
     }
 
+    /// Check if this instruction is a v1.2 feature
+    pub fn is_v1_2_feature(&self) -> bool {
+        matches!(self, Self::KeyboardWrite(_))
+    }
+
     /// Get the instruction name as it appears in CSL files
     pub fn instruction_name(&self) -> &'static str {
         match self {
@@ -695,6 +711,7 @@ impl CslInstruction {
             Self::KeyDelay { .. } => "key_delay",
             Self::KeyOutput(_) => "key_output",
             Self::KeyFromFile(_) => "key_from_file",
+            Self::KeyboardWrite(_) => "keyboard_write",
             Self::Wait(_) => "wait",
             Self::WaitDriveOnOff(_) => "wait_driveonoff",
             Self::WaitVsyncOffOn => "wait_vsyncoffon",
@@ -783,7 +800,7 @@ impl CslInstruction {
     /// Create a KeyDelay instruction
     pub fn key_delay(
         delay: u64,
-        delay_after_key: u64,
+        delay_after_key: Option<u64>,
         delay_after_cr: Option<u64>,
     ) -> Self {
         Self::KeyDelay {
@@ -881,7 +898,7 @@ impl CslInstruction {
 /// CSL script representation
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScript {
-    pub instructions: Vec<CslInstruction>
+    instructions: Vec<CslInstruction>
 }
 
 impl CslScript {
@@ -892,9 +909,34 @@ impl CslScript {
         }
     }
 
+    /// Create a CslScript from a vector of instructions (used by parser, bypasses validation)
+    pub(crate) fn from_instructions(instructions: Vec<CslInstruction>) -> Self {
+        Self { instructions }
+    }
+
     /// Add an instruction to the script
     pub fn add_instruction(&mut self, instruction: CslInstruction) {
         self.instructions.push(instruction);
+    }
+
+    /// Get the number of instructions in the script
+    pub fn len(&self) -> usize {
+        self.instructions.len()
+    }
+
+    /// Check if the script is empty
+    pub fn is_empty(&self) -> bool {
+        self.instructions.is_empty()
+    }
+
+    /// Get an instruction by index
+    pub fn get(&self, index: usize) -> Option<&CslInstruction> {
+        self.instructions.get(index)
+    }
+
+    /// Get an iterator over the instructions
+    pub fn iter(&self) -> impl Iterator<Item = &CslInstruction> {
+        self.instructions.iter()
     }
 
     /// Get the CSL version if specified in the script
@@ -1008,151 +1050,164 @@ impl Default for CslScript {
     }
 }
 
-/// Builder for CSL scripts that ensures version is always first
+/// Builder for CSL scripts that validates instructions as they are added
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScriptBuilder {
-    script: CslScript
+    instructions: Vec<CslInstruction>,
+    version: Option<CslVersion>,
 }
 
 impl CslScriptBuilder {
-    /// Create a new CSL script builder with the given version
-    pub fn new(major: u8, minor: u8) -> Self {
+    /// Create a new CSL script builder without a version (will default to latest)
+    pub fn new() -> Self {
         Self {
-            script: CslScript {
-                instructions: vec![CslInstruction::CslVersion(CslVersion::new(major, minor))]
-            }
+            instructions: Vec::new(),
+            version: None,
         }
     }
 
-    /// Build the final CSL script, ensuring version is first
+    /// Get the current version (or the latest if not set)
+    fn current_version(&self) -> CslVersion {
+        self.version.unwrap_or_else(|| CslVersion::new(1, 2)) // Latest version
+    }
+
+    /// Validate that an instruction is compatible with the current version
+    fn validate_instruction(&self, instruction: &CslInstruction) -> Result<(), String> {
+        let version = self.current_version();
+        
+        // Check v1.2 features
+        if instruction.is_v1_2_feature() {
+            if version.major < 1 || (version.major == 1 && version.minor < 2) {
+                return Err(format!(
+                    "Instruction '{}' requires CSL version 1.2 or higher, but script uses version {}.{}",
+                    instruction.instruction_name(),
+                    version.major,
+                    version.minor
+                ));
+            }
+        }
+        
+        // Check v1.1 features
+        if instruction.is_v1_1_feature() {
+            if version.major < 1 || (version.major == 1 && version.minor < 1) {
+                return Err(format!(
+                    "Instruction '{}' requires CSL version 1.1 or higher, but script uses version {}.{}",
+                    instruction.instruction_name(),
+                    version.major,
+                    version.minor
+                ));
+            }
+        }
+        
+        // Special validation for key_from_file
+        if let CslInstruction::KeyFromFile(file) = instruction {
+            if !file.is_absolute() {
+                return Err("key_from_file instruction requires an absolute file path".to_string());
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Build the final CSL script
     /// Returns an error if the script is invalid
     pub fn build(mut self) -> Result<CslScript, String> {
-        // Find and remove all version instructions, keeping the last one
-        let mut last_version = None;
-        self.script.instructions.retain(|inst| {
-            if let CslInstruction::CslVersion(v) = inst {
-                last_version = Some(*v);
-                false // Remove this instruction
-            }
-            else {
-                true // Keep non-version instructions
-            }
-        });
-
-        // Use the last version found, or default to 1.0
-        let version = last_version.unwrap_or(CslVersion::new(1, 0));
-
-        // Insert version at the beginning
-        self.script
-            .instructions
-            .insert(0, CslInstruction::CslVersion(version));
-
-        // Validate that version is indeed first
-        if self.script.instructions.is_empty() {
-            return Err("CSL script is empty".to_string());
+        // If version was explicitly set, add it at the beginning
+        if let Some(version) = self.version {
+            self.instructions.insert(0, CslInstruction::CslVersion(version));
         }
-
-        if !matches!(self.script.instructions[0], CslInstruction::CslVersion(_)) {
-            return Err("CSL script must start with version instruction".to_string());
-        }
-
-        if let Some(CslInstruction::KeyFromFile(file)) = self
-            .script
-            .instructions
-            .iter()
-            .find(|inst| matches!(inst, CslInstruction::KeyFromFile(_)))
-            && !file.is_absolute()
-        {
-            return Err("key_from_file instruction requires an absolute file path".to_string());
-        }
-        Ok(self.script)
+        
+        Ok(CslScript {
+            instructions: self.instructions
+        })
     }
 
     // Builder pattern wrapper methods that return CslScriptBuilder
 
     /// Add an instruction and return self for chaining
-    pub fn with_instruction(mut self, instruction: CslInstruction) -> Self {
-        self.script.instructions.push(instruction);
-        self
+    /// Validates the instruction against the current version
+    pub fn with_instruction(mut self, instruction: CslInstruction) -> Result<Self, String> {
+        // Special handling for version instruction
+        if let CslInstruction::CslVersion(v) = instruction {
+            self.version = Some(v);
+            return Ok(self);
+        }
+        
+        // Validate instruction before adding
+        self.validate_instruction(&instruction)?;
+        self.instructions.push(instruction);
+        Ok(self)
     }
 
     /// Conditionally add an instruction
-    pub fn with_instruction_if<F>(mut self, condition: bool, f: F) -> Self
+    pub fn with_instruction_if<F>(self, condition: bool, f: F) -> Result<Self, String>
     where F: FnOnce() -> CslInstruction {
         if condition {
-            self.script.instructions.push(f());
+            self.with_instruction(f())
+        } else {
+            Ok(self)
         }
-        self
     }
 
     /// Add a disk directory instruction
-    pub fn with_disk_dir(self, dir: Utf8PathBuf) -> Self {
+    pub fn with_disk_dir(self, dir: Utf8PathBuf) -> Result<Self, String> {
         self.with_instruction(CslInstruction::DiskDir(dir))
     }
 
     /// Add a disk insert instruction
-    pub fn with_disk_insert(self, drive: Drive, filename: Utf8PathBuf) -> Self {
+    pub fn with_disk_insert(self, drive: Drive, filename: Utf8PathBuf) -> Result<Self, String> {
         self.with_instruction(CslInstruction::DiskInsert { drive, filename })
     }
 
     /// Add a snapshot directory instruction
-    pub fn with_snapshot_dir(self, dir: Utf8PathBuf) -> Self {
+    pub fn with_snapshot_dir(self, dir: Utf8PathBuf) -> Result<Self, String> {
         self.with_instruction(CslInstruction::SnapshotDir(dir))
     }
 
     /// Add a snapshot load instruction
-    pub fn with_snapshot_load(self, filename: Utf8PathBuf) -> Self {
+    pub fn with_snapshot_load(self, filename: Utf8PathBuf) -> Result<Self, String> {
         self.with_instruction(CslInstruction::SnapshotLoad(filename))
     }
 
     /// Add a key output instruction
-    pub fn with_key_output(self, output: KeyOutput) -> Self {
+    pub fn with_key_output(self, output: KeyOutput) -> Result<Self, String> {
         self.with_instruction(CslInstruction::KeyOutput(output))
     }
 
     /// Add a key from file instruction
-    pub fn with_key_from_file(self, filename: Utf8PathBuf) -> Self {
+    pub fn with_key_from_file(self, filename: Utf8PathBuf) -> Result<Self, String> {
         self.with_instruction(CslInstruction::KeyFromFile(filename))
     }
 
     /// Add a memory expansion instruction
-    pub fn with_memory_exp(self, expansion: MemoryExpansion) -> Self {
+    pub fn with_memory_exp(self, expansion: MemoryExpansion) -> Result<Self, String> {
         self.with_instruction(CslInstruction::MemoryExp(expansion))
     }
 
     /// Add a CRTC select instruction
-    pub fn with_crtc_select(self, model: CrtcModel) -> Self {
+    pub fn with_crtc_select(self, model: CrtcModel) -> Result<Self, String> {
         self.with_instruction(CslInstruction::CrtcSelect(model))
     }
 
+    /// Add a gate array instruction
+    pub fn with_gate_array(self, model: GateArrayModel) -> Result<Self, String> {
+        self.with_instruction(CslInstruction::GateArray(model))
+    }
+
     /// Add a reset instruction
-    pub fn with_reset(self, reset_type: ResetType) -> Self {
+    pub fn with_reset(self, reset_type: ResetType) -> Result<Self, String> {
         self.with_instruction(CslInstruction::Reset(reset_type))
     }
 
     /// Add a wait instruction
-    pub fn with_wait(self, frames: u64) -> Self {
+    pub fn with_wait(self, frames: u64) -> Result<Self, String> {
         self.with_instruction(CslInstruction::Wait(frames))
     }
 }
 
 impl Default for CslScriptBuilder {
     fn default() -> Self {
-        Self::new(1, 0)
-    }
-}
-
-impl std::ops::Deref for CslScriptBuilder {
-    type Target = CslScript;
-
-    fn deref(&self) -> &Self::Target {
-        &self.script
-    }
-}
-
-impl std::ops::DerefMut for CslScriptBuilder {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.script
+        Self::new()
     }
 }
 
@@ -1237,7 +1292,7 @@ mod tests {
         assert_eq!(
             CslInstruction::KeyDelay {
                 press_delay: 70000,
-                delay_after_key: 70000,
+                delay_after_key: Some(70000),
                 delay_after_cr: Some(400000)
             }
             .to_string(),
@@ -1247,7 +1302,7 @@ mod tests {
             CslInstruction::KeyDelay {
                 press_delay: 50000,
                 delay_after_cr: None,
-                delay_after_key: 50000
+                delay_after_key: Some(50000)
             }
             .to_string(),
             "key_delay 50000 50000"
@@ -1265,7 +1320,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_simple_instructions() {
-        use crate::csl_parser::parse_csl;
+        use crate::csl_parser::parse_csl_with_rich_errors;
 
         let test_cases = vec![
             "reset H",
@@ -1281,10 +1336,10 @@ mod tests {
 
         for case in test_cases {
             let script1 = format!("{}\n", case);
-            let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
+            let parsed1 = parse_csl_with_rich_errors(&script1, None).expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
             let parsed2 =
-                parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+                parse_csl_with_rich_errors(&generated, None).expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
@@ -1302,7 +1357,7 @@ mod tests {
             .with_reset(ResetType::Hard)
             .with_wait(50);
 
-        assert_eq!(script.instructions.len(), 6);
+        assert_eq!(script.len(), 6);
 
         // Test using CslInstruction factory methods
         let script2 = CslScript::new()
@@ -1311,7 +1366,7 @@ mod tests {
             .with_instruction(CslInstruction::snapshot_load("game.sna".into()))
             .with_instruction(CslInstruction::memory_exp(MemoryExpansion::Kb512DkTronics));
 
-        assert_eq!(script2.instructions.len(), 4);
+        assert_eq!(script2.len(), 4);
 
         // Test conditional builder with factory methods
         let with_snapshot = true;
@@ -1321,7 +1376,7 @@ mod tests {
                 CslInstruction::snapshot_load("game.sna".into())
             });
 
-        assert_eq!(script3.instructions.len(), 2);
+        assert_eq!(script3.len(), 2);
 
         // Test without snapshot
         let without_snapshot = false;
@@ -1331,12 +1386,12 @@ mod tests {
                 CslInstruction::snapshot_load("game.sna".into())
             });
 
-        assert_eq!(script4.instructions.len(), 1);
+        assert_eq!(script4.len(), 1);
     }
 
     #[test]
     fn test_roundtrip_with_parameters() {
-        use crate::csl_parser::parse_csl;
+        use crate::csl_parser::parse_csl_with_rich_errors;
 
         let test_cases = vec![
             "disk_insert A 'test.dsk'",
@@ -1349,33 +1404,33 @@ mod tests {
 
         for case in test_cases {
             let script1 = format!("{}\n", case);
-            let parsed1 = parse_csl(&script1).expect(&format!("Failed to parse: {}", case));
+            let parsed1 = parse_csl_with_rich_errors(&script1, None).expect(&format!("Failed to parse: {}", case));
             let generated = parsed1.to_string();
             let parsed2 =
-                parse_csl(&generated).expect(&format!("Failed to parse generated: {}", generated));
+                parse_csl_with_rich_errors(&generated, None).expect(&format!("Failed to parse generated: {}", generated));
             assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
         }
     }
 
     #[test]
     fn test_roundtrip_with_comments() {
-        use crate::csl_parser::parse_csl;
+        use crate::csl_parser::parse_csl_with_rich_errors;
 
         let script1 = "wait 800000 ; fin affichage\n";
-        let parsed1 = parse_csl(script1).expect("Failed to parse");
+        let parsed1 = parse_csl_with_rich_errors(script1, None).expect("Failed to parse");
         let generated = parsed1.to_string();
-        let parsed2 = parse_csl(&generated).expect("Failed to parse generated");
+        let parsed2 = parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated");
         assert_eq!(parsed1, parsed2, "Roundtrip failed with comments");
     }
 
     #[test]
     fn test_roundtrip_full_script() {
-        use crate::csl_parser::parse_csl;
+        use crate::csl_parser::parse_csl_with_rich_errors;
 
         let script = "csl_version 1.0\nreset H\nwait 1000000\ntape_play\nwait 500000\n";
-        let parsed1 = parse_csl(script).expect("Failed to parse script");
+        let parsed1 = parse_csl_with_rich_errors(script, None).expect("Failed to parse script");
         let generated = parsed1.to_string();
-        let parsed2 = parse_csl(&generated).expect("Failed to parse generated script");
+        let parsed2 = parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated script");
         assert_eq!(parsed1, parsed2, "Full script roundtrip failed");
     }
 
@@ -1430,10 +1485,10 @@ mod tests {
             .with_wait(1000)
             .ensure_version_first();
 
-        assert_eq!(script.instructions.len(), 3);
+        assert_eq!(script.len(), 3);
         assert!(matches!(
-            script.instructions[0],
-            CslInstruction::CslVersion(_)
+            script.get(0),
+            Some(CslInstruction::CslVersion(_))
         ));
 
         // Test ensure_version_first moves existing version to front
@@ -1443,9 +1498,9 @@ mod tests {
             .with_wait(1000)
             .ensure_version_first();
 
-        assert_eq!(script.instructions.len(), 3);
+        assert_eq!(script.len(), 3);
         assert!(
-            matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1)
+            matches!(script.get(0), Some(CslInstruction::CslVersion(v)) if v.major == 1 && v.minor == 1)
         );
 
         // Test Display outputs version first
@@ -1526,42 +1581,151 @@ mod tests {
     #[test]
     fn test_csl_script_builder() {
         // Test builder with build() method
-        let builder = CslScriptBuilder::new(1, 0)
-            .with_reset(ResetType::Hard)
-            .with_wait(1000);
+        let builder = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_reset(ResetType::Hard).unwrap()
+            .with_wait(1000).unwrap();
 
         let result = builder.build();
         assert!(result.is_ok());
         let script = result.unwrap();
 
-        // Should have 3 instructions: version (added automatically), reset, wait
-        assert_eq!(script.instructions.len(), 3);
+        // Should have 3 instructions: version (at front), reset, wait
+        assert_eq!(script.len(), 3);
         assert!(matches!(
-            script.instructions[0],
-            CslInstruction::CslVersion(_)
+            script.get(0),
+            Some(CslInstruction::CslVersion(_))
         ));
 
-        // Test builder moves version to front
-        let builder = CslScriptBuilder::new(1, 0)
-            .with_reset(ResetType::Hard)
-            .with_instruction(CslInstruction::csl_version(1, 1))
-            .with_wait(1000);
+        // Test builder with version specified
+        let builder = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_reset(ResetType::Hard).unwrap()
+            .with_wait(1000).unwrap();
 
         let result = builder.build();
         assert!(result.is_ok());
         let script = result.unwrap();
 
-        assert_eq!(script.instructions.len(), 3);
+        assert_eq!(script.len(), 3);
         assert!(
-            matches!(script.instructions[0], CslInstruction::CslVersion(v) if v.major == 1 && v.minor == 1)
+            matches!(script.get(0), Some(CslInstruction::CslVersion(v)) if v.major == 1 && v.minor == 1)
         );
+    }
 
-        // Test Deref works
-        let mut builder = CslScriptBuilder::new(1, 0);
-        builder.add_instruction(CslInstruction::reset(ResetType::Soft));
-        assert_eq!(builder.instructions.len(), 2); // version + reset
+    #[test]
+    fn test_keyboard_write() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
 
-        let script = builder.build().unwrap();
-        assert_eq!(script.instructions.len(), 2); // version + reset
+        // Test parsing keyboard_write instruction
+        let script_text = "keyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let parsed = parse_csl_with_rich_errors(script_text, None).expect("Failed to parse keyboard_write");
+        
+        assert_eq!(parsed.len(), 1);
+        
+        if let Some(CslInstruction::KeyboardWrite(rows)) = parsed.get(0) {
+            assert_eq!(rows.len(), 10);
+            assert_eq!(rows[0], 255);
+            assert_eq!(rows[6], 239);
+            assert_eq!(rows[9], 255);
+        } else {
+            panic!("Expected KeyboardWrite instruction");
+        }
+        
+        // Test Display implementation
+        let output = parsed.to_string();
+        assert_eq!(output, "keyboard_write 255,255,255,255,255,255,239,255,255,255\n");
+        
+        // Test roundtrip
+        let parsed2 = parse_csl_with_rich_errors(&output, None).expect("Failed to parse generated output");
+        assert_eq!(parsed.len(), parsed2.len(), "Roundtrip failed for keyboard_write");
+    }
+
+    #[test]
+    fn test_version_compatibility_validation() {
+        // Test v1.0 with v1.1 feature should fail
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_gate_array(GateArrayModel::Model40010);
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires CSL version 1.1"));
+        
+        // Test v1.0 with v1.2 feature should fail
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10]));
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires CSL version 1.2"));
+        
+        // Test v1.1 with v1.2 feature should fail
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10]));
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires CSL version 1.2"));
+        
+        // Test v1.1 with v1.1 feature should succeed
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_gate_array(GateArrayModel::Model40010).unwrap()
+            .build();
+        
+        assert!(result.is_ok());
+        
+        // Test v1.2 with v1.2 feature should succeed
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .build();
+        
+        assert!(result.is_ok());
+        
+        // Test v1.2 with v1.1 feature should succeed
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
+            .with_gate_array(GateArrayModel::Model40010).unwrap()
+            .build();
+        
+        assert!(result.is_ok());
+        
+        // Test no version (defaults to latest) with v1.2 feature should succeed
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .build();
+        
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_validates_version_compatibility() {
+        use crate::csl_parser::parse_csl_with_rich_errors;
+        
+        // Test v1.0 with v1.2 feature should fail during parsing
+        let script = "csl_version 1.0\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_err(), "v1.0 with v1.2 feature should fail");
+
+        // Test no version with v1.2 feature should succeed (defaults to latest)
+        let script = "keyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_ok(), "No version (defaults to latest) with v1.2 feature should succeed");
+
+        // Test v1.2 with v1.2 feature should succeed
+        let script = "csl_version 1.2\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_ok(), "v1.2 with v1.2 feature should succeed");
+        
+        // Test v1.0 with v1.1 feature should fail
+        let script = "csl_version 1.0\ngate_array 40010\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_err(), "v1.0 with v1.1 feature should fail");
+        
+        // Test v1.1 with v1.1 feature should succeed
+        let script = "csl_version 1.1\ngate_array 40010\n";
+        let result = parse_csl_with_rich_errors(script, None);
+        assert!(result.is_ok(), "v1.1 with v1.1 feature should succeed");
     }
 }

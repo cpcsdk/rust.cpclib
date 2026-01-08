@@ -6,7 +6,7 @@ use cpclib_common::winnow::ascii::{dec_uint, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, opt, preceded, repeat, terminated
 };
-use cpclib_common::winnow::error::{ContextError, StrContext};
+use cpclib_common::winnow::error::{AddContext, ContextError, StrContext};
 use cpclib_common::winnow::stream::LocatingSlice;
 use cpclib_common::winnow::token::{one_of, take_till, take_until, take_while};
 use cpclib_common::winnow::{ModalParser, ModalResult, Parser};
@@ -82,9 +82,12 @@ fn parse_csl_version<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, 
 
 /// Parse reset type
 fn parse_reset_type<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, ResetType> {
-    alt(("soft".value(ResetType::Soft), "hard".value(ResetType::Hard)))
-        .context(StrContext::Label("Reset type"))
-        .parse_next(input)
+    alt((
+        alt(("soft".value(ResetType::Soft), "S".value(ResetType::Soft))),
+        alt(("hard".value(ResetType::Hard), "H".value(ResetType::Hard)))
+    ))
+    .context(StrContext::Label("Reset type"))
+    .parse_next(input)
 }
 
 /// Parse reset instruction
@@ -364,8 +367,8 @@ fn parse_key_delay<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Cs
 
     cut_err((
         dec_uint::<_, u64, _>.context(StrContext::Label("press delay ")),
-        dec_uint::<_, u64, _>
-            .context(StrContext::Label("delay_after_key")),
+        opt(preceded(ws1, dec_uint::<_, u64, _>)
+            .context(StrContext::Label("delay_after_key"))),
         opt(preceded(ws1, dec_uint::<_, u64, _>))
             .context(StrContext::Label("optional delay_after_cr"))
             ))
@@ -477,6 +480,33 @@ fn parse_key_from_file<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a
     cut_err(quoted_path.context(StrContext::Label("key input file path (quoted)")))
         .map(CslInstruction::KeyFromFile)
         .parse_next(input)
+}
+
+/// Parse keyboard_write instruction (v1.2)
+fn parse_keyboard_write<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
+    ("keyboard_write", ws1)
+        .context(StrContext::Label("keyboard_write"))
+        .parse_next(input)?;
+
+    cut_err(
+        (
+            dec_uint::<_, u8, _>,
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+            preceded((ws0, ',', ws0), dec_uint::<_, u8, _>),
+        )
+        .context(StrContext::Label("10 comma-separated byte values (row0 to row9)"))
+    )
+    .map(|(r0, r1, r2, r3, r4, r5, r6, r7, r8, r9)| {
+        CslInstruction::KeyboardWrite([r0, r1, r2, r3, r4, r5, r6, r7, r8, r9])
+    })
+    .parse_next(input)
 }
 
 /// Parse wait instruction
@@ -617,7 +647,7 @@ fn parse_snapshot_version<'a>(
 
 /// Parse csl_load instruction
 fn parse_csl_load<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslInstruction> {
-    ("csl_load", ws1)
+    ( alt(("csl_load", "cls_load")), ws1) // XXX cls_load is kept for compatability with wrong shaker files
         .context(StrContext::Label("csl_load"))
         .parse_next(input)?;
 
@@ -664,6 +694,7 @@ pub fn parse_instruction<'a>(
             )),
             alt((
                 parse_key_from_file,
+                parse_keyboard_write,
                 parse_wait_driveonoff,
                 parse_wait_vsyncoffon,
                 parse_wait_ssm0000,
@@ -704,12 +735,32 @@ pub fn parse_line<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, Csl
 
 /// Parse a complete CSL script
 pub fn parse_csl_script<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, CslScript> {
-    terminated(
-        repeat(0.., parse_line),
-        ws0 // Allow trailing whitespace at end of file
-    )
-    .map(|instructions| CslScript { instructions })
-    .parse_next(input)
+    use cpclib_common::winnow::error::ErrMode;
+    
+    // Use the builder pattern to construct and validate the script as we parse
+    let mut builder = CslScriptBuilder::new();
+    
+    // Parse lines one by one, adding them to the builder for immediate validation
+    loop {
+        // Skip whitespace/newlines
+        let _ = take_while(0.., [' ', '\t', '\n', '\r']).parse_next(input)?;
+        
+        // Check if we've reached end of input
+        if input.is_empty() {
+            break;
+        }
+        
+        // Parse next instruction
+        let instruction = parse_line(input)?;
+        
+        // Add instruction to builder with validation
+        builder = builder.with_instruction(instruction)
+            .map_err(|_validation_err| ErrMode::Cut(ContextError::new()))?;
+    }
+    
+    // Build final script
+    builder.build()
+        .map_err(|_validation_err| ErrMode::Cut(ContextError::new()))
 }
 
 /// Parse a CSL script from a string with enhanced error reporting
@@ -722,129 +773,106 @@ pub fn parse_csl_with_rich_errors(
     use crate::error::{CslError, suggest_instruction};
 
     let mut located_input = LocatingSlice::new(input);
-    let result = parse_csl_script.parse_next(&mut located_input);
+    
+    // Parse with builder to catch validation errors
+    let mut builder = CslScriptBuilder::new();
+    loop {
+        // Skip whitespace/newlines
+        let _ = take_while(0.., [' ', '\t', '\n', '\r']).parse_next(&mut located_input)
+            .map_err(|e| convert_parse_error_to_csl_error(input, &located_input, e, filename.clone()))?;
+        
+        // Check if we've reached end of input
+        if located_input.is_empty() {
+            break;
+        }
+        
+        // Get current offset before parsing
+        let offset_before = input.len() - located_input.len();
+        
+        // Parse next instruction
+        let instruction = parse_line(&mut located_input)
+            .map_err(|e| convert_parse_error_to_csl_error(input, &located_input, e, filename.clone()))?;
+        
+        // Add instruction to builder with validation - capture validation errors
+        builder = builder.with_instruction(instruction)
+            .map_err(|validation_err| {
+                // Create a rich error for validation failures
+                let span = offset_before..offset_before.saturating_add(1);
+                let mut error = CslError::new(input.to_string(), span, validation_err);
+                if let Some(fname) = filename.clone() {
+                    error = error.with_filename(fname);
+                }
+                error
+            })?;
+    }
+    
+    // Build final script
+    builder.build()
+        .map_err(|validation_err| {
+            // Create error for build-time validation failures
+            let span = 0..1;
+            let mut error = CslError::new(input.to_string(), span, validation_err);
+            if let Some(fname) = filename.clone() {
+                error = error.with_filename(fname);
+            }
+            error
+        })
+}
 
-    // Check if there's unparsed content (other than whitespace)
-    if result.is_ok() && !located_input.is_empty() {
-        // There's unparsed content - try to parse it to get the actual error position
-        let base_offset = input.len() - located_input.len();
+// Helper to convert parse errors to CSL errors
+fn convert_parse_error_to_csl_error(
+    input: &str,
+    located_input: &LocatingSlice<&str>,
+    e: cpclib_common::winnow::error::ErrMode<ContextError<StrContext>>,
+    filename: Option<String>
+) -> crate::error::CslError {
+    use cpclib_common::winnow::error::ErrMode;
+    use crate::error::{CslError, suggest_instruction};
+    
+    let offset = input.len().saturating_sub(located_input.len());
+    let span = offset..offset.saturating_add(1);
+    
+    // Try to extract a meaningful error message from the context
+    let mut message = "Parse error".to_string();
+    let mut notes = Vec::new();
 
-        // Create a copy to check whitespace
-        let remaining_with_ws: &str = &located_input;
-        let trimmed = remaining_with_ws.trim_start();
-        let whitespace_skipped = remaining_with_ws.len() - trimmed.len();
+    let inner = match e {
+        ErrMode::Incomplete(_) => None,
+        ErrMode::Backtrack(err) | ErrMode::Cut(err) => Some(err),
+    };
 
-        // Try to parse the remaining content as a line to get precise error location
-        let mut remaining_located = LocatingSlice::new(trimmed);
-        let parse_result = parse_line.parse_next(&mut remaining_located);
+    if let Some(ctx_error) = inner {
+        // Try to extract context information
+        let contexts: Vec<_> = ctx_error.context().collect();
+        if !contexts.is_empty()
+            && let Some(StrContext::Label(label)) = contexts.last()
+        {
+            message = format!("Invalid CSL syntax: expected {}", label);
+        }
+    }
 
-        // Calculate the actual error offset within the remaining content
-        let error_offset_in_remaining = match parse_result {
-            Err(ErrMode::Backtrack(_)) | Err(ErrMode::Cut(_)) => {
-                // Get how much was consumed before the error
-                trimmed.len() - remaining_located.len()
-            },
-            _ => 0 // If it's incomplete or succeeded somehow, use start
-        };
-
-        let actual_offset = base_offset + whitespace_skipped + error_offset_in_remaining;
-        let span = actual_offset..actual_offset.saturating_add(1);
-
-        // Extract the problematic token at the error position
-        let error_context = &trimmed[error_offset_in_remaining..];
-        let word_end = error_context
-            .find(|c: char| c.is_whitespace() || c == '\n')
-            .unwrap_or(error_context.len().min(20));
-        let word = &error_context[..word_end];
-
-        let message = "Invalid CSL syntax: unexpected content".to_string();
-        let mut notes = Vec::new();
-
-        // Only suggest instruction names if the word itself isn't already a known instruction
-        // (the error might be in the arguments, not the instruction name)
-        if let Some(suggestion) = suggest_instruction(word) {
-            // Check if the suggestion is different from the word
-            if suggestion != word {
+    // Check if this looks like an instruction name error
+    if offset < input.len() {
+        let remaining = &input[offset..];
+        if let Some(word_end) = remaining.find(|c: char| c.is_whitespace() || c == '\n') {
+            let word = &remaining[..word_end];
+            if let Some(suggestion) = suggest_instruction(word) {
                 notes.push(format!("Did you mean '{}'?", suggestion));
             }
         }
-
-        let mut error = CslError::new(input.to_string(), span, message);
-
-        if let Some(fname) = filename.clone() {
-            error = error.with_filename(fname);
-        }
-
-        for note in notes {
-            error = error.with_note(note);
-        }
-
-        return Err(error);
     }
 
-    result.map_err(|e: ErrMode<ContextError<StrContext>>| {
-        // Convert ErrMode to ParseError to get location info
-        let (offset, inner) = match e {
-            ErrMode::Incomplete(_) => (0, None),
-            ErrMode::Backtrack(err) | ErrMode::Cut(err) => {
-                // Use the current offset from located_input
-                (input.len().saturating_sub(located_input.len()), Some(err))
-            }
-        };
+    let mut error = CslError::new(input.to_string(), span, message);
 
-        let span = offset..offset.saturating_add(1);
+    if let Some(fname) = filename {
+        error = error.with_filename(fname.clone());
+    }
 
-        // Try to extract a meaningful error message from the context
-        let mut message = "Parse error".to_string();
-        let mut notes = Vec::new();
+    for note in notes {
+        error = error.with_note(note);
+    }
 
-        if let Some(ctx_error) = inner {
-            // Try to extract context information
-            let contexts: Vec<_> = ctx_error.context().collect();
-            if !contexts.is_empty()
-                && let Some(StrContext::Label(label)) = contexts.last()
-            {
-                message = format!("Invalid CSL syntax: expected {}", label);
-            }
-        }
-
-        // Check if this looks like an instruction name error
-        if offset < input.len() {
-            let remaining = &input[offset..];
-            if let Some(word_end) = remaining.find(|c: char| c.is_whitespace() || c == '\n') {
-                let word = &remaining[..word_end];
-                if let Some(suggestion) = suggest_instruction(word) {
-                    notes.push(format!("Did you mean '{}'?", suggestion));
-                }
-            }
-        }
-
-        let mut error = CslError::new(input.to_string(), span, message);
-
-        if let Some(fname) = filename {
-            error = error.with_filename(fname);
-        }
-
-        for note in notes {
-            error = error.with_note(note);
-        }
-
-        error
-    })
-}
-
-/// Parse a CSL script from a string (legacy interface)
-pub fn parse_csl(input: &str) -> Result<CslScript, ContextError<StrContext>> {
-    // Wrap input in LocatingSlice to track positions
-    let mut located_input = LocatingSlice::new(input);
-    let result = parse_csl_script.parse_next(&mut located_input);
-
-    result.map_err(|e| {
-        match e.into_inner() {
-            Ok(inner) => inner,
-            Err(_) => ContextError::new()
-        }
-    })
+    error
 }
 
 #[cfg(test)]
@@ -938,29 +966,29 @@ disk_insert 'test.dsk'
 tape_play
 wait 100000
 "#;
-        let result = parse_csl(script);
+        let result = parse_csl_with_rich_errors(script, None);
         assert!(result.is_ok());
         let script = result.unwrap();
-        assert!(script.instructions.len() > 0);
+        assert!(script.len() > 0);
     }
 
     #[test]
     fn test_parse_windows_line_endings() {
         let input = ";comment\r\ncsl_version 1.0\r\nreset\r\nwait 1000\r\n";
-        let result = parse_csl(input);
+        let result = parse_csl_with_rich_errors(input, None);
         assert!(
             result.is_ok(),
             "Failed to parse with Windows line endings: {:?}",
             result
         );
         let script = result.unwrap();
-        assert_eq!(script.instructions.len(), 4);
+        assert_eq!(script.len(), 4);
     }
 
     #[test]
     fn test_parse_with_trailing_content() {
         let input = "csl_version 1.0\nreset\n;";
-        let result = parse_csl(input);
+        let result = parse_csl_with_rich_errors(input, None);
         assert!(
             result.is_ok(),
             "Failed to parse with trailing semicolon: {:?}",
@@ -1115,5 +1143,55 @@ wait 100000
         let input = "csl_version 1.1\nreset\nwait 1000\n";
         let result = parse_csl_with_rich_errors(input, None);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_csl_with_rich_errors_version_compatibility() {
+        // Test v1.0 with v1.2 feature - should report error
+        let input = "csl_version 1.0\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result = parse_csl_with_rich_errors(input, Some("test_v10_v12.csl".to_string()));
+        
+        assert!(result.is_err(), "Expected error for v1.0 with v1.2 feature");
+        
+        let error = result.unwrap_err();
+        assert_eq!(error.filename, Some("test_v10_v12.csl".to_string()));
+        assert!(!error.source.is_empty());
+        
+        let formatted = error.format_error();
+        // Should mention the incompatibility
+        assert!(
+            formatted.contains("1.2") || formatted.contains("keyboard_write"),
+            "Error should mention version incompatibility: {}",
+            formatted
+        );
+
+        // Test v1.0 with v1.1 feature
+        let input2 = "csl_version 1.0\ngate_array 40010\n";
+        let result2 = parse_csl_with_rich_errors(input2, Some("test_v10_v11.csl".to_string()));
+        
+        assert!(result2.is_err(), "Expected error for v1.0 with v1.1 feature");
+        
+        let error2 = result2.unwrap_err();
+        assert_eq!(error2.filename, Some("test_v10_v11.csl".to_string()));
+        
+        let formatted2 = error2.format_error();
+        eprintln!("{}", formatted2);
+        assert!(
+            formatted2.contains("1.1") || formatted2.contains("gate_array"),
+            "Error should mention version incompatibility: {}",
+            formatted2
+        );
+
+        // Test v1.1 with v1.2 feature
+        let input3 = "csl_version 1.1\nreset\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result3 = parse_csl_with_rich_errors(input3, Some("test_v11_v12.csl".to_string()));
+        
+        assert!(result3.is_err(), "Expected error for v1.1 with v1.2 feature");
+
+        // Test valid v1.2 with v1.2 feature - should succeed
+        let input4 = "csl_version 1.2\nkeyboard_write 255,255,255,255,255,255,239,255,255,255\n";
+        let result4 = parse_csl_with_rich_errors(input4, None);
+        
+        assert!(result4.is_ok(), "v1.2 with v1.2 feature should succeed");
     }
 }

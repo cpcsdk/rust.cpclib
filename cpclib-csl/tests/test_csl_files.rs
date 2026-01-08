@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cpclib_csl::parse_csl;
+use cpclib_csl::parse_csl_with_rich_errors;
 
 /// Helper function to find all CSL test files
 fn find_csl_files() -> Vec<PathBuf> {
@@ -52,12 +52,12 @@ fn test_parse_all_csl_files() {
 
         match fs::read_to_string(file_path) {
             Ok(content) => {
-                match parse_csl(&content) {
+                match parse_csl_with_rich_errors(&content, Some(file_name.to_string())) {
                     Ok(script) => {
                         println!(
                             "✓ {} ({} instructions)",
                             file_name,
-                            script.instructions.len()
+                            script.len()
                         );
                         success_count += 1;
                     },
@@ -68,8 +68,8 @@ fn test_parse_all_csl_files() {
                             debug_content.truncate(500);
                         }
                         let error_msg = format!(
-                            "✗ {}: Parse error: {:?}\nFirst 500 chars: {:?}",
-                            file_name, e, debug_content
+                            "✗ {}: Parse error: {}",
+                            file_name, e
                         );
                         eprintln!("{}", error_msg);
                         errors.push((file_name.to_string(), error_msg));
@@ -84,15 +84,15 @@ fn test_parse_all_csl_files() {
         }
     }
 
-    println!("\n=== Summary ===");
-    println!("Total files: {}", files.len());
-    println!("Successfully parsed: {}", success_count);
-    println!("Failed: {}", errors.len());
+    eprintln!("\n=== Summary ===");
+    eprintln!("Total files: {}", files.len());
+    eprintln!("Successfully parsed: {}", success_count);
+    eprintln!("Failed: {}", errors.len());
 
     if !errors.is_empty() {
-        println!("\n=== Errors ===");
+        eprintln!("\n=== Errors ===");
         for (file, error) in &errors {
-            println!("{}: {}", file, error);
+            eprintln!("{}: {}", file, error);
         }
         panic!(
             "Failed to parse {} out of {} CSL files",
@@ -115,7 +115,7 @@ fn test_parse_specific_module_a_file() {
     // Try parsing progressively larger chunks
     for chunk_size in [500, 1000, 2000, 5000, content.len()] {
         let chunk = &content[..chunk_size.min(content.len())];
-        let result = parse_csl(chunk);
+        let result = parse_csl_with_rich_errors(chunk, None);
         if result.is_err() {
             eprintln!("\nFailed at chunk size {}", chunk_size);
             eprintln!(
@@ -129,14 +129,13 @@ fn test_parse_specific_module_a_file() {
         }
     }
 
-    let script = parse_csl(&content).expect("Failed to parse SHAKE26A-0.CSL");
+    let script = parse_csl_with_rich_errors(&content, Some("SHAKE26A-0.CSL".to_string())).expect("Failed to parse SHAKE26A-0.CSL");
 
     // Verify it has instructions
-    assert!(script.instructions.len() > 0);
+    assert!(script.len() > 0);
 
     // Count non-empty, non-comment instructions
     let real_instructions: Vec<_> = script
-        .instructions
         .iter()
         .filter(|i| {
             !matches!(
@@ -158,7 +157,7 @@ fn test_parse_first_lines_only() {
 
     eprintln!("Testing: {:?}", content);
 
-    let result = parse_csl(content);
+    let result = parse_csl_with_rich_errors(content, None);
     assert!(
         result.is_ok(),
         "Failed to parse first lines: {:?}",
@@ -181,7 +180,7 @@ fn test_parse_first_500_bytes() {
         &chunk[chunk.len().saturating_sub(50)..]
     );
 
-    let result = parse_csl(chunk);
+    let result = parse_csl_with_rich_errors(chunk, None);
     assert!(
         result.is_ok(),
         "Failed to parse first 500 bytes: {:?}",

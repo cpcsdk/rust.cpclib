@@ -9,5 +9,5 @@ pub mod error;
 
 // Re-export commonly used types
 pub use csl::*;
-pub use csl_parser::{parse_csl, parse_csl_with_rich_errors, parse_instruction};
+pub use csl_parser::{parse_csl_with_rich_errors, parse_instruction};
 pub use error::CslError;
