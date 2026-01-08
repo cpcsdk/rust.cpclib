@@ -13,18 +13,7 @@ include!(concat!(
 
 use crate::{ParserContext, ParserContextBuilder, Z80Span};
 
-// Import types from parser submodules
-use super::InnerZ80Span;
-use super::Z80ParserError;
 
-// Import ModalResult from winnow
-use cpclib_common::winnow::ModalResult;
-
-// Import types from cpclib_tokens needed by tests
-use cpclib_tokens::{
-    DataAccess, Expr, IndexRegister8, IndexRegister16, LabelPrefix,
-    Mnemonic, Register8, Register16, Token
-};
 
 // Import register-related functions
 pub use super::registers::{
@@ -52,6 +41,12 @@ pub fn ctx_and_span(code: &'static str) -> (Box<ParserContext>, Z80Span) {
 pub mod test {
     use std::ops::Deref;
 
+    use crate::{InnerZ80Span, Z80ParserError};
+    use cpclib_common::winnow::ModalResult;
+    use cpclib_tokens::{
+        DataAccess, Expr, IndexRegister8, IndexRegister16, LabelPrefix, Mnemonic, Register8,
+        Register16, Token
+    };
     use cpclib_common::winnow::Parser;
     use cpclib_common::winnow::ascii::line_ending;
     use cpclib_common::winnow::combinator::{repeat, terminated};

@@ -282,7 +282,7 @@ impl BndBuilder {
         self.do_compute_dependencies(p);
         let layers = self.get_layered_dependencies_for(&p);
 
-        let mut state = ExecutionState {
+        let state = ExecutionState {
             nb_deps: layers.iter().map(|l| l.len()).sum::<usize>(),
             task_count: 0
         };

@@ -15,7 +15,6 @@ use super::source::Z80Span;
 use crate::LocatedToken;
 use crate::assembler::Env;
 use crate::error::AssemblerError;
-use crate::implementation::tokens::TokenExt;
 use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
 

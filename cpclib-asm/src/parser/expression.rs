@@ -21,7 +21,7 @@ use smallvec::{Array, SmallVec};
 
 // Import from parser submodules
 use super::common::{
-    build_span, build_span_covering, my_line_ending, my_space0, my_space1,
+    build_span, build_span_covering, my_line_ending, my_space0,
     parse_comma, parse_comma_multiline, parse_token, parse_word
 };
 use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};

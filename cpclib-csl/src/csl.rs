@@ -1086,7 +1086,7 @@ impl CslScriptBuilder {
                     None
                 }
             })
-            .unwrap_or_else(|| CslVersion::latest()) // Latest version
+            .unwrap_or_else(CslVersion::latest) // Latest version
     }
 
     /// Validate that an instruction is compatible with the current version
@@ -1107,8 +1107,8 @@ impl CslScriptBuilder {
         let version = self.current_version();
         
         // Check v1.2 features
-        if instruction.is_v1_2_feature() {
-            if version.major < 1 || (version.major == 1 && version.minor < 2) {
+        if instruction.is_v1_2_feature()
+            && (version.major < 1 || (version.major == 1 && version.minor < 2)) {
                 return Err(format!(
                     "Instruction '{}' requires CSL version 1.2 or higher, but script uses version {}.{}",
                     instruction.instruction_name(),
@@ -1116,11 +1116,10 @@ impl CslScriptBuilder {
                     version.minor
                 ));
             }
-        }
         
         // Check v1.1 features
-        if instruction.is_v1_1_feature() {
-            if version.major < 1 || (version.major == 1 && version.minor < 1) {
+        if instruction.is_v1_1_feature()
+            && (version.major < 1 || (version.major == 1 && version.minor < 1)) {
                 return Err(format!(
                     "Instruction '{}' requires CSL version 1.1 or higher, but script uses version {}.{}",
                     instruction.instruction_name(),
@@ -1128,14 +1127,12 @@ impl CslScriptBuilder {
                     version.minor
                 ));
             }
-        }
         
         // Special validation for key_from_file
-        if let CslInstruction::KeyFromFile(file) = instruction {
-            if !file.is_absolute() {
+        if let CslInstruction::KeyFromFile(file) = instruction
+            && !file.is_absolute() {
                 return Err("key_from_file instruction requires an absolute file path".to_string());
             }
-        }
         
         Ok(())
     }

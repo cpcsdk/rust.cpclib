@@ -3176,7 +3176,7 @@ impl Env {
         let repr = info
             .map(|info| self.prepropress_string_formatted_expression(info))
             .unwrap_or_else(|| Ok(Default::default()))?;
-        let warning = AssemblerWarning::AlreadyRenderedError(format!("Warning: {}", repr.to_string()));
+        let warning = AssemblerWarning::AlreadyRenderedError(format!("Warning: {}", repr));
         self.add_warning(Box::new(warning));
         Ok(())
     }
@@ -3474,36 +3474,33 @@ impl Env {
         let assembly_result = visit_processed_tokens(lst, &mut crunched_env);
         
         // Handle errors: some errors (like unknown symbols) can be deferred to next pass
-        match assembly_result {
-            Err(e) => {
-                // Check if this is a recoverable error that might be resolved in a later pass
-                let is_recoverable = matches!(
-                    &*e,
-                    AssemblerError::UnknownSymbol { .. }
-                    | AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { .. }, .. }
-                );
-                
-                // In first pass or if error is recoverable, defer it and request additional pass
-                if crunched_env.pass.is_first_pass() || is_recoverable {
-                    // Mark that we need another pass to resolve this
-                    *self.request_additional_pass.write().unwrap() = true;
-                    *crunched_env.request_additional_pass.write().unwrap() = true;
-                    // Continue with empty bytes for now - will be computed in next pass
-                } else {
-                    // Truly unrecoverable error - propagate it
-                    let e = AssemblerError::CrunchedSectionError { error: e };
-                    return Err(Box::new(match span {
-                        Some(span) => {
-                            AssemblerError::RelocatedError {
-                                error: e.into(),
-                                span: span.clone()
-                            }
-                        },
-                        None => e
-                    }));
-                }
-            },
-            Ok(_) => {}
+        if let Err(e) = assembly_result {
+            // Check if this is a recoverable error that might be resolved in a later pass
+            let is_recoverable = matches!(
+                &*e,
+                AssemblerError::UnknownSymbol { .. }
+                | AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { .. }, .. }
+            );
+            
+            // In first pass or if error is recoverable, defer it and request additional pass
+            if crunched_env.pass.is_first_pass() || is_recoverable {
+                // Mark that we need another pass to resolve this
+                *self.request_additional_pass.write().unwrap() = true;
+                *crunched_env.request_additional_pass.write().unwrap() = true;
+                // Continue with empty bytes for now - will be computed in next pass
+            } else {
+                // Truly unrecoverable error - propagate it
+                let e = AssemblerError::CrunchedSectionError { error: e };
+                return Err(Box::new(match span {
+                    Some(span) => {
+                        AssemblerError::RelocatedError {
+                            error: e.into(),
+                            span: span.clone()
+                        }
+                    },
+                    None => e
+                }));
+            }
         }
 
         if let Some(t) = self.output_trigger.as_mut() {
