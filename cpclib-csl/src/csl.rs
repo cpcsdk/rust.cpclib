@@ -22,6 +22,11 @@ impl CslVersion {
     pub fn new(major: u8, minor: u8) -> Self {
         Self { major, minor }
     }
+
+    /// Returns the latest CSL version (1.2)
+    pub const fn latest() -> Self {
+        Self { major: 1, minor: 2 }
+    }
 }
 
 /// Reset type for the emulator
@@ -670,6 +675,12 @@ impl fmt::Display for CslInstruction {
 }
 
 impl CslInstruction {
+    /// Check if this instruction is "substantial" (not a comment or empty line)
+    /// Comments and empty lines don't count for version placement validation
+    pub fn is_substantial(&self) -> bool {
+        !matches!(self, Self::Comment(_) | Self::Empty)
+    }
+
     /// Check if this instruction is a v1.1 feature
     pub fn is_v1_1_feature(&self) -> bool {
         matches!(
@@ -1054,7 +1065,6 @@ impl Default for CslScript {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CslScriptBuilder {
     instructions: Vec<CslInstruction>,
-    version: Option<CslVersion>,
 }
 
 impl CslScriptBuilder {
@@ -1062,17 +1072,38 @@ impl CslScriptBuilder {
     pub fn new() -> Self {
         Self {
             instructions: Vec::new(),
-            version: None,
         }
     }
 
     /// Get the current version (or the latest if not set)
     fn current_version(&self) -> CslVersion {
-        self.version.unwrap_or_else(|| CslVersion::new(1, 2)) // Latest version
+        self.instructions
+            .iter()
+            .find_map(|inst| {
+                if let CslInstruction::CslVersion(v) = inst {
+                    Some(*v)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| CslVersion::latest()) // Latest version
     }
 
     /// Validate that an instruction is compatible with the current version
     fn validate_instruction(&self, instruction: &CslInstruction) -> Result<(), String> {
+        // Special validation for CslVersion instruction
+        if let CslInstruction::CslVersion(_) = instruction {
+            // Check if version is already set
+            if self.instructions.iter().any(|i| matches!(i, CslInstruction::CslVersion(_))) {
+                return Err("CSL version can only be set once".to_string());
+            }
+            // Check if there are any substantial instructions already (comments/empty lines are OK)
+            if self.instructions.iter().any(|i| i.is_substantial()) {
+                return Err("CSL version must be the first instruction".to_string());
+            }
+            return Ok(());
+        }
+        
         let version = self.current_version();
         
         // Check v1.2 features
@@ -1111,12 +1142,7 @@ impl CslScriptBuilder {
 
     /// Build the final CSL script
     /// Returns an error if the script is invalid
-    pub fn build(mut self) -> Result<CslScript, String> {
-        // If version was explicitly set, add it at the beginning
-        if let Some(version) = self.version {
-            self.instructions.insert(0, CslInstruction::CslVersion(version));
-        }
-        
+    pub fn build(self) -> Result<CslScript, String> {
         Ok(CslScript {
             instructions: self.instructions
         })
@@ -1127,14 +1153,10 @@ impl CslScriptBuilder {
     /// Add an instruction and return self for chaining
     /// Validates the instruction against the current version
     pub fn with_instruction(mut self, instruction: CslInstruction) -> Result<Self, String> {
-        // Special handling for version instruction
-        if let CslInstruction::CslVersion(v) = instruction {
-            self.version = Some(v);
-            return Ok(self);
-        }
-        
         // Validate instruction before adding
         self.validate_instruction(&instruction)?;
+        
+        // Add instruction to the list
         self.instructions.push(instruction);
         Ok(self)
     }
@@ -1727,5 +1749,53 @@ mod tests {
         let script = "csl_version 1.1\ngate_array 40010\n";
         let result = parse_csl_with_rich_errors(script, None);
         assert!(result.is_ok(), "v1.1 with v1.1 feature should succeed");
+    }
+
+    #[test]
+    fn test_version_placement_validation() {
+        // Test that version can only be set once
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::csl_version(1, 0)).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1));
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("can only be set once"));
+        
+        // Test that version must be before substantial instructions
+        let result = CslScriptBuilder::new()
+            .with_reset(ResetType::Hard).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 0));
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must be the first instruction"));
+        
+        // Test that version can come after comments
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::comment("This is a comment")).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_reset(ResetType::Hard).unwrap()
+            .build();
+        
+        assert!(result.is_ok(), "Version should be allowed after comments");
+        
+        // Test that version can come after empty lines
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::empty()).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 1)).unwrap()
+            .with_reset(ResetType::Hard).unwrap()
+            .build();
+        
+        assert!(result.is_ok(), "Version should be allowed after empty lines");
+        
+        // Test that version can come after both comments and empty lines
+        let result = CslScriptBuilder::new()
+            .with_instruction(CslInstruction::comment("Header comment")).unwrap()
+            .with_instruction(CslInstruction::empty()).unwrap()
+            .with_instruction(CslInstruction::comment("Another comment")).unwrap()
+            .with_instruction(CslInstruction::csl_version(1, 2)).unwrap()
+            .with_instruction(CslInstruction::KeyboardWrite([255; 10])).unwrap()
+            .build();
+        
+        assert!(result.is_ok(), "Version should be allowed after comments and empty lines");
     }
 }
