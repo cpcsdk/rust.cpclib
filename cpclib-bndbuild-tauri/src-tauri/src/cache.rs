@@ -220,6 +220,7 @@ impl CachedBndBuilder {
 
         #[cfg(target_os = "windows")]
         let dot_command = {
+            use tauri::Manager;
             // we provide graphviz because every installation is a nightmare on windows
             let resource_path = app_handle
                 .path()
