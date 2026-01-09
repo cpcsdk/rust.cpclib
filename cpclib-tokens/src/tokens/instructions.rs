@@ -1147,6 +1147,16 @@ impl fmt::Display for Token {
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
             Token::Label( string) => write!(f, "{string}"),
 
+            Token::Macro { name, params, content, flavor, tokenized_content } => {
+                let params = if params.is_empty() {
+                    "(void)".to_owned()
+                } else {
+                    params.join(", ")
+                };
+                writeln!(f, "MACRO {} {}", name, params )?;
+                writeln!(f, "{}", content)?;
+                writeln!(f, "ENDMACRO")
+            },
 
             Token::MacroCall( name,  args)
                 => {

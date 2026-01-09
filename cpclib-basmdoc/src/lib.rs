@@ -433,8 +433,8 @@ pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_l
             if let Some(parent) = last_global_label {
                 Some(DocumentedItem::Label(format!("{}{}", parent, label)))
             } else {
-                // No parent label, skip this local label
-                None
+                // No parent label, return the local label as-is (will be filtered later)
+                Some(DocumentedItem::Label(label))
             }
         } else {
             // Regular global label
@@ -482,7 +482,6 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
         .into_iter()
         .filter_map(|(doc, t, last_global_label)| {
             if let Some(t) = t {
-                // Try to create a documented item, passing the parent label context
                 documentation_type(t, last_global_label.as_deref()).map(|item| {
                     ItemDocumentation {
                         item,
@@ -506,7 +505,7 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 }
 
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
-/// Also tracks the last global label to handle local labels (starting with ".")
+/// Local labels (starting with ".") are resolved using the tracked parent global label
 pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
     tokens: &[T],
     include_undocumented: bool
@@ -600,7 +599,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
         else if is_local_documentation(token) {
             if in_process_comment.is_global() {
                 // here we can release the global comment
-                doc.push((in_process_comment.consume(), None, last_global_label.clone()));
+                doc.push((in_process_comment.consume(), None, None));
             }
             in_process_comment.set_kind(CommentKind::Local);
             (true, false)
@@ -609,43 +608,49 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
             (false, is_documentable(token))
         };
 
+        // Track the last global label for local label resolution
+        if token.is_label() {
+            let label = token.label_symbol().to_string();
+            if !label.starts_with('.') {
+                last_global_label = Some(label);
+            }
+        }
+
         if current_is_doc {
             // we update the documentation
             in_process_comment.add_comment(token.comment());
         }
         else if current_is_documentable {
-            // Track the last global label for local label resolution
-            if token.is_label() {
-                let label = token.label_symbol().to_string();
-                if !label.starts_with('.') {
-                    last_global_label = Some(label);
-                }
-            }
+            // Skip local labels without a parent
+            let is_local_label = token.is_label() && token.label_symbol().starts_with('.');
+            let should_skip = is_local_label && last_global_label.is_none();
             
-            if !in_process_comment.is_unspecified() {
-                // we comment an item if any
-                let documented = if in_process_comment.is_global() {
-                    // for a global comment, we do not care of that
-                    None
+            if !should_skip {
+                if !in_process_comment.is_unspecified() {
+                    // we comment an item if any
+                    let documented = if in_process_comment.is_global() {
+                        // for a global comment, we do not care of that
+                        None
+                    }
+                    else {
+                        // but we do for a local comment
+                        Some(token)
+                    };
+                    doc.push((in_process_comment.consume(), documented, last_global_label.clone()));
+                }
+                else if include_undocumented && (token.is_macro_definition() || token.is_function_definition()) {
+                    // Include undocumented macros and functions if flag is set
+                    doc.push((String::new(), Some(token), None));
                 }
                 else {
-                    // but we do for a local comment
-                    Some(token)
-                };
-                doc.push((in_process_comment.consume(), documented, last_global_label.clone()));
-            }
-            else if include_undocumented && (token.is_macro_definition() || token.is_function_definition()) {
-                // Include undocumented macros and functions if flag is set
-                doc.push((String::new(), Some(token), last_global_label.clone()));
-            }
-            else {
-                // we add no comment, so we do nothing
+                    // we add no comment, so we do nothing
+                }
             }
         }
         else {
             // this is not a doc or a documentable, so we can eventually treat a global
             if in_process_comment.is_global() {
-                doc.push((in_process_comment.consume(), None, last_global_label.clone()));
+                doc.push((in_process_comment.consume(), None, None));
             }
             else if in_process_comment.is_local() {
                 // comment is lost as there is nothing else to comment
@@ -656,7 +661,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
 
     // The last comment can only be a global comment
     if in_process_comment.is_global() {
-        doc.push((in_process_comment.consume(), None, last_global_label.clone()));
+        doc.push((in_process_comment.consume(), None, None));
     }
 
     doc

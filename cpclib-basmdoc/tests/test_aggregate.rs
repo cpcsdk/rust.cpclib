@@ -9,7 +9,7 @@ fn test_simple_aggregate() {
     let tokens = dbg!(parse_z80_str(&code).unwrap());
     let doc = dbg!(aggregate_documentation_on_tokens(&tokens, false));
 
-    assert_eq!(doc.len(), 5);
+    assert_eq!(doc.len(), 6);
 
     assert_eq!(
         doc[0].0,
