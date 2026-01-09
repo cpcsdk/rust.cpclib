@@ -312,7 +312,8 @@ impl ItemDocumentation {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DocumentationPage {
     fname: String,
-    content: Vec<ItemDocumentation>
+    content: Vec<ItemDocumentation>,
+    all_files: Vec<String>
 }
 
 impl Object for DocumentationPage {
@@ -419,6 +420,7 @@ impl DocumentationPage {
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
         let mut page = build_documentation_page_from_aggregates(display_name, doc);
+        page.all_files = vec![display_name.to_string()];
         
         // Populate cross-references
         page = populate_cross_references(page, &tokens);
@@ -431,7 +433,8 @@ impl DocumentationPage {
         if pages.is_empty() {
             return Self {
                 fname: String::from("Empty documentation"),
-                content: Vec::new()
+                content: Vec::new(),
+                all_files: Vec::new()
             };
         }
 
@@ -444,13 +447,20 @@ impl DocumentationPage {
             .collect::<Vec<_>>()
             .join(", ");
         
+        let mut all_files: Vec<String> = pages.iter()
+            .flat_map(|p| p.all_files.iter().cloned())
+            .collect();
+        all_files.sort();
+        all_files.dedup();
+        
         let content = pages.into_iter()
             .flat_map(|p| p.content)
             .collect();
 
         Self {
             fname: fnames,
-            content
+            content,
+            all_files
         }
     }
 
@@ -559,14 +569,7 @@ impl DocumentationPage {
 
     /// Get a sorted list of unique source files
     pub fn file_list(&self) -> Vec<String> {
-        let mut files: Vec<String> = self.content
-            .iter()
-            .map(|item| item.source_file.clone())
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-        files.sort();
-        files
+        self.all_files.clone()
     }
 
     /// Return a string that encode the documentation page in markdown
@@ -766,7 +769,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 
     DocumentationPage {
         fname: fname.to_string(),
-        content
+        content,
+        all_files: Vec::new() // Will be populated by for_file
     }
 }
 
