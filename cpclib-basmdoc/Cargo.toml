@@ -10,6 +10,7 @@ description.workspace = true
 
 [dependencies]
 cpclib-asm.workspace = true
+cpclib-tokens.workspace = true
 cpclib-common.workspace = true
 
 delegate.workspace = true

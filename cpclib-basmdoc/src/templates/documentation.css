@@ -665,3 +665,55 @@ pre {
 .jump-link.hidden {
     display: none;
 }
+
+/* Cross-references styling */
+.cross-references {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-left: 3px solid #3498db;
+    border-radius: 4px;
+}
+
+.cross-references h5 {
+    margin: 0 0 10px 0;
+    font-size: 0.9em;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.reference-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.reference-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.reference-item:last-child {
+    border-bottom: none;
+}
+
+.ref-location {
+    font-size: 0.85em;
+    color: #3498db;
+    font-weight: 600;
+}
+
+.ref-context {
+    font-size: 0.85em;
+    color: #666;
+    background-color: #fff;
+    padding: 4px 8px;
+    border-radius: 3px;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+}

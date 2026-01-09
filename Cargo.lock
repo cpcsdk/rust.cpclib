@@ -2324,6 +2324,7 @@ version = "0.11.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
+ "cpclib-tokens",
  "delegate",
  "dirs 5.0.1",
  "glob",

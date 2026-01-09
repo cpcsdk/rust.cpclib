@@ -1,5 +1,6 @@
 pub mod cmdline;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use cpclib_asm::{ListingElement, parse_z80_str};
@@ -155,10 +156,18 @@ impl DocumentedItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SymbolReference {
+    pub source_file: String,
+    pub line_number: usize,
+    pub context: String // surrounding code for context
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ItemDocumentation {
     item: DocumentedItem,
     doc: String, // TODO use MetaDocumentation
-    source_file: String
+    source_file: String,
+    references: Vec<SymbolReference>
 }
 
 impl Object for ItemDocumentation {
@@ -169,6 +178,14 @@ impl Object for ItemDocumentation {
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key())),
             Some("source_file") => Some(Value::from(self.source_file.clone())),
+            Some("references") => {
+                // Convert references to a Value that can be used in templates
+                let refs: Vec<Value> = self.references.iter().map(|r| {
+                    Value::from_serialize(r)
+                }).collect();
+                Some(Value::from(refs))
+            },
+            Some("has_references") => Some(Value::from(!self.references.is_empty())),
             Some("source") => {
                 if self.is_macro() {
                     Some(Value::from(self.macro_source()))
@@ -401,7 +418,12 @@ impl DocumentationPage {
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
-        Ok(build_documentation_page_from_aggregates(fname, doc))
+        let mut page = build_documentation_page_from_aggregates(fname, doc);
+        
+        // Populate cross-references
+        page = populate_cross_references(page, &tokens);
+        
+        Ok(page)
     }
 
     /// Merge multiple documentation pages into a single page
@@ -472,7 +494,8 @@ impl DocumentationPage {
                 ItemDocumentation {
                     item: DocumentedItem::File(source_file.clone()),
                     doc: docs.join("\n\n"),
-                    source_file
+                    source_file,
+                    references: Vec::new()
                 }
             })
             .collect();
@@ -725,7 +748,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                     ItemDocumentation {
                         item,
                         doc,
-                        source_file: fname.to_string()
+                        source_file: fname.to_string(),
+                        references: Vec::new()
                     }
                 })
             }
@@ -733,7 +757,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                 Some(ItemDocumentation {
                     item: DocumentedItem::File(fname.to_string()),
                     doc,
-                    source_file: fname.to_string()
+                    source_file: fname.to_string(),
+                    references: Vec::new()
                 })
             }
         })
@@ -906,6 +931,68 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
     }
 
     doc
+}
+
+/// Extract symbols used in a token's expressions
+fn extract_symbols_from_token<T: ListingElement + std::fmt::Display>(token: &T) -> Vec<String> {
+    // Skip comments and label definitions (they're not references)
+    if token.is_comment() || token.is_label() || token.is_macro_definition() {
+        return Vec::new();
+    }
+    
+    // Use the proper symbols() method from ListingElement
+    token.symbols().into_iter().collect()
+}
+
+/// Collect cross-references by analyzing which symbols are used in which locations
+pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
+    tokens: &[T],
+    source_file: &str
+) -> HashMap<String, Vec<SymbolReference>> {
+    let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
+    
+    for (line_num, token) in tokens.iter().enumerate() {
+        let symbols = extract_symbols_from_token(token);
+        let context = token.to_string();
+        
+        // Limit context length to avoid huge strings (char boundary-safe)
+        let context = if context.chars().count() > 100 {
+            let truncated: String = context.chars().take(100).collect();
+            format!("{}...", truncated)
+        } else {
+            context
+        };
+        
+        for symbol in symbols {
+            references
+                .entry(symbol)
+                .or_insert_with(Vec::new)
+                .push(SymbolReference {
+                    source_file: source_file.to_string(),
+                    line_number: line_num + 1, // 1-indexed for display
+                    context: context.clone()
+                });
+        }
+    }
+    
+    references
+}
+
+/// Populate cross-references in documentation page
+pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T]) -> DocumentationPage {
+    // Collect all references from tokens
+    let all_refs = collect_cross_references(tokens, &page.fname);
+    
+    // Match references to documented items
+    for item in &mut page.content {
+        let symbol_name = item.item_short_summary();
+        
+        if let Some(refs) = all_refs.get(&symbol_name) {
+            item.references.extend(refs.clone());
+        }
+    }
+    
+    page
 }
 
 #[cfg(test)]

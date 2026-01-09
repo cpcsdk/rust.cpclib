@@ -459,6 +459,11 @@ impl ExprElement for LocatedExpr {
             _ => unreachable!()
         }
     }
+    
+    fn symbols(&self) -> std::collections::HashSet<String> {
+        // Delegate to the Expr implementation after converting
+        self.to_expr().symbols()
+    }
 }
 
 impl ExprEvaluationExt for LocatedExpr {
@@ -1429,6 +1434,28 @@ impl ListingElement for LocatedToken {
     fn assembler_control_get_listing(&self) -> &[Self] {
         self.assembler_control_command().get_listing()
     }
+    
+    /// Override symbols() to safely extract symbols without going through problematic delegates
+    fn symbols(&self) -> std::collections::HashSet<String> {
+        use std::collections::HashSet;
+        
+        // Skip comments and labels - they're definitions, not references
+        if self.is_comment() || self.is_label() || self.is_macro_definition() {
+            return HashSet::new();
+        }
+        
+        // Extract symbols by pattern matching on the inner token directly
+        match &self.inner {
+            either::Left(token) => {
+                // Delegate to Token's ListingElement impl which has the default implementation
+                token.symbols()
+            },
+            either::Right(_) => {
+                // Comments/warnings wrapped in Right - no user symbols
+                HashSet::new()
+            }
+        }
+    }
 }
 
 // Several methodsare not implemented because their return type is wrong
@@ -1441,6 +1468,163 @@ impl ListingElement for LocatedTokenInner {
     type TestKind = LocatedTestKind;
 
     listing_element_impl_most_methods!();
+
+    /// Override symbols() to extract symbols without requiring full to_token() conversion
+    fn symbols(&self) -> std::collections::HashSet<String> {
+        use std::collections::HashSet;
+        
+        let mut symbols = HashSet::new();
+        
+        // Extract symbols based on the variant type directly
+        match self {
+            // Skip comments and label definitions - they're definitions, not references
+            Self::Comment(_) | Self::Label(_) | Self::Macro { .. } => {},
+            
+            // Expression-based tokens
+            Self::Org { val1, val2 } => {
+                symbols.extend(val1.symbols());
+                if let Some(val2) = val2 {
+                    symbols.extend(val2.symbols());
+                }
+            },
+            Self::Equ { expr, .. } => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Assign { expr, .. } => {
+                symbols.extend(expr.symbols());
+            },
+            Self::OpCode(_, arg1, arg2, _) => {
+                if let Some(arg1) = arg1 {
+                    if let Some(expr) = arg1.get_expression() {
+                        symbols.extend(expr.symbols());
+                    }
+                }
+                if let Some(arg2) = arg2 {
+                    if let Some(expr) = arg2.get_expression() {
+                        symbols.extend(expr.symbols());
+                    }
+                }
+            },
+            Self::While(expr, _) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Switch(expr, cases, _) => {
+                symbols.extend(expr.symbols());
+                for (case_expr, _, _) in cases {
+                    symbols.extend(case_expr.symbols());
+                }
+            },
+            Self::Iterate(_, values, _) => {
+                match values {
+                    either::Either::Left(exprs) => {
+                        for expr in exprs {
+                            symbols.extend(expr.symbols());
+                        }
+                    },
+                    either::Either::Right(expr) => {
+                        symbols.extend(expr.symbols());
+                    }
+                }
+            },
+            Self::For { start, stop, step, .. } => {
+                symbols.extend(start.symbols());
+                symbols.extend(stop.symbols());
+                if let Some(step) = step {
+                    symbols.extend(step.symbols());
+                }
+            },
+            Self::Repeat(expr, _, _, start, step) => {
+                symbols.extend(expr.symbols());
+                if let Some(start) = start {
+                    symbols.extend(start.symbols());
+                }
+                if let Some(step) = step {
+                    symbols.extend(step.symbols());
+                }
+            },
+            Self::RepeatUntil(expr, _) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Rorg(expr, _) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Incbin { fname, offset, length, extended_offset, .. } => {
+                symbols.extend(fname.symbols());
+                if let Some(offset) = offset {
+                    symbols.extend(offset.symbols());
+                }
+                if let Some(length) = length {
+                    symbols.extend(length.symbols());
+                }
+                if let Some(extended_offset) = extended_offset {
+                    symbols.extend(extended_offset.symbols());
+                }
+            },
+            Self::Include(fname, _, _) => {
+                symbols.extend(fname.symbols());
+            },
+            Self::Defb(exprs) | Self::Defw(exprs) => {
+                for expr in exprs {
+                    symbols.extend(expr.symbols());
+                }
+            },
+            Self::Str(exprs) => {
+                for expr in exprs {
+                    symbols.extend(expr.symbols());
+                }
+            },
+            Self::Run(expr, expr2) => {
+                symbols.extend(expr.symbols());
+                if let Some(expr2) = expr2 {
+                    symbols.extend(expr2.symbols());
+                }
+            },
+            Self::MacroCall(name, _) => {
+                // Macro name is a symbol reference
+                symbols.insert(name.to_string());
+            },
+            Self::Return(expr) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Assert(expr, _) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Fail(_) | Self::Warning(_) => {},
+            Self::OutputFile(expr) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::Breakpoint { address, mask, size, value, value_mask, condition, name, step, .. } => {
+                if let Some(address) = address {
+                    symbols.extend(address.symbols());
+                }
+                if let Some(mask) = mask {
+                    symbols.extend(mask.symbols());
+                }
+                if let Some(size) = size {
+                    symbols.extend(size.symbols());
+                }
+                if let Some(value) = value {
+                    symbols.extend(value.symbols());
+                }
+                if let Some(value_mask) = value_mask {
+                    symbols.extend(value_mask.symbols());
+                }
+                if let Some(condition) = condition {
+                    symbols.extend(condition.symbols());
+                }
+                if let Some(name) = name {
+                    symbols.extend(name.symbols());
+                }
+                if let Some(step) = step {
+                    symbols.extend(step.symbols());
+                }
+            },
+            // For other tokens, skip - they don't contain symbol references
+            _ => {}
+        }
+        
+        symbols
+    }
 
     /// Transform the located token in a raw token.
     /// Warning, this is quite costly when strings or vec are involved

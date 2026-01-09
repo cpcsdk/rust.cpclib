@@ -243,6 +243,10 @@ where T: ExprElement
     fn fix_relative_value(&mut self) {
         self.as_mut().fix_relative_value()
     }
+    
+    fn symbols(&self) -> std::collections::HashSet<String> {
+        self.as_ref().symbols()
+    }
 }
 
 /// All methods are unchecked
@@ -320,6 +324,9 @@ pub trait ExprElement: Sized {
     fn fix_relative_value(&mut self);
 
     fn to_expr(&self) -> Cow<'_, Expr>;
+    
+    /// Returns all symbol names (labels) used in this expression
+    fn symbols(&self) -> std::collections::HashSet<String>;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -804,6 +811,57 @@ impl ExprElement for Expr {
             Self::BinaryOperation(_, _, box arg2) => arg2,
             _ => unreachable!()
         }
+    }
+    
+    fn symbols(&self) -> std::collections::HashSet<String> {
+        use std::collections::HashSet;
+        
+        let mut symbols = HashSet::new();
+        
+        match self {
+            // Base cases: no symbols
+            Self::Value(_) | Self::Float(_) | Self::Char(_) | Self::Bool(_) | 
+            Self::String(_) | Self::RelativeDelta(_) | Self::Rnd => {},
+            
+            // Label is a symbol
+            Self::Label(label) | Self::PrefixedLabel(_, label) => {
+                symbols.insert(label.to_string());
+            },
+            
+            // Recursive cases
+            Self::List(exprs) => {
+                for expr in exprs {
+                    symbols.extend(expr.symbols());
+                }
+            },
+            Self::Paren(expr) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::UnaryOperation(_, expr) => {
+                symbols.extend(expr.symbols());
+            },
+            Self::UnaryTokenOperation(_, _) => {
+                // Token operations don't contain user symbols
+            },
+            Self::BinaryOperation(_, expr1, expr2) => {
+                symbols.extend(expr1.symbols());
+                symbols.extend(expr2.symbols());
+            },
+            Self::Ternary(cond, true_expr, false_expr) => {
+                symbols.extend(cond.symbols());
+                symbols.extend(true_expr.symbols());
+                symbols.extend(false_expr.symbols());
+            },
+            Self::AnyFunction(name, args) => {
+                // Function name could be a symbol reference
+                symbols.insert(name.to_string());
+                for arg in args {
+                    symbols.extend(arg.symbols());
+                }
+            },
+        }
+        
+        symbols
     }
 }
 

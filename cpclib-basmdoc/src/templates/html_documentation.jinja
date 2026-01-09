@@ -146,6 +146,24 @@
 
         <!-- Main content -->
         <main class="main-content">
+        
+        <!-- Macro for displaying cross-references -->
+        {% macro show_references(item) %}
+            {% if item.has_references %}
+            <div class="cross-references">
+                <h5>Referenced in:</h5>
+                <ul class="reference-list">
+                    {% for ref in item.references %}
+                    <li class="reference-item">
+                        <span class="ref-location">{{ ref.source_file | basename }}:{{ ref.line_number }}</span>
+                        <code class="ref-context">{{ ref.context }}</code>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        {% endmacro %}
+        
         <!--
             <div class="file-header">
                 <h1>Assembly Documentation</h1>
@@ -208,6 +226,7 @@
                 <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
+                    {{ show_references(item) }}
                 </div>
                 {% endfor %}
             </section>
@@ -229,6 +248,7 @@
                         </div>
                     </div>
                     {% endif %}
+                    {{ show_references(item) }}
                 </div>
                 {% endfor %}
             </section>
@@ -250,6 +270,7 @@
                         </div>
                     </div>
                     {% endif %}
+                    {{ show_references(item) }}
                 </div>
                 {% endfor %}
             </section>
@@ -263,6 +284,7 @@
                 <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
+                    {{ show_references(item) }}
                 </div>
                 {% endfor %}
             </section>
