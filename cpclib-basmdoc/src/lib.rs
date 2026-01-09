@@ -14,6 +14,56 @@ use serde::{Deserialize, Serialize};
 #[include = "*.jinja"]
 struct Templates;
 
+const HIGHLIGHTJS_URL: &str = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js";
+const HIGHLIGHTJS_CSS_URL: &str = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css";
+
+/// Get cache directory for basmdoc assets
+fn get_cache_dir() -> std::path::PathBuf {
+    let cache_dir = dirs::cache_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("cpclib-basmdoc");
+    
+    std::fs::create_dir_all(&cache_dir).ok();
+    cache_dir
+}
+
+/// Download a URL and cache it, or return cached content
+fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let cache_file = get_cache_dir().join(filename);
+    
+    // Check if cached file exists
+    if cache_file.exists() {
+        return Ok(std::fs::read_to_string(&cache_file)?);
+    }
+    
+    // Download the file
+    let response = ureq::get(url).call()?;
+    let content = response.into_string()?;
+    
+    // Cache it
+    std::fs::write(&cache_file, &content).ok();
+    
+    Ok(content)
+}
+
+// Get highlight.js content (download once, then cache)
+fn get_highlightjs() -> String {
+    download_or_cache(HIGHLIGHTJS_URL, "highlight.min.js")
+        .unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to download highlight.js: {}. Syntax highlighting will be disabled.", e);
+            String::new()
+        })
+}
+
+// Get atom-one-dark CSS content (download once, then cache)
+fn get_highlightjs_css() -> String {
+    download_or_cache(HIGHLIGHTJS_CSS_URL, "atom-one-dark.min.css")
+        .unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to download highlight.js CSS: {}. Styling will be limited.", e);
+            String::new()
+        })
+}
+
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 const LOCAL_DOCUMENTATION_START: &str = ";;";
 
@@ -275,14 +325,22 @@ impl Object for DocumentationPage {
                 Some(functions)
             },
             Some("files") => {
-                let mut files = self
-                    .file_iter()
-                    .cloned()
+                let files = self.merged_files()
+                    .into_iter()
+                    .map(Value::from_object)
                     .collect::<Vec<_>>();
-                files.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
-                let files = files.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let files = Value::from_object(files);
                 Some(files)
+            },
+            Some("symbol_index") => {
+                let index = self.symbol_index();
+                let index_data: Vec<_> = index.into_iter().map(|(letter, items)| {
+                    let items_vec: Vec<_> = items.into_iter()
+                        .map(|item| Value::from_object(item.clone()))
+                        .collect();
+                    minijinja::value::Value::from_serialize(&(letter.to_string(), items_vec))
+                }).collect();
+                Some(Value::from(index_data))
             },
             _ => None
         }
@@ -369,6 +427,68 @@ impl DocumentationPage {
         self.content.iter().filter(|item| item.is_file())
     }
 
+    /// Get file documentation items merged by source file
+    /// Multiple file-level doc comments from the same file are combined into one item
+    pub fn merged_files(&self) -> Vec<ItemDocumentation> {
+        let mut file_docs: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        
+        // Group documentation by source file
+        for item in self.file_iter() {
+            file_docs
+                .entry(item.source_file.clone())
+                .or_insert_with(Vec::new)
+                .push(item.doc.clone());
+        }
+        
+        // Create merged ItemDocumentation for each file
+        let mut merged: Vec<ItemDocumentation> = file_docs
+            .into_iter()
+            .map(|(source_file, docs)| {
+                ItemDocumentation {
+                    item: DocumentedItem::File(source_file.clone()),
+                    doc: docs.join("\n\n"),
+                    source_file
+                }
+            })
+            .collect();
+        
+        // Sort by source file name
+        merged.sort_by(|a, b| a.source_file.cmp(&b.source_file));
+        merged
+    }
+
+    /// Get all symbols (labels, macros, functions, equs) for cross-referencing
+    pub fn all_symbols(&self) -> Vec<(String, String)> {
+        let mut symbols = Vec::new();
+        
+        for item in &self.content {
+            if !item.is_file() {
+                symbols.push((item.item_short_summary(), item.item.item_key()));
+            }
+        }
+        
+        symbols
+    }
+
+    /// Get alphabetically grouped symbols for index page
+    pub fn symbol_index(&self) -> Vec<(char, Vec<&ItemDocumentation>)> {
+        use std::collections::BTreeMap;
+        
+        let mut index: BTreeMap<char, Vec<&ItemDocumentation>> = BTreeMap::new();
+        
+        for item in &self.content {
+            if !item.is_file() {
+                let name = item.item_short_summary();
+                if let Some(first_char) = name.chars().next() {
+                    let key = first_char.to_ascii_uppercase();
+                    index.entry(key).or_insert_with(Vec::new).push(item);
+                }
+            }
+        }
+        
+        index.into_iter().collect()
+    }
+
     pub fn has_labels(&self) -> bool {
         self.label_iter().next().is_some()
     }
@@ -451,10 +571,37 @@ impl DocumentationPage {
                 .to_string())
         });
         
+        // Capture symbols for cross-referencing
+        let symbols = self.all_symbols();
+        
+        // Add a cross-reference filter to auto-link symbol names
+        env.add_filter("auto_link_symbols", move |value: String| -> Result<String, minijinja::Error> {
+            let mut result = value.clone();
+            
+            // Sort symbols by length (longest first) to avoid partial matches
+            let mut sorted_symbols = symbols.clone();
+            sorted_symbols.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+            
+            for (name, key) in sorted_symbols {
+                // Only replace whole words (surrounded by word boundaries)
+                let pattern = format!(r"\b{}\b", regex::escape(&name));
+                if let Ok(re) = regex::Regex::new(&pattern) {
+                    let replacement = format!("<a href=\"#{}\" class=\"symbol-link\">{}</a>", key, name);
+                    result = re.replace_all(&result, replacement.as_str()).to_string();
+                }
+            }
+            
+            Ok(result)
+        });
+        
         const TMPL_NAME: &str = "html_documentation.jinja";
         let tmpl_src = Templates::get(TMPL_NAME).expect("Template not found").data;
         let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();
         env.add_template(TMPL_NAME, tmpl_src).unwrap();
+
+        // Add embedded assets as globals
+        env.add_global("highlightjs", get_highlightjs());
+        env.add_global("highlightjs_css", get_highlightjs_css());
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
         tmpl.render(context! {
