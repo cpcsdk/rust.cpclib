@@ -50,6 +50,10 @@ impl DocumentedItem {
         matches!(self, DocumentedItem::Function { .. })
     }
 
+    pub fn is_file(&self) -> bool {
+        matches!(self, DocumentedItem::File(_))
+    }
+
     pub fn item_key(&self) -> String {
         match self {
             DocumentedItem::Label(l) => {
@@ -68,7 +72,9 @@ impl DocumentedItem {
                 format!("function_{}", name)
             },
 
-            _ => String::from("unknown_item")
+            DocumentedItem::File(fname) => {
+                format!("file_{}", fname.replace(['/', '\\', '.'], "_"))
+            }
         }
     }
 }
@@ -125,6 +131,7 @@ impl ItemDocumentation {
             pub fn is_equ(&self) -> bool;
             pub fn is_macro(&self) -> bool;
             pub fn is_function(&self) -> bool;
+            pub fn is_file(&self) -> bool;
 
             pub fn item_key(&self) -> String;
         }
@@ -148,7 +155,9 @@ impl ItemDocumentation {
                 format!("FUNCTION {name}({args})")
             },
 
-            _ => String::from("Unknown item")
+            DocumentedItem::File(fname) => {
+                format!("File: {}", fname)
+            }
         }
     }
 
@@ -168,7 +177,9 @@ impl ItemDocumentation {
                 name.clone()
             },
 
-            _ => String::from("Unknown item")
+            DocumentedItem::File(fname) => {
+                fname.clone()
+            }
         }
     }
 
@@ -194,8 +205,8 @@ impl ItemDocumentation {
                 md += &format!("## FUNCTION {name}({args}) \n\n");
             },
 
-            _ => {
-                // currently ignored
+            DocumentedItem::File(fname) => {
+                md += &format!("## File: {fname} \n\n");
             }
         }
 
@@ -263,6 +274,16 @@ impl Object for DocumentationPage {
                 let functions = Value::from_object(functions);
                 Some(functions)
             },
+            Some("files") => {
+                let mut files = self
+                    .file_iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                files.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                let files = files.into_iter().map(Value::from_object).collect::<Vec<_>>();
+                let files = Value::from_object(files);
+                Some(files)
+            },
             _ => None
         }
     }
@@ -278,6 +299,7 @@ impl Object for DocumentationPage {
             "has_macros" => Ok(Value::from(self.has_macros())),
             "has_equ" => Ok(Value::from(self.has_equ())),
             "has_functions" => Ok(Value::from(self.has_functions())),
+            "has_files" => Ok(Value::from(self.has_files())),
 
             _ => {
                 Err(minijinja::Error::new(
@@ -343,6 +365,10 @@ impl DocumentationPage {
         self.content.iter().filter(|item| item.is_function())
     }
 
+    pub fn file_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
+        self.content.iter().filter(|item| item.is_file())
+    }
+
     pub fn has_labels(&self) -> bool {
         self.label_iter().next().is_some()
     }
@@ -357,6 +383,10 @@ impl DocumentationPage {
 
     pub fn has_functions(&self) -> bool {
         self.function_iter().next().is_some()
+    }
+
+    pub fn has_files(&self) -> bool {
+        self.file_iter().next().is_some()
     }
 
     /// Get a sorted list of unique source files

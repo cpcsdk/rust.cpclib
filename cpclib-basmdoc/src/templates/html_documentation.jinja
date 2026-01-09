@@ -587,6 +587,19 @@
                 <div class="file-name">File: {{ page.file_name }}</div>
             </div>
 
+            <!-- Files section (file-level documentation) -->
+            {% if page.has_files() %}
+            <section class="section">
+                <h2 id="files-section" class="anchor-offset">File Documentation</h2>
+                {% for item in page.files %}
+                <div class="item" data-source-file="{{ item.source_file }}">
+                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.short_summary | basename }}</h4>
+                    <div>{{ item.doc | markdown_to_html | safe }}</div>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
             <!-- Labels section -->
             {% if page.has_labels() %}
             <section class="section">
@@ -691,6 +704,17 @@
                     link.classList.remove('active');
                 }
             });
+            
+            // Scroll to file documentation if filtering by specific file
+            if (fileName !== '') {
+                const fileAnchorId = 'file_' + fileName.replace(/[\/\\.]/g, '_');
+                const fileAnchor = document.getElementById(fileAnchorId);
+                if (fileAnchor) {
+                    setTimeout(() => {
+                        fileAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            }
             
             // Filter sidebar items and hide empty sections
             sidebarSections.forEach(sidebarSection => {
