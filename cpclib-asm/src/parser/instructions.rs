@@ -31,6 +31,12 @@ use crate::{
     parse_register_iy, parse_register_iyh, parse_register_iyl, parse_value, parse_word
 };
 
+include!(concat!(
+    env!("OUT_DIR"),
+    "/instructions_names_generated.rs"
+));
+
+
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;

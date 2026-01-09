@@ -25,6 +25,9 @@ ureq = "2.10"
 pandoc = {version="0.8"}
 pulldown-cmark = "0.12"
 
+[build-dependencies]
+cpclib-asm.workspace = true
+
 [lints]
 workspace = true
 

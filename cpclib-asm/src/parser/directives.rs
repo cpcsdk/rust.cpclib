@@ -1,4 +1,8 @@
 // Directives module - contains directive-related constants and parsing functions
+
+// Re-export directive constants from parser module
+pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
+
 use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::rc::Rc;
