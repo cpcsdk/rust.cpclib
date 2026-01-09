@@ -76,7 +76,8 @@ impl DocumentedItem {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ItemDocumentation {
     item: DocumentedItem,
-    doc: String // TODO use MetaDocumentation
+    doc: String, // TODO use MetaDocumentation
+    source_file: String
 }
 
 impl Object for ItemDocumentation {
@@ -86,6 +87,7 @@ impl Object for ItemDocumentation {
             Some("summary") => Some(Value::from(self.item_long_summary())),
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key())),
+            Some("source_file") => Some(Value::from(self.source_file.clone())),
             Some("source") => {
                 if self.is_macro() {
                     Some(Value::from(self.macro_source()))
@@ -214,6 +216,13 @@ impl Object for DocumentationPage {
     fn get_value(self: &Arc<Self>, name: &Value) -> Option<minijinja::value::Value> {
         match name.as_str() {
             Some("file_name") => Some(Value::from(self.fname.clone())),
+            Some("file_list") => {
+                let files = self.file_list()
+                    .into_iter()
+                    .map(Value::from)
+                    .collect::<Vec<_>>();
+                Some(Value::from(files))
+            },
             Some("labels") => {
                 let mut labels = self
                     .label_iter()
@@ -350,6 +359,18 @@ impl DocumentationPage {
         self.function_iter().next().is_some()
     }
 
+    /// Get a sorted list of unique source files
+    pub fn file_list(&self) -> Vec<String> {
+        let mut files: Vec<String> = self.content
+            .iter()
+            .map(|item| item.source_file.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        files.sort();
+        files
+    }
+
     /// Return a string that encode the documentation page in markdown
     pub fn to_markdown(&self) -> String {
         let page = Value::from_object(self.clone());
@@ -388,6 +409,16 @@ impl DocumentationPage {
             html::push_html(&mut html_output, parser);
             
             Ok(html_output)
+        });
+        
+        // Add a basename filter to extract filename from path
+        env.add_filter("basename", |value: String| -> Result<String, minijinja::Error> {
+            use std::path::Path;
+            let path = Path::new(&value);
+            Ok(path.file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or(&value)
+                .to_string())
         });
         
         const TMPL_NAME: &str = "html_documentation.jinja";
@@ -485,14 +516,16 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                 documentation_type(t, last_global_label.as_deref()).map(|item| {
                     ItemDocumentation {
                         item,
-                        doc
+                        doc,
+                        source_file: fname.to_string()
                     }
                 })
             }
             else {
                 Some(ItemDocumentation {
                     item: DocumentedItem::File(fname.to_string()),
-                    doc
+                    doc,
+                    source_file: fname.to_string()
                 })
             }
         })

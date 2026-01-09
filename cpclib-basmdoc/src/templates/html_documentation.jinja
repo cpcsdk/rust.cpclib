@@ -472,6 +472,36 @@
             display: none;
         }
 
+        .item.filtered {
+            display: none;
+        }
+
+        .sidebar-item.filtered {
+            display: none;
+        }
+
+        .file-filter-link {
+            display: block;
+            padding: 6px 10px;
+            margin: 2px 0;
+            border-radius: 4px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .file-filter-link.active {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+        }
+
+        .file-filter-link:hover {
+            background-color: #e8f4f8;
+        }
+
+        .file-filter-link.active:hover {
+            background-color: #2980b9;
+        }
+
         .no-results {
             padding: 20px;
             text-align: center;
@@ -492,43 +522,61 @@
     <div class="container">
         <!-- Sidebar with Table of Contents -->
         <aside class="sidebar">
-            <h1>📚 Documentation</h1>
-            <div class="file-name">{{ page.file_name }}</div>
+            <h1>📚 BASMDoc</h1>
+            <!--<div class="file-name">{{ page.file_name }}</div>-->
 
-            {% if page.has_labels() %}
-            <h2>Labels</h2>
-            <ul>
-                {% for item in page.labels %}
-                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+            {% if page.file_list | length > 1 %}
+            <h2>Files</h2>
+            <ul id="file-filter-list">
+                <li><a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a></li>
+                {% for file in page.file_list %}
+                <li><a href="#" onclick="filterByFile('{{ file }}'); return false;" class="file-filter-link" data-file="{{ file }}">{{ file | basename }}</a></li>
                 {% endfor %}
             </ul>
+            {% endif %}
+
+            {% if page.has_labels() %}
+            <div class="sidebar-section" id="sidebar-labels">
+                <h2>Labels</h2>
+                <ul>
+                    {% for item in page.labels %}
+                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
             {% endif %}
 
             {% if page.has_macros() %}
-            <h2>Macros</h2>
-            <ul>
-                {% for item in page.macros %}
-                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                {% endfor %}
-            </ul>
+            <div class="sidebar-section" id="sidebar-macros">
+                <h2>Macros</h2>
+                <ul>
+                    {% for item in page.macros %}
+                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
             {% endif %}
 
             {% if page.has_functions() %}
-            <h2>Functions</h2>
-            <ul>
-                {% for item in page.functions %}
-                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                {% endfor %}
-            </ul>
+            <div class="sidebar-section" id="sidebar-functions">
+                <h2>Functions</h2>
+                <ul>
+                    {% for item in page.functions %}
+                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
             {% endif %}
 
             {% if page.has_equ() %}
-            <h2>Equs</h2>
-            <ul>
-                {% for item in page.equs %}
-                <li><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                {% endfor %}
-            </ul>
+            <div class="sidebar-section" id="sidebar-equs">
+                <h2>Equs</h2>
+                <ul>
+                    {% for item in page.equs %}
+                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
             {% endif %}
         </aside>
 
@@ -544,7 +592,7 @@
             <section class="section">
                 <h2 id="labels-section" class="anchor-offset">Labels</h2>
                 {% for item in page.labels %}
-                <div class="item">
+                <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
                 </div>
@@ -557,7 +605,7 @@
             <section class="section">
                 <h2 id="macros-section" class="anchor-offset">Macros</h2>
                 {% for item in page.macros %}
-                <div class="item">
+                <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
                     {% if item.source %}
@@ -578,7 +626,7 @@
             <section class="section">
                 <h2 id="functions-section" class="anchor-offset">Functions</h2>
                 {% for item in page.functions %}
-                <div class="item">
+                <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
                     {% if item.source %}
@@ -599,7 +647,7 @@
             <section class="section">
                 <h2 id="equs-section" class="anchor-offset">Equs</h2>
                 {% for item in page.equs %}
-                <div class="item">
+                <div class="item" data-source-file="{{ item.source_file }}">
                     <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
                     <div>{{ item.doc | markdown_to_html | safe }}</div>
                 </div>
@@ -627,6 +675,72 @@
             }
         }
 
+        // File filtering functionality
+        function filterByFile(fileName) {
+            const items = document.querySelectorAll('.item');
+            const sections = document.querySelectorAll('.section');
+            const fileLinks = document.querySelectorAll('.file-filter-link');
+            const sidebarItems = document.querySelectorAll('.sidebar-item');
+            const sidebarSections = document.querySelectorAll('.sidebar-section');
+            
+            // Update active link
+            fileLinks.forEach(link => {
+                if (link.dataset.file === fileName) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+            
+            // Filter sidebar items and hide empty sections
+            sidebarSections.forEach(sidebarSection => {
+                let visibleSidebarCount = 0;
+                const sidebarSectionItems = sidebarSection.querySelectorAll('.sidebar-item');
+                
+                sidebarSectionItems.forEach(item => {
+                    const itemFile = item.dataset.sourceFile;
+                    
+                    if (fileName === '' || itemFile === fileName) {
+                        item.classList.remove('filtered');
+                        visibleSidebarCount++;
+                    } else {
+                        item.classList.add('filtered');
+                    }
+                });
+                
+                // Hide sidebar section if no visible items
+                if (visibleSidebarCount === 0) {
+                    sidebarSection.style.display = 'none';
+                } else {
+                    sidebarSection.style.display = 'block';
+                }
+            });
+            
+            // Filter main content items
+            sections.forEach(section => {
+                let visibleCount = 0;
+                const sectionItems = section.querySelectorAll('.item');
+                
+                sectionItems.forEach(item => {
+                    const itemFile = item.dataset.sourceFile;
+                    
+                    if (fileName === '' || itemFile === fileName) {
+                        item.classList.remove('filtered');
+                        visibleCount++;
+                    } else {
+                        item.classList.add('filtered');
+                    }
+                });
+                
+                // Show/hide section based on whether it has visible items
+                if (visibleCount === 0) {
+                    section.style.display = 'none';
+                } else {
+                    section.style.display = 'block';
+                }
+            });
+        }
+
         // Search functionality
         document.addEventListener('DOMContentLoaded', function() {
             const searchBox = document.getElementById('searchBox');
@@ -641,6 +755,11 @@
                     const sectionItems = section.querySelectorAll('.item');
                     
                     sectionItems.forEach(item => {
+                        // Skip if already filtered by file
+                        if (item.classList.contains('filtered')) {
+                            return;
+                        }
+                        
                         const title = item.querySelector('h4').textContent.toLowerCase();
                         const content = item.textContent.toLowerCase();
                         
@@ -661,7 +780,7 @@
                 });
                 
                 // Check if any items are visible
-                const visibleItems = document.querySelectorAll('.item:not(.hidden)');
+                const visibleItems = document.querySelectorAll('.item:not(.hidden):not(.filtered)');
                 const noResultsMsg = document.querySelector('.no-results');
                 
                 if (visibleItems.length === 0 && searchTerm !== '') {
@@ -682,25 +801,6 @@
             // Initialize syntax highlighting
             hljs.highlightAll();
         });
-        
-        // Re-highlight when source is toggled
-        function toggleSource(id) {
-            const content = document.getElementById(id);
-            const button = event.target;
-            
-            if (content.classList.contains('show')) {
-                content.classList.remove('show');
-                button.classList.remove('active');
-            } else {
-                content.classList.add('show');
-                button.classList.add('active');
-                // Highlight the code when shown
-                const codeBlock = content.querySelector('code');
-                if (codeBlock && !codeBlock.dataset.highlighted) {
-                    hljs.highlightElement(codeBlock);
-                }
-            }
-        }
     </script>
 </body>
 </html>
