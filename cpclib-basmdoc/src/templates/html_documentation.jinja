@@ -94,7 +94,7 @@
             <ul id="file-filter-list">
                 <li><a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a></li>
                 {% for file in page.file_list %}
-                <li><a href="#" onclick="filterByFile('{{ file }}'); return false;" class="file-filter-link" data-file="{{ file }}">{{ file | basename }}</a></li>
+                <li><a href="#" onclick="filterByFile('{{ file }}'); return false;" class="file-filter-link" data-file="{{ file }}">{{ file }}</a></li>
                 {% endfor %}
             </ul>
             {% endif %}

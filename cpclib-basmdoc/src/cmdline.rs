@@ -15,7 +15,7 @@ pub fn build_args_parser() -> clap::Command {
         )
         .arg(
             clap::Arg::new("input")
-                .help("Input assembly file")
+                .help("Input assembly file(s) or folder(s) (recursively searches for .asm files in folders)")
                 .required(true)
                 .num_args(1..)
         )
@@ -33,6 +33,122 @@ pub fn build_args_parser() -> clap::Command {
                 .long("undocumented")
                 .action(clap::ArgAction::SetTrue)
         )
+}
+
+/// Find the longest common prefix of all paths (up to directory boundary)
+fn longest_common_prefix(paths: &[String]) -> String {
+    if paths.is_empty() {
+        return String::new();
+    }
+    
+    if paths.len() == 1 {
+        // For a single file, use its parent directory as prefix
+        let path = std::path::Path::new(&paths[0]);
+        return path.parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+    }
+    
+    // Convert all paths to components for comparison
+    let path_components: Vec<Vec<&str>> = paths
+        .iter()
+        .map(|p| {
+            std::path::Path::new(p)
+                .components()
+                .filter_map(|c| {
+                    if let std::path::Component::Normal(s) = c {
+                        s.to_str()
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    
+    // Find the minimum number of components
+    let min_len = path_components.iter().map(|v| v.len()).min().unwrap_or(0);
+    
+    // Find common prefix components
+    let mut common = Vec::new();
+    for i in 0..min_len {
+        let first = path_components[0][i];
+        if path_components.iter().all(|components| components[i] == first) {
+            common.push(first);
+        } else {
+            break;
+        }
+    }
+    
+    // Don't include the filename itself in the prefix
+    if !common.is_empty() && common.len() == min_len {
+        common.pop();
+    }
+    
+    if common.is_empty() {
+        String::new()
+    } else {
+        common.join("/")
+    }
+}
+
+/// Remove the common prefix from a path
+fn remove_prefix(path: &str, prefix: &str) -> String {
+    if prefix.is_empty() {
+        return path.to_string();
+    }
+    
+    let path = path.replace("\\", "/");
+    
+    // Handle both absolute and relative paths
+    let prefix_patterns = vec![
+        format!("/{}/", prefix),  // /prefix/
+        format!("{}/", prefix),   // prefix/
+    ];
+    
+    for pattern in &prefix_patterns {
+        if let Some(stripped) = path.strip_prefix(pattern) {
+            return stripped.to_string();
+        }
+    }
+    
+    // If path equals prefix, return just the filename
+    if path.ends_with(&format!("/{}", prefix)) || path == prefix {
+        return std::path::Path::new(&path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&path)
+            .to_string();
+    }
+    
+    path
+}
+
+/// Recursively find all .asm files in a directory
+fn find_asm_files(path: &std::path::Path) -> Result<Vec<String>, String> {
+    let mut asm_files = Vec::new();
+    
+    let entries = std::fs::read_dir(path)
+        .map_err(|e| format!("Failed to read directory {}: {}", path.display(), e))?;
+    
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let path = entry.path();
+        
+        if path.is_dir() {
+            // Recursively search subdirectories
+            asm_files.extend(find_asm_files(&path)?);
+        } else if path.is_file() {
+            // Check if file has .asm extension
+            if let Some(ext) = path.extension() {
+                if ext.eq_ignore_ascii_case("asm") {
+                    asm_files.push(path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+    
+    Ok(asm_files)
 }
 
 pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result<(), String> {
@@ -63,12 +179,38 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         expanded_inputs
     }
     else {
-        inputs.map(|s| s.to_string()).collect()
+        // Handle both files and directories
+        let mut expanded_inputs = Vec::new();
+        
+        for input in inputs {
+            let path = std::path::Path::new(input);
+            
+            if path.is_dir() {
+                // It's a directory - find all .asm files recursively
+                expanded_inputs.extend(find_asm_files(path)?);
+            } else if path.is_file() {
+                // It's a file - add it directly
+                expanded_inputs.push(input.to_string());
+            } else {
+                return Err(format!("Input '{}' is neither a file nor a directory", input));
+            }
+        }
+        
+        if expanded_inputs.is_empty() {
+            return Err("No .asm files found in the provided directories".to_string());
+        }
+        
+        expanded_inputs
     };
     let inputs = inputs.into_iter();
 
     let output = std::path::Path::new(output);
     let include_undocumented = matches.get_flag("undocumented");
+
+    // Calculate common prefix for all input files
+    let input_vec: Vec<String> = inputs.collect();
+    let common_prefix = longest_common_prefix(&input_vec);
+    let inputs = input_vec.into_iter();
 
     if let Some(ext) = output.extension() {
         let is_md = ext.eq_ignore_ascii_case("md");
@@ -77,7 +219,10 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         if is_html {
             // Generate HTML directly using minijinja - merge all pages into one
             let pages: Result<Vec<_>, String> = inputs
-                .map(|input| DocumentationPage::for_file(&input, include_undocumented))
+                .map(|input| {
+                    let display_name = remove_prefix(&input, &common_prefix);
+                    DocumentationPage::for_file(&input, &display_name, include_undocumented)
+                })
                 .collect();
             
             let html = match pages {
@@ -95,7 +240,10 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         else {
             // Generate markdown (for .md or PDF)
             let mut docs = inputs
-                .map(|input| DocumentationPage::for_file(&input, include_undocumented))
+                .map(|input| {
+                    let display_name = remove_prefix(&input, &common_prefix);
+                    DocumentationPage::for_file(&input, &display_name, include_undocumented)
+                })
                 .map(|page| page.map(|page| page.to_markdown()))
                 .map(|res| {
                     match res {

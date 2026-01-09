@@ -412,13 +412,13 @@ impl Object for DocumentationPage {
 }
 impl DocumentationPage {
     // TODO handle errors
-    pub fn for_file(fname: &str, include_undocumented: bool) -> Result<Self, String> {
+    pub fn for_file(fname: &str, display_name: &str, include_undocumented: bool) -> Result<Self, String> {
         let code = std::fs::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
-        let mut page = build_documentation_page_from_aggregates(fname, doc);
+        let mut page = build_documentation_page_from_aggregates(display_name, doc);
         
         // Populate cross-references
         page = populate_cross_references(page, &tokens);
