@@ -1556,7 +1556,7 @@ fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
                 .map(|ink: Ink| ink.gate_array_value())
                 .map(|ga| format!("0x{ga:x}"))
                 .join(",");
-            format!("\tdw {repr}")
+            format!("\tdb {repr}")
         })
         .join("\n")
 }
@@ -1570,7 +1570,7 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
                 .into_iter()
                 .map(|ink: Ink| format!("GA_{ink}"))
                 .join(",");
-            format!("\tdw {repr}")
+            format!("\tdb {repr}")
         })
         .join("\n")
 }
