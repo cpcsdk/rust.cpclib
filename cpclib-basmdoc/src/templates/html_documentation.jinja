@@ -224,7 +224,10 @@
                 <h2 id="labels-section" class="anchor-offset">Labels</h2>
                 {% for item in page.labels %}
                 <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <h4 id="{{item.key}}" class="anchor-offset item-header">
+                        <span class="item-name">{{ item.summary }}</span>
+                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+                    </h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
                     {{ show_references(item) }}
                 </div>
@@ -238,7 +241,10 @@
                 <h2 id="macros-section" class="anchor-offset">Macros</h2>
                 {% for item in page.macros %}
                 <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <h4 id="{{item.key}}" class="anchor-offset item-header">
+                        <span class="item-name">{{ item.summary }}</span>
+                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+                    </h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
                     {% if item.source %}
                     <div class="macro-source">
@@ -260,7 +266,10 @@
                 <h2 id="functions-section" class="anchor-offset">Functions</h2>
                 {% for item in page.functions %}
                 <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <h4 id="{{item.key}}" class="anchor-offset item-header">
+                        <span class="item-name">{{ item.summary }}</span>
+                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+                    </h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
                     {% if item.source %}
                     <div class="macro-source">
@@ -282,7 +291,10 @@
                 <h2 id="equs-section" class="anchor-offset">Equs</h2>
                 {% for item in page.equs %}
                 <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.summary }}</h4>
+                    <h4 id="{{item.key}}" class="anchor-offset item-header">
+                        <span class="item-name">{{ item.summary }}</span>
+                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+                    </h4>
                     <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
                     {{ show_references(item) }}
                 </div>

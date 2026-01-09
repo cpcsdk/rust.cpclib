@@ -3,7 +3,7 @@ pub mod cmdline;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use cpclib_asm::{ListingElement, parse_z80_str};
+use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str};
 use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
 use minijinja::{Environment, ErrorKind, Value, context};
@@ -167,6 +167,7 @@ pub struct ItemDocumentation {
     item: DocumentedItem,
     doc: String, // TODO use MetaDocumentation
     source_file: String,
+    line_number: usize, // 1-indexed line number where the symbol is defined
     references: Vec<SymbolReference>
 }
 
@@ -178,6 +179,7 @@ impl Object for ItemDocumentation {
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key())),
             Some("source_file") => Some(Value::from(self.source_file.clone())),
+            Some("line_number") => Some(Value::from(self.line_number)),
             Some("references") => {
                 // Convert references to a Value that can be used in templates
                 let refs: Vec<Value> = self.references.iter().map(|r| {
@@ -505,6 +507,7 @@ impl DocumentationPage {
                     item: DocumentedItem::File(source_file.clone()),
                     doc: docs.join("\n\n"),
                     source_file,
+                    line_number: 0, // File-level documentation doesn't have a specific line
                     references: Vec::new()
                 }
             })
@@ -741,17 +744,18 @@ pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_l
 
 pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
     fname: &str,
-    agg: Vec<(String, Option<&T>, Option<String>)>
+    agg: Vec<(String, Option<&T>, Option<String>, usize)>
 ) -> DocumentationPage {
     let content = agg
         .into_iter()
-        .filter_map(|(doc, t, last_global_label)| {
+        .filter_map(|(doc, t, last_global_label, line_number)| {
             if let Some(t) = t {
                 documentation_type(t, last_global_label.as_deref()).map(|item| {
                     ItemDocumentation {
                         item,
                         doc,
                         source_file: fname.to_string(),
+                        line_number,
                         references: Vec::new()
                     }
                 })
@@ -761,6 +765,7 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                     item: DocumentedItem::File(fname.to_string()),
                     doc,
                     source_file: fname.to_string(),
+                    line_number, // Use provided line number (typically 0 for file-level docs)
                     references: Vec::new()
                 })
             }
@@ -776,10 +781,11 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
 /// Local labels (starting with ".") are resolved using the tracked parent global label
-pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
+/// Returns: (doc_string, token_ref, parent_label, line_number)
+pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
     tokens: &[T],
     include_undocumented: bool
-) -> Vec<(String, Option<&T>, Option<String>)> {
+) -> Vec<(String, Option<&T>, Option<String>, usize)> {
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
         #[default]
@@ -869,7 +875,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
         else if is_local_documentation(token) {
             if in_process_comment.is_global() {
                 // here we can release the global comment
-                doc.push((in_process_comment.consume(), None, None));
+                doc.push((in_process_comment.consume(), None, None, 0));
             }
             in_process_comment.set_kind(CommentKind::Local);
             (true, false)
@@ -896,6 +902,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
             let should_skip = is_local_label && last_global_label.is_none();
             
             if !should_skip {
+                let line_number = token.span().location_line() as usize;
                 if !in_process_comment.is_unspecified() {
                     // we comment an item if any
                     let documented = if in_process_comment.is_global() {
@@ -906,11 +913,11 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
                         // but we do for a local comment
                         Some(token)
                     };
-                    doc.push((in_process_comment.consume(), documented, last_global_label.clone()));
+                    doc.push((in_process_comment.consume(), documented, last_global_label.clone(), line_number));
                 }
                 else if include_undocumented && (token.is_macro_definition() || token.is_function_definition()) {
                     // Include undocumented macros and functions if flag is set
-                    doc.push((String::new(), Some(token), None));
+                    doc.push((String::new(), Some(token), None, line_number));
                 }
                 else {
                     // we add no comment, so we do nothing
@@ -920,7 +927,8 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
         else {
             // this is not a doc or a documentable, so we can eventually treat a global
             if in_process_comment.is_global() {
-                doc.push((in_process_comment.consume(), None, None));
+                // For file-level documentation, line_number is 0 (or could be 1)
+                doc.push((in_process_comment.consume(), None, None, 0));
             }
             else if in_process_comment.is_local() {
                 // comment is lost as there is nothing else to comment
@@ -931,7 +939,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString>(
 
     // The last comment can only be a global comment
     if in_process_comment.is_global() {
-        doc.push((in_process_comment.consume(), None, None));
+        doc.push((in_process_comment.consume(), None, None, 0));
     }
 
     doc

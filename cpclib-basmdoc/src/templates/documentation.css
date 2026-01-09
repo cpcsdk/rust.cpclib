@@ -261,6 +261,25 @@ body {
     margin-top: 0;
 }
 
+/* Item header with location info on the right */
+.item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.item-name {
+    flex: 1;
+}
+
+.item-header .ref-location {
+    flex-shrink: 0;
+    font-size: 0.75em;
+    font-weight: normal;
+    white-space: nowrap;
+}
+
 /* Collapsible source code */
 .macro-source {
     margin-top: 15px;
