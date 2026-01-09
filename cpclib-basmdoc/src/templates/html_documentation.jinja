@@ -27,6 +27,12 @@
                         relevance: 0
                     }),
                     {
+                        // Macro/repeat block template variables: {variable_name}
+                        className: 'params',
+                        begin: '\\{[a-zA-Z_][a-zA-Z0-9_]*\\}',
+                        relevance: 10
+                    },
+                    {
                         className: 'number',
                         variants: [
                             { begin: '\\b0[xX][0-9a-fA-F]+' }, // hex
@@ -202,6 +208,12 @@
             background-color: transparent;
             padding: 0;
             color: #333;
+        }
+
+        /* Custom syntax highlighting colors for BASM template variables */
+        .hljs-params {
+            color: #e06c75 !important; /* Bright red/pink for template variables like {comment} */
+            font-weight: 600;
         }
 
         .main-content p {
