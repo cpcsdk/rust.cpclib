@@ -174,11 +174,29 @@ function copyToClipboard(text, button) {
 // Search functionality
 document.addEventListener('DOMContentLoaded', function() {
     const searchBox = document.getElementById('searchBox');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
     const items = document.querySelectorAll('.item');
     const sections = document.querySelectorAll('.section');
     
+    // Function to clear search
+    function clearSearch() {
+        searchBox.value = '';
+        performSearch();
+        searchBox.focus();
+    }
+    
+    // Update clear button visibility based on search input
+    function updateClearButtonVisibility() {
+        if (searchBox.value.trim() !== '') {
+            clearSearchBtn.classList.add('visible');
+        } else {
+            clearSearchBtn.classList.remove('visible');
+        }
+    }
+    
     // Function to perform search filtering
     function performSearch() {
+        updateClearButtonVisibility();
         const searchTerm = searchBox.value.toLowerCase().trim();
         const indexItems = document.querySelectorAll('.index-item');
         const indexLetters = document.querySelectorAll('.index-letter');
@@ -286,6 +304,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Apply search on input
     searchBox.addEventListener('input', performSearch);
+    
+    // Clear search button click handler
+    clearSearchBtn.addEventListener('click', clearSearch);
     
     // Apply search on page load if browser restored value
     if (searchBox.value.trim() !== '') {

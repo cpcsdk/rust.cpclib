@@ -382,8 +382,9 @@ html {
 }
 
 .search-box {
+    position: relative;
     width: 300px;
-    padding: 10px 15px;
+    padding: 10px 40px 10px 15px;
     border: 2px solid #3498db;
     border-radius: 20px;
     font-size: 0.95em;
@@ -398,6 +399,43 @@ html {
 
 .search-box::placeholder {
     color: #999;
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background-color: transparent;
+    color: #333;
+    border: none;
+    border-radius: 50%;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: background-color 0.2s, opacity 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.clear-search-btn.visible {
+    opacity: 0.6;
+    pointer-events: auto;
+}
+
+.clear-search-btn:hover {
+    opacity: 1;
+    background-color: #f0f0f0;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.clear-search-btn:active {
+    transform: translateY(-50%) scale(0.9);
 }
 
 .item.hidden {
