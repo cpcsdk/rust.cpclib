@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Embed)]
 #[folder = "src/templates/"]
 #[include = "*.jinja"]
+#[include = "*.js"]
+#[include = "*.css"]
 struct Templates;
 
 const HIGHLIGHTJS_URL: &str = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js";
@@ -60,6 +62,26 @@ fn get_highlightjs_css() -> String {
     download_or_cache(HIGHLIGHTJS_CSS_URL, "atom-one-dark.min.css")
         .unwrap_or_else(|e| {
             eprintln!("Warning: Failed to download highlight.js CSS: {}. Styling will be limited.", e);
+            String::new()
+        })
+}
+
+// Get documentation.js content from embedded templates
+fn get_documentation_js() -> String {
+    Templates::get("documentation.js")
+        .map(|file| String::from_utf8_lossy(file.data.as_ref()).to_string())
+        .unwrap_or_else(|| {
+            eprintln!("Warning: Failed to load documentation.js");
+            String::new()
+        })
+}
+
+// Get documentation.css content from embedded templates
+fn get_documentation_css() -> String {
+    Templates::get("documentation.css")
+        .map(|file| String::from_utf8_lossy(file.data.as_ref()).to_string())
+        .unwrap_or_else(|| {
+            eprintln!("Warning: Failed to load documentation.css");
             String::new()
         })
 }
@@ -602,6 +624,8 @@ impl DocumentationPage {
         // Add embedded assets as globals
         env.add_global("highlightjs", get_highlightjs());
         env.add_global("highlightjs_css", get_highlightjs_css());
+        env.add_global("documentation_js", get_documentation_js());
+        env.add_global("documentation_css", get_documentation_css());
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
         tmpl.render(context! {
