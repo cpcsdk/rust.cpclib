@@ -218,16 +218,28 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
 
         if is_html {
             // Generate HTML directly using minijinja - merge all pages into one
-            let pages: Result<Vec<_>, String> = inputs
+            // Parse all files and collect both pages and tokens
+            let pages_and_tokens: Result<Vec<_>, String> = inputs
                 .map(|input| {
                     let display_name = remove_prefix(&input, &common_prefix);
-                    DocumentationPage::for_file(&input, &display_name, include_undocumented)
+                    DocumentationPage::for_file_without_refs(&input, &display_name, include_undocumented)
+                        .map(|(page, tokens)| (page, display_name, tokens))
                 })
                 .collect();
             
-            let html = match pages {
-                Ok(pages) => {
+            let html = match pages_and_tokens {
+                Ok(pages_and_tokens) => {
+                    // Separate pages and tokens with their source file names
+                    let pages: Vec<_> = pages_and_tokens.iter()
+                        .map(|(page, _, _)| page.clone())
+                        .collect();
+                    let all_tokens: Vec<(String, _)> = pages_and_tokens.into_iter()
+                        .map(|(_, display_name, tokens)| (display_name, tokens))
+                        .collect();
+                    
+                    // Merge pages and then populate cross-references from ALL files
                     let merged_page = DocumentationPage::merge(pages);
+                    let merged_page = merged_page.populate_all_cross_references(&all_tokens);
                     merged_page.to_html()
                 },
                 Err(e) => format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)

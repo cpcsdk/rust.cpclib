@@ -155,7 +155,7 @@
                 <ul class="reference-list">
                     {% for ref in item.references %}
                     <li class="reference-item">
-                        <span class="ref-location">{{ ref.source_file | basename }}:{{ ref.line_number }}</span>
+                        <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
                         <code class="ref-context">{{ ref.context }}</code>
                     </li>
                     {% endfor %}

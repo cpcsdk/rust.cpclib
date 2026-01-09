@@ -3,7 +3,7 @@ pub mod cmdline;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str};
+use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str, LocatedListing};
 use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
 use minijinja::{Environment, ErrorKind, Value, context};
@@ -430,6 +430,20 @@ impl DocumentationPage {
         Ok(page)
     }
 
+    /// Parse file without populating cross-references (for later batch processing)
+    /// Returns both the documentation page and the parsed tokens
+    pub fn for_file_without_refs(fname: &str, display_name: &str, include_undocumented: bool) -> Result<(Self, LocatedListing), String> {
+        let code = std::fs::read_to_string(fname)
+            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
+        let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
+        let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
+
+        let mut page = build_documentation_page_from_aggregates(display_name, doc);
+        page.all_files = vec![display_name.to_string()];
+        
+        Ok((page, tokens))
+    }
+
     /// Merge multiple documentation pages into a single page
     pub fn merge(pages: Vec<Self>) -> Self {
         if pages.is_empty() {
@@ -464,6 +478,34 @@ impl DocumentationPage {
             content,
             all_files
         }
+    }
+
+    /// Populate cross-references for all symbols from all files
+    /// This should be called after merging pages to get cross-file references
+    pub fn populate_all_cross_references(mut self, all_tokens: &[(String, LocatedListing)]) -> Self {
+        // Collect all references from all files
+        let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
+        
+        for (source_file, tokens) in all_tokens {
+            let refs = collect_cross_references(tokens, source_file);
+            for (symbol, mut symbol_refs) in refs {
+                all_refs.entry(symbol)
+                    .or_insert_with(Vec::new)
+                    .append(&mut symbol_refs);
+            }
+        }
+        
+        // Match references to documented items
+        for item in &mut self.content {
+            let symbol_name = item.item_short_summary();
+            
+            if let Some(refs) = all_refs.get(&symbol_name) {
+                // Replace existing references with complete set from all files
+                item.references = refs.clone();
+            }
+        }
+        
+        self
     }
 
     pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {

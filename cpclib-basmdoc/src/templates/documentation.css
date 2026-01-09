@@ -273,10 +273,10 @@ body {
     flex: 1;
 }
 
-.item-header .ref-location {
+h4.item-header .ref-location {
     flex-shrink: 0;
-    font-size: 0.75em;
-    font-weight: normal;
+    font-size: 0.75em !important;
+    font-weight: normal !important;
     white-space: nowrap;
 }
 
