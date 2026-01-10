@@ -1,5 +1,6 @@
 use cpclib_common::clap;
 use cpclib_common::itertools::Itertools;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::DocumentationPage;
 
@@ -182,6 +183,15 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         // Handle both files and directories
         let mut expanded_inputs = Vec::new();
         
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap()
+        );
+        spinner.set_message("Searching for assembly files...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         for input in inputs {
             let path = std::path::Path::new(input);
             
@@ -192,9 +202,12 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
                 // It's a file - add it directly
                 expanded_inputs.push(input.to_string());
             } else {
+                spinner.finish_and_clear();
                 return Err(format!("Input '{}' is neither a file nor a directory", input));
             }
         }
+        
+        spinner.finish_with_message(format!("Found {} assembly files", expanded_inputs.len()));
         
         if expanded_inputs.is_empty() {
             return Err("No .asm files found in the provided directories".to_string());
@@ -219,13 +232,26 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
         if is_html {
             // Generate HTML directly using minijinja - merge all pages into one
             // Parse all files and collect both pages and tokens
-            let pages_and_tokens: Result<Vec<_>, String> = inputs
+            let input_vec: Vec<_> = inputs.collect();
+            
+            let pb_parse = ProgressBar::new(input_vec.len() as u64);
+            pb_parse.set_style(ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
+                .unwrap()
+                .progress_chars("#>-"));
+            pb_parse.set_message("Parsing assembly files");
+            
+            let pages_and_tokens: Result<Vec<_>, String> = input_vec.into_iter()
                 .map(|input| {
                     let display_name = remove_prefix(&input, &common_prefix);
-                    DocumentationPage::for_file_without_refs(&input, &display_name, include_undocumented)
-                        .map(|(page, tokens)| (page, display_name, tokens))
+                    let result = DocumentationPage::for_file_without_refs(&input, &display_name, include_undocumented)
+                        .map(|(page, tokens)| (page, display_name, tokens));
+                    pb_parse.inc(1);
+                    result
                 })
                 .collect();
+            
+            pb_parse.finish_with_message("Parsing complete");
             
             let html = match pages_and_tokens {
                 Ok(pages_and_tokens) => {
@@ -238,9 +264,32 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
                         .collect();
                     
                     // Merge pages and then populate cross-references from ALL files
+                    let spinner_merge = ProgressBar::new_spinner();
+                    spinner_merge.set_style(
+                        ProgressStyle::default_spinner()
+                            .template("{spinner:.cyan} {msg}")
+                            .unwrap()
+                    );
+                    spinner_merge.set_message("Merging documentation pages...");
+                    spinner_merge.enable_steady_tick(std::time::Duration::from_millis(100));
+                    
                     let merged_page = DocumentationPage::merge(pages);
+                    spinner_merge.finish_with_message("Merge complete");
+                    
                     let merged_page = merged_page.populate_all_cross_references(&all_tokens);
-                    merged_page.to_html()
+                    
+                    let spinner = ProgressBar::new_spinner();
+                    spinner.set_style(
+                        ProgressStyle::default_spinner()
+                            .template("{spinner:.cyan} {msg}")
+                            .unwrap()
+                    );
+                    spinner.set_message("Generating HTML documentation...");
+                    spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+                    
+                    let html = merged_page.to_html();
+                    spinner.finish_with_message("HTML generation complete");
+                    html
                 },
                 Err(e) => format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
             };

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::borrow::Cow;
 
 use dashmap::DashMap;
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -582,6 +583,15 @@ impl DocumentationPage {
     /// Populate cross-references for all symbols from all files
     /// This should be called after merging pages to get cross-file references
     pub fn populate_all_cross_references(mut self, all_tokens: &[(String, LocatedListing)]) -> Self {
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap()
+        );
+        spinner.set_message("Preparing symbol analysis...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         // Collect and sort symbol names once (OPTIMIZATION: sort once, not per macro)
         let mut symbol_names: Vec<String> = self.content.iter()
             .filter(|item| !item.is_file())
@@ -596,23 +606,39 @@ impl DocumentationPage {
         // Create shared cache for ALL operations (MAJOR OPTIMIZATION: shared across all parallel threads)
         let highlight_cache = DashMap::new();
         
+        spinner.finish_with_message("Preparation complete");
+        
+        // Create progress bar for file processing
+        let pb = ProgressBar::new(all_tokens.len() as u64);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
+            .unwrap()
+            .progress_chars("#>-"));
+        pb.set_message("Analyzing files");
+        
         // Collect all references from all files
         // Only use parallelization if workload is large enough to offset overhead (threshold: 10 files)
         let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if all_tokens.len() > 10 {
             all_tokens.par_iter()
                 .map(|(source_file, tokens)| {
                     let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                    collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache)
+                    let result = collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache);
+                    pb.inc(1);
+                    result
                 })
                 .collect()
         } else {
             all_tokens.iter()
                 .map(|(source_file, tokens)| {
                     let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                    collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache)
+                    let result = collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache);
+                    pb.inc(1);
+                    result
                 })
                 .collect()
         };
+        
+        pb.finish_with_message("File analysis complete");
         
         // Merge all references
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
@@ -628,6 +654,14 @@ impl DocumentationPage {
         let macro_func_items: Vec<_> = self.content.iter()
             .filter(|item| item.is_macro() || item.is_function())
             .collect();
+        
+        // Create progress bar for macro/function processing
+        let pb_macro = ProgressBar::new(macro_func_items.len() as u64);
+        pb_macro.set_style(ProgressStyle::default_bar()
+            .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} items ({eta})")
+            .unwrap()
+            .progress_chars("#>-"));
+        pb_macro.set_message("Analyzing macros/functions");
         
         // Only parallelize if workload is large enough (threshold: 20 macros/functions)
         let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if macro_func_items.len() > 20 {
@@ -648,7 +682,9 @@ impl DocumentationPage {
                     
                     let base_line = item.line_number;
                     let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                    collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache)
+                    let result = collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache);
+                    pb_macro.inc(1);
+                    result
                 })
                 .collect()
         } else {
@@ -669,10 +705,14 @@ impl DocumentationPage {
                     
                     let base_line = item.line_number;
                     let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                    collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache)
+                    let result = collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache);
+                    pb_macro.inc(1);
+                    result
                 })
                 .collect()
         };
+        
+        pb_macro.finish_with_message("Macro/function analysis complete");
         
         // Merge macro/function references
         for refs in macro_refs {
@@ -694,7 +734,18 @@ impl DocumentationPage {
         }
         
         // Link symbols in source code
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap()
+        );
+        spinner.set_message("Linking symbols in source code...");
+        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+        
         self = self.link_source_symbols();
+        
+        spinner.finish_with_message("Symbol linking complete");
         
         self
     }
