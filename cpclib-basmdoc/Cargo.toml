@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 description.workspace = true
 
+[features]
+default = ["rayon"]
+rayon = ["dep:rayon"]
+
 [dependencies]
 cpclib-asm.workspace = true
 cpclib-tokens.workspace = true
@@ -17,6 +21,7 @@ delegate.workspace = true
 glob.workspace = true
 minijinja = { workspace = true, features = ["loader"] }
 regex = "1.11"
+rayon = { workspace = true, optional = true }
 rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
 serde.workspace = true
 

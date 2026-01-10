@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::borrow::Cow;
 
+#[cfg(feature = "rayon")]
+use rayon::prelude::*;
+
 use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str, LocatedListing};
 use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
@@ -516,9 +519,6 @@ impl DocumentationPage {
     /// Populate cross-references for all symbols from all files
     /// This should be called after merging pages to get cross-file references
     pub fn populate_all_cross_references(mut self, all_tokens: &[(String, LocatedListing)]) -> Self {
-        // Collect all references from all files
-        let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
-        
         // Collect and sort symbol names once (OPTIMIZATION: sort once, not per macro)
         let mut symbol_names: Vec<String> = self.content.iter()
             .filter(|item| !item.is_file())
@@ -527,9 +527,26 @@ impl DocumentationPage {
         // Sort by length (longest first) to avoid partial matches in regex
         symbol_names.sort_by(|a, b| b.len().cmp(&a.len()));
         
-        for (source_file, tokens) in all_tokens {
-            let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-            let refs = collect_cross_references(tokens, source_file_arc);
+        // Collect all references from all files (PARALLEL)
+        #[cfg(feature = "rayon")]
+        let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.par_iter()
+            .map(|(source_file, tokens)| {
+                let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
+                collect_cross_references(tokens, source_file_arc)
+            })
+            .collect();
+        
+        #[cfg(not(feature = "rayon"))]
+        let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.iter()
+            .map(|(source_file, tokens)| {
+                let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
+                collect_cross_references(tokens, source_file_arc)
+            })
+            .collect();
+        
+        // Merge all references
+        let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
+        for refs in file_refs {
             for (symbol, mut symbol_refs) in refs {
                 all_refs.entry(symbol)
                     .or_insert_with(Vec::new)
@@ -537,9 +554,14 @@ impl DocumentationPage {
             }
         }
         
-        // Also search for symbols inside macro and function content
-        for item in &self.content {
-            if item.is_macro() || item.is_function() {
+        // Also search for symbols inside macro and function content (PARALLEL)
+        let macro_func_items: Vec<_> = self.content.iter()
+            .filter(|item| item.is_macro() || item.is_function())
+            .collect();
+        
+        #[cfg(feature = "rayon")]
+        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = macro_func_items.par_iter()
+            .map(|item| {
                 let content = if item.is_macro() {
                     item.macro_source()
                 } else {
@@ -547,7 +569,6 @@ impl DocumentationPage {
                 };
                 
                 // Exclude the current item's name from the search to avoid self-references
-                // Use a filter to avoid allocating a new Vec
                 let current_name = item.item_short_summary();
                 let filtered_symbols: Vec<&str> = symbol_names.iter()
                     .filter(|name| name.as_str() != current_name.as_str())
@@ -556,13 +577,38 @@ impl DocumentationPage {
                 
                 let base_line = item.line_number;
                 let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                let refs = collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line);
+                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line)
+            })
+            .collect();
+        
+        #[cfg(not(feature = "rayon"))]
+        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = macro_func_items.iter()
+            .map(|item| {
+                let content = if item.is_macro() {
+                    item.macro_source()
+                } else {
+                    item.function_source()
+                };
                 
-                for (symbol, mut symbol_refs) in refs {
-                    all_refs.entry(symbol)
-                        .or_insert_with(Vec::new)
-                        .append(&mut symbol_refs);
-                }
+                // Exclude the current item's name from the search to avoid self-references
+                let current_name = item.item_short_summary();
+                let filtered_symbols: Vec<&str> = symbol_names.iter()
+                    .filter(|name| name.as_str() != current_name.as_str())
+                    .map(|s| s.as_str())
+                    .collect();
+                
+                let base_line = item.line_number;
+                let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
+                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line)
+            })
+            .collect();
+        
+        // Merge macro/function references
+        for refs in macro_refs {
+            for (symbol, mut symbol_refs) in refs {
+                all_refs.entry(symbol)
+                    .or_insert_with(Vec::new)
+                    .append(&mut symbol_refs);
             }
         }
         

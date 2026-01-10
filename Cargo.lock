@@ -2331,6 +2331,7 @@ dependencies = [
  "minijinja",
  "pandoc",
  "pulldown-cmark",
+ "rayon",
  "regex",
  "rust-embed",
  "serde",
