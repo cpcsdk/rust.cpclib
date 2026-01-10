@@ -93,10 +93,10 @@
             </div>
 
             {% if page.file_list | length > 1 %}
-            <div class="sidebar-section">
+            <div class="sidebar-section" id="sidebar-files">
                 <h2>Files</h2>
                 <div class="file-tree-header">
-                    <a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a>
+                    <a href="#" id="all-files-link" class="file-filter-link active" data-file="">All Files</a>
                 </div>
                 <details class="file-tree" open>
                     <summary class="file-tree-toggle">📁 File Structure</summary>

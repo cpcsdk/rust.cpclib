@@ -12,6 +12,7 @@ function buildFileTree(files) {
                     name: part,
                     fullPath: parts.slice(0, index + 1).join('/'),
                     isFile: index === parts.length - 1,
+                    realFile: index === parts.length - 1 ? file : null,  // Store original file path for leaf nodes
                     children: {}
                 };
             }
@@ -39,8 +40,7 @@ function renderFileTree(node, isRoot = false) {
     }).forEach(entry => {
         if (entry.isFile) {
             html += `<li class="file-tree-item file-tree-file">
-                <a href="#" onclick="filterByFile('${entry.fullPath}'); return false;" 
-                   class="file-filter-link" data-file="${entry.fullPath}">
+                <a href="#" class="file-filter-link" data-file="${entry.realFile || entry.fullPath}">
                     📄 ${entry.name}
                 </a>
             </li>`;
@@ -70,16 +70,9 @@ function toggleSource(id) {
     } else {
         content.classList.add('show');
         button.classList.add('active');
-        // Highlight the code when shown
+        // Mark code as ready - syntax highlighting is done server-side in Rust
         const codeBlock = content.querySelector('code');
         if (codeBlock && !codeBlock.dataset.highlighted) {
-            // Check if code already contains symbol links (anchors with class 'symbol-link')
-            // If it does, don't apply highlight.js as it would destroy the links
-            const hasSymbolLinks = codeBlock.querySelector('a.symbol-link') !== null;
-            if (!hasSymbolLinks) {
-                hljs.highlightElement(codeBlock);
-            }
-            // Mark as highlighted either way to avoid re-checking
             codeBlock.dataset.highlighted = 'true';
         }
     }
@@ -94,6 +87,7 @@ function filterByFile(fileName) {
     const sidebarSections = document.querySelectorAll('.sidebar-section');
     const indexItems = document.querySelectorAll('.index-item');
     const indexLetters = document.querySelectorAll('.index-letter');
+    const allFilesLink = document.getElementById('all-files-link');
     
     // Update active link
     fileLinks.forEach(link => {
@@ -103,6 +97,15 @@ function filterByFile(fileName) {
             link.classList.remove('active');
         }
     });
+    
+    // Update "All Files" link active state
+    if (allFilesLink) {
+        if (fileName === '') {
+            allFilesLink.classList.add('active');
+        } else {
+            allFilesLink.classList.remove('active');
+        }
+    }
     
     // Scroll to file documentation if filtering by specific file
     if (fileName !== '') {
@@ -163,7 +166,8 @@ function filterByFile(fileName) {
     // Filter sidebar items and hide empty sections
     sidebarSections.forEach(sidebarSection => {
         // Skip symbol index sidebar - it's handled above
-        if (sidebarSection.id === 'sidebar-symbol-index') {
+        // Skip files sidebar - it should always be visible for navigation
+        if (sidebarSection.id === 'sidebar-symbol-index' || sidebarSection.id === 'sidebar-files') {
             return;
         }
         
@@ -258,7 +262,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (files.length > 0) {
             const tree = buildFileTree(files);
             fileTreeRoot.innerHTML = renderFileTree(tree, true);
+            
+            // Attach click handlers to all file links in the tree
+            fileTreeRoot.querySelectorAll('.file-filter-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    filterByFile(this.dataset.file);
+                });
+            });
         }
+    }
+    
+    // Attach click handler to "All Files" link
+    const allFilesLink = document.getElementById('all-files-link');
+    if (allFilesLink) {
+        allFilesLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            filterByFile('');
+        });
     }
     
     // Function to clear search
@@ -403,12 +424,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Initialize syntax highlighting selectively
-    // Skip code blocks that already have symbol links to preserve them
+    // Note: Syntax highlighting is done server-side in Rust during HTML generation.
+    // Code blocks are already highlighted with <span class="hljs-*"> tags.
+    // We only need to mark them to track their state.
     document.querySelectorAll('pre code').forEach(function(codeBlock) {
-        const hasSymbolLinks = codeBlock.querySelector('a.symbol-link') !== null;
-        if (!hasSymbolLinks && !codeBlock.dataset.highlighted) {
-            hljs.highlightElement(codeBlock);
+        if (!codeBlock.dataset.highlighted) {
             codeBlock.dataset.highlighted = 'true';
         }
     });
