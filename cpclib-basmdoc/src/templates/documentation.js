@@ -12,7 +12,14 @@ function toggleSource(id) {
         // Highlight the code when shown
         const codeBlock = content.querySelector('code');
         if (codeBlock && !codeBlock.dataset.highlighted) {
-            hljs.highlightElement(codeBlock);
+            // Check if code already contains symbol links (anchors with class 'symbol-link')
+            // If it does, don't apply highlight.js as it would destroy the links
+            const hasSymbolLinks = codeBlock.querySelector('a.symbol-link') !== null;
+            if (!hasSymbolLinks) {
+                hljs.highlightElement(codeBlock);
+            }
+            // Mark as highlighted either way to avoid re-checking
+            codeBlock.dataset.highlighted = 'true';
         }
     }
 }
@@ -320,8 +327,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Initialize syntax highlighting
-    hljs.highlightAll();
+    // Initialize syntax highlighting selectively
+    // Skip code blocks that already have symbol links to preserve them
+    document.querySelectorAll('pre code').forEach(function(codeBlock) {
+        const hasSymbolLinks = codeBlock.querySelector('a.symbol-link') !== null;
+        if (!hasSymbolLinks && !codeBlock.dataset.highlighted) {
+            hljs.highlightElement(codeBlock);
+            codeBlock.dataset.highlighted = 'true';
+        }
+    });
     
     // Add copy buttons to all code blocks
     document.querySelectorAll('pre code').forEach(function(codeBlock) {

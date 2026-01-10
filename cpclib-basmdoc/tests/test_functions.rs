@@ -3,7 +3,7 @@ use cpclib_basmdoc::{DocumentationPage};
 #[test]
 fn test_function_support() {
     // Test that the DocumentationPage has function support
-    let page = DocumentationPage::for_file("../cpclib-asm/assets/ga.asm", false).expect("Failed to read ga.asm file");
+    let page = DocumentationPage::for_file("../cpclib-asm/assets/ga.asm", "ga.asm", false).expect("Failed to read ga.asm file");
     
     // This file contains a function, so we should be able to iterate over it
     let has_functions = page.has_functions();

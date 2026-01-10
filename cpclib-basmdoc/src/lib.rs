@@ -7,6 +7,8 @@ use std::borrow::Cow;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
+use lazy_static::lazy_static;
+
 // Polyfill for par_iter when rayon is disabled - makes it behave like regular iter
 #[cfg(not(feature = "rayon"))]
 trait ParallelIteratorShim<'a, T: 'a> {
@@ -227,7 +229,8 @@ pub struct ItemDocumentation {
     doc: String, // TODO use MetaDocumentation
     source_file: String,
     line_number: usize, // 1-indexed line number where the symbol is defined
-    references: Vec<SymbolReference>
+    references: Vec<SymbolReference>,
+    linked_source: Option<String> // Source code with symbols linked to their documentation
 }
 
 impl Object for ItemDocumentation {
@@ -248,7 +251,10 @@ impl Object for ItemDocumentation {
             },
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
             Some("source") => {
-                if self.is_macro() {
+                // Return linked source if available, otherwise return raw source
+                if let Some(ref linked) = self.linked_source {
+                    Some(Value::from(linked.clone()))
+                } else if self.is_macro() {
                     Some(Value::from(self.macro_source()))
                 } else if self.is_function() {
                     Some(Value::from(self.function_source()))
@@ -486,6 +492,9 @@ impl DocumentationPage {
         // Populate cross-references
         page = populate_cross_references(page, &tokens);
         
+        // Link symbols in source code
+        page = page.link_source_symbols();
+        
         Ok(page)
     }
 
@@ -532,13 +541,39 @@ impl DocumentationPage {
             .flat_map(|p| p.content)
             .collect();
 
-        Self {
+        let mut merged = Self {
             fname: fnames,
             content,
             all_files
-        }
+        };
+        
+        // Link symbols in source code
+        merged = merged.link_source_symbols();
+        
+        merged
     }
 
+    /// Link symbols in source code for all macros and functions
+    pub fn link_source_symbols(mut self) -> Self {
+        let symbols = self.all_symbols();
+        
+        for item in &mut self.content {
+            if item.is_macro() || item.is_function() {
+                let source = if item.is_macro() {
+                    item.macro_source()
+                } else {
+                    item.function_source()
+                };
+                
+                if !source.is_empty() {
+                    item.linked_source = Some(link_symbols_in_source(&source, &symbols));
+                }
+            }
+        }
+        
+        self
+    }
+    
     /// Populate cross-references for all symbols from all files
     /// This should be called after merging pages to get cross-file references
     pub fn populate_all_cross_references(mut self, all_tokens: &[(String, LocatedListing)]) -> Self {
@@ -613,6 +648,9 @@ impl DocumentationPage {
             }
         }
         
+        // Link symbols in source code
+        self = self.link_source_symbols();
+        
         self
     }
 
@@ -658,7 +696,8 @@ impl DocumentationPage {
                     doc: docs.join("\n\n"),
                     source_file,
                     line_number: 0, // File-level documentation doesn't have a specific line
-                    references: Vec::new()
+                    references: Vec::new(),
+                    linked_source: None
                 }
             })
             .collect();
@@ -906,7 +945,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                         doc,
                         source_file: fname.to_string(),
                         line_number,
-                        references: Vec::new()
+                        references: Vec::new(),
+                        linked_source: None // Will be populated later
                     }
                 })
             }
@@ -916,7 +956,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                     doc,
                     source_file: fname.to_string(),
                     line_number, // Use provided line number (typically 0 for file-level docs)
-                    references: Vec::new()
+                    references: Vec::new(),
+                    linked_source: None
                 })
             }
         })
@@ -1095,6 +1136,225 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
     doc
 }
 
+/// Apply syntax highlighting to Z80/BASM code using highlight.js compatible CSS classes
+fn highlight_z80_syntax(source: &str) -> String {
+    lazy_static! {
+        // Build regex patterns from cpclib_asm constants
+        static ref INSTRUCTIONS_REGEX: regex::Regex = {
+            // SAFETY: INSTRUCTIONS constants are guaranteed to be valid UTF-8 by cpclib_asm
+            let instructions = cpclib_asm::parser::instructions::INSTRUCTIONS
+                .iter()
+                .map(|s| unsafe { std::str::from_utf8_unchecked(s) });
+            let pattern = format!(r"(?i)\b({})\b", instructions.collect::<Vec<_>>().join("|"));
+            regex::Regex::new(&pattern).unwrap()
+        };
+        
+        static ref DIRECTIVES_REGEX: regex::Regex = {
+            use cpclib_asm::parser::parser::*;
+            // SAFETY: Directive constants are guaranteed to be valid UTF-8 by cpclib_asm
+            let directives = STAND_ALONE_DIRECTIVE.iter()
+                .chain(START_DIRECTIVE.iter())
+                .chain(END_DIRECTIVE.iter())
+                .map(|s| unsafe { std::str::from_utf8_unchecked(s) });
+            
+            let pattern = format!(r"(?i)\b({})\b", directives.collect::<Vec<_>>().join("|"));
+            regex::Regex::new(&pattern).unwrap()
+        };
+        
+        static ref REGISTERS_REGEX: regex::Regex = {
+            regex::Regex::new(
+                r"(?i)\b(af|bc|de|hl|ix|iy|ixh|ixl|iyh|iyl|a|b|c|d|e|h|l|i|r|sp|pc|f)\b"
+            ).unwrap()
+        };
+        
+        static ref NUMBERS_REGEX: regex::Regex = {
+            regex::Regex::new(
+                r"\b0x[0-9a-fA-F]+|\$[0-9a-fA-F]+|#[0-9a-fA-F]+|&[0-9a-fA-F]+|0b[01]+|%[01]+|\b[0-9]+\b"
+            ).unwrap()
+        };
+        
+        static ref STRINGS_REGEX: regex::Regex = {
+            regex::Regex::new(r#""[^"]*"|'[^']*'"#).unwrap()
+        };
+        
+        static ref COMMENTS_REGEX: regex::Regex = {
+            regex::Regex::new(r";.*$").unwrap()
+        };
+        
+        static ref MULTILINE_COMMENT_REGEX: regex::Regex = {
+            // Use (?s) flag to make . match newlines, or use [\s\S] to match any character
+            regex::Regex::new(r"(?s)/\*.*?\*/").unwrap()
+        };
+    }
+    
+    // Collect all matches with their positions, types, and matched text
+    let mut matches: Vec<(usize, usize, &str)> = Vec::new();
+    
+    // Find multiline comments first (highest priority - they can span lines)
+    for cap in MULTILINE_COMMENT_REGEX.find_iter(source) {
+        matches.push((cap.start(), cap.end(), "comment"));
+    }
+    
+    // Find single-line comments
+    for cap in COMMENTS_REGEX.find_iter(source) {
+        matches.push((cap.start(), cap.end(), "comment"));
+    }
+    
+    // Sort matches by start position
+    matches.sort_by_key(|m| m.0);
+    
+    // Merge overlapping comment ranges to find non-comment regions
+    let mut comment_ranges: Vec<(usize, usize)> = Vec::new();
+    for (start, end, _) in &matches {
+        if let Some(last) = comment_ranges.last_mut() {
+            if *start <= last.1 {
+                // Overlapping or adjacent - merge
+                last.1 = (*end).max(last.1);
+                continue;
+            }
+        }
+        comment_ranges.push((*start, *end));
+    }
+    
+    // Find non-comment ranges (code regions)
+    let mut code_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut last_end = 0;
+    for (start, end) in &comment_ranges {
+        if *start > last_end {
+            code_ranges.push((last_end, *start));
+        }
+        last_end = *end;
+    }
+    if last_end < source.len() {
+        code_ranges.push((last_end, source.len()));
+    }
+    
+    // Find other syntax elements in code regions only
+    let mut code_matches: Vec<(usize, usize, &str)> = Vec::new();
+    
+    for (code_start, code_end) in code_ranges {
+        let code_part = &source[code_start..code_end];
+        
+        for cap in STRINGS_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "string"));
+        }
+        for cap in NUMBERS_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "number"));
+        }
+        for cap in DIRECTIVES_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "built_in"));
+        }
+        for cap in INSTRUCTIONS_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "keyword"));
+        }
+        for cap in REGISTERS_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "variable"));
+        }
+    }
+    
+    // Merge all matches and sort by position
+    matches.extend(code_matches);
+    matches.sort_by_key(|m| m.0);
+    
+    // Build the result, applying highlighting and avoiding overlaps
+    let mut result = String::new();
+    let mut last_end = 0;
+    
+    for (start, end, class) in matches {
+        if start >= last_end {
+            // Add un-highlighted text before this match
+            result.push_str(&source[last_end..start]);
+            // Add highlighted match
+            result.push_str(&format!("<span class=\"hljs-{}\">{}</span>", class, &source[start..end]));
+            last_end = end;
+        }
+    }
+    
+    // Add any remaining un-highlighted text
+    result.push_str(&source[last_end..]);
+    
+    result
+}
+
+/// Link symbols in source code to their documentation anchors
+/// Applies after syntax highlighting to preserve both features
+pub fn link_symbols_in_source(source: &str, symbols: &[(String, String)]) -> String {
+    // First apply syntax highlighting
+    let highlighted = highlight_z80_syntax(source);
+    
+    // Then add symbol links
+    // We need to be careful to only replace text content, not content inside HTML tags
+    let mut result = highlighted;
+    
+    // Sort symbols by length (longest first) to avoid partial matches
+    let mut sorted_symbols = symbols.to_vec();
+    sorted_symbols.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    
+    for (name, key) in sorted_symbols {
+        // Replace symbol occurrences that are:
+        // 1. Whole words (surrounded by word boundaries or whitespace/punctuation)
+        // 2. Not already inside an anchor tag
+        // 3. Not inside an HTML tag (<...>)
+        
+        // Simple approach: replace text that's not between < and >
+        let mut new_result = String::new();
+        let mut chars = result.chars().peekable();
+        let mut in_tag = false;
+        let mut in_anchor = false;
+        let mut current_text = String::new();
+        
+        while let Some(ch) = chars.next() {
+            if ch == '<' {
+                // Process accumulated text before tag
+                if !in_tag && !in_anchor && !current_text.is_empty() {
+                    current_text = replace_symbol_in_text(&current_text, &name, &key);
+                }
+                new_result.push_str(&current_text);
+                current_text.clear();
+                
+                in_tag = true;
+                new_result.push(ch);
+                
+                // Check if this is an anchor tag
+                let ahead: String = chars.clone().take(2).collect();
+                if ahead == "a " || ahead == "a>" {
+                    in_anchor = true;
+                } else if ahead == "/a" {
+                    in_anchor = false;
+                }
+            } else if ch == '>' && in_tag {
+                in_tag = false;
+                new_result.push(ch);
+            } else if in_tag {
+                new_result.push(ch);
+            } else {
+                current_text.push(ch);
+            }
+        }
+        
+        // Process remaining text
+        if !in_tag && !in_anchor && !current_text.is_empty() {
+            current_text = replace_symbol_in_text(&current_text, &name, &key);
+        }
+        new_result.push_str(&current_text);
+        
+        result = new_result;
+    }
+    
+    result
+}
+
+/// Replace a symbol with a link in plain text (not inside HTML tags)
+fn replace_symbol_in_text(text: &str, symbol: &str, key: &str) -> String {
+    let pattern = format!(r"\b{}\b", regex::escape(symbol));
+    if let Ok(re) = regex::Regex::new(&pattern) {
+        let replacement = format!("<a href=\"#{}\" class=\"symbol-link\">{}</a>", key, symbol);
+        re.replace_all(text, replacement.as_str()).to_string()
+    } else {
+        text.to_string()
+    }
+}
+
 /// Extract symbols used in a token's expressions
 fn extract_symbols_from_token<T: ListingElement + std::fmt::Display>(token: &T) -> Vec<String> {
     // Skip comments and label definitions (they're not references)
@@ -1209,7 +1469,7 @@ pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page
 mod test {
     use cpclib_asm::Token;
 
-    use crate::{aggregate_documentation_on_tokens, is_any_documentation};
+    use crate::{aggregate_documentation_on_tokens, is_any_documentation, link_symbols_in_source};
 
     #[test]
     fn test_is_documentation() {
@@ -1296,5 +1556,133 @@ mod test {
         assert_eq!(doc.len(), 1);
         assert_eq!(&doc[0].0, "This macro does something");
         assert!(doc[0].1.is_some());
+    }
+
+    #[test]
+    fn test_link_symbols_in_source() {
+        let symbols = vec![
+            ("my_label".to_string(), "label_my_label".to_string()),
+            ("other_func".to_string(), "function_other_func".to_string()),
+        ];
+        
+        let source = "    ld hl, my_label\n    call other_func\n    ret";
+        let linked = link_symbols_in_source(source, &symbols);
+        
+        println!("Generated output:\n{}", linked);
+        
+        // Verify that symbols are wrapped in links
+        assert!(linked.contains("<a href=\"#label_my_label\" class=\"symbol-link\">my_label</a>"));
+        assert!(linked.contains("<a href=\"#function_other_func\" class=\"symbol-link\">other_func</a>"));
+        // Verify that instructions have syntax highlighting
+        assert!(linked.contains("hljs-keyword"));
+        // Verify that registers have syntax highlighting
+        assert!(linked.contains("hljs-variable"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_instructions() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "ld a, 10\ncall my_func\nret";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted instructions
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">call</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">ret</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_directives() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "macro TEST\n    org $4000\nendm";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted directives
+        assert!(highlighted.contains("<span class=\"hljs-built_in\">macro</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-built_in\">org</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-built_in\">endm</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_registers() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "ld hl, bc\npush af";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted registers
+        assert!(highlighted.contains("<span class=\"hljs-variable\">hl</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-variable\">bc</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-variable\">af</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_numbers() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "db $FF, #1234, 0x10, %10101010, 42";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted numbers
+        assert!(highlighted.contains("<span class=\"hljs-number\">$FF</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-number\">#1234</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-number\">0x10</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-number\">%10101010</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-number\">42</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_strings() {
+        use crate::highlight_z80_syntax;
+        
+        let source = r#"db "Hello", 'World'"#;
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted strings
+        assert!(highlighted.contains("<span class=\"hljs-string\">\"Hello\"</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-string\">'World'</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_single_line_comment() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "ld a, 10 ; load 10 into A";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should contain highlighted comment
+        assert!(highlighted.contains("<span class=\"hljs-comment\">"));
+        assert!(highlighted.contains("; load 10 into A"));
+        // Instruction before comment should still be highlighted
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_multiline_comment() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "ld a, 10 /* comment \n*/ call func";
+        let highlighted = dbg!(highlight_z80_syntax(source));
+        
+        // Should contain highlighted multiline comment
+        assert!(highlighted.contains("<span class=\"hljs-comment\">/* comment \n*/</span>"));
+        // Instructions around comment should still be highlighted
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">call</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_case_insensitive() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "LD a, 10\nCALL func\nRET";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Should highlight regardless of case
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">LD</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">CALL</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">RET</span>"));
     }
 }

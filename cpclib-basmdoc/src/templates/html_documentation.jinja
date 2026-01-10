@@ -8,67 +8,7 @@
     <style>
         {{ highlightjs_css | safe }}
     </style>
-    <script>
-        {{ highlightjs | safe }}
-    </script>
-    <script>
-        // Custom BASM/Z80 syntax highlighter
-        hljs.registerLanguage('basm', function(hljs) {
-            return {
-                case_insensitive: true,
-                keywords: {
-                    // Z80 Instructions (generated from cpclib-asm)
-                    keyword: '{{ syntax_instructions }}',
-                    // BASM Directives (generated from cpclib-asm)
-                    built_in: '{{ syntax_directives }}',
-                    // Registers
-                    variable: 'AF HL DE BC IX IY IXL IXH A B C D E H L I R SP PC F IYH IYL',
-                    // Functions
-                    title: 'ABS ACOS ASIN CEIL CHAR COS EXP FLOOR FRAC HI HIGH INT LN LO LOG10 LOW MEMORY PEEK SIN SQRT RND MAX MIN POW'
-                },
-                contains: [
-                    hljs.COMMENT(';', '$', {
-                        relevance: 0
-                    }),
-                    {
-                        // Macro/repeat block template variables: {variable_name}
-                        className: 'params',
-                        begin: '\\{[a-zA-Z_][a-zA-Z0-9_]*\\}',
-                        relevance: 10
-                    },
-                    {
-                        className: 'number',
-                        variants: [
-                            { begin: '\\b0[xX][0-9a-fA-F]+' }, // hex
-                            { begin: '\\$[0-9a-fA-F]+' }, // $ hex
-                            { begin: '#[0-9a-fA-F]+' }, // # hex  
-                            { begin: '&[0-9a-fA-F]+' }, // & hex (CPC style)
-                            { begin: '0[bB][01]+' }, // binary
-                            { begin: '%[01]+' }, // % binary
-                            { begin: '\\b[0-9]+' } // decimal
-                        ]
-                    },
-                    {
-                        className: 'string',
-                        variants: [
-                            { begin: '"', end: '"' },
-                            { begin: "'", end: "'" }
-                        ]
-                    },
-                    {
-                        className: 'symbol',
-                        begin: '^[a-zA-Z_\\.][a-zA-Z0-9_]*:?',
-                        relevance: 0
-                    },
-                    {
-                        className: 'meta',
-                        begin: '\\.(macro|endmacro|function|endfunction)',
-                        relevance: 10
-                    }
-                ]
-            };
-        });
-    </script>
+
     <style>
         {{ documentation_css | safe }}
     </style>
@@ -250,7 +190,7 @@
                     <div class="macro-source">
                         <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
                         <div id="{{item.key}}_source" class="macro-source-content">
-                            <pre><code class="language-basm">{{ item.source }}</code></pre>
+                            <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
                         </div>
                     </div>
                     {% endif %}
@@ -275,7 +215,7 @@
                     <div class="macro-source">
                         <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
                         <div id="{{item.key}}_source" class="macro-source-content">
-                            <pre><code class="language-basm">{{ item.source }}</code></pre>
+                            <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
                         </div>
                     </div>
                     {% endif %}

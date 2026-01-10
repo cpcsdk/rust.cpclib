@@ -2328,6 +2328,7 @@ dependencies = [
  "delegate",
  "dirs 5.0.1",
  "glob",
+ "lazy_static",
  "minijinja",
  "pandoc",
  "pulldown-cmark",
