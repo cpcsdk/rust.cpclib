@@ -93,13 +93,22 @@
             </div>
 
             {% if page.file_list | length > 1 %}
-            <h2>Files</h2>
-            <ul id="file-filter-list">
-                <li><a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a></li>
-                {% for file in page.file_list %}
-                <li><a href="#" onclick="filterByFile('{{ file }}'); return false;" class="file-filter-link" data-file="{{ file }}">{{ file }}</a></li>
-                {% endfor %}
-            </ul>
+            <div class="sidebar-section">
+                <h2>Files</h2>
+                <div class="file-tree-header">
+                    <a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a>
+                </div>
+                <details class="file-tree" open>
+                    <summary class="file-tree-toggle">📁 File Structure</summary>
+                    <div id="file-tree-root" class="file-tree-content"></div>
+                </details>
+                <!-- Hidden list to store file data -->
+                <ul id="file-filter-list" style="display: none;">
+                    {% for file in page.file_list %}
+                    <li><a href="#" class="file-filter-link" data-file="{{ file }}">{{ file }}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
             {% endif %}
 
             {% if page.has_labels() %}

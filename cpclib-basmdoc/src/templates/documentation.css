@@ -491,6 +491,84 @@ html {
     background-color: #2980b9;
 }
 
+/* File tree styles */
+.file-tree {
+    margin-top: 10px;
+}
+
+.file-tree-toggle {
+    cursor: pointer;
+    padding: 6px 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #555;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.file-tree-toggle:hover {
+    background-color: #e8f4f8;
+}
+
+.file-tree-header {
+    margin-bottom: 8px;
+}
+
+.file-tree-header .file-filter-link {
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.file-tree-content {
+    margin-top: 8px;
+}
+
+.file-tree-list {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+.file-tree-item {
+    margin: 2px 0;
+}
+
+.file-tree-folder > details {
+    margin: 2px 0;
+}
+
+.file-tree-folder > details > summary {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: #555;
+    user-select: none;
+    transition: background-color 0.2s;
+    list-style: none;
+}
+
+.file-tree-folder > details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.file-tree-folder > details > summary:hover {
+    background-color: #f8f9fa;
+}
+
+.file-tree-folder > details > .file-tree-list {
+    padding-left: 16px;
+    margin-top: 4px;
+}
+
+.file-tree-file a {
+    font-size: 0.85em;
+    padding: 4px 8px;
+}
+
 .no-results {
     padding: 20px;
     text-align: center;

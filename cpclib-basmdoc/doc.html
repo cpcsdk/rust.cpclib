@@ -503,6 +503,84 @@ html {
     background-color: #2980b9;
 }
 
+/* File tree styles */
+.file-tree {
+    margin-top: 10px;
+}
+
+.file-tree-toggle {
+    cursor: pointer;
+    padding: 6px 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: #555;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.file-tree-toggle:hover {
+    background-color: #e8f4f8;
+}
+
+.file-tree-header {
+    margin-bottom: 8px;
+}
+
+.file-tree-header .file-filter-link {
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.file-tree-content {
+    margin-top: 8px;
+}
+
+.file-tree-list {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+}
+
+.file-tree-item {
+    margin: 2px 0;
+}
+
+.file-tree-folder > details {
+    margin: 2px 0;
+}
+
+.file-tree-folder > details > summary {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: #555;
+    user-select: none;
+    transition: background-color 0.2s;
+    list-style: none;
+}
+
+.file-tree-folder > details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.file-tree-folder > details > summary:hover {
+    background-color: #f8f9fa;
+}
+
+.file-tree-folder > details > .file-tree-list {
+    padding-left: 16px;
+    margin-top: 4px;
+}
+
+.file-tree-file a {
+    font-size: 0.85em;
+    padding: 4px 8px;
+}
+
 .no-results {
     padding: 20px;
     text-align: center;
@@ -785,139 +863,148 @@ pre {
             </div>
 
             
-            <h2>Files</h2>
-            <ul id="file-filter-list">
-                <li><a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/intro.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/intro.asm">IntroHBL/src/intro.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/intro_code.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/intro_code.asm">IntroHBL/src/intro_code.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/intro_faked_link.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/intro_faked_link.asm">IntroHBL/src/intro_faked_link.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/intro_linked.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/intro_linked.asm">IntroHBL/src/intro_linked.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/intro_loader.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/intro_loader.asm">IntroHBL/src/intro_loader.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/music.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/music.asm">IntroHBL/src/music.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('IntroHBL/src/rain.asm'); return false;" class="file-filter-link" data-file="IntroHBL/src/rain.asm">IntroHBL/src/rain.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/config.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/config.asm">MakeItEasy/src/config.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/dsk_multimoderupture8_join.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_join.asm">MakeItEasy/src/dsk_multimoderupture8_join.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/dsk_multimoderupture8_part1.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_part1.asm">MakeItEasy/src/dsk_multimoderupture8_part1.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/dsk_multimoderupture8_part2.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_part2.asm">MakeItEasy/src/dsk_multimoderupture8_part2.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/effets_scenario.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/effets_scenario.asm">MakeItEasy/src/effets_scenario.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/exit.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/exit.asm">MakeItEasy/src/exit.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/loading_screen.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/loading_screen.asm">MakeItEasy/src/loading_screen.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/manage_scenario.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/manage_scenario.asm">MakeItEasy/src/manage_scenario.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/multimoderupture8.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/multimoderupture8.asm">MakeItEasy/src/multimoderupture8.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/multimoderupture8_BAK.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/multimoderupture8_BAK.asm">MakeItEasy/src/multimoderupture8_BAK.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/music.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/music.asm">MakeItEasy/src/music.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/palettes.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/palettes.asm">MakeItEasy/src/palettes.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/routine_hbl_positions.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/routine_hbl_positions.asm">MakeItEasy/src/routine_hbl_positions.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/routine_logozone.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/routine_logozone.asm">MakeItEasy/src/routine_logozone.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/scenario_effets.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/scenario_effets.asm">MakeItEasy/src/scenario_effets.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/scenario_table.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/scenario_table.asm">MakeItEasy/src/scenario_table.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/sna_multimoderupture8.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/sna_multimoderupture8.asm">MakeItEasy/src/sna_multimoderupture8.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('MakeItEasy/src/transfert_gfx.asm'); return false;" class="file-filter-link" data-file="MakeItEasy/src/transfert_gfx.asm">MakeItEasy/src/transfert_gfx.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/basic.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/basic.asm">linking/src/demosystem/basic.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/booster.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/booster.asm">linking/src/demosystem/booster.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/chars_control.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/chars_control.asm">linking/src/demosystem/chars_control.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/chars_name.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/chars_name.asm">linking/src/demosystem/chars_name.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/common.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/common.asm">linking/src/demosystem/common.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/demosystem_config.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/demosystem_config.asm">linking/src/demosystem/demosystem_config.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/linker_common.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/linker_common.asm">linking/src/demosystem/linker_common.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/private.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/private.asm">linking/src/demosystem/private.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/demosystem/public.asm'); return false;" class="file-filter-link" data-file="linking/src/demosystem/public.asm">linking/src/demosystem/public.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/greetings.asm'); return false;" class="file-filter-link" data-file="linking/src/greetings.asm">linking/src/greetings.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl.asm">linking/src/hbl.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_000_and_001.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_000_and_001.asm">linking/src/hbl_000_and_001.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_002.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_002.asm">linking/src/hbl_002.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_003.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_003.asm">linking/src/hbl_003.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_004.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_004.asm">linking/src/hbl_004.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_005.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_005.asm">linking/src/hbl_005.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_006.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_006.asm">linking/src/hbl_006.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_007.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_007.asm">linking/src/hbl_007.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_008.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_008.asm">linking/src/hbl_008.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_009.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_009.asm">linking/src/hbl_009.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_010.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_010.asm">linking/src/hbl_010.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/hbl_011.asm'); return false;" class="file-filter-link" data-file="linking/src/hbl_011.asm">linking/src/hbl_011.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/limited_duration.asm'); return false;" class="file-filter-link" data-file="linking/src/limited_duration.asm">linking/src/limited_duration.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_intro.asm'); return false;" class="file-filter-link" data-file="linking/src/load_intro.asm">linking/src/load_intro.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_intro_loader.asm'); return false;" class="file-filter-link" data-file="linking/src/load_intro_loader.asm">linking/src/load_intro_loader.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_make_it_easy.asm'); return false;" class="file-filter-link" data-file="linking/src/load_make_it_easy.asm">linking/src/load_make_it_easy.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_make_it_easy_loader.asm'); return false;" class="file-filter-link" data-file="linking/src/load_make_it_easy_loader.asm">linking/src/load_make_it_easy_loader.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_outer_space.asm'); return false;" class="file-filter-link" data-file="linking/src/load_outer_space.asm">linking/src/load_outer_space.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('linking/src/load_outer_space_loader.asm'); return false;" class="file-filter-link" data-file="linking/src/load_outer_space_loader.asm">linking/src/load_outer_space_loader.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/PlayerAkmDevelop.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/PlayerAkmDevelop.asm">polar_dots/src/PlayerAkmDevelop.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/PlayerAkm_basm.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/PlayerAkm_basm.asm">polar_dots/src/PlayerAkm_basm.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/curves.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/curves.asm">polar_dots/src/curves.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/link.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/link.asm">polar_dots/src/link.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/multi_mode.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/multi_mode.asm">polar_dots/src/multi_mode.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/music_akm.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/music_akm.asm">polar_dots/src/music_akm.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/polar.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/polar.asm">polar_dots/src/polar.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/polar_loader.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/polar_loader.asm">polar_dots/src/polar_loader.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/scenario.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/scenario.asm">polar_dots/src/scenario.asm</a></li>
-                
-                <li><a href="#" onclick="filterByFile('polar_dots/src/sna.asm'); return false;" class="file-filter-link" data-file="polar_dots/src/sna.asm">polar_dots/src/sna.asm</a></li>
-                
-            </ul>
+            <div class="sidebar-section">
+                <h2>Files</h2>
+                <div class="file-tree-header">
+                    <a href="#" onclick="filterByFile(''); return false;" class="file-filter-link active" data-file="">All Files</a>
+                </div>
+                <details class="file-tree" open>
+                    <summary class="file-tree-toggle">📁 File Structure</summary>
+                    <div id="file-tree-root" class="file-tree-content"></div>
+                </details>
+                <!-- Hidden list to store file data -->
+                <ul id="file-filter-list" style="display: none;">
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/intro.asm">IntroHBL/src/intro.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/intro_code.asm">IntroHBL/src/intro_code.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/intro_faked_link.asm">IntroHBL/src/intro_faked_link.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/intro_linked.asm">IntroHBL/src/intro_linked.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/intro_loader.asm">IntroHBL/src/intro_loader.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/music.asm">IntroHBL/src/music.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="IntroHBL/src/rain.asm">IntroHBL/src/rain.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/config.asm">MakeItEasy/src/config.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_join.asm">MakeItEasy/src/dsk_multimoderupture8_join.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_part1.asm">MakeItEasy/src/dsk_multimoderupture8_part1.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/dsk_multimoderupture8_part2.asm">MakeItEasy/src/dsk_multimoderupture8_part2.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/effets_scenario.asm">MakeItEasy/src/effets_scenario.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/exit.asm">MakeItEasy/src/exit.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/loading_screen.asm">MakeItEasy/src/loading_screen.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/manage_scenario.asm">MakeItEasy/src/manage_scenario.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/multimoderupture8.asm">MakeItEasy/src/multimoderupture8.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/multimoderupture8_BAK.asm">MakeItEasy/src/multimoderupture8_BAK.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/music.asm">MakeItEasy/src/music.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/palettes.asm">MakeItEasy/src/palettes.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/routine_hbl_positions.asm">MakeItEasy/src/routine_hbl_positions.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/routine_logozone.asm">MakeItEasy/src/routine_logozone.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/scenario_effets.asm">MakeItEasy/src/scenario_effets.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/scenario_table.asm">MakeItEasy/src/scenario_table.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/sna_multimoderupture8.asm">MakeItEasy/src/sna_multimoderupture8.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="MakeItEasy/src/transfert_gfx.asm">MakeItEasy/src/transfert_gfx.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/basic.asm">linking/src/demosystem/basic.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/booster.asm">linking/src/demosystem/booster.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/chars_control.asm">linking/src/demosystem/chars_control.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/chars_name.asm">linking/src/demosystem/chars_name.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/common.asm">linking/src/demosystem/common.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/demosystem_config.asm">linking/src/demosystem/demosystem_config.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/linker_common.asm">linking/src/demosystem/linker_common.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/private.asm">linking/src/demosystem/private.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/demosystem/public.asm">linking/src/demosystem/public.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/greetings.asm">linking/src/greetings.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl.asm">linking/src/hbl.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_000_and_001.asm">linking/src/hbl_000_and_001.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_002.asm">linking/src/hbl_002.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_003.asm">linking/src/hbl_003.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_004.asm">linking/src/hbl_004.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_005.asm">linking/src/hbl_005.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_006.asm">linking/src/hbl_006.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_007.asm">linking/src/hbl_007.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_008.asm">linking/src/hbl_008.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_009.asm">linking/src/hbl_009.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_010.asm">linking/src/hbl_010.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/hbl_011.asm">linking/src/hbl_011.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/limited_duration.asm">linking/src/limited_duration.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_intro.asm">linking/src/load_intro.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_intro_loader.asm">linking/src/load_intro_loader.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_make_it_easy.asm">linking/src/load_make_it_easy.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_make_it_easy_loader.asm">linking/src/load_make_it_easy_loader.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_outer_space.asm">linking/src/load_outer_space.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="linking/src/load_outer_space_loader.asm">linking/src/load_outer_space_loader.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/PlayerAkmDevelop.asm">polar_dots/src/PlayerAkmDevelop.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/PlayerAkm_basm.asm">polar_dots/src/PlayerAkm_basm.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/curves.asm">polar_dots/src/curves.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/link.asm">polar_dots/src/link.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/multi_mode.asm">polar_dots/src/multi_mode.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/music_akm.asm">polar_dots/src/music_akm.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/polar.asm">polar_dots/src/polar.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/polar_loader.asm">polar_dots/src/polar_loader.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/scenario.asm">polar_dots/src/scenario.asm</a></li>
+                    
+                    <li><a href="#" class="file-filter-link" data-file="polar_dots/src/sna.asm">polar_dots/src/sna.asm</a></li>
+                    
+                </ul>
+            </div>
             
 
             
@@ -10184,7 +10271,68 @@ Parameters  	1-80, 1-25</p>
             
         </main>
     </div>
-    <script>// Toggle source code visibility
+    <script>// Build file tree from flat file list
+function buildFileTree(files) {
+    const root = {};
+    
+    files.forEach(file => {
+        const parts = file.split('/');
+        let current = root;
+        
+        parts.forEach((part, index) => {
+            if (!current[part]) {
+                current[part] = {
+                    name: part,
+                    fullPath: parts.slice(0, index + 1).join('/'),
+                    isFile: index === parts.length - 1,
+                    children: {}
+                };
+            }
+            current = current[part].children;
+        });
+    });
+    
+    return root;
+}
+
+// Render file tree HTML
+function renderFileTree(node, isRoot = false) {
+    let html = '';
+    const entries = Object.values(node);
+    
+    if (entries.length === 0) return html;
+    
+    if (!isRoot) html += '<ul class="file-tree-list">';
+    else html = '<ul class="file-tree-list">';
+    
+    entries.sort((a, b) => {
+        // Folders first, then files
+        if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+        return a.name.localeCompare(b.name);
+    }).forEach(entry => {
+        if (entry.isFile) {
+            html += `<li class="file-tree-item file-tree-file">
+                <a href="#" onclick="filterByFile('${entry.fullPath}'); return false;" 
+                   class="file-filter-link" data-file="${entry.fullPath}">
+                    📄 ${entry.name}
+                </a>
+            </li>`;
+        } else {
+            const hasChildren = Object.keys(entry.children).length > 0;
+            html += `<li class="file-tree-item file-tree-folder">
+                <details open>
+                    <summary class="file-tree-folder-name">📁 ${entry.name}</summary>
+                    ${renderFileTree(entry.children, false)}
+                </details>
+            </li>`;
+        }
+    });
+    
+    html += '</ul>';
+    return html;
+}
+
+// Toggle source code visibility
 function toggleSource(id) {
     const content = document.getElementById(id);
     const button = event.target;
@@ -10370,6 +10518,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearSearchBtn = document.getElementById('clearSearchBtn');
     const items = document.querySelectorAll('.item');
     const sections = document.querySelectorAll('.section');
+    
+    // Build file tree if files are present
+    const fileTreeRoot = document.getElementById('file-tree-root');
+    if (fileTreeRoot) {
+        // Get all file-filter-link elements to extract file list
+        const allFileLinks = document.querySelectorAll('#file-filter-list .file-filter-link[data-file]');
+        const files = Array.from(allFileLinks)
+            .map(link => link.dataset.file)
+            .filter(file => file !== ''); // Exclude empty strings
+        
+        if (files.length > 0) {
+            const tree = buildFileTree(files);
+            fileTreeRoot.innerHTML = renderFileTree(tree, true);
+        }
+    }
     
     // Function to clear search
     function clearSearch() {

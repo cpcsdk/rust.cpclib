@@ -1,3 +1,64 @@
+// Build file tree from flat file list
+function buildFileTree(files) {
+    const root = {};
+    
+    files.forEach(file => {
+        const parts = file.split('/');
+        let current = root;
+        
+        parts.forEach((part, index) => {
+            if (!current[part]) {
+                current[part] = {
+                    name: part,
+                    fullPath: parts.slice(0, index + 1).join('/'),
+                    isFile: index === parts.length - 1,
+                    children: {}
+                };
+            }
+            current = current[part].children;
+        });
+    });
+    
+    return root;
+}
+
+// Render file tree HTML
+function renderFileTree(node, isRoot = false) {
+    let html = '';
+    const entries = Object.values(node);
+    
+    if (entries.length === 0) return html;
+    
+    if (!isRoot) html += '<ul class="file-tree-list">';
+    else html = '<ul class="file-tree-list">';
+    
+    entries.sort((a, b) => {
+        // Folders first, then files
+        if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+        return a.name.localeCompare(b.name);
+    }).forEach(entry => {
+        if (entry.isFile) {
+            html += `<li class="file-tree-item file-tree-file">
+                <a href="#" onclick="filterByFile('${entry.fullPath}'); return false;" 
+                   class="file-filter-link" data-file="${entry.fullPath}">
+                    📄 ${entry.name}
+                </a>
+            </li>`;
+        } else {
+            const hasChildren = Object.keys(entry.children).length > 0;
+            html += `<li class="file-tree-item file-tree-folder">
+                <details open>
+                    <summary class="file-tree-folder-name">📁 ${entry.name}</summary>
+                    ${renderFileTree(entry.children, false)}
+                </details>
+            </li>`;
+        }
+    });
+    
+    html += '</ul>';
+    return html;
+}
+
 // Toggle source code visibility
 function toggleSource(id) {
     const content = document.getElementById(id);
@@ -184,6 +245,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearSearchBtn = document.getElementById('clearSearchBtn');
     const items = document.querySelectorAll('.item');
     const sections = document.querySelectorAll('.section');
+    
+    // Build file tree if files are present
+    const fileTreeRoot = document.getElementById('file-tree-root');
+    if (fileTreeRoot) {
+        // Get all file-filter-link elements to extract file list
+        const allFileLinks = document.querySelectorAll('#file-filter-list .file-filter-link[data-file]');
+        const files = Array.from(allFileLinks)
+            .map(link => link.dataset.file)
+            .filter(file => file !== ''); // Exclude empty strings
+        
+        if (files.length > 0) {
+            const tree = buildFileTree(files);
+            fileTreeRoot.innerHTML = renderFileTree(tree, true);
+        }
+    }
     
     // Function to clear search
     function clearSearch() {
