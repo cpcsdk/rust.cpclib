@@ -486,12 +486,45 @@ impl DocumentationPage {
         // Collect all references from all files
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
         
+        // Collect symbol names for searching in macro/function content
+        let symbol_names: Vec<String> = self.content.iter()
+            .filter(|item| !item.is_file())
+            .map(|item| item.item_short_summary())
+            .collect();
+        
         for (source_file, tokens) in all_tokens {
             let refs = collect_cross_references(tokens, source_file);
             for (symbol, mut symbol_refs) in refs {
                 all_refs.entry(symbol)
                     .or_insert_with(Vec::new)
                     .append(&mut symbol_refs);
+            }
+        }
+        
+        // Also search for symbols inside macro and function content
+        for item in &self.content {
+            if item.is_macro() || item.is_function() {
+                let content = if item.is_macro() {
+                    item.macro_source()
+                } else {
+                    item.function_source()
+                };
+                
+                // Exclude the current item's name from the search to avoid self-references
+                let current_name = item.item_short_summary();
+                let filtered_symbols: Vec<String> = symbol_names.iter()
+                    .filter(|name| *name != &current_name)
+                    .cloned()
+                    .collect();
+                
+                let base_line = item.line_number;
+                let refs = collect_references_in_content(&content, &filtered_symbols, &item.source_file, base_line);
+                
+                for (symbol, mut symbol_refs) in refs {
+                    all_refs.entry(symbol)
+                        .or_insert_with(Vec::new)
+                        .append(&mut symbol_refs);
+                }
             }
         }
         
@@ -990,12 +1023,59 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
 /// Extract symbols used in a token's expressions
 fn extract_symbols_from_token<T: ListingElement + std::fmt::Display>(token: &T) -> Vec<String> {
     // Skip comments and label definitions (they're not references)
-    if token.is_comment() || token.is_label() || token.is_macro_definition() {
+    if token.is_comment() || token.is_label() || token.is_macro_definition() || token.is_function_definition() {
         return Vec::new();
     }
     
     // Use the proper symbols() method from ListingElement
     token.symbols().into_iter().collect()
+}
+
+/// Collect symbol references inside macro/function content
+/// Since we don't have parsed tokens for macro content, we search for symbol names manually
+fn collect_references_in_content(
+    content: &str,
+    symbol_names: &[String],
+    source_file: &str,
+    base_line: usize
+) -> HashMap<String, Vec<SymbolReference>> {
+    let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
+    
+    // Sort symbols by length (longest first) to avoid partial matches
+    let mut sorted_symbols = symbol_names.to_vec();
+    sorted_symbols.sort_by(|a, b| b.len().cmp(&a.len()));
+    
+    for (line_offset, line) in content.lines().enumerate() {
+        let line_number = base_line + line_offset;
+        
+        // Limit context length
+        let context = if line.chars().count() > 100 {
+            let truncated: String = line.chars().take(100).collect();
+            format!("{}...", truncated)
+        } else {
+            line.to_string()
+        };
+        
+        // Search for each symbol in the line
+        for symbol in &sorted_symbols {
+            // Use regex to match whole words only
+            let pattern = format!(r"\b{}\b", regex::escape(symbol));
+            if let Ok(re) = regex::Regex::new(&pattern) {
+                if re.is_match(line) {
+                    references
+                        .entry(symbol.clone())
+                        .or_insert_with(Vec::new)
+                        .push(SymbolReference {
+                            source_file: source_file.to_string(),
+                            line_number,
+                            context: context.clone()
+                        });
+                }
+            }
+        }
+    }
+    
+    references
 }
 
 /// Collect cross-references by analyzing which symbols are used in which locations

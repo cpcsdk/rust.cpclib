@@ -313,6 +313,13 @@ document.addEventListener('DOMContentLoaded', function() {
         performSearch();
     }
     
+    // Clear search when clicking sidebar links
+    document.querySelectorAll('.sidebar-item a').forEach(function(link) {
+        link.addEventListener('click', function() {
+            clearSearch();
+        });
+    });
+    
     // Initialize syntax highlighting
     hljs.highlightAll();
     
