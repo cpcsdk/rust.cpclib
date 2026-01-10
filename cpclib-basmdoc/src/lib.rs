@@ -491,8 +491,9 @@ impl DocumentationPage {
         let mut page = build_documentation_page_from_aggregates(display_name, doc);
         page.all_files = vec![display_name.to_string()];
         
-        // Populate cross-references
-        page = populate_cross_references(page, &tokens);
+        // Populate cross-references with symbol links
+        let symbols = page.all_symbols();
+        page = populate_cross_references(page, &tokens, &symbols);
         
         // Link symbols in source code
         page = page.link_source_symbols();
@@ -587,11 +588,14 @@ impl DocumentationPage {
         // Sort by length (longest first) to avoid partial matches in regex
         symbol_names.sort_by(|a, b| b.len().cmp(&a.len()));
         
+        // Get all symbols for linking
+        let all_symbols = self.all_symbols();
+        
         // Collect all references from all files (PARALLEL with rayon, sequential without)
         let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.par_iter()
             .map(|(source_file, tokens)| {
                 let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                collect_cross_references(tokens, source_file_arc)
+                collect_cross_references(tokens, source_file_arc, &all_symbols)
             })
             .collect();
         
@@ -627,7 +631,7 @@ impl DocumentationPage {
                 
                 let base_line = item.line_number;
                 let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line)
+                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols)
             })
             .collect();
         
@@ -1374,7 +1378,8 @@ fn collect_references_in_content(
     content: &str,
     symbol_names: &[&str],
     source_file: Arc<str>,
-    base_line: usize
+    base_line: usize,
+    all_symbols: &[(String, String)]
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
@@ -1400,7 +1405,8 @@ fn collect_references_in_content(
         // Search for each symbol in the line using pre-compiled regexes
         for (symbol, re) in &symbol_regexes {
             if re.is_match(line) {
-                let highlighted = highlight_z80_syntax(&context);
+                // Use link_symbols_in_source to add both highlighting and links
+                let highlighted = link_symbols_in_source(&context, all_symbols);
                 references
                     .entry(symbol.to_string())
                     .or_insert_with(Vec::new)
@@ -1420,7 +1426,8 @@ fn collect_references_in_content(
 /// Collect cross-references by analyzing which symbols are used in which locations
 pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
     tokens: &[T],
-    source_file: Arc<str>
+    source_file: Arc<str>,
+    all_symbols: &[(String, String)]
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
@@ -1437,7 +1444,8 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
         };
         
         for symbol in symbols {
-            let highlighted = highlight_z80_syntax(&context);
+            // Use link_symbols_in_source to add both highlighting and links
+            let highlighted = link_symbols_in_source(&context, all_symbols);
             references
                 .entry(symbol)
                 .or_insert_with(Vec::new)
@@ -1454,10 +1462,10 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 }
 
 /// Populate cross-references in documentation page
-pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T]) -> DocumentationPage {
+pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T], all_symbols: &[(String, String)]) -> DocumentationPage {
     // Collect all references from tokens
     let source_file_arc: Arc<str> = Arc::from(page.fname.as_str());
-    let all_refs = collect_cross_references(tokens, source_file_arc);
+    let all_refs = collect_cross_references(tokens, source_file_arc, all_symbols);
     
     // Match references to documented items
     for item in &mut page.content {
