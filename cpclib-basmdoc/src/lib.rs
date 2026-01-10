@@ -2,6 +2,7 @@ pub mod cmdline;
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::borrow::Cow;
 
 use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str, LocatedListing};
 use cpclib_common::itertools::Itertools;
@@ -157,9 +158,41 @@ impl DocumentedItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SymbolReference {
-    pub source_file: String,
+    #[serde(serialize_with = "serialize_arc_str", deserialize_with = "deserialize_arc_str")]
+    pub source_file: Arc<str>,
     pub line_number: usize,
-    pub context: String // surrounding code for context
+    #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
+    pub context: Cow<'static, str> // surrounding code for context
+}
+
+// Helper functions for Arc<str> serialization
+fn serialize_arc_str<S>(arc: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(arc)
+}
+
+fn deserialize_arc_str<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(|s| Arc::from(s.as_str()))
+}
+
+// Helper functions for Cow<str> serialization
+fn serialize_cow_str<S>(cow: &Cow<'static, str>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(cow)
+}
+
+fn deserialize_cow_str<'de, D>(deserializer: D) -> Result<Cow<'static, str>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(|s| Cow::Owned(s))
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -486,14 +519,17 @@ impl DocumentationPage {
         // Collect all references from all files
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
         
-        // Collect symbol names for searching in macro/function content
-        let symbol_names: Vec<String> = self.content.iter()
+        // Collect and sort symbol names once (OPTIMIZATION: sort once, not per macro)
+        let mut symbol_names: Vec<String> = self.content.iter()
             .filter(|item| !item.is_file())
             .map(|item| item.item_short_summary())
             .collect();
+        // Sort by length (longest first) to avoid partial matches in regex
+        symbol_names.sort_by(|a, b| b.len().cmp(&a.len()));
         
         for (source_file, tokens) in all_tokens {
-            let refs = collect_cross_references(tokens, source_file);
+            let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
+            let refs = collect_cross_references(tokens, source_file_arc);
             for (symbol, mut symbol_refs) in refs {
                 all_refs.entry(symbol)
                     .or_insert_with(Vec::new)
@@ -511,14 +547,16 @@ impl DocumentationPage {
                 };
                 
                 // Exclude the current item's name from the search to avoid self-references
+                // Use a filter to avoid allocating a new Vec
                 let current_name = item.item_short_summary();
-                let filtered_symbols: Vec<String> = symbol_names.iter()
-                    .filter(|name| *name != &current_name)
-                    .cloned()
+                let filtered_symbols: Vec<&str> = symbol_names.iter()
+                    .filter(|name| name.as_str() != current_name.as_str())
+                    .map(|s| s.as_str())
                     .collect();
                 
                 let base_line = item.line_number;
-                let refs = collect_references_in_content(&content, &filtered_symbols, &item.source_file, base_line);
+                let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
+                let refs = collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line);
                 
                 for (symbol, mut symbol_refs) in refs {
                     all_refs.entry(symbol)
@@ -1035,42 +1073,42 @@ fn extract_symbols_from_token<T: ListingElement + std::fmt::Display>(token: &T) 
 /// Since we don't have parsed tokens for macro content, we search for symbol names manually
 fn collect_references_in_content(
     content: &str,
-    symbol_names: &[String],
-    source_file: &str,
+    symbol_names: &[&str],
+    source_file: Arc<str>,
     base_line: usize
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
-    // Sort symbols by length (longest first) to avoid partial matches
-    let mut sorted_symbols = symbol_names.to_vec();
-    sorted_symbols.sort_by(|a, b| b.len().cmp(&a.len()));
+    // Pre-compile all regexes once (MAJOR OPTIMIZATION)
+    let symbol_regexes: Vec<(&str, regex::Regex)> = symbol_names.iter()
+        .filter_map(|&symbol| {
+            let pattern = format!(r"\b{}\b", regex::escape(symbol));
+            regex::Regex::new(&pattern).ok().map(|re| (symbol, re))
+        })
+        .collect();
     
     for (line_offset, line) in content.lines().enumerate() {
         let line_number = base_line + line_offset;
         
-        // Limit context length
-        let context = if line.chars().count() > 100 {
+        // Use Cow to avoid allocation when no truncation needed
+        let context: Cow<'static, str> = if line.chars().count() > 100 {
             let truncated: String = line.chars().take(100).collect();
-            format!("{}...", truncated)
+            Cow::Owned(format!("{}...", truncated))
         } else {
-            line.to_string()
+            Cow::Owned(line.to_string())
         };
         
-        // Search for each symbol in the line
-        for symbol in &sorted_symbols {
-            // Use regex to match whole words only
-            let pattern = format!(r"\b{}\b", regex::escape(symbol));
-            if let Ok(re) = regex::Regex::new(&pattern) {
-                if re.is_match(line) {
-                    references
-                        .entry(symbol.clone())
-                        .or_insert_with(Vec::new)
-                        .push(SymbolReference {
-                            source_file: source_file.to_string(),
-                            line_number,
-                            context: context.clone()
-                        });
-                }
+        // Search for each symbol in the line using pre-compiled regexes
+        for (symbol, re) in &symbol_regexes {
+            if re.is_match(line) {
+                references
+                    .entry(symbol.to_string())
+                    .or_insert_with(Vec::new)
+                    .push(SymbolReference {
+                        source_file: Arc::clone(&source_file),
+                        line_number,
+                        context: context.clone()
+                    });
             }
         }
     }
@@ -1081,20 +1119,20 @@ fn collect_references_in_content(
 /// Collect cross-references by analyzing which symbols are used in which locations
 pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
     tokens: &[T],
-    source_file: &str
+    source_file: Arc<str>
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
     for (line_num, token) in tokens.iter().enumerate() {
         let symbols = extract_symbols_from_token(token);
-        let context = token.to_string();
+        let token_str = token.to_string();
         
-        // Limit context length to avoid huge strings (char boundary-safe)
-        let context = if context.chars().count() > 100 {
-            let truncated: String = context.chars().take(100).collect();
-            format!("{}...", truncated)
+        // Use Cow to avoid allocation when no truncation needed
+        let context: Cow<'static, str> = if token_str.chars().count() > 100 {
+            let truncated: String = token_str.chars().take(100).collect();
+            Cow::Owned(format!("{}...", truncated))
         } else {
-            context
+            Cow::Owned(token_str)
         };
         
         for symbol in symbols {
@@ -1102,7 +1140,7 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
                 .entry(symbol)
                 .or_insert_with(Vec::new)
                 .push(SymbolReference {
-                    source_file: source_file.to_string(),
+                    source_file: Arc::clone(&source_file),
                     line_number: line_num + 1, // 1-indexed for display
                     context: context.clone()
                 });
@@ -1115,7 +1153,8 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 /// Populate cross-references in documentation page
 pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T]) -> DocumentationPage {
     // Collect all references from tokens
-    let all_refs = collect_cross_references(tokens, &page.fname);
+    let source_file_arc: Arc<str> = Arc::from(page.fname.as_str());
+    let all_refs = collect_cross_references(tokens, source_file_arc);
     
     // Match references to documented items
     for item in &mut page.content {
