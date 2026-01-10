@@ -1383,6 +1383,9 @@ fn collect_references_in_content(
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
+    // Cache for highlighted contexts to avoid redundant highlighting (MAJOR OPTIMIZATION)
+    let mut highlight_cache: HashMap<String, String> = HashMap::new();
+    
     // Pre-compile all regexes once (MAJOR OPTIMIZATION)
     let symbol_regexes: Vec<(&str, regex::Regex)> = symbol_names.iter()
         .filter_map(|&symbol| {
@@ -1405,8 +1408,12 @@ fn collect_references_in_content(
         // Search for each symbol in the line using pre-compiled regexes
         for (symbol, re) in &symbol_regexes {
             if re.is_match(line) {
-                // Use link_symbols_in_source to add both highlighting and links
-                let highlighted = link_symbols_in_source(&context, all_symbols);
+                // Use cache to avoid re-highlighting the same context
+                let highlighted = highlight_cache
+                    .entry(context.to_string())
+                    .or_insert_with(|| link_symbols_in_source(&context, all_symbols))
+                    .clone();
+                
                 references
                     .entry(symbol.to_string())
                     .or_insert_with(Vec::new)
@@ -1431,6 +1438,9 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
     
+    // Cache for highlighted contexts to avoid redundant highlighting (MAJOR OPTIMIZATION)
+    let mut highlight_cache: HashMap<String, String> = HashMap::new();
+    
     for (line_num, token) in tokens.iter().enumerate() {
         let symbols = extract_symbols_from_token(token);
         let token_str = token.to_string();
@@ -1444,8 +1454,12 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
         };
         
         for symbol in symbols {
-            // Use link_symbols_in_source to add both highlighting and links
-            let highlighted = link_symbols_in_source(&context, all_symbols);
+            // Use cache to avoid re-highlighting the same context
+            let highlighted = highlight_cache
+                .entry(context.to_string())
+                .or_insert_with(|| link_symbols_in_source(&context, all_symbols))
+                .clone();
+            
             references
                 .entry(symbol)
                 .or_insert_with(Vec::new)
