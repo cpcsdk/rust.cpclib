@@ -571,10 +571,10 @@ impl BndbuildState {
         let fname = path.into();
 
         #[cfg(feature = "rayon")]
-        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname);
+        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, false);
 
         #[cfg(not(feature = "rayon"))]
-        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, false);
+        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname);
 
 
 
