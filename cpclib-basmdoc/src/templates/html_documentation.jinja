@@ -14,6 +14,69 @@
     </style>
 </head>
 <body>
+    <!-- Macro definitions (must be at the top before usage) -->
+    
+    <!-- Macro for displaying cross-references -->
+    {% macro show_references(item) %}
+        {% if item.has_references %}
+        <div class="cross-references">
+            <h5>Referenced in:</h5>
+            <ul class="reference-list">
+                {% for ref in item.references %}
+                <li class="reference-item">
+                    <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
+                    <pre><code class="language-basm">{{ ref.highlighted_context | safe }}</code></pre>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    {% endmacro %}
+    
+    <!-- Macro for sidebar section -->
+    {% macro sidebar_section(title, id, items) %}
+        <div class="sidebar-section" id="sidebar-{{ id }}">
+            <h2>{{ title }}</h2>
+            <ul>
+                {% for item in items %}
+                <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endmacro %}
+    
+    <!-- Macro for item header -->
+    {% macro item_header(item) %}
+        <h4 id="{{item.key}}" class="anchor-offset item-header">
+            <span class="item-name">{{ item.summary }}</span>
+            {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+        </h4>
+    {% endmacro %}
+    
+    <!-- Macro for source code toggle -->
+    {% macro source_toggle(item) %}
+        {% if item.source %}
+        <div class="macro-source">
+            <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
+            <div id="{{item.key}}_source" class="macro-source-content">
+                <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
+            </div>
+        </div>
+        {% endif %}
+    {% endmacro %}
+    
+    <!-- Macro for displaying a documented item -->
+    {% macro show_item(item, show_source=false) %}
+        <div class="item" data-source-file="{{ item.source_file }}">
+            {{ item_header(item) }}
+            <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
+            {% if show_source %}
+                {{ source_toggle(item) }}
+            {% endif %}
+            {{ show_references(item) }}
+        </div>
+    {% endmacro %}
+
     <div class="search-container">
         <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search documentation..." />
         <button id="clearSearchBtn" class="clear-search-btn" title="Clear search">✕</button>
@@ -40,69 +103,24 @@
             {% endif %}
 
             {% if page.has_labels() %}
-            <div class="sidebar-section" id="sidebar-labels">
-                <h2>Labels</h2>
-                <ul>
-                    {% for item in page.labels %}
-                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                    {% endfor %}
-                </ul>
-            </div>
+                {{ sidebar_section("Labels", "labels", page.labels) }}
             {% endif %}
 
             {% if page.has_macros() %}
-            <div class="sidebar-section" id="sidebar-macros">
-                <h2>Macros</h2>
-                <ul>
-                    {% for item in page.macros %}
-                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                    {% endfor %}
-                </ul>
-            </div>
+                {{ sidebar_section("Macros", "macros", page.macros) }}
             {% endif %}
 
             {% if page.has_functions() %}
-            <div class="sidebar-section" id="sidebar-functions">
-                <h2>Functions</h2>
-                <ul>
-                    {% for item in page.functions %}
-                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                    {% endfor %}
-                </ul>
-            </div>
+                {{ sidebar_section("Functions", "functions", page.functions) }}
             {% endif %}
 
             {% if page.has_equ() %}
-            <div class="sidebar-section" id="sidebar-equs">
-                <h2>Equs</h2>
-                <ul>
-                    {% for item in page.equs %}
-                    <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
-                    {% endfor %}
-                </ul>
-            </div>
+                {{ sidebar_section("Equs", "equs", page.equs) }}
             {% endif %}
         </aside>
 
         <!-- Main content -->
         <main class="main-content">
-        
-        <!-- Macro for displaying cross-references -->
-        {% macro show_references(item) %}
-            {% if item.has_references %}
-            <div class="cross-references">
-                <h5>Referenced in:</h5>
-                <ul class="reference-list">
-                    {% for ref in item.references %}
-                    <li class="reference-item">
-                        <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
-                        <pre><code class="language-basm">{{ ref.highlighted_context | safe }}</code></pre>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-        {% endmacro %}
         
         <!--
             <div class="file-header">
@@ -163,14 +181,7 @@
             <section class="section">
                 <h2 id="labels-section" class="anchor-offset">Labels</h2>
                 {% for item in page.labels %}
-                <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset item-header">
-                        <span class="item-name">{{ item.summary }}</span>
-                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
-                    </h4>
-                    <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
-                    {{ show_references(item) }}
-                </div>
+                    {{ show_item(item) }}
                 {% endfor %}
             </section>
             {% endif %}
@@ -180,22 +191,7 @@
             <section class="section">
                 <h2 id="macros-section" class="anchor-offset">Macros</h2>
                 {% for item in page.macros %}
-                <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset item-header">
-                        <span class="item-name">{{ item.summary }}</span>
-                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
-                    </h4>
-                    <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
-                    {% if item.source %}
-                    <div class="macro-source">
-                        <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
-                        <div id="{{item.key}}_source" class="macro-source-content">
-                            <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {{ show_references(item) }}
-                </div>
+                    {{ show_item(item, show_source=true) }}
                 {% endfor %}
             </section>
             {% endif %}
@@ -205,22 +201,7 @@
             <section class="section">
                 <h2 id="functions-section" class="anchor-offset">Functions</h2>
                 {% for item in page.functions %}
-                <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset item-header">
-                        <span class="item-name">{{ item.summary }}</span>
-                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
-                    </h4>
-                    <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
-                    {% if item.source %}
-                    <div class="macro-source">
-                        <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
-                        <div id="{{item.key}}_source" class="macro-source-content">
-                            <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {{ show_references(item) }}
-                </div>
+                    {{ show_item(item, show_source=true) }}
                 {% endfor %}
             </section>
             {% endif %}
@@ -230,14 +211,7 @@
             <section class="section">
                 <h2 id="equs-section" class="anchor-offset">Equs</h2>
                 {% for item in page.equs %}
-                <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset item-header">
-                        <span class="item-name">{{ item.summary }}</span>
-                        {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
-                    </h4>
-                    <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
-                    {{ show_references(item) }}
-                </div>
+                    {{ show_item(item) }}
                 {% endfor %}
             </section>
             {% endif %}

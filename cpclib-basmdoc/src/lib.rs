@@ -1263,6 +1263,10 @@ fn highlight_z80_syntax(source: &str) -> String {
             ).unwrap()
         };
         
+        static ref MACRO_PARAMS_REGEX: regex::Regex = {
+            regex::Regex::new(r"\{[a-zA-Z_][a-zA-Z0-9_]*\}").unwrap()
+        };
+        
         static ref NUMBERS_REGEX: regex::Regex = {
             regex::Regex::new(
                 r"\b0x[0-9a-fA-F]+|\$[0-9a-fA-F]+|#[0-9a-fA-F]+|&[0-9a-fA-F]+|0b[01]+|%[01]+|\b[0-9]+\b"
@@ -1336,6 +1340,9 @@ fn highlight_z80_syntax(source: &str) -> String {
         }
         for cap in NUMBERS_REGEX.find_iter(code_part) {
             code_matches.push((cap.start() + code_start, cap.end() + code_start, "number"));
+        }
+        for cap in MACRO_PARAMS_REGEX.find_iter(code_part) {
+            code_matches.push((cap.start() + code_start, cap.end() + code_start, "meta"));
         }
         for cap in DIRECTIVES_REGEX.find_iter(code_part) {
             code_matches.push((cap.start() + code_start, cap.end() + code_start, "built_in"));
@@ -1803,5 +1810,21 @@ mod test {
         assert!(highlighted.contains("<span class=\"hljs-keyword\">LD</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">CALL</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">RET</span>"));
+    }
+    
+    #[test]
+    fn test_highlight_z80_syntax_macro_parameters() {
+        use crate::highlight_z80_syntax;
+        
+        let source = "ld a, {param1}\nadd {value}\nld hl, {address}";
+        let highlighted = highlight_z80_syntax(source);
+        
+        // Macro parameters should be highlighted
+        assert!(highlighted.contains("<span class=\"hljs-meta\">{param1}</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-meta\">{value}</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-meta\">{address}</span>"));
+        // Instructions should still be highlighted
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
+        assert!(highlighted.contains("<span class=\"hljs-keyword\">add</span>"));
     }
 }
