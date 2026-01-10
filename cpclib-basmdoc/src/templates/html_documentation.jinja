@@ -96,7 +96,7 @@
                     {% for ref in item.references %}
                     <li class="reference-item">
                         <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
-                        <code class="ref-context">{{ ref.context }}</code>
+                        <pre><code class="language-basm">{{ ref.highlighted_context | safe }}</code></pre>
                     </li>
                     {% endfor %}
                 </ul>

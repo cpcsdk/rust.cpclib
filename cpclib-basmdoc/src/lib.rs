@@ -190,7 +190,9 @@ pub struct SymbolReference {
     pub source_file: Arc<str>,
     pub line_number: usize,
     #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
-    pub context: Cow<'static, str> // surrounding code for context
+    pub context: Cow<'static, str>, // surrounding code for context
+    #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
+    pub highlighted_context: Cow<'static, str> // syntax-highlighted context
 }
 
 // Helper functions for Arc<str> serialization
@@ -1398,13 +1400,15 @@ fn collect_references_in_content(
         // Search for each symbol in the line using pre-compiled regexes
         for (symbol, re) in &symbol_regexes {
             if re.is_match(line) {
+                let highlighted = highlight_z80_syntax(&context);
                 references
                     .entry(symbol.to_string())
                     .or_insert_with(Vec::new)
                     .push(SymbolReference {
                         source_file: Arc::clone(&source_file),
                         line_number,
-                        context: context.clone()
+                        context: context.clone(),
+                        highlighted_context: Cow::Owned(highlighted)
                     });
             }
         }
@@ -1433,13 +1437,15 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
         };
         
         for symbol in symbols {
+            let highlighted = highlight_z80_syntax(&context);
             references
                 .entry(symbol)
                 .or_insert_with(Vec::new)
                 .push(SymbolReference {
                     source_file: Arc::clone(&source_file),
                     line_number: line_num + 1, // 1-indexed for display
-                    context: context.clone()
+                    context: context.clone(),
+                    highlighted_context: Cow::Owned(highlighted)
                 });
         }
     }
