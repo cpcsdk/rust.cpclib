@@ -7,6 +7,29 @@ use std::borrow::Cow;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
+// Polyfill for par_iter when rayon is disabled - makes it behave like regular iter
+#[cfg(not(feature = "rayon"))]
+trait ParallelIteratorShim<'a, T: 'a> {
+    type Iter: Iterator<Item = &'a T>;
+    fn par_iter(&'a self) -> Self::Iter;
+}
+
+#[cfg(not(feature = "rayon"))]
+impl<'a, T: 'a> ParallelIteratorShim<'a, T> for [T] {
+    type Iter = std::slice::Iter<'a, T>;
+    fn par_iter(&'a self) -> Self::Iter {
+        self.iter()
+    }
+}
+
+#[cfg(not(feature = "rayon"))]
+impl<'a, T: 'a> ParallelIteratorShim<'a, T> for Vec<T> {
+    type Iter = std::slice::Iter<'a, T>;
+    fn par_iter(&'a self) -> Self::Iter {
+        self.iter()
+    }
+}
+
 use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str, LocatedListing};
 use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
@@ -527,17 +550,8 @@ impl DocumentationPage {
         // Sort by length (longest first) to avoid partial matches in regex
         symbol_names.sort_by(|a, b| b.len().cmp(&a.len()));
         
-        // Collect all references from all files (PARALLEL)
-        #[cfg(feature = "rayon")]
+        // Collect all references from all files (PARALLEL with rayon, sequential without)
         let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.par_iter()
-            .map(|(source_file, tokens)| {
-                let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                collect_cross_references(tokens, source_file_arc)
-            })
-            .collect();
-        
-        #[cfg(not(feature = "rayon"))]
-        let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.iter()
             .map(|(source_file, tokens)| {
                 let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
                 collect_cross_references(tokens, source_file_arc)
@@ -554,35 +568,12 @@ impl DocumentationPage {
             }
         }
         
-        // Also search for symbols inside macro and function content (PARALLEL)
+        // Also search for symbols inside macro and function content (PARALLEL with rayon, sequential without)
         let macro_func_items: Vec<_> = self.content.iter()
             .filter(|item| item.is_macro() || item.is_function())
             .collect();
         
-        #[cfg(feature = "rayon")]
         let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = macro_func_items.par_iter()
-            .map(|item| {
-                let content = if item.is_macro() {
-                    item.macro_source()
-                } else {
-                    item.function_source()
-                };
-                
-                // Exclude the current item's name from the search to avoid self-references
-                let current_name = item.item_short_summary();
-                let filtered_symbols: Vec<&str> = symbol_names.iter()
-                    .filter(|name| name.as_str() != current_name.as_str())
-                    .map(|s| s.as_str())
-                    .collect();
-                
-                let base_line = item.line_number;
-                let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line)
-            })
-            .collect();
-        
-        #[cfg(not(feature = "rayon"))]
-        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = macro_func_items.iter()
             .map(|item| {
                 let content = if item.is_macro() {
                     item.macro_source()
