@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::borrow::Cow;
 
+use dashmap::DashMap;
+
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 
@@ -191,8 +193,8 @@ pub struct SymbolReference {
     pub line_number: usize,
     #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
     pub context: Cow<'static, str>, // surrounding code for context
-    #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
-    pub highlighted_context: Cow<'static, str> // syntax-highlighted context
+    #[serde(serialize_with = "serialize_arc_str", deserialize_with = "deserialize_arc_str")]
+    pub highlighted_context: Arc<str> // syntax-highlighted context (Arc to avoid clones)
 }
 
 // Helper functions for Arc<str> serialization
@@ -591,13 +593,26 @@ impl DocumentationPage {
         // Get all symbols for linking
         let all_symbols = self.all_symbols();
         
-        // Collect all references from all files (PARALLEL with rayon, sequential without)
-        let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = all_tokens.par_iter()
-            .map(|(source_file, tokens)| {
-                let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                collect_cross_references(tokens, source_file_arc, &all_symbols)
-            })
-            .collect();
+        // Create shared cache for ALL operations (MAJOR OPTIMIZATION: shared across all parallel threads)
+        let highlight_cache = DashMap::new();
+        
+        // Collect all references from all files
+        // Only use parallelization if workload is large enough to offset overhead (threshold: 10 files)
+        let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if all_tokens.len() > 10 {
+            all_tokens.par_iter()
+                .map(|(source_file, tokens)| {
+                    let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
+                    collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache)
+                })
+                .collect()
+        } else {
+            all_tokens.iter()
+                .map(|(source_file, tokens)| {
+                    let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
+                    collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache)
+                })
+                .collect()
+        };
         
         // Merge all references
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
@@ -609,31 +624,55 @@ impl DocumentationPage {
             }
         }
         
-        // Also search for symbols inside macro and function content (PARALLEL with rayon, sequential without)
+        // Also search for symbols inside macro and function content
         let macro_func_items: Vec<_> = self.content.iter()
             .filter(|item| item.is_macro() || item.is_function())
             .collect();
         
-        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = macro_func_items.par_iter()
-            .map(|item| {
-                let content = if item.is_macro() {
-                    item.macro_source()
-                } else {
-                    item.function_source()
-                };
-                
-                // Exclude the current item's name from the search to avoid self-references
-                let current_name = item.item_short_summary();
-                let filtered_symbols: Vec<&str> = symbol_names.iter()
-                    .filter(|name| name.as_str() != current_name.as_str())
-                    .map(|s| s.as_str())
-                    .collect();
-                
-                let base_line = item.line_number;
-                let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols)
-            })
-            .collect();
+        // Only parallelize if workload is large enough (threshold: 20 macros/functions)
+        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if macro_func_items.len() > 20 {
+            macro_func_items.par_iter()
+                .map(|item| {
+                    let content = if item.is_macro() {
+                        item.macro_source()
+                    } else {
+                        item.function_source()
+                    };
+                    
+                    // Exclude the current item's name from the search to avoid self-references
+                    let current_name = item.item_short_summary();
+                    let filtered_symbols: Vec<&str> = symbol_names.iter()
+                        .filter(|name| name.as_str() != current_name.as_str())
+                        .map(|s| s.as_str())
+                        .collect();
+                    
+                    let base_line = item.line_number;
+                    let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
+                    collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache)
+                })
+                .collect()
+        } else {
+            macro_func_items.iter()
+                .map(|item| {
+                    let content = if item.is_macro() {
+                        item.macro_source()
+                    } else {
+                        item.function_source()
+                    };
+                    
+                    // Exclude the current item's name from the search to avoid self-references
+                    let current_name = item.item_short_summary();
+                    let filtered_symbols: Vec<&str> = symbol_names.iter()
+                        .filter(|name| name.as_str() != current_name.as_str())
+                        .map(|s| s.as_str())
+                        .collect();
+                    
+                    let base_line = item.line_number;
+                    let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
+                    collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache)
+                })
+                .collect()
+        };
         
         // Merge macro/function references
         for refs in macro_refs {
@@ -1099,7 +1138,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
             let should_skip = is_local_label && last_global_label.is_none();
             
             if !should_skip {
-                let line_number = token.span().location_line() as usize;
+                let line_number = token.possible_span().map(|s| s.location_line()).unwrap_or(0) as usize;
                 if !in_process_comment.is_unspecified() {
                     // we comment an item if any
                     let documented = if in_process_comment.is_global() {
@@ -1379,12 +1418,10 @@ fn collect_references_in_content(
     symbol_names: &[&str],
     source_file: Arc<str>,
     base_line: usize,
-    all_symbols: &[(String, String)]
+    all_symbols: &[(String, String)],
+    highlight_cache: &DashMap<String, Arc<str>> // Shared concurrent cache
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
-    
-    // Cache for highlighted contexts to avoid redundant highlighting (MAJOR OPTIMIZATION)
-    let mut highlight_cache: HashMap<String, String> = HashMap::new();
     
     // Pre-compile all regexes once (MAJOR OPTIMIZATION)
     let symbol_regexes: Vec<(&str, regex::Regex)> = symbol_names.iter()
@@ -1408,10 +1445,11 @@ fn collect_references_in_content(
         // Search for each symbol in the line using pre-compiled regexes
         for (symbol, re) in &symbol_regexes {
             if re.is_match(line) {
-                // Use cache to avoid re-highlighting the same context
+                // Use shared cache to avoid re-highlighting the same context
+                let context_key = context.to_string();
                 let highlighted = highlight_cache
-                    .entry(context.to_string())
-                    .or_insert_with(|| link_symbols_in_source(&context, all_symbols))
+                    .entry(context_key)
+                    .or_insert_with(|| Arc::from(link_symbols_in_source(&context, all_symbols).as_str()))
                     .clone();
                 
                 references
@@ -1421,7 +1459,7 @@ fn collect_references_in_content(
                         source_file: Arc::clone(&source_file),
                         line_number,
                         context: context.clone(),
-                        highlighted_context: Cow::Owned(highlighted)
+                        highlighted_context: highlighted
                     });
             }
         }
@@ -1434,12 +1472,10 @@ fn collect_references_in_content(
 pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
     tokens: &[T],
     source_file: Arc<str>,
-    all_symbols: &[(String, String)]
+    all_symbols: &[(String, String)],
+    highlight_cache: &DashMap<String, Arc<str>> // Shared concurrent cache
 ) -> HashMap<String, Vec<SymbolReference>> {
     let mut references: HashMap<String, Vec<SymbolReference>> = HashMap::new();
-    
-    // Cache for highlighted contexts to avoid redundant highlighting (MAJOR OPTIMIZATION)
-    let mut highlight_cache: HashMap<String, String> = HashMap::new();
     
     for (line_num, token) in tokens.iter().enumerate() {
         let symbols = extract_symbols_from_token(token);
@@ -1454,10 +1490,11 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
         };
         
         for symbol in symbols {
-            // Use cache to avoid re-highlighting the same context
+            // Use shared cache to avoid re-highlighting the same context
+            let context_key = context.to_string();
             let highlighted = highlight_cache
-                .entry(context.to_string())
-                .or_insert_with(|| link_symbols_in_source(&context, all_symbols))
+                .entry(context_key)
+                .or_insert_with(|| Arc::from(link_symbols_in_source(&context, all_symbols).as_str()))
                 .clone();
             
             references
@@ -1467,7 +1504,7 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
                     source_file: Arc::clone(&source_file),
                     line_number: line_num + 1, // 1-indexed for display
                     context: context.clone(),
-                    highlighted_context: Cow::Owned(highlighted)
+                    highlighted_context: highlighted
                 });
         }
     }
@@ -1477,9 +1514,12 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 
 /// Populate cross-references in documentation page
 pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T], all_symbols: &[(String, String)]) -> DocumentationPage {
+    // Create shared cache for this operation
+    let highlight_cache = DashMap::new();
+    
     // Collect all references from tokens
     let source_file_arc: Arc<str> = Arc::from(page.fname.as_str());
-    let all_refs = collect_cross_references(tokens, source_file_arc, all_symbols);
+    let all_refs = collect_cross_references(tokens, source_file_arc, all_symbols, &highlight_cache);
     
     // Match references to documented items
     for item in &mut page.content {

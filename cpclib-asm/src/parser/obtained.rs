@@ -2008,7 +2008,7 @@ impl MayHaveSpan for Token {
     }
 
     fn span(&self) -> &Z80Span {
-        panic!()
+        panic!("A raw Token does not have a span")
     }
 
     fn has_span(&self) -> bool {

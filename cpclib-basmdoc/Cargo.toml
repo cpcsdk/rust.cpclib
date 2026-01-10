@@ -25,6 +25,7 @@ rayon = { workspace = true, optional = true }
 rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
 serde.workspace = true
 lazy_static = "1.5"
+dashmap = "6.1"
 
 dirs = "5.0"
 ureq = "2.10"
