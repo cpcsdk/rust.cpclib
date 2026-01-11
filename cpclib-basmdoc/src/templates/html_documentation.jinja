@@ -192,7 +192,7 @@
                             {% endif %}
                         {% endfor %}
                         
-                        <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">Full Source</h4>
+                        <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
                         <details class="source-details">
                             <summary>Show Source</summary>
                             {% if file_source_map[file] %}
