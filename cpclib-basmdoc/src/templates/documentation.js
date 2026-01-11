@@ -471,5 +471,89 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         pre.appendChild(button);
     });
+    
+    // Setup lazy-loading for compressed code blocks
+    setupLazyCodeLoading();
 
 });
+
+// Lazy loading for compressed code blocks using native DecompressionStream API
+function setupLazyCodeLoading() {
+    document.querySelectorAll('details.lazy-code').forEach(function(details) {
+        // Only decompress when the details element is opened
+        details.addEventListener('toggle', function() {
+            if (details.open && !details.dataset.loaded) {
+                const placeholder = details.querySelector('.code-placeholder');
+                if (placeholder && placeholder.dataset.compressed) {
+                    // Decompress using native DecompressionStream API (supported in all modern browsers)
+                    decompressCode(placeholder.dataset.compressed)
+                        .then(function(decompressed) {
+                            // Replace placeholder with actual content
+                            placeholder.outerHTML = decompressed;
+                            details.dataset.loaded = 'true';
+                            
+                            // Add copy button to the newly inserted code block
+                            const codeBlock = details.querySelector('pre code');
+                            if (codeBlock && !codeBlock.parentElement.querySelector('.copy-btn')) {
+                                const pre = codeBlock.parentElement;
+                                const button = document.createElement('button');
+                                button.className = 'copy-btn';
+                                button.textContent = '📋 Copy';
+                                button.onclick = function() {
+                                    copyToClipboard(codeBlock.textContent, button);
+                                };
+                                pre.appendChild(button);
+                            }
+                        })
+                        .catch(function(e) {
+                            console.error('Failed to decompress code:', e);
+                            placeholder.innerHTML = '<pre><code>Error loading code content. Please use a modern browser.</code></pre>';
+                        });
+                }
+            }
+        }, { once: false });
+    });
+}
+
+// Native browser DecompressionStream API for gzip decompression
+async function decompressCode(base64Data) {
+    // Decode base64 to binary
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Create a ReadableStream from the compressed data
+    const stream = new ReadableStream({
+        start(controller) {
+            controller.enqueue(bytes);
+            controller.close();
+        }
+    });
+    
+    // Decompress using native DecompressionStream
+    const decompressedStream = stream.pipeThrough(new DecompressionStream('gzip'));
+    
+    // Read the decompressed data
+    const reader = decompressedStream.getReader();
+    const chunks = [];
+    
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    
+    // Combine chunks and decode as UTF-8 text
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+    }
+    
+    return new TextDecoder().decode(combined);
+}
+

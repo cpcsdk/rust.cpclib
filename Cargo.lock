@@ -2434,12 +2434,14 @@ dependencies = [
 name = "cpclib-basmdoc"
 version = "0.11.0"
 dependencies = [
+ "base64 0.22.1",
  "cpclib-asm",
  "cpclib-common",
  "cpclib-tokens",
  "dashmap",
  "delegate",
  "dirs 5.0.1",
+ "flate2",
  "glob",
  "indicatif 0.17.11",
  "lazy_static",

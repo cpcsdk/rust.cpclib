@@ -53,16 +53,16 @@
         </h4>
     {% endmacro %}
     
-    <!-- Macro for source code toggle -->
+    <!-- Macro for source code toggle with lazy loading -->
     {% macro source_toggle(item) %}
         {% if item.source %}
         <div class="macro-source">
-            <details class="macro-source-details">
+            <details class="macro-source-details lazy-code">
                 <summary>Show Source</summary>
                 {% if item.linked_source %}
-                <pre><code class="hljs language-basm">{{ item.linked_source | add_line_numbers(item.line_number) | safe }}</code></pre>
+                <div class="code-placeholder" data-compressed="{{ (item.linked_source | add_line_numbers(item.line_number)) | compress }}"></div>
                 {% else %}
-                <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | add_line_numbers(item.line_number) | safe }}</code></pre>
+                <div class="code-placeholder" data-compressed="{{ (item.source | highlight_and_link | add_line_numbers(item.line_number)) | compress }}"></div>
                 {% endif %}
             </details>
         </div>
@@ -193,10 +193,10 @@
                         {% endfor %}
                         
                         <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
-                        <details class="source-details">
+                        <details class="source-details lazy-code">
                             <summary>Show Source</summary>
                             {% if file_source_map[file] %}
-                                <pre><code class="hljs language-basm">{{ file_source_map[file] | highlight_and_link | add_line_numbers(1) | safe }}</code></pre>
+                                <div class="code-placeholder" data-compressed="{{ (file_source_map[file] | highlight_and_link | add_line_numbers(1)) | compress }}"></div>
                             {% else %}
                                 <pre><code class="hljs language-basm">(Source not available)</code></pre>
                             {% endif %}
@@ -345,51 +345,49 @@
             
             console.log('[LineNumberClick] Found', Object.keys(fileItems).length, 'file items');
             
-            // Add click handlers to ALL line numbers in the document
-            document.querySelectorAll('.line-number').forEach(function(lineNumber) {
-                lineNumber.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const lineId = this.getAttribute('id');
-                    console.log('[LineNumberClick] Clicked on:', lineId);
-                    
-                    if (!lineId || !lineId.startsWith('L')) {
-                        console.log('[LineNumberClick] Invalid line ID');
-                        return;
-                    }
-                    
-                    // Find the parent .item element to get the source file
-                    let parentItem = this.closest('.item[data-source-file]');
-                    if (!parentItem) {
-                        console.log('[LineNumberClick] No parent item with data-source-file found');
-                        return;
-                    }
-                    
-                    const sourceFile = parentItem.getAttribute('data-source-file');
-                    console.log('[LineNumberClick] Source file:', sourceFile);
-                    
-                    // Extract line number from ID (e.g., "L172" -> "172")
-                    const lineNum = lineId.substring(1);
-                    console.log('[LineNumberClick] Looking for line:', lineNum, 'in file:', sourceFile);
-                    
-                    // Get the item container for this specific file
-                    const fileItem = fileItems[sourceFile];
-                    if (!fileItem) {
-                        console.log('[LineNumberClick] No file item found for:', sourceFile);
-                        return;
-                    }
-                    
-                    // Find and open the details element if it exists and is closed
-                    const detailsElement = fileItem.querySelector('details.source-details');
-                    if (detailsElement && !detailsElement.open) {
-                        console.log('[LineNumberClick] Opening details element for file:', sourceFile);
-                        detailsElement.open = true;
-                    }
-                    
-                    // Now query for the code block (after opening details, it should be accessible)
+            // Use event delegation - attach handler to document body to catch all line number clicks
+            // This works even for dynamically loaded content after decompression
+            document.body.addEventListener('click', function(e) {
+                // Check if clicked element is a line number
+                const lineNumber = e.target.closest('.line-number');
+                if (!lineNumber) return;
+                
+                e.preventDefault();
+                const lineId = lineNumber.getAttribute('id');
+                console.log('[LineNumberClick] Clicked on:', lineId);
+                
+                if (!lineId || !lineId.startsWith('L')) {
+                    console.log('[LineNumberClick] Invalid line ID');
+                    return;
+                }
+                
+                // Find the parent .item element to get the source file
+                let parentItem = lineNumber.closest('.item[data-source-file]');
+                if (!parentItem) {
+                    console.log('[LineNumberClick] No parent item with data-source-file found');
+                    return;
+                }
+                
+                const sourceFile = parentItem.getAttribute('data-source-file');
+                console.log('[LineNumberClick] Source file:', sourceFile);
+                
+                // Extract line number from ID (e.g., "L172" -> "172")
+                const lineNum = lineId.substring(1);
+                console.log('[LineNumberClick] Looking for line:', lineNum, 'in file:', sourceFile);
+                
+                // Get the item container for this specific file
+                const fileItem = fileItems[sourceFile];
+                if (!fileItem) {
+                    console.log('[LineNumberClick] No file item found for:', sourceFile);
+                    return;
+                }
+                
+                // Function to scroll to the target line
+                function scrollToLine() {
                     const fullSourceBlock = fileItem.querySelector('.code-with-line-numbers');
                     if (!fullSourceBlock) {
                         console.log('[LineNumberClick] No full source block found for file:', sourceFile);
-                        return;
+                        return false;
                     }
                     
                     console.log('[LineNumberClick] Found code block with', fullSourceBlock.querySelectorAll('.line-number').length, 'lines');
@@ -414,13 +412,51 @@
                                 codeLine.style.backgroundColor = '';
                             }, 2000);
                         }
-                    } else {
-                        console.log('[LineNumberClick] Target line L' + lineNum + ' not found in file:', sourceFile);
+                        return true;
                     }
-                });
+                    return false;
+                }
+                
+                // Find the details element
+                const detailsElement = fileItem.querySelector('details.source-details');
+                if (detailsElement) {
+                    if (!detailsElement.open) {
+                        console.log('[LineNumberClick] Opening details element for file:', sourceFile);
+                        detailsElement.open = true;
+                        
+                        // If this is a lazy-loaded section, wait for decompression
+                        if (detailsElement.classList.contains('lazy-code') && !detailsElement.dataset.loaded) {
+                            console.log('[LineNumberClick] Waiting for lazy decompression...');
+                            // Set up a mutation observer to detect when content is loaded
+                            const observer = new MutationObserver(function(mutations) {
+                                if (detailsElement.dataset.loaded === 'true') {
+                                    console.log('[LineNumberClick] Decompression complete, scrolling...');
+                                    observer.disconnect();
+                                    setTimeout(scrollToLine, 50); // Small delay to ensure DOM is updated
+                                }
+                            });
+                            observer.observe(detailsElement, { 
+                                attributes: true, 
+                                attributeFilter: ['data-loaded']
+                            });
+                            // Also try after a timeout as fallback
+                            setTimeout(function() {
+                                if (scrollToLine()) {
+                                    observer.disconnect();
+                                }
+                            }, 500);
+                            return;
+                        }
+                    }
+                    // Details is already open or doesn't need lazy loading
+                    setTimeout(scrollToLine, 50);
+                } else {
+                    // No details element, try immediately
+                    scrollToLine();
+                }
             });
             
-            console.log('[LineNumberClick] Setup complete. Added handlers to', document.querySelectorAll('.line-number').length, 'line numbers');
+            console.log('[LineNumberClick] Setup complete. Using event delegation for all line numbers');
         });
     </script>
 </body>

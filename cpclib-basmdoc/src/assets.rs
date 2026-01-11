@@ -1,6 +1,9 @@
 //! Asset management for templates and external resources
 
 use rust_embed::Embed;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::Write;
 
 #[derive(Embed)]
 #[folder = "src/templates/"]
@@ -77,4 +80,14 @@ pub fn get_documentation_css() -> String {
             eprintln!("Warning: Failed to load documentation.css");
             String::new()
         })
+}
+
+/// Compress a string using gzip and encode as base64
+/// This reduces the size of code blocks that are initially collapsed
+pub fn compress_string(input: &str) -> Result<String, std::io::Error> {
+    use base64::Engine;
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+    encoder.write_all(input.as_bytes())?;
+    let compressed = encoder.finish()?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&compressed))
 }

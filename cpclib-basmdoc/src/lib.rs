@@ -67,9 +67,12 @@ mod tests {
         // 5. Generate HTML and check that the source code appears in the output
         let html = merged.to_html();
         println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
-        // The source will be syntax-highlighted, so check for key elements
-        assert!(html.contains("LD") && html.contains("42") && html.contains("NOP") && html.contains("RET"), 
-                "HTML output must contain the source code (with syntax highlighting)");
+        // The source is now compressed in data-compressed attributes for lazy loading
+        // Check that the compressed placeholder exists
+        assert!(html.contains("data-compressed="), 
+                "HTML output must contain compressed source data");
+        assert!(html.contains("code-placeholder"), 
+                "HTML output must contain code placeholder for lazy loading");
         // Also check that it's not showing the fallback message
         assert!(!html.contains("(Source not available)"), "HTML output must not show 'Source not available'");
     }
@@ -988,6 +991,12 @@ impl DocumentationPage {
         // Add syntax highlighting keywords
         env.add_global("syntax_instructions", SYNTAX_INSTRUCTIONS);
         env.add_global("syntax_directives", SYNTAX_DIRECTIVES);
+        
+        // Add compression filter for lazy-loading large code blocks
+        env.add_filter("compress", |value: String| -> Result<String, minijinja::Error> {
+            assets::compress_string(&value)
+                .map_err(|e| minijinja::Error::new(ErrorKind::InvalidOperation, format!("Compression failed: {}", e)))
+        });
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
         let file_list = page_obj.file_list();
