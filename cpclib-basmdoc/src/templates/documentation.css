@@ -862,3 +862,47 @@ pre {
     overflow-x: auto;
     white-space: nowrap;
 }
+
+/* Syntax error styling */
+.syntax-error-box {
+    margin: 20px 0;
+    padding: 20px;
+    background-color: #fff5f5;
+    border: 2px solid #e74c3c;
+    border-left: 6px solid #c0392b;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(231, 76, 60, 0.1);
+}
+
+.syntax-error-title {
+    color: #c0392b;
+    font-size: 1.3em;
+    margin: 0 0 12px 0;
+    padding: 0;
+    background: none;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.syntax-error-message {
+    background-color: #fff;
+    border: 1px solid #e74c3c;
+    border-radius: 4px;
+    padding: 12px;
+    color: #c0392b;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.9em;
+    margin: 10px 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.syntax-error-help {
+    color: #555;
+    font-size: 0.9em;
+    margin: 10px 0 0 0;
+    font-style: italic;
+}

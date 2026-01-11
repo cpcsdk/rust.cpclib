@@ -179,31 +179,24 @@
             <!-- Files section (file-level documentation) -->
             <section class="section">
                 <h2 id="files-section" class="anchor-offset">File Documentation</h2>
-                <div style="color: purple; font-size: small;">DEBUG: files={{ files | length }}</div>
-                {% for f in files %}
-                    <div style="color: purple; font-size: small;">DEBUG: file={{ f.display_source_file }} source={{ f.source }}</div>
-                {% endfor %}
                 {% for file in file_list %}
-                    {% set source_item = None %}
-                    <div style="color: red; font-size: small;">DEBUG: file={{ file }}</div>
-                    {% for item in files %}
-                        {% set item_file = item.display_source_file | replace('\\', '/') %}
-                        {% set file_norm = file | replace('\\', '/') %}
-                        <div style="color: orange; font-size: small;">DEBUG: item_file={{ item_file }} is_source={{ item.is_source }}</div>
-                        {% if item.is_source and (item_file == file_norm or item_file.endswith('/' ~ file_norm) or item_file.endswith(file_norm) or item.source_file == file or item.source_file.endswith(file)) %}
-                            <div style="color: green; font-size: small;">DEBUG: MATCHED source for file={{ file }}</div>
-                            {% set source_item = item %}
-                        {% endif %}
-                    {% endfor %}
                     <div class="item" data-source-file="{{ file }}">
+                        <!-- Show syntax error if present for this file -->
+                        {% for error_item in syntax_errors %}
+                            {% if error_item.display_source_file == file %}
+                                <div class="syntax-error-box">
+                                    <h4 class="syntax-error-title">⚠️ Parse Error</h4>
+                                    <pre class="syntax-error-message">{{ error_item.syntax_error_message }}</pre>
+                                    <p class="syntax-error-help">The source code below may contain syntax errors. Please review and fix them.</p>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                        
                         <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">Full Source</h4>
                         <details class="source-details">
                             <summary>Show Source</summary>
-                            {% if source_item %}
-                                <div style="color: blue; font-size: small;">DEBUG: source_item.source={{ source_item.source }}</div>
-                            {% endif %}
-                            {% if source_item and source_item.source %}
-                                <pre><code class="hljs language-basm">{{ source_item.source | highlight_and_link | safe }}</code></pre>
+                            {% if file_source_map[file] %}
+                                <pre><code class="hljs language-basm">{{ file_source_map[file] | highlight_and_link | safe }}</code></pre>
                             {% else %}
                                 <pre><code class="hljs language-basm">(Source not available)</code></pre>
                             {% endif %}
