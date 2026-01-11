@@ -17,3 +17,4 @@ pub mod img2cpc;
 pub mod snapshot;
 pub mod tracker;
 pub mod xfer;
+pub mod cdt;

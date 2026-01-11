@@ -47,6 +47,7 @@ lazy-regex = "3.5.1"
 memchr.workspace = true
 minijinja = { workspace = true, features = ["loader", "debug"] }
 paste.workspace = true
+rtzx.workspace = true
 self_cell = "1.2.2"
 self_update = {workspace = true, optional = true}
 serde_yaml = "0.9.34"

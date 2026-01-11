@@ -28,11 +28,16 @@ lazy_static = "1.5"
 dashmap = "6.1"
 indicatif = "0.17"
 
+serde_json = "1.0"
+
 dirs = "5.0"
 ureq = "2.10"
 
 pandoc = {version="0.8"}
 pulldown-cmark = "0.12"
+
+[dev-dependencies]
+tempfile = "3.6"
 
 [build-dependencies]
 cpclib-asm.workspace = true

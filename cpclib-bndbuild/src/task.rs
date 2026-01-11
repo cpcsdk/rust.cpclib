@@ -38,6 +38,7 @@ use crate::execute;
 use crate::runners::assembler::Assembler;
 use crate::runners::ay::YmCruncher;
 use crate::runners::basmdoc::BASMDOC_CMD;
+use crate::runners::cdt::CdtManager;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
@@ -55,6 +56,7 @@ pub enum InnerTask {
     Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
+    Cdt(CdtManager, StandardTaskArguments),
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
     Extern(StandardTaskArguments),
@@ -215,6 +217,8 @@ pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
+pub const RTZX_CMDS: &[&str] = &["rtzx"];
+
 pub const SONG2AKM_CMDS: &[&str] = &[SongToAkm::CMD];
 pub const SONG2AKG_CMDS: &[&str] = &[SongToAkg::CMD];
 pub const SONG2AKY_CMDS: &[&str] = &[SongToAky::CMD];
@@ -230,6 +234,7 @@ impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
             Self::Assembler(a, s) => (a.get_command(), s),
+            Self::Cdt(c, s) => (c.get_command(), s),
             Self::YmCruncher(t, s) => (t.get_command(), s),
             Self::BasmDoc(s) => (BASMDOC_CMDS[0], s),
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
@@ -296,7 +301,7 @@ is_some_cmd!(
     miny,
     martine, mkdir, mv,
     orgams,
-    rasm, rm,
+    rasm, rm, rtzx,
     sjasmplus, sna, sugarbox,
     song2akm,
     song2akg,
@@ -504,6 +509,13 @@ impl InnerTask {
 
     pub fn with_fade(std: StandardTaskArguments) -> Self {
         Self::Fade(std)
+    }
+
+    pub fn with_rtzx(std: StandardTaskArguments) -> Self {
+        Self::Cdt(
+            CdtManager::Rtzx,
+            std
+        )
     }
 
     /// Create an InnerTask from a command token and its standard arguments.
@@ -731,6 +743,8 @@ impl InnerTask {
         }
         else if is_rm_cmd(code) {
             Ok(Self::with_rm(std))
+        } else if is_rtzx_cmd(code) {
+            Ok(Self::with_rtzx(std))
         }
         else {
             Err(format!("{code} is an invalid command"))
@@ -759,6 +773,7 @@ impl InnerTask {
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
+            | InnerTask::Cdt(_, t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
@@ -791,6 +806,7 @@ impl InnerTask {
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
+            | InnerTask::Cdt(_, t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
@@ -841,6 +857,7 @@ impl InnerTask {
             InnerTask::BndBuild(_) => false,
             InnerTask::BasmDoc(_) => false,
             InnerTask::Convgeneric(_) => false,
+            InnerTask::Cdt(..) => false,
             InnerTask::Cp(_) => false,
             InnerTask::Mv(_) => false,
             InnerTask::CpcToImg(_) => false,

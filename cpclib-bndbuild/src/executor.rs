@@ -108,6 +108,14 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
+        InnerTask::Cdt(cdt, args) => {
+            match cdt {
+                crate::runners::cdt::CdtManager::Rtzx => {
+                    crate::runners::cdt::RtzxRunner::<E>::default()
+                        .run(task.args(), observer)
+                },
+            }
+        }
         InnerTask::Assembler(a, _) => {
             match a {
                 Assembler::Basm => BasmRunner::default().run(task.args(), observer),

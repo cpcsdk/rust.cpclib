@@ -1,3 +1,54 @@
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    /// Helper: create a temp file with given content, return (dir, file_path, content)
+    fn create_temp_source_file(content: &str) -> (tempfile::TempDir, String, String) {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test.asm");
+        let mut file = File::create(&file_path).expect("create file");
+        file.write_all(content.as_bytes()).expect("write");
+        (dir, file_path.to_string_lossy().to_string(), content.to_string())
+    }
+
+    #[test]
+    fn test_source_preserved_for_file_without_documentation() {
+        // 1. Create a file with no documentation comments
+        let source_code = "LD A,42\nNOP\nRET\n";
+        let (_dir, file_path, expected_source) = create_temp_source_file(source_code);
+        let display_name = "test.asm";
+
+        // 2. Generate DocumentationPage for this file
+        let page = DocumentationPage::for_file(&file_path, display_name, true).expect("parse");
+
+        // 3. Check that a Source item exists in page.content and contains the correct code
+        let source_item = page.content.iter().find(|it| it.item.is_source()).expect("Source item present");
+        match &source_item.item {
+            DocumentedItem::Source(src) => {
+                assert_eq!(src, &expected_source, "Source content must match original");
+            },
+            _ => panic!("Not a Source variant"),
+        }
+
+        // 4. Merge with itself (simulate multi-file merge)
+        let merged = DocumentationPage::merge(vec![page.clone()]);
+        let merged_source_item = merged.content.iter().find(|it| it.item.is_source()).expect("Merged Source item present");
+        match &merged_source_item.item {
+            DocumentedItem::Source(src) => {
+                assert_eq!(src, &expected_source, "Merged Source content must match original");
+            },
+            _ => panic!("Not a Source variant (merged)"),
+        }
+
+        // 5. Generate HTML and check that the source code appears in the output
+        let html = merged.to_html();
+        println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
+        assert!(html.contains(&expected_source), "HTML output must contain the source code");
+    }
+}
 impl ItemDocumentation {
         pub fn macro_source(&self) -> String {
             match &self.item {
@@ -203,6 +254,10 @@ impl DocumentedItem {
         matches!(self, DocumentedItem::File(_))
     }
 
+    pub fn is_source(&self) -> bool {
+        matches!(self, DocumentedItem::Source(_))
+    }
+
     pub fn item_key(&self, fname: &str) -> String {
         match self {
             DocumentedItem::Label(l) => format!("label_{}", l),
@@ -261,6 +316,7 @@ pub struct ItemDocumentation {
     item: DocumentedItem,
     doc: String, // TODO use MetaDocumentation
     source_file: String,
+    display_source_file: String,
     line_number: usize, // 1-indexed line number where the symbol is defined
     references: Vec<SymbolReference>,
     linked_source: Option<String> // Source code with symbols linked to their documentation
@@ -274,13 +330,14 @@ impl Object for ItemDocumentation {
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
             Some("key") => Some(Value::from(self.item.item_key(&self.source_file))),
             Some("source_file") => Some(Value::from(self.source_file.clone())),
+            Some("display_source_file") => Some(Value::from(self.display_source_file.clone())),
             Some("line_number") => Some(Value::from(self.line_number)),
             Some("references") => {
                 let refs: Vec<Value> = self.references.iter().map(|r| Value::from_serialize(r)).collect();
                 Some(Value::from(refs))
             },
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
-            Some("is_source") => Some(Value::from(matches!(self.item, DocumentedItem::Source(_)))),
+            Some("is_source") => Some(Value::from(self.item.is_source())),
             Some("linked_source") => {
                 match &self.linked_source {
                     Some(s) => Some(Value::from(s.clone())),
@@ -389,16 +446,32 @@ impl Object for DocumentationPage {
                     file_names.dedup();
 
                     for fname in file_names {
-                        // If a Source item exists for this file, push it first
-                        if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == fname) {
+                        // If a Source item exists for this file, push it first.
+                        // Match either exact path or suffix (handles absolute vs workspace-relative).
+                        let source_item_opt = self.content.iter().find(|it| {
+                            it.item.is_source() && (it.source_file == fname || it.source_file.ends_with(&fname))
+                        });
+
+                        if let Some(source_item) = source_item_opt {
                             files_vec.push(Value::from_object(source_item.clone()));
                         } else {
-                            // No explicit source item found; create a Source item from file contents
-                            let code = std::fs::read_to_string(&fname).unwrap_or_default();
+                            // No explicit source item found; try reading file content.
+                            // If reading the provided name fails (likely because it's a
+                            // workspace-relative path while content stores absolute
+                            // paths), attempt to locate the absolute path from
+                            // existing content entries and read that instead.
+                            let mut code = std::fs::read_to_string(&fname).unwrap_or_default();
+                            if code.is_empty() {
+                                if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&fname)) {
+                                    code = std::fs::read_to_string(&it.source_file).unwrap_or_default();
+                                }
+                            }
+
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
                                 doc: String::new(),
                                 source_file: fname.clone(),
+                                display_source_file: fname.clone(),
                                 line_number: 0,
                                 references: Vec::new(),
                                 linked_source: None
@@ -408,15 +481,30 @@ impl Object for DocumentationPage {
                 } else {
                     for mf in merged.into_iter() {
                         // Find the corresponding Source item (if any) in the original content
-                        if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == mf.source_file) {
+                        // Match source item by exact path or by suffix to handle
+                        // absolute vs workspace-relative path differences.
+                        let source_item_opt = self.content.iter().find(|it| {
+                            it.item.is_source() && (it.source_file == mf.source_file || it.source_file.ends_with(&mf.source_file))
+                        });
+
+                        if let Some(source_item) = source_item_opt {
                             files_vec.push(Value::from_object(source_item.clone()));
                         } else {
-                            // No source item found for this merged file; read file content and push as Source
-                            let code = std::fs::read_to_string(&mf.source_file).unwrap_or_default();
+                            // No source item found for this merged file; try reading
+                            // the merge-provided path first, then fallback to any
+                            // matching absolute path found in content.
+                            let mut code = std::fs::read_to_string(&mf.source_file).unwrap_or_default();
+                            if code.is_empty() {
+                                if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&mf.source_file)) {
+                                    code = std::fs::read_to_string(&it.source_file).unwrap_or_default();
+                                }
+                            }
+
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
                                 doc: String::new(),
                                 source_file: mf.source_file.clone(),
+                                display_source_file: mf.source_file.clone(),
                                 line_number: 0,
                                 references: Vec::new(),
                                 linked_source: None
@@ -474,6 +562,20 @@ impl DocumentationPage {
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
         let mut page = build_documentation_page_from_aggregates(fname, doc);
+        page.content.insert(0, ItemDocumentation {
+            item: DocumentedItem::Source(code.clone()),
+            doc: String::new(),
+            source_file: fname.to_string(),
+            display_source_file: fname.to_string(),
+            line_number: 0,
+            references: Vec::new(),
+            linked_source: None
+        });
+        // Set the display name for all items in this page so templates and
+        // client-side filtering consistently use workspace-relative paths.
+        for it in &mut page.content {
+            it.display_source_file = display_name.to_string();
+        }
         page.all_files = vec![display_name.to_string()];
         
         // Populate cross-references with symbol links
@@ -492,9 +594,24 @@ impl DocumentationPage {
         let code = std::fs::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
-        let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
+        let mut doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
         let mut page = build_documentation_page_from_aggregates(fname, doc);
+        // Safety: ensure Source item present even if aggregator missed it
+        page.content.insert(0, ItemDocumentation {
+            item: DocumentedItem::Source(code.clone()),
+            doc: String::new(),
+            source_file: fname.to_string(),
+            display_source_file: fname.to_string(),
+            line_number: 0,
+            references: Vec::new(),
+            linked_source: None
+        });
+        // For the without-refs variant we also set the display name so later
+        // processing that renders templates can rely on `display_source_file`.
+        for it in &mut page.content {
+            it.display_source_file = display_name.to_string();
+        }
         page.all_files = vec![display_name.to_string()];
         
         Ok((page, tokens))
@@ -518,26 +635,80 @@ impl DocumentationPage {
             .map(|p| p.fname.as_str())
             .collect::<Vec<_>>()
             .join(", ");
-        
+
         let mut all_files: Vec<String> = pages.iter()
             .flat_map(|p| p.all_files.iter().cloned())
             .collect();
         all_files.sort();
         all_files.dedup();
-        
-        let content = pages.into_iter()
+
+        let mut content: Vec<ItemDocumentation> = pages.into_iter()
             .flat_map(|p| p.content)
             .collect();
+
+        // Normalize all source_file and display_source_file fields in content to match canonical all_files entries
+        let all_files_clone = all_files.clone();
+        for it in &mut content {
+            // If an all_files entry matches the end of the source_file, prefer it
+            if let Some(matching) = all_files_clone.iter().find(|f| it.source_file.ends_with(f.as_str())) {
+                it.display_source_file = matching.clone();
+                it.source_file = matching.clone();
+                continue;
+            }
+            // Fallback: match by basename
+            if let Some(src_basename) = std::path::Path::new(&it.source_file).file_name().and_then(|s| s.to_str()) {
+                if let Some(matching) = all_files_clone.iter().find(|f| std::path::Path::new(f).file_name().and_then(|s| s.to_str()) == Some(src_basename)) {
+                    it.display_source_file = matching.clone();
+                    it.source_file = matching.clone();
+                }
+            }
+        }
+
+        // Guarantee a Source item for every file in all_files
+        for fname in &all_files {
+            // Enforce: every file in all_files must have an in-memory Source item, never fallback to disk
+            let existing = content.iter().find(|it| {
+                it.item.is_source() &&
+                (it.source_file == *fname ||
+                 it.source_file.ends_with(fname) ||
+                 fname.ends_with(&it.source_file))
+            });
+            if let Some(existing) = existing {
+                // Already present, do nothing (or could move to front if needed)
+            } else {
+                panic!("INVARIANT VIOLATION: No in-memory Source item for file '{fname}'. This must never happen. Check earlier code for lost or mismatched Source items.");
+            }
+        }
 
         let mut merged = Self {
             fname: fnames,
             content,
             all_files
         };
-        
+
         // Link symbols in source code
         merged = merged.link_source_symbols();
-        
+
+        // Canonicalize display_source_file values so templates and client-side
+        // filtering use the same workspace-relative names where possible.
+        // Prefer any name from `all_files` that is a suffix of the item's source_file,
+        // otherwise try matching by basename.
+        let all_files_clone = merged.all_files.clone();
+        for it in &mut merged.content {
+            // If an all_files entry matches the end of the source_file, prefer it
+            if let Some(matching) = all_files_clone.iter().find(|f| it.source_file.ends_with(f.as_str())) {
+                it.display_source_file = matching.clone();
+                continue;
+            }
+
+            // Fallback: match by basename
+            if let Some(src_basename) = std::path::Path::new(&it.source_file).file_name().and_then(|s| s.to_str()) {
+                if let Some(matching) = all_files_clone.iter().find(|f| std::path::Path::new(f).file_name().and_then(|s| s.to_str()) == Some(src_basename)) {
+                    it.display_source_file = matching.clone();
+                }
+            }
+        }
+
         merged
     }
 
@@ -771,7 +942,8 @@ impl DocumentationPage {
                 ItemDocumentation {
                     item: DocumentedItem::File(source_file.clone()),
                     doc: docs.join("\n\n"),
-                    source_file,
+                    source_file: source_file.clone(),
+                    display_source_file: source_file.clone(),
                     line_number: 0, // File-level documentation doesn't have a specific line
                     references: Vec::new(),
                     linked_source: None
@@ -788,7 +960,7 @@ impl DocumentationPage {
     pub fn all_symbols(&self) -> Vec<(String, String)> {
         let mut symbols = Vec::new();
         for item in &self.content {
-            if !item.item.is_file() && !matches!(item.item, DocumentedItem::Source(_)) {
+            if !item.item.is_file() && !item.item.is_source() {
                 symbols.push((item.item_short_summary(), item.item.item_key(&item.source_file)));
             }
         }
@@ -802,7 +974,7 @@ impl DocumentationPage {
         let mut index: BTreeMap<char, Vec<&ItemDocumentation>> = BTreeMap::new();
         
         for item in &self.content {
-            if !item.item.is_file() && !matches!(item.item, DocumentedItem::Source(_)) {
+                if !item.item.is_file() && !item.item.is_source() {
                 let name = item.item_short_summary();
                 if let Some(first_char) = name.chars().next() {
                     let key = first_char.to_ascii_uppercase();
@@ -833,12 +1005,28 @@ impl DocumentationPage {
     pub fn has_files(&self) -> bool {
         // Consider a page to "have files" if there are either file-level
         // documentation items or a Source item (whole-file source) present.
-        self.file_iter().next().is_some() || self.content.iter().any(|item| matches!(item.item, DocumentedItem::Source(_)))
+        self.file_iter().next().is_some() || self.content.iter().any(|item| item.item.is_source())
     }
 
-    /// Get a sorted list of unique source files
+    pub fn has_documentation(&self) -> bool {
+        self.content.iter().filter(|d| !d.item.is_source()).next().is_some()
+    }
+
+    /// Get a sorted list of unique source files (workspace-relative, normalized)
     pub fn file_list(&self) -> Vec<String> {
-        self.all_files.clone()
+        self.all_files.iter().map(|f| Self::normalize_path(f)).collect()
+    }
+
+    /// Normalize a file path to workspace-relative, using '/' separators
+    fn normalize_path(path: &str) -> String {
+        let p = std::path::Path::new(path);
+        // If absolute, strip to file name (simulate workspace-relative)
+        if p.is_absolute() {
+            if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+                return fname.replace('\\', "/");
+            }
+        }
+        path.replace('\\', "/")
     }
 
     /// Return a string that encode the documentation page in markdown
@@ -860,66 +1048,102 @@ impl DocumentationPage {
 
     /// Return a string that encode the documentation page in HTML
     pub fn to_html(&self) -> String {
-        let page = Value::from_object(self.clone());
+        // Ensure display_source_file values are canonicalized against page.all_files
+        // so templates and client-side filtering always see the preferred workspace-relative names.
+        let mut page_obj = self.clone();
+        let merged = self.merged_files();
+        let mut files_vec: Vec<minijinja::value::Value> = Vec::new();
 
-        let mut env = Environment::new();
-        
-        // Add a custom filter to convert markdown to HTML
-        env.add_filter("markdown_to_html", |value: String| -> Result<String, minijinja::Error> {
-            use pulldown_cmark::{Parser, Options, html};
-            
-            let mut options = Options::empty();
-            options.insert(Options::ENABLE_TABLES);
-            options.insert(Options::ENABLE_FOOTNOTES);
-            options.insert(Options::ENABLE_STRIKETHROUGH);
-            options.insert(Options::ENABLE_TASKLISTS);
-            
-            let parser = Parser::new_ext(&value, options);
-            let mut html_output = String::new();
-            html::push_html(&mut html_output, parser);
-            
-            Ok(html_output)
-        });
-        
-        // Add a basename filter to extract filename from path
-        env.add_filter("basename", |value: String| -> Result<String, minijinja::Error> {
-            use std::path::Path;
-            let path = Path::new(&value);
-            Ok(path.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&value)
-                .to_string())
-        });
-        
-        // Capture symbols for cross-referencing
-        let symbols = self.all_symbols();
-        // Clone for individual closures since closures take ownership
-        let symbols_for_auto = symbols.clone();
-        let symbols_for_highlight = symbols.clone();
-        
-        // Add a cross-reference filter to auto-link symbol names
-        env.add_filter("auto_link_symbols", move |value: String| -> Result<String, minijinja::Error> {
-            let mut result = value.clone();
-            
-            // Sort symbols by length (longest first) to avoid partial matches
-            let mut sorted_symbols = symbols_for_auto.clone();
-            sorted_symbols.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-            
-            for (name, key) in sorted_symbols {
-                // Only replace whole words (surrounded by word boundaries)
-                let pattern = format!(r"\b{}\b", regex::escape(&name));
-                if let Ok(re) = regex::Regex::new(&pattern) {
-                    let replacement = format!("<a href=\"#{}\" class=\"symbol-link\">{}</a>", key, name);
-                    result = re.replace_all(&result, replacement.as_str()).to_string();
+        // Always normalize file names to workspace-relative for matching
+        let file_names: Vec<String> = if merged.is_empty() {
+            let mut names: Vec<String> = self.content.iter().map(|it| Self::normalize_path(&it.source_file)).collect();
+            names.sort();
+            names.dedup();
+            names
+        } else {
+            merged.iter().map(|mf| Self::normalize_path(&mf.source_file)).collect()
+        };
+
+        for fname in &file_names {
+            // Find Source item by normalized path
+            let source_item_opt = self.content.iter().find(|it| {
+                it.item.is_source() && Self::normalize_path(&it.source_file) == *fname
+            });
+
+            use serde_json::{json, Value as JsonValue, Map};
+            let mut source_map = None;
+            if let Some(source_item) = source_item_opt {
+                let mut src_clone = source_item.clone();
+                src_clone.display_source_file = fname.clone();
+                src_clone.source_file = fname.clone();
+                let mut map = serde_json::to_value(&src_clone).unwrap().as_object().unwrap().clone();
+                if let DocumentedItem::Source(ref code) = src_clone.item {
+                    map.insert("source".to_string(), JsonValue::String(code.clone()));
+                    println!("[DEBUG] File: {} | Source length: {}", fname, code.len());
+                }
+                source_map = Some(map);
+            } else {
+                // No explicit source item found; try reading file content
+                let code = std::fs::read_to_string(fname).unwrap_or_default();
+                println!("[DEBUG] File: {} | Source length (fallback): {}", fname, code.len());
+                let src = ItemDocumentation {
+                    item: DocumentedItem::Source(code.clone()),
+                    doc: String::new(),
+                    source_file: fname.clone(),
+                    display_source_file: fname.clone(),
+                    line_number: 0,
+                    references: Vec::new(),
+                    linked_source: None
+                };
+                let mut map = serde_json::to_value(&src).unwrap().as_object().unwrap().clone();
+                map.insert("source".to_string(), JsonValue::String(code));
+                source_map = Some(map);
+            }
+
+            // Always push the source item first, ensuring 'source' field is present
+            if let Some(map) = source_map {
+                files_vec.push(Value::from_serialize(map));
+            }
+
+            // If merged file doc exists, add it after source
+            if let Some(mf) = merged.iter().find(|m| Self::normalize_path(&m.source_file) == *fname) {
+                let mut mf_clone = mf.clone();
+                mf_clone.display_source_file = fname.clone();
+                mf_clone.source_file = fname.clone();
+                // If this is a Source item, ensure 'source' field is present
+                let mut map = serde_json::to_value(&mf_clone).unwrap().as_object().unwrap().clone();
+                if let DocumentedItem::Source(ref code) = mf_clone.item {
+                    map.insert("source".to_string(), JsonValue::String(code.clone()));
+                    files_vec.push(Value::from_serialize(map));
+                } else {
+                    files_vec.push(Value::from_object(mf_clone));
                 }
             }
-            
-            Ok(result)
-        });
+        }
 
+        // Debug output for functions, macros, labels
+        let labels: Vec<_> = self.label_iter().cloned().collect();
+        let macros: Vec<_> = self.macro_iter().cloned().collect();
+        let functions: Vec<_> = self.function_iter().cloned().collect();
+        println!("[DEBUG] Functions: {}", functions.len());
+        for f in &functions {
+            println!("[DEBUG] Function: {}", f.item_short_summary());
+        }
+        println!("[DEBUG] Macros: {}", macros.len());
+        for m in &macros {
+            println!("[DEBUG] Macro: {}", m.item_short_summary());
+        }
+        println!("[DEBUG] Labels: {}", labels.len());
+        for l in &labels {
+            println!("[DEBUG] Label: {}", l.item_short_summary());
+        }
+
+            let files = Value::from_object(files_vec);
         // Add a filter that applies syntax highlighting and symbol linking
         // This uses the Rust-side highlighter and linker to produce HTML
         // with <span class="hljs-..."> classes and <a class="symbol-link"> anchors.
+        let mut env = Environment::new();
+        let symbols_for_highlight = self.all_symbols();
         env.add_filter("highlight_and_link", move |value: String| -> Result<String, minijinja::Error> {
             let out = link_symbols_in_source(&value, &symbols_for_highlight);
             Ok(out)
@@ -935,14 +1159,25 @@ impl DocumentationPage {
         env.add_global("highlightjs_css", get_highlightjs_css());
         env.add_global("documentation_js", get_documentation_js());
         env.add_global("documentation_css", get_documentation_css());
-        
         // Add syntax highlighting keywords
         env.add_global("syntax_instructions", SYNTAX_INSTRUCTIONS);
         env.add_global("syntax_directives", SYNTAX_DIRECTIVES);
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
+        let file_list = page_obj.file_list();
+        // Build sidebar lists from iterators, always as lists
+        let labels: Vec<_> = self.label_iter().cloned().collect();
+        let macros: Vec<_> = self.macro_iter().cloned().collect();
+        let functions: Vec<_> = self.function_iter().cloned().collect();
+        let equs: Vec<_> = self.equ_iter().cloned().collect();
         tmpl.render(context! {
-            page
+            page => page_obj,
+            file_list => file_list,
+            labels => labels,
+            macros => macros,
+            functions => functions,
+            equs => equs,
+            files => files,
         })
         .unwrap()
     }
@@ -1019,7 +1254,7 @@ fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_label
     }
 }
 
-fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
+pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
     fname: &str,
     agg: Vec<(String, Option<&T>, Option<String>, usize)>
 ) -> DocumentationPage {
@@ -1031,6 +1266,7 @@ fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
         item: DocumentedItem::Source(code),
         doc: String::new(),
         source_file: fname.to_string(),
+        display_source_file: fname.to_string(),
         line_number: 0,
         references: Vec::new(),
         linked_source: None
@@ -1045,7 +1281,8 @@ fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                         ItemDocumentation {
                             item,
                             doc,
-                            source_file: fname.to_string(),
+                                    source_file: fname.to_string(),
+                                    display_source_file: fname.to_string(),
                             line_number,
                             references: Vec::new(),
                             linked_source: None // Will be populated later
@@ -1056,7 +1293,8 @@ fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
                     Some(ItemDocumentation {
                         item: DocumentedItem::File(fname.to_string()),
                         doc,
-                        source_file: fname.to_string(),
+                                source_file: fname.to_string(),
+                                display_source_file: fname.to_string(),
                         line_number, // Use provided line number (typically 0 for file-level docs)
                         references: Vec::new(),
                         linked_source: None
@@ -1075,7 +1313,7 @@ fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
 /// Local labels (starting with ".") are resolved using the tracked parent global label
 /// Returns: (doc_string, token_ref, parent_label, line_number)
-fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
+pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
     tokens: &[T],
     include_undocumented: bool
 ) -> Vec<(String, Option<&T>, Option<String>, usize)> {

@@ -14,7 +14,7 @@ fn test_local_labels() {
     // .orphan_local should be skipped (no parent)
     
     let label_names: Vec<String> = page.label_iter()
-        .map(|item| item.item_key().trim_start_matches("label_").to_string())
+        .map(|item: &cpclib_basmdoc::ItemDocumentation| item.item_short_summary())
         .collect();
     
     println!("Found labels: {:?}", label_names);
@@ -29,7 +29,7 @@ fn test_local_labels() {
     
     // Check that orphan local label (before any global label) is NOT present
     assert!(!label_names.contains(&".orphan_local".to_string()), ".orphan_local should NOT be present (no parent)");
-    assert!(!label_names.iter().any(|l| l.contains("orphan")), "No label should contain 'orphan'");
+    assert!(!label_names.iter().any(|l: &String| l.contains("orphan")), "No label should contain 'orphan'");
     
     // Test HTML output can be generated
     let html = page.to_html();

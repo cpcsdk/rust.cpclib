@@ -39,7 +39,7 @@
             <h2>{{ title }}</h2>
             <ul>
                 {% for item in items %}
-                <li class="sidebar-item" data-source-file="{{ item.source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
+                <li class="sidebar-item" data-source-file="{{ item.display_source_file }}"><a href="#{{item.key}}"><code>{{ item.short_summary }}</code></a></li>
                 {% endfor %}
             </ul>
         </div>
@@ -49,7 +49,7 @@
     {% macro item_header(item) %}
         <h4 id="{{item.key}}" class="anchor-offset item-header">
             <span class="item-name">{{ item.summary }}</span>
-            {% if item.line_number > 0 %}<span class="ref-location">{{ item.source_file }}:{{ item.line_number }}</span>{% endif %}
+            {% if item.line_number > 0 %}<span class="ref-location">{{ item.display_source_file }}:{{ item.line_number }}</span>{% endif %}
         </h4>
     {% endmacro %}
     
@@ -71,9 +71,9 @@
     
     <!-- Macro for displaying a documented item -->
     {% macro show_item(item, show_source=false) %}
-        <div class="item" data-source-file="{{ item.source_file }}">
+        <div class="item" data-source-file="{{ item.display_source_file }}">
             {{ item_header(item) }}
-            <div>{{ item.doc | markdown_to_html | auto_link_symbols | safe }}</div>
+            <div>{{ item.doc | safe }}</div>
             {% if show_source %}
                 {{ source_toggle(item) }}
             {% endif %}
@@ -96,7 +96,7 @@
                 <h2><a href="#symbol-index-section" style="color: inherit; text-decoration: none;">📑 Symbol Index</a></h2>
             </div>
 
-            {% if page.file_list | length > 1 %}
+            {% if file_list | length > 1 %}
             <div class="sidebar-section" id="sidebar-files">
                 <h2>Files</h2>
                 <div class="file-tree-header">
@@ -108,27 +108,27 @@
                 </details>
                 <!-- Hidden list to store file data -->
                 <ul id="file-filter-list" style="display: none;">
-                    {% for file in page.file_list %}
+                    {% for file in file_list %}
                     <li><a href="#" class="file-filter-link" data-file="{{ file }}">{{ file }}</a></li>
                     {% endfor %}
                 </ul>
             </div>
             {% endif %}
 
-            {% if page.has_labels() %}
-                {{ sidebar_section("Labels", "labels", page.labels) }}
+            {% if labels|length > 0 %}
+                {{ sidebar_section("Labels", "labels", labels) }}
             {% endif %}
 
-            {% if page.has_macros() %}
-                {{ sidebar_section("Macros", "macros", page.macros) }}
+            {% if macros|length > 0 %}
+                {{ sidebar_section("Macros", "macros", macros) }}
             {% endif %}
 
-            {% if page.has_functions() %}
-                {{ sidebar_section("Functions", "functions", page.functions) }}
+            {% if functions|length > 0 %}
+                {{ sidebar_section("Functions", "functions", functions) }}
             {% endif %}
 
-            {% if page.has_equ() %}
-                {{ sidebar_section("Equs", "equs", page.equs) }}
+            {% if equs|length > 0 %}
+                {{ sidebar_section("Equs", "equs", equs) }}
             {% endif %}
         </aside>
 
@@ -157,7 +157,7 @@
                 </div>
                 <div class="index-items">
                     {% for item in items %}
-                    <div class="index-item" data-source-file="{{ item.source_file }}">
+                    <div class="index-item" data-source-file="{{ item.display_source_file }}">
                         <a href="#{{item.key}}">
                             <code>{{ item.short_summary }}</code>
                             {% if item.is_label %}
@@ -177,63 +177,76 @@
             </section>
 
             <!-- Files section (file-level documentation) -->
-            {% if page.has_files() %}
             <section class="section">
                 <h2 id="files-section" class="anchor-offset">File Documentation</h2>
-                {% for item in page.files %}
-                    {% if item.is_source %}
-                        <div class="item" data-source-file="{{ item.source_file }}">
-                            <h4 id="{{item.key}}" class="anchor-offset">Full Source</h4>
-                            <details class="source-details">
-                                    <summary>Show Source</summary>
-                                    <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | safe }}</code></pre>
-                                </details>
-                        </div>
-                    {% else %}
-                        <div class="item" data-source-file="{{ item.source_file }}">
-                            <h4 id="{{item.key}}" class="anchor-offset">{{ item.short_summary | basename }}</h4>
-                            <div>{{ item.doc | markdown_to_html | safe }}</div>
-                        </div>
-                    {% endif %}
+                <div style="color: purple; font-size: small;">DEBUG: files={{ files | length }}</div>
+                {% for f in files %}
+                    <div style="color: purple; font-size: small;">DEBUG: file={{ f.display_source_file }} source={{ f.source }}</div>
+                {% endfor %}
+                {% for file in file_list %}
+                    {% set source_item = None %}
+                    <div style="color: red; font-size: small;">DEBUG: file={{ file }}</div>
+                    {% for item in files %}
+                        {% set item_file = item.display_source_file | replace('\\', '/') %}
+                        {% set file_norm = file | replace('\\', '/') %}
+                        <div style="color: orange; font-size: small;">DEBUG: item_file={{ item_file }} is_source={{ item.is_source }}</div>
+                        {% if item.is_source and (item_file == file_norm or item_file.endswith('/' ~ file_norm) or item_file.endswith(file_norm) or item.source_file == file or item.source_file.endswith(file)) %}
+                            <div style="color: green; font-size: small;">DEBUG: MATCHED source for file={{ file }}</div>
+                            {% set source_item = item %}
+                        {% endif %}
+                    {% endfor %}
+                    <div class="item" data-source-file="{{ file }}">
+                        <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">Full Source</h4>
+                        <details class="source-details">
+                            <summary>Show Source</summary>
+                            {% if source_item %}
+                                <div style="color: blue; font-size: small;">DEBUG: source_item.source={{ source_item.source }}</div>
+                            {% endif %}
+                            {% if source_item and source_item.source %}
+                                <pre><code class="hljs language-basm">{{ source_item.source | highlight_and_link | safe }}</code></pre>
+                            {% else %}
+                                <pre><code class="hljs language-basm">(Source not available)</code></pre>
+                            {% endif %}
+                        </details>
+                    </div>
                 {% endfor %}
             </section>
-            {% endif %}
 
             <!-- Labels section -->
-            {% if page.has_labels() %}
+            {% if labels|length > 0 %}
             <section class="section">
                 <h2 id="labels-section" class="anchor-offset">Labels</h2>
-                {% for item in page.labels %}
+                {% for item in labels %}
                     {{ show_item(item) }}
                 {% endfor %}
             </section>
             {% endif %}
 
             <!-- Macros section -->
-            {% if page.has_macros() %}
+            {% if macros|length > 0 %}
             <section class="section">
                 <h2 id="macros-section" class="anchor-offset">Macros</h2>
-                {% for item in page.macros %}
+                {% for item in macros %}
                     {{ show_item(item, show_source=true) }}
                 {% endfor %}
             </section>
             {% endif %}
 
             <!-- Functions section -->
-            {% if page.has_functions() %}
+            {% if functions|length > 0 %}
             <section class="section">
                 <h2 id="functions-section" class="anchor-offset">Functions</h2>
-                {% for item in page.functions %}
+                {% for item in functions %}
                     {{ show_item(item, show_source=true) }}
                 {% endfor %}
             </section>
             {% endif %}
 
             <!-- Equs section -->
-            {% if page.has_equ() %}
+            {% if equs|length > 0 %}
             <section class="section">
                 <h2 id="equs-section" class="anchor-offset">Equs</h2>
-                {% for item in page.equs %}
+                {% for item in equs %}
                     {{ show_item(item) }}
                 {% endfor %}
             </section>
@@ -252,14 +265,54 @@
 
             function resolveFileNameForFiltering(fileName) {
                 if (!fileName) return '';
+                console.debug('[doc] resolveFileNameForFiltering input', fileName);
                 const items = document.querySelectorAll('.item[data-source-file]');
+                const candidates = [];
                 for (const it of items) {
                     const sf = it.dataset.sourceFile;
                     if (!sf) continue;
-                    if (sf === fileName) return sf;
-                    if (sf.endsWith('/' + fileName)) return sf;
-                    if (sf.endsWith(fileName)) return sf;
+                    candidates.push(sf);
+                    if (sf === fileName) {
+                        console.debug('[doc] exact match', sf);
+                        return sf;
+                    }
+                    if (sf.endsWith('/' + fileName)) {
+                        console.debug('[doc] suffix match with /', sf);
+                        return sf;
+                    }
+                    if (sf.endsWith(fileName)) {
+                        console.debug('[doc] suffix match', sf);
+                        return sf;
+                    }
                 }
+                // Try looser matching by basename and by normalizing separators/case
+                try {
+                    const inputBasename = fileName.split('/').pop();
+                    const normalizedInput = inputBasename.toLowerCase().replace(/[-\s]/g, '_');
+                    for (const sf of candidates) {
+                        const candBase = sf.split('/').pop();
+                        if (!candBase) continue;
+                        if (candBase === inputBasename) {
+                            console.debug('[doc] basename exact match', sf);
+                            return sf;
+                        }
+                        const normalizedCand = candBase.toLowerCase().replace(/[-\s]/g, '_');
+                        if (normalizedCand === normalizedInput) {
+                            console.debug('[doc] basename normalized match', sf);
+                            return sf;
+                        }
+                        // also try removing extension variants (e.g., .asm vs .s)
+                        const candNoExt = candBase.replace(/\.[^.]+$/, '');
+                        const inputNoExt = inputBasename.replace(/\.[^.]+$/, '');
+                        if (candNoExt === inputNoExt) {
+                            console.debug('[doc] no-ext match', sf);
+                            return sf;
+                        }
+                    }
+                } catch (e) {
+                    console.debug('[doc] resolver error', e);
+                }
+                console.debug('[doc] resolveFileNameForFiltering candidates', candidates.slice(0,20));
                 return fileName;
             }
 

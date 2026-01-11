@@ -80,6 +80,7 @@ function toggleSource(id) {
 
 // File filtering functionality
 function filterByFile(fileName) {
+    console.debug('[doc] filterByFile called with', fileName);
     const items = document.querySelectorAll('.item');
     const sections = document.querySelectorAll('.section');
     const fileLinks = document.querySelectorAll('.file-filter-link');
@@ -121,6 +122,8 @@ function filterByFile(fileName) {
     // Filter symbol index items
     indexItems.forEach(item => {
         const itemFile = item.dataset.sourceFile;
+        // debug: show item mapping
+        // console.debug('[doc] index-item', itemFile);
         
         if (fileName === '' || itemFile === fileName) {
             item.classList.remove('filtered');
@@ -205,6 +208,8 @@ function filterByFile(fileName) {
         
         sectionItems.forEach(item => {
             const itemFile = item.dataset.sourceFile;
+            // debug: show main item file mapping
+            // console.debug('[doc] main-item', itemFile);
             
             if (fileName === '' || itemFile === fileName) {
                 item.classList.remove('filtered');
@@ -221,6 +226,28 @@ function filterByFile(fileName) {
             section.style.display = 'block';
         }
     });
+
+    // Fallback: if no main items matched this file, try finding items by ref-location
+    const visibleMainItems = document.querySelectorAll('.item:not(.filtered)');
+    if (fileName !== '' && visibleMainItems.length === 0) {
+        const refSpans = document.querySelectorAll('.ref-location');
+        const baseName = fileName.split('/').pop();
+        for (const span of refSpans) {
+            const txt = (span.textContent || '').trim();
+            // Match patterns like "IntroHBL/src/intro_code.asm:419" or just basename
+            if (txt.startsWith(fileName + ':') || (baseName && txt.startsWith(baseName + ':')) || txt.includes('/' + fileName + ':')) {
+                const target = span.closest('.item') || span.closest('.index-item') || span.closest('.section');
+                if (target) {
+                    target.classList.remove('filtered');
+                    // ensure the section is visible
+                    const parentSection = target.closest('.section');
+                    if (parentSection) parentSection.style.display = 'block';
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    break;
+                }
+            }
+        }
+    }
 }
 
 // Copy-to-clipboard functionality
