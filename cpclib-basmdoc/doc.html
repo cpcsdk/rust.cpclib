@@ -353,6 +353,54 @@ h4.item-header .ref-location {
     background-color: transparent;
 }
 
+/* Also style details-based macro/source blocks (used by template) */
+.macro-source details .hljs,
+.macro-source pre.hljs,
+.macro-source pre code.hljs,
+.macro-source pre {
+    background-color: #282c34 !important;
+    color: #abb2bf !important;
+    border: none;
+}
+
+.macro-source details summary {
+    cursor: pointer;
+    padding: 8px 10px;
+    background-color: #2b3037;
+    color: #fff;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
+}
+
+.source-details pre,
+.source-details code {
+    background-color: #282c34 !important;
+    color: #abb2bf !important;
+}
+
+/* Style referenced / highlighted contexts shown in cross-references */
+.cross-references .reference-list pre,
+.cross-references .reference-item pre,
+.cross-references .reference-item pre code,
+.cross-references pre,
+.reference-list pre {
+    background-color: #282c34 !important;
+    color: #abb2bf !important;
+    border: none;
+    padding: 12px;
+    border-radius: 4px;
+    margin: 8px 0;
+    overflow-x: auto;
+}
+
+.cross-references .reference-item .ref-location {
+    display: block;
+    font-size: 0.9em;
+    color: #9da5ab;
+    margin-bottom: 6px;
+}
+
 /* Override main-content code styling for macro source */
 .macro-source-content pre code {
     color: #abb2bf !important;

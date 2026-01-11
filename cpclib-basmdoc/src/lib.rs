@@ -393,9 +393,10 @@ impl Object for DocumentationPage {
                         if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == fname) {
                             files_vec.push(Value::from_object(source_item.clone()));
                         } else {
-                            // No explicit source item found; push an empty File placeholder
+                            // No explicit source item found; create a Source item from file contents
+                            let code = std::fs::read_to_string(&fname).unwrap_or_default();
                             files_vec.push(Value::from_object(ItemDocumentation {
-                                item: DocumentedItem::File(fname.clone()),
+                                item: DocumentedItem::Source(code),
                                 doc: String::new(),
                                 source_file: fname.clone(),
                                 line_number: 0,
@@ -409,6 +410,17 @@ impl Object for DocumentationPage {
                         // Find the corresponding Source item (if any) in the original content
                         if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == mf.source_file) {
                             files_vec.push(Value::from_object(source_item.clone()));
+                        } else {
+                            // No source item found for this merged file; read file content and push as Source
+                            let code = std::fs::read_to_string(&mf.source_file).unwrap_or_default();
+                            files_vec.push(Value::from_object(ItemDocumentation {
+                                item: DocumentedItem::Source(code),
+                                doc: String::new(),
+                                source_file: mf.source_file.clone(),
+                                line_number: 0,
+                                references: Vec::new(),
+                                linked_source: None
+                            }));
                         }
                         files_vec.push(Value::from_object(mf));
                     }
