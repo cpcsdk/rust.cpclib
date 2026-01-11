@@ -29,9 +29,33 @@ pub fn build_args_parser() -> clap::Command {
         )
         .arg(
             clap::Arg::new("undocumented")
-                .help("Include undocumented macros and functions")
+                .help("Include all undocumented symbols (macros, functions, labels, equs)")
                 .short('u')
                 .long("undocumented")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            clap::Arg::new("undocumented-macros")
+                .help("Include undocumented macros")
+                .long("undocumented-macros")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            clap::Arg::new("undocumented-functions")
+                .help("Include undocumented functions")
+                .long("undocumented-functions")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            clap::Arg::new("undocumented-labels")
+                .help("Include undocumented labels")
+                .long("undocumented-labels")
+                .action(clap::ArgAction::SetTrue)
+        )
+        .arg(
+            clap::Arg::new("undocumented-equs")
+                .help("Include undocumented equs")
+                .long("undocumented-equs")
                 .action(clap::ArgAction::SetTrue)
         )
         .arg(
@@ -225,7 +249,18 @@ pub fn handle_matches(matches: &clap::ArgMatches, cmd: &clap::Command) -> Result
     let inputs = inputs.into_iter();
 
     let output = std::path::Path::new(output);
-    let include_undocumented = matches.get_flag("undocumented");
+    
+    // Build undocumented config from flags
+    let include_undocumented = if matches.get_flag("undocumented") {
+        crate::UndocumentedConfig::all()
+    } else {
+        crate::UndocumentedConfig {
+            macros: matches.get_flag("undocumented-macros"),
+            functions: matches.get_flag("undocumented-functions"),
+            labels: matches.get_flag("undocumented-labels"),
+            equs: matches.get_flag("undocumented-equs"),
+        }
+    };
 
     // Calculate common prefix for all input files
     let input_vec: Vec<String> = inputs.collect();
