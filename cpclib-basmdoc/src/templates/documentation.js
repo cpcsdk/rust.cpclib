@@ -444,19 +444,5 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         pre.appendChild(button);
     });
-    
-    // Add copy buttons to symbol links
-    document.querySelectorAll('.symbol-link').forEach(function(link) {
-        const button = document.createElement('button');
-        button.className = 'copy-btn';
-        button.textContent = '📋';
-        button.style.fontSize = '0.7em';
-        button.onclick = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            copyToClipboard(link.textContent, button);
-        };
-        link.parentElement.style.position = 'relative';
-        link.parentElement.appendChild(button);
-    });
+
 });

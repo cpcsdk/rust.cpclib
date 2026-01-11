@@ -1,3 +1,44 @@
+impl ItemDocumentation {
+        pub fn macro_source(&self) -> String {
+            match &self.item {
+                DocumentedItem::Macro { content, .. } => content.clone(),
+                _ => String::new(),
+            }
+        }
+
+        pub fn function_source(&self) -> String {
+            match &self.item {
+                DocumentedItem::Function { content, .. } => content.clone(),
+                _ => String::new(),
+            }
+        }
+    pub fn item_long_summary(&self) -> String {
+        match &self.item {
+            DocumentedItem::Label(label) => format!("Label: {}", label),
+            DocumentedItem::Equ(name, value) => format!("Equ: {} = {}", name, value),
+            DocumentedItem::Macro { name, arguments, .. } => format!("Macro: {}({})", name, arguments.join(", ")),
+            DocumentedItem::Function { name, arguments, .. } => format!("Function: {}({})", name, arguments.join(", ")),
+            DocumentedItem::File(fname) => format!("File: {}", fname),
+            DocumentedItem::Source(_) => "Source".to_string(),
+        }
+    }
+
+    pub fn item_short_summary(&self) -> String {
+        match &self.item {
+            DocumentedItem::Label(label) => label.clone(),
+            DocumentedItem::Equ(name, _) => name.clone(),
+            DocumentedItem::Macro { name, .. } => name.clone(),
+            DocumentedItem::Function { name, .. } => name.clone(),
+            DocumentedItem::File(fname) => fname.clone(),
+            DocumentedItem::Source(_) => "Source".to_string(),
+        }
+    }
+
+    pub fn to_markdown(&self) -> String {
+        // This is a placeholder; you can implement markdown rendering as needed
+        format!("# {}\n{}", self.item_long_summary(), self.doc)
+    }
+}
 pub mod cmdline;
 
 use std::collections::HashMap;
@@ -36,7 +77,6 @@ impl<'a, T: 'a> ParallelIteratorShim<'a, T> for Vec<T> {
 }
 
 use cpclib_asm::{ListingElement, MayHaveSpan, parse_z80_str, LocatedListing};
-use cpclib_common::itertools::Itertools;
 use minijinja::value::Object;
 use minijinja::{Environment, ErrorKind, Value, context};
 use rust_embed::Embed;
@@ -138,7 +178,8 @@ pub enum DocumentedItem {
     Label(String),
     Equ(String, String),
     Macro { name: String, arguments: Vec<String>, content: String },
-    Function { name: String, arguments: Vec<String>, content: String }
+    Function { name: String, arguments: Vec<String>, content: String },
+    Source(String) // Whole source of a file
 }
 
 impl DocumentedItem {
@@ -162,27 +203,14 @@ impl DocumentedItem {
         matches!(self, DocumentedItem::File(_))
     }
 
-    pub fn item_key(&self) -> String {
+    pub fn item_key(&self, fname: &str) -> String {
         match self {
-            DocumentedItem::Label(l) => {
-                format!("label_{}", l)
-            },
-
-            DocumentedItem::Equ(l, _) => {
-                format!("equ_{}", l)
-            },
-
-            DocumentedItem::Macro { name, .. } => {
-                format!("macro_{}", name)
-            },
-
-            DocumentedItem::Function { name, .. } => {
-                format!("function_{}", name)
-            },
-
-            DocumentedItem::File(fname) => {
-                format!("file_{}", fname.replace(['/', '\\', '.'], "_"))
-            }
+            DocumentedItem::Label(l) => format!("label_{}", l),
+            DocumentedItem::Equ(l, _) => format!("equ_{}", l),
+            DocumentedItem::Macro { name, .. } => format!("macro_{}", name),
+            DocumentedItem::Function { name, .. } => format!("function_{}", name),
+            DocumentedItem::File(fname) => format!("file_{}", fname.replace(['/', '\\', '.'], "_")),
+            DocumentedItem::Source(_) => format!("source_{}", fname.replace(['/', '\\', '.'], "_")),
         }
     }
 }
@@ -244,141 +272,48 @@ impl Object for ItemDocumentation {
             Some("doc") => Some(Value::from(self.doc.clone())),
             Some("summary") => Some(Value::from(self.item_long_summary())),
             Some("short_summary") => Some(Value::from(self.item_short_summary())),
-            Some("key") => Some(Value::from(self.item.item_key())),
+            Some("key") => Some(Value::from(self.item.item_key(&self.source_file))),
             Some("source_file") => Some(Value::from(self.source_file.clone())),
             Some("line_number") => Some(Value::from(self.line_number)),
             Some("references") => {
-                // Convert references to a Value that can be used in templates
-                let refs: Vec<Value> = self.references.iter().map(|r| {
-                    Value::from_serialize(r)
-                }).collect();
+                let refs: Vec<Value> = self.references.iter().map(|r| Value::from_serialize(r)).collect();
                 Some(Value::from(refs))
             },
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
-            Some("source") => {
-                // Return linked source if available, otherwise return raw source
-                if let Some(ref linked) = self.linked_source {
-                    Some(Value::from(linked.clone()))
-                } else if self.is_macro() {
-                    Some(Value::from(self.macro_source()))
-                } else if self.is_function() {
-                    Some(Value::from(self.function_source()))
-                } else {
-                    Some(Value::from(String::new()))
+            Some("is_source") => Some(Value::from(matches!(self.item, DocumentedItem::Source(_)))),
+            Some("linked_source") => {
+                match &self.linked_source {
+                    Some(s) => Some(Value::from(s.clone())),
+                    None => None
                 }
             },
-            _ => None
-        }
-    }
-}
-
-impl ItemDocumentation {
-    /// Get the source code of a macro, or empty string for other items
-    pub fn macro_source(&self) -> String {
-        match &self.item {
-            DocumentedItem::Macro { content, .. } => content.clone(),
-            _ => String::new()
-        }
-    }
-
-    /// Get the source code of a function, or empty string for other items
-    pub fn function_source(&self) -> String {
-        match &self.item {
-            DocumentedItem::Function { content, .. } => content.clone(),
-            _ => String::new()
-        }
-    }
-
-    delegate::delegate! {
-        to self.item {
-            pub fn is_label(&self) -> bool;
-            pub fn is_equ(&self) -> bool;
-            pub fn is_macro(&self) -> bool;
-            pub fn is_function(&self) -> bool;
-            pub fn is_file(&self) -> bool;
-
-            pub fn item_key(&self) -> String;
-        }
-    }
-
-    pub fn item_long_summary(&self) -> String {
-        match &self.item {
-            DocumentedItem::Label(l) => l.to_string(),
-
-            DocumentedItem::Equ(l, v) => {
-                format!("{l} EQU {v}")
-            },
-
-            DocumentedItem::Macro { name, arguments, .. } => {
-                let args = arguments.join(",");
-                format!("MACRO {name}({args})")
-            },
-
-            DocumentedItem::Function { name, arguments, .. } => {
-                let args = arguments.join(",");
-                format!("FUNCTION {name}({args})")
-            },
-
-            DocumentedItem::File(fname) => {
-                format!("File: {}", fname)
+            Some("source") => {
+                // Expose source for full-file items and for macros/functions.
+                match &self.item {
+                    DocumentedItem::Source(src) => Some(Value::from(src.clone())),
+                    DocumentedItem::Macro { .. } => {
+                        if let Some(ls) = &self.linked_source {
+                            Some(Value::from(ls.clone()))
+                        } else {
+                            Some(Value::from(self.macro_source()))
+                        }
+                    }
+                    DocumentedItem::Function { .. } => {
+                        if let Some(ls) = &self.linked_source {
+                            Some(Value::from(ls.clone()))
+                        } else {
+                            Some(Value::from(self.function_source()))
+                        }
+                    }
+                    _ => None
+                }
             }
+            None => None,
+            Some(_) => None,
         }
     }
 
-    pub fn item_short_summary(&self) -> String {
-        match &self.item {
-            DocumentedItem::Label(l) => l.to_string(),
 
-            DocumentedItem::Equ(l, v) => {
-                l.clone()
-            },
-
-            DocumentedItem::Macro { name, .. } => {
-                name.clone()
-            },
-
-            DocumentedItem::Function { name, .. } => {
-                name.clone()
-            },
-
-            DocumentedItem::File(fname) => {
-                fname.clone()
-            }
-        }
-    }
-
-    pub fn to_markdown(&self) -> String {
-        let mut md = String::default();
-
-        match &self.item {
-            DocumentedItem::Label(l) => {
-                md += &format!("## {l} (label) \n\n");
-            },
-
-            DocumentedItem::Equ(l, v) => {
-                md += &format!("## {l} EQU {v} \n\n");
-            },
-
-            DocumentedItem::Macro { name, arguments, .. } => {
-                let args = arguments.join(",");
-                md += &format!("## MACRO {name}({args}) \n\n");
-            },
-
-            DocumentedItem::Function { name, arguments, .. } => {
-                let args = arguments.join(",");
-                md += &format!("## FUNCTION {name}({args}) \n\n");
-            },
-
-            DocumentedItem::File(fname) => {
-                md += &format!("## File: {fname} \n\n");
-            }
-        }
-
-        md += &self.doc;
-        md += "\n";
-
-        md
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -440,11 +375,46 @@ impl Object for DocumentationPage {
                 Some(functions)
             },
             Some("files") => {
-                let files = self.merged_files()
-                    .into_iter()
-                    .map(Value::from_object)
-                    .collect::<Vec<_>>();
-                let files = Value::from_object(files);
+                // Include the full source item (DocumentedItem::Source) as the first
+                // entry for each file, followed by the merged file-level documentation.
+                // Ensure we still present source blocks even when there are no file-level
+                // documentation comments (merged_files() may be empty).
+                let merged = self.merged_files();
+                let mut files_vec: Vec<minijinja::value::Value> = Vec::new();
+
+                if merged.is_empty() {
+                    // No merged file docs; enumerate unique source files from content
+                    let mut file_names: Vec<String> = self.content.iter().map(|it| it.source_file.clone()).collect();
+                    file_names.sort();
+                    file_names.dedup();
+
+                    for fname in file_names {
+                        // If a Source item exists for this file, push it first
+                        if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == fname) {
+                            files_vec.push(Value::from_object(source_item.clone()));
+                        } else {
+                            // No explicit source item found; push an empty File placeholder
+                            files_vec.push(Value::from_object(ItemDocumentation {
+                                item: DocumentedItem::File(fname.clone()),
+                                doc: String::new(),
+                                source_file: fname.clone(),
+                                line_number: 0,
+                                references: Vec::new(),
+                                linked_source: None
+                            }));
+                        }
+                    }
+                } else {
+                    for mf in merged.into_iter() {
+                        // Find the corresponding Source item (if any) in the original content
+                        if let Some(source_item) = self.content.iter().find(|it| matches!(it.item, DocumentedItem::Source(_)) && it.source_file == mf.source_file) {
+                            files_vec.push(Value::from_object(source_item.clone()));
+                        }
+                        files_vec.push(Value::from_object(mf));
+                    }
+                }
+
+                let files = Value::from_object(files_vec);
                 Some(files)
             },
             Some("symbol_index") => {
@@ -491,7 +461,7 @@ impl DocumentationPage {
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
-        let mut page = build_documentation_page_from_aggregates(display_name, doc);
+        let mut page = build_documentation_page_from_aggregates(fname, doc);
         page.all_files = vec![display_name.to_string()];
         
         // Populate cross-references with symbol links
@@ -512,7 +482,7 @@ impl DocumentationPage {
         let tokens = parse_z80_str(&code).map_err(|e| format!("Unable to read source. {}", e))?;
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
 
-        let mut page = build_documentation_page_from_aggregates(display_name, doc);
+        let mut page = build_documentation_page_from_aggregates(fname, doc);
         page.all_files = vec![display_name.to_string()];
         
         Ok((page, tokens))
@@ -564,13 +534,12 @@ impl DocumentationPage {
         let symbols = self.all_symbols();
         
         for item in &mut self.content {
-            if item.is_macro() || item.is_function() {
-                let source = if item.is_macro() {
+            if item.item.is_macro() || item.item.is_function() {
+                let source = if item.item.is_macro() {
                     item.macro_source()
                 } else {
                     item.function_source()
                 };
-                
                 if !source.is_empty() {
                     item.linked_source = Some(link_symbols_in_source(&source, &symbols));
                 }
@@ -594,11 +563,11 @@ impl DocumentationPage {
         
         // Collect and sort symbol names once (OPTIMIZATION: sort once, not per macro)
         let mut symbol_names: Vec<String> = self.content.iter()
-            .filter(|item| !item.is_file())
+            .filter(|item| !item.item.is_file())
             .map(|item| item.item_short_summary())
             .collect();
         // Sort by length (longest first) to avoid partial matches in regex
-        symbol_names.sort_by(|a, b| b.len().cmp(&a.len()));
+        symbol_names.sort_by(|a: &String, b: &String| b.len().cmp(&a.len()));
         
         // Get all symbols for linking
         let all_symbols = self.all_symbols();
@@ -652,7 +621,7 @@ impl DocumentationPage {
         
         // Also search for symbols inside macro and function content
         let macro_func_items: Vec<_> = self.content.iter()
-            .filter(|item| item.is_macro() || item.is_function())
+            .filter(|item| item.item.is_macro() || item.item.is_function())
             .collect();
         
         // Create progress bar for macro/function processing
@@ -667,7 +636,7 @@ impl DocumentationPage {
         let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if macro_func_items.len() > 20 {
             macro_func_items.par_iter()
                 .map(|item| {
-                    let content = if item.is_macro() {
+                    let content = if item.item.is_macro() {
                         item.macro_source()
                     } else {
                         item.function_source()
@@ -690,7 +659,7 @@ impl DocumentationPage {
         } else {
             macro_func_items.iter()
                 .map(|item| {
-                    let content = if item.is_macro() {
+                    let content = if item.item.is_macro() {
                         item.macro_source()
                     } else {
                         item.function_source()
@@ -751,23 +720,23 @@ impl DocumentationPage {
     }
 
     pub fn label_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.is_label())
+        self.content.iter().filter(|item| item.item.is_label())
     }
 
     pub fn macro_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.is_macro())
+        self.content.iter().filter(|item| item.item.is_macro())
     }
 
     pub fn equ_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.is_equ())
+        self.content.iter().filter(|item| item.item.is_equ())
     }
 
     pub fn function_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.is_function())
+        self.content.iter().filter(|item| item.item.is_function())
     }
 
     pub fn file_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.is_file())
+        self.content.iter().filter(|item| item.item.is_file())
     }
 
     /// Get file documentation items merged by source file
@@ -806,13 +775,11 @@ impl DocumentationPage {
     /// Get all symbols (labels, macros, functions, equs) for cross-referencing
     pub fn all_symbols(&self) -> Vec<(String, String)> {
         let mut symbols = Vec::new();
-        
         for item in &self.content {
-            if !item.is_file() {
-                symbols.push((item.item_short_summary(), item.item.item_key()));
+            if !item.item.is_file() && !matches!(item.item, DocumentedItem::Source(_)) {
+                symbols.push((item.item_short_summary(), item.item.item_key(&item.source_file)));
             }
         }
-        
         symbols
     }
 
@@ -823,7 +790,7 @@ impl DocumentationPage {
         let mut index: BTreeMap<char, Vec<&ItemDocumentation>> = BTreeMap::new();
         
         for item in &self.content {
-            if !item.is_file() {
+            if !item.item.is_file() && !matches!(item.item, DocumentedItem::Source(_)) {
                 let name = item.item_short_summary();
                 if let Some(first_char) = name.chars().next() {
                     let key = first_char.to_ascii_uppercase();
@@ -852,7 +819,9 @@ impl DocumentationPage {
     }
 
     pub fn has_files(&self) -> bool {
-        self.file_iter().next().is_some()
+        // Consider a page to "have files" if there are either file-level
+        // documentation items or a Source item (whole-file source) present.
+        self.file_iter().next().is_some() || self.content.iter().any(|item| matches!(item.item, DocumentedItem::Source(_)))
     }
 
     /// Get a sorted list of unique source files
@@ -912,13 +881,16 @@ impl DocumentationPage {
         
         // Capture symbols for cross-referencing
         let symbols = self.all_symbols();
+        // Clone for individual closures since closures take ownership
+        let symbols_for_auto = symbols.clone();
+        let symbols_for_highlight = symbols.clone();
         
         // Add a cross-reference filter to auto-link symbol names
         env.add_filter("auto_link_symbols", move |value: String| -> Result<String, minijinja::Error> {
             let mut result = value.clone();
             
             // Sort symbols by length (longest first) to avoid partial matches
-            let mut sorted_symbols = symbols.clone();
+            let mut sorted_symbols = symbols_for_auto.clone();
             sorted_symbols.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
             
             for (name, key) in sorted_symbols {
@@ -931,6 +903,14 @@ impl DocumentationPage {
             }
             
             Ok(result)
+        });
+
+        // Add a filter that applies syntax highlighting and symbol linking
+        // This uses the Rust-side highlighter and linker to produce HTML
+        // with <span class="hljs-..."> classes and <a class="symbol-link"> anchors.
+        env.add_filter("highlight_and_link", move |value: String| -> Result<String, minijinja::Error> {
+            let out = link_symbols_in_source(&value, &symbols_for_highlight);
+            Ok(out)
         });
         
         const TMPL_NAME: &str = "html_documentation.jinja";
@@ -957,27 +937,27 @@ impl DocumentationPage {
 }
 
 #[inline]
-pub fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
+fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
     token.is_comment() && token.comment().starts_with(LOCAL_DOCUMENTATION_START)
 }
 
 #[inline]
-pub fn is_global_documentation<T: ListingElement>(token: &T) -> bool {
+fn is_global_documentation<T: ListingElement>(token: &T) -> bool {
     token.is_comment() && token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
 }
 
 #[inline]
-pub fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
+fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
     token.is_comment()
         && token.comment().starts_with(LOCAL_DOCUMENTATION_START)
         && !token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
 }
 
-pub fn is_documentable<T: ListingElement + ToString>(token: &T) -> bool {
+fn is_documentable<T: ListingElement + ToString>(token: &T) -> bool {
     documentation_type(token, None).is_some()
 }
 
-pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_label: Option<&str>) -> Option<DocumentedItem> {
+fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_label: Option<&str>) -> Option<DocumentedItem> {
     if token.is_label() {
         let label = token.label_symbol().to_string();
         // Handle local labels (starting with ".")
@@ -1027,37 +1007,51 @@ pub fn documentation_type<T: ListingElement + ToString>(token: &T, last_global_l
     }
 }
 
-pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
+fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
     fname: &str,
     agg: Vec<(String, Option<&T>, Option<String>, usize)>
 ) -> DocumentationPage {
-    let content = agg
-        .into_iter()
-        .filter_map(|(doc, t, last_global_label, line_number)| {
-            if let Some(t) = t {
-                documentation_type(t, last_global_label.as_deref()).map(|item| {
-                    ItemDocumentation {
-                        item,
+    // Read the source code for DocumentedItem::Source
+    let code = std::fs::read_to_string(fname).unwrap_or_default();
+    let mut content: Vec<ItemDocumentation> = Vec::new();
+    // Insert Source as first item
+    content.push(ItemDocumentation {
+        item: DocumentedItem::Source(code),
+        doc: String::new(),
+        source_file: fname.to_string(),
+        line_number: 0,
+        references: Vec::new(),
+        linked_source: None
+    });
+
+    // Add all other documentation items
+    content.extend(
+        agg.into_iter()
+            .filter_map(|(doc, t, last_global_label, line_number)| {
+                if let Some(t) = t {
+                    documentation_type(t, last_global_label.as_deref()).map(|item| {
+                        ItemDocumentation {
+                            item,
+                            doc,
+                            source_file: fname.to_string(),
+                            line_number,
+                            references: Vec::new(),
+                            linked_source: None // Will be populated later
+                        }
+                    })
+                }
+                else {
+                    Some(ItemDocumentation {
+                        item: DocumentedItem::File(fname.to_string()),
                         doc,
                         source_file: fname.to_string(),
-                        line_number,
+                        line_number, // Use provided line number (typically 0 for file-level docs)
                         references: Vec::new(),
-                        linked_source: None // Will be populated later
-                    }
-                })
-            }
-            else {
-                Some(ItemDocumentation {
-                    item: DocumentedItem::File(fname.to_string()),
-                    doc,
-                    source_file: fname.to_string(),
-                    line_number, // Use provided line number (typically 0 for file-level docs)
-                    references: Vec::new(),
-                    linked_source: None
-                })
-            }
-        })
-        .collect();
+                        linked_source: None
+                    })
+                }
+            })
+    );
 
     DocumentationPage {
         fname: fname.to_string(),
@@ -1069,7 +1063,7 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 /// Aggregate the comments when there are considered to be documentation and associate them to the required token if any
 /// Local labels (starting with ".") are resolved using the tracked parent global label
 /// Returns: (doc_string, token_ref, parent_label, line_number)
-pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
+fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
     tokens: &[T],
     include_undocumented: bool
 ) -> Vec<(String, Option<&T>, Option<String>, usize)> {
@@ -1278,7 +1272,8 @@ fn highlight_z80_syntax(source: &str) -> String {
         };
         
         static ref COMMENTS_REGEX: regex::Regex = {
-            regex::Regex::new(r";.*$").unwrap()
+            // Match single-line comments per-line (multiline mode)
+            regex::Regex::new(r"(?m);.*$").unwrap()
         };
         
         static ref MULTILINE_COMMENT_REGEX: regex::Regex = {
@@ -1381,7 +1376,7 @@ fn highlight_z80_syntax(source: &str) -> String {
 
 /// Link symbols in source code to their documentation anchors
 /// Applies after syntax highlighting to preserve both features
-pub fn link_symbols_in_source(source: &str, symbols: &[(String, String)]) -> String {
+fn link_symbols_in_source(source: &str, symbols: &[(String, String)]) -> String {
     // First apply syntax highlighting
     let highlighted = highlight_z80_syntax(source);
     
@@ -1527,7 +1522,7 @@ fn collect_references_in_content(
 }
 
 /// Collect cross-references by analyzing which symbols are used in which locations
-pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
+fn collect_cross_references<T: ListingElement + std::fmt::Display>(
     tokens: &[T],
     source_file: Arc<str>,
     all_symbols: &[(String, String)],
@@ -1571,7 +1566,7 @@ pub fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 }
 
 /// Populate cross-references in documentation page
-pub fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T], all_symbols: &[(String, String)]) -> DocumentationPage {
+fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T], all_symbols: &[(String, String)]) -> DocumentationPage {
     // Create shared cache for this operation
     let highlight_cache = DashMap::new();
     

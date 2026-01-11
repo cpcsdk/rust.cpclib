@@ -34,6 +34,13 @@ pub fn build_args_parser() -> clap::Command {
                 .long("undocumented")
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            clap::Arg::new("title")
+                .help("Output title")
+                .short('t')
+                .long("title")
+                .required(false)
+        )
 }
 
 /// Find the longest common prefix of all paths (up to directory boundary)

@@ -57,10 +57,14 @@
     {% macro source_toggle(item) %}
         {% if item.source %}
         <div class="macro-source">
-            <button class="macro-source-toggle" onclick="toggleSource('{{item.key}}_source')">View Source</button>
-            <div id="{{item.key}}_source" class="macro-source-content">
-                <pre><code class="language-basm">{{ item.source | safe }}</code></pre>
-            </div>
+            <details class="macro-source-details">
+                <summary>Show Source</summary>
+                {% if item.linked_source %}
+                <pre><code class="hljs language-basm">{{ item.linked_source | safe }}</code></pre>
+                {% else %}
+                <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | safe }}</code></pre>
+                {% endif %}
+            </details>
         </div>
         {% endif %}
     {% endmacro %}
@@ -177,10 +181,20 @@
             <section class="section">
                 <h2 id="files-section" class="anchor-offset">File Documentation</h2>
                 {% for item in page.files %}
-                <div class="item" data-source-file="{{ item.source_file }}">
-                    <h4 id="{{item.key}}" class="anchor-offset">{{ item.short_summary | basename }}</h4>
-                    <div>{{ item.doc | markdown_to_html | safe }}</div>
-                </div>
+                    {% if item.is_source %}
+                        <div class="item" data-source-file="{{ item.source_file }}">
+                            <h4 id="{{item.key}}" class="anchor-offset">Full Source</h4>
+                            <details class="source-details">
+                                    <summary>Show Source</summary>
+                                    <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | safe }}</code></pre>
+                                </details>
+                        </div>
+                    {% else %}
+                        <div class="item" data-source-file="{{ item.source_file }}">
+                            <h4 id="{{item.key}}" class="anchor-offset">{{ item.short_summary | basename }}</h4>
+                            <div>{{ item.doc | markdown_to_html | safe }}</div>
+                        </div>
+                    {% endif %}
                 {% endfor %}
             </section>
             {% endif %}
@@ -227,5 +241,33 @@
         </main>
     </div>
     <script>{{ documentation_js | safe }}</script>
+    <script>
+        // Normalize file names when filtering: some items use absolute paths
+        // while file-filter links use workspace-relative paths. Wrap the
+        // generated `filterByFile` to resolve a matching source-file when
+        // necessary.
+        (function() {
+            if (typeof window.filterByFile !== 'function') return;
+            const originalFilter = window.filterByFile;
+
+            function resolveFileNameForFiltering(fileName) {
+                if (!fileName) return '';
+                const items = document.querySelectorAll('.item[data-source-file]');
+                for (const it of items) {
+                    const sf = it.dataset.sourceFile;
+                    if (!sf) continue;
+                    if (sf === fileName) return sf;
+                    if (sf.endsWith('/' + fileName)) return sf;
+                    if (sf.endsWith(fileName)) return sf;
+                }
+                return fileName;
+            }
+
+            window.filterByFile = function(fileName) {
+                const resolved = resolveFileNameForFiltering(fileName);
+                return originalFilter(resolved);
+            };
+        })();
+    </script>
 </body>
 </html>
