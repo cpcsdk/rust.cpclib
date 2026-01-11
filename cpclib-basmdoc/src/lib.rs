@@ -1197,6 +1197,31 @@ impl DocumentationPage {
             Ok(out)
         });
         
+        // Filter to add line numbers to code
+        env.add_filter("add_line_numbers", |value: String, start_line: Option<usize>| -> Result<String, minijinja::Error> {
+            let start = start_line.unwrap_or(1);
+            let lines: Vec<&str> = value.lines().collect();
+            let max_line_number = start + lines.len() - 1;
+            let line_number_width = max_line_number.to_string().len().max(3);
+            
+            let mut result = String::new();
+            result.push_str("<div class=\"code-with-line-numbers\">");
+            
+            for (i, line) in lines.iter().enumerate() {
+                let line_num = start + i;
+                result.push_str("<div class=\"code-line\">");
+                result.push_str(&format!("<span class=\"line-number\" id=\"L{}\">   {:width$}</span>", 
+                    line_num, line_num, width = line_number_width));
+                result.push_str("<span class=\"line-content\">");
+                result.push_str(line);
+                result.push_str("</span>");
+                result.push_str("</div>");
+            }
+            
+            result.push_str("</div>");
+            Ok(result)
+        });
+        
         const TMPL_NAME: &str = "html_documentation.jinja";
         let tmpl_src = Templates::get(TMPL_NAME).expect("Template not found").data;
         let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();

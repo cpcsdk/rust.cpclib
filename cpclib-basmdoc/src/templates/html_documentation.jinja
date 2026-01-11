@@ -60,9 +60,9 @@
             <details class="macro-source-details">
                 <summary>Show Source</summary>
                 {% if item.linked_source %}
-                <pre><code class="hljs language-basm">{{ item.linked_source | safe }}</code></pre>
+                <pre><code class="hljs language-basm">{{ item.linked_source | add_line_numbers(item.line_number) | safe }}</code></pre>
                 {% else %}
-                <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | safe }}</code></pre>
+                <pre><code class="hljs language-basm">{{ item.source | highlight_and_link | add_line_numbers(item.line_number) | safe }}</code></pre>
                 {% endif %}
             </details>
         </div>
@@ -196,7 +196,7 @@
                         <details class="source-details">
                             <summary>Show Source</summary>
                             {% if file_source_map[file] %}
-                                <pre><code class="hljs language-basm">{{ file_source_map[file] | highlight_and_link | safe }}</code></pre>
+                                <pre><code class="hljs language-basm">{{ file_source_map[file] | highlight_and_link | add_line_numbers(1) | safe }}</code></pre>
                             {% else %}
                                 <pre><code class="hljs language-basm">(Source not available)</code></pre>
                             {% endif %}
@@ -314,6 +314,114 @@
                 return originalFilter(resolved);
             };
         })();
+
+        // Line number click handler: jump to corresponding line in full source
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('[LineNumberClick] Setting up file-aware click handlers...');
+            
+            // Find the "File Documentation" section which contains full source code for all files
+            // The #files-section ID is on the h2, so we need to get its parent section
+            const filesSectionHeading = document.querySelector('#files-section');
+            if (!filesSectionHeading) {
+                console.log('[LineNumberClick] No file documentation heading found');
+                return;
+            }
+            
+            const fileDocSection = filesSectionHeading.parentElement;
+            if (!fileDocSection) {
+                console.log('[LineNumberClick] No file documentation section container found');
+                return;
+            }
+            
+            // Build a map of source files to their item containers (we'll query for code blocks later after opening details)
+            const fileItems = {};
+            fileDocSection.querySelectorAll('.item[data-source-file]').forEach(function(item) {
+                const sourceFile = item.getAttribute('data-source-file');
+                if (sourceFile) {
+                    fileItems[sourceFile] = item;
+                    console.log('[LineNumberClick] Mapped file:', sourceFile);
+                }
+            });
+            
+            console.log('[LineNumberClick] Found', Object.keys(fileItems).length, 'file items');
+            
+            // Add click handlers to ALL line numbers in the document
+            document.querySelectorAll('.line-number').forEach(function(lineNumber) {
+                lineNumber.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const lineId = this.getAttribute('id');
+                    console.log('[LineNumberClick] Clicked on:', lineId);
+                    
+                    if (!lineId || !lineId.startsWith('L')) {
+                        console.log('[LineNumberClick] Invalid line ID');
+                        return;
+                    }
+                    
+                    // Find the parent .item element to get the source file
+                    let parentItem = this.closest('.item[data-source-file]');
+                    if (!parentItem) {
+                        console.log('[LineNumberClick] No parent item with data-source-file found');
+                        return;
+                    }
+                    
+                    const sourceFile = parentItem.getAttribute('data-source-file');
+                    console.log('[LineNumberClick] Source file:', sourceFile);
+                    
+                    // Extract line number from ID (e.g., "L172" -> "172")
+                    const lineNum = lineId.substring(1);
+                    console.log('[LineNumberClick] Looking for line:', lineNum, 'in file:', sourceFile);
+                    
+                    // Get the item container for this specific file
+                    const fileItem = fileItems[sourceFile];
+                    if (!fileItem) {
+                        console.log('[LineNumberClick] No file item found for:', sourceFile);
+                        return;
+                    }
+                    
+                    // Find and open the details element if it exists and is closed
+                    const detailsElement = fileItem.querySelector('details.source-details');
+                    if (detailsElement && !detailsElement.open) {
+                        console.log('[LineNumberClick] Opening details element for file:', sourceFile);
+                        detailsElement.open = true;
+                    }
+                    
+                    // Now query for the code block (after opening details, it should be accessible)
+                    const fullSourceBlock = fileItem.querySelector('.code-with-line-numbers');
+                    if (!fullSourceBlock) {
+                        console.log('[LineNumberClick] No full source block found for file:', sourceFile);
+                        return;
+                    }
+                    
+                    console.log('[LineNumberClick] Found code block with', fullSourceBlock.querySelectorAll('.line-number').length, 'lines');
+                    
+                    // Look for the corresponding line in the file's full source section
+                    const targetLine = fullSourceBlock.querySelector('.line-number[id="L' + lineNum + '"]');
+                    console.log('[LineNumberClick] Target line found:', !!targetLine);
+                    
+                    if (targetLine) {
+                        // Scroll to target with offset for fixed header
+                        const yOffset = -80;
+                        const y = targetLine.getBoundingClientRect().top + window.pageYOffset + yOffset;
+                        console.log('[LineNumberClick] Scrolling to y:', y);
+                        window.scrollTo({top: y, behavior: 'smooth'});
+                        
+                        // Highlight the target line temporarily
+                        const codeLine = targetLine.parentElement;
+                        if (codeLine) {
+                            codeLine.style.backgroundColor = '#fff3cd';
+                            codeLine.style.transition = 'background-color 0.3s';
+                            setTimeout(function() {
+                                codeLine.style.backgroundColor = '';
+                            }, 2000);
+                        }
+                    } else {
+                        console.log('[LineNumberClick] Target line L' + lineNum + ' not found in file:', sourceFile);
+                    }
+                });
+            });
+            
+            console.log('[LineNumberClick] Setup complete. Added handlers to', document.querySelectorAll('.line-number').length, 'line numbers');
+        });
     </script>
 </body>
 </html>

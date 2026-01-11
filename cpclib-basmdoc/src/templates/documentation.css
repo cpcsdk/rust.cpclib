@@ -906,3 +906,121 @@ pre {
     margin: 10px 0 0 0;
     font-style: italic;
 }
+
+/* Line numbers for code blocks */
+.code-with-line-numbers {
+    display: flex;
+    flex-direction: column;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.875em;
+    line-height: 1.5;
+    background-color: #f8f9fa !important;
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+}
+
+.code-line {
+    display: flex;
+    flex-direction: row;
+    min-height: 1.5em;
+    background-color: transparent !important;
+}
+
+.line-number {
+    display: inline-block;
+    background-color: #f0f0f0;
+    border-right: 1px solid #e0e0e0;
+    padding: 0 0.75em;
+    user-select: none;
+    text-align: right;
+    color: #999;
+    cursor: pointer;
+    transition: color 0.2s, background-color 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: 5em;
+    font-variant-numeric: tabular-nums;
+}
+
+.line-number:hover {
+    color: #3498db;
+    background-color: #d0e7f5;
+}
+
+.line-number:target {
+    color: #2980b9;
+    background-color: #fff3cd;
+    font-weight: bold;
+}
+
+.line-content {
+    flex: 1;
+    padding: 0 1em;
+    white-space: pre;
+    overflow-x: visible;
+    background-color: transparent !important;
+    color: #333 !important;
+}
+
+/* Override highlight.js dark theme with light colors */
+.code-with-line-numbers .hljs,
+.code-with-line-numbers code,
+.code-with-line-numbers pre {
+    background-color: transparent !important;
+    color: #333 !important;
+}
+
+/* Light theme syntax colors */
+.code-with-line-numbers .hljs-keyword,
+.code-with-line-numbers .hljs-selector-tag,
+.code-with-line-numbers .hljs-literal,
+.code-with-line-numbers .hljs-section,
+.code-with-line-numbers .hljs-link {
+    color: #0033b3 !important;
+}
+
+.code-with-line-numbers .hljs-string,
+.code-with-line-numbers .hljs-title,
+.code-with-line-numbers .hljs-name,
+.code-with-line-numbers .hljs-type,
+.code-with-line-numbers .hljs-attribute,
+.code-with-line-numbers .hljs-symbol,
+.code-with-line-numbers .hljs-bullet,
+.code-with-line-numbers .hljs-built_in,
+.code-with-line-numbers .hljs-addition,
+.code-with-line-numbers .hljs-variable,
+.code-with-line-numbers .hljs-template-tag,
+.code-with-line-numbers .hljs-template-variable {
+    color: #067d17 !important;
+}
+
+.code-with-line-numbers .hljs-comment,
+.code-with-line-numbers .hljs-quote,
+.code-with-line-numbers .hljs-deletion,
+.code-with-line-numbers .hljs-meta {
+    color: #8c8c8c !important;
+}
+
+.code-with-line-numbers .hljs-number,
+.code-with-line-numbers .hljs-regexp,
+.code-with-line-numbers .hljs-meta-string {
+    color: #1750eb !important;
+}
+
+.code-with-line-numbers .hljs-doctag,
+.code-with-line-numbers .hljs-params {
+    color: #a80000 !important;
+}
+
+/* Ensure pre/code inside line numbers container has no extra padding */
+.code-with-line-numbers pre {
+    margin: 0;
+    padding: 0;
+}
+
+.code-with-line-numbers code {
+    display: block;
+    padding: 0;
+}
+
