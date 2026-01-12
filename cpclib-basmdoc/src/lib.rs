@@ -65,7 +65,7 @@ mod tests {
         }
 
         // 5. Generate HTML and check that the source code appears in the output
-        let html = merged.to_html();
+        let html = merged.to_html(None);
         println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
         // The source is now compressed in COMPRESSED_CODE map and referenced by data-code-id
         // Check that the JavaScript compressed map exists
@@ -935,7 +935,7 @@ impl DocumentationPage {
     }
 
     /// Return a string that encode the documentation page in HTML
-    pub fn to_html(&self) -> String {
+    pub fn to_html(&self, title: Option<&str>) -> String {
         let page_obj = self;
         let _merged = self.merged_files();
         let mut files_vec: Vec<minijinja::value::Value> = Vec::new();
@@ -1142,6 +1142,7 @@ impl DocumentationPage {
         tmpl.render(context! {
             page => Value::from_object(page_obj.clone()),
             file_list => file_list,
+            title => title.unwrap_or("BASMDoc"),
             labels => labels,
             macros => macros,
             functions => functions,

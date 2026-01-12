@@ -397,7 +397,7 @@ impl BasmDocGenerator {
             None
         };
 
-        let html = merged_page.to_html();
+        let html = merged_page.to_html(self.title.as_deref());
         
         if let Some(s) = spinner {
             s.finish_with_message("HTML generation complete");

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation - {{page.file_name}}</title>
+    <title>{{ title }} - {{page.file_name}}</title>
     <!-- Highlight.js for syntax highlighting (embedded for offline use) -->
     <style>
         {{ highlightjs_css | safe }}
@@ -95,7 +95,7 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
         <!-- Sidebar with Table of Contents -->
         <aside class="sidebar">
             <h1>
-                <span>📚 BASMDoc</span>
+                <span>📚 {{ title }}</span>
                 <button class="theme-toggle" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
                     <span class="theme-icon">🌙</span>
                 </button>
@@ -114,7 +114,7 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
                     <a href="#" id="all-files-link" class="file-filter-link active" data-file="">All Files</a>
                 </div>
                 <details class="file-tree">
-                    <summary class="file-tree-toggle">📁 File Structure</summary>
+                    <summary class="file-tree-toggle">📁 Project Structure</summary>
                     <div id="file-tree-root" class="file-tree-content"></div>
                 </details>
                 <!-- Hidden list to store file data -->

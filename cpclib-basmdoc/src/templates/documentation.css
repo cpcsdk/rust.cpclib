@@ -436,6 +436,13 @@ h4.item-header .ref-location {
     border-radius: 4px;
     display: inline-block;
     margin-bottom: 8px;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.macro-source details summary:hover {
+    background-color: var(--bg-code-light);
 }
 
 .source-details pre,

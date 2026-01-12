@@ -186,11 +186,11 @@ impl ItemDocumentation {
 
     pub fn item_long_summary(&self) -> String {
         match &self.item {
-            DocumentedItem::Label(label) => format!("Label: {}", label),
-            DocumentedItem::Equ(name, value) => format!("Equ: {} = {}", name, value),
-            DocumentedItem::Macro { name, arguments, .. } => format!("Macro: {}({})", name, arguments.join(", ")),
-            DocumentedItem::Function { name, arguments, .. } => format!("Function: {}({})", name, arguments.join(", ")),
-            DocumentedItem::File(fname) => format!("File: {}", fname),
+            DocumentedItem::Label(label) => format!("{}", label),
+            DocumentedItem::Equ(name, value) => format!("{} EQU {}", name, value),
+            DocumentedItem::Macro { name, arguments, .. } => format!("{}({})", name, arguments.join(", ")),
+            DocumentedItem::Function { name, arguments, .. } => format!("{}({})", name, arguments.join(", ")),
+            DocumentedItem::File(fname) => format!("{}", fname),
             DocumentedItem::Source(_) => "Source".to_string(),
             DocumentedItem::SyntaxError(_) => "Syntax Error".to_string(),
         }
