@@ -17,6 +17,7 @@ pub use models::{DocumentedItem, UndocumentedConfig, ItemDocumentation, SymbolRe
 pub use parser::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates};
 pub use generator::BasmDocGenerator;
 
+use pulldown_cmark::{html, Options, Parser};
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -1140,10 +1141,14 @@ impl DocumentationPage {
             .map(|item| Value::from_object(item.clone()))
             .collect();
         
-        // Get merged file-level documentation items
+        // Get merged file-level documentation items and convert markdown to HTML
         let files_docs: Vec<Value> = self.merged_files()
             .into_iter()
-            .map(Value::from_object)
+            .map(|mut item| {
+                // Convert markdown documentation to HTML
+                item.doc = markdown_to_html(&item.doc);
+                Value::from_object(item)
+            })
             .collect();
         
         tmpl.render(context! {
@@ -1161,6 +1166,20 @@ impl DocumentationPage {
         })
         .unwrap()
     }
+}
+
+/// Convert markdown text to HTML
+fn markdown_to_html(markdown: &str) -> String {
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_FOOTNOTES);
+    options.insert(Options::ENABLE_STRIKETHROUGH);
+    options.insert(Options::ENABLE_TASKLISTS);
+    
+    let parser = Parser::new_ext(markdown, options);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
 }
 
 /// Helper function to add line numbers to code (used for compression)

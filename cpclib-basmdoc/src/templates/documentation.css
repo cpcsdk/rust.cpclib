@@ -777,12 +777,19 @@ html {
     padding: 4px 8px;
     background-color: var(--bg-tertiary);
     border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .index-item a {
     text-decoration: none;
     color: var(--text-primary);
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    max-width: 100%;
 }
 
 .index-item a:hover {
