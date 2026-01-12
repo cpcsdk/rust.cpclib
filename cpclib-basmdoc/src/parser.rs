@@ -14,7 +14,66 @@ const GLOBAL_DOCUMENTATION_START: &str = ";;;";
 /// Marker for local documentation comments (item-level)
 const LOCAL_DOCUMENTATION_START: &str = ";;";
 
-/// Check if a token is any kind of documentation comment (;; or ;;;)
+/// Recursively collect all tokens including those inside conditional branches
+///
+/// This function expands IF/ELSE/ENDIF structures to extract documentation
+/// from all conditional branches, not just the active one at parse time.
+///
+/// # Arguments
+/// * `tokens` - The token stream to expand
+/// * `result` - Vector to accumulate all tokens (including nested conditional content)
+fn collect_all_tokens_including_conditionals<'a, T: ListingElement>(
+    tokens: &'a [T],
+    result: &mut Vec<&'a T>
+) {
+    for token in tokens {
+        result.push(token);
+        
+        // If this is a conditional token, recursively process all branches
+        if token.is_if() {
+            let nb_tests = token.if_nb_tests();
+            
+            // Process each condition branch
+            for idx in 0..nb_tests {
+                let (_condition, branch_tokens) = token.if_test(idx);
+                collect_all_tokens_including_conditionals(branch_tokens, result);
+            }
+            
+            // Process the else branch if it exists
+            if let Some(else_tokens) = token.if_else() {
+                collect_all_tokens_including_conditionals(else_tokens, result);
+            }
+        }
+        // Also handle other nested structures
+        else if token.is_repeat() {
+            let listing = token.repeat_listing();
+            collect_all_tokens_including_conditionals(listing, result);
+        }
+        else if token.is_for() {
+            let listing = token.for_listing();
+            collect_all_tokens_including_conditionals(listing, result);
+        }
+        else if token.is_while() {
+            let listing = token.while_listing();
+            collect_all_tokens_including_conditionals(listing, result);
+        }
+        else if token.is_iterate() {
+            let listing = token.iterate_listing();
+            collect_all_tokens_including_conditionals(listing, result);
+        }
+        else if token.is_macro_definition() {
+            // Note: Macro content is typically stored as a string, not as parsed tokens
+            // So we don't recurse into macro bodies
+        }
+        else if token.is_function_definition() {
+            // we don't recurse into function bodies either
+        }
+        else if token.is_module() {
+            let listing = token.module_listing();
+            collect_all_tokens_including_conditionals(listing, result);
+        }
+    }
+}
 fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
     token.is_comment() && token.comment().starts_with(LOCAL_DOCUMENTATION_START)
 }
@@ -148,6 +207,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 /// - Associates them with the next documentable token (label, equ, function, macro)
 /// - Resolves local labels (starting with ".") using the tracked parent global label
 /// - Optionally includes undocumented items based on configuration
+/// - **Recursively processes all conditional branches** (IF/ELSE/ENDIF) to extract
+///   documentation from commented-out code paths
 ///
 /// # Arguments
 /// * `tokens` - The token stream from the assembler
@@ -159,6 +220,10 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
     tokens: &[T],
     include_undocumented: UndocumentedConfig
 ) -> Vec<(String, Option<&T>, Option<String>, usize)> {
+    // First, expand all tokens including those in conditional branches
+    let mut expanded_tokens = Vec::new();
+    collect_all_tokens_including_conditionals(tokens, &mut expanded_tokens);
+    
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
         #[default]
@@ -235,7 +300,8 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
     let mut in_process_comment = CommentInConstruction::default();
     let mut last_global_label: Option<String> = None;
 
-    for token in tokens {
+    // Process the expanded token list (includes all conditional branches)
+    for token in expanded_tokens {
         let (current_is_doc, current_is_documentable) = if is_global_documentation(token) {
             if in_process_comment.is_local() {
                 // here, this is an error, there was a local comment and it is replaced by a global one

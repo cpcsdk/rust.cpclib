@@ -1425,4 +1425,71 @@ mod test {
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">add</span>"));
     }
+    
+    #[test]
+    fn test_conditional_branches_documentation() {
+        // Test that documentation is extracted from all conditional branches
+        let source_code = r#"
+;; This label is always visible
+start:
+    LD A, 1
+    
+    IF 0
+        ;; This label is in a false condition
+        disabled_label:
+            LD B, 2
+    ELSE
+        ;; This label is in the else branch
+        else_label:
+            LD C, 3
+    ENDIF
+    
+    IF 1
+        ;; This label is in a true condition
+        enabled_label:
+            LD D, 4
+    ENDIF
+    
+    RET
+"#;
+        let (_dir, file_path, _expected_source) = create_temp_source_file(source_code);
+        let display_name = "test.asm";
+
+        let page = DocumentationPage::for_file(&file_path, display_name, UndocumentedConfig::all())
+            .expect("parse conditional file");
+
+        // Extract all label names
+        let label_names: Vec<String> = page.content.iter()
+            .filter_map(|item| {
+                if let DocumentedItem::Label(name) = &item.item {
+                    Some(name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // All labels should be documented, regardless of which branch they're in
+        assert!(label_names.contains(&"start".to_string()), 
+            "Should find 'start' label. Found labels: {:?}", label_names);
+        assert!(label_names.contains(&"disabled_label".to_string()), 
+            "Should find 'disabled_label' from IF 0 branch. Found labels: {:?}", label_names);
+        assert!(label_names.contains(&"else_label".to_string()), 
+            "Should find 'else_label' from ELSE branch. Found labels: {:?}", label_names);
+        assert!(label_names.contains(&"enabled_label".to_string()), 
+            "Should find 'enabled_label' from IF 1 branch. Found labels: {:?}", label_names);
+        
+        // Verify documentation was extracted
+        let disabled_doc = page.content.iter()
+            .find(|item| matches!(&item.item, DocumentedItem::Label(name) if name == "disabled_label"))
+            .expect("disabled_label should exist");
+        assert!(disabled_doc.doc.contains("false condition"), 
+            "Documentation should be: 'This label is in a false condition'");
+            
+        let else_doc = page.content.iter()
+            .find(|item| matches!(&item.item, DocumentedItem::Label(name) if name == "else_label"))
+            .expect("else_label should exist");
+        assert!(else_doc.doc.contains("else branch"), 
+            "Documentation should be: 'This label is in the else branch'");
+    }
 }
