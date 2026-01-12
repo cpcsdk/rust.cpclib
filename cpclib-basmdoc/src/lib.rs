@@ -203,7 +203,7 @@ impl Object for DocumentationPage {
                     .label_iter()
                     .cloned()
                     .collect::<Vec<_>>();
-                labels.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                labels.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
                 let labels = labels.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let labels = Value::from_object(labels);
                 Some(labels)
@@ -213,7 +213,7 @@ impl Object for DocumentationPage {
                     .macro_iter()
                     .cloned()
                     .collect::<Vec<_>>();
-                macros.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                macros.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
                 let macros = macros.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let macros = Value::from_object(macros);
                 Some(macros)
@@ -223,7 +223,7 @@ impl Object for DocumentationPage {
                     .equ_iter()
                     .cloned()
                     .collect::<Vec<_>>();
-                equs.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                equs.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
                 let equs = equs.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let equs = Value::from_object(equs);
                 Some(equs)
@@ -233,7 +233,7 @@ impl Object for DocumentationPage {
                     .function_iter()
                     .cloned()
                     .collect::<Vec<_>>();
-                functions.sort_by(|a, b| a.item_short_summary().cmp(&b.item_short_summary()));
+                functions.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
                 let functions = functions.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let functions = Value::from_object(functions);
                 Some(functions)
@@ -845,7 +845,15 @@ impl DocumentationPage {
             }
         }
         
-        index.into_iter().collect()
+        // Sort items within each letter group case-insensitively
+        index.into_iter()
+            .map(|(letter, mut items)| {
+                items.sort_by(|a, b| 
+                    a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase())
+                );
+                (letter, items)
+            })
+            .collect()
     }
 
     pub fn has_labels(&self) -> bool {
@@ -1057,19 +1065,23 @@ impl DocumentationPage {
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
         let file_list = page_obj.file_list();
-        // Build sidebar lists from iterators, always as lists
-        let labels: Vec<Value> = self.label_iter()
-            .map(|item| Value::from_object(item.clone()))
-            .collect();
-        let macros: Vec<Value> = self.macro_iter()
-            .map(|item| Value::from_object(item.clone()))
-            .collect();
-        let functions: Vec<Value> = self.function_iter()
-            .map(|item| Value::from_object(item.clone()))
-            .collect();
-        let equs: Vec<Value> = self.equ_iter()
-            .map(|item| Value::from_object(item.clone()))
-            .collect();
+        // Build sidebar lists from iterators, sorted lexicographically (case-insensitive)
+        let mut labels: Vec<ItemDocumentation> = self.label_iter().cloned().collect();
+        labels.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
+        let labels: Vec<Value> = labels.into_iter().map(Value::from_object).collect();
+        
+        let mut macros: Vec<ItemDocumentation> = self.macro_iter().cloned().collect();
+        macros.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
+        let macros: Vec<Value> = macros.into_iter().map(Value::from_object).collect();
+        
+        let mut functions: Vec<ItemDocumentation> = self.function_iter().cloned().collect();
+        functions.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
+        let functions: Vec<Value> = functions.into_iter().map(Value::from_object).collect();
+        
+        let mut equs: Vec<ItemDocumentation> = self.equ_iter().cloned().collect();
+        equs.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
+        let equs: Vec<Value> = equs.into_iter().map(Value::from_object).collect();
+        
         let syntax_errors: Vec<Value> = self.syntax_error_iter()
             .map(|item| Value::from_object(item.clone()))
             .collect();
