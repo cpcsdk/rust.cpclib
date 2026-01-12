@@ -348,6 +348,10 @@ body {
 
 .item-name {
     flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 h4.item-header .ref-location {

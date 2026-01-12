@@ -17,7 +17,7 @@ pub use models::{DocumentedItem, UndocumentedConfig, ItemDocumentation, SymbolRe
 pub use parser::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates};
 pub use generator::BasmDocGenerator;
 
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{html, Options, Parser, Event, Tag, TagEnd, CodeBlockKind, CowStr};
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -1145,8 +1145,8 @@ impl DocumentationPage {
         let files_docs: Vec<Value> = self.merged_files()
             .into_iter()
             .map(|mut item| {
-                // Convert markdown documentation to HTML
-                item.doc = markdown_to_html(&item.doc);
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
                 Value::from_object(item)
             })
             .collect();
@@ -1168,8 +1168,10 @@ impl DocumentationPage {
     }
 }
 
-/// Convert markdown text to HTML
-fn markdown_to_html(markdown: &str) -> String {
+/// Convert markdown text to HTML with syntax highlighting for code blocks
+fn markdown_to_html(markdown: &str, symbols: &[(String, String)]) -> String {
+    use pulldown_cmark::{Event, Tag, TagEnd, CodeBlockKind, CowStr};
+    
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
@@ -1177,8 +1179,69 @@ fn markdown_to_html(markdown: &str) -> String {
     options.insert(Options::ENABLE_TASKLISTS);
     
     let parser = Parser::new_ext(markdown, options);
+    
+    // Process events to handle code blocks specially
+    let mut events = Vec::new();
+    let mut in_code_block = false;
+    let mut code_block_content = String::new();
+    let mut code_block_lang: Option<String> = None;
+    
+    for event in parser {
+        match event {
+            Event::Start(Tag::CodeBlock(kind)) => {
+                in_code_block = true;
+                code_block_content.clear();
+                code_block_lang = match kind {
+                    CodeBlockKind::Fenced(lang) => Some(lang.to_string()),
+                    CodeBlockKind::Indented => None,
+                };
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                if in_code_block {
+                    // Check if it's assembly code
+                    let is_asm = code_block_lang.as_ref()
+                        .map(|lang| {
+                            let l = lang.to_lowercase();
+                            l.contains("asm") || l.contains("z80") || l.contains("basm")
+                        })
+                        .unwrap_or(false);
+                    
+                    if is_asm {
+                        // Apply syntax highlighting and symbol linking
+                        let highlighted = syntax::link_symbols_in_source(&code_block_content, symbols);
+                        // Emit raw HTML for the highlighted code
+                        events.push(Event::Html(CowStr::from(format!(
+                            "<pre><code class=\"language-basm\">{}</code></pre>",
+                            highlighted
+                        ))));
+                    } else {
+                        // For non-assembly code, use default rendering
+                        events.push(Event::Start(Tag::CodeBlock(
+                            code_block_lang.as_ref()
+                                .map(|s| CodeBlockKind::Fenced(CowStr::from(s.clone())))
+                                .unwrap_or(CodeBlockKind::Indented)
+                        )));
+                        events.push(Event::Text(CowStr::from(code_block_content.clone())));
+                        events.push(Event::End(TagEnd::CodeBlock));
+                    }
+                    
+                    in_code_block = false;
+                    code_block_content.clear();
+                }
+            }
+            Event::Text(text) if in_code_block => {
+                code_block_content.push_str(&text);
+            }
+            _ => {
+                if !in_code_block {
+                    events.push(event);
+                }
+            }
+        }
+    }
+    
     let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
+    html::push_html(&mut html_output, events.into_iter());
     html_output
 }
 
