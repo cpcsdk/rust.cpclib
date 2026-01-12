@@ -7,12 +7,19 @@ use std::sync::Arc;
 /// A documented item (symbol, file, macro, function, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DocumentedItem {
+    /// A documentation at file level
     File(String),
+    /// A documentation of a label
     Label(String),
+    /// A documentation of an EQU symbol
     Equ(String, String),
+    /// A documentation of a macro definition
     Macro { name: String, arguments: Vec<String>, content: String },
+    /// A documentation of a function definition
     Function { name: String, arguments: Vec<String>, content: String },
+    /// The full source code of a file
     Source(String),
+    /// A syntax error encountered during parsing
     SyntaxError(String)
 }
 
@@ -202,7 +209,7 @@ impl ItemDocumentation {
             DocumentedItem::Equ(name, _) => name.clone(),
             DocumentedItem::Macro { name, .. } => name.clone(),
             DocumentedItem::Function { name, .. } => name.clone(),
-            DocumentedItem::File(fname) => fname.clone(),
+            DocumentedItem::File(content) => content.clone(),
             DocumentedItem::Source(_) => "Source".to_string(),
             DocumentedItem::SyntaxError(_) => "Syntax Error".to_string(),
         }

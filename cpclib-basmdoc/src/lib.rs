@@ -1139,6 +1139,13 @@ impl DocumentationPage {
         let syntax_errors: Vec<Value> = self.syntax_error_iter()
             .map(|item| Value::from_object(item.clone()))
             .collect();
+        
+        // Get merged file-level documentation items
+        let files_docs: Vec<Value> = self.merged_files()
+            .into_iter()
+            .map(Value::from_object)
+            .collect();
+        
         tmpl.render(context! {
             page => Value::from_object(page_obj.clone()),
             file_list => file_list,
@@ -1150,6 +1157,7 @@ impl DocumentationPage {
             files => files,
             file_source_map => file_source_map,
             syntax_errors => syntax_errors,
+            files_docs => files_docs,
         })
         .unwrap()
     }
