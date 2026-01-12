@@ -20,6 +20,9 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
     </script>
     <!-- Macro definitions (must be at the top before usage) -->
     
+    <!-- Macro to generate file ID for anchors -->
+    {% macro file_id(file) %}{{ file | replace('/', '_') | replace('.', '_') | replace('\\', '_') }}{% endmacro %}
+    
     <!-- Macro for displaying cross-references -->
     {% macro show_references(item) %}
         {% if item.has_references %}
@@ -192,36 +195,34 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
                 <h2 id="files-section" class="anchor-offset">File Documentation</h2>
                 {% for file in file_list %}
                     <div class="item" data-source-file="{{ file }}">
-                        <!-- Show syntax error if present for this file -->
-                        {% for error_item in syntax_errors %}
-                            {% if error_item.display_source_file == file %}
-                                <div class="syntax-error-box">
-                                    <h4 class="syntax-error-title">⚠️ Parse Error</h4>
-                                    <pre class="syntax-error-message">{{ error_item.syntax_error_message }}</pre>
-                                    <p class="syntax-error-help">The source code below may contain syntax errors. Please review and fix them.</p>
-                                </div>
-                            {% endif %}
+                        <!-- Show syntax error if present -->
+                        {% for error_item in syntax_errors | selectattr('display_source_file', 'equalto', file) %}
+                        <div class="syntax-error-box">
+                            <h4 class="syntax-error-title">⚠️ Parse Error</h4>
+                            <pre class="syntax-error-message">{{ error_item.syntax_error_message }}</pre>
+                            <p class="syntax-error-help">The source code below may contain syntax errors. Please review and fix them.</p>
+                        </div>
                         {% endfor %}
                         
-                        <!-- Show file-level documentation if present -->
-                        {% set matching_file_docs = files_docs | selectattr('source_file', 'equalto', file) | list %}
-                        {% if matching_file_docs | length > 0 %}
-                            {% for file_doc in matching_file_docs %}
-                                <div class="file-documentation">
-                                    <h3 id="file_doc_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">📄 {{ file }}</h3>
-                                    <div>{{ file_doc.doc | safe }}</div>
-                                </div>
-                            {% endfor %}
+                        <!-- Show file-level documentation or simple heading -->
+                        {% set matching_docs = files_docs | selectattr('source_file', 'equalto', file) | list %}
+                        {% if matching_docs %}
+                            <div class="file-documentation">
+                                <h3 id="file_doc_{{ file_id(file) }}" class="anchor-offset">📄 {{ file }}</h3>
+                                <div>{{ matching_docs[0].doc | safe }}</div>
+                            </div>
                         {% else %}
-                            <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
+                            <h4 id="source_{{ file_id(file) }}" class="anchor-offset">{{ file }}</h4>
                         {% endif %}
+                        
+                        <!-- Show source code -->
                         <div class="macro-source">
                             <details class="macro-source-details lazy-code">
                                 <summary>Show Source</summary>
                                 {% if file_source_map[file] %}
-                                    <div class="code-placeholder" data-code-id="file_{{ file | replace('/', '_') | replace('.', '_') | replace('\\', '_') }}"></div>
+                                <div class="code-placeholder" data-code-id="file_{{ file_id(file) }}"></div>
                                 {% else %}
-                                    <pre><code class="hljs language-basm">(Source not available)</code></pre>
+                                <pre><code class="hljs language-basm">(Source not available)</code></pre>
                                 {% endif %}
                             </details>
                         </div>

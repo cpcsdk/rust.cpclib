@@ -1,4 +1,39 @@
 // ============================================================================
+// HELPER UTILITIES
+// ============================================================================
+
+// Common highlight animation constants
+const HIGHLIGHT_COLOR = '#fff3cd';
+const HIGHLIGHT_DURATION = 2000; // ms
+const HEADER_OFFSET = -80; // px
+
+// Highlight element temporarily
+function highlightElement(element, duration = HIGHLIGHT_DURATION) {
+    if (!element) return;
+    element.style.backgroundColor = HIGHLIGHT_COLOR;
+    element.style.transition = 'background-color 0.3s';
+    setTimeout(function() {
+        element.style.backgroundColor = '';
+    }, duration);
+}
+
+// Smooth scroll with header offset
+function smoothScrollTo(element, block = 'center') {
+    if (!element) return;
+    element.scrollIntoView({ behavior: 'smooth', block: block });
+}
+
+// Find ancestor element by condition
+function findAncestor(element, condition) {
+    let current = element;
+    while (current) {
+        if (condition(current)) return current;
+        current = current.parentElement;
+    }
+    return null;
+}
+
+// ============================================================================
 // FILE TREE - Hierarchical display of source files
 // ============================================================================
 
@@ -795,31 +830,41 @@ function scrollToSection(section, lineNumber) {
 
 // Scroll to and highlight a specific line number within a section
 function scrollToLine(section, lineNumber) {
-    const HEADER_OFFSET = -80;
-    const HIGHLIGHT_COLOR = '#fff3cd';
-    const HIGHLIGHT_DURATION = 2000; // ms
-    
     const container = section.parentElement;
     if (!container) return false;
     
     const targetLine = container.querySelector('.line-number[id="L' + lineNumber + '"]');
     if (!targetLine) return false;
     
-    // Smooth scroll to line with header offset
+    // Smooth scroll with offset
     const y = targetLine.getBoundingClientRect().top + window.pageYOffset + HEADER_OFFSET;
     window.scrollTo({ top: y, behavior: 'smooth' });
     
-    // Temporarily highlight the line
-    const codeLine = targetLine.parentElement;
-    if (codeLine) {
-        codeLine.style.backgroundColor = HIGHLIGHT_COLOR;
-        codeLine.style.transition = 'background-color 0.3s';
-        setTimeout(function() {
-            codeLine.style.backgroundColor = '';
-        }, HIGHLIGHT_DURATION);
+    // Highlight the line
+    highlightElement(targetLine.parentElement);
+    return true;
+}
+
+// Helper function to navigate to a symbol element
+function navigateToSymbol(targetElement) {
+    // Open any collapsed parent details
+    const parent = findAncestor(targetElement, el => el.tagName === 'DETAILS' && !el.open);
+    if (parent) {
+        parent.open = true;
+        
+        // Handle lazy-loaded code
+        if (parent.classList.contains('lazy-code') || parent.classList.contains('macro-source-details')) {
+            waitForCodeToLoad(parent, function() {
+                smoothScrollTo(targetElement);
+                highlightElement(targetElement);
+            });
+            return;
+        }
     }
     
-    return true;
+    // Scroll and highlight
+    smoothScrollTo(targetElement);
+    highlightElement(targetElement);
 }
 
 // Set up click handlers for ref-location elements (e.g., "file.asm:123")
@@ -840,75 +885,35 @@ document.addEventListener('DOMContentLoaded', function() {
         // Handle symbol-link clicks - navigate to the symbol's definition
         if (e.target.classList.contains('symbol-link')) {
             e.preventDefault();
-            const targetId = e.target.getAttribute('href')?.substring(1); // Remove leading '#'
+            const targetId = e.target.getAttribute('href')?.substring(1);
             
             if (targetId) {
                 const targetElement = document.getElementById(targetId);
+                if (!targetElement) return;
                 
-                if (targetElement) {
-                    // Find which file this symbol belongs to
-                    let symbolFile = null;
-                    let parent = targetElement.parentElement;
-                    while (parent) {
-                        if (parent.classList.contains('item') && parent.dataset.sourceFile) {
-                            symbolFile = parent.dataset.sourceFile;
-                            break;
-                        }
-                        parent = parent.parentElement;
-                    }
+                // Find which file this symbol belongs to
+                const symbolItem = findAncestor(targetElement, el => 
+                    el.classList.contains('item') && el.dataset.sourceFile
+                );
+                
+                if (symbolItem) {
+                    const symbolFile = symbolItem.dataset.sourceFile;
+                    const currentFilter = document.querySelector('.file-filter-link.active')?.dataset.file || '';
                     
-                    // If the symbol is in a different file than currently filtered, switch to that file
-                    if (symbolFile) {
-                        const currentFilter = document.querySelector('.file-filter-link.active')?.dataset.file || '';
-                        
-                        if (currentFilter && currentFilter !== symbolFile) {
-                            // Switch to the file containing the symbol
-                            filterByFile(symbolFile);
-                            
-                            // Wait for DOM updates to complete
-                            setTimeout(function() {
-                                navigateToSymbol(targetElement);
-                            }, 150);
-                            return;
-                        }
+                    // Switch files if needed
+                    if (currentFilter && currentFilter !== symbolFile) {
+                        filterByFile(symbolFile);
+                        setTimeout(function() {
+                            navigateToSymbol(targetElement);
+                        }, 150);
+                        return;
                     }
-                    
-                    // Symbol is in current file or no file filter active
-                    navigateToSymbol(targetElement);
                 }
+                
+                navigateToSymbol(targetElement);
             }
         }
     });
-    
-    // Helper function to navigate to a symbol element
-    function navigateToSymbol(targetElement) {
-        // If target is inside a collapsed details element, open it first
-        let parent = targetElement.parentElement;
-        while (parent) {
-            if (parent.tagName === 'DETAILS' && !parent.open) {
-                parent.open = true;
-                
-                // If it's lazy-loaded code, wait for it to load
-                if (parent.classList.contains('lazy-code') || parent.classList.contains('macro-source-details')) {
-                    waitForCodeToLoad(parent, function() {
-                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    });
-                    return;
-                }
-            }
-            parent = parent.parentElement;
-        }
-        
-        // Scroll to the target element
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Highlight the target briefly
-        targetElement.style.backgroundColor = '#fff3cd';
-        targetElement.style.transition = 'background-color 0.3s';
-        setTimeout(function() {
-            targetElement.style.backgroundColor = '';
-        }, 2000);
-    }
     
     // ========================================================================
     // DARK MODE - Theme toggle with localStorage persistence
