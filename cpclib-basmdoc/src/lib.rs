@@ -1123,19 +1123,43 @@ impl DocumentationPage {
         // Build sidebar lists from iterators, sorted lexicographically (case-insensitive)
         let mut labels: Vec<ItemDocumentation> = self.label_iter().cloned().collect();
         labels.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let labels: Vec<Value> = labels.into_iter().map(Value::from_object).collect();
+        let labels: Vec<Value> = labels.into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
         
         let mut macros: Vec<ItemDocumentation> = self.macro_iter().cloned().collect();
         macros.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let macros: Vec<Value> = macros.into_iter().map(Value::from_object).collect();
+        let macros: Vec<Value> = macros.into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
         
         let mut functions: Vec<ItemDocumentation> = self.function_iter().cloned().collect();
         functions.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let functions: Vec<Value> = functions.into_iter().map(Value::from_object).collect();
+        let functions: Vec<Value> = functions.into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
         
         let mut equs: Vec<ItemDocumentation> = self.equ_iter().cloned().collect();
         equs.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let equs: Vec<Value> = equs.into_iter().map(Value::from_object).collect();
+        let equs: Vec<Value> = equs.into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
         
         let syntax_errors: Vec<Value> = self.syntax_error_iter()
             .map(|item| Value::from_object(item.clone()))
