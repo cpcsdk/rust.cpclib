@@ -94,7 +94,12 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
     <div class="container">
         <!-- Sidebar with Table of Contents -->
         <aside class="sidebar">
-            <h1>📚 BASMDoc</h1>
+            <h1>
+                <span>📚 BASMDoc</span>
+                <button class="theme-toggle" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </h1>
             <!--<div class="file-name">{{ page.file_name }}</div>-->
 
             <!-- Symbol Index link -->
@@ -254,6 +259,28 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
             {% endif %}
         </main>
     </div>
+    
+    <!-- Keyboard shortcuts help tooltip -->
+    <div class="keyboard-shortcuts-help" id="keyboardHelp">
+        <div style="font-weight: 600; margin-bottom: 10px;">⌨️ Keyboard Shortcuts</div>
+        <div class="shortcut-item">
+            <span>Focus search</span>
+            <kbd>/</kbd>
+        </div>
+        <div class="shortcut-item">
+            <span>Clear search</span>
+            <kbd>Esc</kbd>
+        </div>
+        <div class="shortcut-item">
+            <span>Quick search</span>
+            <kbd>Ctrl</kbd>+<kbd>K</kbd>
+        </div>
+        <div class="shortcut-item">
+            <span>Toggle theme</span>
+            <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd>
+        </div>
+    </div>
+    
     <script>{{ documentation_js | safe }}</script>
     <script>
         // Normalize file names when filtering: some items use absolute paths

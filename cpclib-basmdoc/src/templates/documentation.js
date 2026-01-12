@@ -744,5 +744,198 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+    
+    // ========================================================================
+    // DARK MODE - Theme toggle with localStorage persistence
+    // ========================================================================
+    
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = themeToggle ? themeToggle.querySelector('.theme-icon') : null;
+    
+    // Load saved theme or default to light
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        if (themeIcon) themeIcon.textContent = '☀️';
+    }
+    
+    // Toggle theme on click
+    if (themeToggle) {
+        themeToggle.addEventListener('click', function() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            
+            if (themeIcon) {
+                themeIcon.textContent = isDark ? '☀️' : '🌙';
+            }
+            
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        });
+    }
+    
+    // ========================================================================
+    // SEARCH HIGHLIGHTING - Highlight matched text in search results
+    // ========================================================================
+    
+    const searchBox = document.getElementById('searchBox');
+    const originalSearch = window.searchDocumentation;
+    
+    // Helper to remove all highlights
+    function removeHighlights() {
+        document.querySelectorAll('mark.search-highlight').forEach(function(mark) {
+            const parent = mark.parentNode;
+            parent.replaceChild(document.createTextNode(mark.textContent), mark);
+            parent.normalize(); // Merge adjacent text nodes
+        });
+    }
+    
+    // Helper to highlight text in an element
+    function highlightText(element, searchTerm) {
+        if (!searchTerm || searchTerm.length < 2) return;
+        
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // Skip if parent is already a mark or is a script/style tag
+                    if (node.parentElement.tagName === 'MARK' || 
+                        node.parentElement.tagName === 'SCRIPT' ||
+                        node.parentElement.tagName === 'STYLE') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+        
+        const nodesToHighlight = [];
+        let node;
+        while (node = walker.nextNode()) {
+            nodesToHighlight.push(node);
+        }
+        
+        const regex = new RegExp('(' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+        
+        nodesToHighlight.forEach(function(textNode) {
+            const text = textNode.textContent;
+            if (regex.test(text)) {
+                const fragment = document.createDocumentFragment();
+                let lastIndex = 0;
+                
+                text.replace(regex, function(match, p1, offset) {
+                    // Add text before match
+                    if (offset > lastIndex) {
+                        fragment.appendChild(document.createTextNode(text.substring(lastIndex, offset)));
+                    }
+                    
+                    // Add highlighted match
+                    const mark = document.createElement('mark');
+                    mark.className = 'search-highlight';
+                    mark.textContent = match;
+                    fragment.appendChild(mark);
+                    
+                    lastIndex = offset + match.length;
+                });
+                
+                // Add remaining text
+                if (lastIndex < text.length) {
+                    fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+                }
+                
+                textNode.parentNode.replaceChild(fragment, textNode);
+            }
+        });
+    }
+    
+    // Enhanced search with highlighting
+    if (searchBox && originalSearch) {
+        window.searchDocumentation = function() {
+            removeHighlights();
+            
+            const searchTerm = searchBox.value.trim();
+            originalSearch(); // Call original search function
+            
+            if (searchTerm.length >= 2) {
+                // Highlight in visible items
+                document.querySelectorAll('.item:not(.hidden), .index-item:not(.filtered)').forEach(function(item) {
+                    highlightText(item, searchTerm);
+                });
+            }
+        };
+    }
+    
+    // ========================================================================
+    // KEYBOARD SHORTCUTS - Global keyboard navigation
+    // ========================================================================
+    
+    const keyboardHelp = document.getElementById('keyboardHelp');
+    let helpTimeout;
+    
+    // Show help tooltip temporarily
+    function showKeyboardHelp() {
+        if (!keyboardHelp) return;
+        clearTimeout(helpTimeout);
+        keyboardHelp.classList.add('visible');
+        helpTimeout = setTimeout(function() {
+            keyboardHelp.classList.remove('visible');
+        }, 3000);
+    }
+    
+    // Global keyboard handler
+    document.addEventListener('keydown', function(e) {
+        // / - Focus search
+        if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            if (document.activeElement.tagName !== 'INPUT' && 
+                document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                if (searchBox) {
+                    searchBox.focus();
+                    searchBox.select();
+                    showKeyboardHelp();
+                }
+            }
+        }
+        
+        // Escape - Clear search
+        if (e.key === 'Escape') {
+            if (searchBox && document.activeElement === searchBox) {
+                searchBox.value = '';
+                removeHighlights();
+                if (window.searchDocumentation) {
+                    window.searchDocumentation();
+                }
+                searchBox.blur();
+            }
+        }
+        
+        // Ctrl+K or Cmd+K - Focus search (like many modern apps)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            if (searchBox) {
+                searchBox.focus();
+                searchBox.select();
+                showKeyboardHelp();
+            }
+        }
+        
+        // Ctrl+Shift+D - Toggle dark mode
+        if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+            e.preventDefault();
+            if (themeToggle) {
+                themeToggle.click();
+                showKeyboardHelp();
+            }
+        }
+        
+        // ? - Show keyboard shortcuts
+        if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            if (document.activeElement.tagName !== 'INPUT' && 
+                document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                showKeyboardHelp();
+            }
+        }
+    });
 });
 

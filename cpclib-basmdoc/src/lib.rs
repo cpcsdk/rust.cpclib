@@ -508,7 +508,25 @@ impl DocumentationPage {
         let all_files_clone = all_files.clone();
         for it in &mut content {
             // If an all_files entry matches the end of the source_file, prefer it
-            if let Some(matching) = all_files_clone.iter().find(|f| it.source_file.ends_with(f.as_str())) {
+            // But ensure we match on path component boundaries
+            if let Some(matching) = all_files_clone.iter().find(|f| {
+                let src_normalized = it.source_file.replace('\\', "/");
+                let f_normalized = f.replace('\\', "/");
+                
+                if src_normalized == f_normalized {
+                    return true;
+                }
+                
+                // Check if source_file ends with f at a path boundary
+                if src_normalized.ends_with(&f_normalized) {
+                    let prefix_len = src_normalized.len() - f_normalized.len();
+                    if prefix_len == 0 || src_normalized.as_bytes()[prefix_len - 1] == b'/' {
+                        return true;
+                    }
+                }
+                
+                false
+            }) {
                 it.display_source_file = matching.clone();
                 it.source_file = matching.clone();
                 continue;
@@ -926,12 +944,39 @@ impl DocumentationPage {
         // Use all_files directly - they should already be normalized workspace-relative paths
         for fname in &self.all_files {
             // Find Source item by matching either exact path or normalized path
+            // Use proper path component matching instead of simple string ends_with
             let source_item_opt = self.content.iter().find(|it| {
-                it.item.is_source() && 
-                (&it.source_file == fname || 
-                 &it.display_source_file == fname ||
-                 it.source_file.ends_with(fname) ||
-                 it.display_source_file.ends_with(fname))
+                if !it.item.is_source() {
+                    return false;
+                }
+                
+                // Exact matches
+                if &it.source_file == fname || &it.display_source_file == fname {
+                    return true;
+                }
+                
+                // Path suffix matching - ensure we match on path component boundaries
+                let fname_normalized = fname.replace('\\', "/");
+                let source_normalized = it.source_file.replace('\\', "/");
+                let display_normalized = it.display_source_file.replace('\\', "/");
+                
+                // Check if source_file ends with fname at a path boundary
+                if source_normalized.ends_with(&fname_normalized) {
+                    let prefix_len = source_normalized.len() - fname_normalized.len();
+                    if prefix_len == 0 || source_normalized.as_bytes()[prefix_len - 1] == b'/' {
+                        return true;
+                    }
+                }
+                
+                // Check if display_source_file ends with fname at a path boundary
+                if display_normalized.ends_with(&fname_normalized) {
+                    let prefix_len = display_normalized.len() - fname_normalized.len();
+                    if prefix_len == 0 || display_normalized.as_bytes()[prefix_len - 1] == b'/' {
+                        return true;
+                    }
+                }
+                
+                false
             });
             
             let source_code: String;
@@ -944,8 +989,17 @@ impl DocumentationPage {
                     source_code = String::new();
                 }
             } else {
-                // This should never happen - all files should have Source items
+                // Debug: show what Source items exist
+                let source_items: Vec<_> = self.content.iter()
+                    .filter(|it| it.item.is_source())
+                    .map(|it| format!("  source_file='{}' display_source_file='{}'", it.source_file, it.display_source_file))
+                    .collect();
+                
                 eprintln!("WARNING: No Source item found for file: {}", fname);
+                eprintln!("Available Source items:");
+                for item in source_items {
+                    eprintln!("{}", item);
+                }
                 source_code = String::new();
             }
 
