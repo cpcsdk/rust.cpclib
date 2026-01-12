@@ -836,7 +836,79 @@ document.addEventListener('DOMContentLoaded', function() {
                 navigateToSourceLine(filename, lineNumber);
             }
         }
+        
+        // Handle symbol-link clicks - navigate to the symbol's definition
+        if (e.target.classList.contains('symbol-link')) {
+            e.preventDefault();
+            const targetId = e.target.getAttribute('href')?.substring(1); // Remove leading '#'
+            
+            if (targetId) {
+                const targetElement = document.getElementById(targetId);
+                
+                if (targetElement) {
+                    // Find which file this symbol belongs to
+                    let symbolFile = null;
+                    let parent = targetElement.parentElement;
+                    while (parent) {
+                        if (parent.classList.contains('item') && parent.dataset.sourceFile) {
+                            symbolFile = parent.dataset.sourceFile;
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                    
+                    // If the symbol is in a different file than currently filtered, switch to that file
+                    if (symbolFile) {
+                        const currentFilter = document.querySelector('.file-filter-link.active')?.dataset.file || '';
+                        
+                        if (currentFilter && currentFilter !== symbolFile) {
+                            // Switch to the file containing the symbol
+                            filterByFile(symbolFile);
+                            
+                            // Wait for DOM updates to complete
+                            setTimeout(function() {
+                                navigateToSymbol(targetElement);
+                            }, 150);
+                            return;
+                        }
+                    }
+                    
+                    // Symbol is in current file or no file filter active
+                    navigateToSymbol(targetElement);
+                }
+            }
+        }
     });
+    
+    // Helper function to navigate to a symbol element
+    function navigateToSymbol(targetElement) {
+        // If target is inside a collapsed details element, open it first
+        let parent = targetElement.parentElement;
+        while (parent) {
+            if (parent.tagName === 'DETAILS' && !parent.open) {
+                parent.open = true;
+                
+                // If it's lazy-loaded code, wait for it to load
+                if (parent.classList.contains('lazy-code') || parent.classList.contains('macro-source-details')) {
+                    waitForCodeToLoad(parent, function() {
+                        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
+                    return;
+                }
+            }
+            parent = parent.parentElement;
+        }
+        
+        // Scroll to the target element
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight the target briefly
+        targetElement.style.backgroundColor = '#fff3cd';
+        targetElement.style.transition = 'background-color 0.3s';
+        setTimeout(function() {
+            targetElement.style.backgroundColor = '';
+        }, 2000);
+    }
     
     // ========================================================================
     // DARK MODE - Theme toggle with localStorage persistence

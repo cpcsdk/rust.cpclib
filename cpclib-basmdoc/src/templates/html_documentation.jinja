@@ -204,16 +204,17 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
                         {% endfor %}
                         
                         <!-- Show file-level documentation if present -->
-                        {% for file_doc in files_docs %}
-                            {% if file_doc.source_file == file %}
+                        {% set matching_file_docs = files_docs | selectattr('source_file', 'equalto', file) | list %}
+                        {% if matching_file_docs | length > 0 %}
+                            {% for file_doc in matching_file_docs %}
                                 <div class="file-documentation">
                                     <h3 id="file_doc_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">📄 {{ file }}</h3>
                                     <div>{{ file_doc.doc | safe }}</div>
                                 </div>
-                            {% endif %}
-                        {% endfor %}
-                        
-                        <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
+                            {% endfor %}
+                        {% else %}
+                            <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
+                        {% endif %}
                         <div class="macro-source">
                             <details class="macro-source-details lazy-code">
                                 <summary>Show Source</summary>
