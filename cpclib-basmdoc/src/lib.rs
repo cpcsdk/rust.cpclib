@@ -67,10 +67,12 @@ mod tests {
         // 5. Generate HTML and check that the source code appears in the output
         let html = merged.to_html();
         println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
-        // The source is now compressed in data-compressed attributes for lazy loading
-        // Check that the compressed placeholder exists
-        assert!(html.contains("data-compressed="), 
-                "HTML output must contain compressed source data");
+        // The source is now compressed in COMPRESSED_CODE map and referenced by data-code-id
+        // Check that the JavaScript compressed map exists
+        assert!(html.contains("const COMPRESSED_CODE ="), 
+                "HTML output must contain COMPRESSED_CODE map");
+        assert!(html.contains("data-code-id="), 
+                "HTML output must contain data-code-id attributes");
         assert!(html.contains("code-placeholder"), 
                 "HTML output must contain code placeholder for lazy loading");
         // Also check that it's not showing the fallback message
@@ -138,6 +140,8 @@ impl Object for ItemDocumentation {
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
             Some("is_source") => Some(Value::from(self.item.is_source())),
             Some("is_syntax_error") => Some(Value::from(self.item.is_syntax_error())),
+            Some("is_macro") => Some(Value::from(self.item.is_macro())),
+            Some("is_function") => Some(Value::from(self.item.is_function())),
             Some("syntax_error_message") => {
                 match &self.item {
                     DocumentedItem::SyntaxError(msg) => Some(Value::from(msg as &str)),
@@ -992,10 +996,63 @@ impl DocumentationPage {
         env.add_global("syntax_instructions", SYNTAX_INSTRUCTIONS);
         env.add_global("syntax_directives", SYNTAX_DIRECTIVES);
         
-        // Add compression filter for lazy-loading large code blocks
-        env.add_filter("compress", |value: String| -> Result<String, minijinja::Error> {
-            assets::compress_string(&value)
-                .map_err(|e| minijinja::Error::new(ErrorKind::InvalidOperation, format!("Compression failed: {}", e)))
+        // Build compressed code map with unique IDs
+        // Instead of embedding base64 in each element's attribute, we store all compressed
+        // data in a single JavaScript map and reference by ID (reduces file size by ~33%)
+        let mut compressed_code_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        
+        // Collect and compress all macro/function source code
+        for item in &self.content {
+            let (code_opt, id_opt) = match &item.item {
+                DocumentedItem::Macro { content, name, .. } if !content.is_empty() => {
+                    let code = if let Some(ref linked) = item.linked_source {
+                        format_with_line_numbers(linked, item.line_number)
+                    } else {
+                        let highlighted = syntax::link_symbols_in_source(content, &symbols_for_highlight);
+                        format_with_line_numbers(&highlighted, item.line_number)
+                    };
+                    (Some(code), Some(format!("macro_{}", name.replace("::", "_").replace(".", "_"))))
+                },
+                DocumentedItem::Function { content, name, .. } if !content.is_empty() => {
+                    let code = if let Some(ref linked) = item.linked_source {
+                        format_with_line_numbers(linked, item.line_number)
+                    } else {
+                        let highlighted = syntax::link_symbols_in_source(content, &symbols_for_highlight);
+                        format_with_line_numbers(&highlighted, item.line_number)
+                    };
+                    (Some(code), Some(format!("func_{}", name.replace("::", "_").replace(".", "_"))))
+                },
+                _ => (None, None)
+            };
+            
+            if let (Some(code), Some(id)) = (code_opt, id_opt) {
+                if let Ok(compressed) = assets::compress_string(&code) {
+                    compressed_code_map.insert(id, compressed);
+                }
+            }
+        }
+        
+        // Compress all file sources  
+        for fname in &self.all_files {
+            if let Some(source_code) = file_source_map.get(fname) {
+                if !source_code.is_empty() {
+                    let highlighted = syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
+                    let with_lines = format_with_line_numbers(&highlighted, 1);
+                    let file_id = format!("file_{}", fname.replace("/", "_").replace(".", "_").replace("\\", "_"));
+                    if let Ok(compressed) = assets::compress_string(&with_lines) {
+                        compressed_code_map.insert(file_id, compressed);
+                    }
+                }
+            }
+        }
+        
+        // Pass compressed map to template
+        env.add_global("compressed_code_map", Value::from_serialize(&compressed_code_map));
+        
+        // Add JSON serialization filter
+        env.add_filter("tojson", |value: Value| -> Result<String, minijinja::Error> {
+            Ok(serde_json::to_string(&value)
+                .map_err(|e| minijinja::Error::new(ErrorKind::InvalidOperation, format!("JSON serialization failed: {}", e)))?)
         });
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
@@ -1029,6 +1086,30 @@ impl DocumentationPage {
         })
         .unwrap()
     }
+}
+
+/// Helper function to add line numbers to code (used for compression)
+fn format_with_line_numbers(code: &str, start_line: usize) -> String {
+    let lines: Vec<&str> = code.lines().collect();
+    let max_line_number = start_line + lines.len() - 1;
+    let line_number_width = max_line_number.to_string().len().max(3);
+    
+    let mut result = String::new();
+    result.push_str("<div class=\"code-with-line-numbers\">");
+    
+    for (i, line) in lines.iter().enumerate() {
+        let line_num = start_line + i;
+        result.push_str("<div class=\"code-line\">");
+        result.push_str(&format!("<span class=\"line-number\" id=\"L{}\">   {:width$}</span>", 
+            line_num, line_num, width = line_number_width));
+        result.push_str("<span class=\"line-content\">");
+        result.push_str(line);
+        result.push_str("</span>");
+        result.push_str("</div>");
+    }
+    
+    result.push_str("</div>");
+    result
 }
 
 /// Populate cross-references in documentation page

@@ -14,6 +14,10 @@
     </style>
 </head>
 <body>
+    <!-- Compressed code map: all base64 gzip data stored here, referenced by ID -->
+    <script>
+const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
+    </script>
     <!-- Macro definitions (must be at the top before usage) -->
     
     <!-- Macro for displaying cross-references -->
@@ -59,10 +63,10 @@
         <div class="macro-source">
             <details class="macro-source-details lazy-code">
                 <summary>Show Source</summary>
-                {% if item.linked_source %}
-                <div class="code-placeholder" data-compressed="{{ (item.linked_source | add_line_numbers(item.line_number)) | compress }}"></div>
-                {% else %}
-                <div class="code-placeholder" data-compressed="{{ (item.source | highlight_and_link | add_line_numbers(item.line_number)) | compress }}"></div>
+                {% if item.is_macro %}
+                <div class="code-placeholder" data-code-id="macro_{{ item.short_summary | replace('::', '_') | replace('.', '_') }}"></div>
+                {% elif item.is_function %}
+                <div class="code-placeholder" data-code-id="func_{{ item.short_summary | replace('::', '_') | replace('.', '_') }}"></div>
                 {% endif %}
             </details>
         </div>
@@ -193,14 +197,16 @@
                         {% endfor %}
                         
                         <h4 id="source_{{ file | replace('/', '_') | replace('.', '_') }}" class="anchor-offset">{{ file }}</h4>
-                        <details class="source-details lazy-code">
-                            <summary>Show Source</summary>
-                            {% if file_source_map[file] %}
-                                <div class="code-placeholder" data-compressed="{{ (file_source_map[file] | highlight_and_link | add_line_numbers(1)) | compress }}"></div>
-                            {% else %}
-                                <pre><code class="hljs language-basm">(Source not available)</code></pre>
-                            {% endif %}
-                        </details>
+                        <div class="macro-source">
+                            <details class="macro-source-details lazy-code">
+                                <summary>Show Source</summary>
+                                {% if file_source_map[file] %}
+                                    <div class="code-placeholder" data-code-id="file_{{ file | replace('/', '_') | replace('.', '_') | replace('\\', '_') }}"></div>
+                                {% else %}
+                                    <pre><code class="hljs language-basm">(Source not available)</code></pre>
+                                {% endif %}
+                            </details>
+                        </div>
                     </div>
                 {% endfor %}
             </section>
@@ -418,7 +424,7 @@
                 }
                 
                 // Find the details element
-                const detailsElement = fileItem.querySelector('details.source-details');
+                const detailsElement = fileItem.querySelector('details.macro-source-details, details.source-details');
                 if (detailsElement) {
                     if (!detailsElement.open) {
                         console.log('[LineNumberClick] Opening details element for file:', sourceFile);

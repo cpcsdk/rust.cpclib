@@ -24,6 +24,8 @@ pub struct BasmDocGenerator {
     title: Option<String>,
     /// Whether to show progress indicators
     show_progress: bool,
+    /// Whether to minify HTML output
+    minify_html: bool,
 }
 
 impl Default for BasmDocGenerator {
@@ -41,6 +43,7 @@ impl BasmDocGenerator {
             undocumented_config: UndocumentedConfig::default(),
             title: None,
             show_progress: true,
+            minify_html: true,
         }
     }
 
@@ -75,6 +78,12 @@ impl BasmDocGenerator {
     /// Control whether to show progress indicators
     pub fn with_progress(mut self, show: bool) -> Self {
         self.show_progress = show;
+        self
+    }
+
+    /// Enable or disable HTML minification
+    pub fn with_minify(mut self, minify: bool) -> Self {
+        self.minify_html = minify;
         self
     }
 
@@ -460,7 +469,14 @@ impl BasmDocGenerator {
                 format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
             })?;
             
-            std::fs::write(output_path, html)
+            // Minify HTML if requested
+            let final_html = if self.minify_html {
+                self.minify_html_content(&html)?
+            } else {
+                html
+            };
+            
+            std::fs::write(output_path, final_html)
                 .map_err(|e| format!("Unable to write {} file. {}", output_path.display(), e))?;
         } else if is_md {
             let md = self.generate_markdown()?;
@@ -487,6 +503,38 @@ impl BasmDocGenerator {
         }
 
         Ok(())
+    }
+
+    /// Minify HTML content to reduce file size
+    #[cfg(feature = "minify")]
+    fn minify_html_content(&self, html: &str) -> Result<String, String> {
+        let cfg = minify_html::Cfg {
+            keep_closing_tags: true,
+            keep_html_and_head_opening_tags: true,
+            keep_comments: false,
+            minify_css: true,
+            minify_js: true,
+            minify_doctype: true,
+            remove_bangs: false,
+            remove_processing_instructions: false,
+            keep_input_type_text_attr: false,
+            keep_ssi_comments: false,
+            preserve_brace_template_syntax: false,
+            preserve_chevron_percent_template_syntax: false,
+            allow_noncompliant_unquoted_attribute_values: false,
+            allow_optimal_entities: true,
+            allow_removing_spaces_between_attributes: true,
+        };
+        
+        let minified = minify_html::minify(html.as_bytes(), &cfg);
+        String::from_utf8(minified)
+            .map_err(|e| format!("Failed to convert minified HTML to UTF-8: {}", e))
+    }
+
+    /// No-op when minify feature is disabled
+    #[cfg(not(feature = "minify"))]
+    fn minify_html_content(&self, html: &str) -> Result<String, String> {
+        Ok(html.to_string())
     }
 }
 

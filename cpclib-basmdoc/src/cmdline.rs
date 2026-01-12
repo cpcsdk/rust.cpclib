@@ -64,6 +64,12 @@ pub fn build_args_parser() -> clap::Command {
                 .long("title")
                 .required(false)
         )
+        .arg(
+            clap::Arg::new("no-minify")
+                .help("Disable HTML minification (enabled by default)")
+                .long("no-minify")
+                .action(clap::ArgAction::SetTrue)
+        )
 }
 
 pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Result<(), String> {
@@ -75,6 +81,7 @@ pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Resul
     let output = matches.get_one::<String>("output").expect("required");
     let enable_wildcards = matches.get_flag("wildcards");
     let title = matches.get_one::<String>("title").cloned();
+    let minify = !matches.get_flag("no-minify");
 
     // Build undocumented config from flags
     let undocumented_config = if matches.get_flag("undocumented") {
@@ -93,7 +100,8 @@ pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Resul
         .add_inputs(inputs)
         .with_wildcards(enable_wildcards)
         .with_undocumented_config(undocumented_config)
-        .with_progress(true);
+        .with_progress(true)
+        .with_minify(minify);
 
     if let Some(title) = title {
         generator = generator.with_title(title);

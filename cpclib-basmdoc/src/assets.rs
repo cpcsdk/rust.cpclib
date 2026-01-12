@@ -82,12 +82,59 @@ pub fn get_documentation_css() -> String {
         })
 }
 
-/// Compress a string using gzip and encode as base64
+/// Encode binary data to ASCII85 (custom implementation without delimiters)
+/// This matches our JavaScript decoder exactly
+fn encode_ascii85(data: &[u8]) -> String {
+    let mut result = String::new();
+    let mut i = 0;
+    
+    while i < data.len() {
+        // Get up to 4 bytes
+        let mut tuple: u32 = 0;
+        let mut count = 0;
+        
+        for j in 0..4 {
+            if i + j < data.len() {
+                tuple = (tuple << 8) | (data[i + j] as u32);
+                count += 1;
+            } else {
+                tuple <<= 8;
+            }
+        }
+        
+        // Special case: four null bytes -> 'z'
+        if count == 4 && tuple == 0 {
+            result.push('z');
+            i += 4;
+            continue;
+        }
+        
+        // Convert to 5 ASCII85 digits
+        let mut digits = [0u8; 5];
+        let mut temp = tuple;
+        for k in (0..5).rev() {
+            digits[k] = (temp % 85) as u8;
+            temp /= 85;
+        }
+        
+        // Output the appropriate number of characters
+        let output_count = if count == 4 { 5 } else { count + 1 };
+        for k in 0..output_count {
+            result.push((digits[k] + 33) as char);
+        }
+        
+        i += count;
+    }
+    
+    result
+}
+
+/// Compress a string using gzip and encode as ASCII85
+/// ASCII85 is ~6-7% more efficient than base64 (80% vs 75% efficiency)
 /// This reduces the size of code blocks that are initially collapsed
 pub fn compress_string(input: &str) -> Result<String, std::io::Error> {
-    use base64::Engine;
     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
     encoder.write_all(input.as_bytes())?;
     let compressed = encoder.finish()?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(&compressed))
+    Ok(encode_ascii85(&compressed))
 }

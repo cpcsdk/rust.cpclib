@@ -850,6 +850,14 @@ pre {
     font-size: 0.85em;
     color: #3498db;
     font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s, text-decoration 0.2s;
+}
+
+.ref-location:hover {
+    color: #2980b9;
+    text-decoration: underline;
 }
 
 .ref-context {

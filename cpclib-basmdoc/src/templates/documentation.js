@@ -478,15 +478,18 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Lazy loading for compressed code blocks using native DecompressionStream API
+// Code is stored in a centralized COMPRESSED_CODE map and referenced by ID (reduces file size by ~33%)
 function setupLazyCodeLoading() {
     document.querySelectorAll('details.lazy-code').forEach(function(details) {
         // Only decompress when the details element is opened
         details.addEventListener('toggle', function() {
             if (details.open && !details.dataset.loaded) {
                 const placeholder = details.querySelector('.code-placeholder');
-                if (placeholder && placeholder.dataset.compressed) {
+                const codeId = placeholder ? placeholder.dataset.codeId : null;
+                
+                if (codeId && COMPRESSED_CODE[codeId]) {
                     // Decompress using native DecompressionStream API (supported in all modern browsers)
-                    decompressCode(placeholder.dataset.compressed)
+                    decompressCode(COMPRESSED_CODE[codeId])
                         .then(function(decompressed) {
                             // Replace placeholder with actual content
                             placeholder.outerHTML = decompressed;
@@ -509,20 +512,80 @@ function setupLazyCodeLoading() {
                             console.error('Failed to decompress code:', e);
                             placeholder.innerHTML = '<pre><code>Error loading code content. Please use a modern browser.</code></pre>';
                         });
+                } else {
+                    console.warn('No compressed data found for code ID:', codeId);
                 }
             }
         }, { once: false });
     });
 }
 
-// Native browser DecompressionStream API for gzip decompression
-async function decompressCode(base64Data) {
-    // Decode base64 to binary
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+// ASCII85 decoder - converts ASCII85 encoded string to Uint8Array
+// ASCII85 is more efficient than base64 (80% vs 75% efficiency, ~6-7% smaller)
+function decodeAscii85(str) {
+    const bytes = [];
+    let tuple = 0;
+    let count = 0;
+    
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charAt(i);
+        
+        // Skip whitespace
+        if (char === ' ' || char === '\t' || char === '\r' || char === '\n') {
+            continue;
+        }
+        
+        // Handle 'z' special case (represents four null bytes)
+        if (char === 'z') {
+            if (count !== 0) {
+                throw new Error('Invalid ASCII85 encoding: z in middle of tuple');
+            }
+            bytes.push(0, 0, 0, 0);
+            continue;
+        }
+        
+        // Decode character (valid range: ! to u, ASCII 33-117)
+        const value = char.charCodeAt(0) - 33;
+        if (value < 0 || value > 84) {
+            throw new Error('Invalid ASCII85 character: ' + char);
+        }
+        
+        tuple = tuple * 85 + value;
+        count++;
+        
+        if (count === 5) {
+            // Convert tuple to 4 bytes (big-endian)
+            bytes.push(
+                (tuple >>> 24) & 0xFF,
+                (tuple >>> 16) & 0xFF,
+                (tuple >>> 8) & 0xFF,
+                tuple & 0xFF
+            );
+            tuple = 0;
+            count = 0;
+        }
     }
+    
+    // Handle remaining bytes
+    if (count > 0) {
+        // Pad with 'u' characters (ASCII85 for 84)
+        for (let i = count; i < 5; i++) {
+            tuple = tuple * 85 + 84;
+        }
+        
+        // Output only the valid bytes
+        for (let i = 0; i < count - 1; i++) {
+            bytes.push((tuple >>> (24 - i * 8)) & 0xFF);
+        }
+    }
+    
+    return new Uint8Array(bytes);
+}
+
+// Native browser DecompressionStream API for gzip decompression
+async function decompressCode(ascii85Data) {
+    // Decode ASCII85 to binary
+    const bytes = decodeAscii85(ascii85Data);
     
     // Create a ReadableStream from the compressed data
     const stream = new ReadableStream({
@@ -556,4 +619,72 @@ async function decompressCode(base64Data) {
     
     return new TextDecoder().decode(combined);
 }
+
+// Navigate to a source file section and optionally a specific line
+function navigateToSourceLine(filename, lineNumber) {
+    // Transform filename to anchor ID format (e.g., "path/file.asm" -> "source_path_file_asm")
+    const anchorId = 'source_' + filename.replace(/[/.\\]/g, '_');
+    const section = document.getElementById(anchorId);
+    
+    if (!section) {
+        console.warn('No source section found for:', filename);
+        return;
+    }
+    
+    // Find the details element containing the source code
+    const details = section.parentElement.querySelector('details.lazy-code, details.macro-source-details');
+    
+    if (details) {
+        // Open the details if it's closed
+        if (!details.open) {
+            details.open = true;
+        }
+        
+        // If the code hasn't been loaded yet, wait for it
+        if (!details.dataset.loaded) {
+            const checkLoaded = setInterval(function() {
+                if (details.dataset.loaded === 'true') {
+                    clearInterval(checkLoaded);
+                    scrollToSection(section, lineNumber);
+                }
+            }, 50); // Check every 50ms
+            
+            // Timeout after 5 seconds
+            setTimeout(function() {
+                clearInterval(checkLoaded);
+                scrollToSection(section, lineNumber);
+            }, 5000);
+        } else {
+            // Already loaded, scroll immediately
+            scrollToSection(section, lineNumber);
+        }
+    } else {
+        // No lazy loading, scroll immediately
+        scrollToSection(section, lineNumber);
+    }
+}
+
+function scrollToSection(section, lineNumber) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // TODO: Highlight specific line if line numbers are rendered
+    // For now, just scroll to the section
+}
+
+// Set up click handlers for ref-location elements
+document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('ref-location')) {
+            e.preventDefault();
+            const text = e.target.textContent.trim();
+            const parts = text.split(':');
+            
+            if (parts.length >= 2) {
+                const filename = parts[0];
+                const lineNumber = parseInt(parts[1], 10);
+                navigateToSourceLine(filename, lineNumber);
+            }
+        }
+    });
+});
 
