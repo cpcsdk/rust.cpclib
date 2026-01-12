@@ -1,3 +1,7 @@
+// ============================================================================
+// FILE TREE - Hierarchical display of source files
+// ============================================================================
+
 // Build file tree from flat file list
 function buildFileTree(files) {
     const root = {};
@@ -59,6 +63,10 @@ function renderFileTree(node, isRoot = false) {
     return html;
 }
 
+// ============================================================================
+// SOURCE CODE DISPLAY - Toggle visibility and highlighting
+// ============================================================================
+
 // Toggle source code visibility
 function toggleSource(id) {
     const content = document.getElementById(id);
@@ -78,9 +86,12 @@ function toggleSource(id) {
     }
 }
 
+// ============================================================================
+// FILE FILTERING - Show/hide items by source file
+// ============================================================================
+
 // File filtering functionality
 function filterByFile(fileName) {
-    console.debug('[doc] filterByFile called with', fileName);
     const items = document.querySelectorAll('.item');
     const sections = document.querySelectorAll('.section');
     const fileLinks = document.querySelectorAll('.file-filter-link');
@@ -249,6 +260,10 @@ function filterByFile(fileName) {
         }
     }
 }
+
+// ============================================================================
+// CLIPBOARD - Copy code to clipboard with feedback
+// ============================================================================
 
 // Copy-to-clipboard functionality
 function copyToClipboard(text, button) {
@@ -477,6 +492,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 });
 
+// ============================================================================
+// LAZY LOADING - Decompress and display code on demand
+// ============================================================================
+
 // Lazy loading for compressed code blocks using native DecompressionStream API
 // Code is stored in a centralized COMPRESSED_CODE map and referenced by ID (reduces file size by ~33%)
 function setupLazyCodeLoading() {
@@ -620,58 +639,97 @@ async function decompressCode(ascii85Data) {
     return new TextDecoder().decode(combined);
 }
 
+// ============================================================================
+// NAVIGATION - Scroll to source files and specific line numbers
+// ============================================================================
+
 // Navigate to a source file section and optionally a specific line
 function navigateToSourceLine(filename, lineNumber) {
-    // Transform filename to anchor ID format (e.g., "path/file.asm" -> "source_path_file_asm")
     const anchorId = 'source_' + filename.replace(/[/.\\]/g, '_');
     const section = document.getElementById(anchorId);
     
-    if (!section) {
-        console.warn('No source section found for:', filename);
-        return;
-    }
+    if (!section) return;
     
-    // Find the details element containing the source code
     const details = section.parentElement.querySelector('details.lazy-code, details.macro-source-details');
     
     if (details) {
-        // Open the details if it's closed
         if (!details.open) {
             details.open = true;
         }
         
-        // If the code hasn't been loaded yet, wait for it
         if (!details.dataset.loaded) {
-            const checkLoaded = setInterval(function() {
-                if (details.dataset.loaded === 'true') {
-                    clearInterval(checkLoaded);
-                    scrollToSection(section, lineNumber);
-                }
-            }, 50); // Check every 50ms
-            
-            // Timeout after 5 seconds
-            setTimeout(function() {
-                clearInterval(checkLoaded);
+            waitForCodeToLoad(details, function() {
                 scrollToSection(section, lineNumber);
-            }, 5000);
+            });
         } else {
-            // Already loaded, scroll immediately
             scrollToSection(section, lineNumber);
         }
     } else {
-        // No lazy loading, scroll immediately
         scrollToSection(section, lineNumber);
     }
 }
 
-function scrollToSection(section, lineNumber) {
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// Wait for lazy-loaded code to be decompressed and inserted into DOM
+function waitForCodeToLoad(details, callback) {
+    const POLL_INTERVAL = 50; // ms
+    const TIMEOUT = 5000; // ms
+    const DOM_SETTLE_DELAY = 100; // ms - wait for browser to insert elements
     
-    // TODO: Highlight specific line if line numbers are rendered
-    // For now, just scroll to the section
+    const checkLoaded = setInterval(function() {
+        if (details.dataset.loaded === 'true') {
+            clearInterval(checkLoaded);
+            // Give browser time to insert DOM elements after decompression
+            setTimeout(callback, DOM_SETTLE_DELAY);
+        }
+    }, POLL_INTERVAL);
+    
+    // Fallback timeout
+    setTimeout(function() {
+        clearInterval(checkLoaded);
+        callback();
+    }, TIMEOUT);
 }
 
-// Set up click handlers for ref-location elements
+// Scroll to a section, optionally targeting a specific line number
+function scrollToSection(section, lineNumber) {
+    if (lineNumber && scrollToLine(section, lineNumber)) {
+        return;
+    }
+    
+    // Fallback: scroll to section header
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Scroll to and highlight a specific line number within a section
+function scrollToLine(section, lineNumber) {
+    const HEADER_OFFSET = -80;
+    const HIGHLIGHT_COLOR = '#fff3cd';
+    const HIGHLIGHT_DURATION = 2000; // ms
+    
+    const container = section.parentElement;
+    if (!container) return false;
+    
+    const targetLine = container.querySelector('.line-number[id="L' + lineNumber + '"]');
+    if (!targetLine) return false;
+    
+    // Smooth scroll to line with header offset
+    const y = targetLine.getBoundingClientRect().top + window.pageYOffset + HEADER_OFFSET;
+    window.scrollTo({ top: y, behavior: 'smooth' });
+    
+    // Temporarily highlight the line
+    const codeLine = targetLine.parentElement;
+    if (codeLine) {
+        codeLine.style.backgroundColor = HIGHLIGHT_COLOR;
+        codeLine.style.transition = 'background-color 0.3s';
+        setTimeout(function() {
+            codeLine.style.backgroundColor = '';
+        }, HIGHLIGHT_DURATION);
+    }
+    
+    return true;
+}
+
+// Set up click handlers for ref-location elements (e.g., "file.asm:123")
 document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('click', function(e) {
         if (e.target.classList.contains('ref-location')) {

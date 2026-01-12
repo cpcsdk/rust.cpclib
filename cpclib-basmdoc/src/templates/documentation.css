@@ -26,6 +26,24 @@ body {
     height: 100vh;
     overflow-y: auto;
     box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+    min-width: 200px;
+    max-width: 600px;
+}
+
+.sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 1000;
+    background-color: transparent;
+    transition: background-color 0.2s;
+}
+
+.sidebar:hover .sidebar-resize-handle {
+    background-color: rgba(52, 152, 219, 0.3);
 }
 
 .sidebar h1 {
@@ -38,8 +56,8 @@ body {
 
 .sidebar h2 {
     font-size: 0.95em;
-    margin-top: 20px;
-    margin-bottom: 10px;
+    margin-top: 12px;
+    margin-bottom: 6px;
     color: #555;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -51,14 +69,14 @@ body {
 }
 
 .sidebar li {
-    margin: 4px 0;
+    margin: 1px 0;
 }
 
 .sidebar a {
     color: #3498db;
     text-decoration: none;
     display: block;
-    padding: 4px 8px;
+    padding: 2px 8px;
     border-radius: 4px;
     transition: background-color 0.2s, color 0.2s;
     font-size: 0.9em;
@@ -541,12 +559,12 @@ html {
 
 /* File tree styles */
 .file-tree {
-    margin-top: 10px;
+    margin-top: 6px;
 }
 
 .file-tree-toggle {
     cursor: pointer;
-    padding: 6px 10px;
+    padding: 4px 8px;
     background-color: #f8f9fa;
     border-radius: 4px;
     font-size: 0.9em;
@@ -561,17 +579,17 @@ html {
 }
 
 .file-tree-header {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .file-tree-header .file-filter-link {
     text-align: center;
     font-weight: 600;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .file-tree-content {
-    margin-top: 8px;
+    margin-top: 4px;
 }
 
 .file-tree-list {
@@ -581,22 +599,25 @@ html {
 }
 
 .file-tree-item {
-    margin: 2px 0;
+    margin: 1px 0;
 }
 
 .file-tree-folder > details {
-    margin: 2px 0;
+    margin: 1px 0;
 }
 
 .file-tree-folder > details > summary {
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.85em;
     color: #555;
     user-select: none;
     transition: background-color 0.2s;
     list-style: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .file-tree-folder > details > summary::-webkit-details-marker {
@@ -609,12 +630,16 @@ html {
 
 .file-tree-folder > details > .file-tree-list {
     padding-left: 16px;
-    margin-top: 4px;
+    margin-top: 2px;
 }
 
 .file-tree-file a {
     font-size: 0.85em;
-    padding: 4px 8px;
+    padding: 2px 6px;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .no-results {
@@ -644,10 +669,10 @@ html {
 
 /* Symbol index styles */
 .index-letter {
-    font-size: 2em;
+    font-size: 1.5em;
     color: #3498db;
-    margin-top: 30px;
-    margin-bottom: 15px;
+    margin-top: 20px;
+    margin-bottom: 10px;
     border-bottom: 2px solid #3498db;
     display: flex;
     align-items: center;
@@ -678,14 +703,13 @@ html {
 .index-items {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
+    gap: 8px;
+    margin-bottom: 15px;
 }
 
 .index-item {
-    padding: 8px 12px;
+    padding: 4px 8px;
     background-color: #f8f9fa;
-    border-left: 3px solid #3498db;
     border-radius: 3px;
 }
 
@@ -814,24 +838,45 @@ pre {
 /* Cross-references styling */
 .cross-references {
     margin-top: 20px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-left: 3px solid #3498db;
-    border-radius: 4px;
 }
 
-.cross-references h5 {
-    margin: 0 0 10px 0;
+.cross-references details {
+    background-color: transparent;
+}
+
+.cross-references details summary {
+    list-style: none;
+    user-select: none;
+}
+
+.cross-references details summary::-webkit-details-marker {
+    display: none;
+}
+
+.references-toggle {
+    cursor: pointer;
+    padding: 8px 10px;
+    background-color: #2b3037;
+    color: #fff;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
     font-size: 0.9em;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.references-toggle:hover {
+    background-color: #3d4450;
 }
 
 .reference-list {
     list-style: none;
-    margin: 0;
+    margin: 10px 0 0 0;
     padding: 0;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    padding: 10px;
 }
 
 .reference-item {

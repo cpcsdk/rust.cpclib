@@ -24,15 +24,17 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
     {% macro show_references(item) %}
         {% if item.has_references %}
         <div class="cross-references">
-            <h5>Referenced in:</h5>
-            <ul class="reference-list">
-                {% for ref in item.references %}
-                <li class="reference-item">
-                    <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
-                    <pre><code class="language-basm">{{ ref.highlighted_context | safe }}</code></pre>
-                </li>
-                {% endfor %}
-            </ul>
+            <details>
+                <summary class="references-toggle">📋 Show References ({{ item.references | length }})</summary>
+                <ul class="reference-list">
+                    {% for ref in item.references %}
+                    <li class="reference-item">
+                        <span class="ref-location">{{ ref.source_file }}:{{ ref.line_number }}</span>
+                        <pre><code class="language-basm">{{ ref.highlighted_context | safe }}</code></pre>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </details>
         </div>
         {% endif %}
     {% endmacro %}
@@ -106,7 +108,7 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
                 <div class="file-tree-header">
                     <a href="#" id="all-files-link" class="file-filter-link active" data-file="">All Files</a>
                 </div>
-                <details class="file-tree" open>
+                <details class="file-tree">
                     <summary class="file-tree-toggle">📁 File Structure</summary>
                     <div id="file-tree-root" class="file-tree-content"></div>
                 </details>
@@ -319,6 +321,51 @@ const COMPRESSED_CODE = {{ compressed_code_map | tojson }};
                 const resolved = resolveFileNameForFiltering(fileName);
                 return originalFilter(resolved);
             };
+        })();
+
+        // Resizable sidebar functionality
+        (function() {
+            const sidebar = document.querySelector('.sidebar');
+            const mainContent = document.querySelector('.main-content');
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+
+            // Create resize handle
+            const resizeHandle = document.createElement('div');
+            resizeHandle.className = 'sidebar-resize-handle';
+            resizeHandle.style.cssText = 'position: absolute; top: 0; right: 0; width: 5px; height: 100%; cursor: col-resize; z-index: 1000;';
+            sidebar.appendChild(resizeHandle);
+
+            resizeHandle.addEventListener('mousedown', function(e) {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = sidebar.offsetWidth;
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isResizing) return;
+                
+                const width = startWidth + (e.clientX - startX);
+                const minWidth = 200;
+                const maxWidth = 600;
+                
+                if (width >= minWidth && width <= maxWidth) {
+                    sidebar.style.width = width + 'px';
+                    mainContent.style.marginLeft = width + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
         })();
 
         // Line number click handler: jump to corresponding line in full source
