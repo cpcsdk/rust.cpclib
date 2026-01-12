@@ -489,8 +489,62 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Setup lazy-loading for compressed code blocks
     setupLazyCodeLoading();
+    
+    // Setup references toggle with memory management
+    setupReferencesToggle();
 
 });
+
+// ============================================================================
+// REFERENCES TOGGLE - Show/hide references with memory management
+// ============================================================================
+
+// Handle references toggle to show/hide cross-references and free memory when collapsed
+function setupReferencesToggle() {
+    document.querySelectorAll('.cross-references details').forEach(function(details) {
+        const summary = details.querySelector('summary.references-toggle');
+        if (!summary) return;
+        
+        // Extract the count from the original text (e.g., "📋 Show References (5)")
+        const originalText = summary.textContent;
+        const countMatch = originalText.match(/\((\d+)\)/);
+        const count = countMatch ? countMatch[1] : '';
+        const showText = originalText;
+        const hideText = `📋 Hide References${count ? ' (' + count + ')' : ''}`;
+        
+        details.addEventListener('toggle', function() {
+            if (details.open) {
+                // Opening - change text to "Hide References"
+                summary.textContent = hideText;
+            } else {
+                // Closing - change text back to "Show References" and remove content from DOM
+                summary.textContent = showText;
+                
+                // Remove the reference list from DOM to free memory
+                const referenceList = details.querySelector('.reference-list');
+                if (referenceList && !details.dataset.originalContent) {
+                    // Store original content before removing (for re-insertion)
+                    details.dataset.originalContent = referenceList.outerHTML;
+                    referenceList.remove();
+                } else if (referenceList && details.dataset.originalContent) {
+                    // Already stored, just remove
+                    referenceList.remove();
+                }
+            }
+        }, { once: false });
+        
+        // Re-insert content when opened again
+        details.addEventListener('toggle', function() {
+            if (details.open && details.dataset.originalContent && !details.querySelector('.reference-list')) {
+                // Re-insert the stored content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = details.dataset.originalContent;
+                const restoredList = tempDiv.firstChild;
+                details.appendChild(restoredList);
+            }
+        }, { once: false });
+    });
+}
 
 // ============================================================================
 // LAZY LOADING - Decompress and display code on demand
@@ -500,9 +554,17 @@ document.addEventListener('DOMContentLoaded', function() {
 // Code is stored in a centralized COMPRESSED_CODE map and referenced by ID (reduces file size by ~33%)
 function setupLazyCodeLoading() {
     document.querySelectorAll('details.lazy-code').forEach(function(details) {
+        const summary = details.querySelector('summary');
+        const originalText = summary ? summary.textContent : 'Show Source';
+        
         // Only decompress when the details element is opened
         details.addEventListener('toggle', function() {
             if (details.open && !details.dataset.loaded) {
+                // Update button text to "Hide Source"
+                if (summary) {
+                    summary.textContent = 'Hide Source';
+                }
+                
                 const placeholder = details.querySelector('.code-placeholder');
                 const codeId = placeholder ? placeholder.dataset.codeId : null;
                 
@@ -533,6 +595,37 @@ function setupLazyCodeLoading() {
                         });
                 } else {
                     console.warn('No compressed data found for code ID:', codeId);
+                }
+            } else if (!details.open && details.dataset.loaded === 'true') {
+                // Collapsed: remove content from DOM to free memory and reset button text
+                if (summary) {
+                    summary.textContent = originalText;
+                }
+                
+                // Find and remove all code content (pre, code elements), leaving only the placeholder structure
+                const codeContainer = details.querySelector('pre');
+                if (codeContainer) {
+                    // Create fresh placeholder
+                    const placeholder = details.querySelector('.code-placeholder');
+                    const codeId = placeholder ? placeholder.dataset.codeId : details.dataset.codeId;
+                    
+                    // Remove the entire code content
+                    codeContainer.remove();
+                    
+                    // Re-insert placeholder for next open
+                    const newPlaceholder = document.createElement('div');
+                    newPlaceholder.className = 'code-placeholder';
+                    newPlaceholder.dataset.codeId = codeId;
+                    newPlaceholder.textContent = 'Loading...';
+                    details.appendChild(newPlaceholder);
+                    
+                    // Mark as unloaded so it can be loaded again
+                    details.dataset.loaded = 'false';
+                }
+            } else if (details.open && details.dataset.loaded === 'true') {
+                // Already loaded and opening again - just update button text
+                if (summary) {
+                    summary.textContent = 'Hide Source';
                 }
             }
         }, { once: false });
