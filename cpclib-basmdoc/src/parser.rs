@@ -89,8 +89,8 @@ fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
 }
 
 /// Check if a token can be documented (is it a label, equ, function, or macro?)
-fn is_documentable<T: ListingElement + ToString>(token: &T) -> bool {
-    documentation_type(token, None).is_some()
+fn is_documentable<T: ListingElement + ToString>(token: &T, last_global_label: Option<&str>) -> bool {
+    documentation_type(token, last_global_label).is_some()
 }
 
 /// Determine the type of documentable item
@@ -320,7 +320,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
             (true, false)
         }
         else {
-            (false, is_documentable(token))
+            (false, is_documentable(token, last_global_label.as_deref()))
         };
 
         // Track the last global label for local label resolution
@@ -354,7 +354,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
                     };
                     doc.push((in_process_comment.consume(), documented, last_global_label.clone(), line_number));
                 }
-                else if is_documentable(token) {
+                else if is_documentable(token, last_global_label.as_deref()) {
                     // Check if this specific item type should be included when undocumented
                     if let Some(item_type) = documentation_type(token, last_global_label.as_deref()) {
                         if include_undocumented.should_include(&item_type) {

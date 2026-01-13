@@ -2779,6 +2779,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-orgams-ascii"
+version = "0.11.0"
+dependencies = [
+ "cpclib-asm",
+ "cpclib-common",
+]
+
+[[package]]
 name = "cpclib-python"
 version = "0.11.0"
 dependencies = [

@@ -23,6 +23,7 @@ members = [
   "cpclib-image",
   "cpclib-imgconverter",
   "cpclib-macros",
+  "cpclib-orgams-ascii",
   "cpclib-runner", 
   "cpclib-sna",
   "cpclib-sprite-compiler", 

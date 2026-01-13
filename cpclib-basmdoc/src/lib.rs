@@ -20,67 +20,6 @@ pub use generator::BasmDocGenerator;
 use pulldown_cmark::{html, Options, Parser, Event, Tag, TagEnd, CodeBlockKind, CowStr};
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs::File;
-    use std::io::Write;
-    use tempfile::tempdir;
-
-    /// Helper: create a temp file with given content, return (dir, file_path, content)
-    fn create_temp_source_file(content: &str) -> (tempfile::TempDir, String, String) {
-        let dir = tempdir().expect("tempdir");
-        let file_path = dir.path().join("test.asm");
-        let mut file = File::create(&file_path).expect("create file");
-        file.write_all(content.as_bytes()).expect("write");
-        (dir, file_path.to_string_lossy().to_string(), content.to_string())
-    }
-
-    #[test]
-    fn test_source_preserved_for_file_without_documentation() {
-        // 1. Create a file with no documentation comments
-        let source_code = "LD A,42\nNOP\nRET\n";
-        let (_dir, file_path, expected_source) = create_temp_source_file(source_code);
-        let display_name = "test.asm";
-
-        // 2. Generate DocumentationPage for this file
-        let page = DocumentationPage::for_file(&file_path, display_name, UndocumentedConfig::all()).expect("parse");
-
-        // 3. Check that a Source item exists in page.content and contains the correct code
-        let source_item = page.content.iter().find(|it| it.item.is_source()).expect("Source item present");
-        match &source_item.item {
-            DocumentedItem::Source(src) => {
-                assert_eq!(src, &expected_source, "Source content must match original");
-            },
-            _ => panic!("Not a Source variant"),
-        }
-
-        // 4. Merge with itself (simulate multi-file merge)
-        let merged = DocumentationPage::merge(vec![page.clone()]);
-        let merged_source_item = merged.content.iter().find(|it| it.item.is_source()).expect("Merged Source item present");
-        match &merged_source_item.item {
-            DocumentedItem::Source(src) => {
-                assert_eq!(src, &expected_source, "Merged Source content must match original");
-            },
-            _ => panic!("Not a Source variant (merged)"),
-        }
-
-        // 5. Generate HTML and check that the source code appears in the output
-        let html = merged.to_html(None);
-        println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
-        // The source is now compressed in COMPRESSED_CODE map and referenced by data-code-id
-        // Check that the JavaScript compressed map exists
-        assert!(html.contains("const COMPRESSED_CODE ="), 
-                "HTML output must contain COMPRESSED_CODE map");
-        assert!(html.contains("data-code-id="), 
-                "HTML output must contain data-code-id attributes");
-        assert!(html.contains("code-placeholder"), 
-                "HTML output must contain code placeholder for lazy loading");
-        // Also check that it's not showing the fallback message
-        assert!(!html.contains("(Source not available)"), "HTML output must not show 'Source not available'");
-    }
-}
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::borrow::Cow;
@@ -1318,7 +1257,66 @@ fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: Do
 mod test {
     use cpclib_asm::Token;
 
-    use crate::{aggregate_documentation_on_tokens, syntax::link_symbols_in_source, UndocumentedConfig};
+    use crate::{DocumentationPage, DocumentedItem, UndocumentedConfig, aggregate_documentation_on_tokens, syntax::link_symbols_in_source};
+
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    /// Helper: create a temp file with given content, return (dir, file_path, content)
+    fn create_temp_source_file(content: &str) -> (tempfile::TempDir, String, String) {
+        let dir = tempdir().expect("tempdir");
+        let file_path = dir.path().join("test.asm");
+        let mut file = File::create(&file_path).expect("create file");
+        file.write_all(content.as_bytes()).expect("write");
+        (dir, file_path.to_string_lossy().to_string(), content.to_string())
+    }
+
+    #[test]
+    fn test_source_preserved_for_file_without_documentation() {
+        // 1. Create a file with no documentation comments
+        let source_code = "LD A,42\nNOP\nRET\n";
+        let (_dir, file_path, expected_source) = create_temp_source_file(source_code);
+        let display_name = "test.asm";
+
+        // 2. Generate DocumentationPage for this file
+        let page = DocumentationPage::for_file(&file_path, display_name, UndocumentedConfig::all()).expect("parse");
+
+        // 3. Check that a Source item exists in page.content and contains the correct code
+        let source_item = page.content.iter().find(|it| it.item.is_source()).expect("Source item present");
+        match &source_item.item {
+            DocumentedItem::Source(src) => {
+                assert_eq!(src, &expected_source, "Source content must match original");
+            },
+            _ => panic!("Not a Source variant"),
+        }
+
+        // 4. Merge with itself (simulate multi-file merge)
+        let merged = DocumentationPage::merge(vec![page.clone()]);
+        let merged_source_item = merged.content.iter().find(|it| it.item.is_source()).expect("Merged Source item present");
+        match &merged_source_item.item {
+            DocumentedItem::Source(src) => {
+                assert_eq!(src, &expected_source, "Merged Source content must match original");
+            },
+            _ => panic!("Not a Source variant (merged)"),
+        }
+
+        // 5. Generate HTML and check that the source code appears in the output
+        let html = merged.to_html(None);
+        println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
+        // The source is now compressed in COMPRESSED_CODE map and referenced by data-code-id
+        // Check that the JavaScript compressed map exists
+        assert!(html.contains("const COMPRESSED_CODE ="), 
+                "HTML output must contain COMPRESSED_CODE map");
+        assert!(html.contains("data-code-id="), 
+                "HTML output must contain data-code-id attributes");
+        assert!(html.contains("code-placeholder"), 
+                "HTML output must contain code placeholder for lazy loading");
+        // Also check that it's not showing the fallback message
+        assert!(!html.contains("(Source not available)"), "HTML output must not show 'Source not available'");
+    }
+
 
     #[test]
     fn test_aggregate_global_documentation() {

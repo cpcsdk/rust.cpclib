@@ -212,13 +212,37 @@ impl BasmDocGenerator {
         if paths.len() == 1 {
             // For a single file, use its parent directory as prefix
             let path = Path::new(&paths[0]);
-            return path.parent()
+            let parent = path.parent()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
+            
+            // Normalize path separator to forward slash and strip leading slash
+            // if the path is not considered absolute by the OS
+            let normalized = parent.replace('\\', "/");
+            if !path.is_absolute() && normalized.starts_with('/') {
+                return normalized.trim_start_matches('/').to_string();
+            }
+            return normalized;
         }
 
         // Check if all paths are absolute
         let all_absolute = paths.iter().all(|p| Path::new(p).is_absolute());
+
+        // Store the prefix component (for Windows drive letters)
+        let prefix_component = if all_absolute {
+            Path::new(&paths[0])
+                .components()
+                .next()
+                .and_then(|c| {
+                    if let std::path::Component::Prefix(prefix) = c {
+                        Some(prefix.as_os_str().to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            None
+        };
 
         // Convert all paths to components for comparison
         let path_components: Vec<Vec<&str>> = paths
@@ -260,8 +284,10 @@ impl BasmDocGenerator {
             String::new()
         } else {
             let prefix = common.join("/");
-            // Add leading slash for absolute paths
-            if all_absolute {
+            // Add Windows drive letter or Unix root slash
+            if let Some(win_prefix) = prefix_component {
+                format!("{}/{}", win_prefix, prefix)
+            } else if all_absolute {
                 format!("/{}", prefix)
             } else {
                 prefix
@@ -544,20 +570,40 @@ mod tests {
 
     #[test]
     fn test_common_prefix_single_file() {
+        #[cfg(unix)]
         let paths = vec!["/home/user/project/src/main.asm".to_string()];
+        #[cfg(not(unix))]
+        let paths = vec!["C:\\Users\\user\\project\\src\\main.asm".to_string()];
+        
         let prefix = BasmDocGenerator::calculate_common_prefix(&paths);
+        
+        #[cfg(unix)]
         assert_eq!(prefix, "/home/user/project/src");
+        #[cfg(not(unix))]
+        assert_eq!(prefix, "C:/Users/user/project/src");
     }
 
     #[test]
     fn test_common_prefix_multiple_files() {
+        #[cfg(unix)]
         let paths = vec![
             "/home/user/project/src/main.asm".to_string(),
             "/home/user/project/src/util.asm".to_string(),
             "/home/user/project/src/lib/helper.asm".to_string(),
         ];
+        #[cfg(not(unix))]
+        let paths = vec![
+            "C:\\Users\\user\\project\\src\\main.asm".to_string(),
+            "C:\\Users\\user\\project\\src\\util.asm".to_string(),
+            "C:\\Users\\user\\project\\src\\lib\\helper.asm".to_string(),
+        ];
+        
         let prefix = BasmDocGenerator::calculate_common_prefix(&paths);
+        
+        #[cfg(unix)]
         assert_eq!(prefix, "/home/user/project/src");
+        #[cfg(not(unix))]
+        assert_eq!(prefix, "C:/Users/user/project/src");
     }
 
     #[test]
