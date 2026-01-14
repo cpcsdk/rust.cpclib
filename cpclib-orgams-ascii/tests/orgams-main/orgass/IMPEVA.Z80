@@ -1,0 +1,806 @@
+; << impeva Eval labels from imported files >>
+inRom = 1               ; 1 to auto-install in rom
+rom   = &1D
+dev_checks = 1
+dev_checks' = 1-inRom   ; optional checks
+need_room = 1
+todo  = 1
+
+; Used by: asseva
+; Uses: cache, org, bitset
+
+      IMPORT "symbflag.i"
+      IMPORT "const.i"
+      IMPORT "swapi.i"  ; tmp for assemble
+      IMPORT "memmap.i"
+      IMPORT "assmap.i"
+      IMPORT "macro.i"
+
+; \\\ 2025 \\\\\\\
+; -------- HH Beta J ---------
+ ; Dec
+   ; 9  n: s/vo_curbk/va_curbk (nrt)
+; -------- HH Beta I ---------
+ ; Nov
+   ; 28 m Clean-up: don't save vo_curbk: shouldn't be changed
+; -------- HH Beta C ---------
+ ; Oct
+   ; 12 l Remove fetch_id_in_import (no more used by find)
+; -------- HH Beta B ---------
+   ;  8 k eval_label_in_any_imported_source: return tab+id
+        ; To fix #133 slow import
+
+; -------- HH Beta 6 ---------
+ ; Aug 
+   ; 17 j Add fetch_id_in_import  
+   ; 16 i add test_ambiguous' 
+        ; add test_ambiguous''
+        ; Fix stack unwind at /.double/ 
+   ; 16 h For di_getkey, must use "live" tab, not selected one 
+          ; (needed when called from imported macro)
+        ; Must also use "live" deps
+   ; 13 g Macro: must return tab+id for ass
+        ; Use assmap
+; -------- HH Beta 1 ---------
+ ; Jul
+   ; 10 f [Adapt rom ass] Use CALL_EXT 
+
+ ; Jun
+      ; e [NoChange] nrt_setup: override vo_romExt (!!paused)
+
+; -------- GG Beta J ---------
+ ; Apr
+   ; 10 d Use new farcall
+        ; Remove _call_org
+; \\\ 2024 \\\\\\\
+; -------- GG Beta C ---------
+ ; Oct
+   ; 6  c Faster resolution (don't switch) 
+        ; test_undefined: must call init_phase1 **before** bs_set
+; -------- GG Beta 4 ---------
+ ; Mar
+   ; 17  vb: test_insert_line: fix # of lines (counts empty line)
+           ; test_undefined: must call init_phase1
+
+; \\\ 2023 \\\\\\\
+; -------- GG Beta 3 ---------
+; Dec
+   ; 23  va: tests: fix test_undefined itself. Must clear both deps
+                  ; and depsrec (done via /clear_visited/),
+                  ; to satisfy internal checks (org.check_deps)
+
+; \\\ 2022 \\\\\\\
+
+; Apr
+   ; 21  v9: Don't report already imported flag (fix bug#146)
+           ; Also, don't check double definition when label
+           ; isn't defined! (fix spurious "ambiguous label" with ghost!)
+
+; \\\ 2021 \\\\\\\
+
+      ;  v8: Save and restore current source bk.
+            ; That fixes flaky test_imports_err in assnrt.o
+      ;  v7: Nrt: Check host tab is reselected.
+    ;17  v6: Add /test_ambiguous/  -> Ok is working.
+          ;      /test_undefined/  -> Ok is working.
+    ;16  v5: Use /check_deps/ !!Requires org-ew!!
+    ;14  v4: Use new err_ambiguouslabel (30)
+    ;13  v3: Add checks around /deps/v_deps/
+    ;10  v2: bs_copy/bs_get: must use CALL_BRIC
+; oct 9. v1: WIP /eval_label_in_any_imported_source/
+
+
+main_rom = &0A          ; ORGAMS.ROM 
+;ext_rom = &1A           ; ORGEXT.ROM
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+nrt_buf = &0F00
+
+codedest = impeva_module
+limit = import
+codedest2 = impeva_jp
+limit2 = evacmd_jp
+codedest3 = impeva_jp'
+limit3 = symb_jp''
+
+MAX_SOURCES = 64
+
+      IF MAX_SOURCES - 64
+  !! shared with org
+      END
+
+      ORG &1000
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+; ----- In this rom (ORGASS.ROM) -----
+
+cache = &FE6F           ;after jp find
+clear_visited = cache+15 ; for NRT. Clear deps and depsrec
+
+sy    = &FFE1
+;sy_get = sy+21        ; in:hl=id  out:carry if set, cde=val !!set bit4
+sy_get_import = sy+3
+
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+ass   = &C0A4
+get_tab_symb = ass+6
+
+; ---- In ORGAMS.ROM aka main_rom (for tests) ---------------
+
+setup_custom = &E839    ; Trust me on this
+
+; ---- In BRICBRAC.ROM -----------------------------
+
+aap   = &FDDF
+;connect_label = aap+9 ;in: de=id. out=Carry if ok, hl=lbl. bc trashed.
+aap'  = &FE30
+;di_get = aap'+6         ;in: hl=nt string. Out=Carry if ok, de=id
+di_get_import = &FDF7   ;in: de=nt string, hl=pool. Out: "
+di_getkey = aap'+9
+di_getkey_custom_pool = &FEFD
+
+bitset = &FED0
+bs_init = bitset        ; NRT
+bs_copy = bitset+3
+bs_get = bitset+6
+bs_set = bitset+9       ; NRT
+
+chunk = &FE00
+connect_next = chunk+39
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+org_source_init = org+&84 ;org_init done by setup_custom
+org_get_lines# = org+3
+org_get_line = org+6
+;org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+;org_delete_line = org+15
+;org_load = org+18
+;org_save = org+21
+org_select = org+63     ; for nrt
+org_get_current_selection = org+&30 ;out: A=#, all other regs preserved
+org_assemble = org+111  ; without code installation
+check_deps = org+&2D
+init_phase1 = org+&72   ; nrt
+
+swap  = &FE60
+connect_deps = swap
+connect_aap_pool = swap+15
+
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout ; CALL_EXT in some sources
+          call call_ext_from_ass:WORD rout
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call call_bric_from_ass:WORD adr
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+nrt_select
+va_tab_symb = &981D     ; ass
+;normally sync done by ass
+          ld (va_tab_symb),a
+          CALL_ORG(org_select):call nc,fail
+          ret
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+;vt_extrom = &9D02
+vt_assrom = &9D08
+vt_currom = &9D0A
+;vo    = &7CE8
+;vo_romExt = vo+18
+          ld a,rom
+          ld (vt_assrom),a
+          ld (vt_currom),a
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          ld a,bk_dev:call nrt_setup
+;Sanity checks
+          call test_insert_line
+;Real tests
+          call test_undefined
+          call test_ambiguous
+          call test_ambiguous'
+          call test_ambiguous''
+          call test_macro
+          ret
+
+test_insert_line
+;---------------
+
+; Reset. So tests don't impact each other.
+; Hot reset so we may detect memory leaks.
+          CALL_ORG(org_source_init)
+
+; Code under test.
+          INSERT_LINE(1,dummy_line)
+
+; Checks.
+          CHECK_NB_LINES(2) ; 1 empty line was init
+          CHECK_LINE(1,dummy_line) ; check we get the line back 
+   ;  CHECK_LINE(2,dummy_line) ; uncomment me to trigger failure
+          ret
+
+dummy_line BYTE "Sid",0
+
+
+
+test_ambiguous
+;-------------
+; Same label defined in 2 imports must properly returns.
+; The test don't work properly since v9, since labels are just present,
+    ; not flagged as defined by symb (would require to assemble)
+; We run it nevertheless (without the check), to verify code returns.
+; (allow to catch stack errors).
+; Also, the error itself is verified in :orgnrt/assnrt.o
+
+          call nrt_setup_ambigous
+          ld de,0       ;id 0
+          call nrt_eval_label_in_any_imported_source
+      IF 0
+;!! discard. See comment in header.
+          call c,fail
+          cp err_doubleimportedlabel:call nz,fail
+      END
+          ret
+
+test_ambiguous'
+;--------------
+;Assemble, this time.
+          call nrt_setup_ambigous
+          ld a,4:call nrt_select:call nrt_assemble
+          ld a,5:call nrt_select:call nrt_assemble
+          ld a,3:call nrt_select
+          ld de,0       ;id 0
+          call nrt_eval_label_in_any_imported_source
+          call c,fail
+          cp err_doubleimportedlabel:call nz,fail
+          ret
+
+test_ambiguous''
+;---------------
+;Same macro name
+          call nrt_setup_ambigous_macro
+          ld a,4:call nrt_select:call nrt_assemble
+          ld a,5:call nrt_select:call nrt_assemble
+          ld a,3:call nrt_select
+          ld de,0       ;id 0
+          call nrt_eval_label_in_any_imported_source
+          call c,fail
+          cp err_doubleimportedlabel:call nz,fail
+          ret
+
+
+nrt_setup_ambigous
+          ld a,bk_dev:call nrt_setup
+; ---pick tab 3 as host
+          ld a,3:call nrt_select
+          call nrt_clear_deps
+; ---flag tab 4 & 5 as deps
+          ld hl,deps
+          ld a,4:CALL_BRIC(bs_set)
+          ld a,5:CALL_BRIC(bs_set)
+; ---define label in all sources (to have id and name)
+          INSERT_LINE(1,.src3)
+          ld a,4:call nrt_select
+          INSERT_LINE(1,.src4)
+          ld a,5:call nrt_select
+          INSERT_LINE(1,.src5)
+; ---go back to host source and test 
+          ld a,3:call nrt_select
+          ret
+
+.src3 BYTE "ld a,bb",0  ; creates id 0 = bb
+.src4 BYTE "bb = 1",0
+.src5 BYTE "bb = 2",0
+
+nrt_setup_ambigous_macro
+          ld a,bk_dev:call nrt_setup
+; ---pick tab 3 as host
+          ld a,3:call nrt_select
+          call nrt_clear_deps
+; ---flag tab 4 & 5 as deps
+          ld hl,deps
+          ld a,4:CALL_BRIC(bs_set)
+          ld a,5:CALL_BRIC(bs_set)
+; ---define label in all sources (to have id and name)
+          INSERT_LINE(1,.src3)
+          ld a,4:call nrt_select
+          INSERT_LINE(1,.src45)
+          ld a,5:call nrt_select
+          INSERT_LINE(1,.src45)
+; ---go back to host source and test 
+          ld a,3:call nrt_select
+          ret
+
+.src3 BYTE "m()",0      ; creates id 0 = m
+.src45 BYTE "macro m:endm",0
+
+
+
+test_macro
+; Must return tab+id rather than address,
+; so ass can switch correct tab.
+
+          ld a,bk_dev:call nrt_setup
+; ---pick tab 3 as host
+          ld a,3:call nrt_select
+          call nrt_clear_deps
+; ---flag tab 4 as deps
+          ld hl,deps
+          ld a,4:CALL_BRIC(bs_set)
+; ---setup sources
+          INSERT_LINE(1,.src3)
+          ld a,4:call nrt_select
+          INSERT_LINE(1,.src4)
+; --- assemble so label is defined
+          call nrt_assemble
+; ---go back to host source and test 
+          ld a,3:call nrt_select
+          ld de,1       ;id 1
+          call nrt_eval_label_in_any_imported_source:call nc,fail
+ ; vf_imported flag set by caller (asseva)
+;          bit vf_imported,a:call z,fail
+          bit vf_macro,a:call z,fail
+          ld a,c:cp 4:call nz,fail ; tab 4
+          ld a,d:or a:call nz,fail ; id 0 (in tab 4)
+          ld a,e:or a:call nz,fail
+          ret
+
+.src3 BYTE "l m()",0    ; creates id 0 = l, id 1 = m
+.src4 BYTE "macro m:ei:endm",0
+
+nrt_assemble
+          ld bc,nrt_buf
+          ld de,nrt_buf
+          CALL_ORG(org_assemble)
+          call nc,fail
+          ret
+
+nrt_clear_deps
+; --- simulate ass init 
+          call clear_visited ; clear deps_rec and visited. Needed?
+; Needed to init deps (for bs_set & eval_label_in_any_imported_source)
+          CALL_ORG(init_phase1):call nc,fail
+; -- Done in init_phase1
+;          ld hl,deps
+;          ld a,MAX_SOURCES:CALL_BRIC(bs_init)
+          ret
+
+test_undefined
+; Label not defined in import.
+
+          ld a,bk_dev:call nrt_setup
+; ---pick tab 7 as host
+          ld a,7:call nrt_select
+          call nrt_clear_deps
+; ---flag tab 6 as dependency
+          ld hl,deps
+          ld a,6:CALL_BRIC(bs_set)
+; ---setup sources sources (to have id and name)
+          INSERT_LINE(1,.src7)
+          ld a,6:call nrt_select
+          INSERT_LINE(1,.src6)
+; ---go back to host source and test 
+          ld a,7:call nrt_select
+
+          ld de,0       ;id 0
+          call nrt_eval_label_in_any_imported_source:call c,fail
+          cp err_undefined:call nz,fail
+          ret
+
+.src7 BYTE "ld a,cc",0  ; creates id 0 = cc
+.src6 BYTE "dd = 1",0
+
+nrt_eval_label_in_any_imported_source
+;marker (invalid bk# on purpose) -> shouldn't be checked or touched
+          ld a,&DB:ld (va_curbk),a
+          call eval_label_in_any_imported_source
+          push af
+      IF todo
+; use connect_bk_base
+      END
+          ld a,i:cp bk_dev:call nz,fail
+          ld b,&7F:out (c),a
+          ld a,(va_curbk):cp &DB:call nz,fail
+          pop af
+          ret
+
+; ---------------------------             
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          jp &BB06      ; give chance to see error message (invalid range)
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+
+; ------------------
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+; ------------------
+      MACRO IS_DEP
+; in: A=dep
+          ld hl,v_deps
+          CALL_BRIC(bs_get)
+      ENDM
+; ------------------
+
+eval_label_in_any_imported_source
+; In: de= id label
+; Out: Like sy_get:
+    ; If ok, Carry A=flags (to discriminate macro) CDE=value
+    ; Otherwise, NC, A = error code otherwise (undefined or ambiguous).
+    ; HL trashed
+    ; IYH Conserved.
+;!!set bit4 to say 'used'
+
+; Get name                                                         
+          call get_tab_symb
+          call common_setup
+          ret nc
+
+; --- Loop through deps
+; Here A=0
+.dep_lp
+          IS_DEP():jr z,.dep_nxt_
+
+          push af
+          call get_id_in_import
+          jr nc,.dep_nxt ; try next if no there
+
+          pop af
+          push af
+          push de       ; save id 
+; Note: we won't pass the value, used for filter and ambiguity check
+          call sy_get_import
+          jr nc,.skip   ; Exist but undefined? Must be ghost.
+
+; Bug#146. Pulled label from transitive import musn't be reported.
+          push af
+          bit vf_imported,a
+          jr nz,.skip_
+
+; store pushed AF (code + flags)
+;Note: in case of error (double def), v_result isn't read
+     ; so it's safe to store it now.
+          pop hl:ld (v_flags),hl
+
+; Check "double def" only performed for... defined labels,
+; to avoid spurious "ambiguous label".
+          ld hl,v_label_met
+          ld a,(hl)
+          ld (hl),1
+          ld hl,v_value
+          or a:jr z,.ok1st
+
+; bug #17d: don't raise "ambiguous label" if same value
+          ld a,(hl):inc hl:cp e:jr nz,.double
+          ld a,(hl):inc hl:cp d:jr nz,.double
+          ld a,(hl):cp c:jr nz,.double
+          jr .skip      ; or 2 ** dec hl. But keep first occurence
+
+.ok1st
+; Store value for ambiguity check
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          ld (hl),c:inc hl
+; But return tab+id    
+          pop de        ; id
+          pop af:push af ; tab
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          ld (hl),a
+;NB: we don't return now, because we must check if label
+   ; exists in another import, to report ambiguity.
+
+.dep_nxt
+          pop af
+.dep_nxt_
+          inc a
+          cp MAX_SOURCES
+          jr c,.dep_lp
+
+;All deps checked.
+          ld a,(v_label_met)
+          or a
+       ;   call z,&BE00
+          ld a,err_undefined:ret z ; exit err
+
+          ld hl,v_tabid
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld c,(hl)
+          ld hl,(v_flags)
+          push hl:pop af ; Flags / error code
+          ret
+
+.skip_
+          pop af        ; discard flags
+.skip
+          pop af        ; discard  id
+          jr .dep_nxt
+
+.double
+          pop af        ; discard id
+          pop af        ; discard cpt
+          ld a,err_doubleimportedlabel
+          or a
+          ret
+
+
+; --------------------------
+
+common_setup
+;Put label name in buffer, setup v_deps
+;IN: A = tab 
+;  ; de= id label
+;Out: carry if ok
+    ; A= 0
+          CALL_ORG(connect_aap_pool) ; works if self selected or not
+          ret nc
+
+          ld c,l
+          ld b,h
+          ld hl,buffer
+          CALL_BRIC(di_getkey_custom_pool)
+;bk base reconnected
+      IF dev_checks
+; sanity check: deps has properly been init and not overwritten
+; Also, we must be in bk base.
+          CALL_ORG(check_deps)
+      END
+; Copy deps for easy access (no switch needed)
+          call get_tab_symb
+          CALL_ORG(connect_deps) ; in selected source or else
+          ld de,v_deps
+          CALL_BRIC(bs_copy)
+
+      IF dev_checks
+; sanity check: bs_copy worked properly (at least for size part)
+          ld a,(v_deps):cp MAX_SOURCES-1:call nz,fail
+      END
+
+; --- Init
+          xor a:ld (v_label_met),a
+          scf
+          ret
+
+get_id_in_import
+;In: A = tab id
+;Out: If found, carry, DE = id
+; -- Connect pool of import 
+; !!! Rely on fact dep<>self 
+          CALL_ORG(connect_aap_pool)
+      IF dev_checks'
+          ld a,(hl):and &C4:cp &C4:call nz,fail
+          inc l
+          ld a,(hl):and &C0:cp &40:call nz,fail
+          dec l
+      END
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+; Get corresponding id
+          ld de,buffer
+          CALL_BRIC(di_get_import)
+          ret
+
+      IF 0
+is_tab_selected
+; Out: Z if tab symb == current selection
+     ;NZ otherwise
+     ; A = tab symb in both cases
+          CALL_ORG(org_get_current_selection)
+          ld c,a
+          call get_tab_symb
+          cp c
+          ret
+      END
+
+; ============== 
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+; ==============
+
+code2 = $$
+
+      ORG codedest2,$$
+
+jpTable
+          jp eval_label_in_any_imported_source ; asseva
+
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+; ==============
+
+code3 = $$
+
+      ORG codedest3,$$
+
+jpTable'
+          3 ** BRK      ; was jp fetch_id_in_import
+
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+; ========================================
+
+deps  = &7083           ;defined by org
+      IF deps - &7083
+  !! shared with org.o import.o
+      END
+
+      ORG &9C00
+; Rationale: 
+;   - Might be called from visu (double-check that!)
+;   - Need some room (for label)
+;   - Reuse screen (since not used while assembling)
+
+v_deps SKIP 9           ; copy of source's deps (so no reselect needed)
+v_value SKIP 3          ; tmp storage
+v_tabid SKIP 3
+v_flags WORD 
+v_label_met BYTE        ; label met once
+buffer SKIP 73          ; label size 
+      IF need_room
+;  reuse va_string instead?
+      END
+      SKIP va_err-$
+
+          ASSERT(v_tabid == v_value+3)
+
+err_undefined = 1
+err_doubledefined = 2
+err_doubleimportedlabel = 30
+
+

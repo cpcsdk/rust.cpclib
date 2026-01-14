@@ -1,0 +1,101 @@
+; <<<< Constants shared across modules >>>>
+; 2025 Jul 27: Move store lengths to swapi.i
+     ; Jun 11: Update ass_store_len symb_store_len
+             ; Remove obsolete checks
+
+max_sources = 64        ; Max source opened at once. Quite arbitrary.
+max_filename_len = &50  ; Only used in NRT for now. 
+max_symbols = &0600
+max_ram_pages = 10      ; cocopy. asic + c0 + 512k
+; &50: fit in second chunk when stored.
+
+chunks_per_bk = &40     ; chunk, heap, check, aap.nrt, org.nrt
+heap_chunk_start = 5    ; heap.o
+chead_next = 0          ; chunkcc, ???
+chead_last = 2          ; org, symb and ...?
+chead_last0 = 3         ; org & symb for |orgset
+
+size_symbol = 4         ; flags + value 24 bits.
+spc   = &0100/size_symbol ; symbol per chunk
+size_index = max_symbols + spc - 1 / spc ; shared with init and ass.nrt
+
+;Don't count +1 (type) in org_store_len, as offset 0 must match vo0
+header_size = heap_chunk_start + 1
+source_header_size = &20
+
+; --- asset payload start (used by mon) ---
+ch_data_start = 8
+
+; --- type store (swap.o) ---
+type_empty = 0          ; not used now
+type_orgams = 1
+type_text = 2           ; for the future
+
+; --- param type (mon+evacmd) --------
+type_positive = 0
+;type_negative = 1
+type_bigint = 2
+type_string = 3
+
+; --- errors ----
+;operation failure
+fail_opening = 255
+fail_memoryfull = 251   ; nrt
+fail_unexpected_mess = 247
+fail_assert = 243
+
+;ass error
+err_syntaxerror = 0
+err_undefined = 1       ; (sent by symb via asseva). ch, ass.nrt
+err_doubledefined = 2   ; for nrt (sent by symb) and assequ_error !?!
+err_overflow8 = 3
+err_overflow16 = 4
+err_negativearg = 4     ; todo
+err_overflowidx = 5
+err_jr_outofrange = 6
+err_invalidrst = 7
+err_invalidim = 8
+;err_divbyzero = 9
+err_undefinedop = 10    ; 1+"aa"
+err_emptystring = 11    ; for nrt
+err_unexpectedstring = 12
+err_notimplemented = 13
+err_unknownorgasminstr = 14 ;WTH pseudo instr
+err_toomanyif = 15
+err_unexpectedendofbloc = 16
+err_unexpectedend = 17  ; Also used in asseva
+;err_unexpectedclosingparen = 18
+;err_bufferovf = 19
+err_toomucherrors = 20
+err_unexpectediter = 21
+err_labelinconsistancy = 22
+
+err_invalidbank = 24
+
+err_notamacro = 26
+err_argmismatch = 27
+
+;temporary reuse
+err_invalidbit = err_overflowidx
+;err_labelovf = err_overflow16
+err_mess = 19           ; err_bufferovf
+err_undefinedmacro = 1  ; err_undefined
+err_stackoverflow = 19  ; err_bufferovf
+;err_argoverflow = err_bufferovf ; needed?
+
+err_ambiguouslabel = 28 ; symb, find, nrt ass
+;err_toomanyscopes = 29  ; nrt (sent by symb.o)
+err_ambiguouslabelfromimport = 30 ; impeva, nrt ass
+
+err_emptyfile = 35
+err_doubleent = 36
+err_unexpectedelse = 37
+err_overlap = 38        ; sent by cocopy. ass, ch
+err_missingend = 39
+err_from = 40
+err_saveusage = 44
+err_asic_not_detect = 45
+;For now when trying "call macro" it use the 24 bits address
+err_unexpectedmacro = err_overflow16
+
+

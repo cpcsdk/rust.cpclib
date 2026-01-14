@@ -1,0 +1,435 @@
+; <<<<< Manage line focus change and full page refresh. 
+;         - Must we scroll?
+;         - How much?                             >>>>>
+inRom = 1
+rom   = 10
+
+      IMPORT "orgmap.i"
+      IMPORT "memmap.i"
+
+; /// 2025 ////
+; --- HH Beta 6 ---
+ ; Aug 20 v8: Repair from rom (lost source). Use scr-lo
+; ----
+         ; 15 v7: Expose /offset_firm_to_rupt/
+; 2021 Jan 14 v6: Cosmetic. Use full names for firmware vectors scr_*
+
+     ; May 1  v5: test_IsSelectedLine: add subtests
+            ; v4: IsSelectedLine: rollback.
+                ; Fix bug display when scrolling down.
+         ; 30 v3: update_screen: cur_on systematically (for corner case)
+                ; DrawBloc: take hl=current_line
+            ; v2: Remove oSetLine. 
+; 2020 Apr 29 v1: Extracted 
+
+      ORG &2000
+      IF inRom
+      ENT burn
+      ELSE
+   !! tests now in scr-lo.nrt
+      END
+
+rast  = 0
+USE_NUM = 1             ; Affiche(1) ou non(0) les num{ros
+
+codedest = upd_scr
+limit = ch''
+codedest2 = upd_scr_jp
+limit2 = upd_scr_jp_
+
+scr_get_position = &BC0B
+scr_char_position = &BC1A
+scr_fill_box = &BC44    ; H<->D   L top E bottom   A = fill
+scr_hw_roll = &BC4D     ; in: B=dir A=fill Out: af bc de hl are corrupt.
+scr_sw_roll = &BC50     ; like hw, plus hlde= Lft Top Rgt Bot
+
+; ----- In this ROM ------
+      IF inRom
+chef  = &C100
+bric_far_call = chef+18
+ext_far_call = chef+60
+oDispFail = chef+54
+dispChrAt = chef+&4E
+dispChrAtGrey = chef+&5A
+
+synhigh = &FEF7
+comment_pos = synhigh
+
+      ELSE
+; setup for nrt not included yet
+
+bric_far_call = &BE00
+ext_far_call = &BE00
+oDispFail = &BE00
+dispChrAt = &BE00
+dispChrAtGrey = &BE00
+
+comment_pos = &BE00
+
+      END
+
+
+; ----- In EXT ROM ------
+codec = &C008-3
+
+; ----- In BRIC ROM ------
+disp  = &FF14
+;strPadEi = disp+&33 
+strPadAtEi = disp+&87
+strPadShadedEi = disp+&45
+
+status = &FDC7
+DEC2STR = status+21
+
+; ======= Memory Map =========
+
+memmap
+BUF_LINE = &7700
+
+; -------------------------------------
+      MACRO CALL_ORG rout
+          call ext_far_call:WORD rout ; Works like RST &18
+      ENDM
+
+      MACRO CALL_BRIC rout
+          call bric_far_call:WORD rout
+      ENDM
+
+      MACRO STR_PAD_AT_EI
+;in: hl=nt str
+   ; de=scr pos
+   ;  b=len  (clip or pad)
+          CALL_BRIC(strPadAtEi)
+      ENDM
+
+      MACRO STR_PAD_SHADED_EI
+;in: hl=nt str
+   ;  b=len  (clip or pad)
+          CALL_BRIC(strPadShadedEi)
+      ENDM
+
+      MACRO RASTER col
+      IF rast
+          push bc
+          ld bc,&7F10:out (c),c
+          ld c,col:out (c),c
+          pop bc
+      END
+      ENDM
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+scr_lo = &FD37
+
+init
+          CALL_BRIC(scr_lo):ret
+scr_ins
+          CALL_BRIC(scr_lo+3):ret
+scr_del
+          CALL_BRIC(scr_lo+6):ret
+NUM_LINE
+          CALL_BRIC(scr_lo+12):ret
+get_bot
+          CALL_BRIC(scr_lo+18):ret
+set_cursor
+          CALL_BRIC(scr_lo+21):ret
+inv_cursor
+          CALL_BRIC(scr_lo+24):ret
+cur_off
+          CALL_BRIC(scr_lo+30):ret
+cur2pos
+          CALL_BRIC(scr_lo+33):ret
+DrawBloc
+          CALL_BRIC(scr_lo+36):ret
+offset_firm_to_rupt
+          CALL_BRIC(scr_lo+39):ret
+
+update_screen
+; Rafraichissage ecran permettant d'atteindre POS_LINE :
+;   - simple deplacement curseur si POS_LINE sur la page
+;   - scrolling si POS_LINE @ la frontiere (then refresh line)
+;   - full redraw sinon           
+
+;  IN : HL = SCR_LINE  (previously focused line)
+;     : DE = POS_LINE  (new line to jump to)
+      ; BUF_LINE rempli:
+; NB!! Presume BUF_LINE est synchro en regard de POS_LINE
+
+; If already sync: ret immediatly.
+; Though, cur_on is need in the following case:
+;  * up from first line
+;  * down past last line
+; Because we quitline (cur_off), try to go to the invalid line,
+; and rollback buffer.
+          CALL_BRIC(scr_lo+42) ; update screen prelude
+          ret z
+          jr c,refresh_all
+          call display_full_line
+          jr cur_on
+
+refresh_all
+; In: DE=new line
+          ex de,hl
+          call allfrom
+cur_on
+          CALL_BRIC(scr_lo+27) ; cur_on
+          ret
+
+
+; -----------------------------
+
+RENUM
+;    Redessine et renum{rote les num{ros de ligne
+; In: HL= current line
+  ; C = 
+;          call seek_top
+          ld a,(CURSOR_Y)
+          cp NB_LINES
+          ret z
+          sub c
+          push af
+          call oNbLines
+          pop af
+          CALL_BRIC(scr_lo+3) ;scr_ins
+          ret
+
+          call oNbLines
+          CALL_BRIC(scr_lo+9) ;RENUM_TO
+          ret
+
+
+display_full_line
+; Affiche: numero ligne, marker block, 
+; Affiche une ligne avec clipping droit et grisage commentaire
+;  IN : BUF_LINE contient le texte a afficher.
+      ; HL = line # (for NUM_LINE and setMarkerLine)
+          CALL_BRIC(scr_lo+45) ; display_line_header
+;enchaine
+display_source_line
+; IN: BUF_LINE filled 
+          ld bc,(CURSOR)
+          ld b,DEB_LINE
+          call cur2pos  ; Get DE for strPadAtEi below
+          push de
+
+      IF BUF_LINE AND &FF
+ !! error: expect xx00 for size computation.
+      END
+
+; 1/ get commentary position
+          ld hl,BUF_LINE
+          call comment_pos
+
+; 2/ normal display until this pos.
+          ld b,LEN_LINE
+          ld a,b:sub l:jr nc,ok_poscom
+
+          xor a:ld l,b  ; comment outside field: clip
+
+ok_poscom
+          pop de
+          push af
+          ld b,l
+; If b=0, that's ok. Must call strPadAtEi anyway to set screen pos.
+          RASTER(&55)
+          ld hl,BUF_LINE
+          STR_PAD_AT_EI()
+full_comment
+          pop bc
+          RASTER(&44)
+          STR_PAD_SHADED_EI()
+          RASTER(&54)
+          ret
+
+seek_top = &BE00
+
+allfrom
+; Display all lines from top to bottom (e.g. with CONTROL UP / DOWN)
+;IN: HL = Current line (needed for seek_top AND refresh BUF_LINE)
+;Out: AF, BC, DE, HL trashed
+
+          push hl
+          CALL_BRIC(scr_lo+15) ; seek_top
+          call cur_off
+          ex de,hl
+          ld hl,(CURSOR)
+          push hl
+          ld b,NB_LINES
+          ld hl,DEB_LINE*&0100 + 1
+RED_LP
+          ld (CURSOR),hl
+          push bc
+          push hl
+          push de
+
+          call oGetLine ; R{cup}re la ligne par le codec
+          pop hl        ; was de=num line
+          jr nc,RED_EOF ; past last line
+
+          push hl
+          call display_full_line
+
+          pop de
+          pop hl
+          pop bc
+          inc hl        ; next Y pos
+          inc de        ; next source line
+          djnz RED_LP
+          jr RED_END
+
+RED_EOF
+; Clean l'exc{dent (after last line of source)
+
+          pop hl        ; L= cur Y pos
+          pop bc        ; discard it
+          dec l
+          ld de,79*&0100 + NB_LINES-1 ;right, bottom
+          xor a
+          ld h,a
+          call scr_fill_box
+; Enchaine
+RED_END
+          pop hl
+          ld (CURSOR),hl
+; Reload buffer with current line, 
+; since said buffer was used by loop.
+          pop de
+          call oGetLine
+          jp cur_on
+
+; ======================================
+
+oGetLine
+;In: DE= line#
+          ld hl,BUF_LINE
+          call ext_far_call:WORD codec+9
+          ret
+
+oNbLines
+          push hl
+          call ext_far_call:WORD codec+6
+          pop hl
+          ret
+
+
+      IF 0
+cp_hl_de
+; Like cp:  Z iif hl=de
+         ;  C iif hl<de
+          or a:sbc hl,de ; set the flags
+          add hl,de     ; restore hl
+          ret
+      END
+
+; ========================================
+
+realsize = $$-code
+hi
+      IF inRom
+ ;     FILL limit-$,&FF
+      END
+codesize = $$-code
+
+
+; ========= CONSTANTS ===============================================
+NB_LINES = 25           ; Nombre lignes affich{es
+X_MARKER = 6
+DEB_LINE = 8            ; D{but de l'{criture des mn{moniques
+LEN_LINE = 73
+MAX_CUR_X = 79
+
+; ========= VARIABLES ===============================================
+; ----- Shared with ED ------
+CURSOR = &7811          ; Position du curseur Y,X 
+CURSOR_Y = CURSOR
+CURSOR_X = CURSOR+1
+BL_START = &781A        ; D{but de la s{lection
+BL_END = &781C          ; Fin de la s{lection
+
+crtc_offset = &9CFE     ; -- Shared with disp
+
+; ----- Local ------
+      ORG upd_scr_vars,$$
+
+FLAG_CURSOR BYTE        ; 1 si curseur affiche
+
+; ========= BUFFER ==================================================
+BUF_NUM SKIP 6          ; Buffer de conversion DEC->STR
+
+      SKIP ve-$         ; Vars for CH
+
+; ========================================
+      ORG $$
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp init
+          jp update_screen
+          jp RENUM
+          jp scr_del
+          jp allfrom
+          jp NUM_LINE
+          jp display_source_line
+          3 ** BRK      ; was jp display_full_line
+          3 ** BRK      ; jp seek_top
+          jp get_bot
+          jp set_cursor
+          jp inv_cursor
+          jp cur_on
+          jp cur_off
+          jp cur2pos
+          jp DrawBloc
+          jp offset_firm_to_rupt
+
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+
+

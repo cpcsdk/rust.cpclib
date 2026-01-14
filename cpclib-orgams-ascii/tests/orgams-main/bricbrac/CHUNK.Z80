@@ -1,0 +1,1776 @@
+inRom = 1
+dev_checks = 1
+need_room = 1
+need_speed = 1
+
+; <<<<<<< Memory management >>>>>>>>
+; Most generic possible. 
+
+; Dependencies: None
+; Dependent: asset, liszt, org, symb, and ???
+
+
+;   All routines return NC in case of error,
+;   or BRK if failed assertion. (no 'exit/exception' mecanism)
+
+; [TODO/Optim] compress chunk_def
+; [TODO/Space] drop new_chunk (use new_chunk_cleared)
+; [TODO/Space] factorize check_id, _check_bk0, check_msb etc
+; [TODO/Space] factorize connect_next, get_next (see which ones require
+             ; hl to be left as is for null link).
+
+      IMPORT "bricmap.i"
+      IMPORT "const.i"  ; chunks_per_bk 
+
+; \/\/\/ 2025 \/\/\/\/\/\/\/\/\/\
+; ------ HH beta j -----------
+; Dec 11 ap. chunks_per_bk: s/&3c/&40 (const.i)
+    ; 10 ao. Remove dead code (unused copy-pasta):
+                   ; org_connect_chunk_from_id
+; ------ HH beta i -----------
+; Nov 28 an. Remove dead code (unused copy-pasta):
+                   ; org_insert_new_chunk
+    ; 27 am. Do not set vo_basebk in source banks
+    ; 26 al. Remove test_bank_setup
+           ; new_chunk_no_init: don't setup this_bk
+           ; remove insert_new_chunk_from_here
+; ------ HH beta 1 -----------
+; Jun 6  ak. Replace all out (c),x by call to /connect_a/
+
+; ------ GG beta H -----------
+; Mar 33 aj. Revert ai
+vai   = 0
+       ; ai. Add double free check. See /vf_flag_free/
+           ; Note: it was already checked in _swapfree 
+                 ; (is chunk in free_list)
+                 ; Double check doesn't hurt
+           ; And the new check is faster (but see next point)
+           ;!!! Abandonned !!!    
+               ; Would require to flag each chunk in free_list
+                    ; (as everyone will be checked in new_chunk)
+                    ; -> too cumbersome
+               ; Old test is better since assert at double free time
+    ; 22 ag. /new_chunk/ Clear all chunk. See rationale there
+       ; af. Use "bricmap.i"
+           ; + new_chunk_cleared 
+           ; + clear_chunk
+           ; !!!! Abandonned. Takes too much space
+; \/\/\/ 2021 \/\/\/\/\/\/\/\/\/\
+
+; May 28 ae. More checks:
+             ; get_next: check before loading hl.
+             ; 
+   ; clean-up /insert_new_chunk_connected/ (remove useless ex de,hl)
+
+; May 27 ad. new_chunk_no_init: reconnect bk base after check,
+           ;   so in case of assert we have the failing bk connected.
+           ; + Check vo_thisbk is valid
+
+; Feb 1 ac. + checks in _swapfree (for easier debugging)
+                   ; and everywhere v_free_list is touched!
+
+  ; 25 ab Introduce /insert_new_chunk_from_here/. Rationale: 
+          ; - more handy for clients (e.g. cocopy)
+  ; 22 aa Clean-up. s/ID_CHECK/CHECK_ID/ for uniformization.
+
+      ; z Add /test_free_list37/test_list3_gotoend/test_node7_memfull
+        ; All tests in CF since some tests in CF!
+      ; y /new_node7/ wasn't connecting node!!!
+   ; 18 x +check_id inconditionnal for /free/. Fail fast.
+   ; 17 w Introduce /free_list7/ (tested via listz)
+;Jan 13 v !!FF!!! Requires logo ced deactivated (monuiap)
+        ; Introduce /new_node7/ 
+        ; (Done here so we mutualize init, e.g. v_free7_list)
+
+; \/\/\/ 2020 \/\/\/\/\/\/\/\/\/\    
+
+    ; 8 u Fix typo: calling C000 rather than BE00 in assertion.
+; May 4 t new_chunk: return a=chunk_start
+        ; limit1 @ f818 
+   ;20  s Use all memory available! No more max_chunk
+      ; r Make /goto_end/ return ID.
+        ; Exposte /connect_chunk_from_id/.
+      ; q Expose /goto_end/ (for aap).
+   ;10  p Deactivate /far_call_ext/
+        ; Expose /connect_next/
+        ; More BRK, so we can simplify API and error check.
+;failharder = 1 OR [1-inRom]
+
+     ;  o BRK if mess. Rationale: easier to debug, source persistent.
+failhard = 1 OR [1-inRom]
+   ; 9  n: Fix quadratic behavior of /free_list/
+           ; (only check if head is already in list).
+         ; Fix nrts (/init_custom/ now takes hl=nb chunks)
+      ; m: Move "org init" here.
+         ; init_custom: hl=nb chunks rather than c.
+         ; Expose /free/ and /free_list/.
+   ; 7  l: Add free and free_list!
+         ; new_chunk use vo_free_list
+      ; k: Add is_in_list.
+         ; s/new_chunk/new_chunk_no_init
+         ; s/new_chunk_init/new_chunk
+         ; Expose this last one.
+         ; Rationale: the expected one should have the canonical name.
+      ; j: Add and fix test_incc_memory_full.
+         ; Unexpose far_call.
+      ; i: insert_new_chunk: don't change curbk
+         ;     (old version renamed org_insert_new_chunk)
+         ; Add test_new_chunk, test_org_insert_new_chunk
+         ; connect_bk_base: save AF & BC
+         ; Cleanup flags vh, vb. 
+
+      ; h: Set basebk and thisbk in new_chunk (partially revert vb)
+         ;   aap's di_load will create new_chunk and use thisbk for
+         ;   safe_disp_point.
+         ; We may review that once each module uses chunk.o
+         ; (see design below)
+
+; Apr 1 g: Remove unused code ('exit/exception' mecanism). 
+         ; Expose init (no-op for now, allow ch to call it).
+
+   ; 31 f: Use I for connect_base_bk, so we don't rely on vo_basebk
+         ; which is deprecated (and not set by new_chunk anyway).
+
+design_doc
+; ======================================
+;  Ideas for unification (ayane, arthur)
+
+; - Distinguish last (already there) to sentinel position (to be added),
+;   so we can have generic append/insert.
+;   (this works is the sentinel is fix and can be copied as is,
+;    like in orgams: 7f 00).
+; - In the same spirit, encode header size (= start)
+;    -> order last, sentinel, start facilitate size computation.
+;    ; NB: putting 'size' seems kind of wasted, but it doesn't matter
+         ; much     
+; - Reserve byte for flags (type of chunk).         
+; - Reserve byte (word?) for checksum.
+
+; !! Alternative: pass some of these infos via registers.
+; eg:
+;  insert_generic
+      ; in: hl: source
+      ;     de: dest in chunk
+      ;      c: size
+      ;     b : first
+      ;  ixl:sentinel size
+
+;  insert_orgams
+      ; in: hl: source
+      ;     de: dest in chunk
+      ;      c: size
+      ;  [optional: push ix bc]
+      ;      ld b,ch_head:ld ixl,....
+      ;      call insert_generic
+
+; - Other common info: nb lines (row for ayane, pixel lines for arthur)
+
+; A voir aussi: chunk as double stack. E.g.:
+     ;   ascending: strings
+     ;  descending: index in strings.
+     ; It's full when the 2 meet.
+
+; What about bigger chunks for arthur?
+; - Maybe indicate nb add additional (without header) chunks.
+;   - So last is still pos in last chunk.
+
+; What about smaller chunks? YAGNI.
+
+; ======================================
+
+; 'Current bank' design choice.
+; _____________________________
+
+; Use case: aap need to connect base_bk to use disp
+          ;  (internal vars in bk to accomodate trace)
+          ; then reconnect label chunk.
+
+; Option1:
+  ; client save the chunk id and ask for reconnection.
+     ; pro: explicit 
+
+; Option2:
+  ; connect_bk_base returns previously selected (non base) bk.
+     ; pro: reusable       
+          ; similar to b90f
+     ; con: - more brittle?
+
+; ======================================
+
+   ; 30 e: Expose chunk init (pour tests sans passer par org).
+         ; Some routines @ e300
+
+   ; 30 d: Factorize (see _next_chunk).
+         ; Fix output insert_new_chunk_connected (HL = id)
+
+;Mar 30 c: Expose insert_new_chunk_connected, for asset.
+            ; Maybe other clients may switch to this one, since
+            ; there is no more stack issue.
+
+    ;12 b: new_chunk: set vo_curbk etc.
+          ; So vo_basebk is set even for non-org chunks
+        ; !! Discarded !!
+            ; * Takes too much space.
+            ; * Change curbk (we don't want that)
+            ; * We should use I anyway now.  
+    ; 9 a: new_chunk: start at bk_base AND &fc (free bank %xxxxx101)
+          ; &3c chunks_per_bank
+    ; 5 v9: import get_max_chunks (from org)
+; Jan 1 v8: expose org_new_chunk
+
+; \/\/\/ 2019 \/\/\/\/\/\/\/\/\/\
+
+   ; v7 Export/Import
+; 22 v6 Move @ f710                                
+      ; Disable unused routine (cf used)
+; v5 02/9 Move limit2 @ FE30. Use new rom#
+        ; Move singleushe @ 9e00 
+; v4 14/7 Expose insert_new_chunk, connect_next_aap_check 
+          ; and connect_bk base for aapq
+; v3 14/7 Import new routine from orgbl.
+          ; Remove *_source_* (sole responsibility of org).
+; v2 27/6 Fix split mistake:
+          ; Remove skip_line since use ass_amorce (with callback).
+          ;   cross-roms callback is too slow and clunky.
+          ; Remove connect_line[_start_end] as dependent.
+        ; Boulet! Cannot far call connect_bk_base!
+; v1 26/6/2019 Extracted from orgbb. ; !! WIP not functional 
+
+      ORG 0:BRK
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+rom   = &1C
+romed_nrt = &0A
+romext_nrt = &1A
+rommon_nrt = &1B
+
+codedest = chunk
+limit = scr_lo2
+codedest1 = chunk2
+limit1 = asset2
+codedest2 = chunk_jp
+limit2 = aap_jp2
+need_jp = 0             ; not needed for now
+      IF need_jp
+codedest3 = chunk_jp2
+limit3 = disp_jp2
+      END
+
+org   = &C008
+;org_connect_bk_base = org+&7B
+;connect_line = org+&39
+;skip_line = org+&7E
+; For nrt
+org_init_custom = org+&54
+org_insert_line = org+12
+
+chunk_offset = &40
+
+chead_next = 0
+chead_last = 2
+chead_last' = 0         ;for node pool (not linked)
+;chead_checksum = 3
+chead_lines# = 4        ;0 if empty, -1 if unknown
+;chead_flags = 5
+;bit 0 = 0 if code never emitted in the chunk
+;chead_pc = chead_flags+1 ;pc at start of chunk
+chunk_header_size = 32
+chunk_init_size = chunk_header_size+2 ;2 = room for "eoc"
+chunk_start = chunk_header_size
+
+chunk_aap_header_size = 4
+
+;ass   = &FE20-4
+
+;ass_init_and_amorce = ass+4
+;ass_amorce = ass+7
+;is_pseudo_instr = ass+&0A
+
+;---------------------------
+      MACRO LD_BHL_CDE
+          ld b,c
+          ld h,d
+          ld l,e
+      ENDM
+;---------------------------
+
+      IF 1-inRom
+tests
+          ld c,rom:call &B90F
+          call nrt_clean
+          call test_node7_memfull
+          call test_free_list7
+          call test_new_node7
+          call test_list3_gotoend
+          call test_max_chunks
+          call test_new_chunk
+          call test_new_chunk_interface
+          call test_insert_new_chunk_connected
+          call test_incc_memory_full
+          call test_is_in_list
+          call test_goto_end
+          2 ** call test_free
+          call test_freelist_trivial
+          call test_freelist
+          call test_new_node7
+          call test_list3_gotoend
+          call test_free_list7
+          ret
+
+      MACRO CHECK_HL_EQ n
+          push de
+          ld de,n
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ n
+          push hl
+          ld hl,n
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ n
+          push hl
+          ld hl,n
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+      MACRO CHECK_FREE n
+          push hl
+          call get_free#
+          ld a,l
+          pop hl
+          cp n:call nz,&BE00
+      ENDM
+
+fail  = &BE00
+;------------------------------------
+
+nrt_clean
+; Clear banks so we don't rely on existing/residual init.
+; Also it eases debugging.
+          ld c,bk_nrt:call clear_vars
+          ld c,bk_src:call clear_vars
+
+          ld bc,&7F00+bk_nrt:out (c),c
+; chunk reservation (init_custom) is done in each test.
+          ret
+
+bk_nrt = &CF
+bk_src = bk_nrt-3
+
+nrt_init
+          ld a,bk_nrt
+          ld hl,chunks_per_bk
+          jp init_custom
+
+nrt_setup_crossbank
+; Fill all bank cc but 1 chunk
+
+          ld a,bk_nrt
+          ld hl,chunks_per_bk + 1
+          call init_custom
+
+          ld b,chunks_per_bk - 1
+tbs_lp
+          push bc
+          call new_chunk_no_init:call nc,&BE00
+          pop bc
+          djnz tbs_lp
+          ret
+
+clear_vars
+          ld b,&7F:out (c),c
+          ld hl,&7C00
+          ld de,&7C01
+          ld bc,&03FF
+          ld (hl),l
+          ldir
+          ret
+
+test_max_chunks
+          ld a,&C7
+          call get_max_chunks ; doesn't rely on init
+; 4 banks minus 3 base.
+          CHECK_HL_EQ(chunks_per_bk)
+
+          ld a,&FF
+          call get_max_chunks
+; 32 banks minus 3 base.
+          CHECK_HL_EQ(chunks_per_bk * 29)
+          ret
+
+test_new_chunk
+;-------------
+; We check:
+;  - new chunks are properly ordered (a bit overconstrained test,
+; but it allows to exerce the code).
+;  - memory full is detected.
+
+          ld a,bk_nrt   ; We want to reach c7 (cross bank test)
+tnc_chunks = chunks_per_bk + 2
+          ld hl,tnc_chunks
+          call init_custom
+
+          ld b,tnc_chunks ; nb chunks allocated
+          ld de,chunk_offset * &0100 + bk_src
+tnc_blp
+          push bc
+          call new_chunk_no_init:call nc,&BE00
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          inc d
+          ld a,d:cp chunk_offset+chunks_per_bk
+          jr nz,tnc_okbank
+
+          ld d,chunk_offset
+          res 2,e:dec e:set 2,e
+tnc_okbank
+          pop bc
+          djnz tnc_blp
+
+;should be full
+          call new_chunk_no_init:call c,&BE00
+          ret
+
+test_new_node7
+          call nrt_init
+          CHECK_FREE(chunks_per_bk) ;sanity
+
+          ld b,&12:ld hl,&BEBA ; to check proper save
+          call new_node7:call nc,fail
+          ld a,c:cp bk_nrt-3:call nz,fail
+          CHECK_DE_EQ(&4001) ; 'raw' chunk: must start at 1
+          ld a,b:cp &12:call nz,fail ; B saved?
+          CHECK_HL_EQ(&BEBA) ; HL saved?
+          CHECK_FREE(chunks_per_bk-1)
+
+;2nd node
+          call new_node7:call nc,fail
+          ld a,c:cp bk_nrt-3:call nz,fail
+          CHECK_DE_EQ(&4008) ; must be right after
+          ld a,b:cp &12:call nz,fail
+          CHECK_HL_EQ(&BEBA)
+          CHECK_FREE(chunks_per_bk-1) ; no new chunk
+
+;More chunks
+nodes_per_chunk = 255/7
+          ld b,nodes_per_chunk-2 ; 36*7 fit in one chunk
+tnn7
+          call new_node7:call nc,fail
+          ld a,c:cp bk_nrt-3:call nz,fail
+          ld a,d:cp &40:call nz,fail ; still in first chunk
+          CHECK_HL_EQ(&BEBA)
+          CHECK_FREE(chunks_per_bk-1)
+          djnz tnn7
+
+;One extra node in new chunk
+          call new_node7:call nc,fail
+          ld a,c:cp bk_nrt-3:call nz,fail
+          CHECK_DE_EQ(&4101)
+          CHECK_FREE(chunks_per_bk-2)
+
+;TODO: test memory full.
+          ret
+
+test_list3_gotoend
+
+          call nrt_setup_crossbank
+          CHECK_FREE(2) ;sanity
+
+          call nrt_make_list7
+
+          push bc:push hl
+          call nrt_get_head
+          call list3_gotoend
+          ld a,l:cp &F6:call nz,&BE00
+          pop hl:pop bc
+
+          call nrt_append_new
+; new is in new bank
+          ld a,c:cp &C7:call nz,fail
+
+          LD_BHL_CDE()  ; for next append
+          push bc:push hl
+; Now gotoend must connect c7 (where last node is)
+          call nrt_get_head
+          call list3_gotoend
+          ld a,l:cp &01:call nz,&BE00
+          pop hl:pop bc
+
+          call nrt_append_new
+; now both new and previous are in C7
+          ld a,c:cp &C7:call nz,fail
+          ret
+
+nrt_get_head
+          ld de,(nrt_head):ld c,e
+          ld a,(nrt_head+2):ld e,a
+          jp check_id_cde_
+
+nrt_head SKIP 3         ; room for link to list
+
+
+nrt_make_list7
+          ld b,bk_nrt:ld hl,nrt_head ; simulate in-bank var
+;in: bhl= slot to put list head
+;out: bhl= cde= last node !! b connected
+          ld a,nodes_per_chunk
+nml3
+          push af
+; *prev = new(node)   aka  ld cde,new node:ld (bhl),cde
+          call nrt_append_new
+; prev = *prev    aka  bhl=cde
+          LD_BHL_CDE()
+          pop af
+          dec a
+          jr nz,nml3
+          ret
+
+nrt_append_new
+;in: bhl= slot to put link to new node (i.e. pnt previous node or var)
+;out: bhl inchanged
+    ; cde= new node
+    ; !! b connected
+
+; *pnt = new(node)   aka  ld cde,new node:ld (bhl),cde
+          call new_node7:call nc,fail
+          jp ld_#bhl#_cde
+
+
+test_new_chunk_interface
+;-----------------------
+; Check BC & DE are conserved
+; A: contains start (harmonization with chung)
+
+          call init     ; Dangerous? Rely on previous init_custom?
+
+          ld bc,&CAF5:ld de,&BAB0
+          call new_chunk:call nc,&BE00
+
+          cp chunk_start:call nz,&BE00
+          CHECK_DE_EQ(&BAB0)
+          CHECK_BC_EQ(&CAF5)
+          ret
+
+
+test_insert_new_chunk_connected
+;------------------------------
+; NB: copy/paste of insert_new_chunk,
+    ; but APIs may diverge in the future.
+
+          ld a,bk_nrt
+          ld hl,3
+          call init_custom
+
+          call new_chunk:call nc,&BE00 ; Chunk  A
+          push hl
+          call insert_new_chunk_connected:call nc,&BE00 ; Chunk B
+          pop de
+          push hl       ; id B
+; New one connected: must link to nothing
+          ld l,chead_next
+          ld a,(hl):inc l:or (hl):call nz,&BE00
+
+; Insert new chunk between 2 first
+          ex de,hl
+          push hl       ; id A
+          call insert_new_chunk_connected:call nc,&BE00
+          ld c,l:ld b,h ; id C
+          pop hl        ; A
+          pop de        ; B 
+; Check link A->C->B
+          call connect_chunk_from_id
+          call connect_next
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          call connect_next
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+
+test_incc_memory_full
+;--------------------    
+          ld a,bk_nrt
+          ld hl,3
+          call init_custom
+
+          call new_chunk:call nc,&BE00
+          call insert_new_chunk_connected:call nc,&BE00
+          call insert_new_chunk_connected:call nc,&BE00
+          call insert_new_chunk_connected:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+          ret
+
+
+
+test_is_in_list
+          ld a,bk_nrt
+          ld hl,3
+          call init_custom
+
+          call new_chunk:push hl ; A
+          call insert_new_chunk_connected:push hl ; B
+          call insert_new_chunk_connected:push hl ; C
+
+          pop bc:pop de:pop hl
+          call is_in_list:call nc,&BE00 ; B must be in list!
+          ld e,c:ld d,b
+          call is_in_list:call nc,&BE00 ; C must be in list!
+          ld e,l:ld d,h
+          call is_in_list:call nc,&BE00 ; A must be in list!
+          ld de,0
+          call is_in_list:call c,&BE00 ; 'Null' not in list.
+          ld de,chunk_offset*&0100 + &FF
+          call is_in_list:call c,&BE00 ; Not in list. 
+          ret
+
+test_goto_end
+          ld a,bk_nrt
+          ld hl,3
+          call init_custom
+
+          call new_chunk:push hl ; A
+          call insert_new_chunk_connected ; B
+          call insert_new_chunk_connected ; C
+
+          ld d,h:ld e,l
+          pop hl        ; A
+          ld a,42
+          call goto_end
+          cp 42:call nz,&BE00 ; reg a must be saved
+          CHECK_HL_EQ_DE() ; Last is C.
+          CHECK_BC_EQ(3) ; 3 chunks long
+          ret
+
+
+      MACRO NRT_FREE free_rout
+; We check: - free# is properly updated.
+          ; - we can allocate chunks again.
+; NB: isolated chunks.
+
+          ld a,bk_nrt
+          ld hl,3
+          call init_custom
+
+          CHECK_FREE(3) ; Sanity
+
+; free(0) should be no-op
+          ld hl,0:call free_rout
+          CHECK_FREE(3)
+
+          call new_chunk:call nc,&BE00:push hl ; A
+          call new_chunk:call nc,&BE00:push hl ; B
+          call new_chunk:call nc,&BE00:push hl ; C   
+; Sanity: memory full
+          call new_chunk:call c,&BE00
+          CHECK_FREE(0)
+
+; free(0) should be no-op. Bis
+          ld hl,0:call free_rout
+          CHECK_FREE(0)
+
+; Free C.
+          pop hl
+          ld c,l:ld b,h
+          call free_rout
+          CHECK_FREE(1)
+          call new_chunk:call nc,&BE00 ; C'  
+; Check we are given the same id (since it was the only one remaining)
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+; Free B and A. 
+          pop hl
+          call free_rout
+          CHECK_FREE(1)
+          pop hl
+          call free_rout
+          CHECK_FREE(2)
+          call new_chunk:call nc,&BE00
+          call new_chunk:call nc,&BE00
+          call new_chunk:call c,&BE00 ;memory full expected.
+      ENDM
+
+test_free
+          NRT_FREE(free)
+          ret
+
+test_freelist_trivial
+; With isolated chunks, it must be equivalent to test_free
+          NRT_FREE(free_list)
+          ret
+
+test_freelist
+
+          ld a,bk_nrt
+          ld hl,4
+          call init_custom
+
+          call new_chunk_no_init ; Isolated One (temoin)
+          push hl
+
+          CHECK_FREE(3) ; Sanity
+          call new_chunk:call nc,&BE00:push hl ; A
+          call insert_new_chunk_connected:call nc,&BE00:push hl ; B
+          call insert_new_chunk_connected:call nc,&BE00 ; C   
+; Sanity: memory full
+          call new_chunk:call c,&BE00
+          CHECK_FREE(0)
+
+; Free from A
+          pop hl
+          ex (sp),hl
+          call free_list
+          CHECK_FREE(3)
+
+; Double free (B) triggers BRK (hard to test)
+          pop hl
+   ;       call free_list
+
+; We can reallocate 3 chunks
+          call new_chunk:call nc,&BE00
+          call new_chunk:call nc,&BE00
+          call new_chunk:call nc,&BE00
+          call new_chunk:call c,&BE00 ;memory full expected.
+          CHECK_FREE(0)
+
+; Sanity check: free isolated one
+          pop hl
+          call free
+          CHECK_FREE(1)
+          ret
+
+test_free_list7
+; Like the previous /test_freelist/ (TODO!!), but:
+;  - list of nodes instead of chunks
+;  - pnts are on 3 bytes rather than 2
+;  - we check cross banks
+
+          call nrt_setup_crossbank
+          CHECK_FREE(2) ;sanity
+
+;only room for 2 lists. if free doesn't leak, we are good.
+          ld b,3
+tl3f
+          push bc
+          call nrt_make_list7
+          CHECK_FREE(1)
+          call nrt_get_head
+          call free_list7
+          CHECK_FREE(1)
+          pop bc
+          djnz tl3f
+          ret
+
+
+test_node7_memfull
+; Test error is properly reported
+
+          call nrt_setup_crossbank
+
+          ld b,3
+tn7mf
+          call new_node7
+          jr c,tn7mf
+          cp fail_memoryfull:call nz,&BE00
+          CHECK_FREE(0)
+          ret
+
+
+ec2_eoc = 0             ;end of chunk  !! must remain 0
+ec2_store_pc_line = 2
+ec2_store_pc_instr = 3
+
+      END
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+      IF need_jp
+          ld ix,param_burn3:call burn_
+      END
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn1
+      WORD rom
+      WORD codesize1
+      WORD codedest1
+      WORD code1
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+      IF need_jp
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+      END
+; ===========================================
+      MACRO CHECK_ID
+          call check_id_
+      IF 1-failhard
+          ret nc
+      END
+      ENDM
+
+      MACRO CHECK_ID_CDE
+      IF dev_checks
+          call check_id_cde_
+      END
+      ENDM
+
+      MACRO CHECK_ID0_CDE
+; allow null pnt
+      IF dev_checks
+          call check_id0_cde_
+      END
+      ENDM
+
+      MACRO CHECK_ID_BHL
+      IF dev_checks
+          call check_id_bhl_
+      END
+      ENDM
+
+
+      MACRO CHECK_HL_IN_BANK
+      IF dev_checks
+          call check_hl_in_bank_
+      END
+      ENDM
+
+      MACRO BK_SOURCE
+; From bk base
+          and &FC
+      ENDM
+
+; ===========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+init_custom
+; For internal and externals tests (org, asset).
+; In: a = BK base
+    ; hl = nb chunks
+
+          ld i,a
+          call connect_a
+          ld (vo_basebk),a
+          jr _ini_com
+
+init
+; Cold init.
+          call get_bk_base
+          call get_max_chunks
+_ini_com
+          ld (vo_max_chunks),hl
+          ld (vo_free_chunks),hl
+          ld hl,zeroed
+          ld b,zeroed_
+          xor a
+fill      ld (hl),a:inc hl:djnz fill
+          scf
+          ret
+
+      IF 1-inRom
+ld_#bhl#_cde
+; ld (bhl),cde
+; Out: B is connected !!!
+
+; Here bhl and cde are list pointers,
+; so we perform some checks (fail fast).
+; All registers preserved
+
+; Actually bhl can be a variable pnt (e.g. v_free7_list)
+; So we cannot use CHECK_ID_BHL() which is too strict.
+; Only b will be checked in connect_b
+
+          CHECK_ID0_CDE()
+
+          call connect_b
+      IF dev_checks
+          push af       ; preserve f
+          ld (hl),c:inc l:call z,mess
+          ld (hl),d:inc l:call z,mess
+          ld (hl),e
+          2 ** dec l
+          pop af
+      ELSE
+          ld (hl),c:inc hl ; inc hl to preserve F
+          ld (hl),d:inc hl
+          ld (hl),e
+          2 ** dec hl
+      END
+          ret
+      END
+
+check_id0
+; Like check_id, but hl can be 0 as well.
+          push af
+          inc l:dec l:jr nz,_check_id
+; l=0, so h **must** be 0
+          ld a,h:or a:call nz,mess
+          pop af
+          ret
+
+      IF failhard
+check_id_
+; All register preserved. Simply BRK if wrong iD
+          push af
+_check_id
+          ld a,l:and &C4:xor &C4:jr z,_check_msb
+_mess
+      BRK
+          ld bc,&BAD1
+
+check_msb
+          push af
+_check_msb
+          ld a,h:and &C0:xor &40:jr nz,_mess
+          pop af
+          ret
+
+      ELSE
+check_id
+; return Carry, Z if ok  
+
+          ld a,l:and &C4:xor &C4:jr nz,_nc_mess
+          ld a,h
+check_msb
+          and &C0:xor &40:scf:ret z
+_nc_mess
+          ld a,fail_unexpectedmess
+          or a
+          ret
+      END
+
+
+      IF 1-inRom
+check_id0_cde_
+          push af
+          ld a,c:or a:jr nz,_check_id_cde_
+; if c=0, de must be 0
+          ld a,e:or d:call nz,mess
+          pop af
+          ret
+
+check_id_cde_
+          push af
+_check_id_cde_
+          ld a,c:and &C4:cp &C4:call nz,mess
+; node shouldn't be in base_bk  
+          ld a,i:cp c:call z,mess
+          ld a,d:and &C0:cp &40:call nz,mess
+; cannot point on start of chunk ('last' field)
+          ld a,e:or a:call z,mess
+          pop af
+          ret
+
+check_id_bhl_
+          push af
+          ld a,b:ld b,c:ld c,a:ex de,hl ; swap bhl <-> cde
+          call check_id_cde_
+          ld a,b:ld b,c:ld c,a:ex de,hl
+          pop af
+          ret
+
+check_hl_in_bank_
+          push af
+          ld a,h:and &C0:cp &40:call nz,mess
+          pop af
+          ret
+      END
+
+get_bk_base
+;TODO: and &c7 when basebk has moved.
+          ld a,i:and &C5:cp &C5:call nz,fatal
+          ld a,i
+          ret
+
+
+get_max_chunks
+; In:  a = bk base
+; Out: hl= max chunks
+
+          push bc
+          BK_SOURCE()
+          ld b,a
+          xor a:ld h,a
+oi_get_free
+          add chunks_per_bk:jr nc,$+3:inc h
+          res 2,b:dec b
+          bit 6,b
+          jr nz,oi_get_free ;while >=#c4 
+          ld l,a
+          pop bc
+          ret
+
+
+new_node7_no_init
+;----------------
+; Return id of fresh *uninitialized* chunk of size 7.
+; In: N/A, bk agnostic
+; Out: C:bk DE:pnt      (!! not connected)
+;    : B, HL preserved
+;    ; Carry if OK, NC otherwise
+     ; Bk base connected
+
+          call connect_bk_base
+
+          push hl
+          ld hl,v_free7_list
+          ld a,(hl)
+          or a:jr z,no_freed7
+
+          inc l:ld c,(hl)
+          inc l:ld l,(hl)
+          ld h,c
+          call connect_node_ahl
+;get next link and reset it
+          push hl
+          ld c,(hl):ld (hl),0:inc hl
+          ld d,(hl):ld (hl),0:inc hl
+          ld e,(hl):ld (hl),0
+          call connect_bk_base
+          ld hl,v_free7_list
+          ld (hl),c:inc l
+          ld (hl),d:inc l
+          ld (hl),e
+          pop de
+          pop hl
+          ld c,a
+          scf
+          ret
+
+no_freed7
+;Allocate new chunk if needed
+          ld hl,(v_node7_pool)
+          ld a,l:or h:jr nz,ok_pool7
+
+new_pool_chunk
+;NB: Those chunks won't ever be freed. "False leak".
+   ; Instead, the nodes within them are.
+          call new_chunk:jr nc,end7
+      IF chead_last'
+ !! review that
+  ; For now we use fact that first byte is 0
+  ; (initialized as null link, used as 'last' field)
+      END
+          call connect_bk_base
+          ld (v_node7_pool),hl
+ok_pool7
+          ld c,l        ; Returned bank
+          call connect_chunk_from_id
+          ld l,chead_last'
+          ld a,(hl)
+          ld e,a
+; If full, we just ask a new chunk. They are not linked,
+; since they are never freed anyway.
+          add 7:jr c,new_pool_chunk
+
+          ld (hl),a
+          inc e         ; post previous last = free node
+          ld d,h
+          scf
+end7
+          pop hl
+          ret
+
+free_list7
+          ld hl,v_free7_list
+;enchaine
+free_list3
+; TODO: factorize with /free_list/ (at least in term of style)
+
+; Free list whose links are 3 bytes (bk + adr)
+; In:  HL= pnt to link freed list
+    ; CDE= ID list to release
+; Out: bhl cde conversed.
+          call connect_bk_base
+          push bc
+; X = bhl = freed id
+          ld b,(hl):inc l
+          ld a,(hl):inc l
+          push hl
+          ld l,(hl):ld h,a
+          push hl
+          call list3_gotoend ; end of CDE list
+; Last.next = X  (link)
+          ld (hl),b:inc l
+          pop bc
+          ld (hl),b:inc l
+          ld (hl),c
+          call connect_bk_base
+; freed = cde (replug)
+          pop hl
+          pop bc
+          ld (hl),e:dec l
+          ld (hl),d:dec l
+          ld (hl),c
+          ret
+
+list3_gotoend
+; in: cde= id list  (!! non empty)
+;out:  hl points on start of last node (link field).
+    ; bcde conserved
+          push bc
+          ld b,c:ld h,d:ld l,e
+l3ge
+          call list3_next
+          jr nz,l3ge
+          pop bc
+          ret
+
+list3_next
+; in: bhl= pnt node (!!not null)
+;out: if next, NZ, bhl= pnt next node (connected)
+    ; if last,  Z, bhl unchanged  
+    ; cde conversed
+          call connect_b
+          ld a,(hl):or a:ret z
+          ld b,a
+          inc l:ld a,(hl)
+      IF dev_checks
+          and &C0:cp &40:call nz,mess
+      END
+          ld a,(hl)
+          inc l:ld l,(hl):ld h,a
+      IF dev_checks
+;Cannot point to first byte of chunk, since used for 'last' field.
+          ld a,l:or a:call z,mess
+      END
+; enchaine
+connect_b
+          push bc
+          ld c,b:call connect_c
+          pop bc
+          ret
+connect_c
+          push af
+          ld a,c
+          call connect_a
+          pop af
+          ret
+
+connect_a
+mess  = &BE00           ; TODO: harmonize!  They mean the same thing.
+fatal = &BE00
+      IF dev_checks
+          push af
+          and &C4:cp &C4:call nz,mess
+          pop af
+      END
+          push bc
+          ld b,&7F:out (c),a
+          pop bc
+          ret
+
+
+connect_node_ahl
+; A = bk
+; HL= pnt (H just used for check). Allow to reuse connect_chunk_from_id
+          push hl
+          ld l,a
+          call connect_chunk_from_id
+          pop hl
+          ret
+
+nc_memfull
+          ld a,fail_memoryfull
+          or a
+          ret           ; ko
+
+new_chunk_no_init
+;----------------
+; Return id of fresh *uninitialized* chunk.
+; In: N/A, bk agnostic
+; Out: HL:Id. Ie H: MSB, L: Bk  (chunk left uninitialized)
+;    : BC, DE preserved
+;    ; Carry if OK, NC otherwise
+     ; Bk base connected !!  (todo: change that?)
+
+          call connect_bk_base
+
+          ld hl,(vo_free_chunks)
+          ld a,l:or h:jr z,nc_memfull ; -> No more chunks
+          dec hl
+          ld (vo_free_chunks),hl
+
+; Must start by picking from freed list,
+; otherwise fresh id computation would be off.
+
+          ld hl,(v_free_list)
+          call check_id0
+          ld a,l:or h:jr z,no_freed
+
+          push hl
+          call connect_chunk_from_id
+      IF vai
+; Check flaged as free.
+; Otherwise it means it has been double freed, and the first instance
+; was already re-used.
+          ld l,chead_next+1:bit vf_flag_free,(hl):call z,fatal
+          res vf_flag_free,(hl)
+      END
+ ; next chunk (will be reset when copying header)
+          call get_next
+          call connect_bk_base
+          ld (v_free_list),hl
+          pop hl
+          scf
+          ret
+
+no_freed
+          push de
+          ld hl,(vo_max_chunks)
+          ld de,(vo_free_chunks)
+          scf:sbc hl,de
+          ld de,chunks_per_bk
+
+          call get_bk_base
+          BK_SOURCE()
+nc_seek
+          or a:sbc hl,de
+          jr c,nc_seek_ok
+
+          res 2,a
+          dec a
+          jr nc_seek
+
+nc_seek_ok
+          add hl,de
+          pop de
+
+      IF chunk_offset - &40
+--- todo: change next line
+      END
+          ld h,l:set 6,h
+          set 2,a:ld l,a
+          and &C4:cp &C4:call nz,&BE00
+
+          scf
+;enchaine
+connect_bk_base
+          push af
+          call get_bk_base
+          call connect_a
+          pop af
+          ret
+
+get_next
+;IN:  HL point anywhere in chunk (connected)
+;OUT: HL=nxt id (not connected). Can be 0.
+          ld l,chead_next
+; Check first without modifying hl:
+; in case of breakpoint we'll know the culprit.
+          ld a,(hl):call _check_bk0
+          inc l
+          ld a,(hl):call _check_msb0
+          dec l
+          ld l,(hl):ld h,a
+          ret
+
+free
+;---
+;  In: HL: ID chunk to free
+; Out: N/A: If invalid input or mess, there's nothing the caller can do.
+     ; de, hl trashed.
+
+          call check_id0
+          call _swapfree:ret z
+
+          push bc
+          ld bc,1
+          call connect_chunk_from_id
+__plugtail
+; plug tail: Set HL.next = DE (previous freelist)
+; in: HL: points in cur chunk (connected)
+    ; DE: freed list
+    ; BC: nb chunks in freed list.
+          ld l,chead_next
+          ld (hl),e:inc l
+      IF vai
+; Flag as free
+          set vf_flag_free,d
+      END
+          ld (hl),d
+
+          call connect_bk_base
+          ld hl,(vo_free_chunks)
+          add hl,bc
+          ld (vo_free_chunks),hl
+          pop bc
+          ret
+
+_swapfree
+;  In: HL: ID head of chunk/list to free.
+; Whether only first chunk is actually freed is dealt by caller.
+; Out: No-op if HL is 0.
+     ; Otherwise:         
+     ;   de=(v_free_chunk)  Previous head of freelist.
+     ;   (v_free_chunk)=hl  Chunk to free set as head of freelist.
+     ;         All linked chunks are set free as a consequence.
+     ; In any case:
+     ; Z iif HL == 0 (means nothing to do).
+
+          ld a,l:or h:ret z ; Sanity
+
+      IF vai
+          ld e,l
+          ld d,h
+;Flag as free
+          call connect_chunk_from_id
+          ld l,chead_next+1:set vf_flag_free,(hl)
+      ELSE
+          ex de,hl
+      END
+
+          call connect_bk_base
+          ld hl,(v_free_list)
+          call check_id0
+          ld a,l:or h
+          call nz,is_in_list
+ ; Not exactly fatal, but denote a programming mistake (double free)
+          call c,fatal
+          ex de,hl
+; Most recently freed on top of list (doesn't matter much!).
+          call check_id_
+          ld (v_free_list),hl
+          xor a:inc a   ; NZ
+          ret
+
+insert_new_chunk_connected
+;Like /org_insert_new_chunk/, but:
+   ; * takes HL=id (rather than HA)   
+   ; * leave inserted chunk connected.
+   ; * do not touch **vo_curbk**. Rationale:
+       ; - vo_curbk is codesource's current bk, 
+         ; we shouldn't know about it, left alone change it.
+;in; HL= ID cur chunk (!! MUST BE CONNECTED). Needed for link?
+;out: HL id new chunk (connected)   
+    ; BC, DE preserved.
+
+          CHECK_ID()
+
+          push bc:push de
+          push hl
+          call get_next
+          ld c,l:ld b,h ; Existing link A->B (B can be 0)
+
+          call new_chunk ; New chunk: C
+          ex de,hl      ; de = id new chunk
+          pop hl
+          jr nc,incc_end ; Memory full?
+
+          call connect_chunk_from_id
+          ld l,chead_next
+          ld (hl),e:inc l ; Replace by A->C
+          ld (hl),d
+
+          call connect_next:ret nc
+          ld a,l
+          ld l,chead_next
+          ld (hl),c:inc l ; Set Link C->B
+          ld (hl),b
+          ld l,a
+incc_end
+          pop de:pop bc
+          ret
+
+; =====================
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+; =====================
+
+code1 = $$
+      IF inRom
+      ORG codedest1,$$
+      END
+
+new_node7
+;--------
+; Connect new node of size 7 with 'next' field initialized (0).
+; In: N/A, bk agnostic
+; Out: C:bk DE:pnt  !! connected
+;    : B, HL preserved
+;    ; Carry if OK, NC otherwise
+          call new_node7_no_init:ret nc
+          call connect_c
+          ex de,hl
+          ld (hl),0:inc l
+          ld (hl),0:inc l
+          ld (hl),0
+          2 ** dec l
+          ex de,hl
+      IF dev_checks
+         ; Carry still set here
+          call nc,mess
+      END
+          ret
+
+new_chunk
+; Connect new chunk, all cleared with 00
+; (instead of just 'next' field initialized)
+; Rationale:
+    ; - symb.o needs this version
+             ; making a separate version wouldn't fit
+    ; - allocation are rare, it can be a bit slower 
+    ; - easier to debug
+;  In: N/A
+; Out: hl: id new chunk, bk connected.
+      ; A: chunk start, for harmonization with chung.
+           ; This isn't used here though:
+             ; - chunk is not fully init
+             ; - this could be a AAP chunk with other start!
+           ; To be reviewed when refactoring
+
+     ; !! Last, checksum,etc field NOT SET  
+
+          call new_chunk_no_init_connected
+          ret nc
+          push hl
+          xor a:ld l,a
+.clear    ld (hl),a:inc l:jr nz,.clear
+          ld a,chunk_start
+          pop hl
+          scf
+          ret
+
+connect_next
+; Simple version, but check.
+; In: chunk connect
+    ; h points in chunk
+;Out: If ok,      NZ, chunk is connected and hl=id
+    ; If no next,  Z, HL unchanged.
+; All other register preserved (including A and carry!)
+
+          push de
+          ld d,l
+          ld l,chead_next
+          ld e,(hl):inc e:dec e:jr z,cnret
+          inc l         ; NZ forced here
+          ld d,(hl)
+          ex de,hl
+          call connect_chunk_from_id
+      BYTE &16          ; Hack: ld d,n to skip ld l,d
+cnret
+          ld l,d        ; restore L only is no next.
+          pop de
+          ret
+
+new_chunk_no_init_connected
+          call new_chunk_no_init
+          ret nc
+;enchaine
+connect_chunk_from_id
+;in : h=MSB, l=bk 
+;out: Bk connected, all registers preserved
+
+      IF 1-failhard
+!! todo review that.
+      END
+
+          CHECK_ID()
+connect_l
+          push af
+          ld a,l:call connect_a
+          pop af
+          ret
+
+
+ec2_eoc = 0             ;end of chunk  !! must remain 0
+
+free_list
+; in: hl = points to first chunk in list to be removed.
+         ; if 0, no-op.
+
+          call check_id0
+          call _swapfree:ret z
+
+      IF vai
+          push hl
+; Plug tail of freelist at end of freed list.
+; !! Even if tail is 0, we must do this to count freed chunks.
+!! no goto_end 'pop bc'
+          call goto_end
+          call __plugtail
+          pop hl
+; Flag first chunk as free 
+!! no we must do all chunks
+          call connect_chunk_from_id
+          inc l:set vf_flag_free,(hl)
+          jp connect_bk_base
+      ELSE
+          push bc
+          call goto_end
+          jp __plugtail
+      END
+
+goto_end
+;Connect last chunk of list, and return list length.
+;In:  HL: head id.
+;Out: HL: last id (connected). Rationale: more convenient
+    ; BC: nb chunks in list
+    ; F trashed. All other registers preserved.         
+          call connect_chunk_from_id
+          ld bc,0
+gotolp
+          inc bc
+          call connect_next
+          jr nz,gotolp
+          ret
+
+is_in_list
+;---------
+; Is node already in list?
+; In: hl= id list
+    ; de= id node
+; Out: Carry iif in list.
+     ; All register but AF preserved.
+
+          ld a,e:or d:ret z
+          push hl
+          call connect_chunk_from_id ; to follow list
+          call _is_in_list
+          pop hl
+          jp connect_bk_base
+
+_is_in_list
+          or a:sbc hl,de:add hl,de:scf:ret z
+          call connect_next
+          jr nz,_is_in_list
+          or a
+          ret
+
+
+get_free#
+          call connect_bk_base
+          ld hl,(vo_free_chunks)
+          ret
+
+_check_bk0
+;Check proper bank. 0 is ok (case null id)
+;!! Change F.
+;TODO, check lowbk <= A <= hibk (I-3)  -> Even more secure!
+          or a:ret z
+          push af
+          and &C4:cp &C4:jr z,okpopaf
+          pop af
+      BRK
+okpopaf   pop af
+          ret
+
+_check_msb0
+;Check proper location. 0 is ok (case null id)
+          or a:ret z
+          cp &40:call c,mess
+          cp &40+chunks_per_bk:call nc,mess
+          ret
+
+
+;---------------------------
+; routines for aap and asset
+;---------------------------
+
+aap_chunk_start = 4
+aap_chunk_size = &FC
+
+;-------------------------
+connect_next_aap_chunk
+; comme connect_next_chunk, but:
+;- doesn't touch bk_cur
+;- modify b
+;- return a=bk    
+;NB: aap just check Z (and not always!)
+;  ; H musn't be changed if (hl)=0 
+   ; app and free_list use H.
+
+          call connect_next:jr z,aap_mess
+          ld a,l
+          ld l,chunk_aap_header_size
+          or a          ; nz
+          ret
+
+aap_mess
+;cannot do much                   
+          xor a
+          ret
+
+      IF 0
+far_call_ext
+; arglll, used by aap. .
+          ex (sp),hl
+          push af
+          ld a,(vo_romext)
+_far_call
+          push de
+          push bc
+          ld de,vc_far_call
+          ldi:ldi
+          ld (de),a
+          pop bc
+          pop de
+          pop af
+          ex (sp),hl
+          rst &18
+      WORD vc_far_call
+          ret
+      END
+;-------------------------
+
+realsize1 = $$-code1
+hi1
+      IF inRom
+      FILL limit1-$,&FF
+      END
+codesize1 = $$-code1
+
+; ===========================================
+code2 = $$
+      ORG codedest2,$$
+jps
+; !!! one slot left after jp asset
+          3 ** BRK      ; was   jp insert_new_chunk_from_here ; cocopy
+          jp free_list7
+          jp init
+          jp get_max_chunks ; org
+          3 ** BRK      ; was org_insert_new_chunk
+          jp new_chunk_no_init ; org, aap, liszt nrt
+          jp insert_new_chunk_connected ; aap, asset, cocopy
+          jp new_chunk  ; asset, heap, symb, org (for orgset_store)
+          jp connect_next_aap_chunk ; aap
+          jp connect_bk_base ; app, cue
+          jp free
+          jp free_list
+          jp get_free#
+          jp init_custom ; For NRTs only (asset, liszt, symbl)
+m         jp connect_chunk_from_id ; aap, cocopy, heap, symb nrt
+          jp connect_next ; aap, cocopy, heap nrt
+          jp goto_end   ; aap
+          jp new_node7  ;liszt
+; !!! Full here, continued below
+hi2
+      IF inRom
+      IF hi2-limit2
+ !! error alignment
+      END
+  ;    FILL limit2-$,&F7
+      END
+
+codesize2 = $$-code2
+;-----------------------------------
+      IF need_jp
+code3 = $$
+      ORG codedest3,$$
+jps'
+          jp new_chunk_cleared
+          jp clear_chunk
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+
+codesize3 = $$-code3
+      END
+; =========== Persistent Variables ==============
+
+vo_romext = &7CFA
+
+;------------
+
+var   = &7C7C
+; We set bit 7 of MSB of 'next' to flag chunk as free
+   ; - Make the MSB invalid (even when next=0)
+   ; - Still able to see the previous value for debugging
+vf_flag_free = 7
+
+      ORG var,$$
+zeroed
+v_free_list WORD        ; List of free chunks
+v_node7_pool WORD       ; Last chunk dedicated to nodes7
+v_free7_list SKIP 3     ; List of free nodes of size 7 (full pnt)
+zeroed_ = $-zeroed
+
+      SKIP &7CA0
+
+; ------ no more code / var allocation ------------------
+
+vo_max_chunks = &7CF5   ; Check if still used by org
+vo_free_chunks = &7CF7  ; idem. Then, move them in var.
+
+fail_memoryfull = 251
+fail_unexpectedmess = 247
+
+
+vo    = &7CE8
+vo_curline = vo+1
+;word
+vo_curline_start = vo+3 ;actually end of previous line
+;      BYTE :WORD 
+vo_curline_end = vo+6
+;      BYTE :WORD 
+vo_crossed_chunks = vo+9
+;WORD  ; !!!! MSB used by mon
+
+vo_basebk = vo+20
+
+; =========== One-use Variables ==============
+
+singleuse = &9E00
+
+vc_far_call = singleuse
+

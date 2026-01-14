@@ -1,0 +1,814 @@
+inRom = 1               ; 1 to auto-install in rom
+rom   = &1D
+dev_checks = 1 - inRom  ; most of them for nrt only
+todo  = 1
+need_room = 1
+; <<< cache >>>  Helper functions for cache handling.
+               ; + 'visited' handling (see rationale in v4).
+
+      IMPORT "assmap.i"
+      IMPORT "memmap.i"
+
+;2025
+; ------- HH Beta J ---------
+ ; Dec 
+  ; 19 vw Re-introduce is_import_uptodate
+        ; Remove set/is_visited_cur
+           ; Add set/is_visited
+  ; 17 vv Clean-up dead code.
+
+; ------- HH Beta C ---------
+ ; Oct
+  ; 13 vu Remove is_import_uptodate
+  ;  8 vt Add invalidate_dependent_labels
+; ------- HH Beta 2 ---------
+ ; Jul
+  ; 27 vs Use new swap.o (remove dependencies on variable pos)
+
+; ------- HH Beta 1 ---------
+  ; 10 vr [Adapt rom ass] Use CALL_EXT / pagefirm
+; ------- GG Release --------
+  ; Jun
+    ; 11 vq [NoChange] Cleanup va_pre_pc_offset 
+
+    ;  9 vp set_modified: always invalidate dependant with "I"
+  ; May
+    ; 30 vo set_modified: invalidate imported labels in host source
+                        ; (prevents cache bug in diamond configuration)
+          ; Require new sticky flag "I" for "import modified"
+          ; -> adapt is_uptodate
+          ; Add is_import_uptodate
+
+; ------- GG Beta J ---------
+  ; Apr
+    ; 10 vn Use new farcall
+
+;2024
+; ------- GG Beta E ---------
+  ; Oct
+    ; 20 vm; [cleanup] remove set_pinned_dep
+                 ; - pinned_deps handling write-only since vl
+                 ; - import.o sets deps itself
+
+; ------- GG beta D ----------
+    ; 17 vl: set_modified flags all dependent to be re-assembled
+           ; is_uptodate: no more need to recursively check
+; ------- GG beta A ----------
+  ; Sep       
+    ; 24 vk: Save 2 bytes now that connect_pinned_deps save DE
+    ; 21 vj: Glup! Fast is_uptodate
+
+; ------- GG beta 8 ----------
+    ; 15 vi: Try to fix bug#19e: /is_uptodate/ reconnect bk base
+           ; Cancelled. That wasn't the problem.
+
+; ------- GG beta 7 ----------
+  ; Aug
+    ; 15 vh: Fix bug#19a: change is picked up. Tested in orgnrt/assnrt.o
+           ; Add test_set_pinned_dep
+           ; Remove "check mode" in rom. (requires import-al)
+
+; ------- GG beta 1 ----------
+  ; Feb                   
+    ; 16 vg: (no change) Use memmap.i
+    ; 15 vf: set_modified: update up_to_date_since_visu_pc
+     ; 7 ve: (no change) Use extmap.i 
+;2023
+; ------- Release FF ----------
+  ; Dec
+     ; 14 vd: Move /up_to_date_since_ass/ from 7097 to 7082 
+            ; For investigation purpose, since we got &20 @ &7097
+            ; (previous address), in some random conditions.
+  ; Apr     
+     ; 12 vc: Revert vb!
+            ; We must be able to force modified for cache purpose only
+            ; (see /set_modified/)
+     ; 12 vb: Track /up_to_date_since_save/ for editor as well:
+    ; - make more sense to do it here.
+    ; - fix bug #158 "Source not flagged as modified after hh command"
+    ; !! Require org-fy (new var and moved /up_to_date_since_ass)
+
+;2022      
+  ; Apr     
+        ; va: Init and set /depsrec/ as well.
+            ; Slightly optimize code (size-wise).
+            ; Move first slice @ fef0
+     ; 28 v9: New api for /set_pinned_dep/:
+            ; Just take HL pointing to start $/$$
+
+     ; 21 v8: Fix #13f (was re-assembling even when fresh):
+              ; Was re-using /tmp_pre_pc/ while recursing.
+     ; 20 v7: Expose /_is_selected_uptodate/ (for dev checks in ed)
+  ; Mar
+     ; 27 v6: Introduce pinned_deps (fix bug#139).
+              ; - /set_pinned_dep/ called by import.o
+              ; - /is_uptodate/ checks them. 
+;2021
+  ; Nov 
+     ; 29 v5: Optim space.
+         ; 26. v4: Welcome 'visited' handling. Rationale:
+                 ;   - org.o is too big
+                 ;   - we reuse farcall to bitset (e.g. jr _bs_get)
+                 ; Con:
+                 ;   - since there is only one client for each routine
+                     ; we lose a call + jp entry.
+      IF todo
+;[optim space]: ?Use macros instead?
+              ; Not sure: would hinder bs farcall reuse.
+              ; Prerequisite: fast imports!
+      END
+
+
+MAX_SOURCES = 64
+BS_SIZE = MAX_SOURCES+7 / 8 + 1 ; todo: use macro from bitset
+
+      IF MAX_SOURCES - 64
+!! can't be bigger: pinneds_deps already needs one whole chunk (64*4)
+      END
+
+main_rom = &0A          ; ORGAMS.ROM 
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+nrt_buf = &3000
+break = &BE00
+
+codedest = cache        ;after evacom
+limit = ass2
+codedest2 = cache2      ;after ass
+limit2 = cache2_
+
+codedest3 = cache_jp    ;after jp find
+limit3 = ass_jp2
+
+      ORG &1000
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+; ---- In ORGAMS.ROM aka main_rom (use regular call) ---------------
+setup_custom = &E839    ; Trust me on this
+
+; ---- In this rom (ORGASS) ------
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+symb  = &FFD8
+sy_sync_ext_index_to_live = symb+3
+sy_reset_imported = symb+9
+
+; ---- In ORGEXT.ROM -------------
+org   = &C008
+org_get_current_selection = org+&30
+is_modified_since_ass = &C10C ;in: A = source
+
+swap  = &FE60
+connect_deps = swap
+connect_depsrec = swap+21
+connect_up_to_date_since_visu_pc = swap+24
+connect_up_to_date_since_ass = swap+27
+
+; --- NRT  ---
+org_select = org+63     ; will connect_bk_base itself
+org_source_init = org+&84 ;org_init done by setup_custom
+;org_get_lines# = org+3
+;org_get_line = org+6
+;org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+;org_delete_line = org+15
+;org_load = org+18
+;org_save = org+21
+org_assemble = org+27
+;check_deps = org+&2D
+
+; ---- in Bric ROM
+
+chunk = &FDFA
+; This one checks id.
+; Shorter than org_connect_chunk_from_id:call nc,panic
+new_chunk_no_init = chunk+15 ; !! Reconnect bk base
+;connect_chunk = chunk+42
+
+bitset = &FED0
+bs_init = bitset        ; NRT
+;bs_copy = bitset+3
+bs_get = bitset+6
+bs_set = bitset+9
+
+read_raw_connected = &FEBB
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_BRIC ad
+          call call_bric_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_ORG ad ; CALL_EXT in other sources
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+nrt_set_dep
+          ld hl,deps:CALL_BRIC(bs_set)
+          ld hl,depsrec:CALL_BRIC(bs_set)
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+
+; -------------------------------------------------------------------
+
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          ld a,bk_dev:call nrt_setup
+
+      IF 0
+          ld a,&FF:ld i,a
+          ld b,&7F
+;!!!! Careful, switch to bank &ff for investigation.
+; If doing 'J' -> Will trash current sources.
+      BRK
+          out (c),a
+      END
+          call is_uptodate_cur
+
+;!! NB: all tests will call back ROM's version.
+; To test after modification: burn in backup ORGEXT.
+
+          call test_api
+          call test_dep
+      IF todo
+ ; cannot re-run test_dep after test_set_pinned_ped !!
+ ; see sanity check at beginning of the tests: deps weren't cleared
+        ;  call test_dep
+      END
+; More test via assnrt.
+          ret
+
+      MACRO CHECK_NOT_UPTODATE
+          call is_uptodate_cur:call nz,fail
+      ENDM
+
+      MACRO CHECK_UPTODATE
+          call is_uptodate_cur:call z,fail
+      ENDM
+
+test_api
+;-------
+
+; Reset. So tests don't impact each other.
+; Yet, hot reset so we may detect memory leaks.
+          CALL_ORG(org_source_init)
+; We must reset deps ourselves (normally done by org_assemble) 
+          ld hl,deps:ld a,MAX_SOURCES:CALL_BRIC(bs_init)
+          ld hl,depsrec:ld a,MAX_SOURCES:CALL_BRIC(bs_init)
+
+;New source is not considered up to date
+; (it never has been assembled).
+          CHECK_NOT_UPTODATE()
+          call set_uptodate
+          CHECK_UPTODATE()
+          call set_modified
+          CHECK_NOT_UPTODATE()
+; set 'uptodate' for next test.
+          call set_uptodate
+          CHECK_UPTODATE()
+
+; check org is properly calling set_modified
+          INSERT_LINE(1,dummy_line)
+          CHECK_NOT_UPTODATE()
+          ret
+
+
+test_dep
+; With one dep.
+          ld a,bk_dev:call nrt_setup
+; --- setup
+          xor a:call nrt_select:CALL_ORG(org_source_init)
+          ld a,1:call nrt_select:CALL_ORG(org_source_init)
+; Sanity check: no deps setup here
+; if fail: means it's not cleared at init. 
+; maybe it doesn't matter: will be cleared at assembly time
+          ld hl,deps+1
+          ld b,MAX_SOURCES+7 /8
+.chk0     ld a,(hl):or a:call nz,fail
+          inc hl
+          djnz .chk0
+
+; Pretend we import file in tab 1
+          xor a:call nrt_select
+          ld hl,deps
+          ld a,MAX_SOURCES:CALL_BRIC(bs_init) ; Not done via nrt_setup!
+          ld a,1:CALL_BRIC(bs_set)
+          ld hl,depsrec
+          ld a,MAX_SOURCES:CALL_BRIC(bs_init) ; Not done via nrt_setup!
+          ld a,1:CALL_BRIC(bs_set)
+
+; --- checks 
+; -- none uptodate
+          CHECK_NOT_UPTODATE()
+; -- modify import: must remove uptodate flag in host
+          call set_uptodate
+;sanity check: considered as uptodate (independtly to import status:
+             ; it's the modification of import below that invalidates)
+          CHECK_UPTODATE()
+          ld a,1:call nrt_select
+; we first flag uptodate, to mimic assembly of host+import
+; and because invalidation is only done when first modified
+          call set_uptodate
+          call set_modified
+          CHECK_NOT_UPTODATE() ; import
+          xor a:call nrt_select
+          CHECK_NOT_UPTODATE() ; host
+; -- setting import uptodate should not change the status of host
+; (bug#1a9)
+          ld a,1:call nrt_select
+          call set_uptodate
+          xor a:call nrt_select
+          CHECK_NOT_UPTODATE()
+
+      IF 1
+          ret
+      ELSE
+!! not relevant anymore?
+; -- must mimick import: setting va_* 
+
+          ld bc,nrt_post_pc
+          ld de,nrt_post_objc
+          ld (va_post_pc),bc
+          ld (va_post_objc),de
+          ld bc,nrt_start_pc
+          ld de,nrt_start_objc
+          ld (va_pre_pc),bc
+          ld (va_pre_objc),de
+          ld a,0:call nrt_select
+; -- must mimick import: setting dep
+          ld a,1
+          call nrt_set_dep:call nc,fail
+
+          CHECK_UPTODATE()
+; -- only import uptodate
+          call set_modified
+          CHECK_NOT_UPTODATE()
+          ret
+      END
+
+nrt_start_pc = &1235
+nrt_start_objc = &678B
+nrt_post_pc = &1237
+nrt_post_objc = &678E
+
+      IF 0
+;what was that?
+tmpstore
+      WORD nrt_start_pc,nrt_start_objc
+      WORD nrt_post_pc,nrt_post_objc
+tmpstore'
+      WORD nrt_start_pc+&10,nrt_start_objc+&10
+      WORD nrt_post_pc+&10,nrt_post_objc+&10
+tmpstore''
+      WORD nrt_start_pc+&20,nrt_start_objc+&20
+      WORD nrt_post_pc+&20,nrt_post_objc+&20
+      END
+
+nrt_select
+; Like org_select + save register and additional checks
+          push bc:push de:push hl:push iy
+          push af
+          CALL_ORG(org_select):call nc,fail
+          CALL_ORG(org_get_current_selection)
+          ld c,a
+          pop af
+          cp c:call nz,fail
+          pop iy:pop hl:pop de:pop bc
+          ret
+
+dummy_line BYTE "Sid",0
+
+
+test_source_assemble
+;-------------------
+          CALL_ORG(org_source_init)
+
+          ld hl,source_nrt
+          call nrt_set_source
+
+          ld de,nrt_buf ; dest
+          ld bc,&1234   ; pc
+          CALL_ORG(org_assemble):call nc,fail
+
+          ld hl,(nrt_buf)
+          CHECK_HL_EQ(&3412)
+          ret
+
+source_nrt
+      BYTE "macro rword n:byte n/&100,n and &ff:endm",0
+      BYTE "rword($)",0
+      BYTE 0
+
+; ---------------------------             
+
+burn
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          jp &BB06      ; give chance to see error message (invalid range)
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn1
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+
+; ------------------
+
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+set_modified
+;-----------
+; Flag the source and its dependents as "to be assembled"
+;all registers preserved but AF
+          call set_current_modified
+
+          push bc:push hl
+;invalidate_dependents
+;---------------------
+          CALL_ORG(org_get_current_selection)
+          ld c,a
+          xor a
+.lp
+          push af
+          cp c:jr z,.nxt ; skip self
+
+          CALL_ORG(connect_depsrec)
+          jr nc,.nxt    ; If no source: skip
+
+;Check depsrecs is setup 
+; If not -> source haven't been assembled, so no cache issue anyway
+          ld a,(hl):cp MAX_SOURCES-1:jr nz,.nxt
+
+          ld a,c
+          call _bs_get
+          jr z,.nxt     ; If target not a dependency: skip
+
+          pop af
+          push af
+          CALL_ORG(connect_up_to_date_since_visu_pc)
+          ld (hl),0
+
+          CALL_ORG(connect_up_to_date_since_ass)
+          ld (hl),flag_import_modified
+.nxt
+          pop af
+          inc a
+          cp MAX_SOURCES
+          jr c,.lp
+          pop hl:pop bc
+          ret
+
+
+set_current_modified
+; Flag the currently selected source as "to be assembled"
+;All registers preserved
+          push af
+          xor a
+          ld (up_to_date_since_visu_pc),a ; Set in visu
+; If flag "I" (import modified), must keep this information
+; (so labels are reseted)
+
+;is_import_uptodate
+;Out: NZ if import up-to-date (flag "C" or 0) -> can reuse labels
+    ; Z otherwise -> must reset imported labels
+    ; bc, de preserved.
+          ld a,(up_to_date_since_ass)
+          cp flag_import_modified
+          ld a,0:call nz,_set
+          pop af
+          ret
+
+invalidate_dependent_labels
+;--------------------------
+; When tab X is cleared, we must invalidate all labels dependent on it
+;all registers preserved but AF DE
+; In: A = current tab
+; Out: All regs trashed
+          ld c,a
+          xor a
+.lp
+          push af
+          cp c:jr z,.nxt ; skip self
+
+;Only immediate dependent, as no transivite pull of labels
+          CALL_ORG(connect_deps)
+          jr nc,.nxt    ; If no source: skip
+
+;Check depsrecs is setup 
+; If not -> source haven't been assembled, so no cache issue anyway
+          ld a,(hl):cp MAX_SOURCES-1:jr nz,.nxt
+
+          ld a,c
+          call _bs_get
+          jr z,.nxt     ; If target not a dependency: skip
+
+          pop af
+          push af
+          push bc
+          call sy_sync_ext_index_to_live
+          pop bc
+          call sy_reset_imported
+.nxt
+          pop af
+          inc a
+          cp MAX_SOURCES
+          jr c,.lp
+          ret
+
+
+      IF todo
+; can gain rom room by setting:
+;  flag_uptodate = &af  ; XOR A
+;  set_uptodate
+;        BYTE &3E   ; ld a,
+;  set_modifed
+;          xor a
+;          ld (up_to_date),a
+;          ret     
+      END
+
+set_uptodate
+;Note: the companion routine set_saved lives in org.o
+flag_uptodate = "C"
+flag_import_modified = "I"
+          ld a,flag_uptodate
+_set
+          ld (up_to_date_since_ass),a
+          ret
+
+
+is_import_uptodate
+          CALL_ORG(is_modified_since_ass)
+          jr flip_z
+
+is_uptodate_cur
+; In: N/A. Bk base connected
+;Out: NZ if up-to-date -> use cache
+    ; Z otherwise    -> must reassemble
+    ; bc, de preserved.
+          ld a,(up_to_date_since_ass)
+          cp flag_uptodate
+flip_z                  ; Z <> NZ
+          jr z,_nz
+_z
+          cp a          ; Z
+          ret
+_nz
+          or a          ; NZ
+          ret
+
+; ------------------
+clear_visited
+;-- Reset depsrec at each phase, since used to update visited 
+  ; when cache is used. Doing it here is more symetric and factorised.
+; bc, de preserved.
+          ld hl,depsrec:call _bs_init
+          ld hl,visited
+_bs_init
+          ld a,MAX_SOURCES
+          CALL_BRIC(bs_init)
+          ret
+
+; ------------------
+
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+; ==============
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+; ========================================
+set_visited
+          ld hl,visited
+_bs_set
+          CALL_BRIC(bs_set)
+          ret
+
+is_visited
+          ld hl,visited
+_bs_get
+          CALL_BRIC(bs_get)
+          ret
+
+; ------------------
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ==============
+
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+jps
+          jp invalidate_dependent_labels
+          jp is_import_uptodate ; import
+          jp set_modified ; org
+          jp set_uptodate ; import, org
+          jp is_uptodate_cur ; org
+          jp clear_visited ; ass, impeva.nrt
+          jp set_visited
+          jp is_visited
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+; ========================================
+
+deps  = &7083
+depsrec = &708E
+
+      IF deps - &7083
+  !! shared with org, cache and impeva
+      END
+
+; ========================================
+vars
+      ORG cache_var,$$  ; after impexp    
+visited_tmp SKIP BS_SIZE ; short lived for is_uptodate
+visited SKIP BS_SIZE    ; long lived during assembly to detect diamond
+;NB: we cannot reuse the same location for both, 
+   ; since is_uptodate is called for each import.
+   ; It would be brittle anyway.
+
+      SKIP cocopy_var2 - $
+
+vo0   = &7080
+up_to_date_since_ass = &7082
+up_to_date_since_visu_pc = &7097 ; Defined by org
+depsrec = &708E         ; defined by org
+
+      IF up_to_date_since_ass - &7082
+  !! defined in org for init and (re)store
+      END
+
+      IF up_to_date_since_visu_pc - &7097
+  !! defined in org for init and (re)store. Used by visu
+      END
+
+      IF visited - &8A12
+!! shared with import.
+; Rationale: needed for (visited := visited OR deps).
+; We don't expose that here since no more room in jp table.
+      END
+      IF va_pre_pc - &989A
+!! share with ass
+      END
+

@@ -1,0 +1,274 @@
+inRom = 1
+; <<<< txtfirm: custom 'txt pack' >>>>>
+     ; - Use disp.o for fast display
+     ; - Yet keep firmware in sync
+          ; - So error messages are displayed at right place (bug #131)
+          ; - Proper scrolling (bug #132)
+
+dev_checks = 1
+todo  = 1
+need_room = 1
+      IF todo
+; harmonize scr-upd and this?
+      END
+
+; //// 2025 //////////////////////
+; ----- HH beta I ----
+; Nov 26:v5 Remove check against vo_this_bk
+
+; ----- GG beta I ----
+; Apr  7:v4 Add test_manual_scroll_at_bottom
+        ; Fix #1bc
+           ; -> Oh! Cursor line is in L, not H
+           ; -> Didn't respect scr_get_location API!
+    ;  5: locate_orgams: scroll when y-cursor = r6+1
+    ; -> (no it doesn't) fix disappearing messages when at end of screen
+
+; ----- GG beta H ----
+; Mar 23: [nochange] Fix jps 
+
+; //// 2024 //////////////////////
+; ----- GG beta3 ----
+; Mar 4th v3: locate_orgams saves AF.
+
+; ----- FF Release ----
+; Jan 5th v2: set_offset: update CRTC (needed for mon.tabs: no bandeau)
+            ; Use "bricmap.i"
+
+; //// 2023 //////////////////////
+; May 3rd v1: Extracted from monui-aw to fix bug #131 and #132
+
+disp  = &FF14
+disp_locate_scr = disp+6
+
+r6    = 25              ; For detection scroll
+
+txt_output = &BB5A      ; all regs preserved
+txt_set_cursor = &BB75  ; H:Col L=Line   af / hl corrupt
+txt_get_cursor = &BB78
+scr_set_offset = &BC05  ; af / hl corrupt
+scr_get_location = &BC0B ; out: A=MSB screen address, HL= offset
+scr_char_position = &BC1A ;in: h:col l:line (0-base out hl:screen offset
+
+; --------- in disp rom ------------
+disp  = &FF14
+disp_init = disp        ; For nrt
+disp_text = disp+&1B    ; For nrt
+
+; --------- in main rom ------------
+init  = &E82A
+setup_from_nrt = init+15
+
+mess  = &BE00
+
+      IMPORT "bricmap.i"
+
+      ORG &9000
+      IF inRom
+      ENT burn
+      IMPORT "burnrsx.o"
+      ELSE
+      ENT tests
+      END
+
+rom   = &1C
+rom_ed = &0A            ; for nrt
+
+      IF inRom
+codedest = txtfirm      ; after aap
+limit = status
+codedest2 = txtfirm2
+limit2 = txtfirm_jp
+codedest3 = txtfirm_jp
+limit3 = txtfirm_jp_
+
+;--------------------------------
+
+burn
+          ld ix,param_burn:call burn_rsx
+          ld ix,param_burn2:call burn_rsx
+          ld ix,param_burn3:call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+
+code  = $$
+      ORG codedest,$$
+
+      ELSE
+tests
+          call nrtinit
+          call test_manual_scroll_at_bottom
+          ret
+
+test_manual_scroll_at_bottom
+; Bug #1bc 
+          ld hl,&0100 + r6+1
+          call txt_set_cursor
+          call locate_orgams
+          ld bc,.txt
+          call disp_text
+          call &BB06
+          ret
+.txt  BYTE "herica",0
+
+nrtinit
+; Complete orgams setup needed for checks in locate_orgams
+; and proper variables init. 
+
+nrtbk = &C7
+
+          ld c,rom_ed:call &B90F
+          ld a,nrtbk
+          call setup_from_nrt
+          call nc,mess
+
+          ld c,rom:call &B90F
+          ld a,40:call disp_init
+          ret
+
+      END
+
+;--------------------------------
+txt_nl
+;-----
+; Newline via firmware:
+   ; - So firmware 'locate' is up to date for AMSDOS error messages
+   ; - Handle the scrolling for us
+; Then sync for internal message via disp
+; Note: for now we don't sync orgams -> firmware,
+      ; sync we assume it's has been done when clearing screen.
+          ld a,10:call txt_output
+          ld a,13:call txt_output
+;Enchaine
+locate_orgams
+;------------
+; inverse of locate_firmware
+; + scroll when h-cursor = r6+1 (otherwise message would disappear)
+          push af
+          push hl
+          call txt_get_cursor
+; if past bottom of screen, must scroll
+          ld a,l:cp r6+1:jr c,.ok
+          ld a,10:call &BB5A
+          dec l         ; relocate cursor at last line
+.ok
+          dec h         ; logical to physical
+          dec l
+          push hl
+          ld a,l:ld l,h:ld h,a:ld (cursXY),hl
+; sync from firmware
+; 1/ Screen start
+          call scr_get_location
+          add h:ld h,a
+          call set_offset
+; 2/ Cursor position
+; Note: Monogams didn't used that, since was re-ready cursXY
+      ; before
+; This is needed by txt_nl to simulate disp_nl.
+; Alternative would be to call disp_nl in txt_nl,
+; but this way is less brittle.
+      IF todo
+; disp_locate_scr set 'pos at col=1' as well
+; we want to review that if h > 1 (i.e. in other context than txt_nl)
+      END
+          pop hl
+          call scr_char_position
+          ex de,hl
+          call disp_locate_scr
+          ex de,hl
+          pop hl
+          pop af
+          ret
+
+set_offset
+;---------
+          ld a,h
+          and 7
+          or &C0        ; NC for rra below
+          ld h,a
+          ld (orgScreen),hl
+;Must remain in Sync
+          rra:rr l
+          or &30:ld h,a
+          ld (off7screen),hl
+;Needed when bandeau deactivated
+      IF need_room
+ ; Factorize with screen  (in ram, though: must ensure installed?)
+      END
+          push bc
+          ld bc,&BC0C:out (c),c:inc b:out (c),h
+          dec b:inc c:out (c),c:inc b:out (c),l
+          pop bc
+          ret
+
+      IF inRom
+hi
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+code2 = $$
+      ORG codedest2,$$
+      END
+
+locate_firmware
+;--------------
+; convert monogams cursor to firmware cursor (for amsdos display)
+; BC DE HL IX IY preserved
+          push hl
+; sync from monogams
+          ld hl,(orgScreen)
+          call scr_set_offset
+
+          call set_offset
+          ld hl,(cursXY)
+          ld a,l:ld l,h:ld h,a
+          inc l
+          inc h
+          call txt_set_cursor
+          pop hl
+          ret
+
+      IF inRom
+hi2
+realsize2 = $$-code2
+      FILL limit2-$,&F7
+codesize2 = $$-code2
+
+code3 = $$
+      ORG codedest3,$$
+
+;          3 ** BRK      ; room for scroll_up_if_needed
+;          3 ** BRK      ; room for clear_line
+          jp txt_nl     ; orgui
+          jp locate_orgams ; monui, org, ch
+          jp locate_firmware ; monui, ch
+          jp set_offset ; monui
+
+realsize3 = $$-code3
+      FILL limit3-$,&F7
+codesize3 = $$-code3
+      END
+
+      ORG &76DA         ; keep as it was for now
+;TODO: move all the handling in DISP
+orgScreen WORD          ;need by tr, which cannot access off7screen
+;I.e. when called from tr, all disp routines must use this var,  
+    ; which happen to remain at C000 (no scroll).
+cursX BYTE 
+cursY BYTE 
+cursXY = cursX          ;(To load both)
+
+      IF orgScreen - &76DA
+ !! shared with monui  (and disp?)
+      END
+      IF cursXY - &76DC
+ !! shared with monui  (and disp?)
+      END
+
+off7screen = &9CFE      ; !!! shared (read by screen.o). 
+
+

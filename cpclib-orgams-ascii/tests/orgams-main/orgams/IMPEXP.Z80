@@ -1,0 +1,748 @@
+inRom = 1
+rom   = 10              ; for burn and nrt
+
+; Import/Export
+
+; Depends on io and org_insert_line for import.
+
+      IMPORT "orgmap.i"
+
+; ////// 2025 //////    
+; --- HH Beta I ---
+  ; Nov
+    ; 25 vE [nochange] Remove palette
+; --- HH ---
+  ; Jun
+    ; 22 vD Test files in ":orgnrt/"
+          ; Fix regression import DAMS
+
+; ----- GG Beta I -----
+  ; Apr 
+    ;  7 vC Fix hack importing progress (now dynamic, for |orgpiloted)
+  ; Mar
+    ; 27 vB msg_io: No more cls (for RSX)
+          ; msg_io: Display filename 
+       ; vA Restore rom version
+          ; use "orgmap.i"
+
+; ////// 2021 //////
+
+          ; 5 v9 Factorize (_read_line) to fit in rom.
+     ; Jun  2 v8 Fix /nrtinit/ (new mechanism).
+               ; Add progress in import ascii. 
+               ; Move vars at &8a05 (so no conflict with disp.7cc4)
+
+     ; Apr  5 v7 Add test_import_simple
+               ; Fix nrts themselves (no more padding)
+
+; 2020 Mar 31 v6 Move imp_line_buf from 4000 to 4800.
+        ;  Move limit @ feb8.
+
+; Sept 14 Move limit @ fef7.
+
+     ; v4 Export/import. + test_export (manual. missing: chexport.nrt)
+     ; v3 Import import/export from chaq.
+     ; v2 Use get_len from io.
+; 2019 Aug 5: v1 Import io_import from ioi. Test Ok.
+
+
+      ORG &0100
+
+
+load  = &C100           ; for nrt
+far_call_bric = &C112   ; for io_read_line
+far_call_ext = &C13C    ; for nrt and import (org_insert_line)
+
+org   = &C008
+
+codedest = impexp
+limit = save_jp
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+buf_test = &2000
+ref_test = &6000
+
+;jumptable
+
+imp_line_buf = &6900
+imp_dams_buf = &7B00
+
+disc_in_open = &BC77
+disc_in_close = &BC7A
+disc_in_abandon = &BC7D
+disc_in_char = &BC80
+
+disc_out_open = &BC8C
+disc_out_close = &BC8F
+disc_out_char = &BC95
+disc_out_abandon = &BC92
+
+burn
+
+;
+;install in rom
+;
+          ld hl,nburn
+          call &BCD4
+          ret nc
+          ld ix,param_burn
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BUR"
+      BYTE "N"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+
+
+tests
+          call nrt_setup
+          call testdams
+          call test_import_simple
+          call test2k
+          call testdams
+          ret
+
+nrt_setup
+
+nrtbk = &C7
+
+          ld a,nrtbk
+          push af
+          ld c,rom:call &B90F
+
+; -- Check this is Orgams ROM. If fail: correct rom
+          ld hl,(&C004)
+          ld de,signatureed
+          ld bc,signatureed_
+          call compare
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af
+          call setup_custom
+
+          ld c,rom:call &B90F
+;vt_currom = &9D08
+;          ld a,rom:ld (vt_currom),a
+          ret
+
+signatureed BYTE "Orgams"
+signatureed_ = $-signatureed
+
+
+test_import_simple
+; It used to import properly but displaying 'DOS ERROR'
+          call nrt_setup
+          ld hl,oneline
+          ld de,1
+          call io_import:call nc,&BE00
+
+          ld de,1
+          ld hl,buf_test
+          call org_get_line_for_nrt ;          call nc,&BE00
+          ld hl,buf_test
+          ld de,refoneline
+          ld bc,refoneline_
+          call compare
+          ret
+
+oneline BYTE "oneline.txt",0
+refoneline BYTE "; just one line"
+refoneline_ = $ - refoneline
+
+
+test_export
+;Pb quand buffer=exactement &200 !?
+
+          call nrt_setup
+          ld hl,texp_name
+          ld de,0:ld bc,0
+          call load
+          call nc,&BE00
+
+          ld hl,texp_out
+          ld de,2
+          ld bc,8
+          call export
+          ret
+
+texp_name BYTE "chexport.nrt",0 ;source
+texp_out BYTE "chexport.tmp",0
+
+
+test2k
+;there was a bug : line truncated at buffer boundary
+
+          call nrt_setup
+
+          ld hl,tstfile2k
+          ld de,1
+          call io_import
+          call nc,&BE00
+
+          ld hl,buf_test
+cln       ld (hl),0:inc l:jr nz,cln
+          ld de,93
+          call org_get_line_for_nrt
+          call nc,&BE00
+          ld hl,buf_test
+          ld de,ref2kline1
+          ld bc,ref2kline1_
+          call compare
+
+          ld hl,buf_test
+          ld de,94
+          call org_get_line_for_nrt
+          ld hl,buf_test
+          ld de,ref2kline2
+          ld bc,ref2kline2_
+          call compare
+          ret
+
+tstfile2k BYTE ":orgnrt/nrt-2k.txt",0
+
+ref2kline1
+      FILL 10," "
+      BYTE "jr c,r89b8"
+ref2kline1_ = $-ref2kline1
+ref2kline2
+      BYTE "r89b8"
+      FILL 5," "
+      BYTE "jr c,r89bc"
+ref2kline2_ = $-ref2kline2
+
+
+testdams
+          call nrt_setup
+
+          ld hl,tstfiledams
+          ld de,1
+          call io_import
+          call nc,&BE00
+
+          ld hl,buf_test
+          ld de,1
+          call org_get_line_for_nrt
+          ld hl,buf_test
+          ld de,refdamsline1
+          ld bc,refdamsline1_
+          call compare
+
+          ld hl,buf_test
+          ld de,2
+          call org_get_line_for_nrt
+          ld hl,buf_test
+          ld de,refdamsline2
+          ld bc,refdamsline2_
+          call compare
+
+          ld hl,buf_test
+          ld de,2
+          call org_get_line_for_nrt
+          ld hl,buf_test
+          ld de,refdamsline2
+          ld bc,refdamsline2_
+          call compare
+
+          ret
+
+tstfiledams BYTE ":orgnrt/nrt-dams.s"
+      BYTE 0
+
+refdamsline1
+      BYTE ";dummy"
+refdamsline1_ = $-refdamsline1
+refdamsline2 FILL 6," "
+      BYTE "ORG &1000"
+refdamsline2_ = $-refdamsline2
+refdamsline3 BYTE "toto"
+      FILL 10," "
+      BYTE "jr toto"
+      FILL 22," "
+      BYTE ";ok"
+refdamsline3_ = $-refdamsline3
+
+tstline_size WORD 0
+
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+;          CALL NZ,cp_err
+          call nz,&30
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+
+          ret
+
+org_get_line_for_nrt
+          call far_call_ext:WORD org+6
+          ret
+
+;
+;-----------------------------------------
+
+org_insert_line = org +&0C
+
+io    = &FFCE
+io_read_line = io+3
+get_len = io+15
+
+err_opening = 255
+err_dos = 254
+err_unknown_filetype = 253
+err_unexpect_end = 252
+
+      MACRO CALL_BRIC adr
+          call far_call_bric:WORD adr
+      ENDM
+
+vn    = 0
+
+org   = &C004+4
+org_get_line = org+6
+
+DISP_init = &C142       ; in ch (forwarded)
+disp_failure = &C136
+cls   = &C133
+disp_chr = &C14A
+disp_chr_at = &C14E
+disp_text = &C152
+;disp_text_at = &C156
+disp_nl = &C16A
+disp_deci_hl = &C172
+;disp_locate_scr 
+
+txt_get_msg = &CA0E
+
+io'   = &FFCE
+;io_write_bloc = io'+6
+io_write_line = io'+9
+;io_write_header = io'+12
+
+disc_buf = &8000
+buf_line = &8900        ;pour import/export and save binary
+
+txt_cur_off = &BB84
+txt_set_cursor = &BB75  ;h: logical column. l: logical line.
+
+code
+      IF inRom
+      ORG codedest,$$
+      END
+
+jp
+          jp import
+          jp export
+  ;     jp in_open    ; Hl= nt string. Use disc_buf. Still used???????
+          3 ** BRK
+          jp out_open   ; Hl= nt string. Use disc_buf
+          jp msg_err
+     ;     jp msg_io     ; Temporary. Done in in/out_open
+          3 ** BRK
+
+import
+;Importe fichier ASCII ou DAMS
+;In: HL= filename
+;    DE= pos line
+;Out:HL= nb lines imported
+
+          push de
+
+          call io_import
+
+          ex de,hl      ;hl = last line imported + 1
+          pop de
+          push af
+          or a
+          sbc hl,de
+;hl= nb imported lines. TODO : display it !      
+          pop af
+          ret c
+msg_err
+          push af
+          call disp_failure
+          call &BB06
+          call cls
+ret_pop_af
+          pop af
+          ret
+;
+export
+ ;in HL: filename
+   ; DE: first line
+   ; BC: last line
+
+          push hl
+          ld l,c:ld h,b
+          or a:sbc hl,de:inc hl
+          ld c,l:ld b,h
+          pop hl
+          ret c         ; last < first
+
+          push de
+          push bc
+
+          ld a,msg_export
+          call out_open
+          pop bc        ;nb
+          pop de        ;line #
+          jr nc,exp_err_
+exp_lp
+          push bc
+          ld hl,buf_line
+          push de
+          call far_call_ext:WORD org_get_line
+          jr nc,exp_end
+
+          ld hl,buf_line
+          CALL_BRIC(io_write_line)
+          pop de
+          pop bc
+          jr nc,exp_err_
+          inc de
+          dec bc
+          ld a,c:or b
+          jr nz,exp_lp
+
+          jr _doc       ; ok
+
+exp_err_
+          call disc_out_close
+          jp msg_err
+;
+exp_end
+          pop de
+          pop bc
+_doc
+          jp disc_out_close
+
+
+msg_load = 0
+msg_save = 1
+msg_import = 2
+msg_export = 3
+
+msg_io
+; Display msg (loading/importing/saving) and filename
+          push bc:push de:push hl
+
+          call txt_get_msg
+          ld c,l
+          ld b,h
+          call disp_text
+          ld a," ":call disp_chr
+          pop bc
+          push bc
+          call disp_text
+; for import progress before nl!
+          ld hl,(vo_scrpos):ld (vio_save_pos),hl
+          call disp_nl
+
+          pop hl:pop de:pop bc
+          ret
+
+io_import
+;in : de=ligne, hl:filename
+
+; Called once only, but easier like that (test and RET).
+
+          ld (vio_line),de
+          ld a,msg_import
+          call in_open
+          jr c,imp_open_ok
+
+          ld a,err_opening
+imp_err
+          push af
+          call disc_in_close
+          pop af
+          ld de,(vio_line) ; Needed for partial import
+          or a
+          ret
+
+imp_open_ok
+          ld de,0:ld (vio_lines#),de
+          and 6
+          cp 6
+          jr z,imp_ascii
+
+;binary : dams source
+;entry=size
+
+file_start = 26
+          ld de,file_start
+          add hl,de
+          ld a,(hl)
+          inc hl
+          ld h,(hl)
+          ld l,a
+          or a
+          sbc hl,bc
+          ld a,err_unknown_filetype
+          jr nz,imp_err
+
+imp_dams_lp
+          call _read_line
+          jr c,imp_dams_ok ; Line was read
+          jr nz,imp_err ; Case error
+; Eof.
+;sanity check
+          ld a,(imp_line_buf)
+          or a
+          ld a,err_unexpect_end
+          jr nz,imp_err
+imp_end
+; Eof. Already closed by _readline
+          ld de,(vio_line)
+          scf
+          ret
+
+imp_dams_ok
+          ld hl,imp_line_buf
+          ld de,imp_dams_buf
+          push de
+          call dconvert
+          pop hl
+          jr z,imp_end
+
+          call _insert_line
+          jr c,imp_dams_lp
+          jr imp_err
+
+imp_ascii
+.lp
+;TODO Factorize!
+          call _read_line
+          jr c,.ok      ; Line was read
+          ret nz        ; Case error
+          scf
+          ret           ; End of file.
+
+.ok
+          ld hl,imp_line_buf
+          call _insert_line
+          jr c,.lp
+          jr imp_err
+
+_read_line
+; Return C if line read.
+; NC, Z if end
+; NC, Nz otherwise        
+
+          ld de,imp_line_buf
+          CALL_BRIC(io_read_line)
+          ret c
+          call imp_err
+          xor &1A       ; NC, and Z if EOF
+          ld a,err_dos  ; Only if NZ
+          ret
+
+_insert_line
+; Insert line, update line #.
+; + Every xx lines: print progress.
+; IN: HL=line to insert.
+; OUT: Carry if ok, nc otherwise. A = error
+          ld de,(vio_line)
+          push de
+          call far_call_ext:WORD org_insert_line
+          pop hl
+          ret nc
+
+          inc hl
+          ld (vio_line),hl
+
+          ld hl,(vio_lines#)
+          inc hl
+          ld (vio_lines#),hl
+          ld a,l:and 15:scf:ret nz ; Only every 32 lines
+
+; Hack: display char to act as locate!
+; (since ch doesn't seems to provide locate routine)
+          ld de,(vio_save_pos)
+          ld a,":"
+          push hl
+          call disp_chr_at
+          pop hl
+          call disp_deci_hl
+          scf
+          ret
+
+dconvert
+; in hl : pnt ligne dams (NB : 0D remplace par 00)
+;    de : buffer text output
+; out : Z si end of source
+;     : hl et de incremente en consequence.
+
+          ld a,(hl)
+          or a
+          ret z
+
+          inc hl
+dinstr
+          cp &FF
+          jr z,dcomment
+
+          cp &80
+          jr nc,dmnemo
+
+dlabel
+          ld (de),a
+          inc de
+          ld a,(hl)
+          inc l
+          jr z,deol     ;avoid infinite loop if garbage
+          or a
+          jr z,deol
+          cp &80
+          jr c,dlabel
+          jr dinstr
+
+dmnemo
+          ex de,hl
+          ld (hl)," "
+          inc hl
+          ex de,hl
+
+          cp &C5
+          jr z,ddefm
+
+          push hl
+          ld hl,dams_mnem
+          sub &80
+          jr z,dok_mnem
+          ld b,a
+dmnemolp
+          ld a,(hl)
+          inc hl
+          add a
+          jr nc,dmnemolp
+          djnz dmnemolp
+
+dok_mnem
+          ld a,(hl)
+          and &7F
+          ld (de),a
+          inc de
+          ld a,(hl)
+          inc hl
+          add a
+          jr nc,dok_mnem
+
+          pop hl
+
+          ld a," "
+dlit_lp
+          ld (de),a
+          inc de
+          ld a,(hl)
+          inc l
+          jr z,deol     ;sanity (avoid infinite loop)
+          cp &FF
+          jr nz,dlit_okcom
+dcomment
+          ld a,(hl)
+          or a          ;strip single comment
+          jr z,deol
+          ld a,";"
+dlit_okcom
+          or a
+          jr nz,dlit_lp
+deol
+          xor a
+          ld (de),a
+          inc a         ;nz
+          ret
+
+ddefm
+          ex de,hl
+          ld (hl),"b"
+          inc l
+          ld (hl)," "
+          inc l
+          ex de,hl
+          ld a,&22
+          call dlit_lp
+          ld a,&22
+          ld (de),a
+          inc de
+          jr deol
+
+dams_mnem
+      BYTE "LÄINÃDEÃADÄADÃSUÂSBÃANÄXOÒOÒCÐPUSÈPOÐBIÔREÓSEÔRLÃRRÃRÌRÒSLÁSRÁS"
+      BYTE "RÌIÎOUÔRSÔDJNÚEØIÍJÒCALÌREÔJÐNOÐRLCÁRRCÁRLÁRRÁDAÁCPÌSCÆCCÆHALÔE"
+      BYTE "XØDÉEÉNEÇRETÎRETÉRRÄRLÄLDÉCPÉINÉOUTÉLDÄCPÄINÄOUTÄLDIÒCPIÒINIÒOT"
+      BYTE "IÒLDDÒCPDÒINDÒOTDÒ"
+
+;directives
+          ; db, dw, dm, ds
+      BYTE "B"+&80,"W"+&80,"B"+&80,"F"+&80
+      BYTE "EQÕORÇENÔIÆELSÅENÄ"
+
+in_open
+; Common process when opening file: message, close previous.
+;in A: msg#
+  ; HL: filename (nt string)
+
+          call msg_io
+
+          push hl
+          call disc_in_abandon
+          pop hl
+
+          CALL_BRIC(get_len)
+          ld b,c
+          ld de,disc_buf
+          jp disc_in_open
+
+out_open
+; Common process when opening file: message, close previous.
+;in A: msg#
+  ; HL: filename (nt string)
+          call msg_io
+
+          push hl
+          call disc_out_abandon
+          pop hl
+
+          CALL_BRIC(get_len)
+          ld b,c
+          ld de,disc_buf
+          jp disc_out_open
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+vio   = &7CC0
+vo_scrpos = vio+2
+
+vio_save_pos = &8A00
+vio_line = &8A05
+vio_lines# = &8A07
+
+vio   = &7CC0
+vo_scrpos = vio+2
+

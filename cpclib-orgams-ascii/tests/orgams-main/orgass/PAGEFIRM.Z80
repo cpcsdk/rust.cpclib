@@ -1,0 +1,146 @@
+; <<<<< Page connection (work page, source page) >>>>>
+; "firm": Default bank connection,
+        ; per oposition to CP/M, SymbOS (for the future)
+dev_checks = 1
+todo  = 1
+
+; --- HH Beta I ---
+; Dec      
+  ; 11: Remove vo_curbk
+  ; 10: Also populate va_curbk (out of bank)
+; --- HH Beta 1 ---
+; Jul
+  ; 10: Copy-paste from org.o
+
+MSB_BK = &7F
+mess  = &BE00
+
+      IMPORT "const.i"
+      IMPORT "memmap.i"
+      IMPORT "assmap.i"
+
+      ORG &1000
+      ENT burn
+
+rom   = &1D
+codedest = pagefirm_jp
+limit = chunkcc_jp
+
+;-----------------------------------------
+      MACRO BK_BASE
+      IF dev_checks
+          call get_bk_base
+      ELSE
+          ld a,i
+      END
+      ENDM
+;-----------------------------------------
+
+code  = $$
+      ORG codedest,$$
+
+          jr connect_bk_base
+          jr connect_bk_source
+          jr org_connect_source_chunk_from_id
+
+connect_bk_base
+;--------------
+;All regs preserved
+          push af:push bc
+          BK_BASE()
+          ld b,MSB_BK:out (c),a
+          pop bc:pop af
+          ret
+
+connect_bk_source
+;----------------    
+; Reconnect last chunk selected by 'org_connect_chunk_from_id'
+;Compared to org's version, can be called from any bank
+;And all regs are preserved
+      IF todo
+; Optimise that by putting vo_curbk out of bank
+      END
+          push bc
+          ld bc,(va_curbk)
+          ld b,MSB_BK
+          out (c),c
+          pop bc
+          ret
+
+org_connect_source_chunk_from_id
+;-------------------------------
+; Compared to chunk's version: update va_curbk
+; Compared to org's version: - save all regs (but HL)
+                           ; - assert if invalid (bugged in org)
+; Note: put here rather than chunkcc as symetrical to connect_bk_source
+;in : h=MSB, l=bk
+;out: bk connect, hl=chunk start, NZ, Carry.
+; UPDATE curbk.
+          push af
+      IF dev_checks
+          call check_id:call nc,mess
+      END
+
+          push bc
+          ld a,l:ld (va_curbk),a
+          ld b,MSB_BK:out (c),l
+          pop bc
+
+          ld l,source_header_size
+          pop af
+          ret
+
+
+get_bk_base
+;..........
+; Note: ch uses org.o's version
+      IF dev_checks
+          ld a,i:and &C5:cp &C5:call nz,&BE00
+      END
+          ld a,i
+          ret
+
+check_id_or_null
+;...............
+; Return C if HL well formed (So 0 *is* considered valid).
+; Don't BRK here! (Depends on client).
+          ld a,l:or h:scf:ret z
+; Enchaine
+check_id
+;.......
+; Return C if HL ok (valid for connection. So 0 isn't considered valid).
+; Don't BRK here! (Depends on client).
+          ld a,l:and &C4:xor &C4:ret nz
+          ld a,h:and &C0:cp &40:scf:ret z
+ret_nc
+          or a
+          ret
+
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+      ORG $$
+
+burn
+;
+;install in rom
+;
+          ld ix,param_burn:call _burn
+          call &BB06
+          ret
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BUR"
+      BYTE "N"+&80
+param_burn WORD rom,codesize,codedest,code
+

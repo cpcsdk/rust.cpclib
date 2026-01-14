@@ -1,0 +1,1567 @@
+; <<<<<< disassemble/decode/helpers >>>>>>
+; Dependencies: aap (aap_getkey)
+; Not assemblable as-is:
+  ; Use disarom.o to burn
+  ; Use disatxt.o to test
+
+; - ecodes   (unused, since use lookup table dispasst)
+; - codec_test
+; - dispasst (dispatch for opcodes)
+; - deco_jp  (dispatch for escape codes)
+
+;!!! TODO: use existing bric_far_call install!
+; [size] factorize do_ddispatch
+
+      IMPORT "monique.i"
+            ; decexp.o at /decexp/
+
+; \/\/\/\/ 2025 \/\/\/\/\/\/\/\/\/\/
+; --- HH Beta F ---
+ ; Nov
+  ;  2: 1u Handle local equ (.toto = ...)
+
+; --- HH Beta 1 ---
+ ; Jul
+  ; 18; 1t Handle SAVE/SAVEA
+      ; 1s dispasst: Remove shift_hack. 
+      ; Import "decexp.o" at /decexp/ (instead of using jp table)
+      ; Move in ORGEXT.ROM
+      ; Move tests in disatst.o
+
+; \/\/\/\/ 2024 \/\/\/\/\/\/\/\/\/\/
+; ------- GG beta B ---------
+     ; Oct 1 1r: Add test_get_pc_backward (bug#1a4) DOES NOT REPRODUCE
+               ; Move poubelle at &6900 (room for 11*'set 7,(ix+127),b')
+; ------- Old version -------
+     ; Oct 1 1q: Restore from ROM! 
+                     ; - "STR" mnemonique 
+                     ; - Remove decode_no_firm / firm distinction
+                       ; since decexp uses new far_call for aap.getkey
+                     ; - Move poubelle @ 6980
+
+; \/\/\/\/ 2021 \/\/\/\/\/\/\/\/\/\/
+
+        ; 20 1p: Import directive 
+           ; 1o: Local labels /alocal/
+    ; Jan 15 1n: Fix nrt (todo_hack).
+               ; Clean_up nrt_init
+
+vd2   = &9710           ; After scan
+
+     ; !! Buf ovf detection not done for labels (AAP). 
+        ; -> Nevermind: cf TODO below
+
+     ; !! TODO : fix todo_hack
+
+     ; TODO : remove buf ovf detection 
+              ; replace put_a by ld (de),a:inc e 
+              ; -faster and shorter
+              ; we may detect buf ovf once by instruction
+     ; TODO : remove jp getixy
+
+
+code  = &1C40
+
+tab_instr = 10          ;pos tab pour mnemoniques
+tab_command = 6
+tab_comment = 24
+
+; ---- in bric brac ------
+
+;aap   = &FE30
+;aap_getkey = aap+9     ; called in decexp
+
+poubelle = &6900
+
+vd    = &7CD0
+
+dispasst
+base  = $
+;a0 = single byte opcode (0 arg)
+;a8 = arg reg8
+;a16 = arg reg16
+;ajr = relative jump
+;aws = white space
+;axx = reserved
+
+      IF 0
+; handled in disa_00_3f
+      BYTE a0,a16,a0,a0,a0,a0,a8,a0,a0,a0,a0,a0,a0,a0,a8,a0
+      BYTE ajr,a16,a0,a0,a0,a0,a8,a0,ajr,a0,a0,a0,a0,a0,a8,a0
+      BYTE ajr,a16,a16,a0,a0,a0,a8,a0,ajr,a0,a16,a0,a0,a0,a8,a0
+      BYTE ajr,a16,a16,a0,a0,a0,a8,a0,ajr,a0,a16,a0,a0,a0,a8,a0
+      END
+
+      IF $ AND &FF - &40
+ !! error align
+      END
+
+      BYTE alab,a0,a0,acom,a0,a0,a0,a0,a0,atab,anl,a0,a0,a0,a0,a0
+      BYTE a0,alocal,axx,a0,a0,a0,a0,a0,axx,a0,a0,afact,a0,a0,a0,a0
+      BYTE a0,a0,a0,a0,aequ,a0,a0,a0,a0,a0,a0,a0,a0,amac,a0,a0
+      FILL 15,a0
+      BYTE aesc
+
+      FILL 16,a0
+      FILL 16,a0
+      FILL 16,a0
+      FILL 16,a0
+
+      BYTE a0,a0,a16,a16,a16,a0,a8,arst,a0,a0,a16,a#cb,a16,a16,a8,abyte
+      BYTE a0,a0,a16,a8,a16,a0,a8,aword,a0,a0,a16,a8,a16,a0,a8,a#xy_ind
+      BYTE a0,a0,a16,a0,a16,a0,a8,axx,a0,a0,a16,a0,a16,a#ed,a8,axx
+      BYTE a0,a0,a16,a0,a16,a0,a8,axx,a0,a0,a16,a0,a16,a0,a8,a#xy_ind
+
+      BYTE "ORGAMS DISA/DECODE vG"
+      BYTE 0
+
+
+deco_macrouse
+          call put_instr
+          ld c,"("      ; separator between name and parameters
+          call decodatacom_
+          ld a,b:cp "(":call z,put_a ;wasn't consumed because no param
+          ld a,")"
+          jp put_a
+
+deco_jumptable
+;All routines:
+;return NC with A = code to process.
+;        C if decoding was processed here
+
+abyte = $ AND &FF
+          call put_command
+          ld hl,tx_byte
+          jr decodatacom
+
+aword = $ AND &FF
+          call put_command
+          ld hl,tx_word
+decodatacom
+          ld c,tx_byte_ ;BYTE, WORD, SAVE : same size
+          call safe_ldir
+
+          inc ix        ;skip size
+decodatacom'
+          ld c,","
+decodatacom_
+          inc ix        ;skip data len (or size depending onentry point)
+          ld b,0        ; no separator first iter
+dcdatalp
+          ld a,(ix+0)
+          inc ix
+          cp e_endofdata
+          scf
+          ret z
+          push af
+          ld a,b        ; separator "(" " " or ","
+          or a
+          call nz,put_a
+          pop af
+
+          push bc
+          call deco_exp_a
+          pop bc
+          ld b,c
+          ld c,","
+          jr dcdatalp
+
+axx   = $ AND &FF
+          call _put_error
+          scf
+          ret
+
+alocal = $ AND &FF
+          ld a,".":call put_a
+;enchaine
+alab  = $ AND &FF
+          call put_label
+          scf
+          ret
+
+aequ  = $ AND &FF
+          ld a,".":cp (ix+0):jr nz,.ok
+; Local
+          call put_a
+          inc ix
+.ok
+          call put_label
+          call put_command
+          ld a,"=":call put_a
+          ld a," "
+          jp _put_deco_exp
+
+atab  = $ AND &FF
+          ld a,(ix+0)
+          inc ix
+          call tabulate
+          scf
+          ret
+
+acom  = $ AND &FF
+          ld a,(vd_flags_line)
+          and 1
+          ld hl,vd_nb_instr
+          or (hl)
+          jr z,acom_single ;single comment : no tab (or already encoded)
+
+          ld a,tab_comment
+          call tabulate
+acom_single
+          ld a,";"
+          call put_a
+          call deco_asis_com
+;enchaine avec anl (new line implicite)
+
+anl   = $ AND &FF
+          ld hl,vd_flags
+          set 1,(hl)    ;end of line
+          scf
+          ret
+
+a#xy_ind = $ AND &FF
+;$df->$40 $ff->$80
+          add &20-ec_ix_ind AND &FF
+          add a
+          ld c,a
+          call disa_ixycom
+          scf
+          ret
+
+afact = $ AND &FF
+          call put_instr_
+          ld hl,vd_flags_line
+          set 1,(hl)
+          call deco_exp
+          call _afact   ; needed to set Carry
+          scf
+          ret
+
+amac  = $ AND &FF
+          call put_command
+          ld hl,tx_macro
+          ld c,tx_macro_
+          call safe_ldir
+          ld c," "      ; separator between name and parameters
+          jp decodatacom_
+
+
+arst  = $ AND &FF
+a8    = $ AND &FF
+a16   = $ AND &FF
+ajr   = $ AND &FF
+a#cb  = $ AND &FF
+a#ed  = $ AND &FF
+a0    = $ AND &FF
+          or a          ;"unescape"
+          ret
+
+aesc  = $ AND &FF
+      IF $/&0100 - deco_jumptable/&0100
+ !! error confine
+      END
+          ld a,(ix+0)
+          inc ix
+          cp &40
+          ret nc        ;as is
+
+          cp deco#:jr nc,unknown_code
+          add a
+          add deco_jp AND &FF:ld l,a
+          ld h,deco_jp/&0100
+          ld a,(hl):inc l:ld h,(hl):ld l,a
+          call jp_hl
+          scf           ; mark as escaped
+          ret
+
+      FILL -$ AND &1F,0
+deco_jp
+;todo : store only LSB
+      WORD deco_eoc,deco_asis
+      WORD deco_nop,deco_nop ;store_pc/obj: nothing to do
+      WORD deco_org,deco_org2
+      WORD deco_ent,deco_fill,deco_skip
+      WORD deco_if,deco_else,deco_elif,deco_end
+      WORD deco_factor_bloc
+      WORD deco_factor_bloc_end
+      WORD deco_nop     ;implicit '['
+      WORD deco_brk,deco_brk_set,deco_rest
+      WORD deco_bank
+      WORD deco_endm,deco_macrouse
+      WORD deco_load,deco_import
+      WORD deco_str
+      WORD deco_save
+      WORD deco_savea
+
+deco# = $-deco_jp /2
+
+      IF $/&0100 - deco_jp/&0100
+!!error must be same MSB!!
+      END
+
+deco_nop
+          ret
+
+deco_brk_set            ;todo
+deco_elif               ;todo
+unknown_code
+          call put_error
+      BYTE "~?~"
+      BYTE 0
+
+deco_eoc
+;mustn't be met !
+          call put_error
+      BYTE "!!EOC!!"
+      BYTE 0
+
+
+deco_asis
+          ld a,1
+          ld (vd_asis),a
+          jp deco_asis_com
+
+
+deco_error
+          call put_error
+      BYTE ";(?)"
+      BYTE 0
+
+; Return direct.
+deco_ent  call put_command_tnt_exp:BYTE "ENT ",0
+deco_org  call put_command_tnt_exp:BYTE "ORG ",0
+deco_fil_ call put_command_tnt_exp:BYTE "FILL ",0
+deco_skip call put_command_tnt_exp:BYTE "SKIP ",0
+deco_if   call put_command_tnt_exp:BYTE "IF ",0
+deco_bank call put_command_tnt_exp:BYTE "BANK ",0
+deco_else call put_command_tnt:BYTE "ELSE",0
+deco_end  call put_command_tnt:BYTE "END",0
+deco_endm call put_command_tnt:BYTE "ENDM",0 ; end macro
+deco_brk  call put_command_tnt:BYTE "BRK",0
+deco_rest call put_command_tnt:BYTE "RESTORE",0
+
+deco_org2 call deco_org
+deco_arg2
+          ld a,","
+_put_deco_exp
+          call put_a
+          call deco_exp
+          scf
+          ret
+
+deco_fill call deco_fil_
+          jr deco_arg2
+
+deco_factor_bloc
+          call put_command
+          ld hl,vd_flags_line
+          set 1,(hl)
+          call deco_exp
+          call put_tnt:BYTE " ** [",0
+;put_tnt eats ret
+
+deco_factor_bloc_end
+;avoid ":]"
+          ld hl,vd_nb_instr
+          ld a,(hl)
+          or a
+          ld a,tab_instr
+          call z,tabulate
+
+          ld a,"]"
+          jp put_a
+
+deco_load
+;--------                            
+;same construct than amac
+          call put_command
+          ld hl,tx_load
+          ld c,tx_byte_ ; same size
+          call safe_ldir
+          ld c," "      ; separator between filename and options
+          jp decodatacom_ ; nb: no options right now!
+
+deco_import
+;----------
+;copy/paste of deco_load. No need to factorize: options will differ.
+
+          call put_command
+          ld hl,tx_import
+          ld c,tx_import_
+          call safe_ldir
+          ld c," "      ; separator between filename and options
+          jp decodatacom_ ; nb: no options right now!
+
+deco_str
+;-------
+          call put_command
+          ld hl,tx_str
+          ld c,tx_str_
+          call safe_ldir
+          ld c," "
+          jp decodatacom_
+
+deco_save
+;--------
+          call put_command
+          ld hl,tx_save
+          ld c,tx_save_
+          call safe_ldir
+          jp decodatacom'
+
+deco_savea
+;---------
+          call put_command
+          ld hl,tx_savea
+          ld c,tx_savea_
+          call safe_ldir
+          jp decodatacom'
+
+;----------------------------------------
+put_command_tnt_exp
+;Before: sp: txt, ret
+          ld hl,deco_exp
+          ex (sp),hl
+          push hl
+;After: sp: txt, deco_exp, ret
+; enchaine!!
+put_command_tnt
+;must return carry
+          call put_command
+          jp put_tnt    ; eats RET for txt.
+
+put_command
+          ld c,tab_command
+          call put_separator
+          ld hl,vd_flags_line
+          set 0,(hl)
+          ret
+
+put_instr
+          ld hl,vd_flags
+          bit 0,(hl)
+          ret z
+put_instr_
+          ld c,tab_instr
+
+put_separator
+;in: C = which tab
+
+          ld hl,vd_flags_line
+          bit 1,(hl)    ;if factor...
+          res 1,(hl)
+          ret nz        ;...no separator
+
+          ld b,a        ;backup
+          ld hl,vd_nb_instr
+          ld a,(hl)
+          inc (hl)
+          or a
+          jr nz,ps_not1st
+          ld a,c
+tabulate
+          scf:sbc e:jr nc,$+3:xor a ;nb space to put
+          inc a
+          ex de,hl
+tablp     ld (hl)," ":inc l:dec a:jr nz,tablp
+          ex de,hl
+          ld a,b
+          ret
+
+ps_not1st
+          ld a,":"
+          call put_a
+          ld a,b
+          ret
+
+
+ocl_index
+ocl_nop = 0
+      BYTE 0,3,7,9
+ocl_ex = 4
+      BYTE 11,13,15,17
+ocl_inc = 8
+      BYTE 19
+ocl_dec = 9
+      BYTE 22
+ocl_rlca = 10
+      BYTE 25,29,32,35
+ocl_rrca = 14
+      BYTE 38,42,45,48
+ocl_halt = 18
+      BYTE 51
+ocl_add = 19
+      BYTE 55
+ocl_adc = 20
+      BYTE 58,61
+ocl_sbc = 22
+      BYTE 64
+      BYTE 67,70,73,75
+ocl_ret = 27
+      BYTE 77,80,83
+ocl_ld = 30
+ocl_ldcpinout = 30
+      BYTE 85,87,89
+ocl_out = 33
+      BYTE 91
+ocl_pop = 34
+      BYTE 94
+ocl_jp = 35
+      BYTE 97,99,102,104
+ocl_call = 39
+      BYTE 106
+ocl_push = 40
+      BYTE 110
+ocl_rst = 41
+      BYTE 114
+ocl_in = 42
+ocl_inexei = 42
+      BYTE 117,119,121
+ocl_rlc = 45
+      BYTE 123,126,129,131
+      BYTE 133,136,139,142
+ocl_bit = 53
+      BYTE 145,148,151
+ocl_neg = 56
+      BYTE 154
+ocl_retn = 57
+      BYTE 157
+ocl_im = 58
+      BYTE 161
+ocl_reti = 59
+      BYTE 163
+ocl_ldrrdrld = 60
+      BYTE 167,169,171,173
+      BYTE 175,178,181,182
+      BYTE 183
+
+ocl
+      BYTE "nopdjnzjrjr"
+      BYTE "exjrjrjr"
+      BYTE "incdec"
+      BYTE "rlcarladaascf"
+      BYTE "rrcarracplccf"
+      BYTE "halt"
+      BYTE "addadcsubsbc"
+      BYTE "andxororcp"
+      BYTE "retexxjpld"
+      BYTE "cpinout"    ;ed
+      BYTE "pop"
+      BYTE "jpoutexdi"
+      BYTE "callpush"
+      BYTE "rst"
+      BYTE "inexei"
+;cb      
+      BYTE "rlcrrcrlrr"
+      BYTE "slasrasl1srl"
+      BYTE "bitresset"
+;ed
+      BYTE "negretnimreti"
+      BYTE "ldldldldrrdrld**"
+
+tx_byte BYTE "BYTE "
+tx_byte_ = $-tx_byte
+tx_word BYTE "WORD "
+tx_load BYTE "LOAD "
+tx_macro BYTE "MACRO "
+tx_macro_ = $-tx_macro
+tx_import BYTE "IMPORT "
+tx_import_ = $-tx_import
+tx_str BYTE "STR "
+tx_str_ = $-tx_str
+tx_save BYTE "SAVE "
+tx_save_ = $-tx_save
+tx_savea BYTE "SAVEA "
+tx_savea_ = $-tx_savea
+
+
+opel
+opel_bc = 1
+opel_de = 2
+opel_hl = 3
+opel_sp = 4
+opel_af = 5
+opel_b = 6
+opel_c = 7
+opel_d = 8
+opel_e = 9
+opel_h = 10
+opel_l = 11
+opel_a = 12
+opel_i = 13
+opel_r = 14
+opel_nz = 15
+opel_nc = 16
+opel_po = 17
+opel_p = 18
+opel_z = 19
+opel_ca = 20
+opel_pe = 21
+opel_m = 22
+opel_0 = 23
+      BYTE "bcdehlspaf"
+      BYTE "b",0,"c",0,"d",0,"e",0,"h",0,"l",0,"a",0
+      BYTE "i",0,"r",0
+      BYTE "nzncpop"
+      BYTE 0
+      BYTE "z",0,"c",0,"p","e","m",0
+      BYTE "0",0
+;"IX" and "IY" set in disa_ixiy
+
+oper_base = 24
+oper_reladr = oper_base ;pour jr djnz...
+oper_nn = oper_base+1   ;ld hl,nn
+oper_n = oper_base+2    ;ld h,n
+oper_rst = oper_base+3  ;rst 0 8 ...
+oper_bit# = oper_base+4 ;bit/res/set n.
+oper_index = oper_base+5 ;ld (ix+n),r
+oper_im = oper_base+6   ;im 0 1 ou 2
+
+ixy_reg = &20           ;h/l can be replaced by ixh/l or iyh/l
+adr_ind = &40           ;(nn)/(hl)/(bc) address mode
+ope4i = &60             ;(opei_n[..ab....])
+ope4  = &80             ;opei_n[..ab....], forward flags
+ope8i = &E0             ;(opei_n[..abc...])
+
+opei
+opei_bcdennnn = ope4i+0
+      BYTE opel_bc+adr_ind,opel_de+adr_ind,oper_nn+adr_ind,oper_nn+adr_ind
+opei_aahla = ope4i+1
+      BYTE opel_a,opel_a,opel_hl+ixy_reg,opel_a
+opei_bcdehlaf = ope4i+2
+      BYTE opel_bc,opel_de,opel_hl+ixy_reg,opel_af
+opei_nn_n_sp = ope4i+3
+      BYTE oper_nn,oper_n+adr_ind,opel_sp+adr_ind,0
+opei_ahl = ope4i+4
+      BYTE 0,opel_a,opel_hl+ixy_reg,0
+opei_hl_sp = ope4i+5
+      BYTE 0,0,opel_hl+ixy_reg,opel_sp
+opei_hl = ope4i+6
+      BYTE 0,0,0,opel_hl+ixy_reg
+opei_ade = ope4i+7
+      BYTE 0,opel_a,opel_de,0
+opei_nhl = ope4i+8
+      BYTE 0,oper_n+adr_ind,opel_hl,0
+opei_ia = ope4i+9
+      BYTE opel_i,opel_a,0,0
+opei_ai = ope4i+10
+      BYTE opel_a,opel_i,0,0
+opei_ra = ope4i+11
+      BYTE opel_r,opel_a,0,0
+opei_ar = ope4i+12
+      BYTE opel_a,opel_r,0,0
+
+;NOW par 8 (meme numerotation)
+opei_00_1 = ope8i+13
+      BYTE 0,opel_af,oper_reladr,oper_reladr
+      BYTE opel_nz,opel_z,opel_nc,opel_ca
+opei_00_2 = ope8i+15
+      BYTE 0,opel_af,0,0
+      BYTE oper_reladr,oper_reladr,oper_reladr,oper_reladr
+opei_reg8 = ope8i+17
+      BYTE opel_b,opel_c,opel_d,opel_e
+      BYTE opel_h+ixy_reg,opel_l+ixy_reg,opel_hl+adr_ind,opel_a
+opei_reg8_0 = ope8i+19
+      BYTE opel_b,opel_c,opel_d,opel_e
+      BYTE opel_h,opel_l,opel_0,opel_a
+opei_cond = ope8i+21
+      BYTE opel_nz,opel_z,opel_nc,opel_c
+      BYTE opel_po,opel_pe,opel_p,opel_m
+
+oc4   = &40
+oc8   = &80
+
+op_mask4 = &30
+op_mask8 = &38
+
+band_00_3f
+;for each col : opcode, operande1, operande2
+      BYTE oc4+ocl_nop,opei_00_1,opei_00_2
+      BYTE ocl_ld,ope4+opel_bc+ixy_reg,oper_nn
+      BYTE ocl_ld,opei_bcdennnn,opei_aahla
+      BYTE ocl_inc,ope4+opel_bc+ixy_reg,0
+      BYTE ocl_inc
+ind_reg8 BYTE opei_reg8,0 ;for reuse
+      BYTE ocl_dec,opei_reg8,0
+      BYTE ocl_ld,opei_reg8,oper_n
+      BYTE oc4+ocl_rlca,0,0
+      BYTE oc4+ocl_ex,opei_00_1,opei_00_2
+      BYTE ocl_add,opel_hl+ixy_reg,ope4+opel_bc+ixy_reg
+      BYTE ocl_ld,opei_aahla,opei_bcdennnn
+      BYTE ocl_dec,ope4+opel_bc+ixy_reg,0
+      BYTE ocl_inc,opei_reg8,0
+      BYTE ocl_dec,opei_reg8,0
+      BYTE ocl_ld,opei_reg8,oper_n
+      BYTE oc4+ocl_rrca,0,0
+band_c0_ff
+      BYTE ocl_ret,opei_cond,0
+      BYTE ocl_pop,opei_bcdehlaf,0
+      BYTE ocl_jp,opei_cond,oper_nn
+      BYTE oc4+ocl_jp,opei_nn_n_sp,opei_ahl
+      BYTE ocl_call,opei_cond,oper_nn
+      BYTE ocl_push,opei_bcdehlaf,0
+      BYTE oc8+ocl_add,oper_n,0
+      BYTE ocl_rst,oper_rst,0
+      BYTE ocl_ret,opei_cond,0
+      BYTE oc4+ocl_ret,opei_hl_sp,opei_hl
+      BYTE ocl_jp,opei_cond,oper_nn
+      BYTE oc4+ocl_in-1,opei_ade,opei_nhl
+      BYTE ocl_call,opei_cond,oper_nn
+      BYTE ocl_call,oper_nn,0
+      BYTE oc8+ocl_add,oper_n,0
+      BYTE ocl_rst,oper_rst,0
+band_ed_40_7f
+      BYTE ocl_in,opei_reg8_0,opel_c+adr_ind
+      BYTE ocl_out,opel_c+adr_ind,opei_reg8_0
+      BYTE ocl_sbc,opel_hl,ope4+opel_bc
+      BYTE ocl_ld,oper_nn+adr_ind,ope4+opel_bc
+      BYTE ocl_neg,0,0
+      BYTE ocl_retn,0,0
+      BYTE ocl_im,oper_im,0
+      BYTE oc8+ocl_ldrrdrld,opei_ia,opei_ai
+      BYTE ocl_in,opei_reg8_0,opel_c+adr_ind
+      BYTE ocl_out,opel_c+adr_ind,opei_reg8_0
+      BYTE ocl_adc,opel_hl,ope4+opel_bc
+      BYTE ocl_ld,ope4+opel_bc,oper_nn+adr_ind
+      BYTE ocl_neg,0,0
+      BYTE ocl_reti,0,0
+      BYTE ocl_im,oper_im,0
+      BYTE oc8+ocl_ldrrdrld,opei_ra,opei_ar
+
+disa_ope4
+;ope4 :shift
+          ld a,c
+          and op_mask4
+          rlca
+          rlca
+          rlca
+          rlca
+          add (hl)
+          sub ope4
+          ret
+
+get_oc8
+          ld a,c
+get_oc8_a
+          and op_mask8
+          rrca
+          rrca
+          rrca
+          add b
+          ret
+
+get_reg8
+;b c d e h l (hl) a
+          and 7
+num_reg8 = opei_reg8-ope8i
+          add num_reg8*4
+          jr dopei_ind
+
+get_operand
+; (follow indirection/shift)
+; in hl = main table.  c=original opcode
+; out a = operand (literal or routine)
+;     b,hl preserved
+
+          ld a,(hl)
+          cp ope4i
+          ret c
+;
+          cp ope4
+          jr c,disa_ope4i
+
+          cp ope8i
+          jr c,disa_ope4
+
+;ope8i : indirection sur 8
+
+          ld a,c
+disa_ope8i
+          and op_mask8
+          rlca
+          rlca
+          rlca
+          add (hl)
+          sub ope8i
+          jr dopei_com
+
+disa_ope4i
+
+;ope4i : indirection
+
+          ld a,c
+          and op_mask4
+          rlca
+          rlca
+          add (hl)
+          sub ope4i
+dopei_com
+          rlca
+          rlca
+dopei_ind
+          push hl
+          ld hl,opei
+          call add_hl_a
+          ld a,(hl)
+          pop hl
+          ret
+
+disa_ixiy
+;put 'ix' or 'iy', set flag_h_l_met
+;in: hl = vd_flags
+          set 5,(hl)
+          bit 7,(hl)
+          ld l,a
+          ld a,"i"
+          ld h,"y"
+          jr nz,$+3
+          dec h
+          call put_a
+          ld a,h
+          call put_a
+          ld a,l
+          ret
+
+
+disa_operand
+;in a = operand (literal or routine) with flags
+;  de = buffer output
+;  ix = pointe sur d pour (ixy+d)
+;out : b & hl modified. C preserved
+
+          ld b,a
+          bit 6,a
+          jr z,disa_ope_com
+;(xx)
+          ld a,"("
+          call put_a
+          ld a,b
+          call disa_ope_com
+          ld a,")"
+          jp put_a
+
+disa_ope_com
+          and &1F
+          cp oper_base
+          jr c,disa_opel
+
+jp_iy BYTE &FD          ; jp iy
+jp_hl     jp hl         ;routine
+disa_opel
+;copy operand name
+          ld hl,vd_flags
+          bit 7,(hl)
+          jr nz,dopel_ixy
+          bit 6,(hl)
+          jr z,dopel_okixy
+
+dopel_ixy
+          bit 6,b
+          jr nz,dopel_index
+          bit 5,b
+          jr z,dopel_okixy
+          cp opel_hl
+          jr nz,dopel_nohl
+          jr disa_ixiy
+dopel_nohl
+          cp opel_h
+          jr nz,dopel_noh
+          call disa_ixiy
+          jr dopel_okixy
+dopel_noh
+          cp opel_l
+          jr nz,dopel_okixy
+          call disa_ixiy
+          jr dopel_okixy
+
+dopel_index
+          cp opel_hl
+          jr nz,dopel_okixy
+
+;(ix+n)
+          call disa_ixiy
+          ld a,oper_index
+          jp iy
+
+dopel_okixy
+          dec a
+          add a
+          ld hl,opel
+          call add_hl_a
+          ld a,(hl)
+          inc hl
+          call put_a
+          ld a,(hl)
+          or a
+          ret z
+          jp put_a
+
+disa_00_3f
+          ld hl,band_00_3f
+disa_band_com
+          and &0F
+          ld b,a
+          add a
+          add b
+          call add_hl_a
+
+          ld a,(hl)
+          cp oc4
+          jr c,disa_okoc
+;
+          sub oc8
+          jr c,disa_oc4
+
+          ld b,a
+          call get_oc8
+          jr disa_okoc
+
+disa_oc4
+          add oc8-oc4
+          ld b,a
+          ld a,c
+          and op_mask4
+          rrca
+          rrca
+          rrca
+          rrca
+          add b
+
+disa_okoc
+          push af
+          inc hl
+          call get_operand
+          ld b,a
+          inc hl
+          call get_operand
+          ld h,a
+          ld l,b
+          pop af
+
+disa_instr
+;copy opcode name, then process operands
+;in: a = opcode l,h = operandes 1&2
+
+          push hl
+
+          call put_instr
+
+          ld hl,ocl_index
+          call add_hl_a
+          ld b,(hl)     ;start
+          inc hl
+          ld a,(hl)     ;end
+          sub b
+          ld c,a
+
+          ld a,b
+          ld hl,ocl
+          call add_hl_a
+          ld a,(hl)
+          cp "*"
+          jp z,disa_ed_nop_pop
+
+padding = 0
+
+      IF padding
+          ld a,5        ;for padding
+          sub c
+      END
+          call safe_ldir
+          pop hl
+      IF padding
+          ld b,a
+      END
+          ld a,l
+          or a
+          jr z,disa_postcheck
+
+;padding         
+          ld c,a
+          ld a," "
+disa_pad  call put_a
+      IF padding
+          djnz disa_pad
+      END
+          ld a,c
+
+          ld c,h
+          call disa_operand
+          ld a,c
+          or a
+          jr z,disa_postcheck
+
+          ex de,hl
+          ld (hl),","
+          inc hl
+          ex de,hl
+          call disa_operand
+
+disa_postcheck
+
+          ld a,(vd_flags)
+          ld c,a
+          call get_ixy_prefix
+          ret z
+          bit 5,c
+          ret nz
+disa_byte
+          ld hl,tx_byte
+          ld de,(vd_dest0)
+          ld bc,tx_byte_
+          call safe_ldir
+          ld l,a
+          jp disa_hexa_l
+
+
+disa_40_7f
+          call handle_escape_codes
+          ret c
+
+          cp &76
+          jr z,disa_halt
+
+;ld reg8,reg8
+          ld hl,ind_reg8
+          call disa_ope8i
+          ld b,a
+          ld a,c
+          call get_reg8
+          ld l,b
+          ld h,a
+          ld a,ocl_ld
+;gere cas ld (ix+n),h vs ld b,ixh
+          bit 6,l
+          jr z,d40_ok1
+          res 5,h
+d40_ok1
+          bit 6,h
+          jp z,disa_instr
+          res 5,l
+          jp disa_instr
+
+disa_com
+;ix = source
+;de = dest
+;iy = dispatch pour arg num: decode_dispatch ou disa_dispatch
+    ; Called for operands of instructions (disa_ope_com ou dopel_index)
+    ; NEVER for directive operands.
+
+    ; For instance in set/res/bit, bit# is encoded in instruction:
+    ;   Both disa and decode needs to extract it (see deco_bit#)
+
+          ld (vd_dest0),de ;for correction
+disa_cont
+          ld a,(ix+0)
+          inc ix
+          ld (vd_cur_opcode),a ;actual useless here
+          ld c,a
+          cp &40
+          jp c,disa_00_3f
+          cp &80
+          jr c,disa_40_7f
+          cp &C0
+          jr nc,disa_c0_ff
+;80_7f
+          call get_reg8
+          ld l,a
+          ld h,0
+          ld b,ocl_add
+          call get_oc8
+          jp disa_instr
+
+disa_halt
+          ld a,ocl_halt
+          ld hl,0
+          jp disa_instr
+
+disa_dd
+          ld c,flag_ix
+          jr disa_ixycom
+disa_fd
+          ld c,flag_iy
+disa_ixycom
+          ld hl,vd_flags
+          ld a,(hl)
+          and flag_ix OR flag_iy
+          jr nz,disa_prefix_alone
+          ld a,(hl)
+          or c
+          ld (hl),a
+          jr disa_cont
+
+disa_prefix_alone
+          push hl
+          push bc
+          call get_ixy_prefix
+          call disa_byte
+          pop bc
+          pop hl
+          ld a,(hl)
+          and &3F       ;clear previous flag
+          ld (hl),a
+          ret
+
+disa_c0_ff
+          cp &CB
+          jr z,disa_cb
+          cp &DD
+          jr z,disa_dd
+          cp &FD
+          jr z,disa_fd
+          cp &ED
+          jr z,disa_ed
+
+          call handle_escape_codes
+          ret c
+          ld hl,band_c0_ff
+          jp disa_band_com
+
+disa_ed
+          ld hl,vd_flags
+          ld a,(hl)
+          and flag_ix OR flag_iy
+          jr nz,disa_prefix_alone
+
+          ld a,(ix+0)
+          inc ix
+          ld c,a
+          cp &40
+          jr c,disa_ed_nop
+          cp &80
+          ld hl,band_ed_40_7f
+          jp c,disa_band_com
+          cp &A0
+          jr c,disa_ed_nop
+          cp &BC
+          jr nc,disa_ed_nop
+;band_A0_BC
+          bit 2,a
+          jr nz,disa_ed_nop
+          and &03
+          add ocl_ldcpinout
+          ld hl,0
+          call disa_instr
+          ld c,(ix-1)
+          bit 3,c
+          ld a,"i"
+          jr z,disa_bloc_way
+          ld a,"d"
+disa_bloc_way
+          call put_a
+          bit 4,c
+          ret z
+;repeat (LDIR etc...)
+          ld a,"r"
+          jp put_a
+
+disa_cb
+          ld a,(vd_flags)
+          ld c,a
+          and flag_ix OR flag_iy
+          jr z,disa_cb_
+
+          bit 0,c       ;decode from source
+          jr nz,disa_cb_ ;yes, index (d) stocke apres
+
+;asm:DD CB d OP
+
+          ld a,(ix+1)
+;let IX point on d
+          call disa_cb_com
+          inc ix
+          ret
+
+disa_cb_
+          ld a,(ix+0)
+          inc ix
+disa_cb_com
+          ld (vd_cur_opcode),a
+          ld c,a
+
+          cp &40
+          jr c,disacb_00_3f
+
+          call get_reg8
+          res 5,a       ;no ixh... with cb
+          ld h,a
+          ld a,c
+          and &C0
+          rlca
+          rlca
+          add ocl_bit-1
+          ld l,oper_bit#
+          jp disa_instr
+
+disa_ed_nop_pop
+          pop hl
+disa_ed_nop_ld
+          ld a,(ix-1)
+disa_ed_nop
+          push af
+          ld a,&ED
+          call disa_byte
+          ld a,","
+          call put_a
+          pop af
+          ld l,a
+          jp disa_hexa_l
+
+disacb_00_3f
+          call get_reg8
+          res 5,a
+          ld l,a
+          ld h,0
+          ld b,ocl_rlc
+          call get_oc8
+          jp disa_instr
+
+disassemble
+;in hl:opcode to disassemble
+  ; bc:actual address (for relative jumps)
+  ; de:output for text
+
+          ld (vd_savesp),sp
+
+          ld iy,disa_dispatch
+          xor a
+          ld (vd_flags),a
+          ld (vd_is_word_met),a
+          ld (vd_adr),bc
+          push hl
+          pop ix
+          call disa_com
+          push ix
+          pop hl
+          xor a
+          ld (de),a
+          scf
+          ret
+
+decode
+;in   hl:source  de:output for text
+    ; (vd_cursor_pos): for label picking
+;out  C & NZ if ok.  NC & Z : eof    NC & NZ : error! [TODO]
+
+          ld (vd_savesp),sp
+
+          xor a
+          ld (vd_flags_line),a
+          ld (vd_nb_instr),a
+          ld (vd_asis),a
+
+          ld iy,decode_dispatch
+          push hl
+          pop ix
+decode_lp
+          ld a,1        ;'is_decode' + reset other flags
+          ld (vd_flags),a
+          call disa_com
+          ld a,(vd_flags)
+          bit 1,a       ;end of line
+          jr z,decode_lp
+          push ix
+          pop hl
+          ld a,(vd_flags)
+          bit 2,a       ;eof?
+          jr z,decode_ok
+          xor a
+          ret           ;eof: NC & Z
+
+decode_ok
+
+          xor a
+          ld (de),a
+          inc a         ;NZ
+          scf
+          ret
+
+
+disa_reladr
+;adr relative
+          ld a,(ix+0)
+          inc ix
+          push bc
+          ld c,a
+          add a
+          sbc a
+          ld b,a
+          ld hl,(vd_adr)
+          inc hl
+          inc hl        ;base = pc after instruction
+          add hl,bc
+          pop bc
+          jp disa_hexa_hl
+
+
+disa_rst
+          ld a,(ix-1)
+          ld l,a
+          and &30
+          jr z,drst_lt10
+          ex de,hl
+          ld (hl),"&"
+          inc hl
+          ex de,hl
+          call put_hexa_qh
+drst_lt10
+          ld a,l
+          and 8
+          jp put_hexa_ql
+
+disa_bit#
+;bit n
+          ld a,(vd_cur_opcode)
+com_bit#
+          ld b,"0"
+          call get_oc8_a
+          jp put_a
+
+disa_index
+          ld a,(ix+0)
+          inc ix
+          or a
+          ret z         ;display (ix) insteand of (ix+0)
+          ld b,"+"
+          jp p,diind_com
+          ld b,"-"
+          neg
+diind_com
+          push af
+          ld a,b
+          call put_a
+          pop af
+          cp 10
+          jp c,put_hexa_ql ;no hex
+          ld b,a
+          ld a,"&"
+          call put_a
+          ld a,b
+          jp put_hexa_a
+
+
+disa_dispatch
+; see disa_com
+          sub oper_base:jp z,disa_reladr
+          dec a:jp z,deva_hex16
+          dec a:jp z,deva_hex8
+          dec a:jr z,disa_rst
+          dec a:jr z,disa_bit#
+          dec a:jr z,disa_index
+          dec a
+          jp nz,notimpl
+
+disa_im
+          ld a,(ix-1)
+          sub &46
+          jr z,dim_ok
+          sub 8
+          cp 24
+          jp nc,disa_ed_nop_ld
+dim_ok
+          rrca
+          rrca
+          rrca
+          add "0"
+          jp put_a
+
+deco_index
+          ld a,(ix+0)   ;size
+          inc ix
+          or a
+          scf
+          ret z         ;size=0 means (ix), +0 is implicit
+          ld a,(ix+0)
+          cp e_minus_unary
+          ld a,"+"
+          jp nz,deiind_com
+          ld a,"-"
+          inc ix
+deiind_com
+          call put_a
+          jp _deco_exp
+
+
+deco_bit#
+          ld a,(vd_cur_opcode)
+          and &38
+    ;cp bit_escape*8
+          jp nz,com_bit#
+          jp deco_exp
+
+decode_dispatch
+; see disa_com
+          push bc
+          call do_ddispatch
+          pop bc
+          ret
+
+do_ddispatch
+          sub oper_base
+;TODO: factorize that
+          jp z,deco_exp
+          dec a
+          jp z,deco_exp
+          dec a
+          jp z,deco_exp
+          dec a
+          jp z,deco_exp
+          dec a
+          jr z,deco_bit#
+          dec a
+          jr z,deco_index
+          dec a
+          jp z,deco_exp
+          jp notimpl
+
+deco_im
+          ld a,(ix-1)
+          sub &46
+          jr z,dec_ok
+          sub 8
+          cp 24
+          jp nc,notimpl
+dec_ok
+          rrca
+          rrca
+          rrca
+          add "0"
+          jp put_a
+
+
+handle_escape_codes
+;todo? use iy + dispatch code instead ?
+; return C if escaped
+       ; HL destroyed
+
+          ld l,a
+          ld a,(vd_flags)
+          or a
+          bit 0,a
+          ld a,l
+          ret z         ;raw disa: no escape code !
+
+      IF dispasst AND &FF - &40
+ !! error align
+      END
+          ld h,dispasst /&0100
+          ld c,(hl)
+          ld b,deco_jumptable /&0100
+          call jp_bc
+          ld c,a
+          ret
+jp_bc
+          push bc
+          ret
+
+get_ixy_prefix
+;in a : code with ix/iy flags
+;out Z if no ix/iy
+;   NZ otherwise a = $dd/$fd
+          and flag_ix OR flag_iy
+          ret z
+          rra
+          add &DD-&20
+          ret
+
+
+;-----------------------------------------
+
+add_hl_a
+          add l
+          ld l,a
+          ret nc
+          inc h
+          ret
+
+;-----------------------------------------
+
+get_pc_backward
+;in: hl=target adr, b=nb instr backward
+;out: C if ok, HL=start adr
+
+          ld a,b:add a:add a:ld c,a ;nb max back
+          ld e,l:ld d,h ;de=target
+          ld a,l:sub b:ld l,a:jr nc,$+3:dec h ;1st try
+gpb_try
+          push hl:push bc:push de
+gpb_forward
+          push bc
+          ld de,poubelle
+          call disassemble
+          pop bc
+          djnz gpb_forward
+
+          pop de:pop bc
+          or a:sbc hl,de
+          jr z,gpb_found
+
+          pop hl:dec hl
+          dec c
+          jr nz,gpb_try
+
+          ld h,d
+          ld a,e:sub b:ld l,a:jr nc,$+3:dec h ; default
+
+          or a:ret
+
+gpb_found
+          pop hl
+          scf:ret
+
+_put_error
+          call put_error
+      BYTE "~?~"
+      BYTE 0
+
+_afact
+          call put_tnt
+      BYTE " ** "
+      BYTE 0
+
+decexp
+;Imported at the end to respect alignement constrainsts
+      IMPORT "decexp.o"
+
+;shared
+vd_asis = vd            ;hack to detect "bad lines"
+
+vd_adr = vd+1           ;adr courante (pour calcul saut relatif)
+;!!A renommer, aussi utilise pour assembler
+vd_flags = vd+3         ;!!reset in decode_lp
+flag_ix = &40
+flag_iy = &80
+;flag_h_l_met = $20        ;to detect useless DD/FD prefix
+
+;flag_end_of_file = $04    ;indicate empty line
+;flag_end_of_line = $02    ;set to stop decoding
+;flag_is_decode = $01      ;0:raw disa (for monitor)  1:regenere source
+
+vd_flags_line = vd+4    ;!!not reset between instr. For decode only
+fl_no_firm = 4          ;decide which way call aap_getkey
+;fl_factor = 2      ;factor (disable tab and ":")
+;fl_command = 1         ;command/label met. For separator / tab comment
+
+
+vd_dest0 = vd+5
+vd_cur_opcode = vd+7
+vd_nb_instr = vd+8      ;nb instr met (in decode). Used for padding
+
+vd_savesp = vd+9
+;vd_word_met = vd+11     ; for CTRL-ENTER in trace
+vd_is_word_met = vd+13
+
+; for nrt.   see decexp (for fetch label)
+vd_cursor_pos = vd+14   ;nrt only
+;vd_first_from_cursor = vd+15 ;shared (for CTRL-*)
+vd_first_from_cursor_nondef = vd+17 ;shared (for CTRL-ENTER)
+;vd_last_met = vd+19
+;  ----------              
+
+;  ----------              
+; only 3 bytes free here 
+
+;vo_romed = &7CF9
+;vo_romext = &7CFA
+vo_rombric = &7CFF
+

@@ -535,12 +535,13 @@ impl fmt::Display for BasicTokenNoPrefix {
             
             // Value tokens - these should not appear in source reconstruction
             // They contain binary data that needs special handling
+            Self::ValueQuotedString => write!(f, "\""),
+            
             Self::ValueIntegerDecimal8bits |
             Self::ValueIntegerDecimal16bits |
             Self::ValueIntegerBinary16bits |
             Self::ValueIntegerHexadecimal16bits |
             Self::ValueFloatingPoint |
-            Self::ValueQuotedString |
             Self::LineMemoryAddressPointer |
             Self::LineNumber => {
                 // These tokens should be followed by data bytes that need to be decoded

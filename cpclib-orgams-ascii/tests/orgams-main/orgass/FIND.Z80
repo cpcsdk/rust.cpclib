@@ -1,0 +1,1489 @@
+inRom = 1
+rom   = &1D             ;Must be same as ass (for ass_amorce callbacks)
+romed_nrt = &0A
+rommon_nrt = &1B
+rombric_nrt = &1C
+; Goto line, find label, ...
+
+; Depends on app, ass, scan. 
+
+      IMPORT "assmap.i"
+      IMPORT "memmap.i" ; edsign_pos
+      IMPORT "symbflag.i"
+
+; \/ 2025 \/\/\/\/ 
+; ----- HH Beta i -----
+; Nov
+    ; 26 ac: [nochange] tests: remove check agains vo_this_bk
+; ----- HH Beta C -----
+; Oct
+    ; 12 ab: seek_def_from_line: use fact now tab+id is pinned
+                               ; for imported labels
+; ----- HH Beta 6 -----
+; Aug               
+    ; 17 aa: seek_def_from_line (CTRL-ENTER): Try label in import
+; ----- HH Beta 4 -----
+    ;  1 z: Use parse.is_sep in orgext
+; ----- HH Beta 2 -----
+; Jul
+    ; 27 y: Remove exit_err: never called 
+          ; Remove dep to vo.savesp
+; ----- HH Beta 1 -----
+    ; 10 x: Use "assmap.i"
+          ; [Adapt rom ass] Use CALL_EXT / pagefirm
+          ; Restore "JP seek_def" disappeared I don't know when
+; ----- GG Beta J -----
+; Apr 10 w: Use new farcall
+
+; \/ 2021 \/\/\/\/ 
+
+       ; v: Factorize to make room. See /restore_base_sp/
+
+; Sep 28 u: Since ass-do, ass_amorce stack has changed (ix hook).
+          ; Retablish SP properly rather than hand correcting.
+
+    ; 21 t: Test labels locaux CTRL-ENTER 
+          ; Fix that. See /PEEK_LABEL/
+    ; 21 s: Test labels locaux CTRL-* (fixed in scan5)
+
+       ; r: Use is_separator (parse) in bricbrac.
+   ; -- Abandonned -- Copy-paste /is_separator/ from parsebi.
+          ; Rationale: far call would slow down too much.
+                ; Really? We use far_call_ed!
+
+; Jan 13 q: Fix NRTs (org_init_custom is no more.
+                     ; Init done by setup_custom)
+; \/ 2020 \/\/\/\/
+
+;  Apr 2 p: limit @ fd95 
+
+; Mar 31 o: Remove dead code (skip_line and skip_until_opcode)
+          ; Export/import.
+
+; Jan 05 vN Use setup_custom in nrt (since orgcd expect vt_rom*).
+
+; \/ 2019 \/\/\/\/
+
+; Dec 14 vM New test (cf nrtlab3). Fixed in disa1g.
+
+; Nov 29 vL CTRL_ENTER / * in comment (fetch_label)
+       ; vK Use app in bric-brac.
+; Sep 9  vJ Update nrt CTRL-% for macros and implicit bloc.
+          ; Fixed in assbo.
+; 08/08 vI Move buf @ 9400
+; 07/08 vH Move vf  @ 9f26
+         ; New rom#
+; 14    vG Rollback: Use upd_curline from org.
+         ; Doesn't depend on chunk anymore (or bricbrac rom).
+; 07/07 vF No more hl'. No advantage for it.
+         ; Fix proper bk reconnection and cur_line setting (flip_found)
+         ; Fix test_noflip itself.
+         ; Handle 'no corresponding if'.
+; 07/06 vE if_met: store line rather than address!
+         ; musn't allow EI (far_call) -> use Org's seek_source_begin
+         ; Move @ FB40 !! Requires scan 3 !! 
+         ; Mostly ok flip   !! Requires assbk !!
+; 07/06 vD Wip Flip  !! Requires assbk !!
+; 07/05 vC Expose if/else/end _met for assBK (RET for now)
+         ; Additional JPs @ c0f7
+         ; Remove skip_line.
+; 07/03 vB WIP Flip Routine.  !! Doesn't work !!
+         ; Export/Import.
+         ; Use scan_label from scan!
+; 07/01 vA Handle invalid line (exit_err)
+; 07/01 v9 Rollback test end of chunk.
+; 06/30 v8 Fix reset pointer in slfl_label.
+         ; Fix 'skip size' in macro (again!)
+; 06/29 v7 Optimize label picking
+; 06/29 v6 Fix encoding cpt loop: issue when line# > 100. TODO: nrt
+         ; Fix rewind: first line must be checked.
+         ; Fix seek_def_from_line: vf_param wasn't set (todo: nrt. id>0)
+; 06/29 v5 Optimize found computation.
+; 06/29 v4 Factorize seek_from_line with seek_next_def
+; 06/28 v3 WIP Optimize and cut seek_next_def (for factorization)
+; 06/28 v2 Export/Import
+; 06/25 v1 Extracted from orgba
+
+
+dev_checks = 1
+
+codedest = find
+limit = except
+codedest2 = find_jp
+limit2 = cache_jp
+codedest3 = find_jp0
+
+code  = &1000           ; Stable place so that 'jp if_met' isn't to be reburnt
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+destnrt = &3000
+destnrt2 = &3100
+nrtfail = &BE00
+
+vd    = &7CD0           ; !! shared with disa
+line_sink_dummy = &9400 ;pour C-ENTER/*  !! Reuse org's parse_buffer 
+getkey_tmp = &9400      ;pour C-L        !! Idem
+
+vf    = &9F16
+vf_end = &9F36
+
+;------------ in this rom (ORGASS) ----------------- 
+
+connect_bk_base = pagefirm_jp ; All regs saved
+connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+;org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+connect_next_chunk = chunkcc_jp ;A corrupted
+
+farcall = &FF12
+call_ed_from_ass = farcall
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+ass   = &FE20
+ass_amorce = ass+3
+ass_read_label = ass+&18
+ass_entry0 = ass+&27
+ass_connect_bk_source = ass+&2A ; Restore B to dispass
+
+scan  = &FE50
+scan_label = scan
+
+symb  = &FFD8
+sy_get = symb+30
+
+; ----- in ed rom ----
+synhigh = &FEF7
+get_comment_pos = synhigh
+
+; ----- in bricbrac rom -----
+aap   = &FE30
+aap_get = aap+6         ;in: hl=buffer. Out: C & DE = id if found
+aap_getkey = aap+9      ;in: de=key, hl=dest buf  out:de,bc trashed
+
+; ------ in orgext rom -----
+org   = &C008
+seek_source_begin = org+&42 ;out: curbk and HL. DE preserved
+upd_curline = org+&21   ;in: de=line# hl=line start
+connect_line = org+&39
+org_select = org+&3F    ; also modify current_source' for status
+
+parse = &FE93
+is_sep = parse+6
+
+;pour NRT
+org_insert_line = org+12
+org_assemble = org+111  ; without code installation
+org_load = org+18
+org_get_current_selection = org+&30 ;out: A=#, all other regs preserved
+get_line = org+6
+
+; ----------------------------
+
+ec_label_adr = &40
+ec_label_loc = &51
+ec_label_equ = &64
+ec_macro_def = &6D
+ec_esc = &7F
+
+ec2_eoc = 0             ;end of chunk  !! must remain 0
+ec2_store_pc_line = 2
+ec2_store_pc_instr = 3
+
+;-------------------
+      MACRO CALL_ED adr
+          call call_ed_from_ass:WORD adr
+      ENDM
+
+      MACRO CALL_EXT ad
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call call_bric_from_ass:WORD adr
+      ENDM
+;-------------------
+
+tests
+          ld c,rom:call &B90F
+;          call test_tmp
+          call test_ctrl_enter_import
+          call test_getlabel
+          call test_flip
+          call test_flip_noflip
+          call test_flip_noif
+          call test_flip_noend
+          call test_ctrl_star
+          call test_ctrl_enter
+          call test_ctrl_enter_cross_chunk
+          call test_ctrl_enter_import
+          call test_ctrl_enter_import'
+  ;      call test_ctrl_enter_import''   ; no good ref file
+ ;         call test_ctrl_enter_invalid  Not sure what was tested.
+          call test_getlabel
+ ;          call test_skip_until_opcode
+          ret
+
+nrt_org_init
+
+nrt_bk = &D7
+          ld a,nrt_bk
+;In: a=bk          
+          push af
+          ld c,romed_nrt:call &B90F
+
+; -- Check this is Orgams ROM. If fail: correct rom
+          ld hl,(&C004)
+          ld de,signatureed
+          ld bc,signatureed_
+          call compare
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af
+          call setup_custom
+
+; -- Cold start 
+          ld c,rom:call &B90F
+vt_currom = &9D08
+          ld a,rom:ld (vt_currom),a
+          ret
+
+signatureed BYTE "Orgams"
+signatureed_ = $-signatureed
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+
+          ret
+
+nrt_set_source
+          push hl
+;Ensure properly set 
+          ld hl,&CAFE:ld (vf_savesp),hl
+          call nrt_org_init
+          ld de,1
+          pop hl
+nrt_append_source
+tgllp
+          push de
+          CALL_EXT(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,tgllp
+          ret
+
+lines_per_chunk = 13
+fill_chunk
+; In: B= nb lines
+          push bc
+          ld hl,nrt_line16
+          push de
+          CALL_EXT(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          pop bc
+          djnz fill_chunk
+          ret
+
+
+nrt_load
+          ld bc,0
+          CALL_EXT(org_load):call nc,nrtfail
+          ret
+
+nrt_assemble
+          ld de,destnrt:ld bc,destnrt
+          CALL_EXT(org_assemble)
+          ret
+
+nrt_line16 BYTE ";23456789012345",0 ;16 bytes in memory
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          or a
+          ret z
+          inc hl
+          inc de
+          jr compare_ntstr
+
+
+test_tmp
+          ld hl,nrttmp
+          call nrt_set_source
+      IF 0
+          ld de,1
+          ld l,0
+          call nrt_next_label
+          ld de,2
+          ld l,0
+          call nrt_next_label
+      END
+      BRK
+          ret
+
+nrttmp
+      BYTE "lab",0
+      BYTE "ld a,$+lab",0
+      BYTE 0
+
+test_flip
+          ld hl,nrtflip
+          call nrt_set_source
+
+          ld hl,nrtflip_expected ; start, end
+tflp
+; Not only we check that we got expected line #,
+; but we must verify line has been properly cached (via upd_curline).
+; So, fetch it first.
+          push hl
+          inc hl:ld e,(hl):ld d,0
+          push de
+          push hl
+          ld hl,destnrt
+          CALL_EXT(get_line):call nc,&BE00
+          pop hl
+          dec hl:ld e,(hl):ld d,0
+
+          call flip:call nc,&BE00
+          call nrt_check_bkbase
+
+          pop hl
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,destnrt2
+          CALL_EXT(get_line)
+          ld hl,destnrt
+          ld de,destnrt2
+          call compare_ntstr
+
+          pop hl:inc hl:inc hl
+          ld a,(hl)
+          or a
+          jr nz,tflp
+          ret
+
+nrtflip
+      BYTE "if 0;simple if-end",0 ;1
+      BYTE "end",0
+      BYTE "if 0;with else",0
+      BYTE "else",0
+      BYTE "end",0
+      BYTE "x if $;with marker",0 ;6
+      BYTE "end",0
+      BYTE "x if $;with label",0
+      BYTE "y else",0
+      BYTE "z end",0
+      BYTE "2 ** [ if $;with bloc",0 ;11
+      BYTE "end ]",0
+      BYTE "if $;nested",0
+      BYTE "if $",0
+      BYTE "else",0     ;15
+      BYTE "end:4**nop",0 ; implicit blocs mustn't pertub
+      BYTE ";",0        ; goto next if/else/end
+      BYTE "else",0
+      BYTE "if #:end",0 ; Same line
+      BYTE "end",0      ;20
+      BYTE "if $",0
+      BYTE "macro toto",0
+      BYTE "endm",0
+      BYTE "end",0
+      BYTE 0
+
+
+nrtflip_expected        ; start, end
+      BYTE 1,2,2,1
+      BYTE 3,4,4,5,5,3
+      BYTE 6,7,7,6
+      BYTE 8,9,9,10,10,8
+      BYTE 11,12,12,11
+      BYTE 13,18,18,20,20,13
+      BYTE 14,15,15,16,16,14
+      BYTE 17,18
+      BYTE 19,19
+      BYTE 21,24,24,21
+      BYTE 22,23,23,22
+      BYTE 0
+
+test_flip_noflip
+; When no section marker
+          ld hl,nrtnoflip
+          call nrt_set_source
+
+;Returns Carry for some reason
+          ld de,1:call flip:ld a,e:or d:call nz,&BE00
+          ld de,2:call flip:ld a,e:or d:call nz,&BE00
+          ret
+
+nrtnoflip
+      BYTE "x",0
+      BYTE "y",0,0
+
+test_flip_noif
+; Unbalanced
+          ld hl,nrtnoif
+          call nrt_set_source
+
+          ld de,1:call flip:ld a,e:cp 2:call nz,&BE00
+          ld de,2:call flip
+          ret
+
+nrtnoif
+      BYTE "x",0
+      BYTE "end",0,0
+
+
+test_flip_noend
+; When no section marker
+          ld hl,nrtnoend
+          call nrt_set_source
+
+          ld de,1:call flip:ld a,e:or d:call nz,&BE00
+          ld de,2:call flip:ld a,e:or d:call nz,&BE00
+          ret
+
+nrtnoend
+      BYTE "if",0
+      BYTE "y",0,0
+
+      MACRO NRT_STAR start,expected
+          ld de,start
+          ld hl,expected
+          call _nrt_star
+      ENDM
+
+_nrt_star
+          push hl
+          ld l,0
+          call nrt_next_label:call nc,&BE00
+          pop hl:or a:sbc hl,de:call nz,&BE00
+          ret
+
+test_ctrl_star
+          ld hl,nrtctrlstar
+          call nrt_set_source
+; global label
+          NRT_STAR(1,4)
+          NRT_STAR(4,1)
+; local to generic (.loc <-> loc)
+          NRT_STAR(2,5)
+          NRT_STAR(5,2)
+; local to explicit (.luc <-> .luc)
+          NRT_STAR(6,7)
+          NRT_STAR(7,6)
+          ret
+
+nrtctrlstar
+      BYTE "lab",0
+      BYTE ".loc",0
+      BYTE "!!targhan renegat",0
+      BYTE " jr lab",0
+      BYTE " jr loc",0
+      BYTE " jr .luc",0
+      BYTE " .luc",0
+      BYTE 0
+
+      MACRO NRT_CRTL_ENTER source,def
+          ld de,source:call seek_def_from_line:call nc,&BE00
+          ld a,e:xor def:or d:call nz,&BE00
+      ENDM
+
+test_ctrl_enter
+;CRTL-ENTER on simple case
+          ld hl,nrtctrlenter
+          call nrt_set_source
+;backward        
+          NRT_CRTL_ENTER(2,1)
+;local + forward
+          NRT_CRTL_ENTER(3,4)
+          ret
+
+nrtctrlenter
+      BYTE "x",0
+      BYTE "jr x",0
+      BYTE "w loc",0
+      BYTE ".loc",0
+      BYTE 0
+nrtctrlenter_lastline = 4
+
+
+;--------------------------
+test_ctrl_enter_cross_chunk
+          ld hl,nrtctrlentercc1
+          call nrt_set_source
+
+          ld de,2
+          ld b,lines_per_chunk
+          call fill_chunk
+
+          ld hl,nrtctrlentercc2
+          call nrt_append_source
+
+          ld hl,0       ; Id label
+          ld de,1
+          call seek_def
+          ld a,e:cp 2+lines_per_chunk:call nz,&BE00
+; Rerun from this line
+          ld hl,0
+          call seek_def
+          ld a,e:cp 2+lines_per_chunk:call nz,&BE00
+          ret
+
+nrtctrlentercc1 BYTE "jr y",0,0
+nrtctrlentercc2 BYTE "y ;first link in chunk 2",0,0
+
+;-------------------
+test_ctrl_enter_invalid
+          ld hl,nrtctrlenter
+          call nrt_set_source
+
+          ld de,nrtctrlenter_lastline + 1
+          call seek_def:call c,&BE00
+          ret
+
+;---------------------
+test_ctrl_enter_import
+;CRTL-ENTER on simple case
+          ld hl,.src
+          call nrt_set_source
+;Not assembled -> NC
+          ld de,2:call seek_def_from_line:call c,&BE00
+
+          call nrt_assemble:call c,&BE00 ;fails on purpose
+;;;Since error on tab 2, must switch back manually
+; No, assemble returns error on tab1 bug#1e9
+;;          xor a:CALL_EXT(org_select)
+          ld de,2:call seek_def_from_line:call nc,&BE00
+          ret
+
+.src  BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "m()",0,0    ; arg mismatch but deps still set
+
+test_ctrl_enter_import'
+;Sanity check for next test
+          ld hl,.src
+          call nrt_set_source
+          call nrt_assemble
+          ld de,2:call seek_def_from_line:call nc,nrtfail
+          call nz,nrtfail
+          ld hl,1:or a:sbc hl,de:add hl,de:call nz,nrtfail
+          ret
+
+.src  BYTE "import",34,"testdata/assert.i",0
+      BYTE "ASSERT($ = 2)",0,0 ; fail on purpose
+
+test_ctrl_enter_import''
+; TODO: stable reference file!
+          call nrt_org_init
+          ld hl,.filename
+          call nrt_load
+          call nrt_assemble:call nc,nrtfail
+          ld de,2016:call seek_def_from_line:call nc,nrtfail
+          call nz,nrtfail
+          CALL_EXT(org_get_current_selection)
+          cp 5:call nz,nrtfail
+          ld hl,1:or a:sbc hl,de:add hl,de:call nz,nrtfail
+          ret
+
+.filename BYTE "symb.o",0
+
+;------------
+test_getlabel
+;CRTL-L, ENTER, * 
+          ld hl,nrtgetlabel
+          call nrt_set_source
+
+      IF 1
+          ld de,1:ld hl,nrtwanted:ld bc,3:call test_snd_com
+
+;we can reach 2nd label (unlike dams)
+          ld de,3:ld hl,nrtwanted:ld bc,4:call test_snd_com
+;rewind
+          ld de,5:ld hl,nrtwanted:ld bc,3:call test_snd_com
+
+;return Ca + 0 if not found
+          ld de,1
+          ld hl,nrtabsent
+          call seek_next_def:call nc,&BE00
+          ld a,e:or d:call nz,&BE00
+
+;from last line 
+          ld de,nrt_last_line:ld hl,nrtwanted:ld bc,3
+          call test_snd_com
+      END
+
+; CTRL-ENTER
+      MACRO NRT_CTRL_ENTER line,pos,ref
+          ld de,line
+          ld l,pos
+          call seek_def_from_line
+      IF ref
+          call nc,&BE00
+          ld a,d:or e:cp ref:call nz,&BE00
+      ELSE
+; either NC (not assembled) or de = 0
+          jr nc,.ok
+          ld a,d:or e:call nz,&BE00
+.ok
+      END
+      ENDM
+
+      MACRO NRT_CTRL_ENTER_GOTO line,pos,ref
+; goto line (this also check caching mecanism)
+
+          ld de,line
+          ld l,pos
+          call seek_def_from_line
+          call nc,&BE00
+
+          ld hl,destnrt
+          CALL_EXT(get_line)
+          ld hl,destnrt
+          ld de,ref
+          call compare_ntstr
+
+      ENDM
+
+          NRT_CTRL_ENTER_GOTO(1,0,nrtlab1)
+          NRT_CTRL_ENTER_GOTO(2,0,nrtlab2)
+          NRT_CTRL_ENTER_GOTO(14,0,nrtlab3)
+
+;--- pour macro ---
+line_mac = 10
+          NRT_CTRL_ENTER(11,0,line_mac)
+          NRT_CTRL_ENTER(5,0,0)
+          NRT_CTRL_ENTER(6,0,0)
+
+;--- with comment ---
+line_toto = 4
+line_toto2 = 3
+          NRT_CTRL_ENTER(12,0,line_toto) ; Sanity check: before comment
+; After label: must pick first valid label in comment
+          NRT_CTRL_ENTER(12,17,line_toto2)
+; Cursor on last char of label
+          NRT_CTRL_ENTER(12,27,line_toto2)
+; Second valid label in comment
+          NRT_CTRL_ENTER(12,34,line_mac)
+; Commented call (in real sources, might not work since ghost label)
+          NRT_CTRL_ENTER(13,0,line_toto)
+
+;;; CRTL-*
+
+          ld de,1
+          call nrt_next_label
+          call nc,&BE00
+          ld hl,4
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld de,4
+          call nrt_next_label
+          call nc,&BE00
+          ld hl,7
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld de,7
+          ld l,0        ;1er label (toto2)
+          call nrt_next_label
+          call nc,&BE00
+          ld hl,2
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld de,7
+          ld l,19       ;1nd label (toto2)
+          call nrt_next_label
+          call nc,&BE00
+          ld hl,2
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+;absent : on retombe sur celui d'origine
+          ld de,6
+          call nrt_next_label
+          call nc,&BE00
+          ld hl,6
+          or a
+          sbc hl,de
+          call nz,&BE00
+          ret
+
+test_snd_com
+          push bc
+; Not only we check that we got expected line #,
+; but we must verify line has been properly cached (via upd_curline).
+
+          call seek_next_def:call nc,&BE00
+          call nrt_check_bkbase
+          pop hl
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+nrt_next_label
+          call fetch_label:jp nc,lab_nolabel
+          call nrt_check_bkbase
+          inc de
+          jp seek_next_label_from_id
+
+nrtgetlabel
+      BYTE " ld a,ToTo",0 ;1
+      BYTE " ld b,ToTo2",0 ;2
+nrtlab2 BYTE "ToTo2",0  ;3
+nrtlab1 BYTE "ToTo",0   ;4
+      BYTE " nop",0     ;5
+      BYTE " ld a,absent",0 ;6
+      BYTE " ld ix,(ToTo2+ToTo)",0 ;7
+      BYTE "!!!!syntax error",0 ;8
+      BYTE " macro ma x,y:beuh:endm",0 ;9
+      BYTE " macro mac:nop:endm",0 ;10
+      BYTE "mac()",0    ;11
+      BYTE "jr ToTo ; xx ToTo2 xy mac",0 ; 12
+      BYTE ";   call ToTo",0 ; 13
+      BYTE "code = 1",0
+nrtlab3 BYTE "code  = code",0
+      BYTE 0
+nrt_last_line = 15
+
+nrtwanted BYTE "tot",0
+nrtabsent BYTE "bib",0
+
+nrt_check_bkbase
+          ld a,(edsign_pos):cp "O":call nz,&BE00
+          ld a,(edsign_pos+1):cp "r":call nz,&BE00
+          ld a,(edsign_pos+2):cp "g":call nz,&BE00
+          ret
+;-------------------
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          ld ix,param_burn3
+          call burn_
+          call &BB06
+          ret
+
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+
+code2 = $$
+jp
+          jp seek_def
+          jp fetch_label ;ed (ctrl-* part I)
+          jp seek_next_label_from_id ;ed (ctrl-* part II)
+          jp seek_next_def ;ed (ctrl-l)
+          jp seek_def_from_line ;ed (ctrl-enter)
+          jp flip       ;ed (ctrl-%)
+; !!! full
+codesize2 = $$-code2
+
+code3 = $$
+          jp if_met
+          jp else_met
+          jp end_met
+;!! Warning, limit reached
+codesize3 = $$-code3
+
+      SKIP code-$$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+      MACRO PEEK_LABEL success,macro
+;Fast switch. 
+
+          ld a,(hl)
+          cp ec_label_adr:jr c,snl_lp ;smallest code &40
+          ld c,l:jr z,success
+          cp ec_label_loc:jr z,success
+          cp ec_macro_def:jr z,macro
+          cp ec_label_equ:jr z,success
+          cp ec_esc:jr nz,snl_lp
+
+          call skip_markers:jr nz,snl_lp
+      ENDM
+
+      MACRO CHECK_DI
+      IF 0              ; HL' not used anymore
+; Reenabling firmware (via far_call) trashes our HL'.
+; Ensure we don't do that by mistake.
+      IF dev_checks
+          ld a,i:call pe,&BE00
+      END
+      END
+      ENDM
+
+mess  = &BE00
+
+seek_def_from_line
+;(CTRL-ENTER)
+;in: de=line   l = pos X in line
+;Out: If no label under cursor: Carry, de = 0
+    ; If found: Carry, de = line
+              ;NZ = Same tab
+              ; Z = Tab was switched
+    ; Not found: NC
+          call fetch_label
+          ld l,c:ld h,b ;don't pick def or equ
+          bit 7,h:jp nz,lab_nolabel
+
+; Check if imported label
+          push de
+          push hl
+          call sy_get
+          pop hl
+          jr nc,.inhost
+          bit vf_imported,a
+          jr nz,.imported
+
+.inhost
+;(or not assembled) 
+          pop de
+          call seek_def
+          ld a,e:or d
+          ret z         ; NC: not found
+          scf
+          ret           ; C, NZ ok in-host
+
+.imported
+          ld a,c
+          push de       ; id in imported
+          CALL_EXT(org_select)
+          pop hl
+          pop de        ; discard initial line in host
+          call nc,mess  ; unexpected, might trigger some display bug
+          ld de,1       ; from start
+          call seek_def
+          cp a          ; Z:tab was switched
+          scf
+          ret
+
+seek_def
+          ld ix,slfl_ret
+          jr seek_common
+
+snl_ret
+          inc l         ; code pos at new line
+snl_retry               ; retry after markers or new chunk
+          PEEK_LABEL(snl_label,snl_label_)
+          jr snl_retry
+
+snl_label_
+          inc l         ; Skip macro size
+snl_label
+          ld b,h:push bc ; Source pos start
+          push de       ; Nb lines
+
+          call ass_read_label
+
+          call connect_bk_base
+          ld hl,getkey_tmp
+          push hl
+          CALL_BRIC(aap_getkey)
+          pop hl
+          ld de,(vf_param) ; wanted label
+snl_compare
+          ld a,(de)
+          or a
+          jr z,snl_found
+          inc e
+          xor (hl)
+          inc l
+          and &DF       ;case insensitive
+          jr z,snl_compare
+;no match  
+          pop de
+          pop hl
+          call ass_connect_bk_source
+snl_lp
+          dec e:jp nz,ass_entry0
+          dec d:jp nz,ass_entry0
+
+; not found  
+          call restore_bkbase_lineref
+lab_nolabel
+          ld de,0
+          scf
+          ret
+
+
+seek_next_def
+;(CTRL-L)
+;in: hl=label start   de=line ref (we'll start scaning at de+1)
+;DE is meant to be a valid line (i.e. not past end)
+
+;TODO : use reg' instead
+          ld ix,snl_ret
+
+seek_common
+;Loop until ix jumps to snl_found or all lines are scanned
+;in: ix=predicate hl=param  de=line ref (scanning start here)
+          ld (vf_param),hl
+          CALL_EXT(connect_line)
+          ret nc        ; Sanity check (prevent de=0 and hanging loop)
+
+          push de       ;line ref (to detect complete round)
+          ld (vf_savesp),sp
+
+; Flip reset must be done after connect_line,
+; which change state spuriously.
+
+          call flip_init
+
+          call connect_bk_base
+
+; DE: - nb lines scanned (before rewind) (also act like +INF as a cpt)
+; then: nb lines to scan. Cf found.
+; In both case encoded for loop optimisation (dec de:inc e:inc d).
+
+          ld de,&FF     ; -1 encoded
+          call ass_amorce
+
+; REWIND
+;-------
+          CALL_EXT(seek_source_begin)
+;NB lines left := line ref 
+          pop de
+          push de
+          dec de:inc e:inc d ; loop optim encoding
+
+;Push back return address for stack consistency,
+;i.e. success before or after rewind.
+;This address shouldn't be hit though.
+          call ass_connect_bk_source
+          dec l         ; compensate inc l
+          jp ix
+
+snl_found
+;here: base connected
+          pop de        ; lines to go
+          pop bc        ; source pos
+          jr found
+
+; -------------------
+
+slfl_ret
+          inc l
+slfl_retry
+          PEEK_LABEL(slfl_label,slfl_label_) ; c = l+1
+          jr slfl_retry
+
+slfl_label_
+          inc l         ; Skip macro size
+slfl_label
+          ld iyl,e
+          ld ixl,d
+          call ass_read_label
+
+          ld l,c
+          ld a,(vf_param) ; wanted id
+          cp e
+          ld e,iyl
+          ld a,d
+          ld d,ixl
+          ld ixl,slfl_ret AND &FF
+          jr nz,snl_lp
+          ld c,a
+          ld a,(vf_param+1)
+          cp c
+          jp nz,snl_lp
+
+          ld c,l
+          ld b,h
+found
+;Here: bk base connected
+     ; bc = source
+     ; de = encoded cpt
+
+          ld a,b
+          call restore_bkbase_lineref
+          ld b,a
+
+flip_found
+          call infer_line#
+
+          ld l,c:ld h,b
+;store pos cur line, since it is likely to be requested immediately
+          CALL_EXT(upd_curline)
+          scf
+          ret
+
+
+fetch_label
+;in: de=line   l = pos X in line
+;out: C & HL=id label   BC=id label non def 
+    ; NC otherwise
+    ; DE saved anyway
+
+          push de       ;line ref
+          ld a,l
+          ld (vd_cursor_pos),a
+          ld hl,vd_first_from_cursor
+          ld b,6
+fl_clr    ld (hl),-1:inc hl:djnz fl_clr
+          ld hl,line_sink_dummy
+          CALL_EXT(get_line) ; Main job done by disa
+
+          jr nc,fl_end
+          ld hl,(vd_first_from_cursor)
+;id < &8000. So bit 7 set means: &ffff (not met)
+          bit 7,h
+          jr z,fl_finish
+
+; Second chance: try in comments
+          ld hl,line_sink_dummy
+          CALL_ED(get_comment_pos)
+          ld e,l:ld d,h
+fl_lp
+          ld a,(hl)
+          CALL_EXT(is_sep)
+          jr c,fl_try
+          inc hl
+          jr fl_lp
+
+fl_try
+          push af       ; Save before replacing by 0
+          push hl
+          ld a,l:cp e
+          jr z,fl_next  ; Sanity. remove if aap_get handle empty string
+
+          ld (hl),0
+          ex de,hl
+          CALL_BRIC(aap_get)
+          jr nc,fl_next
+          ex de,hl
+          ld (vd_last_met),hl
+          pop de
+          pop bc        ; af
+
+;Stop for first label whose end pos (e) > cursor (a)
+      IF line_sink_dummy AND &FF
+ !! error align
+      END
+          ld a,(vd_cursor_pos)
+          cp e:jr c,fl_finish
+
+          push bc
+          push de
+fl_next
+          pop hl
+          pop af
+          inc hl
+          ld e,l:ld d,h
+          or a          ; last separator == 0?
+          jr nz,fl_lp
+
+; If nothing after cursor, pick the last one met. 
+          ld hl,(vd_last_met)
+fl_finish
+          ld bc,(vd_first_from_cursor_nodef)
+          bit 7,b
+          jr z,fl_oknondef
+; last_met may be def/equ. Nevermind, ed will detect it's the same line
+; (CTRL ENTER) and do nothing.
+          ld c,l:ld b,h
+fl_oknondef
+          ld a,h
+          add a
+          ccf
+fl_end    pop de
+          ret
+
+
+      IF 0
+get_label_if_any
+;Z if so, de=label
+;NZ otherwise, de unmodified
+;HL may be modified, but still point at valid bytecode.
+gl_retry
+          ld a,(hl)
+          cp ec_esc
+          jr z,gl_esc
+
+          cp ec_label_adr
+          jr z,gl_ok
+          cp ec_label_equ
+          jr z,gl_ok
+          cp ec_macro_def
+          ret nz
+          push hl
+          inc l         ; macro: skip size
+          jr gl_ok_
+gl_ok
+          push hl
+gl_ok_
+          call ass_read_label
+          pop hl
+          xor a
+          ret
+
+gl_esc
+          inc l
+          ld a,(hl)
+          inc l
+      IF ec2_store_pc_line-2
+        !! error: must adapt code below
+      END
+      IF ec2_store_pc_instr-3
+        !! error: must adapt code
+      END
+          dec a
+          dec a:jr z,gl_retry ; code 2: store_pc_line
+          dec a:jr z,gl_retry ; code 3: store_pc_instr
+          dec l
+          dec l
+          ret           ;nz
+      END
+
+skip_markers
+; Consume end of chunks and markers
+; Out: Z if end of chunk or markers met. 
+; TODO: $$ markers
+
+      IF ec2_store_pc_line-2
+        !! error: must adapt code below
+      END
+      IF ec2_store_pc_instr-3
+        !! error: must adapt code
+      END
+          inc l
+          ld a,(hl)
+          inc l
+          or a:jr z,sm_next
+          dec a
+          dec a:ret z   ; code 2: store_pc_line
+          dec a:ret z   ; code 3: store_pc_instr
+          dec l
+          dec l         ; Point to valid opcode
+          ret           ;nz
+
+sm_next
+          push bc       ; B=dispass 
+          call connect_next_chunk
+          pop bc
+          jr z,sm_end
+          xor a         ; Return Z for retry
+          ret
+
+sm_end
+          pop af        ; discard ret
+          call connect_bk_base
+          ret           ; go to snl_rewind
+
+seek_next_label_from_id
+;(CTRL-* part 2)
+;in: de=start line   hl=id label
+; Call /fatal=&be00/ if corrupted
+
+          push hl
+          push de
+          CALL_EXT(connect_line)
+          call connect_bk_base
+          pop de
+          pop bc
+          jp nc,lab_nolabel
+          jp scan_label
+
+
+;----------------------------
+if_met
+; Called from ASS. !! All phase, but only phase 0 makes senses.
+; !! Cannot exit to flip, since called in other contexts.
+; !! We must simply update state.
+          push hl
+          ld a,(va_level_if)
+          inc a
+          ld (va_level_if),a
+          dec a
+          push af       ; Flag Z
+
+; Store line of if/macro/bloc
+          and 7         ; Sanity clipping (8 is a hard maximum)
+          add a
+          add if_array AND &FF
+          ld l,a
+          ld h,if_array/&0100
+          ld (hl),e:inc l
+          ld (hl),d
+
+          pop af:jr nz,if_met_ok
+;Only flag level 0.
+; - For first line scanning.
+; - When searching next if.
+          ld hl,va_flags_if:set vbit_if,(hl)
+if_met_ok
+          pop hl
+          ret
+
+
+else_met
+; !! Cf if_met                            
+; Must flag at level 0 (first line pre-scan)
+; And at level 1 (met after if)
+
+; Alternative: flag always, move the logic in elseend_ret
+          ld a,(va_level_if):cp 2:ret nc
+          ld a,(va_flags_if):set vbit_else,a:ld (va_flags_if),a
+          ret
+
+end_met
+; !! Cf if_met                      
+
+;If level=0, assumes this is the first line pre-scan.
+          ld a,(va_level_if):or a:jr z,end_met_ok
+          dec a:ld (va_level_if),a
+          ret nz
+end_met_ok
+
+          ld a,(va_flags_if):set vbit_end,a:ld (va_flags_if),a
+          ret
+
+;----------------------------
+flip_init
+          push hl
+          ld hl,if_array-1
+          ld b,va_flags_if - if_array + 1
+_filp     inc l:ld (hl),0:djnz _filp
+          pop hl
+          ret
+
+
+flip
+;if / then / else
+;macro / endm
+;In: DE = num line.
+;Out: DE = num line.
+
+          ld ix,flip_ret
+;Scan line to find if / else / ret
+          jp seek_common
+
+flip_ret
+;NB: de="inf" here.
+
+          inc l
+          ld a,(va_flags_if)
+          add a:jr c,flip_to_if ; END met
+          jr z,flip_to_all ; Setting level to 0 will trigger all.
+
+; If or ELSE met
+; We know 'end' wasn't met.
+; Only 'if' met -> go to Else or End
+; 'Else' met    -> go to End  (shouldn't have else on same level)
+
+; 'else' haven't change level, we must set it to 1 in order
+; not to be pertubed by nested if/end.
+          ld a,1
+
+flip_to_all
+          ld (va_level_if),a
+          xor a
+          ld (va_flags_if),a
+          ld ix,elseend_ret
+          jp snl_lp
+
+elseend_ret
+          inc l
+          ld a,(va_flags_if)
+          or a:jp z,snl_lp
+
+          CHECK_DI()
+; Other routs scanned current line. Here we get info from previous line.
+; Also, it would be counter-productive to upd vo_curline,
+; since hl is past the line.
+
+          call restore_bkbase_lineref
+          call infer_line#
+          dec de
+          ret
+
+flip_to_if
+; If 'if' on same line, returns.
+          call restore_bkbase_lineref
+          ex de,hl      ; de = line ref
+          ret m
+
+; Different approach since we cannot scan backward. 
+; We scan from start until this line, and then pick
+; the latest 'if' of same level (cf if_array).
+
+          CALL_EXT(seek_source_begin)
+          call flip_init
+
+          push de       ; ref needed for infer_line#
+; We store sp again. Same value: nevermind.
+; It makes it less brittle if we ever update code.
+          ld (vf_savesp),sp
+
+          dec de:inc e:inc d ; loop optim encoding
+
+          ld ix,if_ret
+; Should not RETurn. 
+; In the buggy case it does, this just exits the routine.
+          jp ass_amorce
+
+if_ret
+          inc l
+          dec e:jp nz,ass_entry0
+          dec d:jp nz,ass_entry0
+
+          CHECK_DI()
+
+          ld a,(va_level_if)
+          and 7         ; Sanity clipping (8 is a hard maximum)
+          add a
+          add if_array AND &FF
+          ld l,a
+          ld h,if_array/&0100
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+
+; We cannot jump to 'found', since current source pointer does
+; not correspond to returned line (hence cannot call upd_current_line)
+          call restore_bkbase_lineref
+          ld a,e:or d:scf:ret z ;corner case: no corresponding if
+
+infer_line#
+; To keep the loop ultra tight, we didn't keep track of line number.
+; So we have to infer it now.      
+; If de<0, that's -nb lines scanned. (assume nblines < 32768)
+; Otherwise it's nb lines left to scan until ref+1.
+
+          dec e:dec d:inc de ; loop optim decoding
+          or a
+          sbc hl,de     ; If de<0, carry
+          ex de,hl
+          ret c         ; found_before_rewind
+          inc de
+          scf           ; For flip return
+          ret
+
+restore_bkbase_lineref
+;In: SP has been saved in (vf_savesp)
+;- Connect bk base
+;- Restore SP to top of the frame.
+;Out: HL=line-ref.
+    ;  B trashed by connect_bk_base
+
+      IF 1-inRom
+          push af
+          ld a,(vf_savesp+1)
+          cp &BF:call nz,nrtfail
+          pop af
+      END
+          pop hl        ; ret adr
+          call connect_bk_base
+          ld sp,(vf_savesp)
+          ex (sp),hl
+          ret
+
+
+;---------------------------------
+
+vd_cursor_pos = vd+14
+vd_first_from_cursor = vd+15
+vd_first_from_cursor_nodef = vd+17
+vd_last_met = vd+19
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      ELSE
+      SKIP destnrt-$
+      END
+codesize = $$-code
+
+; ======== no more code =========
+
+
+      ORG vf
+
+vf_savesp WORD 
+vf_param WORD 
+
+; for flip
+
+ ; Lines with 'if' (8: hard max level)
+if_array_ = 8*2
+if_array SKIP if_array_
+
+va_level_if BYTE 
+va_flags_if BYTE        ; flags if/else/end 
+vbit_if = 6             ; Sign after ADD A
+vbit_else = 5
+vbit_end = 7            ; Carry after ADD A
+
+      IF $/&0100 - if_array/&0100
+ !! error overlap
+      END
+
+      IF va_flags_if - if_array_ - 1 - if_array
+ !! must be continous
+      END
+
+      IF va_flags_if - 1 - va_level_if
+ !! must be continous
+      END
+
+      SKIP vf_end-$
+

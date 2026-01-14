@@ -1,0 +1,2959 @@
+; Evaluate expressions, for ass and monogams.
+inRom = 1               ; 1 to auto-install in rom
+dev_checks = 1 - inRom
+dev_checks' = 1 - inRom ; new checks
+rom   = &1D
+todo  = 1
+need_room = 1
+
+      IMPORT "assmap.i"
+      IMPORT "symbflag.i"
+      IMPORT "monique.i"
+      IMPORT "macro.i"
+
+      IF todo
+; TODO: [space] Factorize eval_mod/eval_div
+; TODO: remove org_init, use org_source_init instead.
+; TODO: test covering is_in_macro
+      END
+
+; -!!!- NB -!!!- IY cannot be modified in eval_and & co.
+               ; How should i have known ?
+
+; -eval_jumptable
+
+; 2025
+; ---- HH Beta I ----
+ ; Dec
+  ;  9 ae [nochange] Remove dead-code srl_vhle_uns      
+
+; ---- HH Beta H ----
+ ; Nov
+  ; 17 ad notimpl & co: return error instead of asserting
+; ---- HH Beta C ----
+ ; Oct         
+  ; 10 ac deactivate dev_checks'
+; ---- HH Beta B ----
+  ;  8 ab try_import: Pin imported label (fix #133 slow imports)
+
+; ---- HH Beta 6 ----
+ ; Aug
+  ; 11 aa Expose try_import 
+  ; 10 z Don't flag errors ourselves:
+           ; - Fix #1d9
+           ; - less dependencies with ass
+; ---- HH Beta 2 ----
+ ; Jul
+  ; 20 y Add test_undefined_label
+  ; 18 x Binary op < (eval_lt) <= ...
+
+; ---- HH Beta 1 ----
+ ; Jul   
+  ; 15 w Fix bug introduced by optimisation: vev_flags must be cleared
+        ; Optimisation! No full blown arithmetic process for:
+                   ; - literal
+                   ; - labels
+        ; eval_equ: Doesn't support 24bits anymore
+     ; v: Use new connect_bk_source from pagefirm (instead of ass)
+  ; 10 u: [Adapt rom ass] Use CALL_ORG / pagefirm
+
+; --------- GG beta I --------
+ ; Apr
+  ;  6 t: 
+     ; s: Add test_eval_undef_div
+        ; Fix exit at /norm_ok/ (bug introduced in vr)
+     ; r: normalize_vdee(_uns): check DE points in values_buffer
+        ; Fix #1bb: do not normalize when error
+        ; eval_iter: poke value even if error to avoid ovf assert
+; 2024   
+; --------- GG beta 8 --------
+ ; Sep
+  ; 17 q: Fix #1a3  CP "A-1" (was returning HL in middle of string)
+        ; Tested via /test_unexpected_string/
+        ; Add /test_undefined_opcode/
+; --------- GG beta 6 --------
+ ; Aug 
+   ; 4 p: eval_iter: adapt offset for ## and ### now that structure
+                   ; is longer.
+; -------- GG Beta 4 ---------
+ ; Mar
+   ; 8 r: DISCARED!!! Was actually simpler to clear the cache.
+        ; Move variables to match ass-fl:
+             ; va_rep_pnt / va_rep /  
+; -------- GG Beta 1 ---------  
+ ; Feb  
+   ;21 q: Don't resolve import for phase 3 and 4
+   ; 5 p: Use extmap.i (no change)
+; ---- For FF Release --------
+ ; Jan
+   ; 4 o: [Optim] Don't call eval_in_deps if no deps.
+            ; - Far too slow  (di_getkey and iteration for nothing)
+   ; 1 n: Bug#155 -4%4 gives 4 instead of zero 
+          ; ??? Bug#44  1/0 gives &1ff
+          ; Bug#171  ld bc,1/0  accepted
+          ; Move /error_phase2_if_exp_ok/ back to ass
+          ; Remove test_garbage (too brittle/implementation dependent)
+          ; Tests: use org_source_init instead of org_init to avoid leak
+     ; m: Macro: fail at invocation rather than use
+                  ; - Far more handy for e.g. CALL_ORG(undefined)
+                       ; -> we know which label is actually undefined
+                  ; - Simpler and faster code
+         ; Revert vl (wip non fonctionnel)
+; 2023
+ ; Dec   
+  ; 31 vl; Optim for labels and short_int.
+ ; !!! WIP On hold !!!!! Not the main culprit?
+         ; nrt_assemble: call install_code (not done anymore by org)
+  ;  3 vk. Fix bug167: /eval_label/: don't search in imports for phase0
+         ; dev_checks = 0 so it still fits in rom
+                         ; Actually needed a bit of refactor for that
+
+; TODO: in #+# case (unexpected iter), the first operand doesn't exist
+      ; (invalid buffer). That could lead to /buferror/.
+      ; * Properly test this scenario.
+      ; * Prefill a dummy but valid value (doesnt 0-length works?).
+; Same thing if undefined label inside expression?
+
+    ; 16 vA Fix introduced bug: unknown macro parameter not reported.
+va    = 1
+
+main_rom = 10           ; ORGAMS.ROM 
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+bk_src = bk_dev-3
+
+nrt_buf = &0F00
+
+codedest = asseva
+limit = asseva_
+codedest1 = asseva2
+limit1 = visu_module
+codedest2 = asseva_jp
+limit2 = find_jp0
+
+      ORG &1000
+      IF inRom:ENT burn
+      ELSE:ENT start
+      END
+
+; ---- In ORGAMS.ROM aka main_rom (use regular call) ---------------
+
+setup_custom = &E839    ; Trust me on this
+;ext_far_call = &C13C
+
+; ------ In this ROM (ORGASS) --------------------------------------
+impeva = &FFBD
+eval_in_deps = impeva   ;in: de=id label, out: like sy_get 
+
+ass   = &FE20
+is_in_macro = ass+6
+exp_fail = ass+33
+ass2  = &C0B0
+dest_next_chunk = ass2
+assert_fail = ass2+3
+;error_phase1 = ass2+6  ; no, ass will do it
+;error_phase2 = ass2+9
+
+cocopy = &FE02
+install_code = cocopy+18 ; nrt
+
+sy    = &FFD8
+sy'   = &FF93
+sy_reset_table_except_imported = sy+6 ; NRT in:hl=# of ids
+sy_set = sy+27          ; in:hl=id a=flags, cde=value
+sy_get = sy+30          ; in:hl=id  out:carry if set, cde=val !!set bit4
+sy_get_import = sy+12
+sy_get_explicit_local = sy'+15
+
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+;call_bric_from_ass = farcall + 12
+
+; ------ In ext rom (ORGEXT) --------------------------------------
+org   = &C008
+; only for nrt
+;org_init = org          ;nrt. !! org_init without complete init: leak
+org_source_init = org+&84
+org_insert_line = org+12 ;nrt out: hl post nt string.
+org_connect_source_begin = org+&81 ; nrt
+org_assemble = org+111  ; nrt
+
+connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+connect_bk_base = pagefirm_jp ; nrt. All regs saved
+;org_connect_source_chunk_from_id = pagefirm_jp + 4
+;connect_next_chunk = chunkcc_jp ;A corrupted
+
+; -------------------------------------------------
+
+fail_unexpected_mess = 247
+
+err_undefined = 1       ; sent by impeva.o / symb.o, except in macro.
+err_overflow16 = 4
+err_divbyzero = 9
+err_undefinedop = 10    ; 1+"aa"
+err_emptystring = 11
+err_unexpectedstring = 12
+err_notimplemented = 13
+err_unexpectedendofexp = 17
+err_unexpectedclosingparen = 18
+err_bufferovf = 19
+err_unexpectediter = 21
+
+;temporary reuse
+err_labelovf = err_overflow16
+err_mess = err_bufferovf
+
+values_buffer = &9900   ;$100 pour stack arithm
+macro_stack = &9A00     ; cf ass_macro_use
+macro_stack_params = &9B00
+
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+      MACRO CHECK_BUFFER
+      IF dev_checks'
+          call _check_buffer
+      END
+      ENDM
+
+      MACRO EXIT_FAIL
+      IF inRom
+          call exp_fail ; no return
+      ELSE
+      BRK
+      END
+      ENDM
+
+      MACRO CALL_ORG rout ; CALL_EXT in other sources
+          call call_ext_from_ass:WORD rout
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop de
+      ENDM
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop hl
+      ENDM
+
+
+nrt_assemble
+; in: hl = source
+; !!! WARNING: use in-rom asseva.
+
+          push hl
+          ld bc,&7F00+bk_dev:out (c),c
+          CALL_ORG(org_source_init):call nc,fail
+
+          pop hl
+          call nrt_set_source
+
+nrt_pc = &1234
+          ld de,nrt_buf ; dest
+          ld bc,nrt_pc  ; pc
+          CALL_ORG(org_assemble)
+          push bc
+          push de
+          push hl
+;not needed here
+ ;          CALL_ED(put_firmware)
+          call install_code
+          call connect_bk_base
+          pop hl
+          pop de
+          pop bc
+          ret
+
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,fail
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+;====
+start
+;====
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom
+
+; -- Cold start
+          ld c,rom:call kl_rom_select
+          jr tests
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====          
+;          call test_manual
+; Sanity tests     
+          call test_not_implemented
+      BRK
+; !! Beware, org_assemble will use ROM's asseva version.
+          call test_source_assemble
+; Real tests    
+          call test_normalize_cde
+          call test_short_literal
+          call test_literal
+          call test_hexa
+          call test_hexa_word
+          call test_eval_undef_div
+          call test_eval_div
+          call test_eval_mod
+          call test_eval_mod'
+          call test_eval_mod_neg''
+          call test_eval_add
+          call test_add_vhle_vdee
+          call test_eval_div
+          call test_eval_mod
+          call test_normalize_vdee_uns
+          call test_div_zero
+          call test_div_zero'
+          call test_eval_mod_neg
+          call test_no_imp
+          call test_unexpected_iter
+          call test_unexpected_iter'
+          call test_unexpected_iter''
+          call test_empty_string
+          call test_byte_string
+          call test_unexpected_string
+          call test_unexpected_string'
+          call test_undefined_operation
+          call test_undefined_label
+          call test_undefined_label'
+          call test_15x16
+          call test_eval_neg
+          call test_eval_neg0
+          call test_eval_mod
+          call test_eval_mod_neg
+          call test_eval_mod_neg'
+          call test_eval_mod_neg''
+          call test_eval_mod_neg'''
+          call test_local_label
+          call test_local_label'
+          call test_generic
+          call test_not_implemented
+          ret
+
+
+test_manual
+;----------
+; To be used with orgams already setup (|org,&df)
+      BRK
+          ld b,.name_ - .name
+          ld hl,.name
+          call &BC77:call nc,fail
+          ld de,nrt_buf
+          call &BC
+
+
+          ld a,&DF:ld i,a
+          ld b,&7F:out (c),a
+          ld hl,.label-1
+          call eval_exp
+          ret
+
+.label BYTE &61
+.name BYTE ":orgbug/undef-80"
+.name_
+
+
+test_source_assemble
+;-------------------
+
+          ld hl,source_nrt
+          call nrt_assemble
+          call nc,&BE00 ; Assemble error
+
+          ld hl,(nrt_buf)
+          CHECK_HL_EQ(&3412)
+          ret
+
+source_nrt
+      BYTE "macro rword n:byte n/&100,n and &ff:endm",0
+      BYTE "rword($)",0,0
+
+test_normalize_cde
+;-----------------
+      MACRO check_pos msb,lsw,ref
+          ld b,ref
+          ld c,msb:ld de,lsw
+          call .checkpos
+      ENDM
+
+      MACRO check_neg msb,lsw,ref
+          ld b,ref
+          ld c,msb:ld de,lsw
+          call .checkneg
+      ENDM
+
+          check_pos(&00,&00,1)
+          check_pos(&00,&FF,1)
+          check_pos(&00,&0100,2)
+          check_pos(&00,&FFFF,2)
+          check_pos(&01,&00,3)
+          check_pos(&7F,&FFFF,3)
+          check_neg(&FF,&FFFF,1)
+          check_neg(&FF,&FF00,1) ; -&100 still count as one byte
+          check_neg(&FF,&FEFF,2)
+          check_neg(&FF,&00,2) ; -&10000 still count as one word
+          check_neg(&FE,&FFFF,3)
+          check_neg(&80,&00,3)
+          ret
+
+.checkpos
+          push bc:push de
+          call normalize_cde
+          call m,fail
+          jr .checkcom
+
+.checkneg
+          push bc:push de
+          call normalize_cde
+          call p,fail
+.checkcom
+;check de untouched
+          pop hl
+          or a:sbc hl,de:add hl,de:call nz,fail
+          pop hl
+;check expected size
+          cp h:call nz,fail
+;check c untouched
+          ld a,c:cp l:call nz,fail
+          ret
+
+nrt_eval_exp_skip_opcode
+; check b,ix,iy are preserved
+          ld b,&12
+          ld ix,&3456
+          ld iy,&789A
+          call eval_exp_skip_opcode
+          push af
+          ld a,b:cp &12:call nz,fail
+          ld a,ixh:cp &34:call nz,fail
+          ld a,ixl:cp &56:call nz,fail
+          ld a,iyh:cp &78:call nz,fail
+          ld a,iyl:cp &9A:call nz,fail
+          pop af
+          ret
+test_local_label
+          ld hl,source_local
+; Assemble for label (definition) to be evaluated.
+; !! Use asseva in ROM.
+          call nrt_assemble:call nc,&BE00
+; Now use dev version of asseva.
+          CALL_ORG(org_connect_source_begin):call nc,fail
+          ld a,(hl):cp &21:call nz,&BE00 ; Sanity check: must be ld hl,n
+
+          call eval_exp_skip_opcode
+          cp 2:call nz,&BE00 ; size = 2
+          CHECK_DE_EQ(nrt_pc+3) ; .hu address
+          ld a,(va_exp_error):or a:call nz,&BE00
+; must point before end of line
+          inc l:ld a,(hl):cp "J":call nz,&BE00
+          ret
+
+source_local BYTE "ld hl,.hu",0 ; explicitly local
+      BYTE ".hu",0,0
+
+test_local_label'
+;same, inside expression
+          ld hl,.src
+; Assemble for label (definition) to be evaluated.
+; !! Use asseva in ROM.
+          call nrt_assemble:call nc,&BE00
+; Now use dev version of asseva.
+          CALL_ORG(org_connect_source_begin):call nc,fail
+          ld a,(hl):cp &11:call nz,&BE00 ; Sanity check: must be ld de,n
+
+          call nrt_eval_exp_skip_opcode
+          cp 2:call nz,&BE00 ; size = 2
+          ld a,(va_exp_error):or a:call nz,&BE00
+          CHECK_DE_EQ(nrt_pc+3 *2)
+          inc l:ld a,(hl):cp "J":call nz,&BE00
+          ret
+
+.src  BYTE "ld de,.hu+hu",0 ; explicitly local + implicit
+      BYTE ".hu",0,0
+
+test_no_imp
+; We use a label that **exists** but it's defined yet.
+; We check we don't call /eval_in_deps/ (there is a BRK in dev version)
+
+; CANNOT WORK RIGHT NOW! (that is, putting BRK in dev version)
+; As soon as a label is referenced, its id exist.
+; So we cannot discriminate between:
+    ; Not yet defined (forward reference)
+    ; Not defined at all in this source.
+; That means we'll try to find it anyway in imported sources,
+; but it might clash with forward reference (tested in assnrt).
+
+          ld hl,.src
+          call nrt_source_com
+
+;Set # of symb. must be done after nrt_source_com.
+;(otherwise would be reset)
+          push hl
+          call connect_bk_base
+          ld hl,1:call sy_reset_table_except_imported:call nc,fail
+          pop hl
+;We must reconnect bk_source
+          CALL_ORG(org_connect_source_begin):call nc,fail
+
+          call nrt_eval_exp_skip_opcode
+; sanity check 
+          ld a,(va_exp_error)
+          cp err_undefined:call nz,fail
+          ret
+
+.src  BYTE "ld a,toto",0
+      BYTE "toto",0,0
+
+test_unexpected_iter
+; Bug #e9, made the source crash!     
+          ld hl,source_e9
+          call tui_com
+          ret
+
+source_e9 BYTE "ld a,#*2+#",0,0
+
+test_unexpected_iter'
+; Bug #e9, made the source crash!     
+          ld hl,source_e9'
+          call tui_com
+          ret
+
+source_e9' BYTE "ld a,#+#",0,0
+
+
+test_unexpected_iter''
+; 2021 sep 26. resucee?
+          ld hl,.src
+          call tui_com
+          ret
+
+.src  BYTE "ld a,2*#",0,0
+
+
+tui_com
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error)
+          cp err_unexpectediter:call nz,&BE00
+          ld a,(hl):cp "E":call nz,&BE00 ; must point end of expression
+          ret
+
+test_short_literal
+          ld hl,.src
+          call nrt_source_com
+          ld a,7:ld (va_exp_error),a ; must be cleared
+          call nrt_eval_exp_skip_opcode
+          call m,fail
+          cp 1:call nz,fail
+          ld a,(va_exp_error):or a:call nz,&BE00
+          CHECK_DE_EQ(7)
+          inc c:dec c:call z,&BE00
+          ret
+.src  BYTE "ld a,7",0,0
+
+test_literal
+          ld hl,.src
+          call nrt_source_com
+          call nrt_eval_exp_skip_opcode
+          call m,fail
+          cp 1:call nz,fail
+          ld a,(va_exp_error):or a:call nz,&BE00
+          CHECK_DE_EQ(42)
+          ret
+.src  BYTE "ld a,42",0,0
+
+test_hexa
+          ld hl,.src
+          call nrt_source_com
+          call nrt_eval_exp_skip_opcode
+          call m,fail
+          cp 1:call nz,fail
+          ld a,(va_exp_error):or a:call nz,&BE00
+          CHECK_DE_EQ(&42)
+;          inc c:dec c:call nz,&BE00
+          ret
+.src  BYTE "ld de,&42",0,0
+
+test_hexa_word
+          ld hl,.src
+          call nrt_source_com
+          call nrt_eval_exp_skip_opcode
+          call m,fail
+          cp 2:call nz,fail
+          ld a,(va_exp_error):or a:call nz,&BE00
+          CHECK_DE_EQ(&BABE)
+          ret
+.src  BYTE "ld de,&babe",0,0
+
+
+test_empty_string
+          ld hl,source_empty_string
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error)
+          cp err_emptystring:call nz,&BE00
+          ret
+
+source_empty_string BYTE "ld a,",34,34,0,0
+
+test_byte_string
+          ld hl,.src
+          call nrt_source_com
+
+          ld de,nrt_buf:ld (vev_data),de ; allow string
+          inc l         ; For byte: skip additional size
+          call nrt_eval_exp_skip_opcode
+          ld a,e:cp "Z":call nz,fail ; last byte in E
+          ld a,(va_exp_error)
+          or a:call nz,fail
+          ld a,(nrt_buf):cp "X":call nz,fail
+          ld a,(nrt_buf+1):cp "Y":call nz,fail
+          ret
+
+.src  BYTE "b",34,"XYZ",34,0,0
+
+test_unexpected_string
+;bug#1a3. Must return hl at end of string
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+;must be at end of string
+          inc l:ld a,(hl):cp &FB:call nz,fail
+          ld a,(va_exp_error)
+          cp err_unexpectedstring:call nz,fail
+          ret
+.src
+      BYTE "cp",34,"abcdef",34,":ei",0,0
+
+test_unexpected_string'
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+;must be at end of string
+          inc l:ld a,(hl):cp &F3:call nz,fail
+          ld a,(va_exp_error)
+          cp err_unexpectedstring:call nz,fail
+          ret
+.src
+      BYTE "ld hl,1+",34,"boob",34,":di",0,0
+
+test_undefined_operation
+;Check no regression while fixing #a13
+; Mimic "byte" assembling: must flag string as ok 
+
+          ld hl,.src
+          call nrt_source_com
+
+          inc l         ; For byte: skip additional size
+          ld de,nrt_buf:ld (vev_data),de
+          call nrt_eval_exp_skip_opcode
+;must be at end of expression
+          inc l:ld a,(hl):cp "A":call nz,fail ; marker end of express
+          ld a,(va_exp_error)
+          cp err_undefinedop:call nz,fail
+          ret
+.src
+      BYTE "b 1+",34,"cafe",34,0,0
+
+test_undefined_label
+; hh beta 1 regression
+
+          ld hl,.src
+          call nrt_assemble
+
+          CALL_ORG(org_connect_source_begin):call nc,fail
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error)
+          cp err_undefined:call nz,fail
+          ret
+.src
+      BYTE "ld a,.love",0,0
+
+test_undefined_label'
+; in exp'
+
+          ld hl,.src
+          call nrt_assemble
+
+          CALL_ORG(org_connect_source_begin):call nc,fail
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error)
+          cp err_undefined:call nz,fail
+          ret
+.src
+      BYTE "ld a,.love+2",0,0
+
+
+test_15x16
+; v4 instroduced a bug, 15x16 gave &fff0 rather than &f0
+          ld hl,source_15x16
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+; we except &00f0 (word) rather than &f0 (would be seen as -&10).
+          cp 2:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp &F0:call nz,&BE00
+          ld a,d:or a:call nz,&BE00
+          ret
+
+source_15x16 BYTE "ld a,15*16",0,0
+
+test_eval_neg
+;simple test -2
+          ld hl,source_eval_neg
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp -2:call nz,&BE00
+          ld a,d:cp &FF:call nz,&BE00 ;extended - sign
+          ret
+
+source_eval_neg BYTE "ld a,-2",0,0
+
+test_eval_neg0
+;- 1+2 should be -3
+;!! doesn't work yet due to syntax error
+          ld hl,source_eval_neg0
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp 0:call nz,&BE00
+          ld a,d:cp 0:call nz,&BE00 ;extended + sign
+          ret
+
+source_eval_neg0 BYTE "ld a,-0",0,0
+
+
+test_eval_neg'
+;- 1+2 should be -3
+;!! doesn't work yet due to syntax error
+          ld hl,source_eval_neg
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp -2:call nz,&BE00
+          ld a,d:cp &FF:call nz,&BE00 ;extended - sign
+          ret
+
+source_eval_neg' BYTE "ld a,- 1+2",0,0
+
+test_eval_add
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp 127:call nz,&BE00
+          ld a,d:cp 0:call nz,&BE00
+          ret
+
+.src  BYTE "ld a,-1 + &80",0,0
+
+
+test_add_vhle_vdee
+          ld hl,.ops
+;Must use officiel buffer, as is it forced in /vcheck_ovf/
+          ld de,values_buffer
+          2 ** call nrt_copy
+
+          ld de,values_buffer+2
+          ld hl,values_buffer+5
+          call add_vhle_vdee
+          dec l
+          dec l
+          dec l
+          ld de,.ref
+          ld b,4
+          call compare_sized
+          ret
+
+.ops
+      BYTE 1,&80,1      ; Signed! = -128
+      BYTE 1,-1,1
+.ref
+      BYTE 2:WORD &FF7F:BYTE 2 ; -129
+
+
+nrt_copy
+;copy value with its len
+          ld c,(hl):inc c:inc c:call z,fail
+          ld b,0
+          ldir
+          ret
+
+test_normalize_vdee_uns
+; Check API. Z vs NZ
+          ld hl,nrt_zero
+          call .norm:call nz,fail
+
+          ld hl,nrt_zero'
+          call .norm:call nz,fail
+
+          ld hl,nrt_one
+          call .norm:call z,fail
+          ret
+
+.norm
+; Transfert value in buffer to preserve invariants
+; (e.g. MSB is checked)
+          ld c,(hl):ld b,0
+          inc bc:inc bc
+          ld de,values_buffer
+          ldir
+          dec de
+          call normalize_vdee_uns
+          ret
+
+nrt_zero BYTE 1,0,1
+nrt_zero' BYTE 2,0,0,2  ; not normalized version
+nrt_one BYTE 1,1,1
+
+test_eval_div
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 2:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp 227:call nz,&BE00
+          ld a,d:or a:call nz,&BE00
+          ret
+
+.src  BYTE "ld a,45654 / 201",0,0
+
+
+test_div_zero
+bug#44
+          ld hl,.src
+          call test_div_zero_
+          ret
+
+.src  BYTE "ld bc,1/0",0,0 ; 
+
+
+test_div_zero'
+; Same when nested
+          ld hl,.src
+          call test_div_zero_
+          ret
+
+.src  BYTE "ld bc,1/[2/[3/0]]",0,0
+
+
+test_div_zero_
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+; va_exp_error not set in this case. Nevermind
+          ld a,(va_exp_error)
+          cp err_divbyzero:call nz,fail
+          ret
+
+
+test_eval_mod
+bug#126
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 2:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp &FC:call nz,&BE00
+          ld a,d:cp &7F:call nz,&BE00
+          ret
+
+.src  BYTE "ld a,-4 % &8000",0,0 ; !!keep ld a: nevermind
+
+test_eval_mod'
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 2:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:cp 128:call nz,&BE00
+          ld a,d:cp 0:call nz,&BE00
+          ret
+
+.src  BYTE "ld a,128 % 256",0,0
+
+
+test_eval_mod_neg
+bug#155
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,&BE00 ; size (word)
+          ld a,(va_exp_error):or a:call nz,&BE00 ; no error
+          ld a,e:or d:call nz,&BE00 ; must be 0
+          ret
+
+.src  BYTE "ld a,-4 % 4",0,0 ; !!keep ld a: nevermind
+
+test_eval_mod_neg'
+;regular
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,fail ; size (word)
+          ld a,(va_exp_error):or a:call nz,fail ; no error
+          ld a,e:cp 3:call nz,fail
+          ld a,d:or a:call nz,fail
+          ret
+
+.src  BYTE "ld a,-101 % 4",0,0 ; !!keep ld a: nevermind
+
+test_eval_mod_neg''
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          cp 1:call nz,fail ; size (word)
+          ld a,(va_exp_error):or a:call nz,fail ; no error
+          ld a,e:cp 127:call nz,fail
+          ld a,d:or a:call nz,fail
+          ret
+
+.src  BYTE "ld a,-129 % 128",0,0
+
+test_eval_mod_neg'''
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error):or a:call nz,fail ; no error
+          ld a,e:cp 128:call nz,fail
+          ld a,d:or a:call nz,fail
+          ret
+
+.src  BYTE "ld a,-128 % 256",0,0
+
+test_eval_undef_div
+; Musn't trigger buf ovf
+;init symb table, otherwise sy_get returns fail_empty_label
+;instead of undefined
+
+          ld hl,.src
+          call nrt_source_com
+
+;init symb table, otherwise sy_get returns fail_empty_label
+;instead of undefined
+          push hl
+          call connect_bk_base
+          ld hl,1:call sy_reset_table_except_imported:call nc,fail
+          call connect_bk_source
+          pop hl
+
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error):or a:call z,fail
+          cp err_undefined:call nz,fail
+          ret
+
+.src  BYTE "ld a,unk/&100",0,0
+
+test_generic
+; Data driven: expression + expected value
+          ld hl,.src_exp
+.lp
+          push hl
+          ld hl,.prefix
+          ld de,nrt_buf
+          ld bc,5
+          ldir
+          pop hl
+          call copy_nt
+          xor a
+          ld (de),a     ; end of source
+
+          push hl
+          ld hl,nrt_buf
+          call nrt_source_com
+          call nrt_eval_exp_skip_opcode
+          pop hl
+          cp (hl):call nz,fail
+          inc hl
+          ld b,a
+          ld a,e:cp (hl):call nz,fail
+          inc hl
+          dec b:jr z,.oksize
+          ld a,d:cp (hl):call nz,fail
+          inc hl
+          dec b:jr z,.oksize
+          ld a,c:cp (hl):call nz,fail
+.oksize
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.prefix
+      BYTE "ld a,"
+
+.src_exp
+; NT exp + 0, size, value 
+false = 0
+true  = 1
+      BYTE "-1<0",0,1,true
+      BYTE "0<0",0,1,false
+      BYTE "1<0",0,1,false
+
+      BYTE "-1<=0",0,1,true
+      BYTE "0<=0",0,1,true
+      BYTE "1<=0",0,1,false
+
+      BYTE "-1>0",0,1,false
+      BYTE "0>0",0,1,false
+      BYTE "1>0",0,1,true
+
+      BYTE "-1>=0",0,1,false
+      BYTE "0>=0",0,1,true
+      BYTE "1>=0",0,1,true
+
+      BYTE "-1=0",0,1,false
+      BYTE "0=0",0,1,true
+      BYTE "256=256",0,1,true
+      BYTE "1=0",0,1,false
+
+      BYTE "-1!=0",0,1,true
+      BYTE "0!=0",0,1,false
+      BYTE "1!=0",0,1,true
+
+      BYTE 0
+
+test_not_implemented
+          ld hl,.src
+          call nrt_source_com
+
+          call nrt_eval_exp_skip_opcode
+          ld a,(va_exp_error):cp err_notimplemented:call nz,fail
+          ret
+
+.src  BYTE "ld a,_",0
+
+copy_nt
+          ld a,(hl):ld (de),a
+          inc hl:inc de
+          or a
+          jr nz,copy_nt
+          ret
+
+nrt_source_com
+; Set up source and point to pre-expresion.
+; Note: vev_data is reset here
+; In: hl=source
+          xor a:ld (va_phase),a ;sanity since we jump to error_phase2
+          push hl
+          ld bc,&7F00+bk_dev:out (c),c
+          CALL_ORG(org_source_init):call nc,fail
+          pop hl
+          call nrt_set_source
+          CALL_ORG(org_connect_source_begin):call nc,fail
+          ret
+
+
+; ---------------------------             
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+          jp &BB06
+
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn1
+      WORD rom
+      WORD codesize1
+      WORD codedest1
+      WORD code1
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jpTable
+          jp eval_exp
+          jp eval_exp_skip_opcode
+          jp eval_exp_mac
+          jp eval_equ
+          jp read_label
+          jp skip_label
+          jp try_import ; ass for macro
+
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+; ========================================
+
+      IF inRom
+code  = $$
+      ORG codedest,$$
+      ELSE
+ ; Same alignment
+      SKIP -$ AND &FF
+      SKIP codedest AND &FF
+code  = $$
+      END
+
+
+
+eval_jumptable
+; !!! If updated, must update scan:read_table as well. !!!
+
+;$20
+; !"#
+      WORD eval_space,eval_xor,eval_string,eval_neg
+;$%&'
+      WORD eval_pc,eval_mod,eval_and,notimpl
+;()*+
+      WORD eval_paren_open,eval_paren_close,eval_mul,eval_add
+;,-./
+      WORD notimpl,eval_sub,eval_local,eval_div
+;$30      
+; decimal > 31
+      WORD val_put_pos_byte,val_put_pos_word,val_put_pos_long,notimpl
+; hexa
+      WORD val_put_pos_byte,val_put_pos_word,val_put_pos_long,notimpl
+; bin
+      WORD val_put_pos_byte,val_put_pos_word,val_put_pos_long,notimpl
+;<=>?
+      WORD eval_lt,eval_eq,eval_gt,notimpl
+;$40 @ABC
+      WORD eval_or,eval_end_exp,eval_begin_exp,eval_cos
+;DEFG
+      WORD eval_objc,eval_end_exp,eval_forward,eval_backward
+;HIJK
+      WORD notimpl,eval_iter1,eval_iter2,eval_iter3
+;LMNO
+      WORD eval_le,eval_ge,eval_neq,notimpl
+;PQRS
+      WORD notimpl,notimpl,notimpl,eval_sin
+;TUVW
+      WORD notimpl,notimpl,eval_abs,notimpl
+;XYZ[
+      WORD notimpl,notimpl,notimpl,notimpl
+;\]^_
+      WORD notimpl,notimpl,notimpl,notimpl
+
+      IF $-1/&0100 - eval_jumptable/&0100
+  !! probleme confine
+      END
+
+sinus
+;cint(sin(i*pi/128)*$ff00)
+
+;size $80+2
+      WORD &00,&0642,&0C83,&12C2,&18FF,&1F37,&256B,&2B98
+      WORD &31BF,&37DF,&3DF6,&4403,&4A06,&4FFD,&55E8,&5BC6
+      WORD &6196,&6756,&6D07,&72A7,&7835,&7DB0,&8319,&886D
+      WORD &8DAC,&92D5,&97E7,&9CE2,&A1C5,&A68F,&AB3F,&AFD5
+      WORD &B450,&B8AF,&BCF1,&C117,&C51E,&C907,&CCD1,&D07C
+      WORD &D406,&D770,&DAB9,&DDDF,&E0E4,&E3C6,&E684,&E920
+      WORD &EB97,&EDEA,&F018,&F221,&F405,&F5C3,&F75C,&F8CE
+      WORD &FA1A,&FB3F,&FC3D,&FD15,&FDC6,&FE4F,&FEB1,&FEEC
+sinpi_4 WORD &FF00      ;for PI/4
+
+eval_jumptable0
+; Shortcut for not-coumpound expression
+;$20
+; !"#
+          4 ** WORD eval_gen
+;$%&'
+          3 ** WORD eval_gen:WORD notimpl
+;()*+
+          4 ** WORD eval_gen
+;,-./
+      WORD notimpl,eval_gen,val_local,eval_gen
+;$30 decimal > 31 
+      WORD val_byte,val_word,eval_gen,notimpl
+; hexa
+      WORD val_byte,val_word,eval_gen,notimpl
+; bin
+      WORD val_byte,val_word,eval_gen,notimpl
+; Fallback for the others
+shortcut_max = $-eval_jumptable0 / 2
+
+      IF $-1/&0100 - eval_jumptable0/&0100
+  !! probleme confine
+      END
+
+
+eval_equ
+;comme eval_exp, mais renvoie valeur 24 bits dans cde
+;in : hl source
+;out : C si ok, cde = value
+              ;   A = size
+          call eval_exp_skip_opcode
+;Ass still expect C
+          ld c,0
+          jp p,.okpos
+          dec c
+.okpos
+;We read from buffer when size = 3, but we don't want to support that
+;anymore, to free a byte in label table.
+          cp 3
+          ld a,err_labelovf ; preserve C if no error
+          jp nc,set_exp_error2 ; no ovf if previous error (eg undefined)
+          jp normalize_cde
+
+divbyzero
+; We flag error, yet return to evaluation to properly unwind.
+          push hl
+          ld c,err_divbyzero
+          ld hl,(save_source)
+          call set_exp_error
+          pop hl
+          ret
+
+skip_label
+;out: de preserved
+          inc l
+          ld a,(hl)
+          cp long_label
+          ret c
+          inc l
+          ret
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+code1 = $$
+      IF inRom
+      ORG codedest1,$$
+      END
+
+eval_exp_skip_opcode
+;in: HL= source pre-sized-expression (e.g. points on opcode)
+   ; Rest like eval_exp
+          inc l
+eval_exp
+;in: HL= source pre-expression (e.g. points on size)
+;out: a = nb bytes.
+   ; If fit: de = value  (S)ign  
+   ;otherwise: de = end of unchanged
+   ; b, ix and iy preserved.
+;out: cf below
+
+          push bc:push ix
+          call .eval
+          pop ix:pop bc
+          ret
+.eval
+; Need for non-coumpound exp.
+          xor a
+          ld (va_exp_error),a
+; Needed at least by evacmd, to discriminate string vs value
+          ld (vev_flags),a
+
+; First, if not coumpound exp, direct evaluation
+          inc l         ; skip exp size
+          ld a,(hl)
+          cp short_decimal_max+1
+          jp c,return_byte
+          cp short_label
+          jp nc,return_label
+
+          sub e__start
+          cp shortcut_max:jr nc,eval_gen'
+          add a
+      IF eval_jumptable0 AND &FF
+          add eval_jumptable0 AND &FF
+      END
+          ld ixl,a
+          ld ixh,eval_jumptable0/&0100
+          ld c,(ix+0)
+          ld b,(ix+1)
+          inc l
+          ld a,(hl)
+          push bc
+          ret
+
+
+val_byte
+          ld a,(hl)
+return_byte
+          ld e,a
+          xor a
+          ld d,a
+          inc a         ;Set A=1 and NS flag (positive)
+          ret
+
+val_word
+          ld e,(hl):inc l
+          ld d,(hl)
+          ld a,2
+          or a          ;Set NS flag (positive)
+          ret
+
+
+eval_gen
+; Generic but slow evaluation
+          dec l
+eval_gen'
+          dec l
+          call eval_exp_gen
+;enchaine
+;val_in_word
+;in: de = end of value
+;out: a = nb bytes.
+   ; If fit: de = value  (S)ign
+   ;otherwise: de unchanged
+   ; ix and iy preserved.
+          push hl
+          ex de,hl
+          ld a,(hl)
+          dec l
+          ld d,(hl)
+          dec l
+          ld e,(hl)
+          cp 2
+          jr c,ee_byte
+          jr z,ee_word
+          dec l
+          cp 4
+          jr nc,ee_big
+;try to fit in word
+          inc d         ;ff?
+          jr z,ee_fitinword
+          dec d         ;00?
+          jr nz,ee_big
+          inc d
+ee_fitinword
+          dec d         ;trigger S
+          ld d,e
+          ld e,(hl)
+          ld a,2
+          pop hl
+          ret
+ee_byte
+          ld e,d
+          ld a,e
+          add a
+          sbc a
+          ld d,a
+          ld a,1
+ee_word
+          inc d:dec d   ;trigger S
+          pop hl
+          ret
+ee_big
+          inc l
+          inc l
+          inc l
+          ex de,hl
+          pop hl
+          ret
+
+
+normalize_vdee_uns
+;unsigned version
+;Out: Z flag only if 0
+          push hl
+          ex de,hl
+          ld b,(hl)
+.lp
+          dec l
+          ld a,(hl)
+          or a
+          jr nz,norm_ok
+          djnz .lp
+; Value is 0
+          ld b,1        ; Don't change Z
+          jr norm_ok
+
+eval_exp_mac            ; since vm
+;-----------
+;Allow to pass long values (>24bits)
+;out : de=value end,  Carry set 
+          xor a
+          ld (vev_flags),a
+          ld (va_exp_error),a
+;enchaine
+eval_exp_gen            ; reset flags already done when coming here
+          push bc
+          ld de,values_buffer
+          push ix
+          call _eval_exp
+          call normalize_vdee
+          pop ix
+          pop bc
+          ret
+
+
+normalize_vdee
+;in  : de=value end
+;out : de=value end,  Carry set
+;-> sign given by MSBit, remove leading 0s or $ffs
+
+          push hl
+          ex de,hl
+          ld b,(hl)
+          dec l
+          ld a,(hl)
+          add a
+          jr c,norm_negative
+          inc l
+.lp
+          dec l
+          ld a,(hl)
+          or a
+          jr nz,.pos_end
+          djnz .lp
+;it's zero !
+          jr norm_ok3
+
+.pos_end
+          jp p,norm_ok
+norm_ok2
+          inc l
+norm_ok3
+          inc b
+norm_ok
+          push af       ;preserve Z 
+          inc l         ; end of expression
+;bug#1bb
+;Don't normalize in case of error (since HL not in buffer anymore)
+          ld a,(va_exp_error)
+          or a
+          jr nz,.exit
+
+      IF dev_checks'
+          ld a,h:call _check_buffer_a
+      END
+          ld (hl),b
+          ld a,l
+          sub b
+          ld l,a
+          dec l
+          ld (hl),b
+          add b
+          ld l,a
+.exit
+          ex de,hl
+          pop af
+          pop hl
+          scf
+          ret
+
+norm_negative
+          inc l
+.lp
+          dec l
+          ld a,(hl)
+          inc a
+          jr nz,.neg_end
+          djnz .lp
+;it's -1 !   
+          jr norm_ok3
+
+.neg_end
+          dec a
+          jp m,norm_ok
+
+          jr norm_ok2
+
+get_op2
+          ld a,(vev_flags)
+          res 0,a       ;hasn't value
+          set 1,a       ;is op2
+          ld (vev_flags),a
+
+          inc e
+          call z,buferror
+
+          dec l
+_eval_exp
+;in: HL= source pre-expression (e.g. points on size)
+   ; DE= exp buffer.
+;out:
+;  HL= last opcode seen
+;  DE= last byte of value (length) in exp buffer.
+     ; !!! bugged in case of error !!!
+          CHECK_BUFFER()
+
+          inc l
+_eval_exp_cur
+          ld a,(hl)
+_eval_exp_a_loaded
+          cp short_decimal_max+1
+          jp c,val_put_pos_byte
+          cp short_label
+          jp nc,eval_label ; short or long
+
+; To be able to report error in nested expressions
+          ld (save_source),hl
+
+          sub e__start
+          add a
+      IF eval_jumptable AND &FF
+          add eval_jumptable AND &FF
+      END
+          ld ixl,a
+          ld ixh,eval_jumptable/&0100
+          ld c,(ix+0)
+          ld b,(ix+1)
+          inc l
+          ld a,(hl)
+          push bc
+          ret
+
+
+read_label
+;out: de=id
+          inc l
+get_label_com'
+          ld a,(hl)
+get_label_com
+          sub short_label
+          call c,assert_fail
+          ld e,a
+          ld d,0
+          sub long_label-short_label
+          ret c
+          ld d,a
+          inc l
+          ld a,(hl)
+          add long_label-short_label
+          ld e,a
+          ret nc
+          inc d
+          ret
+
+
+eval_local_com
+          call get_label_com'
+          push hl       ; source 
+          ld (va_cur_label),de
+          ex de,hl
+          call sy_get_explicit_local
+          pop hl
+          call connect_bk_source
+          call nc,set_exp_error2
+          ret
+
+val_local
+          call eval_local_com
+          jr normalize_cde
+
+eval_local
+; local reference (e.g. jr .toto).
+; copy/paste eval_label, but no need to test for macro, and use
+; sy_get_explicit_local rather than sy_get
+          push de       ; pnt buffer
+          call eval_local_com
+          ex (sp),hl    ; hl:buffer, save source (poped in _el_ret_)
+          jp _el_ret_
+
+return_label
+; Copy/paste of /eval_label/, but instead return CDE=value
+; global reference. Can be any:
+   ; - macro param
+   ; - global or local (deciphered by /sy_get)
+
+; If in macro, fallback to generic code:
+   ; - less duplication
+   ; - we don't need the extra speed-up right now
+   ; - might ease future handling of string substitution
+          call is_in_macro:jp nz,eval_gen'
+          call get_label_com'
+          push hl       ; source
+          call get_label_value
+          pop hl
+          call nc,set_exp_error2
+normalize_cde
+; Well, cde is untouched, we set A=nb bytes of normalization
+; Needed for ass to check ovf
+          ld a,3
+          inc c:dec c
+          jp m,.neg24
+;positive
+          ret nz        ; full 24 bits value 
+          dec a
+          inc d:dec d
+          jr nz,.retpos ; full 18 bits value
+          dec a         ; also set P flag
+          ret
+.retpos
+          or a          ; S flag = 0
+          ret
+
+.neg24
+          inc c
+          jr z,.neg16
+          dec c         ; S flag = 1
+          ret
+.neg16
+          dec c
+          dec a
+          inc d
+          jr nz,.neg16'
+          dec a
+.neg16'
+          dec d
+          bit 7,c       ; Force M
+          ret
+
+get_label_value
+;in: DE: id label
+          ex de,hl
+          ld (va_cur_label),hl
+          push hl
+          call sy_get
+          pop hl        ; id for second chance in import
+          call nc,try_import
+          jr nc,.exit
+;If imported: indirection
+          bit vf_imported,a
+          jr z,.exit
+          ld a,c
+          call sy_get_import
+.exit
+          jp connect_bk_source
+
+eval_label
+; global reference. Can be any:
+   ; - macro param
+   ; - global or local (deciphered by /sy_get)
+          push de
+          call get_label_com
+          ex (sp),hl
+          push hl
+          ld (va_cur_label),de
+
+          call is_in_macro:jr z,.el_global
+
+;In macro: check if label is one of arg
+          add 4:ld l,a:ld h,macro_stack/&0100
+.el_arglp
+          inc l:inc l
+          ld c,(hl):inc l
+          ld b,(hl):inc l
+          ld a,c:and b:inc a:jr z,.el_global ; -1 = tag end
+          ld a,c:cp e:jr nz,.el_arglp
+          ld a,b:cp d:jr nz,.el_arglp
+;found
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+          or h
+      IF va
+; needed since not forced anymore
+          ld a,err_undefined
+      END
+          jr z,_el_ret  ; NC here
+
+;copy, since exp might be overwriten
+          pop de
+          ld c,(hl)     ;size
+          ld b,c:inc b
+.el_argcp ld a,(hl):inc l
+          ld (de),a:inc e
+          djnz .el_argcp
+          ld a,c:ld (de),a
+
+          pop hl
+          scf
+          ret
+
+.el_global
+          call get_label_value
+_el_ret
+          pop hl
+_el_ret_
+;garbage if undefined : nevermind
+          ld b,3        ; !! Careful B=3 used below
+          ld (hl),b:inc l
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          ld (hl),c:inc l
+          ld (hl),b
+          ex de,hl
+          pop hl
+          ret c
+;enchaine
+set_exp_error2
+          ld c,a
+set_exp_error
+; c = error code
+          ld a,(va_exp_error)
+          or a
+;evite cascade  (eg ld a,1/toto -> undefined label + division by zero)
+;incovenient : peut masquer erreurs reelles
+          ret nz
+
+          ld a,c
+; Sanity check: error code should be set,
+              ; necessarily not 0 (syntax error cannot contain exp).
+          or a:jr nz,$+4:ld a,fail_unexpected_mess
+          ld (va_exp_error),a
+
+          ld a,c
+          push hl
+          ld hl,(va_cur_label)
+          ld (va_error_data),hl
+          pop hl
+          ret
+
+try_import
+; In: A = error code
+    ; NC
+; Out: Carry if ok
+           ; A = flags
+           ; C = tab
+          ; DE = id in imported source
+;In phase0: don't check in import (bug167)
+;We might want to actually to re-activate that (bug168)
+;See bug167 and 168.                
+;In phase3 or 4: don't eval either. It means source has been modified
+; so that's why label is not defined. 
+; In those phases we 
+
+; Only if undefined, try looking in import.
+; For ambiguous or other error -> pass nc
+          ASSERT(err_undefined == 1)
+          ld b,a:dec b  ; cp 1 without touching A or NC
+          ret nz
+
+          ld a,(va_phase):or a:jr z,.undef
+          cp 3
+.undef
+          ld a,err_undefined
+          ret nc        ; phase 3 or 4: nc
+
+; If no deps, don't call eval_in_deps which is too slow
+;NB: phase1: only know deps imported so far. That's ok no matter what.
+          ex de,hl
+          ld hl,deps
+          ld b,max_sources+7 / 8
+          xor a
+.orlp
+; !! Do inc first
+   ; - skip size
+   ; - preserve Z flag from 'or (hl)' when exiting the loop
+          inc l
+          or (hl)
+          djnz .orlp
+          ld a,err_undefined
+          ret z         ; NC here
+
+          push de
+          call eval_in_deps ;out: tab + id, flags as sy_get
+          pop hl        ;hl=id
+.vh
+          ret nc        ; A = error in this case. Musn't res/set
+
+; [optim] Set tab+id in host table, so next time we don't redo the work.
+; (bug#133)
+
+; It was defined from the point of view of imported file.
+; But not from host's point of view.
+; If we don't reset the flag, sy_set would raise double_defined error!
+          res vf_defined,a
+; Since we are pulling the label, we flag it as so,
+; to prevent transitive use (bug#146).
+          set vf_imported,a
+          jp sy_set
+
+
+eval_end_exp
+;musn't be met directly
+          ld c,err_unexpectedendofexp
+          jr set_exp_error
+eval_paren_close
+;itoo
+          ld c,err_unexpectedclosingparen
+          jr set_exp_error
+eval_forward
+eval_backward
+notimpl
+          ld c,err_notimplemented
+          jr set_exp_error
+
+eval_begin_exp
+          ld a,(hl)
+          cp e_end
+          ret z
+          call _eval_exp_cur
+; could be done everywhere, but we reload value (e.g. vcheck_ovf)
+          CHECK_BUFFER()
+          inc l
+          jr eval_begin_exp
+
+eval_paren_open
+          ld a,(hl)
+          cp e_paren_close
+          ret z
+          call _eval_exp_cur
+          inc l
+          jr eval_paren_open
+
+eval_space
+          ld a,(vev_flags)
+          rra
+          jr c,space_end
+eval_space_loop
+          ld a,(hl)
+          cp e_paren_close
+          jr z,space_end
+          cp e_end
+          jr z,space_end
+          cp e_space
+          jr z,space_end
+          call _eval_exp_cur
+          inc l
+          jr eval_space_loop
+space_end
+          dec l
+space_end_
+          ret
+
+eval_string
+          ld b,a        ; size
+          ld a,(vev_flags)
+          ld c,a
+          set vevf_string,a ; For evacom
+          ld (vev_flags),a
+          ld a,b
+
+          or a
+          jr z,evst_empty
+          dec a         ;all but one (to allow "toto"+$80)
+          jr z,evst_last
+;several chr : only allowed with byte and rsx
+          ld b,a
+          push de       ; do it now for uniform 
+          ld de,(vev_data)
+          ld a,e
+          or d
+          jr z,evst_forbid
+
+          ld a,c
+          bit 1,a
+          jr nz,evst_undef
+
+evst_lp
+          inc l
+          ld a,(hl)
+          ld (de),a
+          inc e
+          call z,dest_next_chunk
+          djnz evst_lp
+
+          ld (vev_data),de
+          pop de
+evst_last
+          inc l
+          ld a,(hl)
+          jp val_put_pos_byte
+
+evst_empty
+          ld c,err_emptystring
+          jp set_exp_error
+
+evst_undef
+          ld c,err_undefinedop
+          jr evst_errcom
+evst_forbid
+          ld c,err_unexpectedstring
+evst_errcom
+;skip string/exp in source
+          ld a,l
+          add b
+          inc a         ; compensate DEC 
+          ld l,a
+          pop de
+          jp set_exp_error
+
+eval_and
+          ld bc,do_and
+
+eval_logical
+          push bc
+          call get_hlismax
+          pop bc:pop ix:push bc
+          ld a,(de)
+          ld b,a
+          ld c,(hl)
+          call vals_goto_lsb
+elog_lp
+          ld a,(de)
+          call jp_ix
+          ld (hl),a
+          inc e
+          inc l
+          dec c
+          djnz elog_lp
+;extend operation with 00 or FF depending on sign
+          ld a,c:or a:jr z,elog_end
+          dec e:ld a,(de)
+          add a:sbc a
+          ld b,a
+elog_lp2
+          ld a,b
+          call jp_ix
+          ld (hl),a
+          inc l
+          dec c
+          jr nz,elog_lp2
+elog_end
+          ex de,hl      ;DE: end of result
+          pop hl
+          jp unsign
+
+eval_or
+          ld bc,do_or
+          jr eval_logical
+
+eval_xor
+          ld bc,do_xor
+          jr eval_logical
+
+eval_sub
+;out: DE= end of result
+          push de
+          call get_op2
+;(sp)=op1. de=op2
+          ex (sp),hl
+          call neg_vdee
+          ld ix,eval_add_
+          jr get_hlismax_
+
+eval_lt
+          call eval_sub
+          call get_sign
+          jr nc,put_false ; x>=y: false
+;enchaine
+put_true
+;Overwrite result (new value size is 1: no risk of overrun)
+;Put 1,1,1 (normalized 1) 
+          ld a,1
+          ld (de),a:dec e
+          ld (de),a:dec e
+          ld (de),a
+          2 ** inc e
+          ret
+
+eval_le
+          call eval_sub_with_sign
+          jr c,put_true
+          jr z,put_true
+;enchaine
+put_false
+;Overwrite result (new value size is 1: no risk of overrun)
+;Put 1,0,1 (normalized 0) 
+          ld a,1
+          ld (de),a:dec e
+          dec e
+          ld (de),a
+          inc e
+          xor a
+          ld (de),a:inc e
+          ret
+
+eval_gt
+          call eval_sub_with_sign
+          jr c,put_false
+          jr z,put_false
+          jr put_true
+
+eval_ge
+          call eval_sub_with_sign
+          jr c,put_false
+          jr put_true
+
+eval_eq
+          call eval_sub_with_sign
+          jr z,put_true
+          jr put_false
+
+eval_neq
+          call eval_sub_with_sign
+          jr nz,put_true
+          jr put_false
+
+eval_sub_with_sign
+          call eval_sub
+;enchaine
+get_sign
+;In: DE=enc of exp
+;Out: C, NZ: <0
+    ;NC,  Z: =0
+    ;NC, NZ: >0
+          dec de:ld a,(de):inc de
+          bit 7,a:jr nz,.neg
+          or a
+          ret nz        ; NC NZ: >0
+
+;must test if 0 (as it might not be normalized)
+          ex de,hl
+          push hl
+          ld b,(hl)
+          xor a
+.lp
+          dec hl:or (hl):jr nz,.done ; NC, NZ
+          djnz .lp
+ ; NC, Z
+.done
+          pop hl
+          ex de,hl
+          ret
+.neg
+          scf
+          ret
+
+
+eval_add
+          call get_hlismax
+eval_add_
+          call add_vhle_vdee
+          ex de,hl
+          pop hl
+          ret
+
+get_hlismax
+;out : longest op in hl
+;      (sp) = saved hl
+;fetch 2nd term.
+          push de
+          call get_op2
+          pop bc
+          pop ix
+          push hl
+          ld l,c
+          ld h,b
+get_hlismax_
+          ld a,(de)
+          ld c,a
+          ld a,(hl)
+          cp c
+          jr nc,jp_ix
+          ex de,hl
+jp_ix     jp ix
+
+add_vhle_vdee
+;(..hl) = (..hl)+(..de)   Signed!!!
+;precondition : hl >= de in length
+
+          ld a,(de)
+          ld c,a
+          ld b,(hl)
+;b:max len. c:min len
+          call vals_goto_lsb
+          or a
+          dec b
+          dec c
+          jr z,eplus_end1
+eplus_lp
+          ld a,(de)
+          adc (hl)
+          ld (hl),a
+          inc l
+          inc e
+          dec b
+          dec c
+          jr nz,eplus_lp
+eplus_end1
+          ld a,(de)
+          ld c,a
+          adc (hl)
+          ld (hl),a
+          push af       ;V and C flag
+          ld a,b
+          or a
+          jr z,eplus_end2
+;complete with 0 or $ff depending on sign
+          ld a,c
+          add a
+          sbc a
+          ld c,a
+eplus_lp2
+          pop af
+          inc l
+          ld a,c
+          adc (hl)
+          ld (hl),a
+          push af
+          djnz eplus_lp2
+
+eplus_end2
+          pop af
+          jp vcheck_ovf
+
+eval_mul
+;abs
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          push af
+          jr nc,evm_okpos
+          call neg_vdee
+evm_okpos
+          push de
+          call get_op2
+          pop ix        ;op1e
+
+;abs as well
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          jr nc,evm_okpos2
+
+          call neg_vdee
+          pop af
+          ccf
+          push af
+
+evm_okpos2
+;make room for result, so it's longer than op2
+;(to reuse add_vhle_vdee)
+
+          push hl
+
+          ld l,e
+          ld h,d
+          inc l
+          call z,buferror
+          ld a,(de)
+          ld c,a
+          ld b,a
+          ld (hl),b
+evm_reset
+          inc l
+          call z,buferror
+          ld (hl),0
+          djnz evm_reset
+          inc l
+          call z,buferror
+          ld b,c
+          ld (hl),b
+
+;iter on op1 from msb
+
+          ld a,(ix+0)
+evm_bytelp
+          push af
+          dec ix
+          ld a,(ix+0)
+      BYTE &CB,&37
+evm_bitlp
+          push af
+          call sla_vhle
+          pop af
+          jr nc,evm_nxt
+
+          push af
+          push de
+          call add_vhle_vdee
+          pop de
+          pop af
+
+evm_nxt
+
+          add a
+          jr nz,evm_bitlp
+          pop af
+          dec a
+          jr nz,evm_bytelp
+
+;fix sign
+          ex de,hl      ;de = result
+          pop hl
+          pop af
+          jp c,neg_vdee
+          ret
+
+eval_mod
+;abs
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          jr nc,.okpos
+
+          call neg_vdee
+          scf
+.okpos
+          push af       ; save flag Carry=Neg 
+          call normalize_vdee_uns ;needed for sub
+
+          push de
+          inc e
+          call z,buferror
+
+          call get_op2
+          ex (sp),hl    ;op1e
+
+nrt_entrypoint
+
+;abs as well
+          dec e
+          ld a,(de)
+          inc e
+          add a
+;todo. mod (-n)
+          call c,neg_vdee
+
+          call normalize_vdee_uns ;!! must be done before push. bug#126
+          push de
+          call divide_com_
+          pop bc        ;congruence
+
+          ld a,(bc)
+          cp (hl)
+          jr nc,.evmo_oklen
+
+      IF todo OR need_room
+; Can this case ever happen?
+      END
+
+          push bc
+          ld b,a
+          ld a,l
+          dec a
+          call val_setlen
+          pop bc
+
+.evmo_oklen
+          ex de,hl
+          pop hl
+          pop af
+          jr nc,.evmo_sign
+
+          push bc:ex (sp),hl ;  B used in normalize_vdee_uns
+; Must substract remainder to modulo.
+; Normalize: 
+   ; - to test if 0 
+   ; - to ensure DE is shorter (in size) than modulo.
+     ; (it is shorter in value already since it's a remainder,
+       ;but I'm not so sure about leading zeros)
+          call normalize_vdee_uns
+          jr z,.evmo_sign_
+; Note: cannot reuse eval_sub, which expect unsigned values
+      ; Converting from unsigned to signed (/unsign/ routine)
+      ; would make one value overwrite the other.
+          ld b,(hl)
+          call sub_hl_de
+          ex de,hl
+.evmo_sign_
+          pop hl
+.evmo_sign
+; Switch back to signed (otherwise +128 would be seen as -128)
+          jp unsign
+
+
+eval_div
+;-------
+;abs
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          jr nc,evd_okpos
+          call neg_vdee
+          scf
+evd_okpos
+          push af
+          call normalize_vdee_uns ;needed for sub
+
+          push de
+          inc e
+          call z,buferror
+          call get_op2
+          ex (sp),hl    ;op1e
+
+;abs as well
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          jr nc,evd_okpos2
+
+          call neg_vdee
+          pop bc
+          pop af
+          ccf
+          push af
+          push bc
+evd_okpos2
+          call divide_com
+
+          push ix
+          pop hl
+          push hl
+
+;reverse
+          ld b,a
+          ld a,l
+          sub b
+          ld e,a
+          inc b
+          srl b
+rev_lp
+          dec l
+          ld a,(de)
+          ld c,(hl)
+          ld (hl),a
+          ld a,c
+          ld (de),a
+          inc e
+          djnz rev_lp
+
+          pop hl
+          xor a
+          call val_extend
+          ex de,hl
+
+          pop hl
+          pop af
+          ret nc
+          jp neg_vdee
+
+
+divide_com
+;In: HL=dividend >= 0
+   ; DE=divisor  >= 0
+;out: hl=reste ix=result *big endian*
+          call normalize_vdee_uns
+divide_com_
+          call z,divbyzero
+
+          push de
+          push hl
+          call cp_vhle_vdee ;diviseur plus grand ?
+          pop hl
+          pop de
+
+          jr nc,evd_gt0
+
+          inc e
+          call z,buferror
+          xor a
+          call val_put_pos_byte
+          push de
+          pop ix
+          ret
+
+evd_gt0
+          call cp_mantissa
+          ld a,0
+          call nc,val_extend ;no need for z, but nevermind
+
+          ld a,e
+          inc a
+          call z,buferror
+
+          ld ixl,a
+          ld ixh,d
+
+          ld a,(de)
+          ld b,a
+          ld a,(hl)
+          sub b
+          inc a
+
+          push af
+          ld (ix+0),a
+          inc ixl
+          call z,buferror
+          push af
+          ld c,&80
+          jr .evd_ent
+
+.evd_bytelp
+          push af
+.evd_bitlp
+;*2
+;C si ovf, no extension
+          ld a,l
+          ld b,(hl)
+          sub b
+          ld l,a
+          dec l
+          or a
+.sla_vhlslp
+          inc l
+          ld a,(hl)
+          adc a
+          ld (hl),a
+          djnz .sla_vhlslp
+          inc l
+
+          jr c,.sub_mantissa
+.evd_ent
+          call cp_mantissa
+          jr c,.evd_nxt
+
+.sub_mantissa
+; hl -= de
+; With a twist!! Si DE shorter, right align to MSB instead of LSB.
+; (hence sub b applied to both)
+; For generic routine see /sub_hl_de/
+          ld a,(de)
+          ld b,a
+          ld a,e
+          sub b
+          ld e,a
+          ld a,l
+          sub b
+          ld l,a
+          ex de,hl
+.evd_sub
+          ld a,(de)
+          sbc (hl)
+          ld (de),a
+          inc l
+          inc e
+          djnz .evd_sub
+          ex de,hl
+
+          or a
+.evd_nxt
+          ccf
+          rl c
+          jr nc,.evd_bitlp
+
+          ld (ix+0),c
+          ld c,&01
+          inc ixl
+          call z,buferror
+          pop af
+          dec a
+          jr nz,.evd_bytelp
+
+          pop af
+          ld (ix+0),a
+          ret
+
+
+sub_hl_de
+;--------
+;hl-=de (both unsigned)
+;OUT: hl and de preserved
+    ; bc trashed
+;!!!Assume DE <= HL (and that is is reflected in size)
+;        
+          ld c,(hl)
+          ld a,l
+          sub c
+          ld l,a
+          ex de,hl
+          ld b,(hl)
+          ld a,l
+          sub b
+          ld l,a
+.evd_sub
+          ld a,(de)
+          sbc (hl)
+          ld (de),a
+          inc l
+          inc e
+          dec c
+          djnz .evd_sub
+;Need to propagate carry when shorter operand
+;And to move back to end of operande anyway 
+          ex de,hl
+.propagate
+          ret z         ; Triggered by dec c above or below
+          jr nc,$+3:dec (hl)
+          inc l
+          dec c
+          jr .propagate
+
+
+cp_mantissa
+          push de
+          push hl
+          ex de,hl
+          ld a,(hl)
+          call cp_vmant_
+          pop hl
+          pop de
+          ret
+
+cp_vhle_vdee
+          ex de,hl
+          ld a,(de)
+          cp (hl)
+          ret nz
+cp_vmant_
+          ld b,a
+cpvlp
+          dec e
+          dec l
+          ld a,(de)
+          cp (hl)
+          ret nz
+          djnz cpvlp
+          ret
+
+vals_goto_lsb
+          ld a,l
+          sub (hl)
+          ld l,a
+vde_goto_lsb
+          ex de,hl
+          ld a,l
+          sub (hl)
+          ld l,a
+          ex de,hl
+          ret
+
+sla_vhle
+;*2
+          ld a,l
+          ld b,(hl)
+          sub b
+          ld l,a
+          or a
+          dec l
+sla_vhllp
+          inc l
+          ld a,(hl)
+          adc a
+          ld (hl),a
+          djnz sla_vhllp
+          jp vcheck_ovf
+
+
+srl_vhle_uns            ; removed in hh beta i
+
+eval_pc
+          push hl
+          ld hl,(va_pc)
+          jr _eval_ccom
+
+eval_objc
+          push hl
+          ld hl,(va_objc)
+_eval_ccom
+          call _put_hl_unsigned
+          pop hl
+          dec l         ;compense pre-fetch : no param here
+          ret
+
+eval_iter3
+          ld c,-22
+          jr eval_iter
+eval_iter2
+          ld c,-13
+          jr eval_iter
+eval_iter1
+          ld c,-4
+eval_iter
+;poke value no matter what,
+;otherwise garbage in buffer might cause buf ovf assert
+          push hl
+          ex de,hl
+          push hl
+          ld hl,(va_rep_pnt)
+          ld b,255
+          add hl,bc
+          ld bc,va_rep
+          or a
+          sbc hl,bc
+          add hl,bc     ; Carry if error
+;poke value no matter what,
+;otherwise garbage in buffer might cause buf ovf assert
+          ld d,(hl)
+          dec hl
+          ld e,(hl)
+          pop hl
+          ex de,hl
+          push af
+          call _put_hl_unsigned
+          pop af
+          pop hl
+          dec l         ;compense pre-fetch : no param here
+          ret nc
+
+          ld c,err_unexpectediter
+          jp set_exp_error
+
+eval_neg
+          call get_op2  ;to support - 1+1 == - 2   (op1 is 0)
+neg_vdee
+          call vde_goto_lsb
+          dec e
+;neg_vde
+          ex de,hl
+          ld b,(hl)
+          inc b
+          dec b
+          jr z,eval_mess
+          or a
+vnlp
+          inc l
+          ld a,0
+          sbc (hl)
+          ld (hl),a
+          djnz vnlp
+          call vcheck_ovf ;-#80 turned to +#80 ?
+          ex de,hl
+          ret
+
+      IF dev_checks'
+_check_buffer
+; Put here so that eval_mess reachable by jr for eval_neg
+          ld a,d
+_check_buffer_a
+          cp values_buffer/&0100
+          ret z
+;!! enchaine with eval_mess
+      END
+eval_mess
+;todo: stack doesn't contain buf & source
+;we rather BRK than corrupt the source like bug #e9 
+      BRK
+
+eval_abs
+          call _eval_exp_a_loaded
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          jr c,neg_vdee
+          ret
+
+eval_cos
+          call _eval_exp_a_loaded
+          call vde_goto_lsb
+          ld a,(de)
+          add &40
+          jr _sin
+eval_sin
+          call _eval_exp_a_loaded
+          call vde_goto_lsb
+          ld a,(de)
+_sin
+          dec e
+          add a
+          jr nc,_sinpos
+          call _sinpos
+          jr neg_vdee
+
+_sinpos
+          push hl
+          ld l,a
+          set 7,l       ;table en xx80
+      IF sinus AND &FF - &80
+ !! error, assumed in xx80
+      END
+          ld h,sinus/&0100
+          add a
+          jr nc,_sinokphase
+          jr nz,_sinbackphase
+
+          ld hl,sinpi_4
+          jr _sinokphase
+
+_sinbackphase
+;sin(pi/4+a)=sin(pi/4-a) (ok for a!=0)
+          ld a,&80
+          sub l
+          ld l,a
+
+_sinokphase
+          ex de,hl
+          ld (hl),2
+          inc l
+          ld a,(de)
+          inc e
+          ld (hl),a
+          inc l
+          ld a,(de)
+          inc e
+          ld (hl),a
+          inc l
+          ld (hl),2
+          ex de,hl
+          pop hl
+          jr unsign
+
+
+vcheck_ovf
+; in :  hl = val msb
+; out : hl = val end
+          inc hl        ; !!! no inc l to preverse OVF flag (bug v4)
+          ld h,values_buffer/&0100 ; !!! hack if hl was &99ff (bug e9)
+          ret po
+;si ovf, le signe trompe
+          dec l
+          ld a,(hl)
+          inc l
+          add a
+          ccf
+          sbc a
+val_extend
+;insert new MSB
+;in : hl pnt to len value
+    ;  a MSB
+          ld b,(hl)
+          ld (hl),a
+          ld a,l
+          inc l
+          call z,buferror
+          inc b
+val_setlen
+          ld (hl),b
+          sub b
+          ld l,a
+          ld (hl),b
+          add b
+          ld l,a
+          inc l
+          ret
+
+val_put_pos_byte
+          ld c,1
+          call put_c_in_buf
+          call put_a_in_buf
+          jr vpp_com
+
+put_a_in_buf
+          ld (de),a
+          inc e
+          ret nz
+buferror
+;buffer overflow
+          ld a,err_bufferovf
+          EXIT_FAIL()
+      IF inRom
+          call exp_fail
+      ELSE
+      BRK
+      END
+
+set_c_in_buf
+          ld a,(vev_flags)
+          set 0,a
+          ld (vev_flags),a ;hasValue
+          ex de,hl
+          ld (hl),c
+          ex de,hl
+          ret
+
+put_c_in_buf
+          ex de,hl
+          ld (hl),c
+          ex de,hl
+          inc e
+          ret nz
+          call buferror
+          inc l
+          ret
+
+val_put_pos_word
+
+          ld c,2
+          inc l
+          ld b,(hl)
+          call put_c_in_buf
+          call put_a_in_buf
+          ld a,b
+          call put_a_in_buf
+vpp_com
+          call set_c_in_buf
+
+unsign
+;extend with 0 if MSBit = 1
+;That is: convert unsigned (necessary >= 0) to signed.
+;So that e.g. 255 isn't seen as -1 by routine that takes signed.
+
+          dec e
+          ld a,(de)
+          inc e
+          add a
+          ret nc
+
+          ex de,hl
+          xor a
+          call val_extend
+          ex de,hl
+          ret
+
+
+val_put_pos_long
+
+          ld c,a
+          ld b,a
+          call put_c_in_buf
+vppl
+          inc l
+          ld a,(hl)
+          call put_a_in_buf
+          djnz vppl
+          jr vpp_com
+
+_put_hl_unsigned
+          ld c,3
+          call put_c_in_buf
+          ld a,l
+          call put_a_in_buf
+          ld a,h
+          call put_a_in_buf
+          xor a
+          call put_a_in_buf
+          jr vpp_com
+
+
+do_and    and (hl):ret
+do_or     or (hl):ret
+do_xor    xor (hl):ret
+
+
+hi1
+realsize1 = $$-code1
+      IF inRom
+      FILL limit1-$,&F7
+      END
+codesize1 = $$-code1
+
+deps  = &7083
+max_sources = 64
+      IF deps - &7083
+    !! defined by org
+      END
+      IF max_sources - 64
+    !! defined by org
+      END
+
+
+va2   = &9800
+      ORG va2,$$
+va_rep_pnt WORD va_rep
+
+va_phase = &980D
+
+      ORG &9827
+vev_data WORD           ;pour string, = assbuf si .by/.fi/rsx, 0 sinon
+
+      ORG &9832
+va_pc WORD              ;pc at instr start : for $
+va_objc WORD 
+
+vev_flags BYTE          ; shared with evacom
+;bit 0: has value
+;bit 1: is op2
+vevf_string = 2
+
+va_cur_label WORD       ;pour report en cas d'erreur
+va_exp_error BYTE       ;!!needed to flag exp as dirty
+va_error_data WORD 
+          ASSERT(va_exp_error == &9839) ; shared with ass
+          ASSERT(va_error_data == &983A) ; shared with ass
+
+      ORG &986D
+rep_nested_max = 6
+va_rep SKIP rep_nested_max*7
+va_rep_end
+
+      ORG &98DC         ; after ass.va2_end
+
+save_source WORD 
+
+      SKIP &98DE - $    ; import.o 
+
+; ==============
+
+
+

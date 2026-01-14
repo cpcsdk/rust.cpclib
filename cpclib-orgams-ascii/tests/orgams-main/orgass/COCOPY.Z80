@@ -1,0 +1,1572 @@
+inRom = 0               ; done in cocoprom, but needed here for split
+; CoCopy, as in:
+   ; Store a copy of the code /store_code/
+   ; Copy the code to ram /install_code/
+   ; Copy from one store (imported) to another (host) /copy_code/
+
+; !!! Not meant to be assembled stand-alone
+   ; - Use cocoptst.o to test
+   ; - Use cocoprom.o to install
+
+; TODO: Factorize with heap.append_raw?
+      ; !!ON HOLD!!  See Jun 12 vb.        
+      ; - Factorize copy_code with what is done for load?
+
+dev_checks = 1
+todo  = 1               ; ctrl-* to cycle through todo.
+need_room = 1
+
+      IF inRom
+      IMPORT "cocoprom.o" ; for codedest, limit...
+      END
+
+MSB_BK = &7F
+      IF todo
+; Replace by dynamic setting
+      END
+asic_connect = &B8
+asic_disconnect = &A0
+
+      IMPORT "macro.i"  ; ASSERT
+      IMPORT "memmap.i"
+      IMPORT "assmap.i"
+      IMPORT "const.i"  ; max_ram_pages
+      IMPORT "swapi.i"
+
+; Dependencies: chunk, mirror, farcall
+
+
+hist
+
+; 2025 ////    
+ ; ---- HH Beta j ----
+  ; Dec
+      ; 21 ai: Add get_store_start_import
+ ; ---- HH Beta i ----
+  ; Nov
+      ; 26 ah: s/insert_new_chunk_from_here/insert_new_chunk_connected
+ ; ---- HH Beta B ----
+  ; Oct
+      ;  7 ag: Fix #196 (slowness with overlap check)
+ ; ---- HH Beta 7 ----
+  ; Sep  
+      ;  5 af: Fix bug overlap strict sub-range not detected
+      ;  4 ae: cocopy_store: store cocopy_pages (source-bound)
+             ; store_ref: Lift ranges
+  ; Aug            
+      ; 31 ad: store_code Return HL = address overlapping in this case
+      ; 26 ac: Add is_covered (for overlap detection)
+             ; 
+ ; ---------- HH Beta 4 ----------
+  ; Jul    
+      ; 27 ab: install_code: skip bank &b8
+             ; install_asic: new
+             ; normalize_bank: handle &b8 like &c4 and co
+
+ ; ---------- HH Beta 2 ----------
+      ; 26 aa: store_code: fix return value (musn't be normalized)
+      ; 19 z: normalize_bank: review api. It was uninspired to
+                 ; let the routine compute remaining size in each
+                 ; case, while the caller can easily and genericaly
+                 ; do that.
+            ; store_code: use normalize_bank
+         ; y: Reactivate get_intercepting_slice
+            ; Add normalize_bank
+ ; ---------- HH Beta 1  ----------
+  ; Jul 10 x: [Adapt rom ass] Use farcall from ASS rom.
+ ; ---------- GG Beta M  ----------
+  ; Jun 22 w: Add get_intercepting_slice
+
+; 2024 ////
+ ; ---------- GG beta C ----------
+  ; Oct 8 v: [No-change] Use const.i 
+
+ ; ---------- GG beta 1 ----------
+  ; Feb 
+   ; 19 u: Simplify store_ref: doesn't need to pass DE anymore
+   ; 18 t: Store (for org_select) v_store_cur. Rationale:
+            ; - Simplify/harmonize store_ref
+            ; - Before import.o had to store it for us: 
+                   ; - extending this value to 24 bits means we 
+                     ; would have had to modify import.o -> bad design
+   ; 16 s: Move v_store_cur (room for additional byte)
+   ; 14 r: Introduce /iterate_code_chunks/ (for WRITE)
+             ; Refactor other routines to use that. 
+             ; Early exit if call_back fails
+         ; vq: (no change) Extract tests and burn (easy import)
+
+; 2023 ////
+ ; ---------- Release FF ----------
+  ; May 10 vp: Use new farcall:
+               ; - Needed when called from trace (org_select new source)
+               ; - One step towards uniformisation
+     ; Fix tests: forgot CALL_BRIC for one connect_chunk_from_id
+
+; 2022 ////
+
+  ; May 7 vo: Fix /test_256/ and /test_cross_chunk/ themselves:
+            ; Address of chunks have shifted due to external
+            ; change (one more chunk pre-allocated at init).
+            ; Add /test_bug#14c/  Fixed in mirror-q
+
+; 2021 ////
+
+; Dec 20 vn install_code: reconnect bk_base
+; Nov 17 vm [No-op cleanup change]  More accurate naming:
+           ; since /free/reset/ (since reallocating chunk)
+; Oct 19 vl; Add /test_ref_trans_bk/
+           ;  -> fixed in /install_ref/ (must save bk as well).
+   ;  vk ; Redesign: store ref instead of cloning.
+                   ; - faster.
+                   ; - cheaper in memory.
+
+   ;  vj ; ++check source != dest
+
+   ;  vi ; - Expose instead:
+           ; get_store_start
+           ; get_store_cur
+             ; Because we need those vars at different moments.
+             ; Also, that's more convenient to pass via hl in both cases
+         ; - API change (only import.o impacted):
+           ; /copy_code/: take de=dest (instead of vo_store_cur).
+           ; see rationale in routine.
+
+   ;  vh ; Expose (for import.o):
+                ; get_store_vars
+                ; set_store_cur
+
+         ; 17  vg ; Rollback vf: /v_store_cur/ in bank is much more
+                  ; painful to access/update.
+                  ; Since it was done just to keep (re)store simple,
+                  ; it's not worth it  
+                  ; /test_select/ on hold.
+
+     ; Sep 16  vf: Add /test_select/
+                 ; WIP!!!  On hold!!!
+
+     ; Jul 08  ve: Add /check_l_bk_source/
+
+            ;  vd: export/import
+         ; 20  vc: Add /test_sentinelle_doesnt_fit/
+
+     ; Jun 12  vb
+        ;   Move core of /store_code/ in heap.append_raw.
+        ; Rationale:
+        ;   - Factorization:
+              ; - Less code
+              ; - One routine thorougly tested via multiple 
+
+                 ; !!! vv ON HOLD !!!
+                 ; !!! Would require install_code rewrite.           !!!
+                 ; !!! It currently uses copy_trans_bk_mirror, which !!!
+                 ; !!! doesn't support cross-chunk data.             !!!
+                 ; !!! Mitigation: read_raw with intermediate buffer.!!!
+                 ; !?! Not really sufficient: we expect slice header !?!
+                 ; !?! to be confined, since we read it direclty to  !?!
+                 ; !?! get the len to copy.  
+
+         ; Status: part of store_code was actually moved, to fix
+                 ; previously bugged append_raw.
+
+
+     ; May 31  va: Add /test_reset_code/ (musn't trash 8a00)!
+
+     ; May 30  v9: Add /test_buf_ovf/  (not failing)
+                 ; Add /test_buf_ovf2/
+                 ; Add /test_cross_banks/
+                 ; Fix the last 2: big sized must be split twice.
+
+          ; 5  v8: Add /test_copy_code/
+     ; Feb  4  v7: Fix nrt (since # pre-allocated chunks changed).
+                 ; Introduce /copy_code/ to inject imported code.
+
+             ; v6: Add /init/. See rationale there.
+         ; 27  v5: Introduce /store/restore/.
+                     ; Needed by orgdr for cache conserved after 
+                     ; switching source (org_select).
+                 ; Adapt nrts, now that org call us (cocopy.reset)
+
+         ; 25  v4: /test_almost_full/ (fixed in mirroro)
+             ; v3: Follow my own advice: keep housekeeping var private.
+                 ; see v_store_start and v_store_cur.
+         ; 22. v2: /store_code/ must take IX as source,
+                 ; since we must save it anyway when splitting
+                 ; (cannot force source=ass_buf for each split!)
+; 2021 Jan 21. v1: WIP (from asscv:copy_com). Doesn't work:need new API.
+ ; Also, argl. Hand-made rather than trying to use list:append. Faute!
+
+mess  = &BE00
+
+; ---- In this rom (ORGASS) -----
+farcall = &FF12
+call_ed_from_ass = farcall
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+connect_bk_base = pagefirm_jp ; All regs saved
+;connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+;org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+;connect_next_chunk = chunkcc_jp ;A corrupted
+
+
+; ---- In main rom ---- 
+mirror = &E7F2
+copy_trans_bk_mirror = mirror+18
+;in : HL=source DE=dest ixl=size 
+    ; ixh=bk source (orgasm work bank: ff fe ... cc c7 c6 c5 c4)
+    ; a=bk dest (any connection c0 c1 c2 c3 c4 ...)
+;OUT: Reconnect bk source
+    ; (since dest bk may not be an orgams work bank with vo_curbk)
+    ; HL and DE advanced like ldir. BC trashed
+    ; IY corrupted                   
+
+; ---- In orgext ----    
+swap  = &FE60
+connect_cocopy_store = swap+48
+
+; ---- In BricBrac ----    
+heap  = &FEAF
+; In: hl= source !! out of bank
+    ;  b= bk dest
+    ;  d= MSB dest (ie BD = ID of *last* chunk). Coherent with output
+    ;  c= size
+    ;  ix= routine new_chunk (returning HL:id, A:start)
+    ; Bank agnostic    
+
+; Out:  HL = id of new last chunk (can be the same). Needed by new_table
+     ; BDE = dest start (i.e. insertion point). Rationale:
+             ; - simpler client code (new_table)
+             ; - avoid corner case when copy reaches end of chunk:
+                 ; it would quirky to return "past the end" pnt then. 
+           ; NB: that means:
+                           ; - BD is unchanged unless chunk was full.
+                           ; - BD can serve as input to append again.
+     ; Last chunk inserted connected 
+       ; Not a hard constraint for now -> might be revisited upon needs
+;append_raw = heap+6
+
+chunk = &FDFA
+insert_new_chunk_connected = chunk+18
+;in:hl = id chunk (connected)  out:hl=id (connected)
+
+connect_chunk_from_id = chunk+42 ; org version requires sp. all regs sav
+connect_next_chunk = chunk+45
+new_chunk = chunk+21
+free_list = chunk+33    ; no-op if 0
+
+
+liszt = &FEDC
+liszt' = &FEBE
+liszt'' = &FEF1
+list4_new = liszt       ; return empty list (cde). all other reg preserv
+list4_append = liszt+3  ;NRT in: cde= pnt head list. 
+                        ;out: cde conserved
+                            ;  hl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_insert = liszt''  ;NRT in: bhl= post link nxt (cell body or header
+                        ;out: cde conserved
+                            ; bhl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_free = liszt+6    ;in:cde <> 0. all register conserved
+;list_head = liszt'      ; abcde saved
+list_iter_reset = liszt'+3 ; in: cde= pnt head list. out: side effect
+list_iter_get = liszt'+6 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ;  hl= pnt cell body
+list_iter_get' = liszt''+6 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ; bhl= pnt cell body
+list_iter_get_last = liszt''+9 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ; bhl= pnt cell body
+
+list_iter_next = liszt'+9 ; in: cde= pnt head list.
+                          ;out: NZ, iter++ (side effect)
+                              ;  Z, no-op if no next
+                              ; All registers preserved but A
+
+
+; ------------------------------------
+
+; Use almosts same fields than source chunk
+chead_next = 0
+chead_last = 2
+ ; chead_checksum = 3    Not yet used
+ ; chead_lines# = 4      N/A here
+ ; chead_flags = 5
+ ; chead_pc = chead_flags+1 ;pc at start of chunk
+chead_start = 8         ; leave room for flags
+
+; ========================================
+      MACRO CALL_BRIC adr
+          call call_bric_from_ass:WORD adr
+      ENDM
+
+      MACRO CALL_ED adr
+          call call_ed_from_ass:WORD adr
+      ENDM
+
+      MACRO CALL_EXT adr
+          call call_ext_from_ass:WORD adr
+      ENDM
+
+      MACRO CHECK_ID
+      IF dev_checks
+          call _check_id
+      END
+      ENDM
+
+      MACRO SUB_BC_HL
+          ld a,c:sub l:ld c,a
+          ld a,b:sbc h:ld b,a
+      ENDM
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+cocopy_store
+;-----------
+; For org_select  (copy/pasted from symb)
+; in: DE= dest
+    ;  C= max dest (end)
+          ld hl,cocopy_pages
+          call _store_com3
+          ld hl,v_store_start
+          call _store_com1
+          ld hl,v_store_cur
+          jr _store_com2
+
+cocopy_restore
+;-------------
+; For org_select
+; in: HL= source
+    ;  C= max source (end)
+          ld de,cocopy_pages
+          call _store_com3
+          ld de,v_store_start
+          call _store_com1
+          ld de,v_store_cur
+;Enchaine
+_store_com2
+          ld bc,cocopy_len2
+          ldir
+          ret
+
+_store_com1
+      IF cocopy_len1 <= 2
+          cocopy_len1 ** ldi
+      ELSE
+          ld bc,cocopy_store_len
+          ldir
+      END
+          ret
+
+_store_com3
+          ASSERT(cocopy_len3 == max_ram_pages*3)
+          ld bc,cocopy_len3
+          ldir
+          ret
+
+prog_error
+      BRK
+
+init
+;---
+;Needed by org.o for new source
+;Otherwise, org_select when building new_source would call reset only,
+; freeing the list used by previously selecting source.
+;Dangling pointer!                     
+
+;!!! Not called by init.o (instead 7exx chunk is raz).
+;-> Must be fixed if non-zero init is added here (new var).
+
+          ld hl,0
+          ld (v_store_start),hl
+          ld b,max_ram_pages*3
+          ld hl,cocopy_pages
+.initmap
+          ld (hl),0:inc l
+          djnz .initmap
+          ret
+
+amorce
+;-----
+; Used before new re-assemblage:
+;  - free previous list, init new one.
+; NB: Must **not** be called at reset/free time, since v_store_cur
+;   ; is @ 8a03 (in status screen).
+; in: BK base connected.
+;out: Carry if ok. NC + A = error code (memory full) otherwise.
+    ; BK base connected.
+          call reset:ret nc
+;Enchaine
+set_store_cur           ; unused directly
+          ld (v_store_cur),hl
+          ret
+
+get_store_cur
+          ld hl,(v_store_cur)
+          ret
+
+get_store_start_import
+;In: A = id tab
+          CALL_EXT(connect_cocopy_store)
+          ld a,(hl):inc hl
+          ld h,(hl):ld l,a
+          ret
+
+get_store_start
+          call connect_bk_base
+          ld hl,(v_store_start)
+          ret
+
+reset
+;----
+; Used when new source (e.g. CONTROL-N).
+; !!! <> free + /init/ (which just set v_store_start to 0).
+
+; Free occupation map (id set to 0 by init.o)
+          ld b,max_ram_pages
+          ld hl,cocopy_pages
+.freemap
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,(hl):ld (hl),0:inc l
+          inc c:dec c:jr z,.nxt
+          CALL_BRIC(list4_free)
+.nxt
+          djnz .freemap
+
+; Realloc store
+          call get_store_start
+          CALL_BRIC(free_list)
+;enchaine
+_set                    ; for nrt
+          CALL_BRIC(new_chunk):ret nc ; connected
+          push hl       ; conserve id
+          call _init_code_chunk
+          pop hl
+          call connect_bk_base
+          ld (v_store_start),hl
+          ret           ; Carry at this point
+
+
+store_code
+;---------
+; Cache slice of code for later installation (install_code)
+; Allow caching of assembled imports.
+
+; NB: cannot reuse heap.append_raw_in_chunk.
+    ; See /hist/ notes Jun 12 vb.
+
+; in: IX= source (out of bank!). Rationale:
+            ; - ass_buf is already out of bank.
+        ; (note: hl is heavily used in the routine)
+    ;  B= logical dest bank (as instructed by BANK directive)
+    ; DE= logical dest
+    ;  C= size (0=256)
+    ; bk base connected
+;out: IX=IX.in + size (mimic ldir)
+    ; DE=DE.in + size (mimic ldir)
+    ;  Carry if ok, NC otherwise, A=error code (memory full).
+    ; IY preserved. 
+    ; BC, HL trashed
+    ; Bk base reconnected 
+
+; Structure of a chunk                     
+;---------------------
+; +0 Link (word) Link to next chunk. 0000 when last
+; +2 Last (byte) Last byte used in chunk
+; +3 Reversed 
+; +8 N slices (5 or 3 bytes each) 
+; +Last 00 (byte)  end of chunk sentinelle.
+
+; Structure of a slice
+;---------------------
+; -- Header 
+    ;  - bk dest (word) (to allow 7f/7e/7d/7c MSB for 2Mb extension)    
+    ;  - pnt dest (word)    
+    ;  - size (byte)      
+; -- Body
+    ;  - code (size)   ;confined in chunck for now.
+; Or
+    ;  - 01 (byte)        ;escape code
+    ;  - pnt ref (word)
+
+
+ref_size = 3
+slice_header_size = 4
+
+; Nb: - If code doesn't fit in chunk, we split it rather than handling
+    ; 'cross chunk' data. Rationale: simpler code, no much bytes wasted.
+    ; (we rather waste space in RAM than in ROM. Plus KISS)
+    ; - If slice header itself doesn't fit, go to next chunk.
+      ; Kind of covered by test_sentinelle_doesnt_fit
+
+          push iy
+      IF dev_checks
+; Must be out of bank
+          ld a,ixh:and &C0:cp &40:call z,&BE00
+      END
+          ld a,b        ; bk
+          ld b,0:dec c:inc bc ; transform 0 to &100
+          ex de,hl      ; hl=dest
+.lp_norm
+          push af       ; save bk
+          push bc       ; save size
+          push hl       ; save dest
+          call normalize_bank
+          push af
+          push bc
+          ex de,hl      ; de = dest normalized 
+          call .do_store
+          call connect_bk_base ; needed for next iter
+          pop bc
+          jr nc,.error_norm
+          pop af
+          pop hl
+          jr c,.end_norm
+          add hl,bc     ; new dest
+          ex de,hl
+          pop hl        ; was bc=size
+          or a:sbc hl,bc
+          ld c,l:ld b,h ; new size
+          ex de,hl      ; hl = dest
+          pop af        ; original bank
+          jr .lp_norm
+
+.end_norm
+          add hl,bc:ex de,hl ; final dest
+          scf
+          jr .exit_norm
+
+.error_norm
+; Memory full or else
+          2 ** pop bc   ; restore stack
+.exit_norm
+          2 ** pop bc   ; "
+          pop iy
+          ret
+
+.do_store
+;In:
+   ;a =logical bk
+   ;de=logical dest
+   ;c=size
+   ;ix=source data
+;Out:
+   ; Carry if ok
+   ; nc if error. A = error code 
+                ; HL = overlapping address if problem
+
+; -- Update occupation map 
+          ld b,a        ; save bank for /.copy/
+          push bc:push de:push ix
+          call _append_range_com
+          pop ix:pop de:pop bc
+          ret nc        ; memfull or overlap
+
+; -- Append in store
+          ld hl,(v_store_cur)
+      IF need_room
+; [optim]: use connect_chunk_from_id in this ROM (save CALL_BRIC)
+         ; nb: org version is dubious 
+      END
+          CALL_BRIC(connect_chunk_from_id) ; BRK if mess
+; --- slice1
+; Check if slice fit in chunk
+_retry
+; Last point on sentinel (0)    
+          ld l,chead_last:ld a,(hl)
+; Enough place for header + 1 byte ? (0-length slice is not worth it!)
+          add slice_header_size+1:jr c,_new_chunk_
+          dec a         ; Corrige +1 for test above.
+          inc c:dec c:scf:jr z,.ovf ; 0=256 -> ovf (carry).
+          add c         ; Carry if ovf.    
+.ovf
+          push af
+          jr nc,.fit
+
+; size 1 = -last-header-1 (for sentinelle)
+          ld a,-slice_header_size-1:sub (hl)
+          ld c,a
+.fit
+          ld l,(hl)     ; last (overwrite sentinelle)
+          call .copy    ; cannot fail
+          pop af        ; NC means fit -> Ok
+          ccf
+          ret c         ; Exit if no split
+
+; Here: a=needed bytes -1
+          inc a:ld c,a
+          jr _retry     ; might have to split second part again
+
+.copy
+; here: hl point on dest in chunk.
+          ld (hl),b:inc l ; bank dest
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          ld (hl),c:inc l ; size
+          ex de,hl
+          inc c:dec c:call z,mess
+          ld a,b        ; save
+          ld b,0
+          add hl,bc     ; mimic ldir (de:=de+size)
+          push hl
+          push ix:pop hl
+          ldir
+          push hl:pop ix
+          ld b,a
+          ex de,hl
+          pop de        ;new dest
+_finalize
+; set sentinelle
+          ld (hl),0
+          ld a,l
+          ld l,chead_last:ld (hl),a
+          scf
+          ret
+
+
+store_ref
+;--------
+; Store ref (of import codestore) in host codestore.
+; So we don't have to deal with import in install phase
+; (which would be more complex and inefficient, since we would have to
+;  scan sources again).
+
+; in: hl= ID store_start of reference (import)
+;out: If ok, Carry. Ref (hl) put in host store.
+    ; Side effect: v_store_cur updated. Rationale:
+    ; - that's what we want! (pointer in host updated).
+
+;First, lift import ranges into host occupation map
+;Needed to detect overlap, and for occupation bar (ass status)
+          push hl
+          ld iy,_append_range
+          call _iterate_level
+          pop de
+          ld hl,(overlap_adr)
+          ret nc
+
+          ld hl,(v_store_cur)
+      IF dev_checks
+          call _check_id ; sanity check
+; assert source != dest
+          or a:sbc hl,de:add hl,de:call z,mess
+      END
+
+          CALL_BRIC(connect_chunk_from_id) ; BRK if mess
+; Last point on sentinel (0)
+          ld l,chead_last:ld a,(hl):ld l,a
+; Enough place for ref + 1 byte ? (0-length slice is not worth it!)
+          add ref_size+1
+          jr nc,.ok
+          ld hl,(v_store_cur)
+          call insert_code_chunk
+          ret nc        ; fail
+.ok
+; here: hl point on dest in chunk.
+esc_ref = 1
+          ld (hl),esc_ref:inc l ; code
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          jr _finalize
+
+
+_new_chunk_
+; insert, connect and retry
+          ld hl,(v_store_cur)
+          call insert_code_chunk
+          jp c,_retry
+;.ko
+          ret
+
+
+insert_code_chunk
+;in:  hl=id current chunk (connected)
+;out: hl=new chunk connected at last byte (for .copy or .ok)
+          CALL_BRIC(insert_new_chunk_connected):ret nc
+;set as current (nb: append only)
+          ld (v_store_cur),hl
+;enchaine
+_init_code_chunk
+;SAVE AF!
+;complete chunk init
+          ld l,chead_last:ld (hl),chead_start
+          ld l,chead_start:ld (hl),0 ; sentinelle
+          ret
+
+_gflpb
+; bc=bank (doesn' support B<>&7f)
+; de=dest
+;  a=size
+          ld l,a:ld h,0:add hl,de:dec hl ; last byte
+          push hl
+          ld a,c:add a:add a:ld l,a:ld h,tmp_chunk/&0100 ; entry in table
+          ld c,(hl):inc l:ld b,(hl)
+; Update first if de < bc
+          ex de,hl:or a:sbc hl,bc:add hl,bc:ex de,hl:jr nc,.samefirst
+          ld (hl),d:dec l:ld (hl),e:inc l
+.samefirst
+          inc l
+          pop de
+          ld c,(hl):inc l:ld b,(hl)
+; Update last if de > bc
+; Return carry in anycase to continue iteration
+          ex de,hl:or a:sbc hl,bc:add hl,bc:ex de,hl:ret c
+          ld (hl),d:dec l:ld (hl),e
+          scf
+          ret
+
+
+get_first_last_per_bank
+;----------------------
+; In: nothing
+;Out: tmp_chunk updated
+
+      IF need_room
+; Not used anymore? was for save, which use get_page_list now
+      END
+
+; Init table
+          ld hl,tmp_chunk
+.inilp    xor a:bit 1,l
+          jr nz,.okm    ;&0000 for 2,3 % 4 (last)
+          dec a         ;&ffff for 0,1 % 4 (first)
+.okm
+          ld (hl),a
+          inc l
+          jr nz,.inilp
+
+          ld iy,_gflpb
+          jr iterate_code_slices
+
+
+install_asic
+;-----------
+; Copy in ASIC page bufferized code from ass.
+; in: nothing!
+;out: code installed in asic page
+    ; Reconnect bk base. Rational:
+ ; - More symetric.
+ ; - Prevent client (ch) to have to do it (inconvenient from orgams.rom)
+
+;unlock asic
+          di
+          ld bc,&BCFF
+          out (c),c
+          out (c),0
+          ld hl,%1001000011101010
+
+loop
+          out (c),c
+          ld a,h:rlca:ld h,l:ld l,a
+          srl c
+          xor c:and &88:xor c
+          ld c,a
+          cp &4D
+          jr nz,loop
+
+          ld a,&CD      ; a = #CD for unlock, another value for lock
+          out (c),a:out (c),a
+
+          ld iy,.ia_callback
+          jr iterate_code_slices
+
+.ia_callback
+          ld ixl,a      ; size (0=$100)
+          ld a,c        ; bk dest
+          cp asic_connect
+          scf
+          ret nz
+
+          ld c,ixl:ld b,0:dec c:inc bc
+          push de
+          push bc
+          ld de,tmp_chunk
+          push de
+          ldir
+          ld bc,&7F00+asic_connect:out (c),c
+          pop hl
+          pop bc
+          pop de
+          ldir
+          ld bc,&7F00+asic_disconnect:out (c),c
+          scf
+          ret
+
+
+ic_callback
+          ld ixl,a      ; size (0=$100)
+          ld a,c        ; bk dest
+;ASIC: don't install, must be done just before jump
+          cp asic_connect
+          scf
+          ret z
+
+      IF todo
+; pass MSB
+      END
+          CALL_ED(copy_trans_bk_mirror)
+          ret
+
+install_code
+;-----------
+; Copy in ram bufferized code from ass.
+; TODO: compute checksum when installing (since we might jump).
+      ; !!No. routine couldn't be reused when going to basic.
+      ; Hum, a voir. Mainly needed for import.
+
+; See /store_code/ for structure of each slice.
+
+; in: nothing!
+;out: code installed in ram/mirror.
+    ; Reconnect bk base. Rational:
+ ; - More symetric.
+ ; - Prevent client (ch) to have to do it (inconvenient from orgams.rom)
+
+
+          ld iy,ic_callback
+;enchaine
+iterate_code_slices
+;------------------
+; In: IY = routine called at each chunk, which will be passed:
+             ; BC  = Destination Bk 
+             ; DE = Destination address 
+             ;  A = Size (0 < size < &100)
+             ; HL = Contiguous code chunk
+             ; IXH = Currently connected bank
+          ; Out: Carry if ok
+               ; NC -> early exit
+               ; Routine can trash all registers
+               ; (no EXX allowed)
+
+; Out: Carry if ok (all slice processed)
+     ; NC if callback returned NC.
+         ; IY preserved
+         ; All other registers trashed.
+     ; Reconnect bk base
+
+          call get_store_start
+_iterate_level
+; in: hl= Id store 
+          CALL_BRIC(connect_chunk_from_id)
+.loop_chunk
+;ixh: save current chunk (see /.iterate_ref/
+          ld a,l:ld ixh,a ; ixh: source bk 
+          ld l,chead_start
+.loop_slice
+; First byte, either
+   ; 00 (sentinel)
+   ; 01 (escape code for ref)
+   ; XX (dest bk)
+          ld a,(hl):or a:jr z,.next_chunk
+          inc l
+          ld e,(hl):inc l
+          ld d,(hl):inc l ; de: dest or ref
+
+          cp esc_ref:jr z,.iterate_ref
+          ld c,a
+      IF dev_checks
+          cp &B8:jr z,.okic
+          and &C0:cp &C0:call nz,&BE00 ;  bank connection
+.okic
+      END
+          ld b,MSB_BK
+          ld a,(hl):inc l
+
+; CALL BACK  
+          push af
+          push hl
+          push ix
+          push iy
+          call jp_iy
+          pop iy
+          pop ix
+          pop hl
+          jr nc,.exit   ; Early exit in case of failure
+          pop af
+          add l:ld l,a
+          call c,mess
+.next_slice
+; Reconnect:
+  ; - convenience if callee had to switch bank
+  ; - necessary after ref
+          ld c,ixh
+          ld b,MSB_BK
+          call connect_bk
+; We know we are still inside chunk
+; as we always leave room for sentinelle
+          jr .loop_slice
+
+.next_chunk
+          CALL_BRIC(connect_next_chunk)
+          jr nz,.loop_chunk
+          scf           ; flag success
+.finito
+          jp connect_bk_base ; Finito
+
+.exit
+          pop bc        ; don't touch AF (error code + NC)
+          jr .finito
+
+.iterate_ref
+;Recursive iteration
+          push hl
+          push ix
+          ex de,hl
+          call _iterate_level
+          pop ix
+          pop hl
+          jr .next_slice
+
+jp_iy     jp iy
+
+normalize_bank
+;-------------
+; Needed to be able to catch areas defined under C2 when saving e.g. C4.
+; Or vise-versa.
+; It will help ensuring the following invariant:
+    ; - all slices are either in c0
+      ; or contained in a regular 16k page (C4, C5, ...)
+; IN: A=bk
+    ;HL=start
+    ;BC=size
+;Out: A, HL : same but normalized (only C0, C4, C5, ...)
+    ; If all the area is covered: Carry, BC unchanged
+    ; Otherwise, NC, BC is shorter
+         ; In that case the routine must called again with:
+                   ; original bank (to be saved by caller)
+                   ; HL := original HL + BC
+                   ; BC := original BC - BC
+         ; Note: it will happen for overlapping pages (c2)
+               ; or at &4000 and &8000 boundaries.
+    ; IX IY preserved
+    ; DE thrased 
+
+          ld d,a
+          ld a,c:or b:jr z,.empty
+
+          ld a,d
+          cp asic_connect:jr z,.c4
+          and &07
+          ld e,a
+          ld a,&C0      ; normalize c0 c8 d0 ... to c0
+          scf
+          ret z         ; c0: as-is
+          dec e:jr z,.c1
+          dec e:jp z,.c2
+          dec e:jp z,.c3
+.c4
+;b8 c4 c5 ...: must normalize to c0 if outside page 4000
+          ld a,h
+          cp &40:jr c,.cx_0000
+          cp &80:jr c,.cx_4000
+; over 8000: c0 (but check if wrapping around ffff)
+          call .last_address_msb
+          jr c,.cx_wrap
+;enchaine    
+.c0_fit
+.empty                  ; For sanity put &c0 for empty 
+          ld a,&C0
+          scf
+          ret
+
+.cx_0000
+          call .last_address_msb
+          jr c,.cx_overlap
+          cp &40:jr c,.c0_fit
+.cx_overlap
+; First size: &4000-hl 
+          ld b,&40
+          call .bc_sub_b00_hl
+.c0_no_fit
+          ld a,&C0
+          or a
+          ret
+
+.cx_4000
+          call .last_address_msb
+          jr c,.cx_overlap'
+          jp m,.cx_overlap'
+;fit
+          ld a,d
+          scf
+          ret
+
+.cx_overlap'
+; First size: &8000-hl
+          call .bc_sub_8000_hl
+          ld a,d
+          or a
+          ret
+
+.cx_wrap
+; If wrap around ffff, split here 
+; (as last address could land in &4000 page)
+          ld b,0
+          call .bc_sub_b00_hl
+          jr .c0_no_fit
+
+.c1
+.c1c3
+          ld a,h:cp &C0:jr c,.c1_under
+; In C000      
+          call .last_address_msb
+          jr c,.c1_ffff
+;fit  
+          res 7,h       ; c000 -> 4000 
+          ld a,d:and &F8:add 7 ; c1 or c3 -> c7
+          scf
+          ret
+
+.c1_under
+          call .last_address_msb
+          jr c,.c1_overlap
+          cp &C0:jr c,.c0_fit
+.c1_overlap
+; First size = &c000 - hl
+          ld b,&C0
+          call .bc_sub_b00_hl
+          jr .c0_no_fit
+
+.c1_ffff
+; Wrap around ffff
+; First size = 0 - hl
+          ld b,0
+          call .bc_sub_b00_hl
+          res 7,h       ; &c000 -> &4000
+          ld a,d
+          or 7          ; c1->c7 and NC
+          ret
+
+.c2
+;Test fit in 16k
+          ld e,h
+          call .last_address_msb
+          jr c,.c2_overlap ; wrap around &ffff
+          xor e
+          and &C0
+          jr nz,.c2_overlap
+;Fit in 16k
+          call .bank_dispatch
+          scf
+          ret
+
+.c2_overlap
+;First size = ceil(hl,&4000) - hl
+          ld a,h
+          and &C0:add &40
+          ld b,a
+          call .bc_sub_b00_hl
+.bank_dispatch
+          ld a,d:and &F8:ld d,a ; base bank
+          ld a,h:and &C0:2 ** rlca:or d:or 4 ; page c4 c5 c6 or c7 
+          res 7,h:set 6,h ; in 4000
+          ret           ; NC here
+
+.c3
+          ld a,h
+; If <&4000 same than for regular bank,
+; as we only process the first split
+          cp &40:jp c,.cx_0000
+          cp &80:jp nc,.c1c3
+;4000-7fff
+          call .last_address_msb
+          jr c,.c3_overlap
+          jp p,.c3_fit
+.c3_overlap
+;overlap 8000
+;first size = &8000-hl 
+          call .bc_sub_8000_hl
+          set 7,h       ; 4000->c000
+          jp .c0_no_fit
+
+.c3_fit
+          set 7,h       ; 4000->c000
+          jp .c0_fit
+
+.last_address_msb
+; In: hl start address
+;Out: a = msb last address
+    ; Flags like add hl,bc-1
+    ; Notably, Carry if wrap around &ffff
+          dec bc        ; for last address
+          ld a,l:add c  ; only for carry
+          ld a,h:adc b
+          inc bc
+          ret
+
+.bc_sub_8000_hl
+; BC := 8000 - hl
+          ld b,&80
+.bc_sub_b00_hl
+; BC := B 00 - hl
+          xor a:sub l:ld c,a
+          ld a,b:sbc h:ld b,a
+          ret
+
+create_page_list
+; In: A = page (b8, c0, c2, ca...)
+;Out: If ok, Carry CDE = ID list
+          call get_page_list
+      IF dev_checks
+          call nz,mess  ;musn't exist
+      END
+          CALL_BRIC(list4_new)
+          call connect_bk_base
+          ret nc
+          ld (hl),c:dec l
+          ld (hl),d:dec l
+          ld (hl),e
+          ret
+
+
+;-------------------------------------------
+_check_id
+          push af
+          call check_l_bk_source
+          ld a,h:and &C0:cp &40:call nz,mess
+          pop af
+          ret
+
+check_l_bk_source
+          ld a,l:and &C4:xor &C4:call nz,mess
+; mustn't be bk base
+          ld a,i:cp l:ret nz
+      BRK
+; wrong bk
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+code1 = $$
+      IF inRom
+      ORG codedest1,$$
+      END
+
+denormalize_bank
+;---------------
+;Almost inverse of normalize_bank: -> Return C2, CA ...
+; In: A =bk
+    ; HL=address
+;OUT: A =bk (only C0, C2, CA...)
+    ; HL=adapted address
+    ; DE trashed
+
+          ld d,a
+          cp asic_connect:ret z
+          and &07
+          ld e,a
+          ld a,&C0      ; normalize c0 c8 d0 ... to c0
+          ret z         ; c0: as-is
+          ld a,h
+          dec e:jr z,.c1
+          dec e:jr z,.c2
+          dec e:jr z,.c3
+;regular bk 
+          cp &40:jr c,.c0
+          cp &80:jr c,.p4000
+.c0
+;Out of page &4000 -> C0
+          ld a,&C0
+          ret
+.p4000
+; Adjust HL: C4 -> 0000
+           ; C5 -> 4000
+           ; ...
+;e = 1 here for c4
+.lp
+          add &40
+          dec e
+          jr nz,.lp
+          sub &80:ld h,a
+.c2
+          ld a,d
+          and &F8:or 2  ; when coming from regular, c1 or c3
+          ret
+.c1
+          cp &C0:jr c,.c0
+          jr .c2
+.c3
+          ld a,h
+          cp &40:jr c,.c0
+          cp &80:jr nc,.c1
+; switch 4000 -> c000 
+          set 7,h
+          jr .c0
+
+
+
+get_intercepting_slice
+;---------------------
+; In: A: target bk
+    ;HL: target dest
+;Out: If such slice found: 
+             ; Carry
+             ;  A = Size (0 < size < &100)                        
+             ; HL = Correct pnt in contiguous code chunk (start+C)
+             ; IXH = Currently connected bank
+    ; NC otherwise, HL = Start of closest slice coming next
+; Note: we assume there is at most one intercepting slice
+      ; As some point we must check that in ass (overlap error todo)
+
+max_address = &FFFF
+
+          ld (save_sp),sp
+          ld (target_dest),hl
+          ld (target_dest+2),a
+          ld hl,max_address
+          ld (max_so_far),hl
+          ld iy,.is_target_dest
+          call iterate_code_slices
+; if no early return -> all slice scanned, none found
+          ld hl,(max_so_far)
+          or a
+          ret
+
+.is_target_dest
+; See /iterate_code_slices/ for input
+          push hl
+          ld h,a        ; save size
+      IF dev_checks
+; For now we don't handle other MSB than &7f
+          ld a,b:cp &7F:call nz,mess
+      END
+          ld a,(target_dest+2)
+          cp c
+          jr nz,.notfound ; exit: different bank
+
+          ld c,h        ; c = size
+          ld hl,(target_dest)
+; Found if: start (de) <= target (hl) < end (de+c)
+      ; ie: 0 <= hl-de < c
+.found
+          or a:sbc hl,de
+          jr c,.slice_is_higher
+          ld a,h
+          or a
+          jr nz,.notfound
+          ld a,l
+          sub c
+          jr nc,notfound
+          neg           ; corrected size (necessarily > 0)
+          pop de        ; was hl
+          add hl,de     ; corrected pos in chunk
+; Shortcut return:
+; Cannot use /iterate_code_slices/ early exit, as registers wouldn't
+; be passed properly
+          ld sp,(save_sp)
+          scf           ; Main routine: success
+          ret
+
+.slice_is_higher
+; DE = pnt slice > target
+; Update closest 
+          ld hl,(max_so_far)
+          or a:sbc hl,de:jr c,.notfound
+          ld (max_so_far),de
+;enchaine
+.notfound
+          pop hl
+          scf           ; No early exit, next slice will be tried.
+          ret
+
+_append_range
+; -- Update occupation map and check for overlap
+; 1/ Concatenate if contiguous
+       ; Not handled when range **above** existing one. Nevermind:
+            ; - works as is 
+            ; - we don't want to complefixy code for rare use-cases 
+; 2/ Kept ordered
+; This helps overlap check to be fast enough
+
+; The lists created are also used for accurate display of mem (save.o)
+
+  ; BC = logical bk 
+  ; DE = logical dest
+  ;  A = Size (0 < size < &100)
+  ; HL = Contiguous code chunk (unused)
+  ; IXH = Currently connected bank (unused)
+;Out: see below
+          ld b,c:ld c,a:ld a,b ; swap a<->c
+;enchaine
+_append_range_com
+   ;a =logical bk
+   ;de=logical dest
+   ;c=size
+;Out:
+   ; Carry if ok, A, HL trashed
+   ; NB if error. A = error code 
+                ; HL = overlapping address if problem
+   ; BC, DE, IX, IY trashed in any case
+
+; -- Setup params for append_range
+          ex de,hl      ; hl = logical dest
+          call denormalize_bank
+          ld e,l:ld d,h
+          ld b,0:dec c  ; 0 means 256, so that's fine 
+          add hl,bc     ; end address
+      IF dev_checks
+          call c,mess
+      END
+          push de:pop ix ; start
+          push hl:pop iy ; end
+          ld b,a
+          call get_page_list
+          ld a,b
+          jr z,.newlist
+
+; [Optim] First check if IX > "last end" (most common case,
+                                         ;for contiguous code slices)
+; Invariants: - list not empty and ordered
+            ; - iter point on last node
+          CALL_BRIC(list_iter_get_last)
+      IF dev_checks
+          call z,mess   ; at least one node
+      END
+;ix > end ? 
+          inc l:inc l:call cp_ix_whl
+          jr z,.from_scratch ;No 
+          dec l
+          jr nc,.insert ; yes 
+
+.from_scratch
+          CALL_BRIC(list_iter_reset)
+;insertion pnt: flag 0 (header)
+          xor a:ld (insertion_pnt+2),a
+
+.seeklp
+          CALL_BRIC(list_iter_get')
+      IF dev_checks
+          call z,mess   ; at least one node
+      END
+
+; ix < start ?
+          call cp_ix_whl
+          jr c,.before  ; yes
+; ix >= start
+; ix <= end ?
+          inc l
+          call cp_ix_whl
+          jr c,.yes
+          jr nz,.seeknxt ; no
+.yes
+;IX = intersection point
+          push ix:pop hl
+          jr .exitoverlap
+
+.seeknxt
+          3 ** dec l
+          ld (insertion_pnt),hl
+          ld a,b:ld (insertion_pnt+2),a
+          CALL_BRIC(list_iter_next)
+          jr nz,.seeklp
+;post last (shouldn't happen as we checked this first thing)
+      IF dev_checks
+      BRK
+      END
+
+.before
+; ix < start
+; iy >= start?  
+          dec l
+          call cp_iy_whl
+          jr c,.all_before ; no
+          dec l
+;intersection = start
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+.exitoverlap
+; HL = overlap address (for .do_store)
+          ld (overlap_adr),hl ; for store_ref
+          ld a,err_overlapping_code
+          or a
+          ret
+
+.newlist
+          call create_page_list
+          ret nc        ; mem full
+
+          CALL_BRIC(list4_append)
+.nodecom
+          ret nc        ; mem full
+          ld a,ixl:ld (hl),a:inc l
+          ld a,ixh:ld (hl),a:inc l
+          inc l
+;enchaine
+.update_end
+          ld a,iyh:ld (hl),a:dec l
+          ld a,iyl:ld (hl),a
+          scf
+          ret
+
+.fromnode
+          push hl
+          ld l,a
+          ld b,a        ; for list4_insert below
+          CALL_BRIC(connect_chunk_from_id)
+          pop hl
+          2 ** inc l
+;enchaine
+.insert
+; Check if node.end == start-1 (then just extend this node)
+          dec ix
+          call cp_ix_whl
+          inc ix
+          jr z,.update_end
+
+          3 ** dec l
+.insertcom
+          CALL_BRIC(list4_insert)
+          jr .nodecom
+
+.all_before
+;rewind to previous node
+          ld hl,(insertion_pnt)
+          ld a,(insertion_pnt+2)
+          or a
+          jr nz,.fromnode
+;header (insert at head)
+          ld b,c:ld h,d:ld l,e
+          3 ** inc l
+          jr .insertcom
+
+
+cp_ix_whl
+; cp ix,word at (hl)
+          inc l
+          ld a,ixh:cp (hl)
+          ret c
+          ret nz
+          ld a,ixl:dec l:cp (hl):inc hl ; inc hl to preserve Z
+          ret
+
+cp_iy_whl
+; cp iy,word at (hl)
+          inc l
+          ld a,iyh:cp (hl)
+          ret c
+          ret nz
+          ld a,iyl:dec l:cp (hl):inc hl ; inc hl to preserve Z
+          ret
+
+connect_bk
+; IN: BC = bk to connect (B can be 7f, 7e, 7d, 7c for 2M ext)
+; Out: All registers preserved.
+      IF todo
+;!!! move in pagefirm.o
+;YAGNI. To do when we can import macros,
+      ; so that we can cherry-pick depending on ROMs
+      END
+          push af       ; Save F as well
+          ld a,c:and &C4:cp &C4:call nz,mess
+          ld a,b:and &FC:cp &7C:call nz,mess
+          out (c),c
+          pop af
+          ret
+
+get_page_list
+; In: A = page (b8, c0, c2, ca...)
+;Out: If such list, NZ, CDE = list ID for the page 
+    ; Otherwise Z, C=0 
+    ; In any case: HL = pnt for id 
+    ; B preserved
+
+;Page to idx
+          call connect_bk_base
+          ld c,0
+          cp &B8:jr z,.okp
+          inc c
+          cp &C0:jr z,.okp
+      IF dev_checks
+          ld c,a:and &C2:cp &C2:call nz,mess
+          ld a,c
+      END
+          and &38
+          3 ** rrca
+          add 2:ld c,a
+.okp
+          ld a,c
+      IF dev_checks
+          cp max_ram_pages:call nc,mess
+      END
+;*3 (id size)
+          add a:add c
+          ASSERT(cocopy_pages AND &FF == 0)
+          ld l,a
+          ld h,cocopy_pages/&0100
+;they are init at 0 by init.o
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,(hl)
+          inc c:dec c   ; Flag Z/NZ
+          ret
+
+
+
+;-------------------------------
+hi1
+realsize1 = $$-code1
+      IF inRom
+      FILL limit1-$,&F7
+      END
+codesize1 = $$-code1
+;-------------------------------
+
+save_pc = $
+save_obj = $$
+
+      ORG cocopy_var    ; after hack status (7efc), before backup 00-3f
+; This one is persistent (for cached sources)
+; It is reset once by init.o
+; Then, it musn't be reset, but freed (see /reset/).
+v_store_start WORD 
+;!! If new var -> update cocopy_store/cocopy_restore
+          ASSERT($-cocopy_var == cocopy_len1) ; update swap
+          ASSERT(v_store_start/&0100 == &7E)
+              ; init.o assumes it is in 7exx  (cocopy:init not called)
+          ASSERT(v_store_start == cocopy_var) ; get_store_start_import
+
+      SKIP backup00_3f - $
+
+      ORG cocopy_var2
+; This is meant to be a work variable:
+; Only (re)set at assembly time
+; -> Fine a &8xxx.    
+; Yet restore needed when going back from imported source to host source
+v_store_cur WORD 
+      BYTE              ; FREE Reserved if v_store_cur in 24 bits
+                             ; But why would we need that?
+      IF $-cocopy_var2 != cocopy_len2
+ !! update swapi.i
+      END
+
+save_sp WORD 
+target_dest SKIP 3
+max_so_far WORD 
+overlap_adr WORD 
+insertion_pnt SKIP 3
+
+      SKIP tmp_checksums - $
+
+      IF v_store_cur AND &C000 - &8000
+ !! To move in bank would require complex connections for RW.
+ ; Also, to store with v_store_start would
+ ;        invalidate import.o assumptions:
+ ;  v_store_cur unchanged when switching to imported source.
+      END
+
+      ORG save_pc,save_obj ; for host
+
+err_overlapping_code = 38
+

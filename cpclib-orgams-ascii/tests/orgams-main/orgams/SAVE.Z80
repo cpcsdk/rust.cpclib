@@ -1,0 +1,1304 @@
+inRom = 1
+mock  = 1-inRom AND 0   ; 0: nrt tests with real save
+rom   = &0A
+; <<<<< Do actual SAVING at status page >>>>>
+
+dev_checks = 1
+todo  = 1
+
+; 2025
+; ---- HH Beta 2 ----
+   ; Jul  
+      ; 28 v2: Add test_save_big
+             ; Proper bk base after _save_full
+      ; 27 v1: Store reg_mmr's MSB
+      ; 26: save_file_rsx 
+      ; 24: First version
+
+BUF_FILENAME = buf_line
+BUF_PARAM = &9100       ; (reuse ass' compute params)
+BUF_TMP = buf_line      ; Once file opened we can reuse same buffer
+
+bk_dev = &CF
+nrt_buf = &1000
+nrt_ramdisk = &2000
+
+      IMPORT "memmap.i"
+      IMPORT "orgmap.i"
+      ORG &0200
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      IMPORT "testlib.o"
+      IMPORT "ramdisk.o" ; for tests
+      END
+
+; ---- In this ROM (ORGAMS.ROM) ------------------------------------
+chef  = &C100
+dispInit = chef+&42
+  ; dispCharAt*
+    ; in: DE=screen pos.
+    ; Out:DE=next screen pos.
+         ;hl, ix, iy trashed
+dispChrAt = chef+&4E
+dispChrAtGrey = chef+&5A
+dispStr = chef+&52
+dispStrAt = chef+&56
+dispStrInvAt = chef+&5E
+disp_inline = chef+&1E
+dispNL = chef+&6A
+disp_hexa_hl = chef+&7A
+
+putHexaA = chef+&7E     ;!!also put 00 (wasn't a good design choice)
+putHexaHL = chef+&82    ;!!idem
+
+ch'   = &C186
+txt_disp_ch = ch'+3     ; call txt_disp_ch:byte #  BC DE HL saved
+
+ed    = &D200
+copy_nt = ed+&42
+
+mirror = &E7F2
+copy_here_mirror = mirror+24
+;in: HL=source anywhere in memory (according to current connexion)
+   ; DE=dest in work bank (or in page &8000)
+   ; BC=length                              
+;out: HL and DE updated as LDIR. All other registers destroyed
+
+
+far_call_ext = &E810
+far_call_mon = &E817
+far_call_bric = &E81E
+far_call_ass = &FEDE
+
+;---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+org   = &C008
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+org_delete_line = org+15
+org_load = org+18
+org_save = org+21
+
+org_assemble = org+&6F  ; does not install code
+
+org_connect_bk_base = &C106 ; All registers preserved
+
+; ---- In Ass ROM (ORGASS.ROM) ------------------------------------
+ass'' = &FE87
+get_save_list = ass'' + 30
+
+pagefirm_jp = &C140
+org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+cocopy = &FDFC
+normalize_bank = cocopy
+; IN: A=bk
+    ;HL=start
+    ;BC=size
+;Out: A, HL, BC: same but normalized (only C0, C4, C5, ...)
+    ; If all the area is covered: Carry
+    ; Otherwise, NC, BC is shorter
+         ; In that case the routine must called again with:
+                   ; original bank (to be saved by caller)
+                   ; HL := original HL + BC
+                   ; BC := original BC - BC
+         ; Note: it will happen for overlapping pages (c2)
+               ; or at &4000 and &8000 boundaries.
+    ; IX IY preserved
+    ; DE thrased 
+get_intercepting_slice = cocopy+3
+; In: A: target bk
+    ;HL: target dest
+;Out: If such slice found: 
+             ; Carry
+             ;  A = Size (0 < size < &100)                        
+             ; HL = Correct pnt in contiguous code chunk (start+C)
+             ; IXH = Currently connected bank
+    ; NC otherwise HL 
+
+; ---- In Bric ROM (BRICBRAC.ROM) ---------------------------------
+disp  = &FF14
+;strPadEi = disp+&33 
+;strPadAtEi = disp+&87
+;strPadShadedEi = disp+&45
+;putDeciA = disp+&6C     ; in (de)
+;putDeciHL = disp+&6F
+;putHexaA = disp+&72
+;putHexaHL = disp+&75
+
+io    = &FFCE
+io_write_bloc = io+6
+io_write_line = io+9
+io_write_header = io+12
+
+impexp = &FC00
+
+liszt = &FEDC
+liszt' = &FEBE
+list4_new = liszt       ; return empty list (cde). all other reg preserv
+list4_append = liszt+3  ;in: cde= pnt head list. 
+                        ;out: cde conserved
+                            ;  hl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_free = liszt+6    ;in:cde. all register conserved
+list_head = liszt'      ; abcde saved
+list_iter_reset = liszt'+3 ; in: cde= pnt head list. out: side effect
+list_iter_get = liszt'+6 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ;  hl= pnt cell body
+list_iter_next = liszt'+9 ; in: cde= pnt head list.
+                          ;out: NZ, iter++ (side effect)
+                              ;  Z, no-op if no next
+                              ; All registers preserved but A
+
+      IF mock
+disc_out_open = nrt_out_open
+disc_write_header = nrt_write_header
+disc_write_bloc = memdisk_write_bloc
+disc_out_close = nrt_out_close
+      ELSE
+;disc_in_direct = &BC83  ; nrt
+disc_out_open = impexp+9
+;disc_out_direct = &BC98
+disc_write_header = io_write_header
+;in : hl=header (from disc_out_open)
+    ; de=start
+    ; bc=len
+    ; ix=exec                         
+    ; a=type
+disc_write_bloc = io_write_bloc
+disc_out_close = &BC8F
+;disc_out_open = &BC
+      END
+
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+nrtfail = &BE00         ; more explicit
+mess  = &BE00
+
+kl_rom_select = &B90F
+kl_find_name = &BCD4
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CHECK_NOT_LAST
+      IF dev_checks
+;cannot happen as ass put tag_end
+          call z,mess
+      END
+      ENDM
+
+      MACRO NEW_TEST
+;Poor man's progress bar 
+;TODO instead: print test name
+          ld a,".":call &BB5A
+          call init_nrt
+      ENDM
+
+      MACRO CALL_ORG rout
+;!!! Use CALL_EXT for code in rom
+; Call routines in ORGEXT.ROM (nrt version)
+; Note: we don't use orgams's own far_call, to ease overriding.
+          push hl
+          ld hl,rout:ld (_call_org_+1),hl
+          pop hl
+          call _call_org
+      ENDM
+
+      MACRO CALL_EXT adr
+          call far_call_ext:WORD adr ; new version
+      ENDM
+
+;      MACRO CALL_MON adr
+;          call far_call_mon:WORD adr ; new version
+;      ENDM
+
+      MACRO CALL_BRIC adr
+          call far_call_bric:WORD adr ; new version
+      ENDM
+
+      MACRO CALL_ASS adr
+          call far_call_ass:WORD adr ; new version
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO SET_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_set_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      IF 1-inRom
+;====
+tests
+;====      
+          call test_print_files
+          call test_print_full
+          call test_save_files
+          call test_save_big
+          ret
+
+init_nrt
+; A lancer avant chaque test pour mise en place setup (obligatoire)
+; et nettoyage (pour que les differents tests restent independants).
+; -> Utiliser macro NEW_TEST() pour chaque test.
+          ld a,bk_dev
+          call nrt_setup
+          ld c,rom:call kl_rom_select
+          ret
+
+test_print_files
+;---------------
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+          call nrt_org_assemble:call nc,fail
+          call print_files
+          ret
+.src
+      BYTE "save",34,"half",34,",&cafe,&babe",0
+      BYTE "savea",34,"here",34,",1,2,3,4",0,0
+
+test_print_full
+;--------------
+; When no SAVE directive, save full source
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+          call nrt_org_assemble:call nc,fail
+          call print_files
+          ret
+.src
+      BYTE "bank &c2:org &1234:byte 5,6,7",0,0
+
+test_save_files
+;--------------
+
+          ld hl,.cases
+.lp
+          push hl
+;For tests with gaps
+          ld hl,.markers:ld de,nrt_buf:ld bc,3:ldir
+      IF bk_dev - &CF
+ !! review conflict
+      END
+          ld bc,&7FC4:out (c),c
+          ld hl,.markers:ld de,&4000:ld bc,3:ldir
+
+          call init_nrt
+          pop hl
+          call nrt_set_source
+          push hl
+          call nrt_org_assemble:call nc,fail
+          pop hl
+          inc hl        ; skip 0
+          call _check_save
+          ld a,(hl)
+          or a
+          jr nz,.lp
+
+          ret
+
+.markers BYTE "xyz",0
+
+      MACRO NRT_CASE_SAVE
+      BYTE "save",34,"xx",34
+      ENDM
+
+      MACRO NRT_CASE_SAVEA
+      BYTE "savea",34,"xy",34
+      ENDM
+
+
+.cases
+      IF 0
+; Simple size code
+      BYTE "org &3fff:byte ",34,"hot",0
+          NRT_CASE_SAVE():BYTE ",&3fff,3",0,0
+      WORD &3FFF,3,&3FFF
+      BYTE 3,"hot"
+
+; Same with exec
+      BYTE "org &3fff:byte ",34,"teat",0
+          NRT_CASE_SAVE():BYTE ",&3fff,4,77",0,0
+      WORD &3FFF,4,77
+      BYTE 4,"teat"
+
+;Simple savea -> nrt_write_header not called
+      BYTE "org &3fff:byte ",34,"bun",0
+      BYTE "savea",34,"yy",34,",&3fff,3",0,0
+      BYTE 3,"bun"
+
+; Bank
+      BYTE "bank &c5:org &4000:word &cafe",0
+          NRT_CASE_SAVE():BYTE ",&4000,2",0,0
+      WORD &4000,2,&4000
+      BYTE 2:WORD &CAFE
+
+ ; Bank overlap c0
+      BYTE "bank &c5:org &7fff:word &babe",0
+          NRT_CASE_SAVE():BYTE ",&7fff,2",0,0
+      WORD &7FFF,2,&7FFF
+      BYTE 2:WORD &BABE
+
+; Save from c2
+      BYTE "bank &c6:org &4000:byte 42",0
+      BYTE "bank &c5:org &7fff:byte 7",0
+      BYTE "bank &c2",0
+          NRT_CASE_SAVE():BYTE ",&7fff,2",0,0
+      WORD &7FFF,2,&4000 ; exec infered from first org
+      BYTE 2,7,42
+
+; Save full (no SAVE directive)
+      BYTE "org &3fff:byte 7,8,78",0,0
+      WORD &3FFF,3,&3FFF
+      BYTE 3,7,8,78
+
+; Idem in bank
+      BYTE "bank &c5:org &3ffe:byte 1,2,42",0,0
+      WORD &3FFE,3,&3FFE
+      BYTE 3,1,2,42
+      END
+
+; Multiparams, save in middle
+      BYTE "bank &c2:org &3fff:byte 4,5,6",0
+          NRT_CASE_SAVE():BYTE ",&3fff,2,&4001,3",0
+      BYTE "ent $",0
+      BYTE "byte 7,8",0,0
+      WORD &3FFF,5,&4002
+      BYTE 5,4,5,6,7,8
+
+; Size 0 for custom start
+      BYTE "bank &c2:org &3ffe:byte 1,2,3",0
+      BYTE "ent $",0
+          NRT_CASE_SAVE():BYTE ",&cafe,0,&3ffe,3",0,0
+      WORD &CAFE,3,&4001
+      BYTE 3,1,2,3
+
+; -- Test with gaps
+      IF nrt_buf - &1000
+    !! update sources
+      END
+
+;gaps around
+      BYTE "org &1001:b &41",0
+          NRT_CASE_SAVE():BYTE ",&1000,3",0,0
+      WORD &1000,3,&1001 ; exec infered from first org
+      BYTE 3,"xAz"
+
+;same in bank
+      BYTE "bank &c4:org &4001:b &44",0
+          NRT_CASE_SAVE():BYTE ",&4000,3",0,0
+      WORD &4000,3,&4001 ; exec infered from first org
+      BYTE 3,"xDz"
+
+;same in bank via c2
+      BYTE "bank &c2:org 1:b &45",0
+          NRT_CASE_SAVE():BYTE ",0,3",0,0
+      WORD 0,3,1        ; exec infered from first org
+      BYTE 3,"xEz"
+
+;same in bank via c2 save via c4
+      BYTE "bank &c2:org 1:b &48",0
+      BYTE "bank &c4",0
+          NRT_CASE_SAVE():BYTE ",&4000,3",0,0
+      WORD &4000,3,1    ; exec infered from first org
+      BYTE 3,"xHz"
+
+;gaps inside
+      BYTE "org &1000:b &42",0
+      BYTE "b ",0
+      BYTE "b &43",0
+          NRT_CASE_SAVE():BYTE ",&1000,3,777",0,0
+      WORD &1000,3,777
+      BYTE 3,"ByC"
+
+;same in bank
+      BYTE "bank &c4:org &4000:b &44",0
+      BYTE "b ",0
+      BYTE "b &45",0
+          NRT_CASE_SAVE():BYTE ",&4000,3,778",0,0
+      WORD &4000,3,778
+      BYTE 3,"DyE"
+
+;same in bank via c2
+      BYTE "bank &c2:org 0:b &46",0
+      BYTE "b ",0
+      BYTE "b &47",0
+          NRT_CASE_SAVE():BYTE ",0,3,778",0,0
+      WORD 0,3,778
+      BYTE 3,"FyG"
+
+;same in bank via c2 save via c4
+      BYTE "bank &c2:org 0:b &48",0
+      BYTE "b ",0
+      BYTE "b &49",0
+      BYTE "bank &c4",0
+          NRT_CASE_SAVE():BYTE ",&4000,3",0,0
+      WORD &4000,3,0
+      BYTE 3,"HyI"
+
+      BYTE 0
+
+_check_save
+;In:  hl = expected start, size, exec.
+         ; Then size ref followed by ref itself
+;Out: hl = past ref
+          ld (nrt_pnt+1),hl ; for hook nrt_write_header
+
+; put adversarial ROM/Bank       
+          ld a,&82:ld (reg_rmr),a
+          ld hl,&7CCA:ld (reg_mmr),hl
+
+; print to check iter properly reset by save_files
+          call print_files
+
+          ld a,"S"
+          call save_files
+          call nc,fail
+
+;Check bk base reconnected and context saved
+          ld a,(vo_thisbk):cp bk_dev:call nz,nrtfail
+          ld a,(reg_rmr):cp &82:call nz,fail
+          ld a,(reg_mmr):cp &CA:call nz,fail
+          ld a,(reg_mmr+1):cp &7C:call nz,fail
+
+; Check size from header
+          ld hl,(nrt_size)
+      IF mock
+; BC return by nrt_out_close
+          or a:sbc hl,bc:add hl,bc:call nz,fail
+          ld hl,(nrt_pnt+1)
+; for big file, we don't put full ref
+          ld a,b:or a:jr nz,.skipcheck
+          ld a,c:cp (hl):call nz,nrtfail ; expected size
+.skipcheck
+          ld b,(hl)     ; size to check
+          inc hl
+          ld de,nrt_ramdisk
+          call compare_sized
+      ELSE
+;Skip ref
+          ld hl,(nrt_pnt+1)
+          ld bc,6:add hl,bc
+          ld c,(hl):inc hl:add hl,bc
+      END
+          ret
+
+test_save_big
+;------------
+          call init_nrt
+          ld hl,.srcdir
+          call change_dir
+          ld hl,.srcfile
+          call nrt_org_load:call nc,nrtfail
+          call nrt_org_assemble:call nc,nrtfail
+
+          ld hl,.ref
+          call _check_save
+
+;restore dir
+          ld hl,.orgdir
+          call change_dir
+          ret
+
+.srcdir BYTE "sd:res/old/k/",0
+.srcfile BYTE "main.o",0
+.orgdir BYTE "sd:org/",0
+.ref  WORD &3400,&119A,&34A5 ; start, size, exec
+      BYTE 2:ld b,&40   ; Just check 2 first bytes
+
+;----------------------------------------------
+nrt_size WORD &CACA
+
+nrt_out_open
+;check start of filename given by NRT_CASE_SAVE or "main"
+          call _check_filename
+
+          ld ix,&DEAD
+          ld iy,&DEAD
+
+          ld de,nrt_ramdisk
+          call memdisk_init_write
+          scf
+          ret
+
+_check_filename
+; Check filename given by NRT_CASE_SAVE or "main"
+          ld a,(hl)
+          cp "m":ret z
+          cp "x":call nz,nrtfail
+          ret
+
+nrt_write_header
+;in : hl=header (from disc_out_open)
+    ; de=start
+    ; bc=len
+    ; ix=exec                         
+    ; a=type
+          cp 2:call nz,fail ; header only for binary
+ ;Don't check HL: N/A, no disc_out_open in nrt
+nrt_pnt   ld hl,0
+          ld a,e:cp (hl):call nz,fail
+          inc hl:ld a,d:cp (hl):call nz,fail ; start
+          inc hl:ld a,c:cp (hl):call nz,fail ; 
+          inc hl:ld a,b:cp (hl):call nz,fail ; size
+          inc hl:ld a,ixl:cp (hl):call nz,fail ; 
+          inc hl:ld a,ixh:cp (hl):call nz,fail ; exec
+          inc hl
+          ld (nrt_pnt+1),hl
+          scf
+          ret
+
+nrt_out_close
+;Return BC= size written
+          ld hl,(memdisk_pnt_w+1)
+          ld de,nrt_ramdisk
+          or a:sbc hl,de
+          ld c,l
+          ld b,h
+          scf           ; ok
+          ret
+;----------------------------------------------
+      ELSE
+
+codedest = save_module
+limit = mirror'
+codedest2 = save_jp
+limit2 = ed_farcall''
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+
+code  = $$
+
+      ORG codedest,$$
+      END
+
+print_files
+;----------  
+;List all files to save 
+;IN: N/A
+;Out: N/A
+          ld hl,.txtheader
+          ld de,BUF_TMP
+          call copy_nt
+
+          call head_save_list
+          jp z,_print_full
+.file_lp
+          call get_filename_and_type
+          ld de,BUF_TMP+x_pos_savetype
+          cp "B":jr z,.okbin
+          ld (de),a     ; Should be "A"
+.okbin
+;--Put filename
+          ld e,x_pos_filename
+          call copy_sized
+          ld a,34:ld (de),a:inc e ; closing "
+          push de
+;--Put bank        
+          call get_next_node
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ex de,hl
+          ld de,BUF_TMP + x_pos_bank
+          call putHexaHL
+          ld a,":":ld (de),a
+;--Put params
+          pop de
+.printparams
+          call get_next_node
+          CHECK_NOT_LAST()
+          ld a,(hl):inc l:or a
+          jr z,.paramsdone
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+          call put_hexa_with_prefix
+          jr .printparams
+
+.paramsdone
+;          xor a:ld (de),a   ; Already done by putHexaHL
+          call connect_bk_base ; needed before dispStr
+          call disp_buf
+;-next file
+          call get_next_node
+          jr nz,.file_lp
+          jp connect_bk_base
+
+;Filling gap with "xxxx" is shorter than multiple calls
+.txtheader BYTE "Bank &xxxx: SAVE ",34
+;Bank &7fc4: SAVE "toto"
+;012345678901234567...
+x_pos_bank = 6
+x_pos_savetype = 16
+x_pos_filename = 18
+
+
+infer_name_bin
+;.............
+;Transform "xx.o" to "xx.bin", with NT
+;In: DE= dest buffer
+;Out: B= size file
+    ;HL= dest buffer (was de)
+    ;DE= post string in buffer
+          push de
+          ld hl,SRC_NAME
+.copy_until_dot
+          ld a,(hl):or a:jr z,cud_ok
+          cp ".":jr z,.cud_ok
+          ld (de),a:inc de
+          inc hl
+          jr .copy_until_dot
+.cud_ok
+          ld hl,extension_bin
+          call copy_nt
+          ld a,l
+          pop hl
+          sub l:ld b,a
+          ret
+
+get_first_and_size
+;In:  bk base connect
+;Out: hl:start
+    ; bc:size     
+    ; a, de preserved
+          push de
+          ld de,(va_first_objc)
+          ld hl,(va_last_objc)
+          inc hl:or a:sbc hl,de
+          ld c,l:ld b,h
+          ex de,hl
+          pop de
+          ret
+
+head_save_list
+;.............
+; In: None
+;Out: If list: NZ
+             ; HL=pnt node data, connected!!
+    ;  Z if no list  
+          CALL_ASS(get_save_list)
+          CALL_BRIC(list_iter_reset)
+          CALL_BRIC(list_iter_get)
+          ret
+
+
+get_filename_and_type
+;....................
+;Out: HL = pnt to sized string
+    ;  A = type "A"/"B"
+;Pointeur source
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,(hl):inc l
+          ld a,(hl)
+          3 ** inc l
+          push af
+;Like ass.goto_line, but don't modify IYh
+;in: de=id
+;     c=lsb source
+          ex de,hl
+          ld b,h
+          push bc
+          CALL_ASS(org_connect_source_chunk_from_id)
+          pop hl
+          inc l         ; skip marker string
+          pop af
+          ret
+
+_save_full
+; In: (sp) = code "A"/"B"/"S"
+; No SAVE directive: save full (old behavior)
+  ; bk base?
+          call connect_bk_base
+          ld de,BUF_FILENAME
+          call infer_name_bin
+          pop af
+;enchaine
+save_file_rsx
+;Here: A = code
+     ;HL = filename nt
+;When no directive SAVE, "S" means "B" (coherent with _print_full)
+          cp "S"
+          jr nz,$+4:ld a,"B"
+          ex de,hl      ; de= filename
+          call get_first_and_size
+          push hl
+          push bc
+          ex de,hl
+          ld ix,(va_exec)
+          call out_open_com
+          pop bc
+          pop hl
+          ret nc
+
+          ld a,(va_destbk)
+          call do_save
+          jp nc,_io_err_
+          jp _close
+
+
+save_files
+;---------
+; In: A= "A" for ascii
+       ; "B" for binary
+       ; "S" for doing as told
+;OUT: Carry if ok 
+    ; NC if io error
+          push af
+          call head_save_list
+          jr z,_save_full
+.file_lp
+          call get_filename_and_type
+          ld b,a        ; type SAVE/SAVEA
+          pop af        ; type command 
+          push af       ; for next iter
+          cp "S"        ; "S" = as is 
+          jr nz,$+3:ld a,b
+          push af       ; for out_open_com
+; -- copy to NT (needed by out_open_com)
+          ld c,(hl):inc l ; size
+          ld de,BUF_FILENAME
+          call copy_to_nt
+; -- bank
+          call get_next_node
+          CHECK_NOT_LAST()
+      IF dev_checks
+    ; forced to 7f for now
+          inc l
+          ld a,(hl)
+          dec l
+          cp MSB_BK:call nz,mess
+      END
+          ld h,(hl)
+          ex (sp),hl
+          push hl       ; in stack: Typecode, bank
+; -- infer start, total size and exec from params
+; We store params on the go, 
+; easier than to rewind and reiterate through nodes
+; !!! only support 63 pairs (start,size), which is not enterable anyway
+          ld iy,BUF_PARAM
+          call get_next_node
+          CHECK_NOT_LAST()
+      IF dev_checks
+;Must have at least 2 params (enforced by ass)
+          ld a,(hl):or a:call z,mess
+      END
+          call _get_and_store_bc
+          push bc       ; start
+          ld hl,0       ; cummulative size
+          push hl
+.storelp
+ ; necessarily size or marker end of params
+          call get_next_node
+          CHECK_NOT_LAST()
+          ld a,(hl):or a:jr z,.lastwasexec
+          call _get_and_store_bc
+          pop hl
+          add hl,bc
+          push hl
+ ; start or exec
+          call get_next_node
+          CHECK_NOT_LAST()
+          ld a,(hl):or a:jr z,.lastwassize
+;It might be start, but update anyway to avoid having to rewind
+          call _get_and_store_bc
+          push bc:pop ix
+          jr .storelp
+.lastwassize
+;No exec param -> use ENT pointer
+          call connect_bk_base
+          ld ix,(va_exec)
+.lastwasexec            ; ix properly set when jumping here
+; note: iyl is 1 too much, corrected by SRL
+; -- open and write header if binary
+          pop bc        ; was hl=size
+          pop de        ; start
+          pop af        ; code
+          ld hl,BUF_FILENAME
+          push iy
+          call out_open_com
+          pop bc
+          jr nc,_io_err'
+; -- Save all slices
+          srl c:ld b,c  ; nb of pairs (start, size)
+          pop af        ; A = bank (was H)
+          ld iy,BUF_PARAM
+.params_loop
+          push bc
+          call _restore_bc
+          ld l,c:ld h,b ; start
+          call _restore_bc
+          push af:push iy
+          call do_save
+          pop iy
+          jr nc,_io_err''
+          pop af
+          pop bc
+          djnz .params_loop
+
+          call connect_bk_base ; needed before dispStr
+;-next file
+          call get_next_node
+          jp nz,.file_lp
+          pop af        ; eat saved code
+_close
+          call disc_out_close
+          call connect_bk_base
+          push af       ; save Carry after disc_out_close
+          call txt_disp_ch:BYTE 17 ; "Done"
+          pop af
+          ret
+
+_io_err''' pop bc
+_io_err'' pop bc
+_io_err'  pop bc
+_io_err   pop bc
+_io_err_
+;enchaine
+connect_bk_base
+          CALL_EXT(org_connect_bk_base)
+          ret
+
+
+do_save
+;------
+; Save whole block (may be called several times if multi-params)
+; In: Caller must open/close file 
+    ; A: BK
+    ;HL: Start
+    ;BC: Size
+;Out: Carry if OK
+    ; NC if io error
+    ; All register trashed
+          ld e,a
+          ld a,b:or c
+          ld a,e
+          scf:ret z     ; case size=0 to set start
+.lp
+          push af
+          push bc
+          push hl
+          CALL_ASS(normalize_bank)
+          push af
+          push bc
+          call .save_part
+          pop bc
+          jr nc,_io_err'''
+          pop af
+          pop hl
+          pop de        ; was bc = initial size
+          jr c,.done
+          add hl,bc     ; next source
+          ex de,hl
+          or a:sbc hl,bc ; remaining siwe 
+      IF dev_checks
+          call c,fail
+          call z,fail
+      END
+          ld c,l:ld b,h
+          ex de,hl
+          pop af        ; initial bank
+          jr lp
+.done
+          pop bc        ; eat bank (af) without changing Carry
+          ret
+
+
+.save_part
+; Save area HL..HL+BC-1 
+; It can itself be slipt in several code cache chunks or user memory
+
+; In hl=start
+   ; bc=size
+   ;  a=bk
+;Out: Carry if ok
+    ; NC if io error
+    ; all regs trashed
+
+          call connect_bk_base
+          push hl
+;Saving could be done at top level, but it's shorter to do it here
+;as we must anyway overide mmr with normalized bank
+;Connect upper and lower ram for /padding/
+          ld hl,reg_rmr:ld e,(hl):ld (hl),&8E
+          ld ixl,e
+      IF reg_mmr != reg_rmr+1
+ !! review that
+      END
+          inc hl
+;Must connect bank for /padding/
+          ld e,(hl):ld (hl),a
+      IF todo
+;!!!hack. copy_here_mirror use MSB, and for some reason it is not
+        ; set at init
+; as for now BANK cannot connect 7cxx ... that will do it 
+      END
+          inc hl
+          ld d,(hl):ld (hl),MSB_BK
+          pop hl
+;Save context
+          push de
+          push ix
+
+.save_part_lp
+          push af
+          push bc
+          push hl
+          CALL_ASS(get_intercepting_slice)
+          pop de        ; was hl=start 
+          pop bc
+          jr nc,.padding ; not covered area
+;Write from slice
+          push hl
+          ld l,a
+          xor a         ; for NC
+          ld h,a        ; hl=size of slice (necessarily < &100)
+          sbc hl,bc
+          jr c,.slice_is_shorter
+;BC (size to write) is covered by slice
+          pop hl        ; start 
+          CALL_BRIC(disc_write_bloc)
+.exit_part
+          pop bc:ld a,b ; pop a without touching carry
+          call connect_bk_base
+      IF reg_mmr != reg_rmr+1
+ !! review that
+      END
+          pop hl:ld (reg_rmr),hl
+          pop hl:ld (reg_mmr),hl
+          ret
+
+.slice_is_shorter
+; bc = hl+bc (restore size)
+          ld a,l:add c:ld c,a
+          ld a,h:adc b:ld b,a
+          ex de,hl:add hl,bc:ex de,hl ; $$+size
+          ex (sp),hl    ; push -remaining size, pop pnt in chunk
+          push de
+          CALL_BRIC(disc_write_bloc)
+          pop hl        ; next start $$
+.next_part
+          pop bc        ; was hl=-remaining size 
+          jr nc,.exit_part
+;Finish if bc = 0 (comming from /padding/)
+          ld a,c:or b
+          scf
+          jr z,.exit_part
+;bc := -bc
+          xor a:sub c:ld c,a
+          ld a,0:sbc b:ld b,a
+.save_part_nxt
+          pop af
+          jr .save_part_lp
+
+.padding
+;Here: (mmr set by caller)
+  ; BC: size to write
+  ; DE: start of aera
+  ; HL: next fitting slice 
+;Out: jump back to loop with correct HL and BC
+
+; Print warning
+          call txt_disp_ch:BYTE 16 ; "Area not covered &"
+          ex de,hl
+          call disp_hexa_hl
+          ex de,hl
+          call disp_inline:BYTE "-&",0
+ ; last+1 = next slice or end (whichever is smaller)
+          push de
+          ex de,hl:add hl,bc ; past end
+          or a:sbc hl,de:add hl,de:jr c,$+3:ex de,hl
+          pop de
+          dec hl
+          call disp_hexa_hl
+          inc hl
+          call dispNL
+
+; Must write mem from user memory
+          or a:sbc hl,de
+; hl = pad size
+; bc = size to write
+; if hl <  bc, just write hl, since next slice is covered (size bc-hl)
+; if hl >= bc, just write bc, since no more to write
+; That is, tale the minumum.
+          or a:sbc hl,bc
+          jr nc,.last
+          push hl       ; - size to write
+          add hl,bc:ld c,l:ld b,h
+          jr .oksize
+.last
+          ld hl,0       ; no more to write
+          push hl
+.oksize
+          ex de,hl      ; hl=start
+          inc b
+          jr .gross
+.grosslp
+          push bc
+; chunks of &100
+          ld bc,&0100
+          call .write_chunk_from_memory
+          pop bc
+          jr nc,.next_part ; handle pop + err
+.gross
+          djnz .grosslp
+; remaining bytes
+          dec c:inc c
+          call nz,.write_chunk_from_memory
+          jr .next_part
+
+.write_chunk_from_memory
+;IN: HL=start
+   ; BC=size 
+;OUT: HL=start+BC           
+          ld de,BUF_TMP
+          push de
+          push bc
+          di            ; why?  
+          call copy_here_mirror
+          pop bc
+          ex (sp),hl    ;push next start, pop BUF_TMP
+          CALL_BRIC(disc_write_bloc)
+          pop hl
+          ret
+
+copy_sized
+; Take the size, but don't copy it
+          ld c,(hl):inc l
+          inc c:dec c
+          ret z
+          ld b,0
+          ldir
+          ret
+
+
+get_next_node
+;Out: If still node: NZ
+                   ; hl= pnt node data, connected!!
+    ; AF BC trashed
+          push de
+          CALL_ASS(get_save_list)
+          CALL_BRIC(list_iter_next)
+          jr z,.exit
+          CALL_BRIC(list_iter_get)
+.exit
+          pop de
+          ret
+
+_print_full
+          call connect_bk_base
+          call txt_disp_ch:BYTE 15 ; "Whole code:"
+          ld hl,(va_destbk)
+MSB_BK = &7F            ; MSB not handled by ass
+          ld h,MSB_BK
+          ld de,BUF_TMP+x_pos_bank
+          call putHexaHL
+          ld a,":":ld (de),a
+          ld e,x_pos_filename
+          call infer_name_bin
+          ld a,34:ld (de),a:inc e ; closing "
+          call get_first_and_size
+          call put_hexa_with_prefix
+          ld l,c:ld h,b
+          call put_hexa_with_prefix
+          ld hl,(va_exec)
+          call put_hexa_with_prefix
+          call connect_bk_base ; needed before dispStr
+;enchaine
+disp_buf
+          ld bc,BUF_TMP
+          call dispStr
+          jp dispNL
+
+put_hexa_with_prefix
+;In: HL = hexa value
+          call put_inline:BYTE ",&",0
+          jp putHexaHL
+
+put_inline
+; put str in DE buffer
+          ex (sp),hl
+di_lp
+          ld a,(hl):inc hl
+          ld (de),a:inc de
+          or a
+          jr nz,di_lp
+          dec de        ; pnt on last 0
+          ex (sp),hl
+          ret
+
+out_open_com
+;in HL = filename nt
+  ; DE = start
+  ; BC = size
+  ; IX = exec
+  ;  A = code "A"/"B"
+      IF 1-inRom
+; for nrt when no header
+          ld (nrt_size),bc
+          call _check_filename
+      END
+          call connect_bk_base
+          sub "A"
+          push af
+          push bc
+          push de
+          push ix
+          ld d,a
+  ;  D = 0 Save ascii 
+  ;  D = 1 Save binary
+msg_save = 1
+          ld a,msg_save
+          call disc_out_open
+          pop ix
+          pop de
+          pop bc
+          jp nc,_io_err
+          pop af
+          scf
+          ret z         ; Ascii: no header
+          ld a,2        ; binary type
+          CALL_BRIC(disc_write_header)
+          ret
+
+copy_to_nt
+;In: HL=source
+   ; DE=dest
+   ; C =size
+          xor a         ; for marker below
+          ld b,a
+          inc c:dec c:jr z,.done
+          ldir
+.done
+          ld (de),a
+          ret
+
+_get_and_store_bc
+store_offset = &7F      ; put MSB aside (less inc iyl)
+          inc l
+          ld c,(hl):inc l
+          ld b,(hl)
+          ld (iy+0),c
+          ld (iy+store_offset),b
+          inc iyl
+          ret
+
+_restore_bc
+          ld c,(iy+0)
+          ld b,(iy+store_offset)
+          inc iyl
+          ret
+
+
+extension_bin BYTE ".bin",0
+
+
+      IF inRom
+hi
+realsize = $$-code
+      FILL limit-$,&FF
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      ORG codedest2,$$
+
+jps
+          jp print_files
+          jp save_files
+          jp save_file_rsx
+hi2
+      IF limit2-$
+  !! full
+      END
+codesize2 = $$-code2
+
+      END
+
+savepc = $
+saveobj = $$
+
+      ORG save_var
+;vs_flags BYTE 
+;vs_bit_warning_emited = 0
+
+      SKIP vo' - $
+
+      ORG savepc,saveobj
+
+      IF 1-inRom
+ho
+      SKIP nrt_buf - $  ; Poor's man limit
+      END
+

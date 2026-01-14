@@ -1,0 +1,276 @@
+; Backtrace alias Call Stack for trace.
+
+; //// 2025 /////
+ ; Apr
+  ; 13 (Mamou!) [nochange] Use monomap.i
+     ; Move jp table (was at beginning of code: prevented moving)
+
+; //// 2019 /////
+     ; Nov  17. v2. Also catch 'call cond,nn'
+
+     ; Sept 28. v1. POC.
+
+inRom = 1
+rom   = &1B
+
+      IMPORT "monomap.i"
+
+main_rom = 10           ; ORGAMS.ROM
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+codedest = bt
+limit = bt_
+codedest2 = bt_jp
+limit2 = bt_jp_
+
+nrt_buf = &0F00
+
+      ORG &1000
+      IF inRom:ENT burn
+      ELSE:ENT start
+      END
+
+; ---- In ORGAMS.ROM aka main_rom (use regular call) ---------------
+
+setup_custom = &E839    ; Trust me on this
+ext_far_call = &C13C
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+org_init = org
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9
+org_insert_line = org+12
+org_delete_line = org+15
+org_load = org+18
+org_save = org+21
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout
+          call ext_far_call:WORD rout ; Works like RST &18
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_set_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val:or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop de
+      ENDM
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+;====
+start
+;====
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom
+
+; -- Cold start
+          CALL_ORG(org_init)
+          jr tests
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          call test_insert_line ; Sanity check test infra itself
+
+          call test_is_call_ret
+          call test_is_orgams_ret
+          ret
+
+
+test_insert_line
+
+; Reset. So tests don't impact each other.
+          CALL_ORG(org_init)
+
+; Code under test.
+          INSERT_LINE(1,dummy_line)
+
+; Checks.
+          CHECK_NB_LINES(1)
+          CHECK_LINE(1,dummy_line) ; check we get the line back 
+   ;  CHECK_LINE(2,dummy_line) ; uncomment me to trigger failure
+          ret
+
+dummy_line BYTE "Sid",0
+
+test_is_call_ret
+
+; Reset. So tests don't impact each other.
+          CALL_ORG(org_init)
+
+; Not a return address.
+          ld hl,&0101:call is_call_ret:call z,&BE00
+
+; Return addresses
+          ld hl,nrt_ret:call is_call_ret:call nz,&BE00
+          CHECK_HL_EQ(toto)
+
+          ld hl,nrt_ret2:call is_call_ret:call nz,&BE00
+          CHECK_HL_EQ(toto2)
+          ret
+
+nrt_source
+          call toto
+nrt_ret
+      SKIP 1
+toto
+          call pe,toto2
+nrt_ret2
+      SKIP 3
+toto2
+
+test_is_orgams_ret
+          ld hl,nrt_ret:call is_orgams_ret:call z,&BE00
+
+; Pick real RET address  
+          ld ix,0:add ix,sp
+          ld l,(ix+2)   ; Skip this test's ret
+          ld h,(ix+3)
+          call is_orgams_ret:call nz,&BE00
+          ret
+
+; -----------------------------------
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          call &BB06
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+; ------------------
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+; -----------------------------------
+
+is_call_ret
+; In : HL= candidate return address
+; Out: Z if it seems to be one.
+     ;       HL=address callee routine
+     ; NZ otherwise, hl trashed.
+     ; BC, DE conserved.
+
+          3 ** dec hl
+          ld a,(hl):cp &CD:jr z,icr_ok
+          and &C7
+          cp &C4:ret nz
+icr_ok
+          inc hl:ld a,(hl)
+          inc hl:ld h,(hl):ld l,a
+          ret
+
+; -----------------------------------
+
+is_orgams_ret
+; In : HL= candidate return address
+; Out: Z if it is main ret to orgams
+     ; Nz otherwise
+
+          ld a,(hl):inc hl:cp &F3:ret nz ; di
+          ld a,(hl):inc hl:cp &01:ret nz ; ld bc,
+          ld a,(vo_romMon):cp (hl):inc hl:ret nz ; monRom
+          ld a,(hl):cp &DF
+          ret
+
+vo_romMon = &7CFB
+;vt_romMon = &9D04   ; !!! Can't use that: work zone not connected.
+
+      IF inRom
+hi
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+code2 = $$
+      ORG codedest2,$$
+jps
+          jp is_call_ret
+          jp is_orgams_ret
+
+hi2
+realsize2 = $$-code2
+      FILL limit2-$,&F7
+codesize2 = $$-code2
+
+      END
+

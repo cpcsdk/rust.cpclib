@@ -1,0 +1,595 @@
+; ----- Tests for cocopy.o -----
+
+; Expected behavior: the program returns gently and quietly.
+; If there is any issue (init or test failing), breakpoint.
+
+; 2025
+   ; Jul 26: test_store_code: Check store return value
+       ; 25: Add test_slice_size
+   ; Jun 21: First version
+
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+rom   = &1D
+
+nrt_buf = &1000
+
+      ORG &0200
+      ENT tests
+
+      IMPORT "cocopy.o"
+      IMPORT "testlib.o"
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+org_delete_line = org+15
+org_load = org+18
+org_save = org+21
+
+org_assemble = org+&6F  ; does not install code
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+
+kl_rom_select = &B90F
+kl_find_name = &BCD4
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO NEW_TEST
+;Poor man's progress bar 
+;TODO instead: print test name
+          ld a,".":call &BB5A
+          call init_nrt
+      ENDM
+
+init_nrt
+; A lancer avant chaque test pour mise en place setup (obligatoire)
+; et nettoyage (pour que les differents tests restent independants).
+; -> Utiliser macro NEW_TEST() pour chaque test.
+          ld a,bk_dev
+          call nrt_setup
+          ld c,rom:call kl_rom_select
+          ret
+
+
+      MACRO CALL_ORG rout
+; Call routines in ORGEXT.ROM
+; Note: we don't use orgams's own far_call, to ease overriding.
+          push hl
+          ld hl,rout:ld (_call_org_+1),hl
+          pop hl
+          call _call_org
+      ENDM
+
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO SET_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_set_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+;====
+tests
+;====   
+          call init_nrt
+          call test_normalize_bank
+          call test_store_code
+          call test_memfull
+;--- For get_intercepting_slice ----
+          call test_chunk_present
+          call test_chunk_absent
+          call test_chunk_overlap
+          call test_chunk_second
+          call test_not_intercepting
+          call test_slice_size
+          ret
+
+test_normalize_bank
+;------------------
+          ld hl,.cases
+.lp
+          ld a,(hl):inc hl ; bank
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl ; start
+          ld c,(hl):inc hl
+          ld b,(hl):inc hl ; size
+          push hl
+          ex de,hl
+          call normalize_bank
+          ex de,hl
+          pop hl
+          push af       ; For check carry after
+          cp (hl):call nz,fail ; bank
+          inc hl
+          ld a,e:cp (hl):call nz,fail ; start
+          inc hl
+          ld a,d:cp (hl):call nz,fail
+          inc hl
+          ld a,c:cp (hl):call nz,fail ; size
+          inc hl
+          ld a,b:cp (hl):call nz,fail
+          inc hl
+          ld a,(hl):inc hl
+          or a
+          jr z,.last
+; There is a next slice: Must be NC 
+          pop af
+          call c,fail
+          jr .nxt
+.last
+; All fit: Must be C 
+          pop af
+          call nc,fail
+.nxt
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+      MACRO NRT_CASE bk,start,size
+      BYTE bk:WORD start,size
+      ENDM
+
+      MACRO NRT_LAST bk,start,size
+      BYTE bk:WORD start,size
+      BYTE 0            ; marker end
+      ENDM
+
+      MACRO NRT_SPLIT bk,start,size
+      BYTE bk:WORD start,size
+      BYTE 1            ; marker not last
+      ENDM
+
+
+.cases
+; fit. Check D8 -> C0
+          NRT_CASE(&D8,&1000,&2FFF)
+          NRT_LAST(&C0,&1000,&2FFF)
+; fit in extremis
+          NRT_CASE(&E0,&1000,&3000)
+          NRT_LAST(&C0,&1000,&3000)
+; large c0
+          NRT_CASE(&F8,&1000,&F000)
+          NRT_LAST(&C0,&1000,&F000)
+; Bank but not in page &4000
+          NRT_CASE(&FF,&8000,&7000)
+          NRT_LAST(&C0,&8000,&7000)
+; Idem but not in page &4000
+          NRT_CASE(&FF,&1000,&3000)
+          NRT_LAST(&C0,&1000,&3000)
+; Overlap in &4000
+          NRT_CASE(&FF,&3FF0,&20)
+          NRT_SPLIT(&C0,&3FF0,&10)
+
+; c6 fit in 4000
+          NRT_CASE(&FE,&7FF0,&10)
+          NRT_LAST(&FE,&7FF0,&10)
+; c6 overlap at 8000 
+          NRT_CASE(&FE,&7FF0,&20)
+          NRT_SPLIT(&FE,&7FF0,&10)
+
+; C1 fit in c000 
+          NRT_CASE(&F9,&CFF0,&3010)
+          NRT_LAST(&FF,&4FF0,&3010)
+; C1 overlap at 0000 
+          NRT_CASE(&F9,&CFF0,&3020)
+          NRT_SPLIT(&FF,&4FF0,&3010)
+
+; C2:0000 -> c4:&4000
+          NRT_CASE(&FA,&3FF0,&10)
+          NRT_LAST(&FC,&7FF0,&10)
+; C2:4000 -> c5:&4000
+          NRT_CASE(&FA,&7FF0,&10)
+          NRT_LAST(&FD,&7FF0,&10)
+; C2:4000 -> c6:&4000
+          NRT_CASE(&FA,&BFF0,&10)
+          NRT_LAST(&FE,&7FF0,&10)
+; C2:4000 -> c7:&4000
+          NRT_CASE(&FA,&FFF0,&10)
+          NRT_LAST(&FF,&7FF0,&10)
+
+; --- Same with overlap ---
+; C2:0000 -> c4:&4000 
+          NRT_CASE(&FA,&3FF0,&20)
+          NRT_SPLIT(&FC,&7FF0,&10)
+; C2:4000 -> c5:&4000
+          NRT_CASE(&FA,&7FF0,&20)
+          NRT_SPLIT(&FD,&7FF0,&10)
+; C2:4000 -> c6:&4000
+          NRT_CASE(&FA,&BFF0,&20)
+          NRT_SPLIT(&FE,&7FF0,&10)
+; C2:4000 -> c7:&4000
+          NRT_CASE(&FA,&FFF0,&20)
+          NRT_SPLIT(&FF,&7FF0,&10)
+
+; C3 fit under 4000
+          NRT_CASE(&FB,&3FF0,&10)
+          NRT_LAST(&C0,&3FF0,&10)
+; C3 overlap at 4000
+          NRT_CASE(&FB,&3FF0,&20)
+          NRT_SPLIT(&C0,&3FF0,&10)
+; C3 fit under 8000
+          NRT_CASE(&FB,&7FF0,&10)
+          NRT_LAST(&C0,&FFF0,&10)
+; C3 overlap at 8000
+          NRT_CASE(&FB,&7FF0,&20)
+          NRT_SPLIT(&C0,&FFF0,&10)
+; C3 fit under c000
+          NRT_CASE(&FB,&BFF0,&10)
+          NRT_LAST(&C0,&BFF0,&10)
+; C3 overlap at c000
+          NRT_CASE(&FB,&BFF0,&20)
+          NRT_SPLIT(&C0,&BFF0,&10)
+; C3 fit under 0000
+          NRT_CASE(&FB,&FFF0,&10)
+          NRT_LAST(&FF,&7FF0,&10)
+; C3 overlap at 4000
+          NRT_CASE(&FB,&FFF0,&20)
+          NRT_SPLIT(&FF,&7FF0,&10)
+
+; Wrap &ffff (from < &4000 when regular bank)
+          NRT_CASE(&FF,&3FF0,&F000)
+          NRT_SPLIT(&C0,&3FF0,&10)
+; Wrap &ffff (for > &8000 when regular bank)
+          NRT_CASE(&FF,&FFF0,&20)
+          NRT_SPLIT(&C0,&FFF0,&10)
+; Wrap &ffff (from < &4000 when c1)
+          NRT_CASE(&F9,&3FF0,&F000) ; actually f9 to check norm to c0
+          NRT_SPLIT(&C0,&3FF0,&8010) ; split at c000
+; Wrap &ffff (for > &C000 when c1)
+          NRT_CASE(&F9,&FFF0,&20)
+          NRT_SPLIT(&FF,&7FF0,&10)
+; Wrap &ffff (from < &4000 when c2)
+          NRT_CASE(&FA,&3FF0,&F000)
+          NRT_SPLIT(&FC,&7FF0,&10)
+; Wrap &ffff (for > &C000 when c2)
+          NRT_CASE(&FA,&FFF0,&20)
+          NRT_SPLIT(&FF,&7FF0,&10)
+; Wrap &ffff (from < &4000 when c3)
+          NRT_CASE(&FB,&3FF0,&F000)
+          NRT_SPLIT(&C0,&3FF0,&10)
+; Wrap &ffff (from &4000 when c3)
+          NRT_CASE(&FB,&4FF0,&F000)
+          NRT_SPLIT(&C0,&CFF0,&3010)
+; Wrap &ffff (for > &C000 when c3)
+          NRT_CASE(&FB,&FFF0,&20)
+          NRT_SPLIT(&FF,&7FF0,&10)
+
+      BYTE 0            ; end of cases
+
+test_store_code
+;--------------
+; Check expected slices are created
+          ld hl,.cases
+.lp
+          push hl
+          call amorce
+          pop hl
+          ld b,(hl):inc hl ; bank
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl ; start
+          push hl
+ ;ix: dummy source, nevermind, we don't check content
+ ;size = &80 so it largely fits in chunk. We don't want to test
+ ;spliting due to chunk limit.
+nrt_tss_size = &80
+          ld c,nrt_tss_size
+          ld ix,1
+          push de
+          call store_code:call nc,fail
+; source must advance of size
+          ld a,ixl:cp nrt_tss_size+1:call nz,fail
+          ld a,ixh:or a:call nz,fail
+; (unnormalized) dest must advance of size 
+          pop hl:ld bc,nrt_tss_size:add hl,bc
+          or a:sbc hl,de:add hl,de:call nz,fail
+
+; Now check each slice against ref
+          pop hl
+          ld (.pnt_ref+1),hl
+          ld iy,.check_slice
+          call iterate_code_slices
+          ld hl,(.pnt_ref+1)
+          dec hl
+          ld a,(hl):or a:call nz,fail ; must be last ret
+          inc hl
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.check_slice
+          push af       ; given size
+.pnt_ref  ld hl,&BE00
+          ld a,b:cp &7F:call nz,fail ; MSB Bank
+          ld a,c:cp (hl):call nz,fail ; bank
+          inc hl
+          ld a,e:cp (hl):call nz,fail ; dest
+          inc hl
+          ld a,d:cp (hl):call nz,fail
+          inc hl
+          pop af:cp (hl):call nz,fail ; size
+          inc hl
+          inc hl        ; skip ref size, necessarily 0
+          inc hl        ; skip marker
+          ld (.pnt_ref+1),hl
+          scf
+          ret
+
+      MACRO NRT_CASE' bk,start
+      BYTE bk:WORD start
+      ENDM
+
+.cases
+; Regular slice in c0
+          NRT_CASE'(&D0,&3FF0) ; d0 must be normalized
+          NRT_LAST(&C0,&3FF0,nrt_tss_size)
+; Overlap at 4000 creates 2 slices
+          NRT_CASE'(&FE,&3FF0)
+          NRT_SPLIT(&C0,&3FF0,&10)
+          NRT_LAST(&FE,&4000,nrt_tss_size-&10)
+; Overlap at 4000 in c2
+          NRT_CASE'(&FA,&3FFF)
+          NRT_SPLIT(&FC,&7FFF,1)
+          NRT_LAST(&FD,&4000,nrt_tss_size-1)
+; Start of c2
+          NRT_CASE'(&FA,0)
+          NRT_LAST(&FC,&4000,nrt_tss_size)
+      BYTE 0
+
+test_memfull
+;-----------
+; Test no crash, and expected error message
+          call amorce
+.lp
+          ld b,&C2
+          ld c,0        ; 256
+;source and dest: nevermind
+          call store_code
+          jr c,.lp
+err_memoryfull = &FB
+          cp err_memoryfull
+          call nz,fail
+          ret
+
+test_chunk_present
+;----------------- 
+; Chunk start = wanted start  
+          NEW_TEST()
+          call nrt_chunk_1
+          ld a,dest_bk
+          ld hl,dest_ref
+          call get_intercepting_slice
+          call nc,fail
+          cp dummybytes_:call nz,fail ; expected size
+;Check data
+          ld de,dummybytes
+          ld b,dummybytes_
+          call compare_sized
+          ret
+
+test_chunk_absent
+;----------------- 
+; No chunk intercepting address
+          NEW_TEST()
+          call nrt_chunk_1
+; ref < chunk.start
+          ld a,dest_bk
+          ld hl,dest_ref - 1
+          call get_intercepting_slice
+          call c,fail
+; ref > chunk.end
+          ld a,dest_bk
+          ld hl,dest_ref + dummybytes_
+          call get_intercepting_slice
+          call c,fail
+; Distant bk < chunk.start
+          ld a,dest_bk'
+          ld hl,dest_ref
+          call get_intercepting_slice
+          call c,fail
+          ret
+
+test_chunk_overlap
+;----------------- 
+; Chunk start < wanted start  
+          NEW_TEST()
+          call nrt_chunk_1
+          ld a,dest_bk
+          ld hl,dest_ref+2
+          call get_intercepting_slice
+          call nc,fail
+          cp dummybytes_-2:call nz,fail ; expected size
+;Check data
+          ld de,dummybytes+2
+          ld b,dummybytes_-2
+          call compare_sized
+          ret
+
+test_chunk_second
+;---------------- 
+; Try 2nd slice
+          NEW_TEST()
+          call nrt_chunk_1
+          call nrt_chunk_2
+          ld a,dest_bk
+          ld hl,dest_ref + dummybytes_
+          call get_intercepting_slice
+          call nc,fail
+          cp dummybytes2_:call nz,fail ; expected size
+;Check data
+          ld de,dummybytes2
+          ld b,dummybytes2_
+          call compare_sized
+          ret
+
+
+nrt_chunk_1
+;----------  
+dest_bk = &C0
+dest_bk' = &C4          ; distinct bk
+dest_ref = &4ABE        ; in page &4000
+          call amorce
+          ld ix,dummybytes
+          ld c,dummybytes_
+          ld de,dest_ref
+          ld b,dest_bk
+          call store_code
+          call nc,fail
+          ret
+
+dummybytes 5 ** BYTE #
+dummybytes_ = $ - dummybytes
+
+nrt_chunk_2
+;-----------
+          ld ix,dummybytes2
+          ld c,dummybytes2_
+          ld de,dest_ref + dummybytes_
+          ld b,dest_bk
+          call store_code
+          call nc,fail
+          ret
+
+dummybytes2 4 ** BYTE #+&10
+dummybytes2_ = $ - dummybytes2
+
+test_not_intercepting
+;-------------------- 
+;New API: when non intercepting, must return closest address > target
+          ld hl,.src
+.lp
+          push hl
+          call init_nrt
+          pop hl
+          call nrt_set_source
+          push hl
+          call nrt_org_assemble:call nc,fail
+          pop hl
+          inc hl
+
+          ld a,(hl):inc hl ; bk
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl ; start
+          push hl
+          ex de,hl
+          call get_intercepting_slice
+          call c,fail   ; expect NC : non intersection 
+          ex de,hl      ; DE = retourned address
+          pop hl
+          ld a,(hl):cp e:call nz,fail
+          inc hl
+          ld a,(hl):cp d:call nz,fail
+          inc hl
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.src
+; Before adr, in c0
+      BYTE "org &3ff8:b &f7",0,0
+          NRT_CASE'(&C0,&3000)
+      WORD &3FF8        ; Expected returned address
+; Aft adr, in c0
+      BYTE "org &3ff8:b &f7",0,0
+          NRT_CASE'(&C0,&3FF9)
+      WORD max_address
+; c4 <> c0: mustn't matter
+      BYTE "bank &c4:org &4000:b &f7",0,0
+          NRT_CASE'(&C0,&3FF9)
+      WORD max_address
+; c4 <> c7: mustn't matter
+      BYTE "bank &c4:org &5000:b &f7",0,0
+          NRT_CASE'(&C7,&4000)
+      WORD max_address
+; Both in bank and c0
+      BYTE "bank &c4:org &4000:b &f7",0
+      BYTE "org &9000:b &f7",0,0 ; still "c4" but actually in main ram
+          NRT_CASE'(&C0,&3FF9)
+      WORD &9000
+; Before, in bank
+      BYTE "bank &c4:org &5000:b &f7",0,0
+          NRT_CASE'(&C4,&4000)
+      WORD &5000
+; After, in bank
+      BYTE "bank &c4:org &5000:b &f7",0,0
+          NRT_CASE'(&C4,&5001)
+      WORD max_address
+; Two address out of order, must return closest
+      BYTE "org &3ff8:b &f7",0
+      BYTE "org &3fac:b &f7",0,0
+          NRT_CASE'(&C0,&2000)
+      WORD &3FAC
+; Target in between
+      BYTE "org &3000:b &f7",0
+      BYTE "org &2000:b &f7",0,0
+          NRT_CASE'(&C0,&2001)
+      WORD &3000
+; Target in between (when in order)
+      BYTE "org &3f00:b &f7",0
+      BYTE "org &3f40:b &f7",0,0
+          NRT_CASE'(&C0,&3F01)
+      WORD &3F40
+
+      BYTE 0
+
+test_slice_size
+;--------------
+; Check correct size is returned.
+;New API: when non intercepting, must return closest address > target
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+          call nrt_org_assemble:call nc,fail
+          ld a,&C0
+          ld hl,&1000
+          call get_intercepting_slice
+          cp 1
+          call nz,fail
+          ret
+
+.src  BYTE "org &1000:byte 55",0
+      BYTE "save",34,"xx",34,",&1000,1",0,0
+
+hi
+      SKIP nrt_buf - $  ; Poor's man limit
+

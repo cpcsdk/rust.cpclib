@@ -1,0 +1,457 @@
+;RSX: todo: connect user bk?
+;First: ask user if they want to proceed!
+
+inRom = 1
+rom   = &1B
+; << Execution RSX from monogams >>
+
+; Content (CONTROL-ENTER for direct access)
+   ; - rsx (main routine)
+   ; - macros 
+
+      IMPORT "monomap.i"
+
+; ---- 2023 -----------------
+ ; Dec
+    ; 29 v7: No change, use monomap.i
+
+ ; Apr   
+    ; 18 v6: Don't jump back in monogams, so it can be used from ed.
+           ; Let client do STATUS_OFF() and ui-related. Neater.
+
+    ; 17 v5: Multi_param RSX
+             ; Simplify code.
+
+    ; 13 v4: Fix bug#159 unsafe return from rsx. 
+             ; See /test_swap_user/
+                 ; /test_rsx/
+
+    ; 12 v3: Don't call bring_status.
+           ; -> mon does it after locate_monogams to avoid flickering
+
+; ---- 2021 -----------------
+             ; v2: WIP Support multi-params.
+; 16 Oct 2021. v1: Extracted from mon-ba, for easier maintenance.
+
+      ORG &1000
+      IF $ - &1000
+!! cannot assemble in 8000-9fff (working zone)
+!! cannot assemble in a000 (|cat working zone)
+      END
+
+codedest = rsx_rom      ; after mon
+limit = trui_rom        ; trui
+codedest2 = rsx_jp      ; free
+limit2 = trui_jp        ; jp trui
+
+      IF inRom
+      ENT burn          ; auto install
+      ELSE
+      IMPORT ":org/test/mondev.o"
+      IF monrom - rom
+   !! monogams has moved
+      END
+      IF romOrg_dev - &0A
+   !! org rom has moved
+      END
+      ENT tests
+      END
+
+; ==============================
+;        Dependencies
+; ==============================
+
+kl_find_name = &BCD4
+
+; ----- In *this* ROM ----------
+
+mon   = &E000
+check_i = mon+24
+
+monhelp = &FFC0
+;bricbrac_far_call_firm = monhelp+36
+ed_far_call = monhelp+54 ; !! in : iy=rout, c= 
+;ed_far_call_1b = monhelp+39
+ext_far_call_firm = monhelp+45
+call_ass_from_mon = &FF12
+
+; ----- In ORGAMS ROM ----------
+
+mirror = &E7F2
+swap_custom = mirror+27
+
+; ----- In ORGEXT ROM ----------
+
+; --- evacmd.o ---
+relocate_params = &FFC3 ;hl:params ix:types c:nb params iy=dest (preserv
+
+
+; ==============================
+macros                  ; ======   
+; ==============================
+
+;      MACRO CALL_BRIC adr
+;          call bricbrac_far_call_firm:WORD adr
+;      ENDM
+
+      MACRO CALL_ORG ad
+          call ext_far_call_firm:WORD ad
+      ENDM
+
+      MACRO CALL_ASS ad
+          call call_ass_from_mon:WORD ad
+      ENDM
+
+
+      MACRO CHECK_SP
+          push af:push hl
+          ld hl,0:add hl,sp
+          ld a,h:and &FE:cp &BE:call nz,&BE00
+          pop hl:pop af
+      ENDM
+
+; ==============================
+;        Unit tests
+; ==============================
+
+      IF 1-inRom
+tests
+          call test_load
+          ret
+          call test_rsx
+          call test_one_param
+          call test_one_param_integer
+          call test_load
+          call test_swap_user
+          ret
+
+bk_dev = &C7
+nrtfail = &BE00
+
+test_swap_user
+;-------------
+; Bug#159 We weren't swapping the whole &8000-&9fff zone,
+        ; since C was overwritten to pass ROM# to &1b vector.
+
+          call dev_init ; in test/mondev.o
+
+          ld bc,&7F00+bk_dev-1:out (c),c
+          ld a,&C6:ld (&5D00),a
+          ld a,bk_dev
+          out (c),a
+          ld i,a
+          ld a,&80:ld (&9D00),a
+
+          call swap_user
+          ld bc,&7F00+bk_dev-1:out (c),c
+          ld a,(&5D00):cp &80:call nz,nrtfail
+          ld a,(&9D00):cp &C6:call nz,nrtfail
+
+          ld a,i
+          cp bk_dev:call nz,nrtfail
+          out (c),a
+
+          call swap_user
+          ld bc,&7F00+bk_dev-1:out (c),c
+          ld a,(&5D00):cp &C6:call nz,nrtfail
+          ld a,(&9D00):cp &80:call nz,nrtfail
+          ret
+
+test_rsx
+;-------
+; bug #159 unsafe return from 
+          call dev_init ; in test/mondev.o
+
+; clean mirror
+          ld bc,&7F00+bk_dev-1:out (c),c
+          ld hl,&4000
+          ld de,&4001
+          ld bc,&1FFF
+          ld (hl),&CA   ; CA CA partout
+          ldir
+          ld bc,&7F00+bk_dev:out (c),c
+
+;Sanity: far_call installed
+          ld a,(&9D01):cp "0":call nz,nrtfail
+
+          ld c,1        ; # nb params
+          ld ix,.params
+          ld de,.types
+          call rsx
+
+          ld a,(&9D01):cp "0":call nz,nrtfail
+          ret
+
+.params WORD .name
+.types BYTE 3
+.name
+;      BYTE 3,"BRK"
+      BYTE 3,"cat"      ; Cat may use 9d00 area
+;      BYTE 4,"path"
+
+
+test_one_param
+; Check we can pass one *additional* param (rsx name is counted as one)
+; We exercise that with |drive,"b".
+
+          call dev_init ; in test/mondev.o
+
+          ld c,2
+          ld ix,.paramsB
+          ld de,.types
+          call rsx
+
+; - Check drive was changed
+          ld hl,(&BE7D)
+          ld a,(hl):cp 1:call nz,nrtfail
+
+; -- Sanity: switch back to A 
+          ld c,2
+          ld ix,.paramsA
+          ld de,.types
+          call rsx
+
+          ld hl,(&BE7D)
+          ld a,(hl):or a:call nz,nrtfail
+          ret
+
+.types BYTE 3,3         ; strings
+.paramsA WORD .pA,.p0
+.paramsB WORD .pB,.p0
+.p0   BYTE 5,"drive"
+.pA   BYTE 1,"A"
+.pB   BYTE 1,"B"
+
+test_one_param_integer
+; Check passing an integer.
+; We exercise that with |drive,"b".
+
+          call dev_init ; in test/mondev.o
+
+          ld c,2
+          ld ix,.params
+          ld de,.types
+          call rsx
+; No actually check, expect absence of assert.
+          ret
+
+.types BYTE 0,3         ; integer, string
+.params WORD 1,.name    ; integers are inlined.
+.name BYTE 5,"drive"
+
+test_load
+;Check rsx |load. Was triggering assert at some point
+
+          call dev_init ; in test/mondev.o
+
+          ld c,2
+          ld ix,.params
+          ld de,.types
+          call rsx
+; No actually check, expect absence of assert.
+          ret
+
+.types BYTE 3,3         ; srings
+.params WORD .p,.name   ; integers are inlined.
+.name BYTE 4,"load"
+.p    BYTE 6,"prout:"   ; invalid so test doesn't change cwd!
+
+      ELSE
+; ==============================
+;        Auto install
+; ==============================
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call kl_find_name
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+      END
+
+; ========================================
+
+
+; ==============================
+;        Main routine
+; ==============================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+mess  = &BE00
+
+rsx
+;IN: c:nb param+1. ix=params. de=types
+;OUT: Carry if RSX found (automatically called then)
+    ; NC if not found.
+
+; TODO: Factorize with type command?
+; NB: Parameters are inversed. 
+
+          push de
+          ld a,c
+          push af
+
+; Convert str for kl_find_name: Uppercase + &80
+; Note: RSX name is last IX parameter
+          push ix
+          pop hl
+          dec a
+          add a:ld c,a:ld b,0
+          add hl,bc
+          ld a,(hl):inc l:ld h,(hl):ld l,a
+
+          ld b,(hl):inc hl ; size
+          push hl
+.rsxname
+          ld a,(hl):call to_upper
+          ld (hl),a
+          inc hl
+          djnz .rsxname
+
+          dec hl
+          set 7,(hl)
+          pop hl
+          call kl_find_name
+
+          pop de:ld a,d ; aka Pop A
+          pop de        ; types
+      IF inRom
+          ret nc
+      ELSE
+; only test valid rsx.
+          call nc,nrtfail
+      END
+          dec a         ; rsx name was counted. Correct that
+          jr z,rsx_call
+
+; Reserve in stack &40 for string + room for (pnt + size + pnt)
+MAX_SIZE = &40 + 8*5    ; 8 params max. !! shared with evacom
+
+; here ix:params
+     ; de:params types 
+     ;  a:nb params 
+     ; c, hl: rom address for &1b
+
+          ld iy,-MAX_SIZE
+          add iy,sp
+          ld sp,iy      ;!! iy serves as param for relocate_params
+
+          push af:push bc:push hl ; params for rsx call
+
+;move params and strings into stack.
+;strings are converted to firmware format.
+; Input:
+; hl: params (was ix)
+; ix: params types (was de)
+; iy: dest
+;  c: nb params (was a)
+          push ix:pop hl
+          push de:pop ix
+          ld c,a
+
+          CALL_ASS(relocate_params)
+
+          pop hl:pop bc:pop af
+          call rsx_call
+
+          ld hl,MAX_SIZE ; Must be done after rsx_call!
+          add hl,sp
+          ld sp,hl
+          scf           ; success
+          ret
+
+
+to_upper
+          cp "a":ret c
+          cp "z"+1:ret nc
+          sub &20
+          ret
+
+rsx_call
+;in: IY = params
+          call check_i
+          ld d,a
+          ld a,i
+          push af
+          push de:push bc:push hl:push iy
+
+          di            ; really needed?
+          call swap_user
+
+          ld bc,&7FC0:out (c),c
+
+          pop ix:pop hl:pop bc:pop af
+          call &1B
+;switch back
+;TODO: reinstall from scratch instead?          
+          di
+          pop af        ; was a=bl
+          ld b,&7F:out (c),a:ld i,a
+;Enchaine
+swap_user
+;We only swap &8000-&9fff, which is orgams workzone
+;[space optim] factorize with trui.
+          CHECK_SP()
+          ld de,&4000:ld c,&20
+          push iy       ; needed?
+          ld iy,swap_custom
+;!!! bug#159 cannot use firmware 1b since we would be able to pass C.
+          call ed_far_call
+          pop iy
+          scf           ; indicate success for final RET
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp rsx
+
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+

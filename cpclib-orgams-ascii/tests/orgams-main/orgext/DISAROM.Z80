@@ -1,0 +1,53 @@
+; Install "count.o" in room
+
+      ORG &1000
+      ENT burn
+
+      IMPORT "extmap.i"
+      IMPORT "burnrsx.o"
+
+rom   = &1A
+codedest = disa_module
+limit = org3
+codedest2 = disa_jp
+limit2 = &FFAE          ; free for now
+
+
+; ------- main code --------------
+
+code  ORG codedest,$$
+
+      IMPORT "disa.o"
+
+hi
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+      ORG code+codesize
+
+; ------- jump table --------------
+
+jps   ORG codedest2,$$
+          jp disassemble ; monhelp, orgnrt/orgnrt.o
+          jp decode     ; org
+          jp get_pc_backward ; monhelp
+          3 ** BRK      ; jp decode_no_firm
+          3 ** BRK      ; was jp get_ixy_prefix, unused (dup in parse)
+      FILL limit2-$,&F7 ; already full!
+codesize2 = $$-jps
+
+      ORG jps+codesize2
+
+; ------- install --------------
+
+burn
+          ld ix,burnpara:call burn_rsx
+          ld ix,burnpara2:call burn_rsx
+          call &BB06
+          ret
+
+burnpara WORD rom,codesize,codedest,code
+burnpara2 WORD rom,codesize2,codedest2,jps
+
+

@@ -1,0 +1,587 @@
+inRom = 1
+ ; <<<<< Far Call on steroids >>>>>     
+
+   ; - all registers passed both way  (including iy)
+   ; - no firm used (but firm informed. cf vr_firm and kl_var_currsel)
+   ; - sanity checks
+   ; - light in rom (shared)
+   ; - usable from TR since 9800-9fff swapped.
+
+      IMPORT "orgmap.i"
+      IMPORT "extmap.i"
+      IMPORT "assmap.i"
+      IMPORT "memmap.i"
+
+; Each one followed by signature ROM.
+vr_romed = &9D00        ; "0"
+vr_romext = &9D02       ; "1"
+vr_rommon = &9D04       ; "2"
+vr_rombric = &9D06      ; "3"
+vr_romass = &9D08       ; "4"
+vr_currsel = &9D0A      ; "n" (with signature as well)
+vr_firm = &9D0C         ; Flag. FF: Firmware Forbid. FE: Enable
+vr_firmforbid = &FF
+vr_firmenable = &FE
+far_call_mem = &9D0D
+far_call_limit = visu
+
+      IF vr_firm-2 - vr_currsel
+  !! must be contiguous
+      END
+      IF vr_firm - &9D0C
+  !! shared with init.o ; same for vr_*
+      END
+
+; /\/\/\/ 2025  \/\/\/\/\/\/\/\/\/\/\/\/\
+;---- HH beta 4 --------
+; Add
+    ;  7 vK ass_com: add call mon
+;---- HH beta 2 --------
+; Jul
+    ; 23 vJ Remove empty fc_check
+          ; Add call_bric_from_ed_dyn (dynamic version)
+          ; Fix NRT
+;---- HH beta 1 --------
+    ; 10 vI Add call_ass_from_*
+          ; Add call_*_from_ass (burnt in new rom)
+
+; Jun 20 vH New rom
+
+;---- GG beta I --------
+; Apr  5 vG _call_from_ed: Don't check anymore
+                   ; - checks in /fca/ are enough
+                   ; - gives back some room in rom
+; Mar 29 vF _call_from_ed: Check routine instead of install
+                          ; See rationale there.
+                 ; -> If memory was corrupted, it's more useful to
+                    ; break in order to investigate.
+           ; First step before removing the test altogheter
+    ; 27 vE Use Orgmap.i
+
+; /\/\/\/ 2023  \/\/\/\/\/\/\/\/\/\/\/\/\
+; May 10 vD Same thing for monogams. Note:
+        ; - Old ones doesn't pass A. Error-prone!
+        ; - One more step toward uniformisation
+
+     ; 8 vC. Same thing than vB: call_bric_from_ed ...
+          ; Should have be done pro-actively
+
+; Apr 26 vB. Adresse main /curr sel/ issue by introduce
+           ; call_bric_from_ext
+           ; call_ed_from_ext
+
+; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;    (was) BUGGED AS HEAVEN.
+
+; This was plain stupid to try to maintain a 'curr sel' mirror:
+   ; - Each ROM can know its # and can push it instead.
+   ; - Too brittle: if a ROM was called by another far_call
+     ; (rst 18 or far_call in base bk), then the "current rom" wasn't
+     ; updated -> crash guaranteed.
+
+; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+; /\/\/\/  \/\/\/\/\/\/\/\/\/\/\/\/\
+
+       ; v9: New nrt: test_firmforbid.
+           ; Fix it (see fc_nofirm2)
+; Mar 30 v8: Update doc.
+          ; Install in monogams as well.
+
+; Jan 1 v7: Add comment about &b8d6 being checked at init.
+          ; Burn routines in rom ext @ c0bc
+          ; Add init
+
+; /\/\/\/  \/\/\/\/\/\/\/\/\/\/\/\/\
+
+; 21 Sep v6 Export/Import
+
+; 26 Jul v5 Fix nrt_init: must set flag FE in vr_firm
+          ; Restore &b8d6 after far call.
+          ; Boulet! Must change ROM after after read address.
+           ; !!TODO!! How to test that?  -> Burn in clone rom, test clon
+; v4       ; ??? jp @ &e810
+; 21 Jul v3: Move @ c950 , JP @ e820
+; 18 Jul v2: Inform firm (cf vr_firm). 
+; v1: extracted from detect8 + monhelp4
+
+dev_checks = 1
+
+kl_var_currsel = &B8D6
+
+      ORG &0100
+
+romed = &0A
+codedested = ed_farcall
+limited = txt           ; numlengths dico txt 
+codedested2 = ed_farcall'
+limited2 = init_jp
+codedested3 = ed_farcall''
+limited3 = mulf_jp
+
+romext = &1A
+codedestext = &C0BC     ; After jp ass 2
+limitext = &C0E0        ; jp asseva
+codedestext2 = farcallx
+limitext2 = orgui_jp
+
+rommon = &1B
+codedestmon = &FF00     ; After monui 2
+limitmon = &FFA0        ; jp trui
+
+rombric = &1C
+codedestbric = 0
+limitbric = 1
+
+romass = &1D
+codedestass = ass_farcall
+limitass = visu_jp
+
+      IF inRom
+      ENT burn
+
+      ELSE
+
+      ENT tests
+
+kl_curr_selection = &B912
+
+tests
+          call nrt_init
+
+dummy_rom = 5
+;!!! Actually won't change anything now, has vr_currsel is overwriten.
+          ld a,dummy_rom:ld (vr_currsel),a
+          ld c,a
+          call &B90F    ; select upper rom
+          call test_manual
+          call test_firmforbid
+          ret
+
+test_manual
+disp  = &FF14
+          ld a,40:call call_bric_from_ed:WORD disp
+          call call_bric_from_ed:WORD disp+3 ; cls
+          ld a,"!"
+          call call_bric_from_ed:WORD disp+15 ; char
+; Check de is properly passed.
+          ld hl,&C001:or a:sbc hl,de:call nz,&BE00
+; Check rom is ok for firmware
+          call &B912
+          cp romed
+          call nz,&BE00
+          ret
+
+test_firmforbid
+; We mustn't sync firmware when it isn't connected (mirror in trace).
+; Otherwise it would just corrupt user memory at &b8d6
+
+          ld a,40:call call_bric_from_ed:WORD disp ;setup
+
+          ld a,vr_firmforbid:ld (vr_firm),a
+kl_curr_sel = &B8D6
+kl_ref = "Y"
+          ld a,kl_ref:ld (kl_curr_sel),a
+          ld a,"!"
+          call call_bric_from_ed:WORD disp+15 ; char
+          ld a,(kl_curr_sel)
+          cp kl_ref:call nz,&BE00
+;restore as a good citizen.
+          ld a,vr_firmenable:ld (vr_firm),a
+          ret
+
+nrt_init
+; TODO: common init instead.
+bk_base = &C7
+          ld a,bk_base
+          ld b,&7F:out (c),a
+vo_basebk = &7CFC
+          ld (vo_basebk),a
+
+          ld hl,vr_romed
+          ld (hl),romed:inc hl:ld (hl),"0":inc hl
+          ld (hl),romext:inc hl:ld (hl),"1":inc hl
+          ld (hl),rommon:inc hl:ld (hl),"2":inc hl
+          ld (hl),rombric:inc hl:ld (hl),"3":inc hl
+          ld (hl),romass:inc hl:ld (hl),"4":inc hl
+          ld (hl),romed:inc hl:ld (hl),"0":inc hl
+          ld (hl),&FE   ; firmware enable
+
+          ld c,romed:call &B90F
+          call install
+          ret
+      END
+
+      IF inRom
+burn
+          ld ix,burnpara:call burn_
+          ld ix,burnpara2:call burn_
+          ld ix,burnpara2':call burn_
+          ld ix,burnpara3:call burn_
+          ld ix,burnpara3':call burn_
+          ld ix,burnpara4:call burn_
+          ld ix,burnpara5:call burn_
+          call &BB06
+          ret
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+
+nburn BYTE "BURN"+&80
+
+burnpara WORD romed,codeed_,codedested,codeed
+burnpara2 WORD romed,codeed2_,codedested2,codeed2
+burnpara2' WORD romed,codeed3_,codedested3,codeed3
+
+burnpara3
+      WORD romext
+      WORD codesize
+      WORD codedestext
+      WORD codeext
+burnpara3'
+      WORD romext
+      WORD codesizeext2
+      WORD codedestext2
+      WORD codeext2
+burnpara4
+      WORD rommon
+      WORD codemonsize
+      WORD codedestmon
+      WORD codemon
+      END
+burnpara5 WORD romass,codeasssize,codedestass,codeass
+
+; -----------------------------
+      MACRO ASSERT p
+      IF p:ELSE
+  !! assert failed
+      END
+      ENDM
+; -----------------------------
+
+codeed2 = $$
+
+      IF inRom
+      ORG codedested2,$$
+      END
+
+; Safe version of routines (which doesn't required vr_curssel to
+; have been keep in sync when using firmware).
+
+call_ext_from_ed        ; Note: this is a jump block!
+          push hl
+          ld hl,vr_romext
+          jp _call_from_ed
+call_mon_from_ed
+          push hl
+          ld hl,vr_rommon
+          jp _call_from_ed
+call_bric_from_ed
+          push hl
+          ld hl,vr_rombric
+          jp _call_from_ed
+;call_ass_from_ed below (no more room here)
+      IF inRom
+      IF $ - &E825
+ !! error align
+      END
+      END
+          jp install
+
+      IF inRom
+      FILL limited2-$,&F7
+      END
+codeed2_ = $$ - codeed2
+
+codeed3 = $$
+      IF inRom
+      ORG codedested3,$$
+      END
+
+call_ass_from_ed
+          push hl
+          ld hl,vr_romass
+          jp _call_from_ed
+
+      IF inRom
+      FILL limited3-$,&F7
+      END
+codeed3_ = $$ - codeed3
+
+codeed = $$
+
+      IF inRom
+      ORG codedested,$$
+      END
+
+_call_from_ed
+          push hl
+          ld hl,(vr_romed):ld (vr_currsel),hl
+          pop hl
+
+          push af
+          jp far_call_com
+
+install
+          push hl
+          ld hl,fca
+          ld de,far_call_mem
+          ld bc,fca_
+          ldir
+          pop hl
+          ret
+
+fca
+      ORG far_call_mem,$$
+call_bric_from_ed_dyn
+      IF $ - &9D0D
+  !! shared with ed
+      END
+          call call_bric_from_ed:WORD &FF14 ; disp jps
+          ret
+far_call_com
+      IF dev_checks
+;Additionnal checks done in RAM to prevent duplicate them in each rom.
+          ld a,(fc1):cp &CD:call nz,&BE00
+          ld a,(fc2):cp &C9:call nz,&BE00
+      END
+fc0       push bc
+          push de
+far_call_
+          ld a,(hl):inc hl
+          ld b,(hl)
+          ld hl,vr_currsel
+          ld e,(hl):ld (hl),a:inc hl
+          ld d,(hl):ld (hl),b:inc hl
+          ld l,(hl)     ; flag firmware
+          inc l:jr z,fc_nofirm ; FF: no firm present
+          inc l:call nz,&BE00 ; Must be FE then
+
+; Inform firm, so that amsdos calls can return to the right rom.
+; NB: We don't use kl_curr_sel (&b90f) though.
+    ; Pro: Robuster in case of memory mess.
+         ; Doesn't change DI/EI.
+    ; Con: Less portable,
+         ; We have to check validity of the address at init time.
+         ; -> NB: done in detect/get_rom#. 
+          ld (kl_var_currsel),a
+
+fc_nofirm
+          push af
+; here:    (sp) = rom, de, bc, af, hl, ret
+; We want: (sp) = previous_sel, ret+2   jp=((sp+8))
+          ld hl,10:add hl,sp
+          ld c,(hl):inc hl
+          ld b,(hl)     ; bc=ret
+          ld a,(bc):ld (fc_jp+1),a:inc bc
+          ld a,(bc):ld (fc_jp+2),a:inc bc
+          ld (hl),b:dec hl
+          ld (hl),c
+
+          ex de,hl      ; HL: previous sel
+          pop af
+          ld b,&DF:out (c),a
+          pop de
+          pop bc
+          pop af
+          ex (sp),hl
+
+fc1       call fc_jp
+
+          ex (sp),hl
+          ld (vr_currsel),hl
+
+          push af:push bc
+          ld b,&DF:out (c),l
+          ld a,(vr_firm) ; flag firmware
+          inc a:jr z,fc_nofirm2 ; FF: no firm present
+          inc a:call nz,&BE00 ; Must be FE then
+          ld a,l:ld (kl_var_currsel),a
+fc_nofirm2
+          pop bc:pop af
+
+          pop hl
+fc2       ret
+
+fc_jp BYTE &C3
+fca_  = $-far_call_mem
+
+          ASSERT(far_call_mem+fca_ < far_call_limit)
+
+      ORG fca+fca_,$$
+
+      IF inRom
+      FILL limited-$,&FF
+      END
+
+codeed_ = $$ - codeed
+
+
+      MACRO FAR_CALL_CALL
+; Pass all regs both ways, except:
+; In:   IY isn't passed.
+; Out:  IY is restored.
+; Usage: call bricbrac_far_call:word adr
+
+;NB: call trick a la Amsdos considered, but takes as much space,
+   ; and is more complex.
+
+          push af
+
+; Sanity check: is routine still here or is RAM corrupted?
+      IF dev_checks
+          ld a,(far_call_com):cp &3A:call nz,&BE00
+          ld a,(fc0):cp &C5:call nz,&BE00
+      END
+
+          jp far_call_com
+      ENDM
+
+
+;--------------------
+codeext = $$
+
+      IF inRom
+      ORG codedestext,$$
+      END
+
+; Use call_ed_from_ext and co
+
+          push hl
+;call_ed_from_ext'
+          ld hl,vr_romed:jr ext_com
+          push hl
+;call_mon_from_ext'
+          ld hl,vr_rommon:jr ext_com
+          push hl
+;call_bric_from_ext'
+          ld hl,vr_rombric
+ext_com
+          FAR_CALL_CALL()
+
+codesize = $$-codeext
+ho
+      IF inRom
+      FILL limitext-$,&FF
+      END
+
+
+codeext2 = $$
+
+      IF inRom
+      ORG codedestext2,$$
+      IF $-&FF12
+!! don't move, that's a jump block
+      END
+      END
+
+; Safe version of routines (which doesn't required vr_curssel to
+; have been keep in sync -- which happens when using firmware's farcall)
+
+call_ass_from_ext       ; Note: this is a jump block!
+          push hl
+          ld hl,vr_romass
+          jr _call_from_ext
+call_ed_from_ext
+          push hl
+          ld hl,vr_romed
+          jr _call_from_ext
+call_mon_from_ext
+          push hl
+          ld hl,vr_rommon
+          jr _call_from_ext
+call_bric_from_ext
+          push hl
+          ld hl,vr_rombric
+;enchaine
+_call_from_ext
+          push hl
+          ld hl,(vr_romext):ld (vr_currsel),hl
+          pop hl
+          jp ext_com
+
+codesizeext2 = $$-codeext2
+ho2
+      IF inRom
+      FILL limitext2-$,&FF
+      END
+
+;--------------------
+codemon = $$
+
+      IF inRom
+      ORG codedestmon,$$
+      END
+
+;This is a jump block!
+          push hl:ld hl,vr_romed:jr mon_com
+          push hl:ld hl,vr_romext:jr mon_com
+          push hl:ld hl,vr_rombric:jr mon_com
+          push hl:ld hl,vr_romass
+mon_com
+          push hl
+          ld hl,(vr_rommon):ld (vr_currsel),hl
+          pop hl
+          FAR_CALL_CALL()
+
+codemonsize = $$-codemon
+
+;--------------------
+codeass = $$
+
+      IF inRom
+      ORG codedestass,$$
+      END
+
+;This is a jump block!
+          push hl:ld hl,vr_romed:jr .ass_com
+          push hl:ld hl,vr_romext:jr .ass_com
+          push hl:ld hl,vr_rombric:jr .ass_com
+          push hl:ld hl,vr_rommon
+.ass_com
+          push hl
+          ld hl,(vr_romass):ld (vr_currsel),hl
+          pop hl
+          FAR_CALL_CALL()
+
+codeasssize = $$-codeass
+
+
+      IF 0              ; Should NOT be necessary.
+;--------------------
+codebric = $$
+
+          push hl:ld hl,vr_romed:jr bric_com
+          push hl:ld hl,vr_romext:jr bric_com
+          push hl:ld hl,vr_romrom
+bric_com
+          FAR_CALL_CALL()
+
+      IF $$-codebric - codesize
+ !! error not same size
+      END
+      IF inRom
+      FILL limitbric-$,&FF
+      END
+
+
+codesize = $-codedest
+      END
+
+
+      IF vr_firm-2 - vr_currsel
+  !! must be contiguous
+      END
+      IF vr_firm - &9D0C
+  !! shared with init.o ; same for vr_*
+      END
+
+

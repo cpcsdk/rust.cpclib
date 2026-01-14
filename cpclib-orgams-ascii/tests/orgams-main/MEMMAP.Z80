@@ -1,0 +1,523 @@
+; Mem map: buffers and vars.
+; For persistant vars: use 7efb downwards. See /free/
+need_room = 1
+
+; TODO: more clean-up (remove ORG, SKIP, and non-shared variables)
+
+; 2025   
+     ; Jul 27: Define vo0, vo, va... for swap.o
+     ; Jul 23: header @ &4000
+     ; Apr 20: hist_display @ &4100
+; 2024            
+     ; Oct  1: Move poubelle at &6900 (disa)
+     ; Sep 23: Move cocopy_var2 at 8a40
+     ; May 18: No more tmp_name at 8900 (asseto)
+
+     ; Mar 17. Move visu var out of bank (&9d9d)
+     ; Feb 16. Add cache_var, va_pre_pc, va_pre_objc
+; 2023 Dec 28. Extracted from memmap.
+             ; Clean-up: can be imported.
+
+      IMPORT "const.i"  ; for max_sources
+
+save_pc = $
+save_obj = $$
+
+; ---- io ----
+header = &4000
+
+; ---- mon ----
+
+hist_display = &4100
+hist_display_size = 7   ; in &100 chunks
+
+hum   = &48F8           ; !!! some trash here
+
+free0
+; until &5600 (was label_index from previous aap)
+
+; ---- aap -----
+pool  = &5600           ; first chunk labels  (TODO: is it still here)
+
+;5700-6000 free ?       ; it seems so.
+
+;6000 ????  ; first byte used; by whom?
+
+
+mulf  = &6100           ; direct run multiface
+
+free2 = &6120
+
+pilot_str = &6200       ; ed
+backup_key_translate = &6500 ; ed
+;6578 free
+cocopy_pages = &6600    ; reserve for 35 pages (128k+2Mb+asic) * 3 
+free8 = cocopy_pages + 35*3
+symb_vars' = &6700      ; scope array
+
+; ----- ed ----- 
+rsx_hist = &6800
+
+; ----- disa & symb ----
+; for disa.get_pc_backward
+; for symb display of labels set by |orgset
+bufmp = &6900           ; impexp
+poubelle = &6900
+
+; ---- symb -----
+symbol_index = &6A00    ; ass.nrt org.nrt
+
+symb_vars = &6A30
+;symb# = &6A30
+; free from &6a32  (was scope context)
+; ------ ed ------
+
+ed_var2 = &6A60
+
+;filename = &6B00        ; filename.o (todo) for now in &7e00
+filename = &7E00
+name_load = &6C00       ; ed
+name_save = &6D00       ; ed
+
+; ---- asset -----
+asset_index = &6E00     ; for caching mecanism
+
+; ---- aap -----
+aap_reserved = &6F00    ;??? not used yet?
+
+vaap  = &6FE4
+aap_pool_pnt = &6FE6    ; swap
+aap_chunk_index = &6FE8
+
+; --- org ---
+; All in 7000-70ff seen "only" by org, swap, cache 
+sources_index = &7000
+vo0   = sources_index + 2*max_sources
+source_begin = vo0
+      IF vo0 - &7080
+  !! shared with org, cache, swap
+      END
+      IF source_begin - &7080
+  !! shared with org, swap
+      END
+deps  = &7083           ; shared by org, impeva
+depsrec = &708E         ; shared by org, swap, cache
+up_to_date_since_ass = &7082 ; "
+up_to_date_since_visu_pc = &7097 ; "
+
+vo_romAss = &70BF
+meta_sources = &70C0    ; What's that
+current_source = &70F0  ; org + swap
+
+; ---- shared -----
+txtbuffer = &7100       ; Use &400 for ed's help !!! and welcome message
+;!! reused for persistent monogams (refresh)
+;7200 etc used. By whom?
+; ---- mon -----  
+tmp_tag = &73FF
+tmp_buf = &7400         ; mon, trui, evacom (command_result)
+bufdump = &7400
+command_history = &7500
+
+; ****** **  monogams persistent var  ** ******
+; in bank, to be reset-proof
+
+
+; ****** **  trace related var  ** ******
+; (cannot be put in page 8000, even for tmp var)
+; (Now we can) 
+
+      IF 0
+; TODO: remove org, skip, byte, etc
+      ; remove non-shared variables
+
+      ORG &7600
+      IF $/&0100 - command_history/&0100+1
+  !!     vars must follow command_history (cf cold_init)
+      END
+
+oh_size = 7             ;flag sep, pc, opcodes
+
+nbPCbck = 6
+
+opcode_history nbPCbck-1 * oh_size ** BYTE 
+oh_last   oh_size ** BYTE 
+      IF $/&0100 - opcode_history/&0100
+error     MSB(changed)
+      END
+
+lngBufC = 16
+bufDisa   lngBufC ** BYTE  ; used by mon? trui, monhelp
+
+lngCtxt = 32            ; lng_max du buffer "copyHere"
+bufCtxt   lngCtxt ** BYTE 
+
+m1
+
+; ---- trUI ----  
+      IF $- &765A
+ !! error align
+      END
+
+tmp_save_sp WORD        ; NB: could move at 9xxx (after swap)
+
+; pour callee/caller (right/left) navigation
+nb_adr_buf_explore BYTE  ; TODO: double check that!! doesn't seem here
+pnt_buf_explore WORD 
+buf_explore 16 ** WORD 
+buf_explore_
+
+line_num_src WORD       ; 767f  ok
+pc_nav WORD 
+
+      IF pc_nav - &7681
+ !! error (shared trui - monui)
+      END
+check_sep WORD 
+flag_visu_source BYTE 
+last_com BYTE 
+
+      END
+
+; ---- monui ----
+      ORG &7687
+monui_var
+      IF $-&7687
+ !! error align
+      END
+
+keyBuf    10 ** BYTE 
+
+; ---- mon ------
+mon_var
+
+; ---- monui (shared with mon) ----
+      ORG &76DA
+monui_var'
+
+      ORG monui_var'
+;TODO: move all the handling in DISP
+orgScreen WORD          ;need by tr, which cannot access off7screen
+;I.e. when called from tr, all disp routines must use this var,  
+    ; which happen to remain at C000 (no scroll).
+cursX BYTE 
+cursY BYTE 
+cursXY = cursX          ;(To load both)
+      SKIP &76E0 - $
+;76e0       ??? 
+
+monui_var'_ = &76E0
+
+; ----- mon -----
+
+      ORG &76E2
+mon_var'
+
+; --- ass --- 
+
+free_ = &76E8           ; was visu
+
+; - 76ff   ;FREE
+
+; ---- ed ---
+
+BUF_LINE = &7700        ; Stockage de la ligne courante
+
+edVar = &7800
+
+edsign_pos = &7800      ; init and ed ? 
+
+;7900 ??? Text
+;7933 ??? BFF0
+
+;795c - 79df: Reserved by ???
+; ---- upd-scr -----
+
+upd_scr_vars = &79E0
+
+; ---- ch (shared) ------
+ve    = &79EE           ; ch and init 
+
+firm_save_sp = &79FC
+firm_rommem = &79FE     ;rom work zone aka himem+1
+
+; ---- ????? parse? ------
+      ORG &7A00
+; ---- aap ------
+      ORG &7B00         ; for load only. Used by impexp (dams) as well.
+
+; ---- ass ---- 
+va    = &7C00
+;Persistent versions (hence vo_ prefix)
+vo_first_pc = va+2      ;lowest adr reached
+vo_first_objc = va+4    ;lowest adr modified in memory
+vo_last_pc = va+6
+vo_last_objc = va+8
+vo_exec = va+10         ; ass, ch, save
+vo_exec_bk = va+12
+vo_destbk_last = va+13
+
+      IF 0
+
+free3 = &7C0C           ; not sure
+;&7c0c-7c7c Free?
+vchunk = &7C7C
+
+log   = &7C8E           ; used for tmp debug (store values)
+                        ; -> cf org.org_save (uni_out_close).
+
+; ------ parse -------
+vp    = &7CA0           ;//cf !?! conflict with disp?
+
+; ----- disp -----
+vio   = &7CC0
+vo_scrpos0 = vio        ; +ch?
+vo_scrpos = vio+2
+vo_tmp = vio+4
+vo_reg1 = vio+10        ; shared with monui
+
+; ----- disa -----
+vd    = &7CD0
+
+; ----- ass ---- 
+adr_met_in_operand = &7CDB
+was_adr_met = &7CDD
+
+      END
+; ---- chunk and org ------
+
+vo    = &7CE8
+;vo_flags = &7CE8        ; +mirror. others?
+;vf_codeinC000 = 2
+
+;vo_curline = vo+1
+;word
+;vo_curline_start = vo+3 ;actually end of previous line
+;      BYTE :WORD 
+;vo_curline_end = vo+6
+;      BYTE :WORD   
+
+vo_orgset_store = vo+9  ; shared with symb
+
+; ----- org (shared) ------
+
+; ****** **  external var/routines  ** ******
+
+vo_romEd = &7CF9
+vo_romExt = &7CFA
+vo_romMon = &7CFB
+vo_romBric = &7CFF
+vo_basebk = &7CFC
+; vo_curbk = &7CFD !! obsolete
+
+tr    = &7D00
+
+farcall = &7D2C
+restore_jump = &7D42
+
+tr_vars = &7D60
+
+val   = &7D80
+reg_rmr = &7D86
+reg_mmr = &7D87
+      IF 0
+valROM = val+&1B
+valZ80 = val+&1C
+
+pc_   = valZ80
+f_    = valZ80+22
+sp_   = valZ80+24
+      END
+
+; ---- &7e00: Name (size &80) ----
+; Shared by ed & ord.
+SRC_NAME = &7E01        ; Shared with org.o and save.o
+
+      IF 0
+; --- Flag non blocking fatal error ---
+      ORG &7E80
+monhelp
+; TODO: why in bank?
+errorcode BYTE          ; 0 = no error  (reset at setup)
+errorrom BYTE           ; rom the error comes from
+errorpos WORD 
+far_call SKIP 3
+      SKIP 76           ; Room for dump or message. TODO: check if used
+  ; -- No free space!
+m
+      SKIP &7ED0 - $
+      END
+
+; ---- trui -----------
+
+trui  = &7ED0           ; For stacktrase
+; full (used until &7ef4)
+;???  = &7EF5
+
+clipboard = &7EF8       ; clip.o
+free  = &7EFA
+status0 = &7EFC         ; For hack cnt
+cocopy_var = &7EFE
+v_store_start = cocopy_var ; org.dev_checks
+
+backup00_3f = &7F00     ; en maio bank
+
+
+; -- call stack
+
+prgpile = &8000         ; monui? Needed when swaping firm.
+
+; **** ** tmp variables/buffer (can be dropped at reset) ** ****
+rammad
+
+
+BUF_IO = &8000          ; ed 2ko, org
+err_tmp_buf = &8000     ; ch pour status ass
+tmp_help = &8000        ; monui
+
+io_buf = &8800          ; aap di_load/save
+tmp_chunk = &8800       ; org, cocopy for first-last
+
+buf_line = &8900        ; ch pour import/export, save.o for filename
+buf_bin = &8900         ; ch pour save binary
+v_asset = &8980
+
+
+; ---- misc tmp var ----
+; !!TODO. Reuse adresses when not-conflicting?
+progress = &8A00        ; (3 bytes)       ; org & aap load/save
+impexp' = &8A00         ; reused
+; ??? free &8a03  (was cocopy)  SEEMS USED
+impexp = &8A05          ; 2*words (for CONTROL-I)
+cache_var = &8A09       ; 2*9 bytes (visited) + 4 words (pre_pc/objc)
+cocopy_var2 = &8A40
+v_store_cur = cocopy_var2 ; org.dev_checks
+
+tmp_checksums = &8B00   ; org. max_chunks, save (tmp_copy)
+
+free7 = &8C00
+
+; ---- mon ----
+
+buf_work = &9000        ;!! reuse bufCom.
+
+      ORG &9000
+
+width = 80
+
+lngCom = width-1        ; for '>' 
+bufCom    lngCom+1 ** BYTE 
+bufCom_
+      IF bufCom AND &FF
+!! error align
+      END
+
+bufCom'   lngCom ** BYTE  ; backup for history
+
+dif_start1 WORD 
+dif_ecart WORD 
+dif_last_line WORD 
+
+; --- histrion ----
+
+      ORG &90C0
+histrion
+
+; ----- STATUS DISP ----
+
+      ORG &90F0         ; ??
+
+status
+
+; ------ ass/asseva -----
+
+computed_params = &9100 ; mon -> ass
+
+; ------ ed -----
+
+BUF_TMP = &9100         ; ed. Buffer de r{serve (reuse computed_params)
+PATTERN = &91E0         ; ed.
+
+ass_buf = &9200         ; ass phase 2
+tmp_rast_tab = &9200    ; status ass  (reuse ass_buf)
+completion = &9200      ; buffer auto completion. Rationale:  
+                            ; - Edition and Ass are disjoncted
+                              ; if no more the case, just move to 9300
+                            ; - Not needed by trace.
+cue   = &9300           ; used for pattern between ed & cue.
+
+parse_buffer = &9400    ; org, evacom -> parse
+
+tmp_str = &9500         ; for RSXs from basic and pilot str
+tmp_diff_buf = &9500    ; for diff buffer
+
+int   = &9600           ; screen.o: use almost 200
+
+current_source' = &97F0 ; screen and org
+
+va_scan = &97FA
+
+; =====================================
+;  Zone &9800-&9fff accessible and used by TRUI.
+; =====================================
+
+va2   = &9800           ; ass
+va_destbk = &980B       ;ass, org? save 
+va_curbk = &9846        ;ass, pagefirm, org, visu
+va2'' = &986D
+va2_store' = &9896      ; ass, swap
+va_pre_pc = &989A       ; ass and cache
+va_pre_objc = &989C     ; ass and cache
+va_post_pc = &989E      ; ass and cache
+va_post_objc = &98A0    ; ass and cache
+; ... ass internal                     
+va2_end = &98DC
+asseva_var = &98DC
+import_var = &98DE
+except = &98F0          ; for new v_save_sp
+free6 = &98F4
+save_var = &98F8        ; could be moved in ass_buf or other unused buf
+                        ; (unused at save.do_save time)
+vo'   = &98FA           ; org: vo_savesp2, vo_crossed_chunks 
+values_buffer = &9900   ; ass: $100 pour stack arithm
+tmp_name = &9900        ; asseto (name) 
+macro_stack = &9A00     ; ass
+macro_stack_params = &9B00 ; ass
+
+; -- screen & impeva ----
+
+int0  = &9C00
+impeva = &9C00          ;cf impeva.o for rationale.
+      IF need_room
+; can impeva reuse va_string instead of its own buffer?
+      END
+va_err = &9C60          ; only ass
+va_string = &9CA0       ; ass, import 
+;94 bytes more than enough since it is a 
+offset = &9CFE          ; +monui (set it)
+
+; ---- farcall ----
+
+far_call' = &9D0B
+vt_rommon = &9D04
+vt_rombric = &9D06
+vt_rom_cur = &9D0A
+vt_rom_firmflag = &9D0C ; for farcall, visu
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+visu  = &9D9D
+
+symbol_index_live = &9DD0
+
+single_use = &9E00
+;screen: store (&39) for redispatch.
+;asset: copy filename here.         
+;org: vt_far_call
+
+; --- find+ass -----
+; &9f18
+
+;nb: stack in &9fxx-&9fff when called from trace
+
+      ORG save_pc,save_obj

@@ -1,0 +1,83 @@
+; Destination address for each module in BRICBRAC.ROM
+
+; 2025 Mar 17. Move io_disc
+; 2024 Oct 17. bitset'
+     ; May 30. Correct screen_jp = &fd34 
+; 2023 Dec 22. Move parse
+     ; Dec 10.  v0: Extracted from rommap.o
+
+logodest = &C000        ;
+disp  = &C6FD           ; 0 free
+aap   = &C900           ; 0 free
+txtfirm = &C93A         ;98 free (more if move to txtfirm2)
+status = &CA00          ;16 free
+liszt = &CBE0
+;free was parse = &C99E     
+conv  = &DAAB           ; 0 free
+check = &DC00           ;&5 free?
+string = &DC5C          ;&a free
+string_ = &DC80
+;free (was status)
+scr_lo = &DE3C          ;0 free
+bitset = &DE80          ;8 free
+;free was liszt = &DEFA           ;0 free
+screen = &DF00
+search = &E048          ;
+heap  = &E100           ;&b free
+chunk = &E200           ;1 free
+chunk_module = chunk    ; disambiguate
+scr_lo2 = &E444
+field = &E4F0
+asset = &E5EF           ;0
+cue   = &E710           ;4
+histrion_rom = &E800    ; Mord sur fonte (needs disp vQ)
+gris  = &E800
+gris_rom = &E8F8        ; Reserve one special char
+scr_lo3 = &EC00         ; Mord sur fonte 
+fonte = &EC00           ; 
+fonte_rom = &ED00       ; hmm.. no more room for special char
+disp2 = &F000           ;0 free
+; free was screen = &F380
+aap2  = &F473           ;0 free
+chunk2 = &F70C          ;0 free
+asset2 = &F818          ; 
+screen2 = &F842
+io_disc = &FAAA
+txtfirm2 = &FCCE        ; &f
+
+; == jps === 
+txtfirm_jp = &FCF4      ; 0 free
+txtfirm_jp_ = &FD00
+bitset' = &FD00         ; not burnt yet: doesn't fit (was ced logo)
+screen_jp = &FD32       ; palette+jp 0 free
+scr_lo_jp = &FD37       ; 0 free
+conv_jp = &FD67
+string_jp = &FD82
+search_jp = &FD94       ; 6 free
+token_jp = &FDA0        ; ?? free
+histrion_jp = &FDA9
+status_jp = &FDB8       ;0 free
+aap_jp = &FDDF          ; 0
+asset_jp = &FDEB        ; 0
+aap_jp1 = &FDF7         ; 0
+chunk_jp = &FDFA        ; 0
+aap_jp2 = &FE30         ; 0
+screen_jp2 = &FE4E      ; 0
+disp_jp = &FE78         ; 1
+heap_jp = &FEAF         ; 0 
+liszt_jp = &FEBE        ; 0
+bitset_jp = &FECD       ; 0
+liszt_jp2 = &FEDC
+liszt_jp2_ = &FEE8
+check_jp = &FEE8        ; 6
+liszt_jp3 = &FEF1
+aap_jp3 = &FEFD
+unknown_jp = &FF00      ;Free?  (was jump to ced logo col at &fd00)
+; or was it jumps for bitset new routines?
+chunk_jp2 = &FF0A
+disp_jp2 = &FF10
+field_jp = &FFA0        ;0 free
+cue_jp = &FFA3          ;1 free
+disp_jp3 = &FFB0        ; 2 free
+io_disc_jp = &FFCE      ; 29 free
+ ;--- nothing after    

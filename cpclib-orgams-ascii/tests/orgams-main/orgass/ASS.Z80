@@ -1,0 +1,7764 @@
+inRom = 0               ; 0: tests. See also asstest.o
+; Assembler, source navigation and more     
+
+; Dependencies: org, cocopy (for flush), asseto, import ...
+; Used by: org, find, scan, visu, and ... TODO
+
+rom   = &1E             ;burn & nrt
+romedNrt = &0A
+romextNrt = &1A
+rommonNrt = &1B
+do_profile = 0
+do_profile_line = 0 AND [1 - inRom]
+do_test_timernrt = 0 AND [1 - inRom] ; manual profiling
+prof_sample = 0 AND [1 - inRom]
+dev_checks = 1
+dev_checks' = 1         ; new ones
+nrt_checks = 1 - inRom
+nrt_is_plus = 0         ; nrt
+failhard = 1
+todo  = 1
+need_room = 1
+need_optim = 1
+cy    = 1
+
+; -nrtsources   ; for testing! 
+; -dispasst     ; opcodes
+; -jp_assesc0   ; escape codes
+; -cptesc       ; idem phase4 (cpt_*)
+; -gflp_scan_   ; phase4
+
+      ; iyh= jump table
+; Also, ix = jump address after each line!
+
+;Pistes pour size optimisation:
+   ; - error_* versions when we're in bk_base
+   ; - set iy and pop de before okdestdispatch (if enough room)
+
+      IMPORT "assmap.i"
+      IMPORT "memmap.i"
+      IMPORT "const.i"  ; for size_index and error codes
+      IMPORT "swapi.i"  ; for var size checks
+      IMPORT "symbflag.i"
+      IMPORT "testlib.o"
+      IF do_profile_line
+      IMPORT "prof2c00.o"
+      END
+
+; \/ In 2025 \/\/\/\/\/\/\/\/
+; ----- HH Beta j -----
+  ; Dec 
+    ;18 hn: Expose connect_pre_pc
+          ; Add test_#1: cache after fail
+
+; ----- HH Beta i -----
+    ;11 hm: Remove vo_curbk
+    ;10 hl: Also populate va_curbk (out of bank)
+          ; + GET_CURBK()
+  ; Nov
+    ;27 hk: [nochange] remove dead code
+    ;26 hj: check_bk_base: remove check around vo_this_bk
+; ----- HH Beta ? -----
+; -- HH Beta F --
+ ; Nov   
+  ; 2 hq: Handle local equ (.t=1)
+  ; 2 hp: Fix /bug#1ee/ (bkbase not connected after fix_error_lines)
+  ; 1 ho: Add test /bug#1ed/ (overlap err, assert after 2nd assembly)
+        ; Fix it! Remove backup_src_pnt mecanism:
+                    ; - too hackish
+                    ; - doesn't give better line position
+ ; Oct      
+  ;31 hn: Move error codes in const.i
+        ; Sync va_error_data with asseva (needed to report undef label)
+  ;25 hm: overlap: save conflicting address in error entry
+;OLDER: see journal.o
+bug#1bf = 1
+bug#1ba = 1
+tm_newc = 3
+tm_devc = 1
+
+bug#135 = 1
+
+      ORG &0100
+
+rast  = 1-inRom         ; for trace debug
+
+codedest = ass_module
+limit = ass_end_rom
+codedest2 = ass2
+limit2 = ass2_
+
+codedest3 = ass_jp
+limit3 = scan_jp
+codedest4 = ass_jp0
+limit4 = farcall_jp
+codedest5 = ass_jp2
+limit5 = ass_farcall
+
+kl_time_please = &BD0D
+kl_time_set = &BD10
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+;ec_: escape code (la ou on attend opcode)
+;e_ : code pour composantes expressions (la ou on attend argument numerique)
+short_label = &60       ;de $60 a $df : 128 first labels
+long_label = &E0        ;from $E000 to $ffff : 8192 other labels
+short# = long_label - short_label
+
+
+;------ in rom ed --------
+ch    = &C100
+copy_message_error = ch+36
+
+; ----- in this rom (ORGASS) ---------
+assexp = &C0E0          ; asseva.o
+find  = &C0F7
+cocopy = &FDFC
+scan  = &FE50
+import = &FFC6
+visu  = &FFCC
+sy    = &FFD8           ; actually start later, nevermind
+sy'   = &FF93
+sy''  = &FDED
+except = &FF7E
+asseto = &FFAE
+
+setup_import = import
+do_import = import+3
+get_import_tab = &FF6F
+
+
+_check_frame = except
+_check_frame_lt = except+3
+except_enter = except+6
+except_ret = except+9
+abort = except+12
+unwind = except+15
+
+;reset_code = cocopy
+store_code = cocopy+21
+install_code = cocopy+24
+get_intercepting_slice = cocopy+3
+
+eval_exp_asseva = assexp ; asseva.o
+eval_exp_skip_size = assexp+3
+eval_exp_mac = assexp+6 ;pass long values (>24bits)
+eval_equ_asseva = assexp+9
+read_label = assexp+12
+skip_label = assexp+15
+try_import = assexp+18  ; bk base must be connected
+
+sy_reset_phase2 = sy'+9 ;nrt
+sy_reset_imported = sy+9 ;nrt
+;sy_new = sy+24
+sy_set = sy+27
+sy_set_local = sy'+12
+sy_get = sy+30          ; in:hl=id  out:carry if set, cde=val !!set bit4
+sy_get_explicit_global = sy'+18
+sy_get# = sy+33         ; # of symbols reserved for assemblage.
+sy_peek = sy+36         ; in:hl=id  out:A=flags   NC if invalid id
+sy_sync_cur_index_to_live = sy
+sy_sync_ext_index_to_live = sy+3
+
+new_scope = sy'
+enter_scope = sy'+3
+exit_scope = sy'+6
+sy_reset_scope = sy'+9  ; nrt
+
+source2line = visu      ;in: (hl) = bk, srcH, srcL.  out: bc=line
+get_line_from_pc_safe = visu+3 ; in: bc = target
+
+collect_label = scan+3
+read_exp = scan+6
+read_exp_a_loaded = scan+9
+
+if_met = find
+else_met = find+3
+end_met = find+6
+
+;reset
+load_if_absent = asseto+6 ; carry if ok. de=id, bc=size
+
+connect_bk_base = pagefirm_jp ; All regs saved
+connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+connect_next_chunk = chunkcc_jp ;A corrupted
+
+farcall = &FF12
+;call_ed_from_ass = farcall
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+call_mon_from_ass = farcall + 18
+
+cache = &FE75
+clear_visited = cache+9
+is_uptodate = cache+6   ; for nrt
+cache_set_modified = cache ; for nrt
+
+; ------ In EXT rom ---------
+org   = &C008
+org'  = &C100
+init_phase1 = org+&72   ;nrt   ; Return hl: pnt source
+init_phase2 = org+&75   ;nrt
+org_select = org+63
+; connect_source_begin = org+&81  !! unsafe since sp not saved
+;far_call_bric = org+&57  ; replaced by new far call
+org_connect_source_begin = org+&81 ; nrt
+org_get_lines# = org+3  ; 
+check_deps = org+&2D
+orgset = org + &90      ; for nrt
+orgget = &C11B
+;pour NRT
+org_source_init = org+&84
+org_insert_line = org+12
+org_load = org+18
+org_get_current_selection = org+&30
+get_save_list = &C118
+
+swap  = &FE63
+set_assembled_info = swap
+connect_ass_store = swap+9
+
+filename = &FF66
+set_filename = filename+6 ; nrt
+;------ BRIC -----------
+
+asset = &FDEB
+get_asset_chunk = asset+9 ; For LOAD
+; In:  DE = chunk id.
+    ;  Bank agnostic.
+; Out: Carry, NZ: ok, there are more chunks
+     ; Carry, Z:  ok, last chunk.
+     ; In both case: hl = start in chunk (connected)
+                   ;  b = bank of this chunk
+                   ;  c = nb byte in this chunk > 0
+                   ; de = id next chunk
+     ; NC: error. A = error code.
+
+
+aap   = &FE30           ;jumps
+aap_get# = aap+21       ; out: HL=nb labels
+
+liszt = &FEDC
+liszt' = &FEBE
+liszt'' = &FEF4
+list4_new = liszt       ; return empty list (cde). all other reg preserv
+list4_append = liszt+3  ;in: cde= pnt head list. 
+                        ;out: cde conserved
+                            ;  hl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_free = liszt+6    ;in:cde. all register conserved
+list_head = liszt'      ; abcde saved
+list_iter_reset = liszt'+3 ; in: cde= pnt head list. out: side effect
+list_iter_get = liszt'+6 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ;  hl= pnt cell body
+list_iter_next = liszt'+9 ; in: cde= pnt head list.
+                          ;out: NZ, iter++ (side effect)
+                              ;  Z, no-op if no next
+                              ; All registers preserved but A
+list4_pop_node = liszt''
+
+; ------- in monogams ---------
+restore_and_goto_ed = &E006
+restore_and_goto_ed' = &E015 ; backup 
+monui = &F900
+is_amstrad_plus = monui+&0122 ; Z if old A preserved BC trashed
+
+destnrt = &3500         ; &800 used
+pcnrt = &CAFE
+nrtply = &4000          ; "nrtass" !!must be ass-gl.o's ORG!!
+nrtply_ = &1910         ; size
+nrtplyref = &6000
+
+;7C00: cf va
+
+ass_buf = &9200         ; phase 2. Reused by cocopy.copy_code
+macro_stack = &9A00     ; cf ass_macro_use
+macro_stack_params = &9B00
+;values_buffer = &9900   ;$100 pour stack arithm
+;nb: stack in &9fxx-&9fff when called from trace
+
+chunk_max = &04
+chunks_per_bk = &30
+chunk_offset = &40      ;MSB in bank 
+
+;chunk fields
+chead_next = 0
+;chead_last = 2
+;chead_checksum = 3
+;chead_lines# = 4        ;0 if empty, -1 if unknown
+
+chead_flags = 5
+ch_flag_code_emitted = 0 ; 0 if code never emitted (including the chunk)
+ch_flag_visited = 1
+
+chead_pc = chead_flags+1 ; pc at start of chunk
+chead_if = chead_pc+2   ; if state
+; --- not used yet. See vCA notes ---
+chead_pc_min = &0C      ; min reached in chunk (!=chead_pc if org)
+chead_pc_max = &0E      ; max reached in chunk (!=next chead_pc if org)
+
+va    = &7C00
+vo    = &7CE8
+
+e_endofdata = "A"       ;repasse en mode 'opcode' (pour .byte .word ...)
+
+nb_error_max = 8
+;--------------------------------------
+
+      MACRO ASSERT pred
+      IF pred:ELSE
+ !! fail
+      END
+      ENDM
+
+      MACRO ANCHOR x
+; Do nothing. Just used to annotate source.
+      ENDM
+
+      MACRO ASSERT_NOT p
+      IF p:ELSE
+   !! error
+      END
+      ENDM
+
+      MACRO CALL_BRIC ad
+          call call_bric_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_EXT ad
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_SY ad
+; Same rom
+          call ad
+      ENDM
+
+      MACRO CALL_MON ad
+          call call_mon_from_ass:WORD ad
+      ENDM
+
+      MACRO IS_BK_BASE
+      IF nrt_checks
+          call check_bk_base
+      END
+      ENDM
+
+      MACRO IS_IN_MACRO
+; is in macro invokation?   
+; Z if no, NZ if yes       
+; !! WRT source being assembled.
+; E.g. in IMPORT in MACRO, will return No (bug#1df)
+          call is_in_macro_
+      ENDM
+
+      MACRO IS_IN_MACRO_AT_ALL
+; is in macro invokation?  Z if no, NZ if yes
+; WRT to host
+          ld a,(va_nxt_msp):or a
+      ENDM
+
+
+      MACRO IS_IN_LOOP
+; Inside repeat block? Z if no, NZ if yes
+          ld a,(va_rep_pnt):cp va_rep AND &FF
+      ENDM
+
+      MACRO CHECK_FRAME
+      IF dev_checks
+          call _check_frame
+      END
+      ENDM
+
+      MACRO CHECK_FRAME_LT
+      IF dev_checks
+          call _check_frame_lt
+      END
+      ENDM
+
+      MACRO NRT_CHECK_DEST
+      IF nrt_checks
+          push af
+          ld a,d:cp ass_buf/&0100:call nz,nrtfail
+          pop af
+      END
+      ENDM
+
+      MACRO PROF_TAG
+      IF prof_sample
+          call prof_tag_
+      END
+      ENDM
+
+      MACRO RESTORE_ROUT jump
+.st
+          di
+; Connect RAM since we save (#e004) and execute there
+          ld bc,&7F8E
+          out (c),c
+          ld bc,&DF00 + rommonNrt
+restorerom = $-2 - .st
+          out (c),c
+          ld a,&86
+          ld bc,&7F00 + bk_dev
+restorebk = $-2 - .st
+          ld hl,jump-1
+restorejump = $-2 - .st
+          ld d,(hl):ld (hl),&79:dec hl ; poke OUT (c),a
+; The next 4 bytes cannot end in #e004-#e005
+restorecritical = $-1 - .st
+          ld e,(hl):ld (hl),&ED
+          jp hl         ; will connect bk and execute at restore_and_goto_ed
+      ENDM
+
+      MACRO GET_CURBK
+      IF dev_checks'
+          call get_curbk
+      ELSE
+          ld a,(va_curbk)
+      END
+      ENDM
+;-------------
+
+      IF inRom
+burn
+;
+;install in rom
+;
+          ld ix,param_burn:call _burn
+          ld ix,param_burn2:call _burn
+          ld ix,param_burn3:call _burn
+          ld ix,param_burn4:call _burn
+          ld ix,param_burn5:call _burn
+          call &BB06
+          ret
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BUR"
+      BYTE "N"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+param_burn4 WORD rom,codesize4,codedest4,code4
+param_burn5 WORD rom,codesize5,codedest5,code5
+
+      ELSE
+
+;-------------------------------------
+      MACRO CHECK_HL_EQ val
+; Break if <>  
+          push de
+          ld de,val
+          call _check_hl_eq_de
+          pop de
+      ENDM
+
+_check_hl_eq_de
+          push af
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop af
+          ret
+;-------------------------------------
+
+tests
+;----          
+          ld a,&F7:ld (0),a
+
+          call nrt_init
+
+      IF do_test_timernrt
+          call test_timernrt
+      END
+;          call test_files ; for profile and regular tests
+
+      IF do_profile_line
+          call profile_by_line
+      END
+      IF prof_sample
+          call sample_profile
+      END
+
+      IF 1 - [do_profile_line OR prof_sample]
+; Only run regular tests when main loop non-instrumented.
+      IF 1
+          call test_glfp
+          call asstest
+          call asserrtest
+
+          call test_#147
+          call test_#1ba
+          call test_#1dd
+          call test_#1e9_live_symbols
+          call test_#1
+
+          call test_orgset
+          call test_slice_size
+          call test_gap_in_bank
+
+   ;      call test_manual:BRK
+          call test_orgset
+          call test_#1ae
+
+          call test_dangling_if
+      END
+          call test_count_tm0
+          call test_count_tm
+      IF 0
+          call test_count_tm_range ; needs more test
+      END
+
+      ;    call test_gflp_scan_crash  !! File visu9015.o lost
+
+          call test_imports
+          call test_imports_err
+          call test_emitted0
+          call test_emitted
+          call test_emitted_imported_in_macro
+          call test_emitted_skip
+          call test_glfp
+          call test_pc_after_load
+          call test_skip_doesnt_change_range
+          call test_save
+          call test_1cb
+
+          call test_ref_big
+; Other tests in asstest.o and assnrt.o
+          ret
+
+; -----------------------------------------
+
+test_manual
+; Assemble a source loaded in other orgams instance!
+
+          ld a,&CF
+          call nrt_setup_custom
+
+          ld hl,name_c0
+          call nrt_load
+
+          call ass_test_com
+          ret
+name_c0 BYTE "#c0.o",0
+
+
+nrtsetsource
+          push hl
+          CALL_EXT(org_source_init)
+          pop hl
+nrtprependsource
+          ld de,1
+nss_
+          call _check_symbols_cleared
+atlnlp
+ ; memory was corrupted at some point
+          ld a,(&08):cp &C3:call nz,mess
+          ld a,(&0B):cp &C3:call nz,mess
+          push de
+; for debug: show lines
+          ld (nrt_cur_pnt),hl
+          push hl:call display_text_hl:pop hl
+          push hl:CALL_EXT(org_insert_line):pop de
+          call nc,&BE00:ld a,"/":call &BB5A
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,atlnlp
+
+          call _check_symbols_cleared
+          call test_de_untouched
+          ret
+
+nrt_cur_pnt WORD 
+
+_check_symbols_cleared
+          push hl
+          ld hl,symbol_index
+          ld b,size_index*2
+.lp       ld a,(hl):or a:call nz,fail
+          inc l
+          djnz .lp
+          pop hl
+          ret
+
+ass_test_com
+; First clean destnrt for "skip" checks. 
+          push ix
+          push hl
+          ld hl,destnrt
+nrt_marker = &BA
+.raz      ld (hl),nrt_marker:inc l:jr nz,.raz
+          pop hl
+
+;-- From here: copy from assnrt.
+          call nrt_assemble_com
+          ld c,(hl)
+          inc hl:ld b,0
+          ld de,destnrt
+          call compare
+
+          ld a,10:call &BB5A
+          ld a,13:call &BB5A
+          pop ix
+          ld a,(hl):or a
+          ret
+
+glfp_test_com
+          call nrt_assemble_com
+
+.reflp
+          ld c,(hl):inc hl
+          ld b,(hl):inc hl ; bc: target   
+          ld a,c:or b
+          jr z,.refend
+
+          ld de,pcnrt
+          call nrt_glfp_scan
+
+          ld a,e:cp (hl):call nz,nrtfail
+          inc hl
+          ld a,d:cp (hl):call nz,nrtfail
+          inc hl
+          jr .reflp
+.refend
+          ld a,(hl):or a
+          ret
+
+count_test
+          call nrt_assemble_com
+;Enchaine
+count_test0
+          push hl
+          CALL_EXT(org_get_lines#) ; scan whole source
+          push de
+;----
+;copy-paste from count.o
+          call init_var_main
+          call sy_reset_scope
+;----
+          pop bc        ; was de
+_count_test_com
+          inc bc        ; end included
+          call nrt_gpc_scan
+          pop hl
+          ld a,c:cp (hl):call nz,fail
+          inc hl
+          ld a,b:cp (hl):call nz,fail
+          inc hl
+          ld a,(hl):or a
+          ret
+
+      IF 0
+count_test_range
+;In:hl point to source, then start, end, tm
+          call nrtsetsource
+          push hl
+          call nrt_assemble_com
+;copy-paste from count.o
+          call init_var_main
+          call sy_reset_scope
+          pop hl
+          inc hl
+          ld e,(hl):ld d,0:inc hl
+          ld c,(hl):ld b,0:inc hl
+          push hl
+          jr _count_test_com
+      END
+
+nrt_assemble_com
+          ld bc,pcnrt
+nrt_assemble_custom
+;in bc = $
+          ld de,destnrt
+; Assemble, expecting all is well. Otherwise, point to error.
+          push hl
+          call org_assemble_nrt
+          call nc,unexpected_error
+          pop hl:inc hl
+          ret
+
+
+test_de_untouched
+ ; In phase 0, DE must be kept for various scanning purpose
+          push bc:push de:push hl
+          call nrt_init_phase1
+          ld de,&CAF5
+          ld ix,ass_loop0
+          call ass_amorce
+          ld hl,&CAF5:or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop hl:pop de:pop bc
+          ret
+
+
+test_pc_after_load
+          ld hl,.src
+          call asstestrange
+          ret
+.src
+      BYTE "load",34,":orgnrt/123.nrt",34,0
+      BYTE "word $",0,0
+;ref code
+      BYTE 5:BYTE 1,2,3:WORD pcnrt+3
+;ref range
+      WORD pcnrt        ;low pc
+      WORD destnrt      ;low obj
+      WORD pcnrt+4      ;hi pc  (inclusive)
+      WORD destnrt+4    ;hi obj (inclusive)
+
+test_skip_doesnt_change_range
+; Check low/hi value are correctly after skip.
+; (not to be confused with first/last).
+; Bug #127
+          ld hl,.src
+          call asstestrange
+          ret
+.src
+      BYTE "org &cafe,$$",0
+      BYTE "skip 2",0
+      BYTE "byte 1,2",0
+      BYTE "skip 3",0,0
+      BYTE 7
+          2 ** BYTE nrt_marker
+      BYTE 1,2
+          3 ** BYTE nrt_marker
+;ref
+      WORD &CB00        ;low pc
+      WORD destnrt+2    ;low obj
+      WORD &CB01        ;hi pc  (inclusive)
+      WORD destnrt+3    ;hi obj (inclusive)
+
+asstestrange
+          call nrtsetsource
+          ld b,3
+.lp
+; Loop to test cache version
+          push bc
+          push hl
+          call ass_test_com
+          call connect_bk_base
+          ld e,l
+          ld d,h
+          call compare_range
+          pop hl
+          pop bc
+          djnz .lp
+          ret
+
+compare_range
+          ld hl,vo_low_pc
+          ld bc,4*2
+          call compare
+          ret
+
+      MACRO IMPORT_X_ id
+;import line
+      BYTE "import",34,id,34,0
+      ENDM
+
+      MACRO IMPORT_X id
+;final import
+          IMPORT_X_(id):BYTE 0
+      ENDM
+
+      MACRO IMPORT_B
+;final import"b"
+          IMPORT_X("B")
+      ENDM
+
+test_slice_size
+;--------------
+; Check correct size is returned.
+;New API: when non intercepting, must return closest address > target
+          call nrt_init
+          ld hl,.src
+          call nrtsetsource
+          call nrt_assemble_com
+          ld a,&C0
+          ld hl,destnrt
+          call get_intercepting_slice
+          cp 1
+          call nz,fail
+          ret
+          ASSERT(destnrt == &3500) ; !! review src
+.src  BYTE "org &3500:byte 55",0
+      BYTE "save",34,"xx",34,",&3500,1",0,0
+
+test_gap_in_bank
+; byte after gap must be present!
+; Due to bug in store_code changing 0001 to 4001 (fixed in cocopy)
+; See journal.o
+          call nrt_init
+          ld hl,.src
+          call nrtsetsource
+          call nrt_assemble_com
+          ld bc,&7FCC:out (c),c
+          ld a,(&4000):cp &46:call nz,fail
+          ld a,(&4002):cp &47:call nz,fail
+          call connect_bk_base
+          ret
+
+.src  BYTE "bank &ca:org 0:b &46",0
+      BYTE "b ",0
+      BYTE "b &47",0,0
+
+asstest
+;------     
+          call nrt_init
+          ld hl,nrtsources
+.lp       ld (nrt_cur_pnt),hl
+          call nrtsetsource:call ass_test_com:jr nz,.lp
+          ret
+
+test_glfp
+;--------
+          ld hl,.sources
+.lp       call nrtsetsource:call glfp_test_com:jr nz,.lp
+          ret
+.sources
+;Source, then target and expected line#
+      IF 1
+; Exercise cpt_factor_bloc_end
+      BYTE "4 ** byte # ",0
+      BYTE "4 ** byte #+3 ",0
+      BYTE "nop",0,0
+      WORD pcnrt+2,1
+      WORD pcnrt+6,2
+      WORD pcnrt+8,3
+      WORD 0
+
+; Exercise ccom/cptcom 
+; Note: It doesn't trigger jp to glfp_reached_line,
+      ; so not all code paths are covered.
+      ; But I've manually check stack was ok.
+      ; Plus, there is assertio about ret address in glfp_reached
+      BYTE ";a",0
+      BYTE "di",0
+      BYTE ";b",0
+      BYTE "ei",0,0
+      WORD pcnrt,2
+      WORD pcnrt+1,4
+      WORD 0
+
+      IF 0
+!!! return NC in that case
+; EI reactivated when going past end!?!
+; oh! only by test. Was calling &bb06! because past-end -> NC
+      BYTE "ei",0
+      BYTE ";",0,0
+      WORD pcnrt+1,2    ;past end
+      WORD 0
+      END
+
+bug#122
+; Nested repetition
+      BYTE "10 ** [",0
+      BYTE "1 ** ei",0
+      BYTE "]",0,0
+      WORD pcnrt+8,2
+      WORD 0
+
+bug#199
+; PC lost after import
+      BYTE "import",34,":orgnrt/nrtimp$$.o",34,0 ; just 2**word
+      BYTE "ei",0
+      BYTE "ei",0,0
+      WORD pcnrt,1
+      WORD pcnrt+4,2
+      WORD 0
+      END
+; after if 0 (for internal checks about de)
+      BYTE "if 0",0
+      BYTE ";",0
+      BYTE "end",0
+          2 ** BYTE "di",0
+      BYTE 0
+      WORD pcnrt,4
+      WORD 0
+bug#19c
+; wrong line pointed
+      BYTE "macro m",0
+      BYTE "if 0",0
+      BYTE ";",0
+      BYTE "end",0
+      BYTE "endm",0
+      BYTE "m()",0
+          3 ** BYTE "ei",0
+      BYTE 0
+      WORD pcnrt,7
+      WORD 0
+bug#1a7
+; PC rewinded after skipped import
+      BYTE "import",34,":orgnrt/#17a/b.o",34,0 ; import c, skip &10
+      BYTE "import",34,":orgnrt/#17a/c.o",34,0 ; skip &20
+      BYTE "ei",0,0
+      WORD pcnrt+&30,3
+      WORD 0
+
+; Nested macro
+      IF 0
+;broken, i don't remember why
+      BYTE "macro m",0
+      BYTE "ei",0
+      BYTE "ei",0       ;3
+      BYTE "endm",0
+      BYTE "macro n",0
+      BYTE "ei",0       ;6
+      BYTE "m()",0
+      BYTE "ei",0
+      BYTE "endm",0     ;9
+      BYTE "n()",0
+      BYTE "di",0,0
+      WORD pcnrt+4,11
+      WORD pcnrt+3,10
+      WORD pcnrt+1,10
+      WORD pcnrt+4,11   ; "restart from macro"
+      WORD 0
+      END
+
+      BYTE 0
+
+test_save
+; Check SAVE create proper list of parameters
+          ld hl,.src
+          call nrtsetsource
+          ld bc,&9000
+          call nrt_assemble_custom
+
+          CALL_EXT(get_save_list)
+          CALL_BRIC(list_iter_reset)
+          CALL_BRIC(list_iter_get)
+          call z,fail
+;Pointeur source
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,(hl):inc l
+          ld a,(hl):cp "B":call nz,fail
+          3 ** inc l
+          call goto_line
+          ld a,(hl)
+          cp 34:call nz,fail ; must be str
+; bank at SAVE time
+          CALL_EXT(get_save_list)
+          CALL_BRIC(list_iter_next)
+          call z,fail
+          CALL_BRIC(list_iter_get)
+          ld a,(hl):cp &CA:call nz,fail
+          inc l
+          ld a,(hl):cp &7F:call nz,fail
+
+          ld a,5        ; ref
+.chklp
+          push af
+          CALL_BRIC(list_iter_next)
+          call z,fail
+          CALL_BRIC(list_iter_get)
+          ld a,(hl):cp tag_param:call nz,fail
+          inc l
+;16 bits value
+          pop af
+          ld b,a
+          cp (hl):call nz,fail
+          inc l
+          ld a,(hl):or a:call nz,fail ; MSB value 16 bits
+          ld a,b
+          inc a
+          cp 9
+          jr c,.chklp
+
+          CALL_BRIC(list_iter_next)
+          call z,fail
+          CALL_BRIC(list_iter_get)
+          ld a,(hl):cp tag_end:call nz,fail
+          call connect_bk_base
+          ret
+
+.src
+      BYTE "bank &ca",0
+      BYTE "SAVE",34,"x",34,",5,6,7,8",0 ; 4 params
+      BYTE "bank &c0",0,0
+
+test_count_tm0
+; Test without assembling
+          call nrt_init
+          ld hl,_tm_sources
+.lp       call nrtsetsource:inc hl:call count_test0:jr nz,.lp
+          ret
+
+test_count_tm
+; Test after assembling
+          call nrt_init
+          ld hl,_tm_need_ass
+.lp       call nrtsetsource:call count_test:jr nz,.lp
+          ret
+
+_tm_need_ass
+_skip_tm_test = 0
+
+      IF 1 - _skip_tm_test
+
+      BYTE "import",34,"testdata/maccount.o",0
+      BYTE "tm(2)",0,0
+      WORD unknown_tm + 10
+
+      BYTE "macro x n:n ** cpi:endm",0
+      BYTE "x(3)",0,0
+      WORD 12
+
+      BYTE "import",34,"testdata/macvisu.o",0
+      BYTE "xx()",0,0
+      WORD unknown_tm + 2
+
+      BYTE ".t=2",0
+      BYTE ".t ** di",0,0
+      WORD 2
+
+      END
+;enchaine
+_tm_sources
+;Source, then expected TM
+;(mustn't need ass)
+      IF 1 - _skip_tm_test
+      BYTE "rrd",0,0
+      WORD 5
+
+      BYTE "1 ** ei",0,0
+      WORD 1
+
+      BYTE "4 ** [",0
+      BYTE "1 ** di",0
+      BYTE "]",0,0
+      WORD 4
+
+      END
+;Bug#1d3
+      BYTE "LOAD",34,":org/testdata/grid3.zx0",0,0
+      WORD unknown_tm
+
+
+;Bug#1e5 !! test itself fails with NC
+;      BYTE "x-y**di",0,0
+;      WORD unknown_tm
+
+      BYTE 0
+
+      IF 0
+!! no !! ; nrt_gpc_scan only starts from begining
+test_count_tm_range
+;------------------
+;macro defined lower than invokatiorn
+          ld hl,.src
+.lp       call count_test_range:jr nz,.lp
+          ret
+
+.src
+      BYTE "import",34,"testdata/maccount.o",0
+      BYTE "tm(2)",0,0
+      BYTE 2,2:WORD 10
+
+      BYTE 0
+      END
+
+test_imports
+;-----------
+; Like asstest, but setting as many tabs as needed, named A, B, C, ..
+          ld hl,nrtimports
+.lp
+          call set_imports
+          call check_updated_
+          jr nz,.lp
+          ret
+
+check_updated_
+; hl= ref   
+; --- check without update
+          call _doublecheck
+; ---Add line in host
+          ld a,0:ld de,.line0:call .addline
+          call _doublecheck
+; ---Add line in import
+          ld a,1:ld de,.line1:call .addline
+          call _doublecheck
+
+; ---Add line in host and import
+          ld a,0:ld de,.line0:call .addline
+          ld a,1:ld de,.line1:call .addline
+          call _doublecheck ; no jp, for stack.
+          ret
+.line0
+      BYTE "by ",0
+.line1
+      BYTE "by 10",0
+
+.addline
+; Prepend line to source in tab A.
+; in:  a=tab
+    ; de=line
+          push hl
+          push de
+          call nrt_select
+          pop hl
+          ld de,1
+          CALL_EXT(org_insert_line):call nc,fail
+          pop hl
+          ret
+
+_doublecheck
+;In: hl = ref
+;Out: hl = post ref
+          xor a:call nrt_select
+; Check produced code is uptodate.
+          push hl
+          call ass_test_com
+          pop hl
+; Sanity check: ok when using cache.
+          call ass_test_com
+          ld e,l:ld d,h
+      IF todo
+;remove this hack
+      END
+          dec hl
+          ret
+
+nrtimports
+; Two succesive imports
+          IMPORT_X_("B")
+          IMPORT_X_("C")
+      BYTE "ld hl,bb+cc",0
+      BYTE "word $",0,0
+      BYTE "bb=&ba00",0,0
+      BYTE "cc=&be",0,0,0
+      BYTE 5:ld hl,&BABE:WORD pcnrt+3
+      BYTE 6,nrt_marker:ld hl,&BABE:WORD pcnrt+4
+      BYTE 7,nrt_marker,10:ld hl,&BABE:WORD pcnrt+5
+      BYTE 9,nrt_marker,nrt_marker,10,10:ld hl,&BABE:WORD pcnrt+7
+
+      IF todo
+; !! reactivate tests below
+      END
+
+      BYTE 0
+
+; Use a label from imported file.
+          IMPORT_X_("B")
+      BYTE "ld hl,ok",0,0
+      BYTE "ok=&1234",0,0,0
+      BYTE 3:ld hl,&1234
+
+; Simple import again (like assnrt.test_import)
+          IMPORT_B()
+      BYTE "word $,$$",0,0
+      BYTE 0,4:WORD destnrt,destnrt
+      IF 0              ; TODO
+; Case insensitive
+          IMPORT_X("b")
+      BYTE "jp $",0,0
+      BYTE 0,4,&C3:WORD destnrt
+      END
+; Transitivity
+          IMPORT_B()
+          IMPORT_X("C")
+      BYTE "word $+1,&1234",0,0
+      BYTE 0,4:WORD destnrt+1,&1234
+; After code
+      BYTE "word 1:word $",0
+          IMPORT_B()
+      BYTE "word $",0,0
+      BYTE 0,6:WORD 1,destnrt+2,destnrt+4
+; Sandwitch
+      BYTE "rla",0
+          IMPORT_X_("B")
+      BYTE "word $",0,0
+      BYTE "word $",0,0
+      BYTE 0,5:rla:WORD destnrt+1,destnrt+3
+; Just macro (without invocation) 
+      BYTE "daa",0
+          IMPORT_B()
+      BYTE "macro t:rra:endm",0,0
+      BYTE 0,1:daa
+; Sandwitch + Just macro (without invocation) 
+      BYTE "ei",0
+          IMPORT_X_("B")
+      BYTE "di",0,0
+      BYTE "macro t:rla:endm",0,0
+      BYTE 0,2:ei:di
+; Use a label from imported file.
+          IMPORT_X_("B")
+      BYTE "ld hl,ok",0,0
+      BYTE "ok=&1234",0,0
+      BYTE 0,3:ld hl,&1234
+      IF bug#135
+; Two succesive imports
+          IMPORT_X_("B")
+          IMPORT_X_("C")
+      BYTE "ld hl,bb+cc",0,0
+      BYTE "bb=&ba00",0,0
+      BYTE "cc=&be",0,0
+      BYTE 0,3:ld hl,&BABE
+      END
+
+      BYTE 0
+
+
+test_imports_err
+;---------------
+;Like test_imports, but for errors (in host or imported source)
+          call nrt_init
+          ld hl,nrtimportserr
+.lp
+          call set_imports
+          xor a:call nrt_select
+          call asserrtest_com
+          jr nz,.lp
+          ret
+
+nrtimportserr
+; Error in host before
+; To be replaced (already covered in asstest.o)
+      BYTE "!!",0
+          IMPORT_B()
+      BYTE "ei",0,0
+      BYTE 0,1,err_syntaxerror:WORD 1
+
+      BYTE 0
+
+set_imports
+; Set tabs named A, B, C, ... until BYTE 0 is met.
+          xor a
+.lp
+          call nrt_select
+          push af
+          add "A"
+          ld (.name),a
+          call nrtsetsource ; init source as well
+          push hl
+ ; must be set after nrtsetsource (which reset filename)
+          ld hl,.name
+          CALL_EXT(set_filename)
+          pop hl
+
+          inc hl
+          pop de:inc d  ;tab # (was A)
+          ld a,(hl):or a
+          ld a,d
+          jr nz,.lp
+          xor a
+          call nrt_select
+          ret
+
+.name BYTE 0,0
+
+test_dangling_if
+;---------------
+; bugs #19e: bk base not reconnected after unclosed if 0?
+     ; Hmmm, doesn't reproduce
+          ld hl,.src
+          call nrtsetsource
+          call nrt_init_phase1:call nc,fail
+          ld a,1
+          call ass_init_and_amorce
+          call check_bk_base
+          ret
+
+.src  BYTE "if 0",0,0
+
+test_ref_big
+;----------- 
+;Fill with 00 to check skip.
+;Need to clean anyway between tests.
+          ld bc,&7FC0:out (c),c
+          ld hl,nrtply
+          ld de,nrtply+1
+          ld bc,nrtply_-1
+          ld (hl),&00
+          ldir
+          ld hl,.dir
+          call change_dir
+          ld hl,.fileref
+          call nrt_load_bin
+
+          ld hl,.file
+          call nrt_load_needs_ram
+          call nrt_assemble_com
+
+          ld bc,&7FC0:out (c),c
+          ld hl,nrtply
+          ld bc,nrtply_
+          ld de,nrtplyref
+          call compare
+          call connect_bk_base
+          jr cd_root
+
+.dir  BYTE ":orgnrt/orgdata/ass-gl/",0
+.file BYTE "ass-gl.o",0
+.fileref BYTE "ass-gl.bin",0
+
+      IF do_test_timernrt
+test_timernrt
+;------------
+;just assemble for manual profiling
+          ld hl,.dir
+          call change_dir
+          ld hl,.file
+          call nrt_load_needs_ram
+          ld hl,any_ret:ld (hook_timernrt+1),hl
+          call _org_assemble_nrt_:call nc,nrtfail
+          call nrt_touch
+          ld hl,&BE00:ld (hook_timernrt+1),hl
+          call _org_assemble_nrt_
+          jr cd_root
+
+.dir  BYTE ":aya/old/v0ar/",0
+.file BYTE "timernrt.o",0
+      END
+
+cd_root
+          ld hl,root
+          jp change_dir
+
+
+test_#1ae
+;--------
+; No crash expected
+; Cannot use test_files as we expect disc_in_open to return carry
+; but unidos return NC for dir
+          ld a,bk_dev2
+          call nrt_init_custom
+          ld hl,.dir
+          call change_dir
+          ld hl,ply_file
+          call nrt_load
+          call org_assemble_nrt:call c,fail ; erroneous ass expected
+          ld hl,root
+          call change_dir
+          ret
+
+.dir  BYTE ":orgbug/#1ae",0
+
+test_#147
+;--------
+; No assert expected
+          ld a,bk_dev
+          call nrt_init_custom
+          ld hl,.dir
+          call change_dir
+          ld hl,.file
+          call nrt_load
+          ld bc,&9000
+          call nrt_assemble_custom
+          ld hl,root
+          call change_dir
+          ret
+
+.dir  BYTE ":orgnrt/",0
+.file BYTE "nrt147-c.o",0
+
+ply_file BYTE "ply.o",0
+root  BYTE ":org",0
+
+          ANCHOR(bug#1ba)
+test_#1ba
+;--------
+; No crash expected
+          ld a,bk_dev2
+          call nrt_init_custom
+          ld hl,.dir
+          call change_dir
+          ld hl,ply_file
+          call nrt_load
+; We expect errors, but no crash
+          call nrt_expect_err
+
+; Idem when ply imported from chung
+          ld hl,ply_file
+          call nrt_load
+          call nrt_expect_err
+
+          ld hl,root
+          call change_dir
+          ret
+
+.dir  BYTE ":orgbug/#1ba'",0
+
+test_#1dd
+;--------
+; Correct assembly expected
+          ld a,bk_dev2
+          call nrt_init_custom
+          ld hl,.dir
+          call change_dir
+          ld hl,.file
+          call nrt_load
+          ld bc,&9000
+          call nrt_assemble_custom
+          ld hl,root
+          call change_dir
+          ret
+
+.dir  BYTE "testdata/#1dd''",0
+.file BYTE "instruit.o",0
+
+test_#1e9_live_symbols
+          call nrt_init
+          ld hl,.src
+          call nrtsetsource
+          call org_assemble_nrt:call c,fail ; fail
+          CALL_EXT(org_get_current_selection)
+          or a:call nz,fail
+;check symbol in sync
+          ld hl,(symbol_index_live)
+          ld de,(symbol_index)
+          or a:sbc hl,de:add hl,de:call nz,fail
+;sanity check, t=77
+          ld hl,0:call sy_get:call nc,fail
+          ld a,c:or a:call nz,fail
+          ld a,d:or a:call nz,fail
+          ld a,e:cp 77:call nz,fail
+          ret
+
+.src  BYTE "t=77",0
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "m()",0,0    ; arg mismatch
+
+test_#1
+;------         
+; cache must be available even when host source fails
+; oh! was ok (expect if error in phase1)
+          call nrt_init
+          ld hl,.src
+          call nrtsetsource
+          call org_assemble_nrt
+          ld a,1:call nrt_select
+          call is_uptodate:call z,fail
+          ret
+
+.src  BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "ld a,unk",0,0
+
+test_orgset
+;----------
+;Reproduce org.test_orgset with assembling
+          call nrt_init
+          ld hl,.src
+          call nrtsetsource
+; Define 
+          ld hl,.x:ld bc,&CAFE:call nrt_orgset:call nc,nrtfail
+          ld hl,.x:ld de,&CAFE:call .check_orgget
+; Define other
+          ld hl,.y:ld bc,&BABE:call nrt_orgset:call nc,nrtfail
+          ld hl,.y:ld de,&BABE:call .check_orgget
+; x still ok
+          ld hl,.x:ld de,&CAFE:call .check_orgget
+; Redefine x
+          ld hl,.x:ld bc,&FACE:call nrt_orgset:call nc,nrtfail
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; y still ok
+          ld hl,.y:ld de,&BABE:call .check_orgget
+; Redefine y
+          ld hl,.y:ld bc,&4567:call nrt_orgset:call nc,nrtfail
+          ld hl,.y:ld de,&4567:call .check_orgget
+; x still ok
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; z still undef
+          ld hl,.z:call nrt_orgset:call c,nrtfail
+          cp err_undefined:call nz,nrtfail
+; Other tab: empty store
+          ld a,1:call nrt_select
+          ld hl,.x:call nrt_orgset:call c,nrtfail
+; back to tab0: ok
+          xor a:call nrt_select
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; Tests with assemble in ass.o
+          ret
+
+.src
+      BYTE "x=5",0
+      BYTE "y=6",0
+      BYTE 0
+.x    BYTE "x",0
+.y    BYTE "y",0
+.z    BYTE "z",0
+
+.check_orgget
+          push de
+          push hl
+          call nrt_assemble_com
+          pop hl:CALL_EXT(orgget):call nc,nrtfail
+          pop hl        ; was de=ref
+          call _check_hl_eq_de
+          ret
+
+nrt_orgset
+          CALL_EXT(orgset)
+any_ret   ret
+
+test_files
+;---------
+; Generic test engine, based on table:
+; "filename", test_to_run, [data]
+          ld hl,.tests
+.lp
+          push hl
+          ld a,bk_dev2:call nrt_init_custom ; need enough ram
+          pop hl
+          push hl:call nrt_load:pop hl
+          call skipnt
+          ld e,(hl):inc hl
+          ld d,(hl)
+;NB: no inc hl, done by called checks.
+;we can clean up that once imports are working.
+          call jp_de
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.tests
+      IF 1
+      IF do_profile
+profile01
+      BYTE ":orgnrt/plyref.o",0:WORD profile
+;0: before symb-t (remove dev_checks)
+;1: before ass-ev (remove dev_checks)
+;2: before ??? Regression!                               
+;3: before symb-v (table at 9dd0 -> no connect bk base needed) 
+;4: before asseva-o (don't call eval_in_deps if no deps!)
+;5: before symb-w (reverted symb-v)
+      WORD 0            ; uptodate
+      WORD 9+tm_newc    ; init1
+      IF tm_devc
+      WORD &0190        ; +17
+      WORD 0
+      WORD &0293        ; +24
+      WORD &76          ; + 5
+      ELSE
+      WORD 383          ; phase1. 0:436 1:412 2:408 3:414 4:399 5:372
+      WORD 0            ; init2
+      WORD 635          ; phase2. 0:678 1:645       3:638 5:608 
+      WORD 113          ; prof_eval_exp on all labels (+ghosts)
+      END
+
+profile02
+      BYTE ":orgnrt/orgdata/assew0.o",0:WORD profile
+      WORD 0            ; uptodate
+      WORD 11+tm_newc   ; init1
+      IF tm_devc
+      WORD &013B        ; +10
+      ELSE
+      WORD 305
+      END
+      WORD 0            ; init2
+      IF tm_devc
+      WORD &02F4        ; +22
+      ELSE
+      WORD 734
+      END
+      WORD 177          ; 799 labels (longer due to ghosts)
+;178 -> sometimes fail (-1)
+
+; Same source after export / import 
+      BYTE ":orgnrt/orgdata/assew1.o",0:WORD profile
+      WORD 0            ; uptodate
+      WORD 11+tm_newc   ; init1
+      WORD 305
+      WORD 0            ; init2
+      WORD 734
+      WORD 143          ; 665 labels  (8 ghosts)  
+;142 -> +0 assert
+      END
+
+      BYTE ":orgnrt/orgdata/trash.o",0:WORD test_no_trash
+
+; Sanity check: assemble in isolation the source
+              ; which is imported in next test
+      BYTE "testdata/nrtimp1.o",0:WORD asserrtest_com
+      BYTE 3
+      BYTE err_undefined:WORD 36
+      BYTE err_undefined:WORD 131
+      BYTE err_undefined:WORD 135
+
+          ANCHOR(bug#1ba)
+      BYTE ":orgnrt/testdata/#1ba.o",0:WORD asserrtest_com
+      BYTE 1
+      BYTE err_missingend:WORD 3
+;same when imported
+      BYTE ":orgnrt/testdata/#1bahost.o",0:WORD asserrtest_com
+      BYTE 1
+      BYTE err_missingend:WORD 3
+
+
+; Doesn't work witch check_incremental that set line 5 in tab 3 (empty)
+;      BYTE "testdata/useimpc.o",0:WORD check_incremental
+
+      BYTE "testdata/useimpa.o",0:WORD check_incremental
+
+;full path since imported by cycleb 
+      BYTE ":org/testdata/cyclea0.o",0:WORD check_ref
+      BYTE 9
+      BYTE &0B:WORD pcnrt+1
+      BYTE &0A:WORD pcnrt+4
+      BYTE &00:WORD pcnrt+7
+
+      BYTE ":org/testdata/cyclea.o",0:WORD check_ref
+      BYTE 6
+      BYTE &0B:WORD pcnrt+1
+      BYTE &0A:WORD pcnrt+4
+
+      BYTE ":orgnrt/#1cb/a.o",0:WORD check_ref
+      BYTE 2:WORD &40
+
+      BYTE "testdata/hostmac.o",0:WORD check_ref
+      BYTE 30
+      2 ** [BYTE #,42:WORD pcnrt+4 + #*4]
+      BYTE 12,42:WORD pcnrt+12
+      BYTE 13,42:WORD pcnrt+16
+      BYTE "axxxyy"
+      WORD &BABE,pcnrt+&16,&CAFE,&FADA
+
+
+bug#1dc
+      BYTE "testdata/#1dc.o",0:WORD check_touch
+
+;this one immune to #1dc due to cycle
+      BYTE "testdata/hostmac.o",0:WORD check_touch
+
+
+      BYTE "testdata/#1dd/instruit.o",0:WORD check_ref
+      BYTE 2
+      WORD &CAFE
+
+bug#1df
+      BYTE "testdata/#1df/imported.o",0:WORD check_emitted,pcnrt
+      BYTE "testdata/#1df/orgmac.o",0:WORD check_emitted,2
+      BYTE "testdata/#1df/host.o",0:WORD check_emitted,pcnrt
+      BYTE "testdata/#1df/trans.o",0:WORD check_emitted,pcnrt
+      BYTE "testdata/#1df/a.o",0:WORD check_emitted,pcnrt
+      BYTE "testdata/#1df/fluhost.o",0:WORD check_emitted,pcnrt
+      BYTE "testdata/#1de/main'.o",0:WORD check_emitted,&40
+      BYTE "testdata/#1df/ayahost.o",0:WORD check_ref
+      BYTE 3
+      WORD &4567:di
+
+      END
+bug#1ed
+      BYTE ":orgbug/#1ed/bug.o",0:WORD asserrtest_com
+      BYTE 2
+      BYTE err_overlap:WORD 2
+      BYTE err_overlap:WORD 4
+
+      BYTE 0
+
+
+test_1cb
+;-------
+;At some point old cached version of c.o (generated at &9000 from b.o)
+;was used instead of version instanciated at &40 from a.o
+
+          call nrt_init
+
+          ld hl,name#1cb
+          call nrt_load:call nc,fail
+
+;First assembly: ok
+          call check#1cb
+
+          ld a,2:call nrt_select ; "b.o"
+          call cache_set_modified
+
+;Assemble import: error (on purpose)
+          ld bc,destnrt:ld de,destnrt:call org_assemble_nrt
+          call c,fail
+
+;Reassemble from start
+          ld a,0:call nrt_select
+          call check#1cb
+          ret
+
+name#1cb BYTE ":orgnrt/#1cb/a.o",0
+
+check#1cb
+          call nrt_assemble_com
+      IF 0
+;not installed, just check assemble was ok 
+ref40 = &40
+          ld hl,(destnrt)
+          ld a,l:cp ref40 AND &FF:call nz,fail
+          ld a,h:cp ref40 / &0100:call nz,fail
+      END
+          ret
+
+jp_de
+          push de
+          ret
+
+test_emitted0
+;------------
+; Sanity check  
+          ANCHOR(bug#1df)
+          ld hl,.src:call nrtsetsource
+      ;    ld hl,root:call change_dir
+          call check_emitted
+          ret
+.src  BYTE "ei",0,0
+      WORD pcnrt
+
+test_emitted
+;-----------
+          ANCHOR(bug#1df)
+          ld hl,.file:call nrt_load_needs_ram
+          call _org_assemble_nrt:call nc,nrtfail
+          ld hl,&7300 + [bk_dev2 AND &FC] ; britle
+          call org_connect_source_chunk_from_id
+          ld l,chead_pc
+          ld a,(hl):cp &6F:call nz,fail
+          inc l
+          ld a,(hl):cp &20:call nz,fail
+          jp connect_bk_base
+
+.file BYTE ":orgbug/gpc2.o",0
+
+test_emitted_imported_in_macro
+;-----------------------------
+          ANCHOR(bug#1df)
+          ld hl,.file:call nrt_load
+          ld bc,&BABE
+          push bc
+          call _org_assemble_nrt:call nc,nrtfail
+          pop bc
+          call .check
+          ld a,1:call nrt_select
+          ld bc,&4567   ; forced in c.o
+          call .check
+          ret
+
+.check
+          push bc
+          CALL_ORG(org_connect_source_begin)
+          ld l,chead_flags
+          bit ch_flag_code_emitted,(hl):call z,fail
+          pop bc
+          ld l,chead_pc
+          ld a,(hl):cp c:call nz,fail
+          inc l
+          ld a,(hl):cp b:call nz,fail
+          jp connect_bk_base
+
+.file BYTE "testdata/#1df/macimp.o",0
+
+test_emitted_skip
+;----------------
+          ANCHOR(bug#1df)
+          ld hl,.file:call nrt_load
+          ld bc,&BABE
+          call _org_assemble_nrt:call nc,nrtfail
+          CALL_ORG(org_connect_source_begin)
+          call connect_next_chunk
+          ld l,chead_flags
+          bit ch_flag_code_emitted,(hl):call z,fail
+          ld bc,&BABE+1
+          ld l,chead_pc
+          ld a,(hl):cp c:call nz,fail
+          inc l
+          ld a,(hl):cp b:call nz,fail
+          jp connect_bk_base
+
+.file BYTE "testdata/#1df/crossch.o",0
+
+
+      IF 0
+;visu9015 lost!!
+;and now sk_prev_target defined in visu only.
+test_gflp_scan_crash
+;-------------------
+; d&9015 on testdata/visu9015.o could hang
+; Was initialy encountered on track-1.o 
+          call nrt_init
+          ld hl,.name
+          call nrt_load
+
+          ld bc,&9000
+          call nrt_assemble_custom
+
+; brittle!!
+; TODO: connect first chunk and interate
+          CALL_EXT(org_connect_source_begin)
+          ld hl,&4C00+[bk_dev AND &C4]
+          call org_connect_from_id
+; Check we are in the right chunk
+; chead_pc set at assembly time.
+          ld d,h:ld e,chead_pc
+          ld a,(de)
+          cp &0C:call nz,nrtfail ; if fails see todo above
+          ld de,&900C
+          ld bc,&9015
+
+          call nrt_glfp_scan
+
+          ex de,hl
+          CHECK_HL_EQ(1+4) ; nrt_glfp_scan pretends start from line 1
+          ld hl,(sk_prev_target)
+          CHECK_HL_EQ(&9015)
+          ret
+.name BYTE "testdata/visu9015.o",0
+      END
+
+nrt_glfp_scan
+;------------
+;In; DE: cur $ 
+   ; BC: target $
+          ld ix,glfp_scan_
+          call nrt_scan_com
+;api: must return va_if (well, only needed for glfp_scan_)
+          push hl
+          ld hl,va_if
+          cp (hl):call nz,&BE00
+          pop hl
+          ret
+
+nrt_gpc_scan
+;-----------
+;In; BC: target line
+          ld ix,get_pc_from_line
+          jp nrt_scan_com
+
+nrt_scan_com
+          push hl
+          ld (nrt_target+1),bc
+
+          CALL_EXT(org_connect_source_begin)
+          di
+; Since exx used, cannot use firmware anymore.
+; (note: actually could by restoring BC' as it is done in screen.o)
+; Checked in e.g. asseto for LOAD directive: already loaded, or cancel.
+; If not (LOAD added after assembling), asseto.load_if_absent returns NC
+          ld a,vt_rom_firmforbid
+          ld (vt_rom_firmflag),a
+;Sanity: EI shouldn't be reactivated.
+          ld a,(&B941)
+          push af
+          ld a,&F7:ld (&B941),a
+          exx
+          push bc
+nrt_target ld bc,0      ; target $ or line
+          ld de,1       ; cur line
+          exx
+          ld a,&FF      ; IF 1 
+
+          ld bc,0       ; for count tm
+          call jp_ix    ; /glfp_scan_/ or /get_pc_from_line/
+
+          call nc,&BE00
+          ld (.savea+1),a ; for check
+
+;Restore firmware for subsequent tests
+          exx
+          pop bc
+          push de       ; line for check
+          exx
+          pop de
+          pop af
+          ld (&B941),a
+          pop hl
+          ld a,vt_rom_firmenable
+          ld (vt_rom_firmflag),a
+.savea    ld a,0
+          ret
+
+jp_ix     jp ix
+
+asserrtest
+;--------- 
+          call nrt_init
+          ld hl,nrtbadass
+aertsrclp
+          call nrtsetsource
+aert_
+          call asserrtest_com
+          jr nz,aertsrclp
+          ret
+
+
+test_no_trash
+;------------
+; bug: was writting to $$ despite assembly error
+          inc hl
+          push ix
+          push hl
+          ld hl,&BAB1:ld (destnrt),hl ; marker
+          ld bc,destnrt:ld de,destnrt:call org_assemble_nrt
+          call c,fail
+          ld hl,(destnrt):CHECK_HL_EQ(&BAB1)
+          pop hl
+          pop ix
+          ret
+
+asserrtest_com
+;-------------              
+; !!! Differ from assnrt:
+;  * no support from interjected lines
+;  * line# on 16 bits
+
+          push ix
+          push hl
+          call nrt_expect_err
+
+          call get_nb_errors
+          pop hl:inc hl:cp (hl):call nz,&BE00
+          inc hl
+          pop ix
+          ld c,a
+          xor a
+checkerr
+          push af
+          push bc
+          push hl
+          call get_error
+          call nc,&BE00
+          pop hl
+          cp (hl)
+          call nz,&BE00
+          inc hl
+; (HL)= expected line  DE= returned line
+          ld a,(hl):cp e:call nz,&BE00
+          inc hl
+          ld a,(hl):cp d:call nz,&BE00
+          inc hl
+          pop bc
+          pop af
+          inc a
+          cp c
+          jr c,checkerr
+          ld a,(hl):or a
+          ret
+
+check_ref
+;--------       
+          call nrt_assemble_com
+          ld c,(hl):inc hl
+          ld b,0
+          ld de,destnrt
+          call compare
+          ret
+
+
+check_emitted
+;------------
+          push hl
+          call .ce
+          call nrt_touch
+          pop hl
+          call .ce
+          ret
+.ce
+          push hl
+          call nrt_assemble_com
+          CALL_EXT(org_connect_source_begin)
+          ld l,chead_flags
+          bit ch_flag_visited,(hl):call z,nrtfail
+          bit ch_flag_code_emitted,(hl):call z,nrtfail
+          pop de
+          inc de
+          ld l,chead_pc
+          ld a,(de):cp (hl):call nz,nrtfail
+          inc de
+          inc l
+          ld a,(de):cp (hl):call nz,nrtfail
+          inc de
+          ex de,hl
+          jp connect_bk_base
+
+
+check_incremental
+;----------------
+; Check CTRL-1 vs CTRL-5 after adding one line on tab1..4, line 5
+; Designed to detect potential error after reuse of import labels.
+; Note: independent from "cache ass". We want import labels to be
+      ; persistent even when *not* using cache for host.
+
+          push ix
+          push hl
+
+;Base assembly to exercice "reuse of import labels"
+          call nrt_assemble_com
+
+          xor a         ; tab id
+.tablp
+          push af
+; -- add "word $" in line 5 of tab 0..3
+          call nrt_select
+          ld de,5
+          ld hl,.code
+          CALL_EXT(org_insert_line):call nc,fail
+          xor a
+          call nrt_select
+
+          call nrt_assemble_com
+; -- store 
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&20     ; max size
+          ldir
+
+; -- reassemble after explicitly clearing import labels
+; (to simulate CTRL-5)
+          call sy_reset_imported
+          call nrt_assemble_com
+
+; -- must be same
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&20
+          call compare
+
+          pop af
+          inc a
+          cp 4
+          jr c,.tablp
+
+          pop hl
+          pop ix
+          inc hl
+          ret
+
+.code BYTE "w $",0
+
+check_touch
+;----------
+; Check reassemble after touching host
+
+          push ix
+          push hl
+
+          call nrt_assemble_com
+; -- store 
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&0100   ; max size
+          ldir
+          call nrt_touch
+
+          call nrt_assemble_com
+
+; -- must be same
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&0100
+          call compare
+
+          pop hl
+          pop ix
+          inc hl
+          ret
+
+nrt_touch
+          ld de,1
+          ld hl,empty
+          CALL_EXT(org_insert_line):call nc,fail
+          ret
+empty BYTE 0
+
+profile
+;------
+; Check time taken by each phase              
+          inc hl
+
+; copy hl to iy, since HL used to pass parameters
+; (e.g. init_phase1 returns hl= source begin) 
+          push hl:pop iy
+
+          push ix
+          ld ix,is_uptodate:call nrt_check_time
+          ld ix,nrt_init_phase1:call nrt_check_time
+          ld ix,nrt_init_and_amorce1:call nrt_check_time
+          ld ix,nrt_init_phase2:call nrt_check_time
+          ld ix,nrt_init_and_amorce2:call nrt_check_time
+          ld ix,prof_eval_exp:call nrt_check_time
+          pop ix
+
+          push iy:pop hl
+          ld a,(hl):or a
+          ret
+      END
+
+nrt_src_pnt SKIP 3
+
+skipnt    ld a,(hl):inc hl
+          or a
+          jr nz,skipnt
+          ret
+
+      IF do_profile_line
+profile_by_line
+; Assemble "aapao.o". At each source line we jump to profile_line
+
+          ld a,bk_dev2:call nrt_init_custom ; need enough ram
+          ld hl,profsrc
+          call nrt_load
+          xor a:ld (is_profiling),a
+          ld hl,1:ld (profline#),hl
+          call nrt_init_phase1:call nc,fail
+          call nrt_init_and_amorce1:call nc,fail
+          ret
+
+is_profiling BYTE 0
+profile_line_reached BYTE 0
+profline# WORD 
+
+profile_line
+          ld a,1:ld (profile_line_reached),a
+          ld (.sbc+1),bc
+          ld (.sde+1),de
+          ld (.shl+1),hl
+          ld a,(is_profiling)
+          or a
+          ret nz        ; Ret: return from "call profile" below.
+;First time reached: no ret
+.lp
+          xor a:ld (profile_line_reached),a
+          ld a,1:ld (is_profiling),a
+          ld hl,(profline#):inc hl:ld (profline#),hl
+
+          ld bc,143
+          or a:sbc hl,bc:jr nz,.nobreak
+;give me a break
+   ;   BRK
+   ;       jr .go
+.nobreak
+;poor man's progress bar
+          ld hl,(profline#):ld bc,&C000:add hl,bc:set 7,h:set 6,h
+          ld (hl),&AA
+
+          ld hl,.go
+          call profile
+;profline# 6: 576 
+;profline# 10: 1426
+;profline# 143: 2012  (actually line 86: if inRom AND 1-...)
+ ; how line# < profline# possible, as no multiple-opcodes lines before?
+          ld de,4000:or a:sbc hl,de:add hl,de:call nc,fail
+          ld a,(profile_line_reached)
+          or a
+          jr nz,.lp
+;end of source
+          ret
+
+.go
+.sbc      ld bc,0
+.sde      ld de,0
+.shl      ld hl,0
+          jp profile_loop
+      END
+
+      IF prof_sample
+sample_profile
+;-------------
+;Put src and/or dest at destnrt, each int
+do_sample_src = 0
+do_sample_dest = 1
+
+          ld a,bk_dev2:call nrt_init_custom
+          ld hl,profsrc
+          call nrt_load
+          di
+          ld hl,&B941
+          ld de,.saveint
+          ld bc,3
+          ldir
+;Init sample collector
+          ld hl,0:ld (sample#),hl
+          ld hl,destnrt:ld (sample_pnt),hl
+          di
+          ld a,&C3:ld (&B941),a
+          ld hl,.inthook:ld (&B942),hl
+          ei
+          call nrt_init_phase1:call nc,fail
+          call nrt_init_and_amorce1:call nc,fail
+
+          di
+          ld hl,.saveint
+          ld de,&B941
+          ld bc,3
+          ldir
+
+      IF do_sample_src
+;Convert pnts to lines#
+      BRK
+ ; fix me: source2line gives first line, and then only 0
+ ; Anyway, not a really good measure?
+          ld hl,destnrt
+          ld de,destnrt
+          ld bc,(sample#)
+          ld a,c:or b:call z,fail
+.convlp
+          push bc
+          push de
+          call source2line
+          ex de,hl
+          pop hl
+          ld (hl),c:inc hl
+          ld (hl),b:inc hl
+          ex de,hl
+          3 ** inc hl
+      IF do_sample_dest
+          2 ** ldi
+      END
+          pop bc
+          dec bc
+          ld a,c:or b
+          jr nz,.convlp
+      END
+          ret
+
+.inthook
+          push af:push bc:push de:push hl
+          ld bc,&7F10:out (c),c
+          ld a,r:and &15:or &40:out (c),a
+          ld hl,(sample#):inc hl:ld (sample#),hl
+      IF do_sample_src
+          ld hl,sample_bk
+          ld de,(sample_pnt)
+          3 ** ldi
+          ld (sample_pnt),de
+      END
+      IF do_sample_dest
+          ld hl,sample_dest
+          ld de,(sample_pnt)
+          2 ** ldi
+          ld (sample_pnt),de
+      END
+          pop hl:pop de:pop bc:pop af
+          ex af,af
+          jp &B945
+
+.saveint SKIP 3
+
+
+sample_bk BYTE 
+sample_src WORD         ; BIG Endian
+sample_dest WORD 
+sample# WORD 
+sample_pnt WORD 
+
+prof_tag
+      IF do_sample_src
+          ld a,l:ld (sample_src+1),a
+;          cp &A5:call z,&BE00
+      END
+      IF do_sample_dest
+          ld a,(va_objc0):add e:ld (sample_dest),a
+          ld a,(va_objc0+1):adc 0:ld (sample_dest+1),a
+      END
+          ret
+
+prof_tag_
+          push af
+      IF do_sample_src
+          GET_CURBK():ld (sample_bk),a
+          ld a,h:ld (sample_src),a
+          ld a,l:ld (sample_src+1),a
+      END
+          pop af
+          ret
+
+
+      ELSE
+
+prof_eval_exp
+;------------
+; Call eval_exp on all labels 
+; Note: including ghost ones. 
+      ; Nevermind: we use assew2 for more accurate profiling.
+          CALL_BRIC(aap_get#)
+.lp
+          ld a,l:or h:ret z
+          dec hl
+          push hl
+          ex de,hl
+          ld hl,.lab
+          call nrt_set_label
+          dec l         ; compensate inc l done to skip size
+          ld bc,&7F10:out (c),c:ld c,&45:out (c),c
+          call eval_exp
+          ld bc,&7F54:out (c),c
+          pop hl
+          jr .lp
+
+.lab  WORD 
+
+nrt_set_label
+;------------
+; Encode label DE to (HL)
+
+
+          ld a,d:or a:jr nz,.long
+          ld a,e:cp short#:jr nc,.long
+          add short_label
+          ld (hl),a
+          ret
+.long
+          ex de,hl
+          ld bc,long_label*&0100 - short#
+          add hl,bc
+          ex de,hl
+          ld (hl),d:inc hl
+          ld (hl),e:dec hl
+          ret
+
+nrt_check_time
+;-------------
+;In:  ix: routine to call
+   ;  iy: points to ref time
+   ;  bc, de, hl: params to pass to ix 
+;Out: hl+= 2
+
+          push iy
+
+          push bc:push de:push hl
+          ld de,0
+          ld hl,0
+          call kl_time_set
+          pop hl:pop de:pop bc
+
+          call nrt_jp_ix
+
+          pop iy
+          push bc:push de:push hl
+          ld e,(iy):inc iy
+          ld d,(iy):inc iy
+          push iy
+          push de
+          call kl_time_please
+;Musn't be > 65536/300 seconds
+          ld a,d:or e:call nz,fail
+          pop de
+          ld (.exp),de
+          ld (.got),hl
+          or a:sbc hl,de:jr z,.ok
+          call c,fail   ; Better than expected!
+          jr c,.ok      ; skip diff check when better
+;Difference shouldn't be more than 4
+      IF tm_devc
+;Well for now, allow big tolerance
+          ld bc,30
+      ELSE
+          ld bc,5
+      END
+          or a:sbc hl,bc:call nc,fail ; set /got/exp
+.ok
+          pop iy
+          pop hl:pop de:pop bc
+          ret
+
+.exp  WORD 
+.got  WORD 
+
+nrt_jp_ix jp ix
+
+      END
+
+
+nrt_init_phase1
+;--------------
+          push bc:push de
+          call init_var_once
+          CALL_EXT(init_phase1)
+          pop de:pop bc
+          ret
+
+nrt_init_phase2
+;--------------
+          CALL_EXT(init_phase2)
+          ret
+
+nrt_init_and_amorce2
+;-------------------
+          ld a,2
+          jr _nrt_init_and_amorce
+nrt_init_and_amorce1
+;-------------------
+          ld a,1
+_nrt_init_and_amorce
+          ld bc,destnrt:ld de,destnrt
+          call ass_init_and_amorce
+          ret c
+;enchaine
+unexpected_error
+          call nrtfail
+          ld bc,&DEAD
+          xor a:call get_error
+; !!! here de=line and a=error code
+; ; TODO: save hl before get_error?
+      BRK
+          ret
+
+nrt_init
+;-------
+bk_dev = &C7
+bk_dev1 = &CF
+bk_dev2 = &DF           ; when more ram is needed.
+          ld a,bk_dev
+nrt_init_custom
+;In: a=bk          
+
+; Clean-up:
+; - for reproductability
+; - to double check init is properly done
+          ld b,&7F:out (c),a
+          ld hl,&4000:ld de,&4001:ld bc,&3FFF:ld (hl),a:ldir
+
+; -- Cold start --------------------------- 
+          call nrt_setup_custom
+          ret
+
+nrt_setup_custom
+; HOT start for test_manual
+
+          push af
+          ld c,romedNrt:call &B90F
+
+; -- Check this is Orgams ROM. If fail: correct rom
+          ld hl,(&C004)
+          ld de,signatureed
+          ld bc,signatureed_
+          call compare
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af
+          call setup_custom
+
+          ld c,rom:call &B90F
+vt_edrom = &9D00
+vt_extrom = &9D02
+vt_assrom = &9D08
+vt_currom = &9D0A
+vo    = &7CE8
+vo_romEd = vo+17
+vo_romExt = vo+18
+          ld a,rom
+          ld (vt_assrom),a
+          ld (vt_currom),a
+;No need to change vo_romAss : no far_call uses it
+
+          ld a,romextNrt
+          ld (vt_extrom),a
+          ld (vo_romExt),a
+
+          ld a,romedNrt
+          ld (vt_edrom),a
+          ld (vo_romEd),a
+          ret
+
+signatureed BYTE "Orgams"
+signatureed_ = $-signatureed
+
+disc_buffer = &8000
+disc_in_open = &BC77
+disc_in_direct = &BC83  ; nrt
+disc_in_close = &BC7A   ; nrt
+
+nrt_load_bin
+; Load binary @ C0:nrtplyref
+; !!! BANK C0 connected
+; In: HL: nt string
+; Out: BC: filesize
+
+          ld bc,&7FC0:out (c),c
+          call get_len
+          ld de,disc_buffer
+          call disc_in_open:call nc,nrtfail
+          push bc
+          ld hl,nrtplyref
+          call disc_in_direct:call nc,nrtfail
+          call disc_in_close
+          pop bc
+          ret
+
+nrt_select
+; Like org_select + save register and additional checks
+          push bc:push de:push hl:push iy
+          push af
+          CALL_EXT(org_select):call nc,fail
+          CALL_EXT(org_get_current_selection)
+          ld c,a
+          pop af
+          cp c:call nz,fail
+          pop iy:pop hl:pop de:pop bc
+          ret
+
+nrt_load_needs_ram
+          push hl
+          ld a,bk_dev2
+          call nrt_init_custom
+          pop hl
+;enchaine
+nrt_load
+          ld bc,0
+          CALL_EXT(org_load)
+          call nc,nrtfail
+          ret
+
+nrtfail
+          push af:push bc:push de:push hl
+          ld bc,&060D:call &BC38
+          call &BB06
+          pop hl:pop de:pop bc:pop af
+      BRK
+          ret
+
+nrtbadass
+      IF 1
+      BYTE "macro m n:word n:endm",0
+      BYTE "m(1)",0     ; sanity check
+      BYTE "m(unk)",0,0
+;
+      BYTE 2
+      BYTE err_undefined:WORD 1
+      BYTE err_from:WORD 3
+
+; Bug #162 unexpected end not detected
+      BYTE "end",0,0
+      BYTE 1,err_unexpectedend:WORD 1
+
+; Mem full in phase 1
+; to be replaced (already covered in asstest.o)
+      BYTE "fill &4000,&f7",0,0
+      BYTE 1,fail_memoryfull:WORD 1
+
+;Forbid double ent, as it is error-prone, especially with imports
+      BYTE "ent 12",0
+      BYTE "ent 13",0,0
+      BYTE 1,err_doubleent:WORD 2
+
+; --- local labels ---
+; Clash local / param     
+      IF 0
+; todo #df. For now assemblage is successful.
+      BYTE "macro MM n:byte n",0
+      BYTE ".n endm",0
+      BYTE "MM(42)",0,0
+      BYTE 1,err_ambiguouslabel:WORD 2
+      END
+
+bug#179
+; Dangling else raises "label inconsistency",
+      BYTE "else",0
+      BYTE "dy",0
+      BYTE "end",0
+      BYTE "lab",0,0
+      BYTE 2
+      BYTE err_unexpectedelse:WORD 1
+      BYTE err_unexpectedend:WORD 3
+
+      BYTE "]",0,0
+      BYTE 1
+      BYTE err_unexpectedendofbloc:WORD 1
+
+bug#160
+      BYTE "if 0",0
+      BYTE "end",0
+      BYTE "if 0",0
+      BYTE "!",0,0
+      BYTE 1
+      BYTE err_missingend:WORD 3
+
+bug#19e
+; Same via transitive imports
+      BYTE "import",34,":orgnrt/bug#19e/a.o",34,0,0
+      BYTE 1
+      BYTE err_missingend:WORD 1
+
+bug#1a3
+; Random errors because eval_exp return in middle of exp.
+      BYTE "cp ",34,"a-1",34,0,0
+      BYTE 1
+      BYTE err_unexpectedstring:WORD 1
+
+      BYTE "ld hl,",34,"a-1",34,0,0
+      BYTE 1
+      BYTE err_unexpectedstring:WORD 1
+
+      BYTE "b 1+",34,"boob",34,0,0
+      BYTE 1
+      BYTE err_undefinedop:WORD 1
+
+todo#11e
+; Show line of invocation
+      BYTE "macro n x",0
+      BYTE "!",0
+      BYTE "endm",0
+      BYTE "n(2)",0,0
+      BYTE 2
+      BYTE err_syntaxerror:WORD 2
+      BYTE err_from:WORD 4
+
+; Show full stack
+      BYTE "macro n:unk():endm",0
+      BYTE "macro o:n():endm",0
+      BYTE "o()",0,0
+      BYTE 3
+      BYTE err_undefined:WORD 1
+      BYTE err_from:WORD 2
+      BYTE err_from:WORD 3
+
+; Empty binary file
+bug#1b2
+      BYTE "load",34,":org/testdata/size0",34,0,0
+      BYTE 1,err_emptyfile:WORD 1
+
+; Missing if 
+      BYTE "if 1",0
+      BYTE "if 0",0
+      BYTE "end",0,0
+      BYTE 1,err_missingend:WORD 1
+
+; Same 
+      BYTE "if 0",0
+      BYTE "if 0",0
+      BYTE "end",0,0
+      BYTE 1,err_missingend:WORD 1
+
+; Dangling IF inside of macro
+      BYTE "macro m",0
+      BYTE "if 0",0
+      BYTE "endm",0,0
+      BYTE 1,err_missingend:WORD 2
+
+; Unknown label in macro
+      BYTE "macro m",0
+      BYTE "b u/&100",0
+      BYTE "endm",0
+      BYTE "m(",0,0
+      BYTE 2
+      BYTE err_undefined:WORD 2
+      BYTE err_from:WORD 4
+
+; Missing endm + new macro
+          ANCHOR(bug#1bf)
+      BYTE "macro m",0
+      BYTE "macro n",0
+      BYTE "endm",0,0
+      BYTE 1,err_missingend:WORD 1
+
+;bug#1c2
+      BYTE "macro e",0
+      BYTE "!!",0
+      BYTE "endm",0
+      BYTE "e(",0,0
+      BYTE 2
+      BYTE err_syntaxerror:WORD 2
+      BYTE err_from:WORD 4
+
+      BYTE "macro f x",0
+      BYTE " ld a,x",0
+      BYTE "endm",0
+      BYTE "f(256",0,0
+      BYTE 2
+      BYTE err_overflow8:WORD 2
+      BYTE err_from:WORD 4
+
+;error not stored: musn't step into IMPORT
+      BYTE "!!",0
+      BYTE "import",34,"__nope",0,0
+      BYTE 1
+      BYTE err_syntaxerror:WORD 1
+
+;Since not stepping into import, musn't report "missing end" 
+      BYTE "!!",0
+      BYTE "if 1",0
+      BYTE "import",34,"__nope",0
+      BYTE "end",0,0
+      BYTE 1
+      BYTE err_syntaxerror:WORD 1
+
+      BYTE "save lab,1,2",0,0 ; Must be str
+      BYTE 1
+      BYTE err_saveusage:WORD 1
+
+      BYTE "save",34,"x",0,0 ; Must have at least 2 params
+      BYTE 1
+      BYTE err_saveusage:WORD 1
+
+      BYTE "save",34,"x",34,",1",0,0 ; Must have at least 2 params
+      BYTE 1
+      BYTE err_saveusage:WORD 1
+
+      BYTE "save",34,"x",34,",0,-1",0,0 ; params must be >= 0
+      BYTE 1
+      BYTE err_overflow16:WORD 1
+
+
+      BYTE "save",34,"x",34,",0,unk",0,0 ; params must exist
+      BYTE 1
+      BYTE err_undefined:WORD 1
+
+      IF nrt_is_plus:ELSE ; no error on plus
+      BYTE "bank &b8",0
+      BYTE "bank &a0",0,0
+      BYTE 2
+      BYTE err_asic_not_detect:WORD 1
+      BYTE err_asic_not_detect:WORD 2
+      END
+
+      BYTE "macro n:endm",0
+      BYTE "jp n",0,0
+      BYTE 1
+      BYTE err_unexpectedmacro:WORD 2
+
+      BYTE "n",0
+      BYTE "n()",0,0
+      BYTE 1
+      BYTE err_notamacro:WORD 2
+
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "macro x:error():endm",0
+      BYTE "error()",0
+      BYTE "x()",0
+      BYTE "error_trans()",0,0
+      BYTE 8
+      BYTE err_syntaxerror:WORD 16
+      BYTE err_from:WORD 3
+      BYTE err_syntaxerror:WORD 16
+      BYTE err_from:WORD 2
+      BYTE err_from:WORD 4
+      BYTE err_syntaxerror:WORD 16
+      BYTE err_from:WORD 20
+      BYTE err_toomucherrors:WORD 5
+
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "import",34,"testdata/impmac1.o",0
+      BYTE "m(0)",0,0
+      BYTE 1
+      BYTE err_ambiguouslabelfromimport:WORD 3
+
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "m()",0
+      BYTE "m(1,2)",0,0
+      BYTE 2
+      BYTE err_argmismatch:WORD 2
+      BYTE err_argmismatch:WORD 3
+
+      BYTE "org &3f00:di",0
+      BYTE "org &3f00:ei",0
+      BYTE "org 42",0,0 ; force flush
+      BYTE 2
+      BYTE err_overlap:WORD 1
+      BYTE err_overlap:WORD 3 ; wrong 
+
+      BYTE "org &4000:di",0
+      BYTE "org &4000:ei",0,0
+      BYTE 2
+      BYTE err_overlap:WORD 1
+      BYTE err_overlap:WORD 2
+
+      BYTE "x-y**ei",0,0
+      BYTE 1
+      BYTE err_undefined:WORD 1
+
+      END
+
+      BYTE ".t=1",0
+      BYTE ".t=2",0,0
+      BYTE 1
+      BYTE err_doubledefined:WORD 2
+
+      BYTE 0
+
+; -----------------------
+nrtsources
+      IF 1
+      BYTE "macro m",0
+      BYTE "if 0:else:daa:end",0
+      BYTE "endm",0
+      BYTE "m()",0,0
+      BYTE 1:daa
+
+
+      BYTE "32**[if 0:end]:ei",0,0
+      BYTE 1:ei
+
+      BYTE "32**[if 1:end]:di",0,0
+      BYTE 1:di
+
+      BYTE "10**[if #:byte #:end]",0,0
+      BYTE 9,1,2,3,4,5,6,7,8,9
+
+      BYTE "str",34,"oi",34,0
+      BYTE "lab",0,0    ; to trigger $ check 
+      BYTE 2:BYTE "oi"+&80
+
+; to be replaced (already covered in asstest.o)
+      BYTE "2 ** [",0
+      BYTE ".hu word hu",0
+      BYTE "]",0,0
+      BYTE 4:WORD pcnrt,pcnrt+2
+
+bug#185
+; scope lost after empty repetition
+      BYTE "jr .p",0
+      BYTE "0**ei",0
+      BYTE ".p",0,0
+      BYTE 2:jr $+2
+
+      BYTE "macro b",0
+      BYTE "endm",0
+      BYTE "daa",0,0
+      BYTE 1:daa
+
+      BYTE "if 0",0
+      BYTE "if 0",0
+      BYTE "end",0
+      BYTE "else",0
+      BYTE "ei",0
+      BYTE "end",0,0
+      BYTE 1:ei
+
+      BYTE "if 0",0
+      BYTE "if 1",0
+      BYTE "end",0
+      BYTE "else",0
+      BYTE "di",0
+      BYTE "end",0,0
+      BYTE 1:di
+
+
+;Forward is ok
+      BYTE "org &1234,$$",0
+      BYTE "ent fw",0
+      BYTE " fill &ff,&aa",0
+      BYTE "fw",0,0
+      BYTE 2:FILL 2,&AA ; just check first bytes
+
+      BYTE "di",0
+      BYTE "if 1",0
+      BYTE "fill 2,2",0
+      BYTE "else",0
+      BYTE "fill 3,3",0
+      BYTE "end",0
+      BYTE "x",0,0
+      BYTE 3,&F3,2,2
+
+      BYTE "ei",0
+      BYTE "inRom=1",0
+      BYTE "pad",0
+      BYTE "if inRom",0
+      BYTE "fill &14,4",0
+      BYTE "else",0
+      BYTE ";gloup",0
+      BYTE "fill &14,5",0
+      BYTE "end",0
+      BYTE ";",0
+      BYTE "x",0,0
+      BYTE 3,&FB,4,4
+;     BYTE "nop:macro b",0
+;      BYTE "endm",0
+;      BYTE "b()",0,0
+
+;Imported macro
+      BYTE "g=4",0
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "2**m(#)"
+      BYTE "b g",0,0
+      BYTE 9
+      2 ** [BYTE #,42:WORD pcnrt+4 + #*4]
+      BYTE 4
+
+;host macro defines global label
+      BYTE "macro x",0
+      BYTE "y",0
+      BYTE "endm",0
+      BYTE "w y",0
+      BYTE "x()",0,0
+      BYTE 2
+      WORD pcnrt+2
+
+;Imported macro defines global label
+      BYTE "import",34,"testdata/impmaclb.o",0
+      BYTE "g()",0,0
+      BYTE 2
+      WORD pcnrt+2
+
+
+bug#1dd'
+      BYTE ".x",0
+      BYTE "import",34,"testdata/#1dd/globo.i",0 ; any src with global
+      BYTE "w .x",0,0
+      BYTE 2
+      WORD pcnrt
+
+bug#1ce
+      BYTE "restore",0,0
+      BYTE restore_
+          RESTORE_ROUT(restore_and_goto_ed)
+
+      BYTE "org &e004-22,$$:restore",0,0
+      BYTE restore_
+          RESTORE_ROUT(restore_and_goto_ed')
+      END
+
+;local equ 
+      BYTE "t = 42",0
+      BYTE "3 ** [",0
+      BYTE ".t = #*2",0
+      BYTE "b .t+1 ]",0
+      BYTE "b t",0,0
+      BYTE 4
+      BYTE 1,3,5,42
+
+newtestcase
+      BYTE 0
+
+
+compare = compare_sized16
+
+display_text_hl
+          push af
+dt_lp
+          ld a,(hl)
+          inc hl
+          call &BB5A
+          or a
+          jr nz,dt_lp
+          pop af
+          ret
+
+nrt_expect_err
+          ld bc,destnrt:ld de,destnrt:call _org_assemble_nrt
+          ld bc,&CAFE:call c,&BE00
+          call z,&BE00  ; expect 'error' but not failure
+          ret
+
+org_assemble_nrt
+
+;COPY PASTE from org_assemble (without firmware restore)
+;!!! Needed to call ass_init_and_amorce in ram.
+;!!! org_assemble would call ROM version.
+
+;in : de = org (obj), ie dest
+;     bc = org (pc)
+;out : HL=first objc, DE = last objc, BC = exec, Z if fail (A = code)
+
+; NO!! 
+; To test cache reuse: org or assnrt
+;          call is_uptodate:jr nz,.use_cache
+;          call init_var_once
+;          jr nc,.nrt_ass_failure
+
+          call _org_assemble_nrt
+          ret nc
+
+;!! Copy paste of org_assemble, without put_firmware
+
+;TODO? .usecache?
+;-> No. If we want to test cache reuse,
+      ; we'd better test from org or assnrt
+;          call set_uptodate
+
+;TODO: expose that in org?
+          push af
+          push bc
+          push de
+          push hl
+          call install_code
+          call connect_bk_base
+          pop hl
+          pop de
+          pop bc
+          pop af
+          ret
+
+
+_org_assemble_nrt_
+          ld de,destnrt:ld bc,pcnrt
+_org_assemble_nrt
+;!! Copy paste of org_assemble, without install
+;-> So we can jump in dev version of ass_init_and_amorce
+          push de:push bc
+
+          call nrt_init_phase1
+          jr nc,.nrt_ass_err_phase1
+          ld a,1
+
+          call ass_init_and_amorce
+          jr nc,.nrt_ass_err_phase1
+
+          call nrt_init_phase2
+          pop bc:pop de
+          jr nc,.nrt_ass_failure
+
+          ld a,2
+          call ass_init_and_amorce
+          ret
+
+.nrt_ass_err_phase1
+          pop ix        ;discard
+          pop ix
+          ret
+
+.nrt_ass_failure        ; like org.ass_failure
+          cp a          ; NC, Z 
+          ret
+
+
+profsrc
+      BYTE ":orgnrt/orgdata/aapao.o",0
+;      BYTE ":orgnrt/plyref.o",0
+;assew2 BYTE ":orgnrt/orgdata/assew2.o",0
+      END
+;--------------------------------------------------
+;Les opcodes s'enchainent.
+;Pour le retour a la ligne, on encode ec_nl.
+; + Cela evite un lookahead pour detection fin ligne.
+; + Dans mes sources, les 'nl' ne sont pas predominants (vs ":" et ";")
+
+;ec_label_adr = &40
+;ec_comment = &43
+;ec_tab    = $49
+;ec_nl     = $4A
+;ec_comma  = 0
+;ec_factor = &5B         ;5** inc c  ("[")
+;ec_label_equ = &64
+;ec_space = &6D          ;suivi de nb space
+;tab_instr = 10          ;pos tab pour mnemoniques
+;tab_command = 6
+;tab_comment = 24
+;
+;ec_byte = &CF           ;"O"+$80
+;ec_word = &D7           ;"W"+$80
+;ec_&skip   = 0             ;sentinelle
+;ec_ix_ind = &DF
+;ec_iy_ind = &FF
+;ec_esc = &7F
+
+;ec2_eoc = 0             ;end of chunk
+;ec2_asis = 1
+;ec2_store_pc_line = 2   ;trigger $ and $$ saving for "<<" rewind
+;ec2_store_pc_instr = 3  ;idem for use in subsequent instr
+;ec2_org = 4             ;ORG x
+;ec2_org2 = 5            ;ORG x,y
+;ec2_ent = 6
+;ec2_fill = 7
+;ec2_skip  = 8
+;ec2_if = 9
+;ec2_else = 10
+;ec2_elif  = 11
+;ec2_end = 12
+;ec2_factor_bloc = 13    ; 4 * [
+;ec2_factor_bloc_end = 14
+;ec2_factor_end = 15
+
+;From $40 to $7f : themself
+
+
+;---------------------------------
+      SKIP -$ AND &FF   ; Same alignement rom / ram
+      SKIP codedest AND &FF
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+dispasst
+;a0 = single byte opcode (0 arg)
+;a8 = arg reg8
+;a16 = arg reg16
+;ajr = relative jump
+;aws = white space
+
+;
+;axx = reserved. to be
+
+da0
+; !!! Used by parse via is_pseudo_instr
+      BYTE a0,skip,a0,a0,a0,a0,skip,a0,a0,a0,a0,a0,a0,a0,skip,a0
+      BYTE skip,skip,a0,a0,a0,a0,skip,a0,skip,a0,a0,a0,a0,a0,skip,a0
+      BYTE skip,skip,skip,a0,a0,a0,skip,a0,skip,a0,skip,a0,a0,a0,skip,a0
+      BYTE skip,skip,skip,a0,a0,a0,skip,a0,skip,a0,skip,a0,a0,a0,skip,a0
+
+      BYTE alab0,a0,a0,acom0,a0,a0,a0,a0,a0,ainc0,anl,a0,a0,a0,a0,a0
+      BYTE a0,alocal0,axx,a0,a0,a0,a0,a0,axx,a0,a0,afact0,a0,a0,a0,a0
+      BYTE a0,a0,a0,a0,aequ0,a0,a0,a0,a0,a0,a0,a0,a0,amac0,a0,a0
+      FILL 15,a0:BYTE aesc0
+
+      FILL 64,a0
+
+      BYTE a0,a0,skip,skip,skip,a0,skip,skip
+      BYTE a0,a0,skip,a#cb0,skip,skip,skip,skip
+      BYTE a0,a0,skip,skip,skip,a0,skip,skip
+      BYTE a0,a0,skip,skip,skip,a0,skip,a#xy_ind03
+      BYTE a0,a0,skip,a0,skip,a0,skip,axx
+      BYTE a0,a0,skip,a0,skip,a#ed0,skip,axx
+      BYTE a0,a0,skip,a0,skip,a0,skip,axx
+      BYTE a0,a0,skip,a0,skip,a0,skip,a#xy_ind03
+
+da1
+      BYTE s_,s16,s_,s_,s_,s_,s8,s_,s_,s_,s_,s_,s_,s_,s8,s_
+      BYTE s8,s16,s_,s_,s_,s_,s8,s_,s8,s_,s_,s_,s_,s_,s8,s_
+      BYTE s8,s16,s16,s_,s_,s_,s8,s_,s8,s_,s16,s_,s_,s_,s8,s_
+      BYTE s8,s16,s16,s_,s_,s_,s8,s_,s8,s_,s16,s_,s_,s_,s8,s_
+
+      BYTE alab1,s_,s_,skip1,s_,s_,s_,s_,s_,atab,aok_dest1,s_,s_,s_,s_,s_
+      BYTE s_,alocal1,axx,s_,s_,s_,s_,s_,axx,s_,s_,afact,s_,s_,s_,s_
+      BYTE s_,s_,s_,s_,aequ1,s_,s_,s_,s_,s_,s_,s_,s_,amac1,s_,s_
+      FILL 15,s_:BYTE aesc
+
+      FILL 64,s_
+
+      BYTE s_,s_,s16,s16,s16,s_,s8,arst1
+      BYTE s_,s_,s16,a#cb1,s16,s16,s8,abyte1
+      BYTE s_,s_,s16,s8,s16,s_,s8,aword1
+      BYTE s_,s_,s16,s8,s16,s_,s8,a#xy_ind1
+      BYTE s_,s_,s16,s_,s16,s_,s8,axx
+      BYTE s_,s_,s16,s_,s16,a#ed1,s8,axx
+      BYTE s_,s_,s16,s_,s16,s_,s8,axx
+      BYTE s_,s_,s16,s_,s16,s_,s8,a#xy_ind1
+
+da2
+      BYTE a_,a16,a_,a_,a_,a_,a8,a_,a_,a_,a_,a_,a_,a_,a8,a_
+      BYTE ajr,a16,a_,a_,a_,a_,a8,a_,ajr,a_,a_,a_,a_,a_,a8,a_
+      BYTE ajr,a16,a16,a_,a_,a_,a8,a_,ajr,a_,a16,a_,a_,a_,a8,a_
+      BYTE ajr,a16,a16,a_,a_,a_,a8,a_,ajr,a_,a16,a_,a_,a_,a8,a_
+
+      BYTE alab2,a_,a_,skip2,a_,a_,a_,a_,a_,atab,aok_dest2,a_,a_,a_,a_,a_
+      BYTE a_,alocal2,axx,a_,a_,a_,a_,a_,axx,a_,a_,afact,a_,a_,a_,a_
+      BYTE a_,a_,a_,a_,aequ2,a_,a_,a_,a_,a_,a_,a_,a_,amac2,a_,a_
+      FILL 15,a_:BYTE aesc
+
+      FILL 64,a_
+
+      BYTE a_,a_,a16,a16,a16,a_,a8,arst
+      BYTE a_,a_,a16,a#cb2,a16,a16,a8,abyte2
+      BYTE a_,a_,a16,a8,a16,a_,a8,aword2
+      BYTE a_,a_,a16,a8,a16,a_,a8,a#xy_ind2
+      BYTE a_,a_,a16,a_,a16,a_,a8,axx
+      BYTE a_,a_,a16,a_,a16,a#ed2,a8,axx
+      BYTE a_,a_,a16,a_,a16,a_,a8,axx
+      BYTE a_,a_,a16,a_,a16,a_,a8,a#xy_ind2
+
+da3                     ; for scan (CTRL-L, CTRL-*)
+      BYTE a0,exp0,a0,a0,a0,a0,exp0,a0,a0,a0,a0,a0,a0,a0,exp0,a0
+      BYTE exp0,exp0,a0,a0,a0,a0,exp0,a0,exp0,a0,a0,a0,a0,a0,exp0,a0
+      BYTE exp0,exp0,exp0,a0,a0,a0,exp0,a0,exp0,a0,exp0,a0,a0,a0,exp0,a0
+      BYTE exp0,exp0,exp0,a0,a0,a0,exp0,a0,exp0,a0,exp0,a0,a0,a0,exp0,a0
+
+      BYTE alab3,a0,a0,acom0,a0,a0,a0,a0,a0,ainc0,anl,a0,a0,a0,a0,a0
+      BYTE a0,alocal3,axx,a0,a0,a0,a0,a0,axx,a0,a0,afact0,a0,a0,a0,a0
+      BYTE a0,a0,a0,a0,aequ3,a0,a0,a0,a0,a0,a0,a0,a0,amac3,a0,a0
+      FILL 15,a0:BYTE aesc0
+
+      FILL 64,a0
+
+      BYTE a0,a0,exp0,exp0,exp0,a0,exp0,exp0
+      BYTE a0,a0,exp0,a#cb0,exp0,exp0,exp0,abyte3
+      BYTE a0,a0,exp0,exp0,exp0,a0,exp0,aword3
+      BYTE a0,a0,exp0,exp0,exp0,a0,exp0,a#xy_ind03
+      BYTE a0,a0,exp0,a0,exp0,a0,exp0,axx
+      BYTE a0,a0,exp0,a0,exp0,a#ed0,exp0,axx
+      BYTE a0,a0,exp0,a0,exp0,a0,exp0,axx
+      BYTE a0,a0,exp0,a0,exp0,a0,exp0,a#xy_ind03
+
+d4                      ; for trace visu and tm count
+phase_count = 4
+; For djnz / jr cc / call cc / ret cc, assume cc not met
+    ; (3, 2, 3,   nops resp.)
+      BYTE c11,ce33,c12,c12,c11,c11,ce22,c11
+      BYTE c11,c13,c12,c12,c11,c11,ce22,c11
+      BYTE ce23,ce33,c12,c12,c11,c11,ce22,c11
+      BYTE ce23,c13,c12,c12,c11,c11,ce22,c11
+      BYTE ce22,ce33,ce35,c12,c11,c11,ce22,c11
+      BYTE ce22,c13,ce35,c12,c11,c11,ce22,c11
+      BYTE ce22,ce33,ce34,c12,c13,c13,ce23,c11
+      BYTE ce22,c13,ce34,c12,c11,c11,ce22,c11
+
+; +6: ld r,(hl)
+      BYTE clab,c11,c11,ccom,c11,c11,c12,c11
+      BYTE c11,cinc,cnl,c11,c11,c11,c12,c11
+      BYTE c11,clocal,cxx,c11,c11,c11,c12,c11
+      BYTE cxx,c11,c11,cfact,c11,c11,c12,c11
+      BYTE c11,c11,c11,c11,cequ,c11,c12,c11
+      BYTE c11,c11,c11,c11,c11,cmac,c12,c11
+;+30: ld (hl),r  
+      BYTE c12,c12,c12,c12,c12,c12,c11,c12
+      BYTE c11,c11,c11,c11,c11,c11,c12,cesc
+
+          8 ** BYTE c11,c11,c11,c11,c11,c11,c12,c11
+
+      BYTE c12,c13,ce33,ce33,ce33,c14,ce22,ce13
+      BYTE c12,c13,ce33,c#cb,ce33,ce35,ce22,cskipdata
+      BYTE c12,c13,ce33,ce23,ce33,c14,ce22,cskipdata
+      BYTE c12,c11,ce33,ce13,ce33,c11,ce22,c#xy_ind
+      BYTE c12,c13,ce33,c16,ce33,c14,ce22,cxx
+      BYTE c12,c11,ce33,c11,ce33,c#ed,ce22,cxx
+      BYTE c12,c13,ce33,c11,ce33,c14,ce22,cxx
+      BYTE c12,c12,ce33,c11,ce33,c11,ce22,c#xy_ind
+
+cpt_hi = $ / &0100      ; direct calls in routines here
+          ASSERT(cpt_hi == d4/&0100 + 1) ; we use dec iyh to get d4
+
+ass_init_module
+;--------------
+; Called once (by org.o) at first orgams invocation.
+; Out: carry if ok
+; Alloc 
+
+; Empty for now as save_list moved to org
+      IF 0
+          ld hl,zero
+          ld b,zero_
+.raz      ld (hl),0:inc hl:djnz .raz
+      END
+          ret
+
+cpt#dd#cb
+          inc l
+          ld a,(hl)
+          push af
+          call skip_common ;idx
+          pop af
+          jr c#dd#cb
+
+c#xy_ind = $ AND &FF
+
+          3 ** inc bc
+          2 ** inc de   ; prefix and +n
+          inc l
+          ld a,(hl)
+          cp &CB
+          jr z,cpt#dd#cb
+
+          ld iyl,a
+          call skip_common ; idx
+          jp cpt_artist_entry
+
+cpt_fill
+          call cpt_advance
+skip_loop4_unknown
+          call skip_common
+loop4_unknown
+          ld bc,unknown_tm
+          jp ass_loop4
+
+ccom  = $ AND &FF
+cptcom = cpt_comment
+          jp cpt_comment
+cnl   = $ AND &FF
+          jp ix
+
+cesc  = $ AND &FF
+          jp cptesc
+
+clab  = $ AND &FF
+clocal = $ AND &FF
+          call skip_label
+          jp ass_loop4
+
+cfact = $ AND &FF
+          jp cpt_factor_bloc
+
+cequ  = $ AND &FF
+          call skip_label_maybe_local
+ceskip = $ AND &FF
+cpt_skip_common
+          call skip_common
+          jp ass_loop4
+
+cinc  = $ AND &FF
+          inc l
+          jp ass_loop4
+
+unknown_tm = &8000
+
+cskipdata = $ AND &FF
+          inc l
+          ld a,l
+          add (hl)
+          inc l
+          ld c,(hl)
+          ld l,a
+cskipcom
+          ld b,0
+          ex de,hl:add hl,bc:ex de,hl
+          ld bc,unknown_tm
+          jp ass_loop4
+
+c#cb  = $ AND &FF
+          inc l
+          ld a,(hl)
+c#dd#cb
+          cp &40
+          jr c,c#cbok
+
+;bit/res/set
+;source encoding: bits 1 to 7 encoded as is.
+                ; bit 0: escape code for arbitrary expression
+                       ; --to be able to write "set toto+1,(hl)"
+          push af
+          and &38
+          call z,skip_common
+          pop af        ; !! can't reload from (hl) when from cpt#dd#cb
+          cp &80
+          jr nc,c#cbok
+; Different timing for bit: 
+  ; bit n,r    ; 2
+  ; bit n,(hl) ; 3
+  ; bit n,(ix) ; 6
+          and 7:cp 6
+          jr nz,cpt22
+cpt23
+          inc bc
+          jr cpt22
+
+c#cbok
+;rl and co, set/res: same duration.
+  ; rl r    ; 2
+  ; rl (hl) ; 4
+  ; rl (ix) ; 7  (+3 already counted in c#xy_ind)
+          and 7:cp 6
+          jr nz,cpt22
+          jr cpt24
+
+c#ed  = $ AND &FF
+
+          inc l
+          ld a,(hl)
+          cp &A0
+          jr nc,cpt#eda0
+
+          and 7:jr z,cpt24 ;in
+          dec a:jr z,cpt24 ;out
+          dec a:jr z,cpt24 ;sbc
+          dec a:jr z,cpte46 ;ld (nn),
+          dec a:jr z,cpt22 ;neg
+          dec a:jr z,cpt22 ;retn
+          dec a:jr z,cpte22 ;im
+          bit 5,(hl):jr z,cpt23 ;ld a,i & co
+          jr cpt25      ;rrd
+
+cpt#eda0
+          cp &B0
+          jr c,cpt#ednorep
+          ld bc,unknown_tm
+cpt#ednorep
+          and 7:jr z,cpt25 ;ldi
+          dec a:jr z,cpt24 ;?cpi
+          jr cpt25      ;ini/outi
+
+cmac  = $ AND &FF
+          jp cpt_macro_def
+
+ce35  = $ AND &FF
+          inc bc
+ce34  = $ AND &FF
+          inc bc
+ce33  = $ AND &FF
+          inc de
+ce23  = $ AND &FF
+          inc bc
+ce22  = $ AND &FF
+cpte22
+          call skip_common
+cpt22
+          inc de
+          inc bc
+          jr cpt11
+
+ce13  = $ AND &FF
+          call skip_common
+          jr cpt13
+
+c16   = $ AND &FF
+          inc bc
+          inc bc
+          jr cpt14
+cpte46
+          call skip_common
+          inc de:inc de
+          inc bc
+cpt25
+          inc bc
+cpt24
+          inc de
+c14   = $ AND &FF
+cpt14
+          inc bc
+c13   = $ AND &FF
+cpt13
+          inc bc
+c12   = $ AND &FF
+          inc bc
+c11   = $ AND &FF
+cxx   = $ AND &FF
+cpt11
+          ASSERT($/&0100 == cpt_hi) ; last adr reached by table
+          inc bc
+cptbrk
+;cpt10
+          inc de
+ass_loop4
+          inc l
+ass_entry4
+;HL=source
+;DE=pc     
+;BC=TM         
+          ld a,(hl):ld iyl,a
+cpt_artist_entry
+      IF nrt_checks
+          ld a,iyh:cp cpt_hi:call nz,fail
+      END
+          dec iyh
+          ld a,(iy+0):ld iyl,a
+          inc iyh
+          jp iy
+
+ass_loop40
+;deactivated : nothing to do, but must maintain numline
+             ; (only if not in macro: bug#19c)
+          exx
+          ld a,(va_nxt_msp):or a:jr nz,$+3:inc de
+          exx
+          jp ass_loop0
+aend
+
+cpt_skip                ; SKIP directive!
+          call cpt_advance
+          jp loop4_unknown
+
+cpt_advance
+          push de
+          call cpt_eval_exp_skip_size
+_cpt_advance_com
+          ex (sp),hl
+          add hl,de
+          ex de,hl
+          pop hl
+          ret
+
+cpt_import
+; Must get last $ from tab containing import
+          push hl
+          push de
+          call _setup_import
+          xor a
+          call get_import_tab
+; Only connect if import found to avoid assert.
+          jr nc,.same_pc ; NC: import not found
+
+; If va_pre_pc<>$, necessarily "skipped" import.
+; In that case: must keep same $ (bug #1a7).
+          pop de        ; cur $
+          call connect_pre_pc
+          ld a,e:cp (hl):jr nz,.exit
+          inc l
+          ld a,d:cp (hl):jr nz,.exit
+          3 ** inc l
+          ld e,(hl):inc l
+          ld d,(hl)
+.exit
+; Must connect bk base to get back real bk_source.
+          call connect_bk_source_safe
+          pop hl
+          jp skip_loop4_unknown
+.same_pc
+;not found: preserve DE to give more meaningful result
+;(tested in visu1)
+; Actually that might be trompeur results....
+          pop de
+          jr .exit
+
+cpt_load
+; nb: Trash BC since it wouldn't be computed anyway (raw bytes)
+          call _cpt_load
+          jp ass_loop4
+_cpt_load
+          push de
+      IF 1-inRom
+;Calling get_file is safe since count.o set flag
+;We check for tests
+vt_rom_firmflag = &9D0C
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+          ld a,(vt_rom_firmflag)
+          inc a:call nz,fail
+      END
+          call get_file
+          ld e,c
+          ld d,b        ; file_size
+          ld bc,unknown_tm
+          jp _cpt_advance_com
+
+
+connect_pre_pc
+;-------------
+          ld l,va_pre_pc - tostore1
+;enchaine
+connect_ass_var
+;--------------
+;in: A: Source id (not self!)
+   ; L: offset var in store
+;Out: HL= pointer in store
+          push bc
+          ld c,l
+          ld b,0
+      IF todo
+; TM optim: Move connect_ass_store here
+      END
+          CALL_EXT(connect_ass_store)
+          add hl,bc
+          pop bc
+          ret
+
+;---- helpers for import.o
+
+check_premerge
+; We import is assemble, all low/hi variables are updated 'live',
+; then copied in vo_*.
+; So, they must be equals.
+; We check this fact.     
+; Out: BC and DE 
+
+      IF dev_checks
+          push de
+          ld hl,vo_emitted
+          ld de,va_emitted
+; if not code gen in imported source, says nothing for host.
+          ld a,(hl):or a:jr z,.ok
+          ld a,(de):or a:call z,mess
+.ok
+          ld b,4*2
+.lp       inc de:inc hl
+          ld a,(de):cp (hl):call nz,mess
+          djnz .lp
+          pop de
+      END
+          ret
+
+;-------
+lab_stat
+;collect nb of labels used/ghost
+;in: base connected
+;out: hl=used, bc=ghosts
+
+          call sy_get#
+          push hl
+          ld bc,0
+ls_lpused
+          ld a,l
+          or h
+          jr z,ls_endused
+
+          dec hl
+
+          push bc:push hl
+          call sy_peek
+          pop hl:pop bc
+
+          bit 4,a
+          jr nz,ls_lpused
+
+          inc bc        ; ghost
+
+          jr ls_lpused
+
+ls_endused
+          pop hl
+          sbc hl,bc
+          ret
+
+get_nb_errors
+;return in A nb errors
+          ld a,(va_error_pnt)
+          sub va_error_array AND &FF
+          ld bc,error_struct_size*&0100+&FF
+.div_b
+          inc c
+          sub b
+          jr nc,.div_b
+          ld a,c
+          ret
+
+advance_de
+; Fill/Load phase1: Advance $, $$ and update range.
+; In: DE= offset to advance.
+;     !! Presume buffer is flushed
+
+          inc d
+ade_lp
+          dec d:jr z,ade_end
+          push de
+          call fake_flush_100
+          pop de
+          jr ade_lp
+ade_end
+          ld d,ass_buf/&0100
+          ret
+
+advance_c
+; phase1: advance buffer + C  (byte or word)                
+          ld a,e
+          add c
+          call c,fake_flush_100
+          ld e,a
+          ret
+
+get_pcadr
+; Current $ (that is, $ at buffer start + e) 
+          ld a,e
+get_pcadr'
+          ld de,(va_pc0)
+          add e
+          ld e,a
+          ret nc
+          inc d
+          ret
+
+get_objcadr
+;in : _e = adr in buff
+;out : de = $$
+          ld a,e
+          ld de,(va_objc0)
+          add e
+          ld e,a
+          ret nc
+          inc d
+          ret
+
+update_low
+; In: HL = $
+    ; DE = $$
+;out: update iif hl < lo $
+    ; update iif de < lo $$
+    ; bc, de, hl trashed
+          ld bc,(va_low_pc)
+          or a:sbc hl,bc:add hl,bc
+          jr nc,.update_low_objc
+          ld (va_low_pc),hl
+.update_low_objc
+          ex de,hl
+          ld bc,(va_low_objc)
+          or a:sbc hl,bc:add hl,bc
+          ret nc
+          ld (va_low_objc),hl
+          ret
+
+update_hi
+; Idem for hi $/$$
+          dec hl
+          ld bc,(va_hi_pc)
+          or a:sbc hl,bc:add hl,bc
+          jr c,.update_hi_objc
+          ld (va_hi_pc),hl
+.update_hi_objc
+;idem for objc 
+          ex de,hl
+          dec hl
+          ld bc,(va_hi_objc)
+          or a:sbc hl,bc:add hl,bc
+          ret c
+          ld (va_hi_objc),hl
+          ret
+
+glfp_test
+;--------
+; Inc line # even in phase 0, but not in macro.
+; (we don't point to macro source but stay at invocation line)
+
+          ld a,e:exx:ld l,a
+;is in macro?      
+          ld a,(va_nxt_msp):or a:jr nz,$+3:inc de
+          exx
+
+; Test phase here instead of okdestdispatch later.
+;   - Slightly more optimized.
+;   - More importantly, okdestdispatch reload bc and I'm not sure why.
+          ld a,(va_phase):or a:jp z,ass_loop0
+
+          ld a,d:exx:ld h,a
+          scf:sbc hl,bc
+          exx
+          jp c,ass_loop4
+
+glfp_reached_line
+;We stay on line
+          exx
+;Inside macro, line wasn't incremented, so we don't have to correct.
+          ld a,(va_nxt_msp):or a:jr nz,$+3:dec de
+          exx
+
+glfp_reached
+      IF dev_checks
+; Check ret address
+          ex (sp),hl    ; we don't really need to save hl. nevermind
+          ld a,h
+      IF inRom
+          cp &C0:call c,mess
+      ELSE
+          cp &10:call c,mess
+          cp &30:call nc,mess
+      END
+          ex (sp),hl
+      END
+          ld a,(va_if)
+          scf
+          jp connect_bk_base
+
+
+glfp_factor_bloc_end
+;We must check PC before rewinding, to get proper line.
+          ld a,e:exx:ld l,a:exx
+          ld a,d:exx:ld h,a
+          scf:sbc hl,bc
+          exx
+          jp c,ass_factor_bloc_end ;rewind
+
+          dec l         ;must process ']' next time
+          jr glfp_reached
+
+glfp_comment_test
+;if PC reached, we want to stay in comment line, 
+;and perform NL next iteration.
+;Y, tho?
+          ld a,e:exx:ld l,a:exx
+          ld a,d:exx:ld h,a
+          ld a,(va_nxt_msp):or a:jr nz,$+3:inc de
+          scf:sbc hl,bc
+          exx
+          jr nc,glfp_reached_line
+          jp cpt_skip_common
+
+_setup_import
+          inc l         ; skip code import
+          inc l         ; skip length
+          inc l         ; skip '"' bytecode
+; here hl point to sized string (name of lib)
+          call setup_import ; copy filename out of bank
+          jp connect_bk_base
+
+assert_fail
+          ld a,fail_assert
+          jr exit_fail
+
+exp_fail
+;in : A=error  
+          call error_phase12
+          jr exit_fail
+
+
+exit_mess
+          ld a,fail_unexpected_mess
+exit_fail
+;cannot continue
+      IF failhard OR [1-inRom]
+      BRK
+          ld bc,&DEAD
+      ELSE
+; Previous behavior: soft exit
+          jr abort_ass'
+      END
+
+ass_exit_scope
+          CALL_SY(exit_scope)
+          ret c
+          ld a,fail_unexpected_mess
+;enchaine
+;error_phase2_and_abort
+          call error_phase2
+;Enchaine
+abort_ass'
+;Prior to ass-dn, exit_soft returned from _ass_amorce_.
+;Now abort_ass returns from ass_init_and_amorce.
+;This version reproduce the previous behavoir.
+
+          call _finitions_
+;enchaine
+abort_ass
+; In: a=fail code >= 128   !! Won't trigger /fix_error_lines/
+    ; a=0 if aborted because of failure in imported file.
+; Shall jump back to org_assemble anyway.
+          CHECK_FRAME()
+
+          pop hl        ; address of failure (used by ch)
+          call connect_bk_base
+
+ ; Return Err rather than Fail.
+ ; so that memory full due to fill is properly reported 
+ ; in ass status.
+
+          or a:inc b    ;nc & nz
+          jp abort
+
+      IF dev_checks'
+check_bk_base
+; light version: doesn't check bk is actually connected
+      IF need_room
+; use import version (or maybe org.o has one)
+      END
+          push af
+          ld a,i:and &C5:cp &C5:call nz,fail
+          pop af
+          ret
+      END
+
+;---------
+ass_amorce
+;---------
+;for skipline, visu (find line) and other walk through (find.o, scan.o)
+
+          xor a
+ass_amorce_from_ext     ; call by scan (phase 3)
+          call except_enter
+          call _ass_amorce_
+          jp except_ret
+
+_ass_amorce_
+;for all             
+;Finish setup and enter main loop.
+; a = phase
+;de = line (for scan.o and org.o?)
+;hl = source pnt
+
+;!!Don't save sp here: failure from import must rollback
+;!!to root call org_assemble.
+          CHECK_FRAME()
+
+          ld (va_phase),a
+          ld (va_phase_backup),a
+
+          call connect_bk_source_from_bk_base
+          ld a,b        ;dispasst MSB
+          ld bc,0
+          ld (vev_data),bc
+          ld iyh,assjumpMSB
+          ld b,a
+          sub dispasst/&0100
+
+          PROF_TAG()
+
+          jp z,ass_entry0
+          cp 3
+          jp nc,ass_entry0
+          jp ass_entry
+
+eval_exp
+          call eval_exp_asseva
+          push af       ; P flag
+          ld a,(va_exp_error):or a
+          jr z,.ok
+          call nz,error_phase12
+          ld de,0       ;hack: prevent huge repetitions (hangs)
+.ok
+          pop af
+          ret
+
+eval_equ
+          call eval_equ_asseva
+          push af
+          ld a,(va_exp_error):or a
+          call nz,error_phase12
+          pop af
+          ret
+
+init_var_once
+;------------
+; Done for phase1 by org.org_assemble (but **not** for import)
+; That is, only at the start of host assembly
+; In: N/A
+;Out: Carry if ok
+    ; Otherwise NC, a = err msg (memory full)
+
+; Nothing, done in org_assemble since save_list moved in org
+      IF todo
+;!! Remove !! Org shouldn't have to call that (too acrobatic)
+; - host only init is done in init_var_main, 
+    ; which could do phase1-only init.
+      END
+          scf
+          ret
+
+get_save_list'
+;tmp for SAVE
+          CALL_EXT(get_save_list)
+          ret
+
+init_var_main
+;------------
+; Done for phase1 and 2, visu but **not** for import
+; import ones done at /.init_var/
+; !! Only for **not swaped** vars
+          push bc:push de
+          ld hl,def
+          ld de,va2
+          ld bc,va2_
+          ldir
+          ld a,c
+          ld (va_macro_pnt),a ; 0 = not in macro def
+          ld hl,va_error_array:ld (va_error_pnt),hl
+;done here for visu/count 
+;and also in init_var
+          call sync_symb_tab
+; when adding variables, ensure it's ok to init them from visu/import
+          pop de:pop bc
+          ret
+
+
+_enter_scope
+          CALL_SY(enter_scope)
+          call connect_bk_source_safe
+          ret c
+; Must stop here:
+; When too many scopes, enter_scope becomes no-op:
+;  - it means we would get the error duplicated
+;  - we would have more exit than enter: fatal error
+          jp error_phase12_and_abort
+
+
+phase1_fakeflush
+; keep track of pnt and range 
+;NON EMPTY:E=0 means #100 here
+
+          push hl
+          push de
+
+          ANCHOR(bug#1df)
+          ld de,(va_pc0)
+          call update_chead_pc
+
+          ld hl,va_emitted
+          bit 0,(hl)
+          set 0,(hl)
+          jr nz,.already_emitted
+
+;First emetting chunk: reset low/hi
+          ex de,hl      ; hl=va_pc0
+          ld (va_low_pc),hl
+          ld (va_hi_pc),hl
+
+          ld hl,(va_objc0)
+          ld (va_low_objc),hl
+          ld (va_hi_objc),hl
+
+.already_emitted
+
+; before advancing pointeur
+          ld hl,(va_pc0)
+          ld de,(va_objc0)
+          call update_low
+
+          pop de:ld d,0:dec e:inc de
+          call assdataskip
+
+          push de
+          ld hl,(va_pc0)
+          ld de,(va_objc0)
+          call update_hi
+          pop de
+          pop hl
+          scf
+          jp okflush_
+
+connect_bk_source_safe
+      IF need_room OR todo
+  ; use connect_bk_source that works for any bank
+      END
+; All registers preserved
+          push bc
+; !! LOAD directive or store_code may have inserted new chunks,
+  ;  without setting vo_curbk in new bank.
+  ; !!! Also, when comming from a random bk, vo_curbk = vo_thisbk
+  ; !!! Pratically useless.
+; !! That's why we pick the right one from bk_base.
+          call connect_bk_base
+          call connect_bk_source_from_bk_base
+          pop bc
+          ret
+
+connect_bk_source_from_bk_base
+;!!! USE /connect_bk_source_safe/ !!!!!!!!!
+;!! this one is only valid when switching from bk_base to bk_source,
+;! not from random bk (like after /org_connect_ass_store/ 
+      IF todo
+; Remove this one? So no error possible.     
+; Check all callers were reconnecting bk_base (e.g. after sy_set)
+      END
+;25+8
+          push af
+          GET_CURBK()
+          ld b,&7F
+          out (c),a
+
+          ld a,(va_phase)
+          add dispasst/&0100
+          ld b,a
+          pop af
+          ret
+
+get_tab_symb
+          ld a,(va_tab_symb)
+          ret
+
+copy_to_buf
+          ld de,ass_buf
+copy_to_de
+          push bc
+          ld b,0:dec c:inc bc
+          ldir
+          pop bc
+          ret
+
+copy_com
+; Copy ass_buf and advance $ & $$ accordingly.
+; in: ass_buf filled
+    ; hl = src pnt (need to overlap report)
+    ; va_src_pnt_backup set
+    ;  c=size (0=&100) 
+;out: Carry as returned by store_code.
+    ; E.g. NC if memory full 
+   ; a, bc, de, hl trashed 
+
+          push ix
+          push hl
+;advance $ (in advance! so we don't have to save bc)
+          ld b,0:dec c:inc bc
+          ld hl,(va_pc0)
+          add hl,bc
+          ld (va_pc0),hl
+
+          ld ix,ass_buf
+          ld de,(va_objc0)
+          ld a,(va_destbk):ld b,a
+          call store_code
+          jr nc,.err
+
+;advance $$
+          ld (va_objc0),de
+          pop hl
+          pop ix
+          jp connect_bk_source_safe
+
+.err
+          ex (sp),hl    ; save conflict address, hl=src
+          cp err_overlap
+          jp nz,error_phase12_and_abort ; mem full
+;Overlap:
+;err 2: already emited point
+; must be done first as get_line_from_pc_save reset va vars!
+; if we call error_phase2 before, it will be cleared
+; We convert to user's $
+.bug#1f0
+  ; To fix that, store current src pnt in store.
+; If c0,c1,c2: no correction to do.
+; TODO? handle c3:4000? nevermind for now 
+; Also, bug if c4 but $ not in &4000
+    ; to fix: let cocopy return bk and be smarter
+          pop bc        ; was hl: address in page b8, c0, c2, ca...
+          push hl       ; src
+          ld a,(va_destbk)
+          bit 2,a
+          jr z,.okbk
+          res 7,b:set 6,b ; in 4000
+.okbk
+          ld (va_error_data),bc
+          di
+;err1: first occurence
+; Get proper source pnt from infringuing address
+          call get_line_from_pc_safe ; !!! reset va vars
+          ld a,2:ld (va_phase),a
+          ld hl,sk_cur_src
+          ld a,err_overlap
+; If line not found: nothing we can do
+          call c,error_phase2_custom_src
+;err1: new overlap (might be off) 
+          pop hl
+; Hack: since problem is trigger by flushing, we are generally past
+      ; the conflecting zone. Try to mitigate that (when > chunk start)
+      IF todo
+; use an alt version of get_line_from_pc_safe that start from 
+; arbritrary point
+      END
+          ld a,l:cp source_header_size:jr z,$+3:dec l
+          xor a:call get_pcadr':ld (va_error_data),de
+          ld a,err_overlap
+          jp error_phase12_and_abort
+
+update_chead_pc_if_emitted
+          ld a,(va_emitted)
+          or a
+          ret z
+;enchaine
+update_chead_pc
+;IN: HL points on chunk (connected)
+   ; DE pc at start of chunk
+   ; Code emitted
+
+; Don't flag chunks with only macro defs
+          IS_IN_MACRO()
+          ret nz
+
+          push hl
+
+; Don't refresh emit flag and pc when chunk if visited a second time
+; (macro invocation or repeat block)
+; Bugs #c0, #DEb, #109      
+; Plus, now we do that at each flush: DE is only correct the first time
+          ld l,chead_flags
+          bit ch_flag_visited,(hl)
+          set ch_flag_visited,(hl)
+          jr nz,.exit
+
+          set ch_flag_code_emitted,(hl)
+
+          chead_pc - chead_flags ** inc l
+          ld (hl),e:inc l:ld (hl),d
+.exit
+          pop hl
+          ret
+
+assbw_dispatch
+          call is_endofdata_
+          jp nz,advance_c
+;enchaine
+assbw_com
+          call flush
+          ld e,c
+          ld d,0
+
+assdataskip
+;reset buf advance pc & objc (leave byte/word asis)
+;Range hi-low not updated.
+;in: DE = size
+          push hl
+          ld hl,(va_objc0):add hl,de:ld (va_objc0),hl
+          ld hl,(va_pc0):add hl,de:ld (va_pc0),hl
+          ld de,ass_buf
+          pop hl
+          ret
+
+assskipparam
+;actually we may have to scan it 
+          ld a,b
+          cp dispasst/&0100 + 3
+          jp nz,assskip03
+
+assdata3
+          push bc
+          push ix
+          inc l
+data3_lp
+          call is_endofdata_
+          jp z,data3_end
+
+          call read_exp_a_loaded
+          jr data3_lp
+
+data3_end
+          pop ix
+          pop bc
+          jp ass_loop0
+
+skip_label_maybe_local
+          call skip_local_tag
+          jp skip_label
+
+read_label_maybe_local
+          call skip_local_tag
+          jr z,.local
+          call read_label
+          xor a
+          ret
+.local
+          call read_label
+          ld a,vmask_local
+          ret
+
+skip_local_tag
+; IN: HL = src (-1)
+;Out: Z if local
+          inc l
+          ld a,(hl):cp "."
+          ret z
+          dec l         ; stay NZ
+          ret
+
+sy_set_maybe_local
+          bit vf_local,a
+          jp z,sy_set
+          jp sy_set_local
+
+fail  = &BE00           ; for nrt. use /nrtfail/ to pause
+mess  = &BE00           ; programming error or memory corruption
+;-------------------------------
+
+hi
+realsize = $-codedest
+      IF inRom
+      FILL limit-$,&F7
+      END
+
+codesize = $-codedest
+
+;-------------------------------
+
+code2 = $$
+      IF inRom
+      ORG codedest2,$$
+      ELSE
+; same align than rom
+      SKIP -$ AND &FF
+      SKIP codedest2 AND &FF
+      END
+
+;-------------------------------
+
+; !!!! Don't move this code (for proper /padding/)
+; Remove code before /def/
+
+skip_line
+;In            (vo_curbk), HL: pos in source
+;OUT If line:  (vo_curbk), HL: pos in source post line, C & NZ
+   ; If eof:   NC & NZ (base connected)
+          push de
+          ld ix,.skip_done
+          call ass_amorce
+; here: end of source
+          pop de
+          xor a
+          inc a         ;NC & nZ
+          ret
+.skip_done
+          call unwind
+          pop de        ; discard call ass_amorce
+          call connect_bk_base
+          inc l
+          pop de
+      IF todo
+; replace by scf:sbc a, or factorize.
+      END
+          xor a
+          inc a
+          scf           ;C & NZ
+          ret
+
+
+fix_error_lines
+; Convert "bk+pos" to "line"
+      IF need_room
+; inline 
+      END
+
+; Cannot use source2line_lp (incremental search) as-is, since with macro
+; non-decreasing isn't guaranteed anymore.
+; This solution is slower; nevermind since mid-term goal is ass online.
+
+          xor a
+fel_errlp
+          push bc
+          call get_error_pnt
+          pop bc
+          ret nc
+
+          push af
+          ld a,(hl):inc hl
+      IF nrt_checks
+          cp nrt_max_tabs:call nc,nrtfail
+      END
+          push hl
+          CALL_EXT(org_select)
+          pop hl
+          jr nc,.skip   ; err, nothing to do
+
+          inc hl
+          push hl
+          call source2line
+.bug#1ee
+      IF todo
+; Ensure source2line always reconnect bk base instead?
+      END
+          call connect_bk_base
+          pop hl
+.ok
+          ld (hl),c
+          inc hl
+          ld (hl),b
+.skip
+          pop af
+          inc a
+          jr fel_errlp
+
+
+jp_assesc0
+      WORD ass_eoc,assskipasis,ass_loop0,ass_loop0
+      WORD assskip03,skiptwice,assskip03,skiptwice
+      WORD assskip03,ass_if0,ass_else0,ass_elif0
+      WORD ass_end0
+      WORD ass_factor_bloc0 ; explicit
+      WORD ass_factor_bloc_end0
+      WORD ass_factor_bloc_end0_
+      WORD ass_loop0,assskip03,ass_loop0,assskip03
+      WORD ass_macro_end0,assskipparam
+      WORD ass_load0,ass_import0
+      WORD assskip03    ; STR
+      WORD assskipparam ; SAVE
+      WORD assskipparam ; SAVEA
+jp_assesc
+      WORD ass_eoc,ass_asis,ass_store_pc_line,ass_store_pc_instr ;0
+      WORD ass_org,ass_org2,ass_ent,ass_fill
+      WORD ass_skip,ass_if,ass_else,ass_elif
+      WORD ass_end,ass_factor_bloc
+      WORD ass_factor_bloc_end
+      WORD ass_factor_bloc_end ; implicit version
+      WORD ass_brk,ass_brk_set,ass_restore_command,ass_bank ;&10
+      WORD ass_macro_end,ass_macro_use
+      WORD ass_load,ass_import
+      WORD ass_str
+      WORD ass_save
+      WORD ass_savea
+      IF $-1/&0100 - jp_assesc0/&0100
+  !! error align
+      END
+
+;--------------------------------
+
+set_cur_source
+;16+8             
+          GET_CURBK()
+set_source
+          ld (hl),a:inc hl
+          ld (hl),d:inc hl
+          ld (hl),e:inc hl
+          ret
+
+
+padding
+      IF inRom
+      FILL 15,0
+      ELSE
+; With prof_sample, code in RAM might be different than in ROM
+; We compensate here.
+      FILL 10,0
+      END
+
+
+asslab2
+; consistency check
+          push de
+          call read_label
+          ex (sp),hl
+          push hl
+          ex de,hl
+; sy_get could return ambiguous error if local with same name
+          CALL_SY(sy_get_explicit_global)
+; if nc here (mess), nevermind, it will trigger error below anyway.
+          call connect_bk_source_from_bk_base
+          ex de,hl
+          pop de
+          push de
+          call get_pcadr
+          or a
+          sbc hl,de
+          pop de
+          pop hl
+
+          ld a,err_labelinconsistancy
+          call nz,error_phase2
+; Must be done after get, other we believe we already have entered
+; the scope, and might fetch a local label instead (if same name).
+          CALL_SY(new_scope)
+          call connect_bk_source_from_bk_base
+          jp assok_dest2
+
+asslocal1
+;copy/paste asslab1
+          push de
+          call get_pcadr
+          push de
+          call read_label
+          ex (sp),hl
+          ex de,hl
+          xor a
+          ld c,a
+          CALL_SY(sy_set_local)
+          call connect_bk_source_from_bk_base
+          pop hl
+          pop de
+          call nc,error_phase12
+          jp assok_dest1
+
+asslab1
+       ;   ld a,l:cp &E9:jr nz,.ok
+       ;   ld a,h:cp &76:jr nz,.ok
+;.ok
+          push de
+; Each global label defines a new scope
+          CALL_SY(new_scope)
+          call connect_bk_source_from_bk_base
+          call get_pcadr
+          push de
+          call read_label
+          ex (sp),hl
+          ex de,hl
+          xor a         ; flags
+          ld c,a        ; address = 16 bits
+          CALL_SY(sy_set)
+          call connect_bk_source_from_bk_base
+          pop hl
+          pop de
+          call nc,error_phase12
+          jp assok_dest1
+
+
+assequ2
+;!! equ set both in phase 1 and 2. Allow forward ref.
+;!! error only given in phase 2.
+          push de
+          call read_label_maybe_local
+          push de
+          push af
+          push hl
+          ex de,hl
+;if already defined : check consistency.
+;!!! Needed to detect 'double defined'? 
+          CALL_SY(sy_get)
+          call connect_bk_source
+          pop hl
+          jr c,assequ2_check
+
+          call eval_equ ; with check 
+          jr assequ_com
+
+
+assequ2_check
+; if set externally, we must *NOT* check,
+; as the mismatch is expected
+; In A=type, CDE=value
+          bit vf_orgset,a
+          jr z,.noset
+
+          call skip_exp012
+          jr .assequ_ret
+.noset
+          push bc
+          push de
+          call eval_equ
+          ex (sp),hl
+          or a
+          sbc hl,de
+          pop hl
+          ld a,c
+          pop bc
+          jr nz,.assequ_error
+          cp c
+          jr nz,.assequ_error
+.assequ_ret
+          pop af
+          pop de
+          jp okdestdispatch_popde
+
+.assequ_error
+; Mismatch could happen in 3 cases:
+   ; - label inconsistency between phase 1 and 2 (don't happen anymore)
+         ; -> indicate a bug 
+         ; -> don't happen anymore, all related bug fixed
+   ; - double def (real error)
+   ; - value overriden in orgset
+; The latter case has already been handled
+          ld a,err_doubledefined
+          call error_phase2
+          jr .assequ_ret
+
+assequ1
+; We set inconditionnaly in phase 1 (no error checking)
+; Double def is checked in phase 2
+; !!! Been there, done that !!! DON'T CHANGE IT !!!
+               ; - it's good as it this
+               ; - it has not be proven to be a big cause of slowness
+          push de
+          call read_label_maybe_local
+          push de
+          push af
+;Do not raise error in phase1, to allow for foward reference 
+          call eval_equ_asseva
+assequ_com
+          pop af:or vmask_equ:ld b,a
+          ex (sp),hl
+          ld a,(va_exp_error)
+          or a
+          ld a,b
+          call z,sy_set_maybe_local ;don't set if exp erroneous
+;Note: we check for double (distinct) definition in phase 2
+          call connect_bk_source_from_bk_base
+          ld iyh,assjumpMSB
+          jp okdestdispatch_pophlde
+
+assbyte_data
+          dec l
+          call check_8_data ;allow string
+          ld (de),a
+          inc e
+          call z,dest_next_chunk
+          call is_endofdata_
+          jr nz,assbyte_data
+          ld bc,0       ;disallow string
+          ld (vev_data),bc
+          ld b,dispasst/&0100+2
+          jp assok_dest2
+
+assword_data
+          dec l
+          push de
+          call check_16_data ;no size
+          ex (sp),hl
+          ld (hl),e
+          ld a,d
+          ex de,hl
+          pop hl
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+          inc e
+          call z,dest_next_chunk
+          call is_endofdata_
+          jr nz,assword_data
+          ld b,dispasst/&0100+2
+          jp assok_dest2
+
+asslocal2
+;don't bother checking. 
+          call skip_label
+          jp assok_dest2
+
+assjumpMSB = $/&0100
+afirst
+alab3 = $ AND &FF
+alocal3 = $ AND &FF
+          push bc
+          call collect_label
+          pop bc
+          jp ass_loop0
+
+alab0 = $ AND &FF
+alocal0 = $ AND &FF
+          call skip_label
+          jp ass_loop0
+alab2 = $ AND &FF
+          jp asslab2
+alab1 = $ AND &FF
+;only set in phase 1 (to detect double defined)
+          jp asslab1
+alocal2 = $ AND &FF
+          jr asslocal2
+alocal1 = $ AND &FF
+          jp asslocal1
+aequ1 = $ AND &FF
+          jr assequ1
+aequ2 = $ AND &FF
+          jp assequ2
+amac1 = $ AND &FF
+          jp ass_macro_def1
+amac2 = $ AND &FF
+          jp ass_macro_def2
+abyte3 = $ AND &FF
+aword3 = $ AND &FF
+          inc l
+amac3 = $ AND &FF
+          jp assdata3
+
+abyte1 = $ AND &FF
+aword1 = $ AND &FF
+          inc l
+          ld a,l
+          add (hl)
+          inc l
+          ld c,(hl)
+          push af
+          call assbw_dispatch
+          pop af
+          ld l,a
+          jp assok_dest1
+
+abyte2 = $ AND &FF
+          call is_endofdata
+          jr nz,assbyte_data
+          ld c,1
+          jr abw_com
+
+aword2 = $ AND &FF
+          call is_endofdata
+          jr nz,assword_data
+          ld c,2
+abw_com
+          call assbw_com
+          ld b,dispasst/&0100+2
+          jp assok_dest2
+
+
+aequ3 = $ AND &FF
+          push bc
+          call skip_local_tag
+          call collect_label
+          pop bc
+exp0  = $ AND &FF       ;TODO: rename to exp3
+          call read_exp
+          jr ass_loop0
+aequ0 = $ AND &FF
+          call skip_label_maybe_local
+skip  = $ AND &FF
+assskip
+; See /ass_skip/ for the SKIP directive.
+; Here, just skip length.
+          inc l
+          ld a,l
+          add (hl)
+          ld l,a
+          jr ass_loop0
+skip1 = $ AND &FF
+skip2 = $ AND &FF
+          inc l
+          ld a,l
+          add (hl)
+          ld l,a
+          jp okdestdispatch
+
+acom0 = $ AND &FF
+          inc l
+          ld a,l
+          add (hl)
+          ld l,a
+          jp ix         ;anl
+
+atab  = $ AND &FF
+          inc l         ;skip tab value
+          jp okdestdispatch
+
+a#cb0 = $ AND &FF
+          call ass#cb_skip_com
+          jr ass_loop0
+
+a#cb1 = $ AND &FF
+          call ass#cb_skip_com
+          inc e
+          call z,dest_next_chunk
+          jr ass_loop1
+
+a#cb2 = $ AND &FF
+          call ass#cb_com
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+          jr ass_loop2
+
+s16   = $ AND &FF
+ass16_1
+          inc e
+          call z,dest_next_chunk
+          jr ass8_1
+
+a16   = $ AND &FF
+ass16
+          call checkput_16
+          jr ass_loop2_b
+ajr   = $ AND &FF
+          call checkput_jr
+          jr ass_loop2_b
+
+ainc0 = $ AND &FF
+          inc l
+a0    = $ AND &FF
+ass_loop0
+          inc l
+ass_entry0
+;ret at end of source
+;jp (ix) at end of line
+      IF nrt_checks
+          ld a,iyh:cp afirst/&0100:call nz,mess
+      END
+          ld c,(hl)
+          ld a,(bc)
+          ld iyl,a
+          jp iy
+
+amac0 = $ AND &FF
+          jp ass_macro0
+afact0 = $ AND &FF
+          jp ass_factor_bloc0_ ;implicit
+afact = $ AND &FF
+          jp ass_factor_bloc
+
+arst  = $ AND &FF
+          jr assrst
+axx   = $ AND &FF
+          jr assxx
+a#xy_ind03 = $ AND &FF
+          jp ass#xy_ind03
+a#xy_ind1 = $ AND &FF
+          jp ass#xy_ind1
+a#xy_ind2 = $ AND &FF
+          jr ass#xy_ind2
+a#ed0 = $ AND &FF
+          call ass#ed03
+          jr ass_loop0
+a#ed1 = $ AND &FF
+          jp ass#ed1
+a#ed2 = $ AND &FF
+      IF nrt_checks
+          jp ass#ed2
+      ELSE
+          jr ass#ed2
+      END
+aesc  = $ AND &FF
+          jp assesc
+aesc0 = $ AND &FF
+          jp assesc0
+anl   = $ AND &FF
+          jp ix         ;custom ret
+s8    = $ AND &FF
+ass8_1
+          inc e
+          call z,dest_next_chunk
+arst1 = $ AND &FF
+          inc l
+          ld a,l
+          add (hl)
+      IF dev_checks'
+          call c,mess
+      END
+          ld l,a
+s_    = $ AND &FF
+ass_loop1
+          inc e
+          jr z,assnotok_dest
+aok_dest1 = $ AND &FF
+assok_dest1
+      IF prof_sample
+          call prof_tag
+      END
+      IF do_profile_line
+          jp profile_line
+profile_loop
+      END
+          inc l
+          ld c,(hl)
+      IF nrt_checks
+ ;         ld a,iyh:cp afirst/&0100:call nz,mess
+      IF prof_sample
+          call tmp
+      END
+      END
+.ok
+          ld a,(bc)
+          ld iyl,a
+          jp iy
+a8    = $ AND &FF
+          call check_8
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+ass_loop2_b
+          ld b,dispasst/&0100+2
+a_    = $ AND &FF
+;nothing more to do
+ass_loop2
+;          NRT_CHECK_DEST()
+          inc e
+          jr z,assnotok_dest
+alast
+      IF [afirst AND &FF00]-[alast AND &FF00]
+!! error: must be same MSB .
+; See /padding/
+      END
+
+aok_dest2 = $ AND &FF
+assok_dest2
+          inc l
+ass_entry
+      IF prof_sample
+          call prof_tag
+      END
+          ld a,(hl)
+;copy by default. may be overwritten
+          ld (de),a
+ass_artist_entry
+          ld c,a
+      IF nrt_checks
+;          ld a,(vo_curbk):ld (nrt_src_pnt+2),a
+;          ld (nrt_src_pnt),hl
+;          ld a,iyh:cp afirst/&0100:call nz,mess
+      END
+          ld a,(bc)
+          ld iyl,a
+          jp iy
+
+assxx
+          jp ass_unknown
+
+assrst
+          call check_8
+          cp 8
+          jp nc,assrstcheck
+          add a
+          add a
+          add a
+          jp assrstcheck
+
+assnotok_dest
+          call dest_next_chunk
+          jp okdestdispatch
+
+ass#xy_ind2
+          ld a,c
+          dec a
+          dec a
+          ld (de),a
+          inc e
+          call z,dest_next_chunk
+          inc l
+          ld a,(hl)
+          ld (de),a
+          cp &CB
+          jp z,ass#dd#cb2
+          push af
+          call checkput_idx
+          pop af
+          ld b,dispasst/&0100+2
+          jr ass_artist_entry
+ass#ed2
+          inc e
+          call z,dest_next_chunk
+          inc l
+          ld a,(hl)
+          ld (de),a
+          and &C7
+          cp &43
+          jp z,ass16
+          cp &46
+          jr nz,ass_loop2
+;im
+          call check_8
+          ld c,a
+          cp 3
+          ld a,err_invalidim
+          call nc,error_phase2_if_exp_ok
+          ld a,c
+          or a
+          jr z,$+3
+          inc a
+          add a
+          add a
+          add a
+          or &46
+          ld (de),a
+          jr ass_loop2_b
+
+ass#ed1
+          inc e
+          call z,dest_next_chunk
+          inc l
+          ld a,(hl)
+          and &C7
+          cp &43
+          jp z,ass16_1
+          cp &46
+          call z,skip_exp012 ;im
+          jp ass_loop1
+
+ass#ed03
+          inc l
+          ld a,(hl)
+          and &C7
+          cp &43
+          jp z,skip_exp
+          cp &46
+          ret nz
+;im
+          jp skip_exp
+
+is_endofdata
+;Z if end
+          inc l
+          inc l
+is_endofdata_
+          inc l
+          ld a,(hl)
+          cp e_endofdata
+          ret
+
+assesc0
+          inc l
+          ld a,(hl)
+          cp &40
+          jp nc,ass_loop0
+
+          push hl
+          ld l,jp_assesc0 AND &FF
+
+          jr assesc_com
+
+      IF nrt_checks
+tmp
+          ld a,l:cp &95:ret nz
+          ld a,h:cp &5B:call z,&BE00
+          ret
+      END
+
+assesc
+;phase1 & 2 only     
+      IF dev_checks'
+          ld a,d:cp ass_buf/&0100:call nz,mess
+      END
+          inc l
+          ld a,(hl)
+          ld (de),a
+          cp &40
+          jp nc,loopdispatch
+
+          push hl
+          ld l,jp_assesc AND &FF
+
+assesc_com
+          cp 28:jr nc,ass_unknown
+          add a         ;!! NC is used by ass_org
+          add l
+          ld l,a
+          ld h,jp_assesc/&0100
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+          ex (sp),hl
+;!! Must be NC here for assesc
+          ret
+
+ass_brk_set
+ass_elif0
+ass_elif
+ass_unknown
+          ld a,err_unknownorgasminstr
+error_phase12_and_abort
+          call error_phase12
+;we must stop here, as we don't know if we need to read parameters
+          call abort_ass' ; no return!
+
+ass_asis
+;syntax error   
+          push de
+          ld a,err_syntaxerror
+          call error_phase12
+          inc l
+          ld a,l
+          add (hl)
+          ld l,a
+          ld a,err_mess
+          call c,error_phase12
+          jp okdestdispatch_popde
+
+ass_eoc
+; Only flush in phase1 for housekeeping
+          ld a,(va_phase_backup):dec a
+          call z,flush
+
+          call connect_next_chunk
+          push af       ; Z reused
+          dec hl:dec hl ; overlap error report: point before EOC tag
+          jr z,ae_com
+          inc hl:inc hl
+; Only phase1
+; We cannot rely on va_phase, 
+; we must store state even in pseudo phase 0 (if 0, macro def...)
+          ld a,(va_phase_backup)
+          dec a:jr nz,.ae_com
+
+;current va_if at start of new chunk
+;(first chunk done by org)
+          push hl
+          ld l,chead_if
+          ld a,(va_if):ld (hl),a
+          pop hl
+.ae_com
+          PROF_TAG()
+
+          xor a
+          ld (vev_data),a
+          ld (vev_data+1),a
+          ld iyh,assjumpMSB
+          pop af
+          jp nz,loopaftereoc
+
+          call connect_bk_base ;!!NO JP
+          scf
+          sbc a         ;C et NZ
+          ret
+
+cpt_eoc
+          call connect_next_chunk
+          ld iyh,cpt_hi
+          jp nz,ass_entry4
+
+          call connect_bk_base
+          or a
+          ret
+
+
+ass_store_pc_line
+          push de
+          call get_pcadr
+          ld (va_pc_line),de
+          pop de
+          push de
+          call get_objcadr
+          ld (va_objc_line),de
+          jp okdestdispatch_popde
+
+ass_store_pc_instr
+;todo: factorize (hl taking va_pc or va_pc_line)
+          push de
+          call get_pcadr
+          ld (va_pc),de
+          pop de
+          push de
+          call get_objcadr
+          ld (va_objc),de
+          jp okdestdispatch_popde
+
+ass_org2
+          scf
+ass_org
+          call flush
+          push de
+          push af
+          call check_16_notneg
+          ld (va_pc0),de
+          pop af
+          call c,check_16
+          ld (va_objc0),de
+          jp okdestdispatch_popde
+
+ass_ent
+          push de
+;only raise error in phase2 for forward ENT
+          call check_16_phase2
+          ld (va_exec),de
+          ld a,(va_destbk):ld (va_exec_bk),a
+          ld a,(va2_flags)
+          bit vbit_ent_met,a
+          set vbit_ent_met,a
+          ld (va2_flags),a
+          pop de
+          jp z,okdestdispatch
+          ld a,err_doubleent
+          jp error_phase12_and_dispatch
+
+ass_skip
+; Same behavior phase 1/2:
+; - Reset buffer
+; - Only update $/$$
+          call flush
+          call check_16_notneg
+          call assdataskip
+          jp okdestdispatch
+
+ass_fill1
+          call advance_de
+          call skip_common ;skip value
+          jp assok_dest1
+
+ass_fill
+          call flush
+          call check_16_notneg
+          ld a,b
+          sub dispasst/&0100+1
+          jr z,ass_fill1 ;Z: phase 1, no need for value
+
+          push de
+          call check_8
+          pop bc
+          ld de,ass_buf
+          inc b
+          dec b
+          jr z,afill_ok
+af_full   ld (de),a
+          inc e
+          jr nz,af_full
+af_gros
+          call dest_next_chunk
+          djnz af_gros
+
+afill_ok
+          ld b,a
+          ex de,hl
+af_fine
+          ld a,l
+          cp c
+          jr z,af_done
+          ld (hl),b
+          inc l
+          jr af_fine
+af_done
+          ex de,hl
+          ld b,dispasst/&0100+2
+          jp assok_dest2
+
+ass#dd#cb2
+          call ass#cb_com
+          push af
+          call checkput_idx
+          pop af
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+          jp ass_loop2_b
+
+ass#xy_ind1
+          inc e
+          call z,dest_next_chunk
+          inc l
+          ld a,(hl)
+          cp &CB
+          jr z,ass#dd#cb1
+          ld c,a
+          call skip_common
+          ld a,c
+          inc e
+          call z,dest_next_chunk
+          jp ass_artist_entry
+
+ass#dd#cb1
+          call ass#dd#cb_skip_com
+          inc e
+          call z,dest_next_chunk
+          inc e
+          call z,dest_next_chunk
+          jp ass_loop1
+
+ass#xy_ind03
+          inc l
+          ld a,(hl)
+          cp &CB
+          jr z,ass#dd#cb0
+          ld c,a
+          call skip_exp
+          ld a,c
+          jp ass_artist_entry
+ass#dd#cb0
+          call ass#dd#cb_skip_com
+          jp ass_loop0
+
+okdestdispatch_pophlde
+          pop hl
+okdestdispatch_popde
+          pop de
+okdestdispatch
+          ld a,(va_phase)
+          cp 4:jr z,.phase4 ; Mustn't change bc for phase 4
+          add dispasst/&0100
+          ld b,a
+          sub dispasst/&0100
+          jp z,ass_loop0
+          dec a:jp z,assok_dest1
+          dec a:jp z,assok_dest2
+          jp ass_loop0
+
+.phase4
+          ld iyh,cpt_hi
+; What the fuck?
+; -> jump at &1000, then other breakpoint
+;          ld a,l:cp &89:call z,&BE00
+          jp ass_loop4
+
+get_pc_from_line
+;---------------   
+; Actuallly get both PC and TM
+;In A = va_if
+ ; hl  = source pointer (with vo_curbk)
+ ; de  = current $  (for visu)
+ ; bc' = target line #
+ ; de' = line # 
+; Note: target line needed to handle macro
+;Out: nc if not found (problem!)
+    ; If found: Carry. DE = target $
+          call except_enter
+          ld bc,gpc_hooks
+          call pc_count
+          jp except_ret
+
+gpc_hooks
+  ;phase0: must continue increment and test as usual
+      WORD gpc_test
+      WORD gpc_test0
+          jp gpc_comment
+          jp ass_factor_bloc_end
+
+gpc_comment
+          call skip_common
+;enchaine
+gpc_test
+;------- 
+; Copy-paste from /glfp_test/ 
+; Inc line # even in phase 0, but not in macro.
+; (we don't point to macro source but stay at invocation line)
+
+          call is_line_reached
+          jp nz,ass_loop4
+gpc_exit
+;ok DE= cur $ 
+  ; BC= tm
+          scf
+      IF todo
+;replace all connect_bk_base by connect_bk_base_save_bc
+      END
+          jp connect_bk_base
+
+gpc_test0
+;--------
+          call is_line_reached
+          jp nz,ass_loop0
+          ld bc,(va_cpt_bc)
+          jr gpc_exit
+
+is_line_reached
+; Update de' and check.
+; Out: Z if target reached 
+
+;is in macro? if yes, don't change line #  (so, no need to test target)
+          ld a,(va_nxt_msp):or a
+          ret nz
+
+          exx
+          inc de
+;reached target? 
+          ld l,e:ld h,d
+          or a:sbc hl,bc
+          exx
+          ret
+
+glfp_scan_
+;itere opcodes tant que current $ <= target $
+;In A  = va_if   
+ ; hl  = source pointer (with vo_curbk)
+ ; de  = current $
+ ; bc' = target $
+ ; de' = line #
+;Out: nc if not found
+    ; If found: Carry
+              ; DE = source pointer at target $
+              ;  A = va_if
+; Then:
+; BC=TM  ?               
+
+; Enter exception block, since _enter_scope may use except.abort
+; TODO: See why _enter_scope wouldn't work for visu, as it has
+      ; worked for assembly. 
+; Anyway: that's neater to show "line not found" in visu mode
+        ; than to breakpoint due to CHECK_FRAME().
+          call except_enter
+          ld bc,.glfp_hooks
+          call pc_count
+          jp except_ret
+
+.glfp_hooks
+      WORD glfp_test
+      WORD ass_loop40
+          jp glfp_comment_test
+          jp glfp_factor_bloc_end
+
+pc_count
+; actually pc and tm count
+; In: bc: hooks
+    ; except_enter has been called
+    ; other: see get_pc_from_line and glfp_scan_
+          push hl
+          push de
+          ld l,c:ld h,b
+          ld de,count_hooks
+          ld bc,count_hooks_
+          ldir
+          pop de
+          pop hl
+
+          call connect_bk_source_safe
+          ld bc,0       ; reset tm 
+          ld (va_cpt_bc),bc ; needed if we start by phase 0
+          ld (va_if),a
+          inc a         ; for z/nz
+          ld a,phase_count
+          ld (va_phase_backup),a
+          jr z,$+3:xor a ;NZ= phase 0
+          ld (va_phase),a
+;dispatch
+          ld ix,(loop4)
+          ld iyh,cpt_hi
+          or a
+          jp nz,ass_entry4
+;phase0
+          ld ix,(loop40)
+          ld iyh,assjumpMSB
+          ld b,dispasst/&0100
+          jp ass_entry0
+
+
+loopdispatch
+;only called by assesc (phase 1 & 2 only)
+          ld a,b
+          sub dispasst/&0100+1
+          jp z,ass_loop1
+          jp ass_loop2
+
+loopaftereoc
+;no inc l nor inc e
+          ld a,b
+          sub dispasst/&0100
+          jp z,ass_entry0
+          cp 3
+          jp nc,ass_entry0
+          jp ass_entry
+
+skiptwice
+          call skip_exp
+assskip03
+          call skip_exp
+          jp ass_loop0
+assskipasis
+;skip error
+          call skip_common
+          jp ass_loop0
+
+assrstcheck
+          ld c,a
+          and &C7
+          jr z,assrstok
+          ld a,err_invalidrst
+          call error_phase2_if_exp_ok
+_brkok
+          ld c,&F7      ;rst $30
+assrstok
+          ld a,c
+          or &C7
+          ld (de),a
+          jp ass_loop2_b
+
+ass_brk
+          ld a,b
+          cp dispasst/&0100+2
+          jr z,_brkok
+          jp ass_loop1
+
+ass_restore_command
+          call flush
+          ld a,b
+          cp dispasst/&0100+2
+          jr z,ass_restore2
+          ld e,restore_-1
+          jp ass_loop1
+
+ass_restore2
+          push hl
+          push bc
+          push de
+; if restore zone intersect poked OUT,
+; we use backup jump address.
+          call get_pcadr
+          ld hl,restorecritical
+          add hl,de
+          ASSERT(restore_and_goto_ed/256 == restore_and_goto_ed'/256)
+          ld a,h:cp restore_and_goto_ed/256
+          ld a,restore_and_goto_ed-1 AND &FF
+          jr nz,.okj
+          cp l:jr c,.okj
+          ld a,restore_and_goto_ed'-1 AND &FF
+.okj
+          pop de
+          ld hl,restorerout
+          ld bc,restore_
+          ldir
+          push de
+          ld e,restorejump:ld (de),a
+          ld a,i:ld e,restorebk:ld (de),a
+          ld a,(vt_rommon):ld e,restorerom:ld (de),a
+          pop de
+          pop bc
+          pop hl
+          jp assok_dest2
+
+restorerout
+          RESTORE_ROUT(restore_and_goto_ed)
+restore_ = $-restorerout
+
+ass_bank
+          call flush
+          call check_8
+          cp &B8:jr z,.asic_on
+          cp &A0:jr z,.asic_off
+          ld c,a
+          and &C0
+          xor &C0
+          jr z,.ab_ok
+          ld a,err_invalidbank
+          call error_phase2_if_exp_ok
+          ld c,&C0
+.ab_ok
+          ld a,c
+.ab_ok_
+; Global version (cross tabs for import to respect current connection)
+          ld (va_destbk),a
+; For storage (since save.o will re-read it after reset)
+; Copied to vo_destbk_last in finitions
+          ld (va_destbk_last),a
+          jp okdestdispatch
+
+.asic_on
+          call .check_is_plus
+; If several "BANK &b8", don't trash backup
+          cp &B8
+          jr z,.ab_ok
+          ld (va_destbk_backup),a
+          jr .ab_ok
+
+.asic_off
+; Undo &b8 (never poke &a0 itself)
+          call .check_is_plus
+; If "BANK &a0" alone without b8 before, no-op
+          cp &B8
+          jp nz,okdestdispatch
+          ld a,(va_destbk_backup)
+          jr .ab_ok_
+
+.check_is_plus
+;Out: C: &b8/&a0
+    ; A: va_destbk
+          di
+          CALL_MON(is_amstrad_plus)
+          ei
+          ld c,a
+          ld a,(va_destbk)
+          ret nz
+
+          ld a,err_asic_not_detect
+          call error_phase2_if_exp_ok
+          pop af        ; discard ret
+          jp okdestdispatch
+
+
+ass_if
+          call track_if
+      IF todo
+; Can remove err_toomanyif below
+      END
+;enchaine
+cpt_if
+          push de
+          call check_16
+          ld a,e
+          or d
+          pop de
+          jr z,ass_if_com
+          scf
+ass_if_com              ;also for 0 * [ ... ] and macro def skipped
+          ld a,(va_if)
+          rla
+;If nc: too many IFs (already tested in /track_if/)
+          call c,_cond_
+          jp okdestdispatch
+
+track_if
+; Track level and position of each if.
+; Just to report error when IF/END mismatch
+; Note: It is more (re)strict(ive) than previous test (NC after 
+      ; shifting va_if), as we allowed more than 8 levels as long 
+      ; as first ones were True.
+; Bugged if more than 8 IF 0
+
+; !!! Only in done phase1:
+   ; - It would be inconvenient in real phase 0:
+       ; - need to init va_if_level and va_if_pnt
+       ; - even more complicated, as it would prevent using phase 0
+         ; from arbitrary point
+   ; - Phase2: discard as well for symetry with cpt_end 
+   ; Note phase4 here (as we call /cpt_if/ instead)
+
+; !!! BUT: if "IF 0" inside a macro def (which set va_phase to 0)
+         ; we still want to be able to track it.
+
+          ld a,(va_phase_backup)
+          dec a
+          ret nz
+;phase1
+          ld a,(va_if_level)
+          cp MAX_IF_LEVEL
+          jr c,.ok
+
+          ld a,err_toomanyif
+          jp error_phase12
+
+.ok
+          inc a
+          ld (va_if_level),a
+
+; store cur pnt in case of if mismatch.
+      IF need_room
+; Maybe it  would be enough just to store 1st pnt when  
+      END
+          push de
+          ex de,hl
+          ld hl,(va_if_pnt)
+      IF dev_checks'
+          ld a,h:cp if_stack/&0100:call nz,mess
+      END
+          call set_cur_source
+          ld (va_if_pnt),hl
+
+          ex de,hl
+          pop de
+          ret
+
+
+ass_macro_def1
+          push hl       ; keep for common skip
+          push de
+          push hl       ; pnt to "m" bytecode
+; get name                     
+          inc l         ; skip length
+          call read_label
+; rewind to macro opcode for check in marg_lp
+; and to store macro start in va_macro_pnt
+          pop hl
+          ld (va_macro_pnt),hl ; put H msb
+          ld a,l:ld (va_macro_pnt+2),a
+          GET_CURBK():ld (va_macro_pnt),a
+          ld c,a
+          ex de,hl
+          ld a,vmask_macro
+          CALL_SY(sy_set) ;cde= pos in source
+          ex de,hl
+          call connect_bk_source_from_bk_base
+          call nc,error_phase12
+          ld iyh,assjumpMSB
+          pop de
+          pop hl
+;enchaine:
+
+ass_macro_def2
+; don't parse code here
+cpt_macro_def
+          call skip_common
+          or a
+          jr ass_if_com
+
+ass_if0
+; We want to track "IF" inside a macro def (which set va_phase to 0)
+          call track_if
+          jr ass_if0_
+ass_macro0
+          ANCHOR(bug#1bf)
+;previous macro must be closed
+;if we are in macro: phase is 0.
+          ld a,(va_phase_backup)
+          dec a         ; only in phase 1
+          push bc       ; needed in case of error
+          push de       ; Needed?
+          call z,check_macro_closed
+          pop de
+          pop bc
+ass_factor_bloc0
+ass_if0_
+
+          call if_met
+
+ass_factor_bloc0_
+
+;must maintain level BUT do not trigger error
+;va_if = garbage if real phase0, nevermind
+          call skip_exp
+          ld a,(va_if)
+          add a         ;No change : already deactived.
+          ld (va_if),a
+          jp ass_loop0
+
+ass_else
+; bug#179, must detect dangling ELSE
+; But only in phase1 to mimic ass_end0.
+   ; error_phase1_and_dispatch is also activated in phase2...
+   ; va_if_level not updated in phase2?
+          ld a,(va_phase_backup)
+          dec a
+          jr nz,ass_else0
+
+          ld a,(va_if_level)
+          or a
+          ld a,err_unexpectedelse
+          jp z,error_phase12_and_dispatch
+ass_else0
+;'else' flag set in all phases instead of just phase0: nevermind.
+          call else_met
+cpt_else
+;if real phase0 : NO-OP
+          ld a,(va_if)
+          xor 1
+          jr ai_com
+
+ass_end
+          NRT_CHECK_DEST()
+ass_end0
+;We only track 'end' in phase 1
+  ; - We musn't track in phase:
+         ; 0 (see track_if for rational)
+         ; 4 (visu: would mess up registers)
+          ld a,(va_phase_backup)
+          dec a
+          jr nz,com_end_
+
+          ld a,(va_if_level)
+          ld c,a
+          or a
+          ld a,err_unexpectedend
+          jp z,error_phase12_and_dispatch
+          ld a,c
+          dec a
+          ld (va_if_level),a
+; pop if_stack
+          push hl
+          ld hl,(va_if_pnt)
+SOURCE_PNT_SIZE = 3
+          SOURCE_PNT_SIZE ** dec hl
+          ld (va_if_pnt),hl
+          pop hl
+          jr com_end_
+
+ass_macro_end0
+; Flag "out of macro def" for missing endm detection. 
+; Must be done here, as phase set to 0 at ass_macro_def1/2
+; Note: if unclosed "if 0" in middle of macro, this flagging is wrong.
+      ; it doesn't matter much.
+          xor a:ld (va_macro_pnt),a
+          jr com_end_
+com_end
+;flush needed in phase1/2, since assbuf will be reset in cond_com
+     ;     call flush
+com_end_
+ass_factor_bloc_end0
+          call end_met
+ass_factor_bloc_end0_
+cpt_end
+          ld a,(va_if)
+          scf
+          rra
+ai_com
+          call _cond_
+          jp okdestdispatch
+
+_cond_
+;switch phase  
+          ld (va_if),a
+          inc a         ;all bits set : activate
+          ld a,(va_phase_backup)
+          jr z,.cc_activate
+;off
+          or a:ret z    ;don't change ix
+
+          sub 3
+          ret z         ;don't change phase, ix and bc (!?)
+          ld ix,ass_loop0
+          dec a:jr nz,.okoff
+;4to0 
+; Note: bc saved before jump to cpt_if, as check_16 might trash it
+          ld ix,(loop40)
+.okoff
+          xor a
+          ld (va_phase),a
+          ld iyh,assjumpMSB ;coming from phase4
+
+.cc_activate
+          ld (va_phase),a
+          or a:ret z    ; true phase 0
+          cp 4
+          ret nz
+;0 to 4
+          ld ix,(loop4)
+          ld bc,(va_cpt_bc)
+      IF dev_checks'
+;only gpc_test or glfp_test for now (anyway must be an address in rom)
+      IF glfp_test > gpc_test
+ !! review
+      END
+          ld a,ixh
+          cp glfp_test/&0100
+          call c,mess
+      END
+          ret
+
+
+is_in_macro_
+; is in macro invokation from the current source?
+; If no:  Z
+; If yes, NZ, A=va_cur_smp (for asseva)
+          ld a,(va_nxt_msp)
+          push hl
+          ld hl,va_base_msp:cp (hl)
+          pop hl
+          ld a,(va_cur_msp)
+          ret
+
+ass_macro_end
+; Flag "out of macro def" for missing endm detection. 
+          xor a:ld (va_macro_pnt),a
+cpt_macro_end
+
+      IF todo
+ ; unexpected ENDM then
+      END
+          IS_IN_MACRO():jr z,com_end ; no -> com_end
+
+; return from macro expansion
+          call ass_exit_scope
+
+          push de
+fixdc = 1
+      IF fixdc
+; pop parameters. Otherwise the buffer acts as a rotating one,
+; which conflicts with our bufovf check (mparam_ovf).
+          ld hl,(va_cur_psp)
+          dec l
+          ld a,(hl)
+          ld (va_cur_psp),a
+      END
+
+; pop frame.
+          push bc       ; tm
+          ld hl,(va_cur_msp)
+          ld (va_nxt_msp),hl ; free this frame
+
+; Must sync table if host's one <> macro
+          ld a,(va_tab_symb) ; current macro tab
+          cp (hl)
+          ld a,(hl)
+          call nz,sync_symb
+
+          inc l
+          ld e,(hl):inc l ; bk
+          ld c,(hl):inc l ; lsb 
+          ld d,(hl):inc l ; msb
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+          ld (va_cur_msp),hl ; previous frame
+        ;  call connect_bk_source  <- no need since jp goto_line
+          call goto_line
+          call skip_common
+          ANCHOR(bug#1df)
+          ld de,(va_pc0_before_macro)
+          call update_chead_pc_if_emitted
+          pop bc
+          jp okdestdispatch_popde
+
+
+cpt_factor_bloc
+          push bc       ; save cpt tm
+          exx
+          push de
+          exx
+          pop bc
+          push de
+          call check_16_notneg
+          jr c,com_factor_bloc
+          pop de
+          ex (sp),hl
+          ld hl,unknown_tm
+          ex (sp),hl
+          push de
+          ld de,0
+          jr com_factor_bloc
+
+ass_factor_bloc
+          push bc       ; just to harmonize with cpc_factor_bloc
+;enchaine
+; In: BC= current line (only for cpc_factor_bloc
+          push de
+          call check_16_notneg
+com_factor_bloc
+
+          ld a,e
+          or d
+          jr z,.af_switchoff
+
+          call _enter_scope
+          push hl
+          push hl
+
+          ld hl,(va_rep_pnt)
+          ld a,l
+          cp va_rep_end AND &FF
+          jr c,.afact_ok
+;af_err    
+          ld a,err_toomanyif
+          call error_phase12
+          jr .af_end
+
+.afact_ok
+          ld (hl),c:inc hl
+          ld (hl),b:inc hl ; bc: line at repetition start
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl ; de: nb reps
+          ld (hl),0:inc hl
+          ld (hl),0:inc hl ; iter (for #, ##, ###)
+          pop de
+          call set_cur_source ; pnt at repetition start
+          ld (va_rep_pnt),hl
+.af_end
+          pop hl
+          pop de
+          pop bc
+          jp okdestdispatch
+
+
+.af_switchoff
+;special case 0 * [...] : must skip (like 'if 0')
+          pop de
+          pop bc
+          or a
+          jp ass_if_com
+
+ass_factor_bloc_end
+          push bc       ; for count tm
+          push hl
+          ld hl,(va_rep_pnt)
+          ld bc,va_rep
+          scf
+          sbc hl,bc
+          add hl,bc     ;no carry (= dec hl)
+          jr c,.afe_err
+
+;Must be done here, after 'unexpected ]' test.
+;Otherwise we try to exit a scope we never entered,
+;leading to an obscure interal error.
+          call ass_exit_scope
+        ;  call connect_bk_source  <- no need, done anyway
+
+          push de
+          ld e,(hl):dec hl
+          ld d,(hl):dec hl
+          ld a,(hl):dec hl
+          ld b,(hl):dec hl
+          ld c,(hl)
+          inc bc
+          ld (hl),c:inc hl
+          ld (hl),b:dec hl
+          dec hl
+          ld b,(hl):dec hl
+          ld c,(hl)
+
+          ld iyl,a
+
+      IF dev_checks
+;can't be 0 : 0*[...] acted like 'if 0' (no rep pushed)
+            ; ass_factor_bloc_end0 is called instead
+          ld a,c
+          or b
+          call z,assert_fail
+      END
+
+          dec bc
+          ld (hl),c:inc hl
+          ld (hl),b:dec hl
+          ld a,c
+          or b
+          dec hl:ld b,(hl)
+          dec hl:ld c,(hl) ; line at start of rep
+          jr z,.afe_endofiter
+
+;New iter, new scope
+          call _enter_scope
+
+;rewind to start of repeat
+          ld a,(va_phase)
+          cp 4
+          jr nz,.okphase
+          push bc
+          exx
+          pop de
+          exx
+.okphase
+          ld c,e
+          ld e,iyl      ; de:id
+          call goto_line
+          pop de
+          pop af        ;discard source pos
+          jr .afe_end
+
+.afe_endofiter
+          ld (va_rep_pnt),hl
+          pop de
+          pop hl
+          call connect_bk_source_from_bk_base
+.afe_end
+          pop bc
+          jp okdestdispatch
+
+.afe_err
+          pop hl
+          call connect_bk_source_from_bk_base
+          ld a,err_unexpectedendofbloc
+          call error_phase12
+          jr .afe_end
+
+ass_load0 = assskip03
+;ass_save0 = assskip03
+
+ass_load
+; Must be loaded in phase1 to have the size.
+;  (We could just open the file, but it would be more complex and
+;   since the drive is launched we might as well read.)
+; Phase 2 will use the cached version.
+
+; Flush so we can use DE, and in phase2 easily copy content.
+          call flush
+          push de       ; shorter than to reload after with ass_buf
+
+          call get_file
+          jr c,ald_okfile
+load_error
+          pop de
+error_phase12_and_dispatch
+          call error_phase12
+          jp okdestdispatch
+
+ald_okfile
+          ld a,(va_phase)
+          dec a:jr z,ass_load1
+          dec a:jr z,ass_load2
+      BRK               ; Cannot reach here anyway?
+
+ass_load1
+          pop af        ;discard assbuf
+          ld e,c
+          ld d,b
+          call advance_de
+          jp okdestdispatch
+
+ass_load2
+;de = id asset        
+;hl = src
+          push hl:pop ix
+; transfer cached copy.
+          ld a,c:or b:jr z,.done ; TODO: warn instead?
+
+ ; skip first chunk (metadata).
+          CALL_BRIC(get_asset_chunk):jp nc,exit_mess
+.read
+          CALL_BRIC(get_asset_chunk):jp nc,exit_mess
+          push af:push de
+
+      IF dev_checks
+;get_asset_chunk promise to return C>0
+          inc c:dec c:call z,&BE00
+      END
+
+;We copy out of bank. Allow to use generic copy_com (copy from ass_buf)
+;also it's faster than copy_trans_bk
+          call copy_to_buf
+          push ix:pop hl ; src
+          call copy_com
+
+          pop de
+          pop af
+          jr nz,.read
+
+.done
+          jp okdestdispatch_popde
+
+;---    
+ass_save
+          ld iyl,"B"
+          jr ass_save_com
+ass_savea
+          ld iyl,"A"
+ass_save_com
+;in: IYl= type "A"/"B"
+          ld a,(va_phase)
+          cp 2
+          jr z,.ok2
+          call skip_common
+          jp okdestdispatch
+.ok2
+          push de
+          push hl       ; to rewind in case of error
+          inc l
+          inc l         ; skip datasize
+
+; Store pointeur to string (easier than copying, as we don't have
+; dynamic nodes)
+; Note: nodes are created even in case of error, that doesn't matter
+      ; as they will be released at next assemblage
+          GET_CURBK()
+; !! must be done before connecting node (since /vo_curbk/ in bk base)
+          push hl
+          push af
+          call append_save_node
+          pop af
+          pop de
+          call set_source
+; Set type
+          ld a,iyl:ld (hl),a
+          ex de,hl
+
+; Must also store bank connection at directive time
+; (whole node used for that, never mind)
+          call append_save_node
+          ld a,(va_destbk)
+          ld (hl),a:inc l
+MSB_BK = &7F
+          ld (hl),MSB_BK
+
+; Check string type
+          call connect_bk_source_safe
+          ex de,hl
+          ld a,(hl)
+          cp 34
+          jr nz,.errsave
+          call skip_common ; skip the str
+
+; Evaluating params must be done now  (in case of local label)
+          ld b,0        ; #number of params
+.storeparams
+          call connect_bk_source_safe
+          inc l
+          ld a,(hl)
+          cp e_endofdata
+          jr z,.endparams
+          dec l
+          push bc
+          call check_16_notneg' ; flag errors itself
+          push hl
+          push de
+          call append_save_node
+          pop de
+; We tag params, as we have only one list for all SAVE directives
+tag_param = 1
+          ld (hl),tag_param:inc l
+          ld (hl),e:inc l
+          ld (hl),d
+          pop hl
+          pop bc
+          inc b
+          jr .storeparams
+
+.endparams
+; Check # of params
+          ld a,b:cp 2
+          jr c,.errsave
+; Tag end of (sub)list
+          call append_save_node
+tag_end = 0
+          ld (hl),tag_end
+          ex de,hl      ; hl = source
+          call connect_bk_source_safe
+          pop de        ; eat start of exp
+          jp okdestdispatch_popde
+
+; enchaine (err if 0 or 1 params)
+.errsave
+          pop hl
+          call skip_common
+          pop de
+          ld a,err_saveusage
+          jp error_phase12_and_dispatch
+
+append_save_node
+;in: HL = source
+;out: like list4_append, expect
+    ; DE = source
+          CALL_EXT(get_save_list)
+          push hl
+          CALL_BRIC(list4_append)
+          pop de
+          ret c
+; Memory: nothing much we can do, and ensure stack unwind
+          call abort_ass ; no return
+
+
+ass_import0 = assskip03
+
+ass_import
+          CHECK_FRAME()
+; Flush so we can use DE, and in phase2 easily copy content.
+          call flush
+      IF dev_checks
+          ld a,e:or a:call nz,fail
+;Phase must be 1 or 2
+          ld a,(va_phase)
+          dec a:jr z,.ok
+          dec a:jr z,.ok
+          ld a,(va_if):inc a:jr z,.ok
+      BRK
+.ok
+      END
+
+; va_error_array isn't stored. Since we don't handle cross-source 
+; errors, early exit if already an error
+; NOT TRUE anymore (HH beta 6), but early exit doesn't hurt.
+          call get_nb_errors
+          or a
+          jp nz,abort_ass'
+
+      IF nrt_checks
+          ld a,(va_tab_symb)
+          cp nrt_max_tabs:call nc,nrtfail
+      END
+
+; Do all bksource related stuff first, while it's connected.
+        ;  ld a,(va_phase):cp 2:call z,&BE00
+          call _setup_import
+; Must save current state before imported file reset it.
+; It will be merged once imported file is assembled.
+          ld hl,va_emitted
+; Only in phase 1!! Otherwise we would overwrite with dummy values.
+; (since va_* isn't updated in other phases)
+          ld a,(va_phase)
+          dec a
+          jr nz,.no1
+          CALL_EXT(set_assembled_info)
+.no1
+; $ and $$ for do_import
+          ld bc,(va_pc0)
+          ld de,(va_objc0)
+
+; va_tab_symb is sync by init_var via do_import
+; but not synced when we switch back to host.
+; We cannot use org_get_current_selection at return, as it might differ
+; (case this IMPORT is in imported macro).
+; We have to store current value.
+          ld a,(va_tab_symb)
+      IF nrt_checks
+          cp nrt_max_tabs:call nc,nrtfail
+      END
+          push af
+
+; Need to save ix/iy.
+; In dev, do_import use ass_from_import in rom, 
+        ; which set iy to rom version.
+; Mort importantly (also in rom version):
+; in case of i/o error, ix and iy might have been corrupted.
+          push ix:push iy
+      IF dev_checks
+; must va_if = -1
+; import: directive wouldn't have been entered otherwise
+          ld a,(va_if):inc a:call nz,mess
+      END
+          call _enter_scope ; needed for #1dd'
+          push bc       ; va_pre_pc of import
+      IF do_test_timernrt
+          ld a,(va_phase):cp 2
+hook_timernrt call z,&BE00
+      END
+          call do_import ; in/out: bc=pc de=obj (out: hl=src)
+
+; Update (even if error, to free BC and DE)
+; ?? Already set at end of import??
+          ld (va_pc0),bc
+          ld (va_objc0),de
+          pop de        ; was bc (value checked against in cpt_import)
+          push af
+
+          ANCHOR(bug#1df)
+;if import emitted, it updated its own chead_pc.
+;We do it for host now. (in phase1_fakeflush it would be too late,
+;as va_pc0 has changed)
+          ld a,(va_phase):dec a
+          call z,update_chead_pc_if_emitted
+
+          ANCHOR(bug#1dd')
+          call ass_exit_scope
+          pop af
+          pop iy:pop ix
+
+;Sync va_tab_symb          
+;needed if IMPORT directive inside an imported macro
+          pop de        ; d = va_tab_symb (was A)
+          push af
+          ld a,d
+          call sync_symb
+          call connect_bk_source
+          pop af
+
+          CHECK_FRAME() ; preserve AF
+
+          ld de,ass_buf
+          jr nc,.error  ; NC NZ: err directive, NC Z: err in imported  
+
+      IF 0
+;hack to defeat bug#19e (exiting with phase0)
+; No -> Wouldn't be enough. Start $/$$ thrashed
+   ; -> Cannot happen anymore since bug#160 fixed (well...)
+;!!! But: see check below
+          ld a,(va_phase_backup)
+          ld (va_phase),a
+      END
+          ANCHOR(bug#1ba)
+      IF dev_checks'
+;phase 0 due to dangling IF.
+   ; -> Then NL leads to JP IX. But IX is trashed -> crash
+; We fixed the triggering bug (dangling IF in macro),
+; check no other instance happen.
+;!!! Also see comment in next (deactivated) check
+          ld a,(va_phase)
+          or a:call z,mess
+      END
+
+      IF dev_checks
+;sanity. Don't check it before:
+;in case of error, /fix_error_lines/ reset phase to 0.
+          ld a,(va_phase_backup):or a:call z,mess
+;now va_if is in middle of /tostore0/. Must be -1 here.
+          ld a,(va_if):inc a:call nz,mess
+      END
+          jp okdestdispatch
+
+.error
+; If import in directive (file not found): 
+; continue despite risk cascading errors (e.g. labels not found),
+; since that's the simplest code!
+          jp nz,error_phase12_and_dispatch
+
+; Error in imported source itself: we stay on its tab
+; Also, finitions/fix_error_lines already been called.
+; Lastly, we must rool back until main org_assemble invocation.
+;A=0: no additional failure.
+          xor a
+          call abort_ass ;!!no return
+
+sync_symb_tab
+          CALL_EXT(org_get_current_selection)
+;enchaine
+sync_symb
+;IN: A = tab id
+      IF nrt_checks
+          cp nrt_max_tabs:call nc,nrtfail
+      END
+          ld (va_tab_symb),a
+          push hl
+          ld c,a
+          CALL_EXT(org_get_current_selection)
+          cp c
+          ld a,c
+          push af:call z,sy_sync_cur_index_to_live
+          pop af:call nz,sy_sync_ext_index_to_live
+          pop hl
+          ret
+
+
+get_options
+; For now, no options.
+          ld a,(hl)
+          cp e_endofdata
+          ret z
+          jp exit_mess
+
+get_file
+;IN: hl=source (directive LOAD)
+;OUT: Carry if ok
+    ; Then HL = post source
+         ; DE = id metadata file.
+         ; BC = filesize
+
+          inc l
+          inc l         ; skip data compound size
+          inc l         ; skip string marker "
+          ld a,(hl)
+;Copy string for routine to be able to scan banks.
+;Overrun: not likely, since string <= 65 characters from parser)
+        ; Also, it would write on exp buffer (not used here).
+
+          inc a         ; copy size itself. 256 ok  
+          ld c,a
+          ld de,va_string
+          push de
+          call copy_to_de
+
+; NB: don't check for empty string: dos will deal with that.
+          call get_options
+
+          ex (sp),hl
+          call load_if_absent
+          pop hl
+          jp connect_bk_source_safe
+
+
+ass_str
+;------
+          inc l
+          inc l         ; skip length of compound data
+          ld a,(va_phase)
+          dec a:jr z,ass_str1
+          dec a:jr z,ass_str2
+      BRK               ; shouldn't reach here
+
+ass_str1
+          ld a,(hl):inc l
+      IF dev_checks
+; For now only string allowed in encoding
+          cp 34
+          call nz,mess
+      END
+          ld c,(hl)
+          ld a,l:add c:ld l,a
+
+          call advance_c
+
+          inc l
+      IF dev_checks
+          ld a,(hl)
+          cp e_endofdata
+          call nz,mess
+      END
+          jp okdestdispatch
+
+ass_str2
+          call flush    ; so we can copy to buffer start
+          inc l         ; skip string marker (checked in phase 1)
+          ld c,(hl):inc l
+          call copy_to_buf
+          dec e
+          ld a,(de):or &80:ld (de),a
+          inc e
+; Here, hl points to e_endofdata (checked in phase 1)
+          jp okdestdispatch
+
+
+;---------------------
+goto_line
+;fact repeat, return from macro, or overlap rewind
+;in: de=id
+;     c=lsb source
+          ex de,hl
+          ld b,h
+          push bc
+          call org_connect_source_chunk_from_id
+          pop hl
+          ld iyh,assjumpMSB ; in phase4: corrected in a4a
+          ret
+
+;---------------------
+macput_bc
+          ld (hl),c:inc l
+          ld (hl),b:inc l
+          ret nz
+
+          pop af        ; discard ret adr
+          ld a,err_stackoverflow
+errmac
+; err in invocation itself (we have switched tab)
+; in phase1 since we don't know how much code must be expanded
+
+          pop hl        ; discard source pnt or macro stack pnt
+          pop hl
+          call org_connect_source_chunk_from_id
+          pop hl        ; source pnt at macro start
+          call error_phase12
+          call skip_common
+          jp okdestdispatch_popde
+
+errmac_undefined
+          ld a,err_undefinedmacro
+          jr errmac
+
+mparam_ovf
+          pop hl
+;TODO: NRT for this. right now, reuse error
+          ld a,err_overflowidx
+          jr errmac
+
+marg_mismatch
+;we are in imported tab, we must unwind
+          ld a,(va_nxt_msp) ; nb: cur frame behing constructed
+          ld c,a
+          ld a,(bc)
+          call sync_symb
+          ld a,err_argmismatch
+          jr errmac
+
+
+cpt_macro_use
+; Low key 'push'. If we were using push:
+ ; - ass_macro_use would have to, too. Not a big deal though
+ ; - More annoyingly, we would have to pop it at every exit point
+     ; (but maybe that would be shorter)
+          ld (va_cpt_bc),bc
+
+ass_macro_use
+;------------
+
+; One frame in macro_stack:
+  ; cur chunk, cur source pnt in chunk, prev frame (0 if none)
+  ; Then for each param:
+  ; id label, pnt in macro_stack_param  (key:value)
+
+; Rationale for Param not inlined in frame:
+    ; - So we have more room for recursive macro.
+    ; - Also easier to match param name (fixed size).
+    ; - Can flag absence of value (0). 
+
+; Once args collected, we jump back to ass loop at macro position.
+; "Return from macro" is handled in ass_macro_end
+
+          call _enter_scope
+
+          push de
+          push hl       ; current pnt (rewind in case of error)
+          GET_CURBK()
+          ld c,a
+          ld b,h        ; MSB in b for ID 
+          push bc       ; (for errmac)
+          push hl       ; need for stack consistency (cf macput_bc)
+
+          ANCHOR(bug#1df)
+          IS_IN_MACRO():jr nz,.ok ; only for first invoker
+;Needed when macro itself flushes (buffer full)
+    ; - chead_pc not updated because macro chunk
+    ; - va_pc0 modified because of flush
+          ld hl,(va_pc0):ld (va_pc0_before_macro),hl
+.ok
+
+ ; In case of error, we want va_cur_psp to remain unchanged.
+ ; Thus: use aux var.
+          ld hl,(va_cur_psp):ld (va_tmp_psp),hl
+          ld hl,(va_nxt_msp)
+          ld b,c        ; vo_curbk
+          ld a,(va_tab_symb)
+          ld c,a
+          call macput_bc
+          pop bc:push bc ; source pnt (was hl)
+          call macput_bc
+          ld bc,(va_cur_msp)
+          call macput_bc ; link to previous Macro Frame
+mac_offset = 6
+          ex (sp),hl
+
+          inc l
+          call read_label
+          push hl
+
+          ex de,hl
+;Macro necessarily global. Avoid ambiguity
+; check A = "undefined"                  
+          push hl
+          CALL_SY(sy_get_explicit_global)
+          pop hl        ; id for second chance in import
+;          call nc,&BE00
+          IS_BK_BASE()
+          call nc,try_import
+          ld (va_save_a),a ; flags
+          ld b,d        ;MSB to form ID
+          ld (va_save_bc),bc
+          ld (va_save_de),de
+          call connect_bk_source
+          pop hl
+;!!! if bit imported, must follow ref
+; If NC, A = err_undefined 
+; If  C, A = flags.
+          jp nc,errmac
+          bit vf_macro,a
+          ld a,err_notamacro
+          jp z,errmac
+
+
+;set params -------------------
+mparam_lp
+          call is_endofdata_:jr z,mparam_end
+
+          dec l:call eval_exp_mac
+          ex (sp),hl
+;Leave room for id.
+;put 0 to discriminate from -1 (end of params)
+;will be replaced in /marg_lp/ 
+          ld bc,0
+          call macput_bc
+;error in param: raise it (fix #1d9) and abort macro
+;NB: other errors in param list won't be raised. nevermind
+          ld a,(va_exp_error):or a:jr z,.noerr
+
+;error: we flag it (null pnt in param list), but don't "raise" it
+;So if param not used, no error will be issued.
+; !! Needed for e.G. ANCHOR(forward_label)
+; bc = 0 here
+          call macput_bc
+          jr mparam_nxt
+
+.noerr
+;copy pnt to param stack
+          ld bc,(va_tmp_psp):call macput_bc
+
+          push hl
+
+          ld a,(de)
+          ld l,a
+          cpl:add e:ld e,a
+          inc l         ; copy size as well
+mparam_cp
+          ld a,(de):inc e
+          ld (bc),a:inc c:jp z,mparam_ovf
+          dec l
+          jr nz,mparam_cp
+
+          ld (va_tmp_psp),bc
+          pop hl
+mparam_nxt
+          ex (sp),hl
+          jr mparam_lp
+
+mparam_end
+          ex (sp),hl    ; push only to maintain stack level
+          ld bc,-1:call macput_bc ; tag end of param
+
+;connect macro def
+;todo? factorize with ass_factor_bloc_end ?
+
+          ld a,(va_save_a)
+          ld hl,(va_save_bc) ; msb + bk when not imported
+          ld de,(va_save_de)
+          bit vf_imported,a
+          jr z,.inhost
+;imported macro
+          ld a,l        ; tab    
+          call sync_symb
+          ld hl,(va_save_de) ; id label
+;get pointer in imported source
+          call sy_get_explicit_global
+          jp nc,errmac
+          ld l,c:ld h,d
+.inhost
+;h=msb, l = bk, e = lsb
+          call org_connect_source_chunk_from_id
+          ld l,e
+          ld iyh,assjumpMSB
+
+; With visu.get_pc_from_line, we can invoke a macro that has been
+; deleted. We must check macro is still here.
+; This is not 100% fiable: e.g. a comment or random data could
+; match this signature (very low probabily, but still).
+; So there is another check below before calling /read_label/
+          ld a,(hl):inc l
+          cp "m":jp nz,errmac_undefined
+          call read_label ; skip label name
+; set args ids -----------------------
+
+          ld a,(va_nxt_msp) ; nb: cur frame behing constructed
+          add mac_offset:ld c,a
+          ld b,macro_stack/&0100
+marg_lp
+          call is_endofdata_:jr z,marg_end
+
+          ld a,(bc):or a
+          jp nz,marg_mismatch ; more id than param
+; Sanity check for visu.
+; If not a label: return error rather than assertion in read_label
+          ld a,(hl):cp short_label
+          jp c,errmac_undefined
+          dec l         ; compensate read_label's inc l
+          call read_label
+;put id (we alreay know there is room)
+          ld a,e:ld (bc),a:inc c
+          ld a,d:ld (bc),a:inc c
+          inc c:inc c
+          jr marg_lp
+
+marg_end
+          ld a,(bc):inc a:jp nz,marg_mismatch ; less id than param
+
+;everything ok: we can update sp
+          ex (sp),hl
+          ld hl,(va_nxt_msp)
+          inc c:inc c
+          ld (va_nxt_msp),bc
+          ld (va_cur_msp),hl
+
+          ld hl,(va_tmp_psp)
+      IF fixdc
+; Push previous cur_psp for pop in ass_macro_end
+          ld a,(va_cur_psp)
+          ld (hl),a:inc l ; !! Ovf not handled here
+      END
+; Updated pnt (for nested macros).
+          ld (va_cur_psp),hl
+
+          pop hl
+          pop bc        ; discarded 
+          pop af
+;Get back cpt. Garbage if not coming from cpt_macro_use, nevermind.
+          ld bc,(va_cpt_bc)
+          jp okdestdispatch_popde
+
+;----------------
+
+ass#cb_com
+          inc l
+          ld a,(hl)
+          cp &40
+          ret c
+          ld c,a
+          and &38
+     ;     CP   bit_escape*8
+          ld a,c
+          ret nz
+          push bc
+          call check_8
+          pop bc
+          ret nz
+          cp 8
+          jr c,ok_bit
+          ld a,err_invalidbit
+          jp error_phase2_if_exp_ok ;!! return garbage
+ok_bit
+          add a
+          add a
+          add a
+          or c
+          ret
+
+ass#dd#cb_skip_com
+          call ass#cb_skip_com
+          jr skip_exp
+ass#cb_skip_com
+          inc l
+          ld a,(hl)
+          cp &40
+          ret c
+          and &38
+          ret nz
+skip_exp
+;actually we may have to scan it 
+          ld a,b
+          cp dispasst/&0100 + 3
+          jp z,read_exp
+skip_exp012
+;we already know phase!=3
+skip_common
+;skip commentaire ou expression
+          inc l
+          ld a,l
+          add (hl)
+          ld l,a
+      IF dev_checks'
+          ret nc
+      BRK
+      ELSE
+          ret
+      END
+
+assesc4
+cptesc
+          inc l
+          ld a,(hl)
+          cp &40
+          jp nc,cpt11
+;TODO: optimize (jp table) when va_cpt_bc below explained
+
+          or a:jp z,cpt_eoc
+          dec a:jp z,cptcom ;asis : skip+nl
+          dec a:jp z,ass_loop4 ;store pc ;TODO
+          dec a:jp z,cpt_store_pc_instr
+          dec a:jr z,cpt_org
+          dec a:jr z,cpt_org2
+          dec a:jr z,cptskip ;ent
+          dec a:jp z,cpt_fill
+          dec a:jp z,cpt_skip ;SKIP directive
+;Save bc in case we swith to phase 0 (via if or else)
+          ld (va_cpt_bc),bc
+          dec a:jp z,cpt_if
+          dec a:jp z,cpt_else
+          dec a:jp z,ass_elif0
+          dec a:jp z,cpt_end
+          dec a:jp z,cpt_factor_bloc
+          dec a:jp z,cpt_factor_bloc_end
+          dec a:jp z,cpt_factor_bloc_end ;implicit version
+          dec a:jp z,cptbrk
+          dec a:jr z,cptskip ;brk=
+          dec a:jp z,cptrestore
+          dec a:jr z,cptskip ;bank=
+          dec a:jp z,cpt_macro_end
+          dec a:jp z,cpt_macro_use
+          dec a:jp z,cpt_load
+          dec a:jp z,cpt_import
+          jp ass_unknown
+
+cpt_org
+          call cpt_eval_exp_skip_size
+          ld (va_pc0),de ;for pc/obj diff
+          ld (va_objc0),de
+          jp ass_loop4
+cpt_org2
+          call cpt_eval_exp_skip_size
+          ld (va_pc0),de
+          push de
+          call cpt_eval_exp_skip_size
+          ld (va_objc0),de
+          pop de
+          jp ass_loop4
+cptskip
+          call skip_common
+          jp ass_loop4
+
+cpt_store_pc_instr
+          push bc
+          push hl
+          ld (va_pc),de
+          ld hl,(va_objc0)
+          ld bc,(va_pc0)
+          or a:sbc hl,bc
+          add hl,de
+          ld (va_objc),hl
+          pop hl
+          pop bc
+          jp ass_loop4
+
+
+cptrestore
+          ld c,restore_
+          jp cskipcom
+
+cpt_eval_exp_skip_size
+          push bc
+          call eval_exp_skip_size
+          pop bc
+          ld iyh,cpt_hi
+          ret
+
+
+;------------------------
+
+error_phase2_custom_src
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld c,(hl)
+          call goto_line ; to set vo_curbk
+          jr error_phase2
+
+error_phase2_if_exp_ok
+;97+8
+;In: HL: source (important to locate line)
+;Out: NC
+          ld c,a
+      IF 1-inRom
+          ld a,h:and &C0:cp &40:call nz,fail
+      END
+          ld a,(va_exp_error)
+          or a
+          ld a,c
+          ret nz        ;pas de double peine
+;Note: va_exp_error not set. Nevermind
+;Enchaine
+error_phase2
+;88+8
+;in a=err
+;   hl=pnt source
+;Out: NC
+          ld c,a
+          ld a,(va_phase)
+      IF todo
+;hum: review that + test in comerror
+    ; !! would be activated in phase 3 
+      END
+          dec a
+          jr comerror
+
+error_phase12
+;Error set in either phase 1 or 2
+;84+8
+;in a=err
+;   hl=pnt source
+;out a preserved
+   ; c=a
+   ; NC
+
+          ld c,a
+          ld a,(va_phase)
+comerror
+;In some very rare cases (cf bug #db), an error which should have been
+;caught in phase1 wasn't. Second chance here.
+          dec a:cp 2:ret nc
+
+          push hl
+          push de
+          push bc
+          ex de,hl
+          GET_CURBK()
+          call set_error_cur_tab
+
+          IS_IN_MACRO_AT_ALL()
+          jr z,.fin
+
+;show invocation stack
+          ld hl,(va_cur_msp) ; actually prev frame!
+.lp
+          ld a,l:or a
+          push af       ; last if 0
+          ld b,(hl):inc l ; tab
+          ld a,(hl):inc l
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,err_from
+          call set_error
+          ld l,(hl)
+          pop af
+          jr nz,.lp
+
+.fin
+          pop bc
+          ld a,c        ; not sure why we return error code
+          pop de
+          pop hl
+;NC here
+          ret
+
+check_macro_closed
+; Check if macro closed
+; Don't use IS_IN_MACRO(): that's for macro invokation, not def.
+          push hl
+          ld hl,va_macro_pnt
+          ld a,(hl):inc hl
+          ld d,(hl):inc hl ; MSB first. 
+          ld e,(hl)
+          pop hl
+          or a
+          ret z
+          ld c,err_missingend
+;enchaine
+set_error_cur_tab
+          push af
+          ld a,(va_tab_symb):ld b,a
+          pop af
+set_error
+;in ade=pnt source
+    ; c=error code
+    ; b=tab 
+;out: hl saved
+error_struct_size = 7
+;0: current tab
+;1: error code
+;2: bk, pos of ine
+;5: error_data
+          push hl
+          push af
+          ld hl,(va_error_pnt)
+          ld a,va_error_array_end AND &FF
+          sub l
+          jr z,.serrdone ;too much already
+          sub error_struct_size
+          jr nz,.okroom
+          ld c,err_toomucherrors
+.okroom
+      IF nrt_checks
+      IF do_test_timernrt
+nrt_max_tabs = 12
+      ELSE
+nrt_max_tabs = 9        ; ply.o
+      END
+          push af
+          ld a,b
+          cp nrt_max_tabs:call nc,nrtfail
+          pop af
+      END
+          ld (hl),b:inc hl
+          ld (hl),c:inc hl
+          pop af
+          push af       ; for stack 
+          call set_source
+          ld de,(va_error_data)
+          ld (hl),e
+          inc hl
+          ld (hl),d
+          inc hl
+          ld (va_error_pnt),hl
+.serrdone
+          pop af
+          pop hl
+          ret
+
+
+get_error
+;in: A = nb error (from 0)
+;out: If error, Carry
+       ; A = Error code
+       ; C = Tab
+       ;DE = Line
+       ;HL = Meta-data (unused for now)
+    ;NC if A out of range
+
+          call get_error_pnt
+          ret nc
+          ld c,(hl):inc hl
+          ld a,(hl):inc hl
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          inc hl        ; slot for source BK
+          push af
+          ld a,(hl):inc hl
+          ld h,(hl):ld l,a
+          pop af
+          scf
+          ret
+
+get_error_pnt
+          ld l,a
+          call get_nb_errors
+          cp l
+          ld a,l
+          ret z
+          ccf
+          ret nc
+
+          ASSERT(error_struct_size == 7)
+          ld h,0
+          ld c,l
+          ld b,h
+          3 ** add hl,hl
+          sbc hl,bc
+          ld bc,va_error_array
+          add hl,bc
+          scf
+          ret
+
+
+
+check_8_data
+;comme check_8, en autorisant string longer than 1 byte.
+          ld (vev_data),de
+          call eval_exp
+          ld c,a
+          ld a,e
+          ld b,d
+          ld de,(vev_data)
+          dec c
+          ret z
+          dec c
+          jr nz,c8_ovf
+
+          inc b
+          ret z
+          dec b
+          ret z
+          jr c8_ovf
+
+check_8
+;Si ok, A=E
+;Sinon (ovf, ...), A=garbage
+          inc l         ;skip size
+          push de
+          call eval_exp
+          ld c,a
+          ld a,e
+          ld b,d
+          pop de
+          dec c
+          ret z
+          dec c
+          jr nz,c8_ovf
+
+          inc b
+          ret z
+          dec b
+          ret z
+
+c8_ovf
+;will ret garbage
+          ld a,err_overflow8
+          jp error_phase2_if_exp_ok
+
+
+checkput_16
+          push de
+          call check_16
+;
+          ld a,e
+          ld c,d
+          pop de
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+          inc e
+          call z,dest_next_chunk
+          ld a,c
+          ld (de),a
+          ret
+
+checkput_idx
+          inc l:ld a,(hl):or a:jr z,cput_com_ ; special case (ix)
+
+          push de
+          call check_16_data
+          ld a,e
+          inc d
+          jr z,cidx_neg
+          dec d
+          jr nz,cidx_ovf
+          or a
+          jp p,cput_com
+cidx_ovf
+          ld a,err_overflowidx
+          call error_phase2_if_exp_ok
+          jr cput_com
+cidx_neg
+          or a
+          jp m,cput_com
+          jr cidx_ovf
+
+checkput_jr
+          push de
+          call check_16
+
+          ex (sp),hl
+          ex de,hl      ;target in HL
+          push de
+
+          call get_pcadr
+
+          inc de
+          scf
+          sbc hl,de
+          ld a,l
+          ld bc,&80
+          jr c,cjr_neg
+          sbc hl,bc
+          jr c,cjr_com
+;
+cjr_ovf
+          pop hl
+          ex (sp),hl    ;HL: pos for error
+          ld a,err_jr_outofrange
+          call error_phase2_if_exp_ok
+          jr cput_com
+
+cjr_neg
+          add hl,bc
+          jr nc,cjr_ovf
+cjr_com
+          pop hl
+          ex (sp),hl
+
+cput_com
+          pop de
+cput_com_
+          inc e
+          call z,dest_next_chunk
+          ld (de),a
+          ret
+
+check_16_notneg
+;+ check no error (e.g. undefined --no forward def allowed)
+          inc l
+          call check_16_notneg'
+          ret c
+          ld de,0       ;hack: prevent huge repetitions (hangs)
+          ret
+check_16_notneg'
+          call eval_exp
+          jp p,c16_com
+          ld a,err_negativearg
+          jp error_phase12
+
+check_16_phase2
+;only raise error in phase2
+          inc l
+          call eval_exp_asseva
+          push af
+          ld a,(va_exp_error):or a
+          call nz,error_phase2
+          pop af
+          jr c16_com
+
+check_16
+;return DE = value if ok
+; otherwise, garbage value, error in phase 2
+          inc l         ;skip size
+check_16_data
+          call eval_exp
+c16_com
+          cp 3
+          ret c
+
+          ld a,err_overflow16
+          jp error_phase2_if_exp_ok ; pas de double peine 
+
+
+flush
+;copy from 0 to e-1
+;in : de = pos in ass_buf
+;out: af preserved. Not sure why!
+    ; de = ass_buf 
+          inc e:dec e:jr nz,dest_next_chunk
+;Needed for for e.g. sequences of SKIP
+          push af:push de
+          call get_pcadr
+          call update_chead_pc_if_emitted
+          pop de:pop af
+          ret
+
+fake_flush_100
+          ld e,0
+;enchaine
+dest_next_chunk
+;Here e=0 -> full buf
+;out: af preserved. Not sure why!
+          push af
+;!!! Must do it if **real** phase is 1 or 2
+; Case: code, if 0, eoc 
+          ld a,(va_phase_backup)
+          or a:jp z,noflush
+          cp 3:jp nc,noflush ;no op (musn't change DE)
+          push bc
+          dec a:jp z,phase1_fakeflush ;must update pnt
+
+break = &BE00
+
+      IF dev_checks'
+;copy_com expect source in ass_buf.
+          ld a,d:cp ass_buf/&0100:call nz,break
+      END
+;for overlap error, we backup line having triggered the flush
+;(see ass_load2 for why we don't pass HL directly) ....
+          ld c,e
+          call copy_com
+          ld de,ass_buf
+okflush_
+          pop bc
+noflush
+          pop af
+          ret
+
+
+
+ass_init_and_amorce
+;Only for main host (i.e. not /ass_from_import)
+;in A=phase 1 ou 2
+  ; bc=$
+  ; de=$$
+  ; hl=pnt source. TODO: do we really need to pass other pnt than begin?
+
+;!! Must be done here and not in ass_amorce_
+;!! So that error in imported filed rollback enough to stay in tab.
+          call except_enter
+
+          push af
+          push hl
+; Must only clear visited at start of assembly, not for imports
+          call clear_visited
+          ld hl,&C0:ld (va_destbk),hl ;&c0 for bk, 0 for flags
+; Default bank when no ENT met
+          ld a,l:ld (va_exec_bk),a
+          ld (va_destbk_last),a
+;default
+;!!! low/hi will only be updated in phase1,
+; but more convenient to reset them here in both phases.
+; Note: The values doesn't matter much, since overwritten
+      ; when first emitting.
+; But ch.ass_status doesn't check this flag yet, so we put
+; raisonnable value (e.g. leads to binary size 0).
+          ld (va_low_pc),bc
+          ld (va_low_objc),de
+          ld (va_hi_pc),bc ;valeur raisonnable si aucun octet ecrit
+          ld (va_hi_objc),de
+
+          call init_var_main
+
+          pop hl
+; If memory full at the first flush
+;          call backup_src_pnt    ; done in ass_common
+          pop af
+
+          call ass_common
+          jp except_ret
+
+
+ass_from_import
+; Not everything should be reset!
+;  In particuler: !!! don't call except_enter, don't reset 'visited'
+; In: bc=$
+    ; de=$$
+    ; hl=pnt source.
+
+; NB: !! don't call except_enter
+    ; Because in case of failure we want to rollback to root call
+    ; (org_assemble).
+          CHECK_FRAME_LT()
+
+; re-read phase for factorization purpose,
+; so we can reuse ass_amorce
+          ld a,(va_phase)
+      IF dev_checks'
+          or a:call z,mess
+      END
+; enchaine
+ass_common
+;Here: bk_base (for vo_curbk)
+          IS_BK_BASE()
+          push af
+          push hl
+          ex de,hl
+
+          ld (va_pc0),bc
+          ld (va_objc0),hl
+          dec a:jr nz,.init_var
+
+.init1
+          ld (va_emitted),a
+;va_pre_* are used to validate cache of imported source.
+;We must set them up even if no code will be emitted.
+;And we *musn't change them afterward*.
+          ld (va_pre_pc),bc
+          ld (va_pre_objc),hl
+
+; -- Reset flags in chunks
+          pop hl
+          push hl
+          GET_CURBK()
+          push af
+          call connect_bk_source_from_bk_base
+.reset
+          ld l,chead_flags
+          ld (hl),0
+          call connect_next_chunk
+          jr nz,.reset
+
+          call connect_bk_base
+          pop af
+          ld (va_curbk),a
+.init_var
+; those one not done at /init_var_main/ since swapped
+          xor a:ld (va_if_level),a
+; Hack: ed_load trashes va_if (import.o)
+      ; set it (necessarily -1 when entering source)
+          dec a
+          ld (va_if),a
+
+          ANCHOR(bug#1df)
+; in macro, we mustn't update_chead_pc
+; but if IMPORT in macro, imported file mustn't act as in macro!
+          ld a,(va_nxt_msp)
+          ld (va_base_msp),a
+
+          ld hl,if_stack:ld (va_if_pnt),hl
+;done both in init_var_main and here (for import)
+          call sync_symb_tab
+
+      IF dev_checks
+; assume bk base is connected here.
+; If not -> check caller.
+   ; if legit -> connect bk base ourselves
+   ; if not -> add nrt
+          CALL_EXT(check_deps)
+; must va_if = -1
+; host: reset in init_var_main
+; import: directive wasn't entered 
+          ld a,(va_if):inc a:call nz,mess
+      END
+
+          pop hl
+          pop af        ; phase
+          ld de,ass_buf
+          call _ass_amorce_
+_finitions
+      IF todo OR need_room
+    ; check if connect_bk_source_from_bk_base still needed
+; actually flush might not be needed at all (done at /ass_eoc/)
+      END
+          call connect_bk_source_from_bk_base ;for flush!
+          call flush
+_finitions_
+; We do finitions even in case of hard failure (e.g. unknown opcode).
+; Also, memory full is considered hard failure, but it doesn't prevent
+; to correctly report error line.
+          call connect_bk_base
+
+      IF dev_checks
+          CALL_EXT(check_deps)
+      END
+
+; Bug#160: check all 'IF' were closed 
+; NB: When dangling IF 0 in macro, we cannot detect this one,
+    ; as va_if_level isn't processed in fake phase 0 (=skip macro def)
+    ; (see rational in /ass_if/).
+    ; But then ENDM won't be met, which is detected below.
+
+; Oh! Don't perform the check when there are already errors,
+; to prevent spurious "End missing" when early exit at import time.
+; One alternative would be to discard this test when ass_import
+; calls abort_ass' (either replace abort routine or set a flag)
+; -> neater, but more code
+          call get_nb_errors
+          or a:jr nz,.okcheck
+
+          ld c,err_missingend ; used for both if and macro
+          ld a,(va_if_level)
+          or a
+          jr z,.okif
+;We must rewind to unmatched "if"
+          ld hl,(va_if_pnt)
+          dec hl:ld e,(hl)
+          dec hl:ld d,(hl)
+          dec hl:ld a,(hl)
+; Cannot use error_phase1 as va_phase might be 0 due to unclosed if
+          call set_error_cur_tab
+.okif
+          call check_macro_closed
+.okcheck
+          call get_nb_errors
+          or a
+          scf
+          jr z,.ass_ret ;ok C & NZ
+
+          call fix_error_lines
+      IF need_room
+; remove that
+      END
+      IF dev_checks'
+          call check_bk_base
+      END
+          xor a         ;errors NC & NZ
+.ass_ret
+          inc a
+          push af
+;default ent. must be done before copy.
+
+; $ and $$ are only tracked in phase1.      
+; If re-doing update at phase2 we would corrupt them!
+          ld a,(va_phase):dec a:jr nz,.okadr
+
+          ld a,(va2_flags):bit vbit_ent_met,a
+          jr nz,.ok_exec
+          ld hl,(va_low_pc)
+          ld (va_exec),hl
+.ok_exec
+;$ and $$ at end of source.
+          ld hl,(va_pc0):ld (va_post_pc),hl
+          ld hl,(va_objc0):ld (va_post_objc),hl
+
+;Copy for ch which expect given address.
+;Also for save.o which need vo_destbk_last
+;Also used for store/restore to be consistent with cache.
+;TODO: ch, org and store/restore to read ram instead?
+; Must only be done in phase 1, since not set in phase 2.
+          ld hl,va_emitted
+          ld de,vo_emitted
+          ld bc,va_map_
+          ldir
+.okadr
+; 'ENT toto' can be set at phase2 (and often is *only set in phase2*)
+          ld hl,(va_exec)
+          ld (vo_exec),hl
+
+      IF 1-cy
+          ld hl,(va_low_objc)
+          ld de,(va_hi_objc)
+          ld bc,(va_exec)
+      END
+          pop af
+          ret
+
+      IF dev_checks'
+get_curbk
+          push af
+          ld a,(va_curbk):and &C4:cp &C4:call nz,mess
+          pop af
+          ld a,(va_curbk)
+          ret
+      END
+
+;--------------------------------
+
+; If new code <= 10 bytes, put it at beggining: /code2/
+; (for alignment of afirst/alist)
+; otherwise at /hi/
+
+; ---- initialised var ------
+def
+      ORG va2,$$
+va_rep_pnt WORD va_rep
+free  WORD 0
+      IF va_rep_pnt - &9800
+ !! shared with asseva.eval_iter
+      END
+
+;NB: va_if doesn't need to be stored (actually value is trashed by
+   ; ed_load: see import.load_if_absent)
+va_if BYTE -1
+
+      IF va_if - &9804
+ !! shared with visu (and import for sanity check)
+      END
+
+;NB: Mustn't be stored, as we want to pass param across sources
+va_cur_msp WORD macro_stack
+va_nxt_msp WORD macro_stack
+va_cur_psp WORD macro_stack_params
+      IF va_nxt_msp-2 - va_cur_msp
+ ; !! must be contiguous
+      END
+
+va2_  = $-va2
+
+      IF va2_ - 11
+ !! when adding variables, check if init at init_var_main or .init_var
+      END
+
+; no much room left in this slice. Put new code before /hi/
+
+      ORG def+va2_,$$
+hi2
+realsize2 = $-codedest2
+      IF inRom
+      FILL limit2-$,&F7
+      ELSE
+      SKIP destnrt-$
+      END
+
+codesize2 = $-codedest2
+
+;---------------------------------
+
+      IF inRom
+code3 = $$
+jps
+      ORG codedest3,$$
+          jp ass_init_and_amorce
+          jp ass_amorce ; org.skipline, visu
+m         jp is_in_macro_ ; asseva, visu nrt
+          jp flush
+          jp init_var_main ; visu, import.nrt
+          jp get_nb_errors
+          jp get_error
+          jp eval_exp_asseva
+          jp read_label_maybe_local ; scan, find
+          jp glfp_scan_ ; visu
+          jp lab_stat
+          jp exp_fail
+          jp ass_amorce_from_ext ; used by scan_label (CTRL-*) and ???
+          jp ass_entry0
+          jp connect_bk_source_from_bk_base ; For Find
+          jp exit_mess
+;full!!!
+hi3
+      FILL limit3-$,&F7
+codesize3 = $$ - code3
+
+code4 = $$
+jps'
+      ORG codedest4,$$
+          jp ass_init_module
+          jp ass_from_import
+          jp get_tab_symb ; impeva
+          3 ** BRK      ; jp ass_restore
+          jp dest_next_chunk
+          jp assert_fail
+          jp error_phase12
+          jp error_phase2
+;!!full
+hi4
+      IF limit4-$
+ !! error align
+      END
+codesize4 = $$ - code4
+
+code5 = $$
+jps''
+      ORG codedest5,$$
+          jp update_low ;import
+          jp update_hi  ;import
+          jp check_premerge ;import
+          jp connect_pre_pc ;import
+          3 ** BRK      ; jp set_assembled_info ;import.nrt "
+          jp get_pc_from_line ;visu, count
+          jp set_cur_source ;visu, import
+          jp connect_ass_var ;import
+          jp skip_line  ;org
+          jp init_var_once ; org
+          jp get_save_list' ; SAVE
+hi5
+      FILL limit5-$,&F5
+codesize5 = $$ - code5
+      END
+
+savepc = $
+saveobj = $$
+
+;:===========: var :==========:
+;!! NO CODE BELOW !!
+
+;---- vars that are not init by init_var
+
+;__ ass __
+      ORG va
+
+      BYTE              ; free. Not used by other module.
+
+tostore2
+;shared ! (we use work var in &8c00, and then we copy them back here)
+;!! must respect same order than va_* counter part.
+  ;  - for check_merge
+  ;  - and potential space optimisation in merge.
+vo_emitted BYTE         ;=1 si data written !! Only set/reset at phase1
+vo_low_pc WORD          ;lowest pc   
+vo_low_objc WORD        ;lowest written adr
+vo_hi_pc WORD 
+vo_hi_objc WORD 
+vo_exec WORD 
+vo_exec_bk BYTE 
+vo_destbk_last BYTE 
+; save.o needs it to be persistent
+; Copy it rathen than to move the variable
+   ; - va_destbk must remain global so imported file honor current bk
+vo_map_ = $ - vo_emitted
+
+      IF todo
+; move flag is_exec_set here
+      END
+
+          ASSERT($-tostore2 == ass_len2) ; update swap
+          ASSERT(tostore2 == va+1) ; "          
+          ASSERT(vo_emitted == tostore2) ; update import
+
+      SKIP &7C7C - $
+
+      MACRO IS_SHARED lab,val
+      IF lab != val
+  !! shared
+      END
+      ENDM
+
+          IS_SHARED(vo_emitted,&7C01) ; org (to store)
+          IS_SHARED(vo_low_pc,&7C02) ; import
+          IS_SHARED(vo_exec_bk,&7C0C) ; ch
+          IS_SHARED(vo_destbk_last,&7C0D) ; save
+
+      ORG va2+va2_
+;-- global vars across imports.
+va2'
+
+;bk not stored. It doesn't make sense to get back original bank
+; since we don't get back $ and $$
+;also, not reset when entering import
+va_destbk BYTE 
+va2_flags BYTE 
+vbit_ent_met = 0
+
+          IS_SHARED(va_destbk,&980B) ; org?
+
+va2_' = $-va2'
+      IF va2_'-2 OR [va2_flags-1-va_destbk]
+ !! review ass_init_and_amorce
+      END
+
+va_phase BYTE 
+va_phase_backup BYTE    ;pour 'if', 0*[], macro def
+
+          IS_SHARED(va_phase,&980D) ; import.o, asseva.nrt, org
+
+      IF va_phase_backup-1 - va_phase
+ !! org save both by reading word
+      END
+
+;!! Only updated in phase 1.
+va_emitted BYTE         ;only reset at ass_common
+va_low_pc WORD          ;lowest pc. 
+va_low_objc WORD        ;lowest written adr
+va_hi_pc WORD 
+va_hi_objc WORD 
+;!! Only updated in phase 2?
+va_exec WORD 
+va_exec_bk BYTE         ; Bk at 'ent' time
+va_destbk_last BYTE     ; See /vo_destbk_last/ for rationale
+; (as all vars copied by import via swap.copy_assembled_info)
+va_map_ = $ - va_emitted
+
+      IF va_map_ != vo_map_
+  !! new var: vo_* and va_* must stay in sync
+      END
+
+          IS_SHARED(va_emitted,&980F) ; import
+          IS_SHARED(va_low_pc,&9810) ; import?
+
+va_destbk_backup BYTE 
+va_tab_symb BYTE        ; tab of currently connected symb
+;tmp saves
+va_save_a BYTE 
+va_save_bc WORD 
+va_save_de WORD 
+va_tmp_psp WORD 
+
+va_cpt_bc WORD 
+; BC is used to count TM in phase 4.
+; But when switching to phase 0, it is used for jumptable.
+; We must hence store it.
+
+;&9827
+vev_data WORD           ;pour string, = assbuf si .by/.fi, 0 sinon
+
+      IF vev_data - &9827
+!! shared with asseva
+      END
+
+      BYTE              ;free (va_emitted has moved)
+va_pc0 WORD             ;pc at buffer start
+; When not flushed yet, also pc at chunk start
+va_objc0 WORD           ;obj dest at "
+va_pc_line WORD         ;pc at line start (only upd when needed) : for <<
+va_objc_line WORD 
+va_pc WORD              ;pc at instr start : for $
+va_objc WORD 
+
+      IF va_pc0 - &982A
+ !! shared with import.nrt
+      END
+
+      IF va_pc - &9832
+ !! shared with asseva.eval_pc
+      END
+
+      IF va_objc - &9834
+ !! shared with asseva.eval_objc
+      END
+
+      BYTE              ;vev_flags
+      WORD              ;va_cur_label 
+va_exp_error BYTE       ;!!needed to flag exp as dirty
+
+      IF va_exp_error - &9839
+ !! shared with asseva
+      END
+
+; Global accross sources (to deal with err macro in imported source)
+; We still exit early at ass_import in case of error (for UI purpose)
+va_error_data WORD 
+;va_error_array put below to respect current var positions
+      IF va_error_data - &983A
+  !! error shared with asseva
+      END
+
+count_hooks
+loop4 WORD 
+; When phase 4 deactivated (if 0 or macro def), we must still
+; jump to test at each line. Dedicated routine allows to 
+   ; - handle different context
+   ; - loop to the right place 
+loop40 WORD 
+; We'd like to have generic comment (hu?)
+cpt_comment SKIP 3
+cpt_factor_bloc_end SKIP 3
+count_hooks_ = $ - count_hooks
+va_curbk BYTE 
+          ASSERT(va_curbk == &9846) ; shared with page_firm
+      SKIP va2'' - $
+
+rep_nested_max = 4
+va_rep SKIP rep_nested_max*9
+va_rep_end
+      IF va_rep - &986D
+ !! error shared with asseva.eval_iter
+      END
+      IF va_rep_end/&0100 - va_rep/&0100
+ !! error confine
+      END
+
+      SKIP 3            ; Free
+va_pc0_before_macro WORD 
+;full!
+
+tostore1
+          ASSERT($ == va2_store') ; update swap and import
+
+va_base_msp BYTE        ; must be restored when coming back from IMPO
+va_source SKIP 3        ; Save pointer for Import (done by import.o)
+      IF va_source - &9897
+  !! shared with import.o 
+      END
+; In stored part: Persistant despite being at 98xx.
+va_pre_pc WORD          ; $  at start of source. 
+va_pre_objc WORD        ; $$ at start of source
+va_post_pc WORD         ; $  at end of source
+va_post_objc WORD       ; $$ at end of source
+; va_parent BYTE          ; <-- no actually pushed in stack
+
+      IF va_post_objc - &98A0
+  !! shared with import.o and cache nrt
+      END
+      IF va_post_pc - va_pre_pc - 4
+  !! review cpt_import
+      END
+
+; Only handled by ass_if (phase 1), not cpt_if or else
+; Must be stored to handle conditional import, eg:
+    ;   if dev
+    ;     IMPORT"testkey.o"
+    ;   end               
+; Otherwise: "unexpected end" error
+; The alternative would be to init non-stored state
+  ;only at main ass init (org.init_phase), not import-time init. But:
+      ; -YAGNI
+      ; -As is, allows 8 levels by source, not 8 overall. Better!
+;Note: va_if itself has a different life cycle (shared cross imports)
+     ; That's ok since necessarily = -1 at import entry/exit
+va_if_level BYTE        ;0
+va_if_pnt WORD          ; if_stack
+MAX_IF_LEVEL = 8
+if_stack SKIP MAX_IF_LEVEL * SOURCE_PNT_SIZE ; Pos source
+ho
+          ASSERT($-tostore1 == ass_len1) ; update swapi.i and burn swap
+
+          ASSERT(va_if_pnt == va_if_level+1) ; must be contiguous
+
+;va_pre_pc_offset = va_pre_pc - tostore2 + tostore0_
+;
+;      IF va_pre_pc_offset - &64
+;  !!! used by cache
+;      END
+
+; Only used by asseva, but defined here for now
+asseva_save_source WORD 
+      IF asseva_save_source - &98BD
+ !!! used by asseva
+      END
+
+va_macro_pnt SKIP SOURCE_PNT_SIZE
+
+zero
+; Variable to reset at ass_init time
+; none since save_list moved in org
+zero_ = $ - zero
+
+          ASSERT(zero_ == 0) ; !! reactivate clr in /ass_init_module/
+
+      SKIP va2_end - $  ;  If fail, move some vars before tostore2
+
+;__ shared __        
+      ORG va_err
+
+va_error_array SKIP error_struct_size*nb_error_max
+va_error_array_end
+va_error_pnt WORD 
+
+      SKIP va_string - $
+;va_string  in memap 
+      IF va_string - &9CA0
+ ; reused by import
+      END
+
+vo_flags = vo           ; defined in org.o
+vf_isphase1ok = 0
+vf_imported_labels_cleared = 3
+
+;vo_romEd = vo+17        
+vo_romExt = vo+18
+vo_romMon = vo+19       ; For restore
+
+sk_cur_src = &9DA3      ;visu
+
+      ORG savepc,saveobj ; for asstest.o
+
+

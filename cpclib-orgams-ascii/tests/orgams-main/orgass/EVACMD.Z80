@@ -1,0 +1,895 @@
+inRom = 1
+dev_checks = 1
+; Eval command monogams. !! Almost no room left !!
+
+; Dependencies: ASS, Org, Parse 
+
+      IMPORT "const.i"
+      IMPORT "assmap.i"
+      IMPORT "extmap.i" ; parse_jp
+
+; \/\/ In 2025 \/\/\/\/\/\/\/\/\/\/\/\/\/\
+; ---- HH Beta i ----
+  ; Nov
+    ; 27 Q Remove hack around cur_bk
+             ;  (not needed since base bk reconnected after eval_exp)
+         ; tests: adapt references, since a space is added to err msg. 
+
+; ---- HH Beta 1 ----
+  ; Apr
+    ; 16 P Add test_string_and_literal
+    ; 13 O Use parse in ORGEXT
+
+    ; 10 N [Adapt rom ass] Use CALL_EXT / pagefirm
+
+; ---- GG Beta ? ----
+    ;  9 M Use new farcall
+    ;  7 L Use extmap.i
+         ; is_string_command: command_sb accepts strings
+  ; Mar
+    ; 28 K is_string_command: x now accepts strings (filename)
+       ; J [no change] Use const.i
+
+; \/\/ In 2023 \/\/\/\/\/\/\/\/\/\/\/\/\/\
+  ; Apr    
+    ; 19 I Add /test_undefined/. Fix it:
+           ; - Reconnect bk base after eval_exp.
+           ; - Also, don't overwrite A = error code (237 = empty label)
+
+    ; 18 H Rename module: s/evacom/evacmd
+         ; Add /test_load/ and fix it:
+             ; ep_error wasn't restoring stack properly.
+         ; flag "load" as string command (see /is_string_command/)
+
+
+    ; 17 G Add /test_multi_strings/ and fix it.
+         ; Strings were concatenated in string_buf, 
+         ;    because vev_data wasn't reset.
+         ; relocate: API change API (dest in IY)
+
+; \/\/ In 2021 \/\/\/\/\/\/\/\/\/\/\/\/\/\
+    ; 14 F Command type: proper string like for rsx, 
+               ; before: of "a"->byte  "aa"->unexpected string
+               ; now: both are strings, yet  ?"a" shows byte as expected
+         ; Start @ DD00
+    ; 13 E Use /parse_command/ in bricbrac.rom
+
+     ; 2 D Fix bug#10a ?"a"
+         ; Remove unnecessary push ix/iy around eval_exp
+         ; Robuster NRT: respect API (don't assume IY=HL)
+; Jan  1 C Don't call org_init_custom. Done by init_custom
+
+; \/\/ In 2020 \/\/\/\/\/\/\/\/\/\/\/\/\/\
+
+; Jan 11 B limit2 @ ffcc
+         ; Use init_custom for proper install
+         ; Move command_result from 4000 to 7400
+
+   ; 21 vA Export/import
+
+      ; v9 Relocate param (so that mon.o can move them in stack).
+         ; eval_command does not encode string a la firmware anymore
+           ; since they must be moved anyway.
+         ; move @ dd22
+      ; v8 NRT: "a" should remain text as RSX name.  OK with assbq.
+         ; !!regression: ?"a"
+      ; v7 OK rsx.
+         ; What!?! test_eval_params was burnt!
+         ; Move @ dd77
+   ; 15 v6 WIP! Nrt for rsx. 
+         ; Move @ dd20
+      ; v5 Nrt Syntax error and too many params.
+      ; v4 Fix va2=9800 (shared with ass)
+             ; computed_params = 9100 (shared with mon???)
+
+; Sep 8 v3 Install in ROM (not plugged yet).
+
+rom   = &1D
+romedNrt = &0A
+
+codedest = evacmd
+limit = cache
+codedest2 = evacmd_jp
+limit2 = import_jp
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+nrtbuf = &3000
+nrtfail = &BE00
+
+; 13 v2 Burn @ ??? JP @ fe11  <-- No room, must move AAP first.
+; 13 Jul 19  v1 eval_param extracted from assbl, eval_command from orgbl
+
+command_result = &7400
+computed_params = &9100
+string_buf = computed_params+&80
+parse_buffer = &9400
+va2   = &9800
+
+      IF command_result - &7400
+ !!  shared with mon
+      END
+
+e_string = &22
+e_short_label = &60     ;de &60 a &df : 128 first labels
+e_endofdata = "A"       ;repasse en mode 'opcode' (pour .byte .word ...)
+
+romthis = &1A           ;pour burn & nrt
+romed_nrt = &0A
+rommon_nrt = &1B
+rombric_nrt = &0B
+
+; --  In this rom (ORGASS) -----
+ass   = &FE20
+eval_exp = ass+21
+; in: hl=expression in source
+    ; (vev_data) = buffer for string.
+; preserve ix and iy. 
+exit_mess = ass+45
+
+farcall = &FF12
+call_ed_from_ass = farcall
+call_ext_from_ass = farcall + 6
+;call_bric_from_ass = farcall + 12
+
+connect_bk_base = pagefirm_jp ; All regs saved
+;connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+;org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+;connect_next_chunk = chunkcc_jp ;A corrupted
+
+; --  In ext rom -----
+parse_command = parse_jp + 3
+
+; -- In ED rom -----
+ch    = &C100
+copy_message_error = ch+36
+
+;--------------------------
+va_phase = va2+&0D
+va_savesp = va2+&19
+vev_data = va2+&27      ;pour string, = assbuf si .by/.fi, 0 sinon
+vev_flags = va2+&36
+;bit 0: has value
+;bit 1: is op2
+vevf_string = 2
+;va_cur_label WORD       ;pour report en cas d'erreur
+va_exp_error = va2+&39  ;!!needed to flag exp as dirty
+
+
+
+;-------------
+tests
+          call nrt_init
+
+          call test_undefined
+          call test_load ; deactivated
+
+          call test_eval_params
+          call test_eval_short_string
+          call test_eval_short_string'
+
+          call test_eval_command
+          call test_eval_rsx
+          call test_string_and_literal
+          call test_multi_strings
+
+          call test_syntax_error
+          call test_too_many_params
+
+          call test_relocate
+          ret
+
+nrt_init
+nrt_bk = &C7            ; For label transbk.
+;nrt_chunks = &31        ; needed for new label values chunks (aapk)
+
+          ld a,nrt_bk
+nrt_init_custom
+;In: a=bk          
+          push af
+          ld c,romedNrt:call &B90F
+
+; -- Check this is Orgams ROM. If fail: correct rom
+          ld hl,(&C004)
+          ld de,signatureed
+          ld b,signatureed_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af
+          call setup_custom
+
+          ld c,rom:call &B90F
+          ret
+
+signatureed BYTE "Orgams"
+signatureed_ = $-signatureed
+
+
+      MACRO CHECK_STRING size,pnt
+;Check expected type
+          ld a,(hl):cp type_string:call nz,&BE00
+;Check str firmware-encoded
+          ld l,(ix):ld h,(ix+1)
+          ld a,(hl):inc l:cp size:call nz,&BE00
+          ld de,pnt
+          ld b,size
+          call compare_sized
+      ENDM
+
+test_eval_params
+; Mainly done by asseva
+
+          ld hl,tep_data
+          ld de,string_buf ; to collect string
+          call eval_params
+          CHECK_STRING(4,tep_ref)
+          ret
+
+pad   FILL 7,0
+
+tep_data BYTE e_string,4 ;enchaine with string itself
+tep_ref BYTE "dear",e_endofdata
+      IF $/&0100 - tep_data/&0100
+   !! error     align
+      END
+
+test_undefined
+; For label not yet defined (wasn't assembled)
+; must return "undefined" rather than "syntax error"
+          ld hl,.param
+          ld de,0
+          call eval_params
+          call c,nrtfail
+          ld de,.expected
+          call compare
+          ret
+.param BYTE e_short_label,e_endofdata
+.expected BYTE "Undefined (not assembled) ",0
+
+test_eval_short_string
+;Single char remains string (for rsx)
+          ld hl,tess
+          ld de,string_buf ; to collect string
+          call eval_params:call nc,&BE00
+          CHECK_STRING(1,tess_)
+          ret
+
+tess  BYTE e_string,1
+tess_ BYTE "a",e_endofdata
+
+test_eval_short_string'
+;Single char interpreted as byte (for print command)
+          ld hl,tess
+          ld de,0
+          call eval_params:call nc,&BE00
+          ld a,(hl):cp type_positive:call nz,&BE00
+          ld a,(ix):cp "a":call nz,&BE00
+          ld a,(ix+1):or a:call nz,&BE00
+          ret
+
+
+      MACRO CHECK_COMMAND text,com,param#,type
+          ld hl,text
+          call eval_command:call nc,&BE00
+          cp com:call nz,&BE00
+          ld a,c
+          cp param#:call nz,&BE00
+      IF param#
+          ld a,(hl)
+          cp type:call nz,&BE00
+      END
+      ENDM
+
+
+test_eval_command
+          call nrt_init
+          ld hl,nrtcommand6
+          call eval_command
+          call nc,&BE00
+          cp command_x
+          call nz,&BE00
+          dec c:dec c
+          call nz,&BE00
+          push hl:pop iy
+          ld a,(iy)
+          or a
+          call nz,&BE00
+          ld l,(ix+2)
+          ld h,(ix+3)
+          ld de,1
+          or a
+          sbc hl,de
+          call nz,&BE00
+          ld a,(iy+1)
+          or a
+          call nz,&BE00
+          ld l,(ix+0)
+          ld h,(ix+1)
+          ld de,2
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld hl,nrtcommand5
+          call eval_command
+          call nc,&BE00
+          cp command_bk
+          call nz,&BE00
+          dec c
+          call nz,&BE00
+          ld a,(hl)
+          or a
+          call nz,&BE00
+          ld l,(ix+0)
+          ld h,(ix+1)
+          ld de,&C5
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld hl,nrtcommand
+          call eval_command
+          call nc,&BE00
+          or a
+          call nz,&BE00
+          dec c
+          call nz,&BE00
+          ld a,(hl)
+          or a
+          call nz,&BE00
+          ld l,(ix+0)
+          ld h,(ix+1)
+          ld de,&33*14
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld hl,nrtcommand2
+          call eval_command
+          call nc,&BE00
+com_d = 2
+          cp com_d
+          call nz,&BE00
+          ld a,c
+          or a
+          call nz,&BE00
+
+com_print = 0
+          CHECK_COMMAND(nrtcommand3,com_print,1,type_positive)
+          ld l,(ix+0)
+          ld h,(ix+1)
+          ld de,3
+          or a
+          sbc hl,de
+          call nz,&BE00
+
+          ld hl,nrtcommand4
+          call eval_command
+          call c,&BE00
+
+      IF 0
+;BROKEN. The idea would be for PRINT in mon.o to deal with this case
+          CHECK_COMMAND(nrtcom7,com_print,1,type_positive)
+          ld a,(ix+0):cp "a":call nz,&BE00
+      END
+          ret
+
+nrtcommand BYTE "?#33*14",0
+nrtcommand2 BYTE "d",0
+nrtcommand3 BYTE "? 3",0
+nrtcommand4 BYTE "dxzzxg",0
+nrtcommand5 BYTE "b#C5",0
+nrtcommand6 BYTE "x1,2",0
+;; nrtcom7 BYTE "?",34,"a",34,0 ; ?"a" should return value. !!BROKEN
+
+test_load
+; In version G, load"toto" crashed.
+      IF 0
+          ld hl,.cmd
+          call eval_command
+          cp command_load:call nz,nrtfail
+;load"oups" syntax not recognized. Must adapt parser
+;          ld a,c:cp 2:call nz,nrtfail
+      END
+          ret
+.cmd  BYTE "load",34,"oups",34,0
+
+test_eval_rsx
+
+          call nrt_init
+          CHECK_COMMAND(nrtrsx,command_rsx,2,type_positive)
+          ld a,(ix+0):cp 42:call nz,&BE00
+;First param is second!
+          inc hl:inc ix:inc ix
+          CHECK_STRING(4,nrtrsxref)
+
+; musn't coerce 1-length str to byte (for rsx A, D, I, O, ...)
+          CHECK_COMMAND(nrtrsxb,command_rsx,1,type_string)
+          CHECK_STRING(1,nrtrsxb)
+          ret
+
+nrtrsx                  ; !! Cannot pick toto as dummy rsx -> t oto
+      BYTE "zzzz,42",0  ; | optionnal
+nrtrsxref
+      BYTE "zzzz",0
+
+nrtrsxb BYTE "a",0
+
+test_multi_strings
+          call nrt_init
+          CHECK_COMMAND(.rsx,command_rsx,3,type_string)
+; check each param individual
+; (note: they are in reverse order)
+          ld l,(ix+0)
+          ld h,(ix+1)
+          ld de,_ref2
+          ld b,_ref2_
+          call compare_sized
+
+          ld l,(ix+2)
+          ld h,(ix+3)
+          ld de,_ref1
+          ld b,_ref1_
+          call compare_sized
+
+          ld l,(ix+4)
+          ld h,(ix+5)
+          ld de,_ref0
+          ld b,_ref0_
+          call compare_sized
+          ret
+
+.rsx
+; |ren,"toto","titi"
+      BYTE "|ren",34,"totote",34,",",34,"titi",34,0
+_ref0 BYTE 3,"ren"
+_ref0_ = $ - _ref0
+_ref1 BYTE 6,"totote"
+_ref1_ = $ - _ref1
+_ref2 BYTE 4,"titi"
+_ref2_ = $ - _ref2
+
+test_string_and_literal
+          call nrt_init
+          CHECK_COMMAND(.rsx,command_x,2,type_positive)
+; check each param individual
+; (note: they are in reverse order)
+;1st param = 
+          inc hl:ld a,(hl):cp type_string:call nz,nrtfail
+
+          ld l,(ix+2)
+          ld h,(ix+3)
+          ld de,.ref0
+          ld b,6
+          call compare_sized
+
+          ld a,(ix+0):cp &40:call nz,nrtfail
+          ld a,(ix+1):or a:call nz,nrtfail
+          ret
+
+.rsx
+; x"pop.o",&40
+      BYTE "x",34,"pop.o",34,",&40",0
+.ref0 BYTE 5,"pop.o"
+
+
+test_syntax_error
+
+          call nrt_init
+          ld hl,nrtwrong
+          call eval_command
+          ld de,refsyntaxerror
+          call compare
+          ret
+
+nrtwrong BYTE "!zzzz",0
+refsyntaxerror BYTE "Syntax error ",0
+
+test_too_many_params
+
+          call nrt_init
+          ld hl,nrttoomuch
+          call eval_command
+          ld de,ep_too_many_params
+          call compare
+          ret
+
+nrttoomuch BYTE "x1,2,3,4,5,6,7,8,9",0
+
+test_relocate
+          ld hl,trsrc
+          ld ix,trsrctype
+          ld iy,nrtbuf
+          ld c,2
+          call relocate:call nc,&BE00
+
+          ld hl,trref
+          ld de,nrtbuf
+          ld b,11
+          call compare_sized
+          ret
+
+trsrc WORD 42,trstr
+trsrctype BYTE type_positive,type_string
+trstr BYTE 4,"cafe"
+
+trref WORD 42:WORD nrtbuf+4
+      BYTE 4:WORD nrtbuf+7:BYTE "cafe"
+
+compare
+          ld a,(de):cp (hl):call nz,&BE00
+          or a:ret z
+          inc de:inc hl
+          jr compare
+
+compare_sized
+          ld a,(de):cp (hl):call nz,&BE00
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+;-----------       
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          call &BB06
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+;-----------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+jps
+          jp eval_command
+          jp relocate
+
+      IF inRom
+      FILL limit2-$,&FF
+      END
+
+codesize2 = $$-code2
+
+;-----------
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+      MACRO CALL_PARSE adr
+          call call_ext_from_ass:WORD adr
+      ENDM
+
+      MACRO CALL_ED adr
+          call call_ed_from_ass:WORD adr
+      ENDM
+
+eval_command
+;in : hl = NT command
+;out: C if ok, A = command, C = nb param
+             ; IX = params, HL = params types    !! Last to first
+    ; NC if not, HL = error message
+
+          ld ix,parse_buffer
+          CALL_PARSE(parse_command)
+          jr nc,ec_error
+
+          ld b,(hl)
+          inc hl
+          push bc
+
+          ld a,b
+          call is_string_command
+          ld de,string_buf ; to collect string
+          jr z,$+5:ld de,0
+          call eval_params
+
+          pop bc        ; use bc so F is unchanged
+          ld c,a
+          ld a,b
+          ret
+
+is_string_command
+; return Z if yes (sb, rsx, type, load)
+ ;          cp command_load:ret z   ; no such command yet
+          cp command_x:ret z
+; use the fact all command 18 (sb), 19 (rsx), 20 (type)
+; are string commands, to save room
+          cp command_sb:ret c ; NZ 
+          cp a          ; Z
+          ret
+
+ec_error
+          ld a,err_syntaxerror
+          jr z,ec_err_
+          ld a,err_unknownlabel
+ec_err_
+          ld de,command_result
+          push de
+          CALL_ED(copy_message_error)
+          pop hl
+          or a
+          ret
+
+err_syntaxerror = 0
+err_unknownlabel = 25
+
+      IF 0
+is_rsx
+;Is rsx (or save in the future)
+;Return Z if yes.
+          cp command_rsx
+; todo: ret z:cp command_save
+          ret
+      END
+
+eval_params
+; In: HL: pre-ass data (output of parse_command, after command code)
+    ; DE: string_buf to collect strings, 0 otherwise
+; Out: Carry si OK, A=nb params, IX=params (last first), HL=params type
+     ; NB sinon, HL=message d'erreur      
+
+nb_params_max = 8
+
+          push de
+          ld (va_savesp),sp ; Needed? Check exit mecanism in asseva
+
+          xor a         ;cpt param
+          ld (va_phase),a ;evite report error superflu
+          ld de,computed_params ;room for big numbers and strings
+          ld ix,computed_params+&0100 ;stack for params
+          ld iy,computed_params+&0100-[2*nb_params_max]
+ep_lp
+; Reset pointer for each string
+          ex (sp),hl
+          ld (vev_data),hl
+          ex (sp),hl
+
+          push af
+          ld a,(hl)
+          cp e_endofdata
+          jr z,ep_end
+
+          push de
+          dec l
+          call eval_exp
+; eval_exp might have connected source (see test_undefined for instance)
+; (default after changing bank to resolve label)
+          call connect_bk_base
+
+          inc l
+          ld c,a
+          ld a,(va_exp_error)
+          or a
+          jr nz,ep_error
+
+          ld a,(vev_data+1):or a
+          jr z,ep_char
+; String are splitted: all char but last in (vev_data), last byte as int
+; We have to handle this first
+          ld a,(vev_flags)
+          bit vevf_string,a:jr nz,ep_string
+ep_char
+          ex (sp),hl
+          ex de,hl
+
+          ld a,c
+          push af       ; For F?
+          cp 3
+          jr c,oktpword
+          pop af
+
+;copy big value
+          push de
+          ld b,a
+          ld (de),a
+          inc de
+          ld a,l
+          sub b
+          ld l,a
+cpbit
+          ld a,(hl)
+          inc hl
+          ld (de),a
+          inc e
+          djnz cpbit
+
+          pop hl
+          ld a,type_bigint
+          jr oktp
+
+oktpword
+          pop af
+          ld a,type_positive
+          jp p,oktp
+          inc a
+oktp
+          dec iy
+          ld (iy+0),a
+          dec ix
+          ld (ix+0),h
+          dec ix
+          ld (ix+0),l
+ep_next
+          pop hl
+          pop af
+          inc a
+          cp nb_params_max+1
+
+          jr c,ep_lp
+
+          pop de
+          ld hl,ep_too_many_params
+ep_error_com
+          ld de,computed_params
+ep_copyerr
+          ld a,(hl)
+          inc hl
+          ld (de),a
+          inc e
+          or a
+          jr nz,ep_copyerr
+          ld hl,computed_params
+          or a
+          ret
+
+ep_end
+          pop af
+          pop de
+          push iy
+          pop hl
+          scf
+          ret
+
+ep_error
+          pop de
+          pop de        ; was af. Keep A= error number
+          pop de
+          jp ec_err_
+
+ep_string
+          dec c:call nz,exit_mess ; Assumption failed
+          ex (sp),hl
+          push hl
+; Wrap string (firmware encoding: size + pnt).
+          ld a,(vev_data) ;past string
+          sub string_buf AND &FF
+          ld c,a        ; length - 1
+          inc a:ld (hl),a:inc l ; Length
+          ld a,e        ; last byte
+          ex de,hl
+          ld hl,string_buf
+          call safe_ldir_c
+          ld (de),a:inc e
+          pop hl
+          ld a,type_string
+          jr oktp
+
+
+ep_too_many_params
+      BYTE "Too many params."
+      BYTE 0
+
+relocate
+; Move params out of orgams work zone (which will be switched out).
+; Used by rsx.o to form proper parameter passing (PPP) via IX.
+
+; in:hl = source params
+    ;ix = params types
+    ;IY = destination
+    ; c = nb params < 128 (not checked)
+; Out: C if ok. NC if error (too much param)
+
+; !! NB: client must reserve MAX_SIZE + nbparams * 5 (pnt, size, pnt)
+
+MAX_SIZE = &40          ; for string
+
+          push iy:pop de ; iy= dest param
+          ld a,c:add a:add e:ld e,a
+          jr nc,$+3:inc d ; de= dest string
+
+          ld b,0        ; total string size
+relo_lp
+          ld a,(ix):inc ix
+          cp type_string:jr z,relo_string
+
+;copie value
+      2 ** [ld a,(hl):inc hl
+          ld (iy),a:inc iy]
+          jr relo_next
+
+relo_string
+
+          ld a,(hl):inc hl
+          push hl
+          ld h,(hl):ld l,a
+
+          ld a,(hl):add b:ld b,a
+          cp MAX_SIZE:jr nc,relo_err
+
+          ld (iy),e:inc iy
+          ld (iy),d:inc iy
+          push bc
+          call string_to_firmware
+          pop bc
+
+          pop hl
+          inc hl
+relo_next
+          dec c
+          jr nz,relo_lp
+          scf
+          ret
+
+relo_err
+          pop bc
+          ret           ; already nc
+
+string_to_firmware
+; Move string and wrap it a la firmware
+; in: hl=source  len + str
+    ; de=dest    len + pnt + str
+          ld c,(hl):inc hl
+          push hl
+          ex de,hl
+          ld (hl),c:inc hl ; len
+          ld e,l:ld d,h:2 ** inc de
+          ld (hl),e:inc hl ; pnt
+          ld (hl),d
+          pop hl
+safe_ldir_c             ; check c and save b
+          inc c:dec c:ret z
+          ld b,0
+          ldir          ; str
+          ret
+
+realsize = $$ - code
+
+hi
+      IF inRom
+      FILL limit-$,&FF
+      END
+
+codesize = $$ - code
+
+command_bk = 7
+command_x = 9
+command_sb = 18
+command_rsx = 19
+command_type = 20
+

@@ -1,0 +1,2708 @@
+; <<<<<< symb: Handling value of symbols for assemblage >>>>>
+inRom = 1
+rom   = &1D
+dev_checks = 1
+dev_checks' = 1         ; new checks
+;Those nrt_checks are to heavy (time and room) to leave in rom
+nrt_checks = 1 - inRom
+need_room = 1
+todo  = 1
+
+      IF todo
+; Add test symb_get_import
+      END
+
+      IMPORT "symbflag.i"
+      IMPORT "memmap.i"
+      IMPORT "assmap.i"
+      IMPORT "const.i"  ; chead_last / chead_last0
+      IMPORT "swapi.i"  ; for check store size /symb_store_len/
+      IMPORT "macro.i"
+
+      IF need_room
+; sy_walk: Pass hook in-line instead of via IX  call sy_walk:defw hook
+      END
+
+; Depends on: chunk (new_chunk_no_init for symb chunks)
+            ; liszt
+; Used by: ass    (sy_set, sy_set_local, sy_get_explicit_global...)
+         ; asseva (sy_get, sy_get_explicit_local)
+         ; bt (adr_to_id)
+         ; org (sy_reset_phase2, sy_store/restore)
+         ; visu (indirectly, for macro paramaters evaluation)
+
+  ; TODO: When vo_curbk etc out of bank, remove bk base reconnection?
+        ; Nb: stack always out
+        ; of bank (even in trace mode).
+        ; !!!! BUT CHECK WHICH FAR CALL IS USED
+
+; \\\\ 2025 \\\\\\\\
+; ----- HH Beta k -----
+ ; Dec
+  ;28 au: Fix test_free (use const.chunks_per_bk)
+        ; sy_reset_if_imported: fix #1f7
+; ----- HH Beta i -----
+ ; Nov
+  ;28 at: sy_walk: s/vo_basebk/I/ for check
+  ;26 as: remove vo_this_bk checks
+; ---- HH beta C ---------
+ ; Oct
+  ;12 ar Add test_redefine_imported. Fix it
+; ---- HH beta ? ---------
+  ; 5 aq Fix #1e4 exit_scope: Return nc instead of asserting
+
+; ---- HH beta 7 ---------
+ ; Aug  
+  ;29 ap Bump max_scope_level to 64. Move vs_cur_id & co at 6700
+    ; ao sy_reset_table_except_imported: don't call sy_reset_scope
+            ; (scope now cross-sources for bug #1dd)
+       ; Don't store scope (same reason)
+  ;27 an sy_walk: use live version, so release_locals can fastly
+                ; be called for imported sources.
+         ; Expose release_locals (to fix #1dc)
+; ---- HH beta 6 ---------
+  ;15 am "Storing" index made no sense: they are "static" once init
+       ; by sy_reset_table_except_imported
+  ;13 al sy_reset must reset symb_index_live as well
+       ; Update profile_sy_get
+  ;12 ak _get_chunk: musn't fail. See rationale there.
+       ; sy_restore: sync symbs live for visu/count
+  ;11 aj Use symbol_index_live
+       ; Add sy_store_table/restore
+       ; Remove sy_reset_table
+       ; _get_chunk: Do not check anymore if hl >= vs_symbols#
+                   ; (would require connect bk base) 
+; ---- HH beta 1 ---------
+ ; Jul 
+ ; 27 ai Use new swap.o (remove dependencies on variable pos)
+  ;18 ah Fix regression display " = " for |orgset
+  ;10 ag [Adapt rom ass] Use CALL_EXT / pagefirm
+ ; Jun
+  ;11 af Don't store scope state (vs_cur_id and co).
+           ; - Ease macro cross import
+           ; - Bonus: slightly faster source switch.
+       ; sy_get_import: symbol_index now in first stored chunk
+
+; ---- GG release --------
+ ; May
+  ;26 ae Expose sy_reset_table_except_imported
+; ---- GG beta h --------
+; Apr
+     ;27 ad [orgset] Do print_nl in label display 
+     ;25 ac [orgset] preset labels from /vo_orgset_store/
+          ; + test_org_set
+       ; ab Must be iso.
+          ; + test_no_leak_local  (deactivated)
+          ; sy_reset_table_except_imported: call /release_locals/
+                ; This was done previously (vz) by calling sy_reset
+                ; which was overkill.
+     ;22 aa 
+          ; + /sy_reset_table_except_imported/
+          ; + /sy_reset_imported/
+          ; + test_imported_preserved
+          ; + nrt_checks 
+          ; + _check_no_leak
+     ;21    + test_symb_in_new_chunk
+          ; Remove dead code (vv)
+          ; Double test coverage with/out full init
+; \\\\ 2024 \\\\\\\\
+; ---- GG beta C --------
+; Oct 14 z Introduce sy_get_import
+    ;  8 y sy_store/sy_restore: don't check buf overrun.
+             ; Reverse order of storage (so symbol_index confined)
+             ; Use const.i 
+; ---- GG beta 3 --------
+; Feb 27 x sy_store/sy_restore: don't check against C anymore
+; ---- GG beta 1 --------
+; Feb 21 w Rollback vv (fix bug#177 labels non persistant for monitor)
+
+; \\\\ 2023 \\\\\\\\
+; ---- Release FF --------
+; Dec 29 v Move symbols_index at 9DD0 (use memmap.i)
+             ; -> _get_chunk, no more need to connect bk base
+         ; nrt_setup: *Almost* allow rom override
+                    ; clean all banks to ease detection
+         ; more checks (dev mode)
+; Jul  3 u Add /profile_sy_get
+; Jun  1 t Set dev_checks = 0
+; Apr 25 s Use non-firmware far CALL_BRIC. Fix bug#15f (visu crash)
+
+; \\\\ 2022 \\\\\\\\
+; Apr 21 r Export flags in symbflag.i
+
+; Feb 19 q Move vars at 6a00 (to make room for prof.o)
+
+; \\\\ 2021 \\\\\\\\       
+
+; Nov 17 p [No-op cleanup change]  More accurate naming:
+         ;  s/sy_reset/sy_reset_table
+         ;  s/sy_free/sy_reset (since free+init actually)
+
+; Feb 02 o Move vars in bank. See vs_cur_id for rationale.
+
+       ; n Update limit?
+    ; 19 m Change API: sy_set* must return error code, since they can
+          ; be several (err_doubledefined OR memory full sent by liszt)
+          ; Actually finish /test_memfull/!
+        ; l Handle memory full /test_memfull/
+          ; Robuster /test_free/
+        ; k /test_reset/ Fixed in liszt7 + chunky
+        ; j Handle memory /test_nomemoryleak/
+          ; !! Requires liszt6
+          ; Simplify sy_walk (no need to save c).
+        ; i /test_crossbank/. Fix the test with:
+          ; Use I to reconnect bk base at then end!
+          ; Code cleanup and factorisation.
+          ; Adapt /test_sy_notdefined/test_sy_notdefined_bk/
+     ; 17 h Fix /test_local_global/ Wasn't handled at all.
+          ; Add sy_get_explicit_global for consistency check
+          ; Clean. Remove version switch /vf/.
+     ; 16 g Fix /test_nested/: we must search the whole list before
+                             ; going to parent scope!
+          ; Fix /test_unknown_local/. We assumed that when calling
+                ; /sy_get_explicit_local/, the local would exist!
+          ; Requires liszt4!!  
+ ; Jan 12 f Local labels. WIP (test_nested still bugged).
+          ; introduce /sy_set_local/, adapt /sy_get/ for the flag.
+          ; sy_get, sy_set: connect_bk_base. See asscq.o
+          ; API change: sy_get return directly error code. Rationale:
+                      ; - Before could only be defined or not.
+                      ; - Now can also be ambiguous (local vs global).
+          ; Move @ db00-dd00 
+          ; Requires liszt3!!  
+
+      ORG 0:call &BE00
+
+      ORG &0100
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+nrt_buf = &3000
+
+main_rom = &0A          ; ORGAMS.ROM
+
+codedest = symb
+limit = evacmd
+codedest2 = symb2
+limit2 = impeva_jp'
+codedest3 = symb3
+limit3 = asseto
+codedest4 = symb_jp
+limit4 = asseto_jp
+codedest5 = symb_jp'
+limit5 = &FFFF          ; END OF ROM!
+codedest6 = symb_jp''
+limit6 = cocopy_jp
+
+max_scope_level = 64    ; Needs a lot since IMPORT create a level
+scope_size = 2          ; Id
+
+      IF size_index - &18 ; in const.i
+  !! must move symbol_index
+      END
+
+vs    = symb_vars
+
+; ---- In ORGAMS.ROM aka main_rom ---------------
+
+setup_custom = &E839    ; Trust me on this
+;ext_far_call = &C13C
+
+; ---- In this rom (ass) --
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+; ---- In ext rom ---------
+
+org   = &C008
+; connect_bk_base = org+&7B !! use I version ;B corrupted. AF saved
+; nrt
+org_init = org
+org_set_line = org+9
+org_insert_line = org+12
+;org_delete_line = org+15
+org_load = org+18
+;org_save = org+21
+org_assemble = org+111  ; without code installation
+orgset = org + &90      ; for nrt
+org_is_self_selected = org + &60 ;connect bk base
+
+swap  = &FE69
+connect_symb_index = swap+9
+
+print = &FF33           ; in orgui
+;print_msg = print+18    ; a = msg#
+print_chr = print+36
+print_txt_sized = print+30 ; hl=txt b=size (works with txt in rom)
+;print_space = print+39
+print_nl = print+42
+
+; ---- In BRICBRAC.ROM ---------
+chunk = &FE00
+new_chunk_no_init = chunk+9 ; for nrt
+new_chunk = chunk+15    ; cleared and connected
+free  = chunk+24        ; hl:id chunk. can be 0
+chunk_init_custom = chunk+33 ; for nrt
+chunk_get_free# = chunk+30 ; for nrt
+connect_chunk_from_id = chunk+&24 ; for nrt_checks
+
+liszt = &FEDC
+liszt' = &FEBE
+list4_new = liszt       ; return empty list (cde). all other reg preserv
+list4_append = liszt+3  ;in: cde= pnt head list. 
+                        ;out: cde conserved
+                            ;  hl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_free = liszt+6    ;in:cde. all register conserved
+list_head = liszt'      ; abcde saved
+list_iter_reset = liszt'+3 ; in: cde= pnt head list. out: side effect
+list_iter_get = liszt'+6 ; in: cde= pnt head list.
+                            ;out: cde conserved
+                            ;  hl= pnt cell body
+list_iter_next = liszt'+9 ; in: cde= pnt head list.
+                          ;out: NZ, iter++ (side effect)
+                              ;  Z, no-op if no next
+                              ; All registers preserved but A
+list_search_word_from_iter = liszt'+12
+
+aap   = &FE30
+aap_getkey = aap+9
+
+disp  = &FF14
+disp_deci_a = disp+&48
+disp_hexa_a = disp+&5A
+disp_hexa_hl = disp+&63
+
+;----
+chunks_per_bank = &3C   ;nrt 
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures (nrt)
+mess  = &BE00           ; Main code
+kl_rom_select = &B90F
+kl_time_please = &BD0D
+kl_time_set = &BD10     ;nrt
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG adr ; CALL_EXT in some sources
+          call call_ext_from_ass:WORD adr
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call call_bric_from_ass:WORD adr
+      ENDM
+
+      MACRO CHECK_I
+;!! trash A.
+      IF dev_checks
+          call check_i_
+      END
+      ENDM
+
+      MACRO CHECK_ID_CDE
+      IF dev_checks
+          call check_id_cde_
+      END
+      ENDM
+
+      MACRO CHECK_BK_BASE
+      IF dev_checks
+          call check_bk_base_
+      END
+      ENDM
+
+
+      MACRO CHECK_SP
+      IF dev_checks
+          call check_sp_
+      END
+      ENDM
+
+      MACRO NRT_RESET_SLOTS n
+          call sy_reset_scope
+          ld hl,n:call nrt_reset_table:call nc,fail
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val:or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop de
+      ENDM
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val:or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop hl
+      ENDM
+
+
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+tst_bk = &CF            ; We want to reach c7
+bk_dev_big = &D7
+
+nrt_clean
+          ld a,tst_bk
+          call _clean
+          ld a,bk_dev
+_clean
+          ld b,&7F:out (c),a
+          ld hl,&4000:ld de,&4001:ld bc,&3FFF:ld (hl),0:ldir
+          ret
+
+nrt_setup
+          ld a,bk_dev
+nrt_setup_custom
+;in:  a= bk dev  
+          push af
+; -- Clean banks to ensure proper detection in case of breakpoint
+          ld a,&C4:call nrt_fill_bank
+        ;  ld a,&C5:call nrt_fill_bank
+        ;  ld a,&C6:call nrt_fill_bank
+          ld a,&C7:call nrt_fill_bank
+          pop af
+          ld b,&7F:out (c),a
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          push af
+          ld c,main_rom:call kl_rom_select
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          pop af:call setup_custom
+
+; -- Override rom detection
+; !!! Not enough, since setup_custom stills call installed rom.
+      IF 0
+; no, now we are in ass rom
+          ld a,rom
+          ld (vo_romext),a
+          ld (vo_romext'),a
+      END
+
+          ld c,rom:call kl_rom_select
+
+; --- setup_custom calls rom version. So we must call our version
+          call sy_init
+
+; --- ref for _check_no_leak
+          CALL_BRIC(chunk_get_free#)
+          ld (free#_ref),hl
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+nrt_fill_bank
+          ld b,&7F:out (c),a
+          ld hl,&4000:ld de,&4001:ld bc,&3FFF:ld (hl),a:ldir
+          ret
+
+      MACRO NRT_INIT pass
+          ld a,".":call &BB5A
+      IF pass
+          call sy_reset
+      ELSE
+          call nrt_setup
+      END
+      ENDM
+
+_check_no_leak
+          push bc:push hl
+          CALL_BRIC(chunk_get_free#)
+          ld bc,(free#_ref)
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          pop hl:pop bc
+          ret
+
+tests
+; A bit brittle!! Since e.g. org_assemble will use old version in ROM
+; Burn new change in extra rom.
+          NRT_INIT(0)
+          call test_redefine_imported
+
+      2 ** [
+; 1st pass: with full init
+; 2nd pass: only sy_reset
+      IF 1
+          NRT_INIT(#):call test_free
+          NRT_INIT(#):call test_org_set
+          NRT_INIT(#):call test_no_leak_local
+          NRT_INIT(#):call test_imported_preserved
+          NRT_INIT(#):call test_symb_in_new_chunk
+          NRT_INIT(#):call profile_sy_get
+          NRT_INIT(#):call test_memfull
+          NRT_INIT(#):call test_reset
+          NRT_INIT(#):call test_sy_get
+          NRT_INIT(#):call test_sy_notdefined
+          NRT_INIT(#):call test_sy_notdefined_bk
+          NRT_INIT(#):call test_sy_get2
+          NRT_INIT(#):call test_sy_setdefined_bk
+          NRT_INIT(#):call test_adr_to_id
+          NRT_INIT(#):call test_bank_setup
+      2 ** [
+          NRT_INIT(#):call test_free
+          ]
+      2 ** [
+          NRT_INIT(#):call test_set_local
+          ]
+          NRT_INIT(#):call test_forward
+          NRT_INIT(#):call test_set_local_doubledefined
+          NRT_INIT(#):call test_scope
+          NRT_INIT(#):call test_enter_scope
+          NRT_INIT(#):call test_global_local
+          NRT_INIT(#):call test_local_global
+          NRT_INIT(#):call test_ambiguous
+          NRT_INIT(#):call test_unknown_local
+          NRT_INIT(#):call test_nested
+          NRT_INIT(#):call test_crossbank
+;We must reset free_ref#
+ ;since some previous would break _check_no_leak 
+          call nrt_setup
+          NRT_INIT(#):call test_nomemoryleak
+          NRT_INIT(#):call test_reset
+          NRT_INIT(#):call test_symb_in_new_chunk
+          NRT_INIT(#):call test_imported_preserved
+          NRT_INIT(#):call test_redefine_imported
+      END
+          ]
+          ret
+
+;;;;;;;; nrt         ;;;;;;;;;;;;;;
+
+      MACRO NRT_SET id,type,msb,val
+          ld hl,id
+          ld a,type:ld c,msb:ld de,val
+          call sy_set
+          call nc,&BE00
+      ENDM
+
+      MACRO NRT_CHECK id,type,msb,val
+          ld hl,id
+          call sy_get
+          call nc,&BE00
+          call z,&BE00  ; ??
+          cp type+&30:call nz,&BE00 ; flags 'defined' & 'used'
+          ld a,c:cp msb:call nz,&BE00
+          ld hl,val:or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+
+test_sy_get
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+          NRT_SET(0,1,2,&0304)
+          NRT_CHECK(0,1,2,&0304)
+          ret
+
+test_sy_get2
+;try with 2 symbols
+          call sy_init
+          NRT_RESET_SLOTS(2)
+
+          NRT_SET(1,1,2,&0304)
+          NRT_SET(0,1,5,&0607)
+
+          NRT_CHECK(1,1,2,&0304)
+          NRT_CHECK(0,1,5,&0607)
+          ret
+
+profile_sy_get
+;-------------
+; see assprof.o for nop-accurate profiling
+      IF 0
+;wth we don't need a source at all for this test
+          ld a,bk_dev_big
+          call nrt_setup_custom
+          ld hl,.name
+          ld bc,0       ; no meta data
+          CALL_ORG(org_load):call nc,fail
+      ELSE
+          call sy_init
+      END
+
+nrt_symb# = 850
+          ld hl,nrt_symb#
+          push hl
+          call sy_reset_table_except_imported
+
+          ld de,0
+          ld hl,0
+          call kl_time_set
+
+          pop hl
+.lp
+          push hl
+          call sy_get
+          pop hl
+          dec hl
+          ld a,l:or h
+          jr nz,.lp
+
+          call kl_time_please
+;Musn't be > 65536/300 seconds
+          ld a,d:or e:call nz,fail
+;Undefined: Musn't be more than 168 + loop nops by call
+          ld de,nrt_symb# * [168+14] / 64 / 52 + 5
+          or a:sbc hl,de:ret z
+;Difference shouldn't be more than 4
+          ld bc,5:or a:sbc hl,bc:call nc,fail
+          ret
+
+; .name BYTE ":org/testdata/assex.o",0 ; missing file!
+.name BYTE ":orgnrt/orgdata/assew.o",0
+
+
+test_sy_notdefined
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+          ld hl,0
+          call sy_get:call c,fail ; expect NC
+          cp err_undefined:call nz,fail
+          ret
+
+
+test_sy_notdefined_bk
+;sy_get must reconnect base_bk 
+
+          call nrt_setup
+
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+;sanity: are we in base_bk
+          call nrt_check_bkbase
+
+          ld hl,0
+          call sy_get:call c,fail
+          cp err_undefined:call nz,fail
+
+          call nrt_check_bkbase
+          ret
+
+nrt_check_bkbase
+          ld a,(edsign_pos):cp "O":call nz,fail
+          ld a,(edsign_pos+1):cp "r":call nz,fail
+          ld a,(edsign_pos+2):cp "g":call nz,fail
+          ret
+
+test_sy_setdefined_bk
+;sy_set must reconnect base_bk 
+
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+;sanity: are we in base_bk
+          call nrt_check_bkbase
+
+          xor a:ld hl,0
+          call sy_set:call nc,fail
+          call nrt_check_bkbase
+
+;redefine
+          xor a:ld hl,0
+          call sy_set:call c,fail
+          cp err_doubledefined:call nz,&BE00
+          call nrt_check_bkbase
+          ret
+
+
+test_adr_to_id
+;-------------
+          CALL_ORG(org_init)
+
+          ld hl,source_adr_to_id
+          call nrt_set_source
+
+          ld de,nrt_buf ; nevermind, since code not installed
+          ld bc,&CAFE   ; $
+          CALL_ORG(org_assemble)
+
+          ld de,&BABE:call adr_to_id:call c,&BE00
+          ld de,&CAFE:call adr_to_id:call nc,&BE00
+          CHECK_HL_EQ(1) ; Second label
+          ld de,&CAFF:call adr_to_id:call nc,&BE00
+          CHECK_HL_EQ(2)
+          ld de,&CAFE:call adr_to_id:call nc,&BE00 ; Sanity
+          CHECK_HL_EQ(1) ; Second label
+          ret
+
+source_adr_to_id
+      BYTE "toto=1",0
+      BYTE "tata",0
+      BYTE "ei",0
+      BYTE "titi",0
+      BYTE 0
+
+test_bank_setup
+          ld a,tst_bk
+          ld hl,&40
+          call nrt_setup_custom
+
+;--mark
+          ld bc,&7FC7:out (c),c
+          ld bc,&7F00+tst_bk:out (c),c
+
+;--only size_index (24) chunks are created at max.
+;so, we prefil bank
+          ld b,chunks_per_bk+1 - size_index
+tbs_fill
+          push bc
+          CALL_BRIC(new_chunk_no_init)
+          pop bc
+          djnz tbs_fill
+
+          NRT_RESET_SLOTS(max_symbols)
+
+          ld bc,&7FC7:out (c),c
+          ld bc,&7F00+tst_bk:out (c),c
+
+; Needed, otherwise NRT_SET returns 'already defined'
+          NRT_RESET_SLOTS(max_symbols)
+
+nlast = max_symbols-1
+          NRT_SET(nlast,1,33,&CAFE)
+          NRT_SET(0,1,5,&BABE)
+
+          NRT_CHECK(nlast,1,33,&CAFE)
+          NRT_CHECK(0,1,5,&BABE)
+          ret
+
+test_free
+; Check all chunks are freed when calling di_free (hot reset).
+
+          call nrt_setup ; Needed for far_call?
+expected_chunks = chunks_per_bk-4 ;  source amorce, meta, aap, savelist
+
+; Sanity checks
+          CALL_BRIC(chunk_get_free#)
+
+          CHECK_HL_EQ(expected_chunks)
+
+; Mustn't be defined
+; deactivate: we don't check againt vs_symbols# anymore
+;          ld hl,1:call sy_peek:call c,&BE00
+
+          NRT_RESET_SLOTS(max_symbols)
+
+; Sanity check: exactly size_index chunks used.
+          CALL_BRIC(chunk_get_free#)
+          CHECK_HL_EQ(expected_chunks-size_index)
+
+          call sy_reset
+
+; proper checks
+          CALL_BRIC(chunk_get_free#)
+          CHECK_HL_EQ(expected_chunks)
+; Mustn't be defined
+        ;  ld hl,1:call sy_peek:call c,&BE00
+          ret
+
+test_set_local
+          call sy_init
+          NRT_RESET_SLOTS(2)
+
+; global scope 0
+          ld hl,1       ;id
+          ld de,&CAFE   ;adr
+          call sy_set_local:call nc,&BE00
+; do we get back the thingy?
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&CAFE)
+; twice?
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&CAFE)
+
+; now check double definition (same scope)
+          ld hl,1       ;id
+          ld de,&CAFE   ;adr
+          call sy_set_local:call c,fail
+          cp err_doubledefined:call nz,fail
+
+; check get in phase2
+          call connect_bk_base_i
+          call sy_reset_scope
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&CAFE)
+; twice?
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&CAFE)
+          ret
+
+test_forward
+; mimic:
+;   jr .ho
+; .ho
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+; global scope 0
+          ld de,"z"
+          ld hl,0:call sy_set_local:call nc,&BE00
+; sanity: do we get back the thingy?
+          ld hl,0:call sy_get:call nc,&BE00
+          CHECK_DE_EQ("z")
+
+; check get in phase2
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          ld hl,0:call sy_get_explicit_local:call nc,&BE00
+          CHECK_DE_EQ("z")
+; twice?          
+          ld hl,0:call sy_get_explicit_local:call nc,&BE00
+          CHECK_DE_EQ("z")
+; generic must work too
+          ld hl,0:call sy_get:call nc,&BE00
+          CHECK_DE_EQ("z")
+          ret
+
+
+test_set_local_doubledefined
+; also tested in test_set_local! 
+
+          NRT_RESET_SLOTS(1)
+          ld hl,0:call sy_set_local:call nc,fail
+          call new_scope
+          ld hl,0:call sy_set_local:call nc,fail ; ok in new scope
+          ld hl,0:call sy_set_local:call c,fail ; not 2 in same scope
+          cp err_doubledefined:call nz,&BE00
+          ret
+
+test_scope
+; Test scope handling
+          call sy_init
+          call sy_reset_scope
+          NRT_RESET_SLOTS(1)
+
+          call _test_scope
+; Replay
+          call connect_bk_base_i
+          call sy_reset_scope
+          call _test_scope
+          ret
+
+_test_scope
+          call get_scope_id
+          CHECK_DE_EQ(0)
+          call enter_scope
+          call get_scope_id
+          CHECK_DE_EQ(1)
+          call enter_scope
+          call get_scope_id
+          CHECK_DE_EQ(2)
+          call exit_scope
+          call get_scope_id
+          CHECK_DE_EQ(1)
+          call exit_scope
+          call get_scope_id
+          CHECK_DE_EQ(0)
+
+test_enter_scope
+; We mimic using twice a macro:
+; each instance must be a new scope
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+          call enter_scope ; mimick macro instance
+          ld hl,0       ;id
+          ld de,&BABE   ;adr
+          call sy_set_local:call nc,&BE00
+; do we get back the thingy?
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&BABE)
+          call exit_scope ; mimick ENDM
+
+; Bis repetitia (with another value)
+
+          call enter_scope
+          ld hl,0
+          ld de,&B00B
+          call sy_set_local:call nc,&BE00
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&B00B)
+          call exit_scope
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          call enter_scope
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&BABE)
+          call exit_scope
+
+; Bis repetitia (with second value)
+
+          call enter_scope
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&B00B)
+          call exit_scope
+          ret
+
+
+test_global_local
+; We mimic:
+;   ll  nop
+;   g   jr .ll
+;   .ll
+          call connect_bk_base_i
+          call sy_init
+          NRT_RESET_SLOTS(2)
+
+          call get_scope_id:CHECK_DE_EQ(0) ; sanity
+          ld hl,0
+          xor a
+          ld c,0:ld de,&8888
+          call sy_set
+
+          call new_scope ;ll 
+          call get_scope_id:CHECK_DE_EQ(1) ; sanity
+
+          ld hl,1
+          xor a
+          ld de,&8889
+          call sy_set
+
+          call new_scope ;g 
+
+          ld hl,0       ;.ll
+          ld de,&888B
+          call sy_set_local
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          call get_scope_id:CHECK_DE_EQ(0) ; sanity
+
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&8888)
+
+          call new_scope
+          call get_scope_id:CHECK_DE_EQ(1) ; sanity
+
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&8889)
+
+          call new_scope
+
+          ld hl,0
+          call sy_get_explicit_local:call nc,&BE00
+          CHECK_DE_EQ(&888B)
+          ret
+
+test_local_global
+; We mimic:
+;   .ll jr .ll
+;   ll  jr ll  ; Not ambiguous since .ll in previous scope
+
+          call connect_bk_base_i
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+          ld hl,0
+          ld de,"x"
+          call sy_set_local
+
+          ld hl,0
+          xor a
+          ld c,0
+          ld de,"y"
+          call sy_set
+
+         ; ld hl,0       ;.ll
+         ; ld de,&888B
+         ; call sy_set_local
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          ld hl,0:call sy_get_explicit_local:call nc,&BE00
+          CHECK_DE_EQ("x")
+
+; mimic asslab2's consistency check (we get label and compare with $)
+          ld hl,0:call sy_get_explicit_global:call nc,&BE00
+          CHECK_DE_EQ("y")
+
+          call new_scope ; enter "ll" scope
+          call get_scope_id:CHECK_DE_EQ(1) ; sanity
+
+; evaluation in 'jr ll'
+          ld hl,0:call sy_get:call nc,&BE00
+          CHECK_DE_EQ("y")
+
+; previous local should be unreachable 
+; (hence the non-ambiguity with sy_get above)
+          ld hl,0
+          call sy_get_explicit_local:call c,&BE00
+          ret
+
+
+test_unknown_local
+; We mimic:
+;   jr .unknown
+
+          call connect_bk_base_i
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+; directly phase2, since expression not evaluated in phase1.
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          ld hl,0:call sy_get_explicit_local:call c,&BE00
+; Mustn't work either as global
+          ld hl,0:call sy_get:call c,&BE00
+          ret
+
+test_ambiguous
+; We mimic:
+;   ll  nop
+;   g   jr ll   <- ambiguous
+;   .ll
+          call sy_init
+          NRT_RESET_SLOTS(2)
+
+          call new_scope ;ll
+          ld hl,0
+          xor a
+          ld c,0:ld de,&1118
+          call sy_set
+
+          call new_scope ;g 
+          ld hl,1
+          xor a
+          ld de,&1119
+          call sy_set
+
+          ld hl,0       ;.ll
+          ld de,&111B
+          call sy_set_local
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          call new_scope
+          ld hl,0
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&1118)
+
+          call new_scope
+          ld hl,1
+          call sy_get:call nc,&BE00
+          CHECK_DE_EQ(&1119)
+
+          ld hl,0       ; exist both as global and in this scope
+          call sy_get:call c,&BE00
+          ret
+
+test_nested
+; We mimic:
+;   Macro A:word .ho
+; .ho 
+;   endm
+;   Macro B
+; .ho A():word .ho
+;   endm
+; B()
+; Must expand to:
+;.hoB  WORD .hoA
+;.hoA
+;      WORD .hoB
+
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+          call enter_scope:call nc,fail ;B() scope 1
+          ld hl,0
+          xor a
+          ld c,0:ld de,"B"
+          call sy_set_local:call nc,fail
+
+          call enter_scope:call nc,fail ;A() scope 2
+          ld hl,0
+          xor a
+          ld c,0:ld de,"A"
+          call sy_set_local:call nc,fail
+
+          call exit_scope
+          call exit_scope
+
+          call nrt_peek
+
+          CALL_BRIC(list_iter_reset)
+          CALL_BRIC(list_iter_next) ; skip global node
+          CALL_BRIC(list_iter_get)
+          ld a,(hl):cp 1:call nz,fail ; scope
+          inc l:inc l
+          ld a,(hl):cp "B":call nz,fail ; val
+          CALL_BRIC(list_iter_next)
+          CALL_BRIC(list_iter_get)
+          ld a,(hl):cp 2:call nz,fail
+          inc l:inc l
+          ld a,(hl):cp "A":call nz,fail
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          call enter_scope:call nc,fail ;B() scope 1
+          call get_scope_id
+          CHECK_DE_EQ(1)
+          call enter_scope:call nc,fail ;A() scope 2
+          ld hl,0
+          call sy_get_explicit_local:call nc,fail
+          CHECK_DE_EQ("A")
+
+          call exit_scope ;B()
+          ld hl,0
+          call sy_get_explicit_local:call nc,fail
+          CHECK_DE_EQ("B")
+
+          call exit_scope ;Global scope
+          ld hl,0
+          call sy_get:call c,fail
+          cp err_undefined:call nz,fail
+          ret
+
+nrt_peek
+; Check internals.
+; Return CDE = id list (when local value)
+; A bit brittle, but make it easier to localize error.
+; We expect list of (scope, val) to be [(1, B), (2, A)].
+          ld hl,0
+          call _peek:call nc,fail
+          inc l
+          ld c,(hl):inc l
+          ld d,(hl):inc l
+          ld e,(hl)
+          CHECK_ID_CDE()
+;'next cannot be null
+          ld b,&7F:out (c),c
+          ld a,(de)
+          or a
+          call z,fail
+          ret
+
+test_crossbank
+; mimic:
+;   &900 ** [ 
+; .hu  word hu
+; ]          
+
+; NB: could be accelerated by preallocating chunks !!
+
+          call nrt_clean
+          ld a,tst_bk   ; for cross bank
+          call nrt_setup_custom
+
+; Sanity check
+          call nrt_check_bkbase
+
+          call sy_init
+          NRT_RESET_SLOTS(1)
+
+nrt_iter = &0900
+
+          ld ix,-nrt_iter
+tlcc_lp
+          call enter_scope:call nc,fail
+          ld hl,0
+          push ix:pop de ; numerote
+          call sy_set_local:call nc,fail
+
+          call exit_scope
+          inc ixl
+          jr nz,tlcc_lp
+          ld a,".":call &BB5A
+          inc ixh
+          jr nz,tlcc_lp
+
+; Mimick phase 2  (replay)
+          call connect_bk_base_i
+          call sy_reset_scope
+
+          ld ix,-nrt_iter
+tlcc_lp2
+          call enter_scope:call nc,fail
+          ld hl,0
+          call sy_get:call nc,fail
+          push ix:pop hl
+          or a:sbc hl,de:add hl,de:call nz,fail
+          call exit_scope
+          inc ixl
+          jr nz,tlcc_lp2
+          ld a,"=":call &BB5A
+          inc ixh
+          jr nz,tlcc_lp2
+          ret
+
+test_nomemoryleak
+; We check that released nodes are reused
+          call sy_reset
+          call _check_no_leak
+          NRT_RESET_SLOTS(1)
+          call nrt_fill_chunk
+          CALL_BRIC(chunk_get_free#) ; ref
+          push hl
+          call sy_reset
+          NRT_RESET_SLOTS(1)
+      IF 0
+; !! False leak (header chunk for liszt is never released)
+; !! why 2 chunks though?
+          call _check_no_leak
+      END
+;repeat: must reuse nodes freed by reset
+          call nrt_fill_chunk
+          CALL_BRIC(chunk_get_free#) ; must be the same
+          pop bc
+          or a:sbc hl,bc:add hl,bc:call nz,fail
+          ret
+
+test_no_leak_local
+; Locals must be release at table reset
+; !!! need a more complex test, as there is a false leak
+; !!! due to persistent list header (nodes are released, not the header)
+      IF 0
+          call sy_reset
+          NRT_RESET_SLOTS(42)
+          CALL_BRIC(chunk_get_free#) ; ref
+          push hl
+; global scope 0
+          ld hl,41      ;id
+          call sy_set_local:call nc,&BE00
+          ld hl,42      ; same number of vars to not create new chunks
+          call sy_reset_table_except_imported
+          CALL_BRIC(chunk_get_free#) ; must be the same
+          pop bc
+          or a:sbc hl,bc:add hl,bc:call nz,fail
+      END
+          ret
+
+
+nrt_fill_chunk
+;-------------
+node_per_chunks = 36    ; &100/7
+          ld b,node_per_chunks+1
+nfc_lp
+          push bc
+          call enter_scope:call nc,fail ; needed to avoid double def
+          ld hl,0
+;          ld a,b:cp node_per_chunks+1:call z,&BE00
+          call sy_set_local:call nc,fail ; nevermind the value
+          call exit_scope
+        ;  CALL_BRIC(chunk_get_free#)
+        ;  ld bc,&35:or a:sbc hl,bc:add hl,bc:call z,&BE00
+          pop bc
+          djnz nfc_lp
+          ret
+
+test_memfull
+; Check proper handling.
+; Todo: same test cross bank?
+
+          call nrt_setup ; needed for far_call?
+
+;Now override nb chunks free.
+;!! Cannot use org_* source routines anymore, 
+;!! since we reuse reserved chunk.
+;TODO INSTEAD? Prefill with new_chunk_no_init, /like test_bank_setup/
+          ld a,bk_dev
+          ld hl,1       ; symb chunk
+          CALL_BRIC(chunk_init_custom)
+
+          NRT_RESET_SLOTS(1)
+; No more chunks: cannot even create a list.
+          ld hl,0
+          call sy_set_local:call c,fail
+          cp fail_memoryfull:call nz,fail
+; Reset works, though
+          NRT_RESET_SLOTS(1)
+; But cannot reserve more symb chunks
+          ld hl,spc+1:call nrt_reset_table:call c,fail
+          cp fail_memoryfull:call nz,fail
+
+; Now with more room
+          call nrt_setup
+          ld a,bk_dev
+          ld hl,2       ; (one for symb chunk, one for local lists)
+          CALL_BRIC(chunk_init_custom)
+
+          NRT_RESET_SLOTS(1)
+          ld iyh,-1     ; count nb labels set.
+; Fill until error
+nmf_lp
+          call enter_scope:call nc,fail ; needed to avoid double def
+          ld hl,0
+          ld e,b:ld d,&AA
+          call sy_set_local
+          push af
+          call exit_scope
+          inc iyh
+          pop af
+          jr c,nmf_lp
+;proper error code ?
+          cp fail_memoryfull:call nz,fail
+
+;Now check that reset release all.
+          call sy_reset
+          ld b,iyh      ; # before mem full
+          call nrt_mimic
+          ret
+
+test_reset
+; Try to reproduce
+; 1 ** [
+; .hu word hu
+; ]          
+; Then same thing with &80.
+          call nrt_setup ; reallocate enough chunks
+
+          ld b,1:call nrt_mimic
+          ld b,&80:call nrt_mimic
+          ld b,&80:call nrt_mimic
+          ret
+
+nrt_mimic
+;--------
+; Mimic:
+; b ** [
+; .hu word hu
+; ]
+
+; In: B = nb iter
+          push bc
+          NRT_RESET_SLOTS(1)
+          pop bc
+          push bc
+          ld iyh,0
+nm_lp
+          push bc
+          call enter_scope:call nc,fail ; needed to avoid double def
+          ld hl,0
+          ld e,iyh:inc iyh
+          ld d,iyh:inc iyh
+          call sy_set_local:call nc,fail
+          call exit_scope
+          pop bc
+          djnz nm_lp
+
+; mimic phase2
+          call nrt_peek
+          call connect_bk_base_i
+          call sy_reset_scope
+          call nrt_peek
+          pop bc
+          ld iyh,0
+nm_lp2
+          push bc
+          call enter_scope:call nc,fail ; needed to avoid double def
+          ld hl,0
+          call sy_get:call nc,fail
+          ld a,e:cp iyh:call nz,fail
+          inc iyh
+          ld a,d:cp iyh:call nz,fail
+          inc iyh
+          call exit_scope
+          pop bc
+          djnz nm_lp2
+          ret
+
+test_symb_in_new_chunk
+; Check lazy initialisation of new chunk    
+          ld hl,1
+          call sy_reset_table_except_imported:call nc,fail
+          ld hl,spc+1
+          call sy_reset_table_except_imported:call nc,fail
+
+; like test_sy_get, with id=spc (1st label in new chunk)
+          NRT_SET(spc,1,4,&CAFE)
+          NRT_CHECK(spc,1,4,&CAFE)
+          ret
+
+test_imported_preserved
+          NRT_RESET_SLOTS(spc+1)
+          NRT_SET(0,vmask_imported,1,&BABE)
+          NRT_SET(spc,vmask_imported,3,&C0C0)
+;          ld a,&F7:ld (hook),a
+          ld hl,spc+1
+          call sy_reset_table_except_imported:call nc,fail
+          NRT_CHECK(0,vmask_imported,1,&BABE)
+          NRT_CHECK(spc,vmask_imported,3,&C0C0)
+          ret
+
+test_redefine_imported
+; since imported labels are not cleared,
+; we must ensure replacing it won't cause "double def"
+          CALL_ORG(org_init)
+
+          ld hl,.src
+          call nrt_set_source
+
+          ld de,nrt_buf ; nevermind, since code not installed
+          ld bc,&CAFE   ; $
+          CALL_ORG(org_assemble):call nc,fail
+
+      IF 0
+;manuel test
+          ld hl,1:call sy_reset_table_except_imported
+          ld hl,0
+          xor a
+      BRK
+          call sy_set
+      END
+
+          ld de,2
+          ld hl,.src'
+          CALL_ORG(org_set_line):call nc,fail
+
+          ld de,nrt_buf ; nevermind, since code not installed
+          ld bc,&CAFE   ; $
+          CALL_ORG(org_assemble):call nc,fail
+          ret
+
+
+.src  BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "m(1)",0,0
+.src' BYTE "m jr m",0
+
+
+test_org_set
+          ld hl,.src
+          call nrt_set_source
+          ld hl,.x
+          ld bc,&BAB0
+          CALL_ORG(orgset)
+          call sy_reset_table_except_imported
+          ld hl,0
+          call sy_get:call nc,fail
+          cp vmask_orgset + vmask_equ + vmask_used + vmask_defined
+          call nz,fail
+          ld a,c:or a:call nz,fail ; MSB (24 bits) must be 0
+          ex de,hl
+          CHECK_HL_EQ(&BAB0)
+;Unset store so other NRTs aren't impacted
+          call nrt_setup
+          ret
+
+.src  BYTE "x=42",0,0
+.x    BYTE "x",0
+
+
+nrt_reset_table
+          call sy_reset_table_except_imported
+          ret nc
+;!! only reset symbols imported from 2nd tab
+          ld a,1:call sy_reset_imported
+          ret
+
+free#_ref WORD 
+
+; For nrt
+romed_dev = &0A         ; pour nrt utilisant org_get_line
+
+vo_romed = &7CF9
+vo_romext = &7CFA
+vo_romext' = &9D02
+vo_rommon = &7CFB
+
+      IF inRom
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          ld ix,param_burn4:call burn_
+          ld ix,param_burn5:call burn_
+          ld ix,param_burn6:call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+param_burn4 WORD rom,codesize4,codedest4,code4
+param_burn5 WORD rom,codesize5,codedest5,code5
+param_burn6 WORD rom,codesize6,codedest6,code6
+
+      END
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+sy_store
+;-------
+; For org_select
+; in: DE= dest
+          ld hl,vs
+          ld a,e
+          call _store_com0
+          ld hl,symbol_index
+;enchaine
+_store_com1
+;!!! only for symbol_index (used by sy_sync_cur_index_to_live & co)
+          ld bc,size_index*2
+          ldir
+          ret
+
+_store_com0
+          ld bc,symb_store_len
+          ldir
+          ret
+
+sy_restore
+;---------
+; For org_select
+; in: HL= source
+          ld de,vs
+          ld a,l
+          call _store_com0
+          ld de,symbol_index
+          call _store_com1
+; Sync live: needed for count/visu when switching tab in ed or trace
+;Assymmetry note: sy_store doesn't have to sync live to persistent
+                ; since only modified by ass, who does the sync.
+; enchaine   
+sy_sync_cur_index_to_live
+;------------------------
+; Sync current persistent to live
+; A, Carry/Z preserved
+          CHECK_BK_BASE()
+          push de:push hl ; needed by sy_restore
+          ld hl,symbol_index
+          ld de,symbol_index_live
+          call _store_com1
+          pop hl:pop de
+          ret
+
+
+sy_sync_ext_index_to_live
+;------------------------
+; Copy another's tab persistent to live
+; In: A= tab id
+;Out: (side_effect) bk ext index connected!
+    ; A preserved
+          call _get_index_pnts
+          jr _store_com1
+
+sy_reset
+;-------
+; Free all dynamic chunks and list. 
+; Needed when closing source!
+
+          push ix       ; Needed?
+          call release_locals_cur
+          pop ix
+
+      IF nrt_checks
+; Check release_locals worked! 
+          push ix
+          ld ix,_check_no_local
+          call sy_walk
+          pop ix
+      END
+
+          ld hl,symbol_index
+          ld b,size_index
+.sflp     ld d,(hl):inc l ;!! MSB first
+          ld e,(hl):inc l
+          push hl
+          ex de,hl:CALL_BRIC(free) ; No-op if DE=0
+          pop hl
+          djnz .sflp
+; Enchaine! 
+sy_init
+; Global init: clean state. There is no memory to reclaim here,
+                          ; since it was initialized.
+; in : N/A.
+
+          ld de,0
+          ld (vs_symbols#),de
+          ld de,symbol_index
+          ld b,size_index*2
+          xor a
+siclr     ld (de),a:inc e:djnz siclr
+;Must clear live version so new loaded source doesn't have dangling pnt
+;of previous source
+          jp sy_sync_cur_index_to_live
+
+_free_list
+          bit vf_local,(hl):ret z ; Non local? Nothing to do
+; Flag the entry as freed, will be checked in sy_reset
+; Needed as imported sources might be released twice
+     ; - from host (to fix #1dc)
+     ; - when reassembled 
+          ld (hl),0
+; Must Preserve B, HL and A to reconnect symb chunk.
+
+          inc l:ld c,(hl)
+          inc l:ld d,(hl)
+          inc l:ld e,(hl)
+          3 ** dec l
+
+          CHECK_ID_CDE()
+
+          CALL_BRIC(list4_free) ; All regs saved.
+
+          ld e,b
+          ld b,&7F:out (c),a ;must reconnect !
+          ld b,e
+          ret
+
+      IF nrt_checks
+_check_no_local
+          bit vf_local,(hl):call nz,&BE00
+          ret
+      END
+
+
+sy_reset_table_except_imported
+;-----------------------------
+; Actually clear "used flag" for all.
+; Called by org.init_phase1. 
+; Release locals.
+; Reserve HL slots (4 bytes each) for value and reset flag in each. 
+; And then move symbol_index to symbol_index_live
+    ;  HL=  # of symbols 
+; out: Carry if ok
+     ; NC otherwise, A=error code (memory full)
+
+          push hl
+
+          push ix       ; Needed?
+          call release_locals_cur
+
+;-- reset non-imported
+          ld ix,sy_reset_if_not_imported
+          call sy_walk
+          pop ix
+
+          pop hl
+; Store # for subsequent checks when ass calls sy_set etc.
+          ld (vs_symbols#),hl ; keep after sy_free !
+
+          ld a,l:or h
+          jr z,.okinit
+
+; Create missing chunks (when number of labels have grown)
+          dec hl        ; last symbol id
+          call _get_idx_pnt_persistent ; last index
+.init_lp
+;Index is built contiguously,
+;and we are scanning backwards
+;as soon as we meet a chunk -> done 
+          ld a,(de):or a:jr nz,.okinit
+;new_chunk clears chunk.
+;That's what we need. Otherwise, garbage could be considered as
+;"imported flag" or "local flag" -> dangling chunk id
+          CALL_BRIC(new_chunk)
+          call connect_bk_base_i
+          ret nc        ; memory full. 
+          ex de,hl
+          ld (hl),d:inc l ; MSB !! Warning: Big Endian
+          ld (hl),e:dec l ; bk
+          ex de,hl
+          ld a,e
+          dec e:dec e
+          or a
+          jr nz,.init_lp
+
+.okinit
+
+; Move persistent to live
+; Must be done before "orgset" which uses sy_set: live index
+;like sy_restore_table, but for currently selected tab.
+          call sy_sync_cur_index_to_live
+          call connect_bk_base_i
+
+;Preset label from |orgset
+;ass will take care of spurious "double defined"
+          ld hl,(vo_orgset_store)
+          ld a,l:or h
+          scf
+          jr z,.okset   ; no store, done!
+
+          ld b,&7F:ld c,l ; bk for reconnect
+          out (c),c
+          ld l,chead_last
+          ld l,(hl)
+.setlp
+          ld a,l:cp chead_last0:jr z,.okset
+          out (c),c
+          push bc
+          ld b,(hl):dec l
+          ld c,(hl):dec l ; bc=value
+          ld d,(hl):dec l
+          ld e,(hl):dec l ; de=label
+          push hl
+;Display "label = value"
+          push de
+          push bc
+          ld hl,poubelle ; reuse zone from disa
+          push hl
+          CALL_BRIC(aap_getkey) ; reconnect bk base
+;Mustn't fail. If it fails, it is better to display than to BRK
+      IF poubelle AND &FF
+ !! review that
+      END
+          ld b,l        ; last 0 = size (we don't have print_txt)
+          pop hl
+          CALL_ORG(print_txt_sized)
+
+; " = "  (cannot use print_txt_sized as <> rom)
+          call print_space
+          ld a,"=":call print_chr'
+          call print_space
+
+          pop hl        ; was bc=value
+          call smart_disp
+          CALL_ORG(print_nl)
+          ex de,hl
+          ld c,0        ; 16 bits to 24
+          pop hl        ; was de=id
+          ld a,vmask_orgset + vmask_equ
+          call sy_set
+          pop hl
+          pop bc
+          jr .setlp
+.okset
+          scf
+          jp connect_bk_base_i
+
+
+sy_reset_if_not_imported
+; will clear all chunk (even non existing symbs, nevermind)
+          res vf_used,(hl)
+          bit vf_imported,(hl)
+_reset_if_z
+          ret nz
+          ld (hl),0
+          ret
+
+sy_reset_if_imported
+          bit vf_imported,(hl)
+          ret z
+;Only target tab
+          3 ** inc l
+          ld a,(hl)
+          3 ** dec l
+          cp c
+          jr _reset_if_z
+
+sy_reset_scope
+;in: bk_base must be connected.
+; we must replay scope entering in both phases
+          CHECK_BK_BASE()
+          push hl
+          ld hl,0:ld (vs_cur_id),hl
+          ld (vs_scope_array),hl ; no scope = global scope 0
+          ld hl,vs_scope_array:ld (vs_scope_pnt),hl
+          pop hl
+          ret
+
+release_locals_cur
+;Ensure live version = cur
+          call sy_sync_cur_index_to_live
+;enchaine
+release_locals
+;in live version (used by org to clear locals from imported sources)
+          ld ix,_free_list
+;enchaine
+sy_walk
+; Go through all symbols 
+; !!! Also iterate through no-existing ones (inside last chunk).
+    ; -> Doesn't matter much.
+; !!! All walk done on live symbol_index
+
+; Caller routine adr_to_id uses the internals
+
+;In: IX= routine to apply at each symbol    
+          ; In: hl=symbol,
+              ; de=user value 
+              ; A =work bank. (symbs chunk)
+              ; C =passed value 
+              ; iyl: chunk number
+          ; Out: !!! must preserve B and HL
+               ; !!! base bk must be reconnected.  
+   ; DE= user value, will be passed to routine. (free usage)
+
+          CHECK_I()
+
+          push iy
+          ld hl,symbol_index_live
+          ld iyl,0      ; chunk number
+          ld b,size_index
+.syidxlp
+          ld a,(hl):or a:jr z,.exit
+          push bc
+          ld b,a
+          inc l
+          ld a,(hl):and &C4:cp &C4:call nz,mess
+          ld a,i:cp (hl):call z,mess ;Mustn't be base_bk
+          ld a,(hl)
+          inc l
+          push hl
+          ld l,0
+          ld h,b
+          ld b,&7F:out (c),a
+          ld b,spc
+.syrst
+          call jp_ix    ; <-- hook
+
+      IF size_symbol - 4
+ !! update code for optimization purpose.
+      ELSE
+          size_symbol ** inc hl
+      END
+          djnz .syrst
+
+          inc iyl
+          pop hl
+          pop bc
+          djnz .syidxlp
+.exit
+          call connect_bk_base_i
+          pop iy
+          ret
+
+;---
+
+jp_ix     jp ix
+
+;---
+      MACRO GET_SCOPE_PNT
+      IF dev_checks
+          call _get_scope_pnt
+      ELSE
+          ld hl,(vs_scope_pnt)
+      END
+      ENDM
+
+      IF dev_checks
+_get_scope_pnt
+          ld hl,(vs_scope_pnt)
+          push af
+          ld a,h:cp vs_scope_array/&0100:call nz,fail
+          pop af
+          ret
+      END
+
+get_scope_id
+          call connect_bk_base_i
+          push hl
+          GET_SCOPE_PNT()
+          ld e,(hl):inc hl
+          ld d,(hl)
+          pop hl
+          ret
+
+new_scope
+; Change the id of the current scope
+; In: nothing
+; Out: carry if ok. A=error otherwise
+     ; All registers preserved but A
+          call connect_bk_base_i
+          push de:push hl
+          ld hl,(vs_cur_id)
+          inc hl
+          ld a,l:or h
+          ld a,err_toomanyscopes:jr z,ns_end
+          ld (vs_cur_id),hl
+          ex de,hl
+          GET_SCOPE_PNT()
+          ld (hl),e:inc hl
+          ld (hl),d
+          scf
+ns_end
+          pop hl:pop de
+          ret
+
+enter_scope
+; in: nothing
+; out: carry if ok. A = error otherwise
+     ; All registers preserved but A
+
+;We need to handle nested scopes for e.g.
+;   toto                      ; level 0
+;         inc l:jr z,end
+;     4 *[                    ; level 1
+;         inc l:jr nz,ok
+;         inc h:jr z,end      ;-> can go to outer scope
+;   .ok
+;         DO_STUFF()          ; level 2
+;        ]
+;   .end  
+          call connect_bk_base_i
+          push hl
+          GET_SCOPE_PNT()
+; too many scopes?
+; NB: we could be more leniant by allowing more nesting,
+    ; as long as we don't use scope.
+    ; I.e. check 'out of bound' in get/set_local (at use point).
+    ; It's more complicated and not worth it?
+    ; Or maybe for recursive macros...
+          ld a,l
+          inc a:inc a
+          cp [vs_scope_array + 2*max_scope_level] AND &FF
+          jr nc,_toomany
+          ld (vs_scope_pnt),a
+          call new_scope
+          scf
+;Enchaine. Nevermind A, since carry is set.
+_toomany
+          ld a,err_toomanyscopes
+          pop hl
+          ret
+
+exit_scope
+; In: N/A
+; Out: Carry if ok (always the case from ass) 
+          call connect_bk_base_i
+          push hl
+          GET_SCOPE_PNT()
+; More exit than enter? -> can happen with visu (bug #1e4)
+          ld a,l:cp vs_scope_array AND &FF:jr z,.exit ; NC
+          dec a:dec a
+          ld (vs_scope_pnt),a
+          scf
+.exit
+          pop hl
+          ret
+
+sy_set_local            ; only adr (no local equ)
+;like /sy_set/ expect no A passed (since we know it's not equ).
+
+          call _get_chunk
+          ret nc
+
+          ld iyl,a      ; save for reconnection symb chunk
+
+          push de
+; Read flags and 24 bits value
+; (unitialised, global value or pnt to local list)
+          ld a,(hl):inc l
+          ld c,(hl):inc l
+          ld d,(hl):inc l
+          ld e,(hl)
+
+          bit vf_local,a
+          jr nz,ssl_already_local
+; New list is needed.
+
+          push de:push bc ; save "global" value
+          push hl
+          CALL_BRIC(list4_new)
+          pop hl
+          jr nc,ssl_ko
+
+          ld b,&7F:ld a,iyl:out (c),a ; reconnect slot
+;put list pnt
+          ld (hl),e:dec l
+          ld (hl),d:dec l
+          ld (hl),c:dec l
+          set vf_local,(hl)
+
+          CALL_BRIC(list4_append):jr nc,ssl_ko
+; If value already defined (i.e. global with the same name)
+; we copy the value in list header.
+; If not (unitialized), nevermind.
+          ld a,c        ;save
+          pop bc
+          ld (hl),c:inc l
+          pop bc        ; was de
+          ld (hl),b:inc l
+          ld (hl),c
+          ld c,a        ; restore cde=list pnt
+
+          push de
+;de=current scope
+          call get_scope_id
+sslal_ok
+          ex de,hl      ; hl=current scope
+          pop de
+          push hl
+          CALL_BRIC(list4_append):jr nc,ssl_ko2
+          pop de
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          pop de        ; address
+          ld (hl),e:inc l
+          ld (hl),d
+          CHECK_SP()
+          jr s_ok
+
+ssl_ko
+          pop de        ; discard global value
+ssl_ko2
+          pop de
+          pop de        ; trashed anywas
+          ret
+
+ssl_already_local
+; First, check this is a new scope.
+; Otherwise: double defined.
+
+; Get current scope. We do it first, because it connects bk base.
+          ex de,hl      ; save de
+          call get_scope_id
+          push de
+          ex de,hl
+          CALL_BRIC(list_iter_get)
+;We have: de=head,  SP: scope
+;We want: de=scode  SP: head      HL preserved
+          ex de,hl
+          ex (sp),hl
+          ex de,hl
+; de=current scope
+; Equal to scope of prev instance of this local variable?
+          ld a,e:xor (hl):jr nz,sslal_ok
+          inc l
+          ld a,d:xor (hl):jr nz,sslal_ok
+
+          pop de        ;discard id
+          pop de        ;discard value
+          ld a,err_doubledefined
+          jr s_ret
+
+sy_set
+; Set Macro/Equ/Global label
+; Can only be set once. Otherwise => double defined
+;in : hl=id symb
+    ; a=80 if equ
+    ;   40 if macro
+    ;   00 if adr (global label)
+    ; ...
+    ;   -> Actually see symbflag.i
+    ; cde=value
+;out: if ok,carry.
+    ; nc: a=error_code
+    ; a, b, iyl trashed 
+
+          ld b,a        ; save
+          call _get_chunk
+          ld a,b
+          ret nc
+
+          bit vf_defined,(hl):jr z,.ok
+;As imported label are never cleared, we must allow redefinition
+          bit vf_imported,(hl):jr z,_doubledefined
+;!!bug#1ea if forward reference before redefinition
+          bit vf_used,(hl):jr nz,_ambiguous
+          ld (hl),0
+.ok
+          or (hl)       ; or to keep "use flag"!?! I don't remember
+          set vf_defined,a
+          ld (hl),a:inc l
+          call _goto_global
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          ld (hl),c
+          jr s_ok
+
+_goto_global
+; Fetch the right pointer for global value.
+; (I.e. when same id used as global and local, we want the global one)
+
+;in: a= flags
+   ; hl= post flags
+;out: hl points to global slot.
+          bit vf_local,a:ret z ; No local: all good
+
+;If local, next byte contains list id rather than global value,
+;and value is deported in list's head.
+          push bc:push de
+          ld c,(hl):inc l
+          ld d,(hl):inc l
+          ld e,(hl)
+          CALL_BRIC(list_head)
+          pop de:pop bc
+          ret
+
+
+sy_get
+;-----
+;in: hl=id symb
+;out: Carry if ok. A=flags (to discriminate macro) CDE=value
+    ; NC, A = error code otherwise (undefined or ambiguous).
+    ; HL trashed. TODO? keep hl (for asseva). Only if other clients
+    ; IYH Conserved.
+;!!set bit4 to say 'used'
+          call _use
+          ret nc
+
+; vf: if undefined (as global), still can be local. Return err code
+          bit vf_local,a:jr nz,get_local
+_get_global
+          bit vf_defined,a:jr z,_undefined
+
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld c,(hl)
+s_ok
+          scf
+s_ret
+connect_bk_base_i
+      IF need_room
+; TODO: use pagefirm
+      END
+          push af       ; needed by all
+          push bc       ; needed by some
+          CHECK_I()
+          ld a,i:ld b,&7F:out (c),a
+          pop bc
+          pop af
+          ret
+
+_doubledefined
+          ld a,err_doubledefined
+          jr s_ko
+_undefined
+          ld a,err_undefined
+          jr s_ko
+_ambiguous
+          ld a,err_ambiguouslabel
+s_ko
+          or a
+          jr s_ret
+
+get_local
+; Called for "jr toto"
+; We check whether .toto exist in scope.
+; Is yes and toto exists as global as well -> ambigous.
+; PRESERVE B (see s_ret)
+
+          push af
+          call _get_local
+          jr nc,glnoloc
+          pop af
+          bit vf_defined,a:jr nz,_ambiguous
+_local
+;ok: only local          
+          ld e,(hl):inc l
+          ld d,(hl)
+          ld c,0        ;that's an address
+          jr s_ok
+
+glnoloc
+          CALL_BRIC(list_head):call z,fail ; shouldn't happen
+          pop af
+          jr _get_global
+
+sy_get_import
+;------------
+; Like /sy_get/, expect:
+   ; - read in import's symbol table
+   ; - symbol table in store not aligned: cannot reuse routines 
+   ; - cannot check against vs_symbols#, since it's not the right source
+   ; - don't set vf_used (not considered useful or pertinent)
+; IN:  A = id source 
+    ; DE = id label 
+;out: Carry if ok. A=flags (to discriminate macro/imported) CDE=value
+    ; NC, A = error code otherwise (undefined or ambiguous).
+    ; IYH Conserved.
+
+; Can be self-selected (cyclic import)
+          CALL_ORG(org_is_self_selected)
+          ld hl,symbol_index
+          jr z,.okidx
+; - Connect store 
+          CALL_ORG(connect_symb_index)
+.okidx
+          ex de,hl
+; - Mimic _get_idx_pnt
+ ; size_symbol = 4 -> &40 symbols per chunks
+ ; aaa aaxxxxxx  - > E=aaaaa0+offset L=xxxxxx00
+      IF size_symbol - 4
+   !!! review
+      END
+          add hl,hl
+          add hl,hl
+          ld a,h
+          add a:add e:ld e,a
+      IF dev_checks'
+          call c,fail
+      END
+
+; - Mimic _get_chunk
+          ld a,(de):inc e:ld h,a
+          ld a,(de)
+          and &C4:xor &C4:ret nz ; Return NC
+          ld a,(de)
+          ld b,&7F:out (c),a
+
+; - Mimic _peek
+          ld a,(hl)
+          inc hl
+
+; - Necessarily global
+          jr _get_global_com
+
+sy_get_explicit_global
+;---------------------
+; Only called by asslab2 for consistency check.
+; See /sy_get/ for API.
+          call _use
+          ret nc
+_get_global_com
+          call _goto_global
+          jr _get_global
+
+
+;-------------------
+realsize = $$-code
+
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+
+codesize = $$-code
+
+;-------------------
+
+code2 = $$
+      IF inRom
+      ORG codedest2,$$
+      END
+
+sy_get_explicit_local
+;--------------------
+; Called for "jr .toto" (by asseva)
+; See /sy_get/ for API.
+          call _use
+          ret nc
+
+          push af
+          or a
+; is local defined? If not->sgelnoloc (NC)
+          bit vf_local,a
+          call nz,_get_local
+          jr nc,sgelnoloc
+          pop af        ; Return flags to respect sy_get API.
+          jp _local
+
+sgelnoloc
+          pop af
+          jp _undefined ; TODO 'undefined in this scope?'
+
+_get_local
+; We must get the instance that match current or parent scope id.
+; !! Precondition: at least one local defined (vf_local set)
+; !! Postcondition: must preserve B
+;  IN: hl points on symb slot post flag (necessarily id list).
+     ; a flags for this symb.
+; OUT: if scope found: Carry, HL points to value (address 16 bits).
+     ; in both cases CDE=id list
+     ; preserve B !!
+
+;Stored 'Bk, MSB, LSB' to match link convention.
+;Serve as list ID, not as current cell pointer which is stored as
+;iterator (baked into list itself).
+          ld c,(hl):inc l
+      IF dev_checks
+          ld a,c:call check_bk_
+      END
+          ld d,(hl):inc l
+          ld e,(hl)
+
+; tldr; For each scope, search the whole list.
+
+; We mustn't go to parent scope before having checked the whole list,
+; and we must check the whole list since scopes are not necessarily
+; increasing (due to nested scope: when exit_scope, id decreases).
+
+; But for locals attached to globals, ids are mostly increasing.
+; So, as an optimisation, we start searching from the current iter,
+; and try the whole list only if it fails.
+
+          call connect_bk_base_i
+          ld hl,(vs_scope_pnt)
+_parent_lp
+          push hl
+          call connect_bk_base_i
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a ; hl=scope id
+          CHECK_ID_CDE()
+          CALL_BRIC(list_search_word_from_iter):jr c,_scope_found
+; rewind and retry
+          CHECK_ID_CDE()
+          CALL_BRIC(list_iter_reset)
+          CHECK_ID_CDE()
+          CALL_BRIC(list_iter_next) ; skip 'global' node
+          CHECK_ID_CDE()
+          CALL_BRIC(list_search_word_from_iter):jr c,_scope_found
+          CHECK_ID_CDE()
+; try with parent scope
+          pop hl
+          ld a,l
+          scope_size ** dec l
+          cp vs_scope_array AND &FF
+          jr nz,_parent_lp
+          ret           ; NC: not found
+
+_scope_found
+          pop af        ;discard id. HL points on value.
+          scf
+          ret
+
+
+
+_get_chunk
+;  in: hl= id       
+
+; out: Carry if ok
+        ;   hl = position
+        ;   a = bk (connected)
+     ; NC otherwise (bk base connect). A= error code
+     ; BC preserved
+
+; !! mustn't fail (for count/visu)
+; Before we had NC when DE >= (vs_symbols#)
+; But we don't check that anymore, 
+; as it would require to connect bk_base: unnecessary slow down.
+
+          push de
+          call _get_idx_pnt_live
+
+          ld a,(de):inc e:ld h,a
+;xor for CP and NC
+          and &C0:xor &40:ld a,fail_emptylabel:jr nz,.exit
+          ld a,(de)
+          and &C4:xor &C4:ld a,fail_emptylabel:jr nz,.exit
+          ld a,(de)
+          push bc
+          ld b,&7F:out (c),a
+          pop bc
+          scf
+.exit
+          pop de
+          ret
+
+
+adr_to_id
+; Return the label id of a routine given its entry point.
+; For stack trace.
+; Nb: filter EQUs, so  'toto = $' won't be seen.
+
+; In: de = adr
+;   ; Carry if found  hl = id
+    ; NC otherwise
+
+          ld (save_sp),sp ; for walk exit shortcut
+
+          ld ix,adr_to_id_one
+          call sy_walk
+          or a
+          ret
+
+adr_to_id_one
+;Is it a defined label (but not equ)?
+;!! mustn't change B, HL 
+
+          ld a,(hl)
+          and vmask_defined + vmask_equ
+          cp vmask_defined
+          ret nz
+
+          inc hl
+          ld a,e:cp (hl):dec hl:ret nz
+          2 ** inc hl
+          ld a,d:cp (hl):2 ** dec hl:ret nz
+
+          ld a,iyl      ; index chunk
+      IF spc-&40
+ !! update code
+      ELSE
+      2 ** [srl a:rr l]
+          ld h,a        ; hl=id
+      END
+
+          call connect_bk_base_i
+          ld sp,(save_sp)
+          scf
+          ret
+
+
+sy_peek
+;in : hl=id symb
+; get flags without changing anything
+; reconnect bk base
+          call _peek
+          jp s_ret
+;---
+
+_get_idx_pnt_live
+; Get pnt live
+;  in: hl=id
+; out: de=pnt in symbol_index
+     ; A trashed
+      IF [size_symbol - 4]
+ !! error must adapt code
+      END
+ ; size_symbol = 4 -> &40 symbols per chunks
+ ; Divide by &40, then multplity by 2 (one word per entry)
+
+ ; aa aaxxxxxx  - > e=aaaa0 l=xxxxxx00
+          add hl,hl
+          add hl,hl
+          ld a,h:add a
+          add symbol_index_live AND &FF:ld e,a
+          ld d,symbol_index_live / &0100
+          ret
+
+_get_idx_pnt_persistent
+; See _get_idx_pnt_live
+;  in: hl=id
+; out: de=pnt in symbol_index
+     ;  l= pnt in chunk
+      IF [size_symbol - 4]
+ !! error must adapt code
+      END
+      IF [symbol_index AND &FF]
+ !! error must adapt code
+      END
+          add hl,hl
+          add hl,hl
+          ld e,h:sla e
+          ld d,symbol_index/&0100
+          ret
+
+_use
+          call _peek
+          ret nc
+          set vf_used,a ;used
+          ld (hl),a
+          inc hl
+          ret
+
+_peek
+;in : hl=id symb
+;out: hl=value
+    ; a=(hl)
+          call _get_chunk
+          ret nc
+
+          ld b,c        ;needed by sy_get and s_ok
+          ld a,(hl)
+          scf
+          ret
+
+_get_index_pnts
+; Get symbol_index from another tab
+; In: A= tab id   
+      IF dev_checks
+;Only used when switching to a macro in another tab
+          CALL_ORG(org_is_self_selected)
+          call z,fail
+      ELSE
+ !! check if bk base must be connected ; done by org_is_self_selected
+      END
+          CALL_ORG(connect_symb_index)
+          ld de,symbol_index_live
+          ret
+
+      IF dev_checks
+check_id_cde_
+          push af
+          ld a,c:and &C4:cp &C4:call nz,&BE00
+; node shouldn't be in base_bk  
+          ld a,i:cp c:call z,&BE00
+          ld a,d:and &C0:cp &40:call nz,&BE00
+; cannot point on start of chunk ('last' field)
+          ld a,e:or a:call z,&BE00
+          pop af
+          ret
+
+check_i_
+          ld a,i:and &C5:cp &C5:ret z
+      BRK
+
+check_bk_base_
+; Check if bk base is connected.
+; That's longer than actually connect bk base,
+; but allows to detect programming errors.
+      IF need_room
+; factorize
+      END
+          push af:push hl
+; Now cannot do that, edsign-pos might not be installed yet
+        ;  ld a,(edsign_pos):cp "O":call nz,fail
+        ;  ld a,(edsign_pos+2):cp "g":call nz,fail
+; From HH Beta I, vo_basebk is only installed in ... base_bk
+          ld hl,vo_basebk
+          ld a,i:cp (hl):call nz,fail
+          pop hl:pop af
+          ret
+
+check_bk_
+;in: A must be bk
+          push af
+          and &C4:cp &C4:call nz,fail
+          pop af
+          ret
+
+check_sp_
+; In order not to have to reconnect bank bk, we assume that SP isn't
+; in bank. We double check that here.
+          push af:push hl
+          ld h,0:add hl,sp:bit 7,h ; Crude <&8000? Good enough
+          pop hl
+          call z,&BE00
+          pop af
+          ret
+      END
+
+sy_get#
+;------
+          ld hl,(vs_symbols#)
+          ret
+
+; -----
+print_space
+          ld a," "
+          jr print_chr'
+print_eperluette
+          ld a,"&"
+print_chr'
+          CALL_ORG(print_chr)
+          ret
+
+
+;-------------------
+realsize2 = $$-code2
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+;------------------------------------
+code3 = $$
+      IF inRom
+      ORG codedest3,$$
+      END
+;-------------------
+
+sy_reset_imported
+;Reset imported symbols from tab A
+;Used by cache (invalidate in some cases after do_import)
+; In: C= tab id
+; !!! live symbols but be sync.
+          ld ix,sy_reset_if_imported
+_walk
+          call sy_walk
+          scf           ; needed when comming from jr _walk
+          ret
+
+smart_disp
+;0..9    -> as is.
+;10..255 -> hexa 8
+;>255    -> hexa 16
+;in: HL = value    
+          ld a,h:or a:jr nz,.hexa16
+          ld a,l
+          cp 10:jr nc,.hexa8
+          CALL_BRIC(disp_deci_a)
+          ret
+.hexa8
+          call print_eperluette
+          CALL_BRIC(disp_hexa_a)
+          ret
+.hexa16
+          call print_eperluette
+          CALL_BRIC(disp_hexa_hl)
+          ret
+
+
+;-------------------
+realsize3 = $$-code3
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+;------------------------------------
+code4 = $$
+
+      IF inRom
+      ORG codedest4,$$
+      END
+
+jps'
+          jp new_scope  ; ass
+          jp enter_scope ; ass
+          jp exit_scope ; ass
+          jp sy_reset_scope ; org, ass nrt
+          jp sy_set_local ; ass
+          jp sy_get_explicit_local ; !! asseva
+          jp sy_get_explicit_global ; ass:asslab2
+          jp sy_store   ; org
+          jp sy_restore ; org
+;------------------------------------
+realsize4 = $$-code4
+hi4
+      IF inRom
+      IF limit4-$
+ !! error align
+      END
+      END
+codesize4 = $$-code4
+
+;------------------------------------
+
+code5 = $$
+
+      IF inRom
+      ORG codedest5,$$
+      END
+
+jps
+          jp sy_sync_cur_index_to_live ; org, import post switch, ass
+          jp sy_sync_ext_index_to_live ; org, ass_macro_use, cache
+          jp sy_reset_table_except_imported
+          jp sy_reset_imported ; cache
+          jp sy_get_import
+          jp adr_to_id  ; bt (trui.o)
+          jp sy_init    ; house keeping
+          jp release_locals ; org
+          jp sy_reset   ; free + init
+          jp sy_set
+          jp sy_get
+          jp sy_get#    ; Ass for labstat
+          jp sy_peek
+      IF inRom
+hi5
+codesize5 = $$ - code5
+      FILL limit5-$,&F7 ; full
+      END
+
+;------------------------------------
+
+code6 = $$
+      IF inRom
+      ORG codedest6,$$
+      END
+
+jps''
+; free before
+          3 ** BRK      ; free
+;6 free
+      IF inRom
+hi6
+codesize6 = $$ - code6
+      FILL limit6-$,&F7
+      END
+
+
+
+; ========= Variables ===========================
+
+vo_basebk = &7CFC
+
+          ASSERT(symbol_index == &6A00)
+
+      ORG vs,$$
+vs_symbols# WORD 
+          ASSERT(symb_store_len == [$ - vs]) ; update swapi.i
+          ASSERT(symb_store_len' == size_index*2) ; update swapi.i
+      SKIP ed_var2 - $
+
+      ORG symb_vars'
+; Those vars in bk:
+   ; - so after reset it's still valid state for visu.
+   ; - room is more precious in &9xxx
+; NOT stored, as scope now cross sources (fix #1dd)
+vs_cur_id WORD          ; Increment at each new scope
+vs_scope_pnt WORD 
+vs_scope_array SKIP max_scope_level * scope_size
+          ASSERT([$-1]/&0100 == vs_scope_array/&0100) ; must be confined
+tab_to_clear BYTE 
+
+      SKIP rsx_hist - $
+
+work  = &9E00           ; tmp buf
+save_sp = work
+
+err_undefined = 1
+err_doubledefined = 2
+err_ambiguouslabel = 28
+err_toomanyscopes = 29  ; tested in assnrt
+err_too_many_labels = 239
+
+fail_memoryfull = 251   ; for nrt, sent by chunk via liszt.
+fail_emptylabel = 237
+
+; === THE END ===
+

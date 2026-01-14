@@ -1,0 +1,196 @@
+; <<<<< Modification history deluxe >>>>>
+
+; 2025 June 26: API and some tests
+
+      ORG &9000
+      ENT tests
+
+is_line_edited
+;-------------
+; Indicate if passed line is in modif history
+; Needed for: - get_previous_edited_line 
+            ; - "modified markers" (future editor feature)
+; In: DE = line #
+;Out: If line is in one of the range:
+             ; Carry
+             ; HL = start of entry in LastEditedRanges
+    ; NC otherwise
+          ret
+
+is_line_edited_near
+;------------------
+; Same than is_line_edited, but must *also* return true if DE is either:
+   ; Start of range - 1
+   ; End of range + 1
+; In: DE = line #
+;Out: If line is in one of the range or next to a range
+             ; Carry
+             ; HL = start of entry in LastEditedRanges
+    ; NC otherwise
+          ret
+
+update_history
+;-------------
+; If line is already in range, move this range at first entry
+; (e.g. if it's entry 4, we must shift entries 0-3 to 1-4 to leave room)
+; Update this range:
+   ; Last  := DE
+   ; Time  := BC
+
+; If line is next to a range, same thing,
+; but update Start or End accordingly
+
+; Otherwise: shift all entries down, set first entry:
+   ; Start := DE
+   ; End   := DE
+   ; Last  := DE
+   ; Time  := BC   
+
+; -> So that first entry is always the last range modified
+
+; In: DE = line #
+    ; BC = time (meta data)
+;Out: Nothing    
+          ret
+
+get_previous_edited_line
+;-----------------------
+; We **don't** maintain a pointer to cycle through modified lines.
+; We return last modified line of first range by default,
+     ; unless we already are in a modified range (see below) 
+; In: DE = line #
+;Out: If line is already in a modified range, we go to next range
+               ; Carry, NZ, DE = 'last' of next range
+               ; If it was already last range:
+               ; Carry, Z, DE = 'last' of first range
+    ; Otherwise: Carry, Z, DE = 'last' of first range (same than above)
+    ; If history is empty: NC
+          ret
+
+;-------------------------------------------------------
+
+tests
+;----
+          call test_is_line_edited
+          call test_empty
+          call test_one_line
+          call test_same_range
+          call test_new_range
+          ret
+
+fail  = &BE00
+
+      MACRO NEW_TEST
+          ld a,"-":call &BB5A ; Progress bar !
+ ; Reset modif history 
+          ld hl,LastEditedRanges
+          ld b,MAX_LEVEL * 8
+.raz      ld (hl),0:inc hl:djnz .raz
+      ENDM
+
+      MACRO CHECK_DE_EQUAL n
+          ld hl,n:or a:sbc hl,de:add hl,de:call nz,fail
+      ENDM
+
+      MACRO CHECK_HL_EQUAL n
+          ld de,n:or a:sbc hl,de:add hl,de:call nz,fail
+      ENDM
+
+test_is_line_edited
+          NEW_TEST()
+
+          ld hl,.array
+          ld de,LastEditedRanges
+          ld bc,8
+          ldir
+; line in range
+          ld de,4:call is_line_edited
+          call nc,fail
+          CHECK_HL_EQUAL(LastEditedRanges)
+; line out of range (before)
+          ld de,1:call is_line_edited
+          call c,fail
+; line out of range (after)
+          ld de,6:call is_line_edited
+          call c,fail
+          ret
+
+.array WORD 2,5,3,42
+
+test_empty
+          NEW_TEST()
+          scf
+          call get_previous_edited_line
+;Must return NC
+          call c,fail
+          ret
+
+test_one_line
+          NEW_TEST()
+          ld de,13:ld bc,42:call update_history
+;Check the array itself
+          ld de,.ref_one_line
+          call compare_ref
+;Check we get back line
+          ld de,1:call get_previous_edited_line
+          call nc,fail
+          call nz,fail  ; first entry: expect Z
+          CHECK_DE_EQUAL(13)
+          ret
+.ref_one_line
+      BYTE 8
+      WORD 13,13,13,42
+
+test_same_range
+          NEW_TEST()
+          ld de,13:ld bc,1:call update_history
+          ld de,14:ld bc,2:call update_history
+;Check the array itself
+          ld de,.ref_same_range
+          call compare_ref
+          ld de,1:call get_previous_edited_line
+          call nc,fail
+          call nz,fail  ; first entry: expect Z
+          CHECK_DE_EQUAL(14)
+          ret
+.ref_same_range
+      BYTE 8
+      WORD 13,14,14,2
+
+test_new_range
+          NEW_TEST()
+          ld de,13:ld bc,1:call update_history
+          ld de,23:ld bc,5:call update_history
+          ld de,.ref_new_range
+          call compare_ref
+          ld de,1:call get_previous_edited_line
+          call nc,fail
+          call nz,fail  ; first entry: expect Z
+          CHECK_DE_EQUAL(23)
+          ld de,23:call get_previous_edited_line
+          call nc,fail
+          call z,fail   ; second entry: expect NZ
+          CHECK_DE_EQUAL(13)
+          ret
+.ref_new_range
+      BYTE 8
+      WORD 23,23,23,5   ; Last entered must be first
+      WORD 13,13,13,1
+
+compare_ref
+; In: DE: Ref
+          ld a,(de):inc de ; nb bytes to compare
+          ld b,a
+          ld hl,LastEditedRanges
+.lp
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz .lp
+          ret
+
+MAX_LEVEL = 8
+LastEditedRanges
+; 4 words per entry: Start, End, Last, Time
+          MAX_LEVEL ** WORD 0,0,0,0
+
+

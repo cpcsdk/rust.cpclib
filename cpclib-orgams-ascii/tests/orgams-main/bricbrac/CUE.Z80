@@ -1,0 +1,785 @@
+inRom = 1
+rom   = &1C             ; rom de travail
+main_rom = &0A          ; orgams.rom
+bk_dev = &C7            ; temporary orgams instance will use c4-c7
+
+; <<< CUE: Completion uber Editor >>>
+
+; ---- 2023 ------------------------
+  ; Dec
+     ; 13 ve: Add /test_no_hint/  (was already good)
+
+; ---- In 2021 ???? ----------------
+     ; Nov 6  vd: Add /test_almost_fit/.
+        ; 30  vc: TIME optimisation. Add 2 bytes.
+        ; 30  vb: Toms. Fix /test_buffer_overflow/.
+        ; 27  va. space-optimisation: see /reset_selection/
+                ; Add /test_buffer_overflow/.
+        ; 23  v9. Toms. Fix tests.
+        ; 22  v8. Add /tests/.
+        ; 21  v7. Reconnect bk_base at return
+                ; Use /connect_next_aap/  !! requires aap-ar
+                ; Add /UNEXPECTED_Z/
+        ; 19  v6. Slight space optim. Move from e048 to e71a
+        ; 10  v5. Case insensitive. --bug.
+         ; 9  v4. Fix enchainement bugs (ld l,4).  10x plus rapide.
+            ; v2. space-optimisation.
+; 2021 Oct 8: v1. startw.o from toms + burn
+
+codedest = &E710        ;after asset
+limit = &E800           ;fonte
+codedest2 = &FFA3       ;after jp field
+limit2 = &FFB0          ;jp disp
+
+; ========================================
+
+; In orgams.rom (main_rom)
+
+setup_custom = &E839
+
+; In this rom (bricbrac.rom)
+
+app   = &FDDF
+connect_label = app+9   ; In: DE = id
+                        ; Out: Carry if OK, HL = lbl. BC trashed
+
+chunk = &FE00
+connect_bk_base = chunk+21 ; All registers saved
+
+app2  = &FE30
+di_init = app2
+di_append = app2 + 18   ; In > HL = key (nt string)
+                        ; If ok: Carry
+                        ;        DE = fresh id (0, then 1, 2, 3...)
+                        ; NC otherwise, A = error (e.g. memory full)
+connect_next_aap = app2+27 ; In: HL points anywhere in the chunk
+                        ;     (only H matters)
+                        ;     Chunk bk connected
+                        ; Out: If there is a next chunk, NZ
+                        ;      HL points to start of data in chunk
+                        ;      A = bk of this chunk (might be the same)
+                        ;      This new chunk bk connected
+                        ;      Otherwise Z
+; Handy aliases
+
+fail  = &BE00
+kl_rom_select = &B90F
+
+      ORG &1000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+
+nrt_setup
+; In: A = bk_dev
+          push af
+          ld c,main_rom:call kl_rom_select
+
+; Check this is Orgmas ROM. If fail, correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; Setup Orgams (install in bank etc...)
+          pop af:call setup_custom
+
+; Work rom
+          ld c,rom:call kl_rom_select
+          ret
+
+signature BYTE "Orgams"
+signature_ = $-signature
+
+copy_nt
+; In: HL = nt strings
+    ; DE = dest    
+.lp
+;Must copy first since final 0 must be copied as well.
+          ld a,(hl):inc hl
+          ld (de),a:inc de
+          or a
+          jr nz,.lp
+          ret
+
+
+compare_nt
+; In: HL & DE = nt strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          or a:jr nz,compare_nt
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+;     B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      END
+
+; ---------------------------             
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+; ========================================
+
+      MACRO UNEXPECTED_Z
+ ; Mustn't reach this since we are in a middle of a label
+ ; Breakpoint means: programming error or memory corruption
+      BRK
+      ENDM
+
+refresh_suggestions
+; In: HL = pattern
+; Out: All registers trashed. 
+;      Side effect: Buffer (known fixed address) filled with suggestions
+             ; separated by space
+             ; terminated by 0
+; NB: No suggestion is selected yet
+          ld (pattern_address),hl
+;Enchaine
+reset_selection
+; In: Nothing
+; Out: Like if refresh_suggestions was called again with same pattern
+; Goal: Allow to cycle when last suggestion reached,
+        ; can be more efficient than refresh_suggestion
+        ; But in v1, it should be just more/less refresh_selections
+          ld de,0
+; Enchaine
+fetch_labels
+; In: DE = next index to fetch
+; Out: AF, BC, DE, HL trashed
+;      If list of suggestion exists:
+       ; Carry, Buffer filled with suggestions
+       ; Otherwise, NC
+          ld a,-1
+          ld (current_selection),a
+          ld bc,suggestions
+          ld (current_buffer),bc
+          ld hl,current_indices
+fetch_labels_loop
+          push hl
+          push bc
+          call start_with
+          jr nc,copy_label_to_buffer_end
+          call connect_label
+          pop bc
+          ld a,c
+          or a
+          jr z,copy_label_to_buffer_2
+          cp MAX_WIDTH
+          jr z,copy_label_to_buffer_end_2
+          ld a,32
+          ld (bc),a
+          inc c
+copy_label_to_buffer
+          ld a,c
+          cp MAX_WIDTH
+          jr z,copy_label_to_buffer_end_2
+copy_label_to_buffer_2
+          ld a,(hl)
+          and 127
+          ld (bc),a
+          inc c
+          bit 7,(hl)
+          jr nz,next_label_to_copy
+          inc l
+          jr nz,copy_label_to_buffer
+          call connect_next_aap
+          jr nz,copy_label_to_buffer
+          UNEXPECTED_Z()
+
+next_label_to_copy
+          pop hl
+          ld (hl),e
+          inc l
+          ld (hl),d
+          inc l
+          inc de
+          ld (next_index_to_fetch),de
+          jr fetch_labels_loop
+
+copy_label_to_buffer_end
+          pop bc
+copy_label_to_buffer_end_2
+          pop hl
+          xor a
+          ld (bc),a
+          cp c
+          dec a
+          ld (hl),a
+          inc l
+          ld (hl),a
+          jp connect_bk_base ; reconnect and return
+
+next_selection
+; In: Nothing (the current selection is stored in internal state)
+; Out: If next_selection exists:
+        ; Carry, Buffer refreshed (if scrolling was needed)
+        ; D = start of suggestion in buffer (hence 0 <= D < 96)
+        ; E = end (excluded) in buffer (hence 0 <= E <= 96)
+        ; Otherwise (past the end): NC
+          ld hl,current_selection
+          inc (hl)
+          call get_selected_id
+          jr nc,scroll
+          call get_position_in_buffer
+          scf
+          jp connect_bk_base ; reconnect and return
+scroll
+          ld de,(next_index_to_fetch)
+          call fetch_labels
+          jr c,next_selection
+          jp connect_bk_base ; reconnect and return
+
+
+start_with
+; In: DE = label index (0 to start from beginning)
+; Out: AF, BC, HL trashed
+;      If found: Carry. DE = index found
+;      Otherwise: NC (end of table reached)
+          call connect_label
+          ret nc
+compare_label
+          ld a,(hl)
+          or a
+          ret z
+          ld bc,(pattern_address)
+compare_characters
+; optim idea 1:
+  ; - tester au prealable si pattern vide.
+      ; Dans ce cas on renvoit tout les labels de toute facon.
+      ; Et on peut faire mieux
+      ; point de vue ergonomique: renvoyer les labels les + recents.
+  ; - si non vide, pas besoin de tester en debut de boucle.
+
+          ld a,(bc)
+          or a:scf:ret z ; Ret if label_found
+
+; On traite le cas le plus probale (mismatch en premier)
+          xor (hl):and %01011111:jr z,check_match
+next_search
+; No match: skip current label.
+          bit 7,(hl)
+          jr nz,end_found
+          inc l
+          jr nz,next_search
+          call connect_next_aap
+          jr nz,next_search
+          UNEXPECTED_Z()
+
+check_match
+; here, match expect **maybe** bit 5 
+; If we are in A..Z, that's good (case insensitive match).
+          ld a,(bc)
+          and %11011111
+          cp "A":jr c,check_exact
+          cp "Z"+1:jr c,same_character
+check_exact
+; Last chance: same non-alpha caracter.
+          ld a,(bc)
+          xor (hl):add a:jr nz,next_search
+same_character
+          inc c
+          bit 7,(hl)
+          jr z,next_character
+          ld a,(bc)
+          or a:jr nz,end_found
+next_character
+          inc l
+          jr nz,compare_characters
+          call connect_next_aap
+          jr nz,compare_characters
+          UNEXPECTED_Z()
+end_found
+          inc de
+          inc l
+          jr nz,compare_label
+          call connect_next_aap
+          jr nz,compare_label
+          UNEXPECTED_Z()
+
+get_position_in_buffer
+; In: Nothing
+; Out: AF, HL trashed
+;      DE = Start & End of label in buffer
+          ld hl,(current_buffer)
+          ld d,l
+search_label_end
+          ld a,(hl)
+          ld e,l
+          inc l
+; We must stop at 32 (space) or 0 (end of buffer).
+          cp 32
+          jr z,label_end_found
+          or a
+          jr nz,search_label_end
+label_end_found
+          ld (current_buffer),hl
+          ret
+
+get_selected_id
+; In: Nothing
+; Out: AF, BC, DE trashed
+;      If something selected:
+       ; Carry, HL = id label (as returned by start_with).
+       ; Otherwise: NC
+          ld a,(current_selection)
+          cp -1
+          ret z
+          add a
+          ld hl,current_indices
+          add l
+          ld l,a
+          ld e,(hl)
+          inc l
+          ld d,(hl)
+          ld hl,1
+          add hl,de
+          ex de,hl
+          ccf
+          ret
+
+; =======================================
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp refresh_suggestions
+          jp next_selection
+          jp reset_selection
+          jp get_selected_id
+
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+      IF inRom:ELSE
+
+tests
+          call test_no_hint
+          call test_buffer_overflow
+          call test_almost_fit
+          call test_all_selections
+          call test_cycle
+          call test_no_corruption
+          call test_no_corruption_big
+          call test_much
+          ret
+
+      MACRO NEW_TEST
+;Poor man's progress bar 
+;TODO instead: print test name
+          ld a,".":call &BB5A
+          call init_nrt
+      ENDM
+
+init_nrt
+; A lancer avant chaque test pour mise en place setup (obligatoire)
+; et nettoyage (pour que les differents tests restent independants).
+; -> Utiliser macro NEW_TEST() pour chaque test.
+          ld a,bk_dev
+          call nrt_setup
+          call di_init
+          ret
+
+test_buffer_overflow
+;-------------------
+; Until version A: fin de label coincide avec fin de buffer
+                 ; -> kaboum, les suivant sont pris.
+; Pour le test, le buffer fait 12 de long: 012345678901
+; On reproduit avec les labels:            Stop Sexy SS 
+          NEW_TEST()
+
+          ld hl,lbl2:call di_append:call nc,fail
+          ld hl,lbl3:call di_append:call nc,fail
+          ld hl,lbl6:call di_append:call nc,fail
+; Following labels mustn't be fetched!
+          ld hl,lbl1:call di_append:call nc,fail
+          ld hl,lbl4:call di_append:call nc,fail
+
+          ld hl,_pat_s
+          call _set_pattern
+          ld hl,pattern
+          call refresh_suggestions
+
+          ld hl,suggestions
+          ld de,.ref
+          call compare_nt
+          ret
+
+.ref  BYTE "Stop Sexy SS",0
+
+test_almost_fit
+;--------------
+; Check when there is just one letter missing to fit in buffer.
+; 012345678901
+; Start Sexy SS 
+
+          NEW_TEST()
+
+          ld hl,lbl1:call di_append:call nc,fail
+          ld hl,lbl3:call di_append:call nc,fail
+          ld hl,lbl6:call di_append:call nc,fail
+; Following labels mustn't be fetched at first!
+          ld hl,lbl2:call di_append:call nc,fail
+          ld hl,lbl4:call di_append:call nc,fail
+
+          ld hl,_pat_s
+          call _set_pattern
+          ld hl,pattern
+          call refresh_suggestions
+
+          ld hl,suggestions
+          ld de,.ref
+          call compare_nt
+
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&05) ; 00:05 for Start
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&060A) ; 06:0a for Sexy
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&02) ; 00:02 for SS (scrolled)
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&0307) ; 03:07 for Stop
+          ret
+
+.ref  BYTE "Start Sexy S",0
+
+
+test_all_selections
+;------------------
+          NEW_TEST()
+
+          call _add_4_labels
+          ld hl,_pat_s
+          call _set_pattern
+          ld hl,pattern
+          call refresh_suggestions
+
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&05) ; 00:05 for Start
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&060A) ; 06:0a for Stop
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&04) ; 00:04 for Sexy (scrolled)
+          call next_selection:call nc,fail
+          CHECK_DE_EQ(&08) ; 00:08 for Solefald (scrolled)
+          ret
+
+
+test_cycle
+;--------- 
+          NEW_TEST()
+
+          call _add_4_labels
+          ld hl,_pat_s
+          call _set_pattern
+          ld hl,pattern
+          call refresh_suggestions
+
+; Go to last selection
+          ld b,4:call _skip_selections
+; Now check that next returns NC
+          call next_selection:call c,fail
+
+; Check 1st selection again
+          call reset_selection
+          call next_selection
+          CHECK_DE_EQ(&05) ; 00:05 for Start
+          ret
+
+test_no_corruption
+;-----------------
+; Test that 'label' not found doesn't 
+          NEW_TEST()
+
+          call _add_4_labels
+          ld hl,_absent_prefix
+          call _set_pattern
+
+; Run the tests 3 times
+          call .test
+          call .test
+          call .test
+          ret
+
+.test
+          ld a,"x":ld (suggestions),a ; marker
+          ld hl,pattern
+          call refresh_suggestions
+          ld a,(suggestions):or a:call nz,fail ; must have no suggestions
+
+; Check internal label table haven't been corrupted.
+          ld de,0:call connect_label:call nc,fail
+          ld de,ref_labels
+          call compare_nt
+          ret
+
+
+test_no_corruption_big
+;---------------------
+; Like test_no_corruption, but with 500 labels
+
+          NEW_TEST()
+
+          ld bc,500
+          call generate_labels
+;Sanity check: it works before the call to refresh_suggestions.
+; So we know it's not _generate_labels or aap which is bugged. 
+          call .check_label
+
+          ld hl,_absent_prefix
+          call _set_pattern
+
+; Run the tests 3 times
+          call .test
+          call .test
+          call .test
+          ret
+
+
+.test
+          ld a,"x":ld (suggestions),a ; marker
+          ld hl,pattern
+          call refresh_suggestions
+          ld a,(suggestions):or a:call nz,fail ; must have no suggestions
+          call .check_label
+          ret
+
+.check_label
+; Check internal label table haven't been corrupted.
+; Well, for now, just check label032 (first label of second chunk)
+; since it's was enough to reproduce the bug.
+          ld de,32:call connect_label:call nc,fail
+          ld de,.ref
+          ld b,8
+          call compare_sized
+          ret
+
+.ref  BYTE "label032"+&80
+
+test_much
+;--------
+; Check differents operations with 4 custom labels + 500 generated ones.
+
+          NEW_TEST()
+
+          call _add_4_labels
+          ld bc,500
+          call generate_labels
+
+          ld hl,_pat_s
+          call _set_pattern
+
+          ld hl,pattern
+          call refresh_suggestions
+          ld hl,suggestions
+          ld de,expected0
+          call compare_nt
+          call next_selection
+          call next_selection
+          call next_selection
+          CHECK_DE_EQ(&04) ; 00-04 for "sexy"
+          ld hl,suggestions
+          ld de,expected1
+          call compare_nt
+          call next_selection
+          call next_selection
+          ld a,"t"
+          ld (pattern+1),a
+          ld hl,pattern
+          call refresh_suggestions
+          call next_selection
+          call next_selection
+          call next_selection
+          ret
+
+
+test_no_hint
+;-----------
+;Check when empty pattern is given, 
+;first selection is ok.
+; (actually the bug was in ED)
+          NEW_TEST()
+
+          call _add_4_labels
+
+          xor a:ld (pattern),a
+          ld hl,pattern
+          call refresh_suggestions
+          call next_selection
+;"Start": 0:5
+          ld a,d:cp 0:call nz,fail
+          ld a,e:cp 5:call nz,fail
+          ret
+
+_pat_s BYTE "s",0
+_absent_prefix BYTE "a",0
+
+_add_4_labels
+          ld hl,lbl1:call di_append:call nc,fail
+          ld hl,lbl2:call di_append:call nc,fail
+          ld hl,lbl3:call di_append:call nc,fail
+          ld hl,lbl4:call di_append:call nc,fail
+          ret
+
+lbl1  BYTE "Start",0
+lbl2  BYTE "Stop",0
+lbl3  BYTE "Sexy",0
+lbl4  BYTE "Solefald",0
+lbl5  BYTE "label",48,48,47,0
+lbl6  BYTE "SS",0
+
+expected0 BYTE "Start Stop S",0
+expected1 BYTE "Sexy Solefal",0
+
+ref_labels
+;4 first labels as encoded by aap
+      BYTE "Start"+&80
+      BYTE "Stop"+&80
+      BYTE "Sexy"+&80
+      BYTE "Solefald"+&80
+      BYTE 0
+
+_set_pattern
+          ld de,pattern
+          jp copy_nt
+
+_skip_selections
+; B ** call next_selection
+.lp
+          push bc
+          call next_selection
+          pop bc
+          djnz .lp
+          ret
+
+generate_labels
+; Creation of BC labels (labelxxx)
+; in: BC= # disctint labels to create (<1000)
+          ld hl,lbl5+7
+next_digit
+          ld a,(hl)
+          inc a
+          cp 58
+          jr nz,label_ready
+          ld a,48
+          ld (hl),a
+          dec hl
+          jr next_digit
+
+label_ready
+          ld (hl),a
+          ld hl,lbl5
+          push bc
+          call di_append:call nc,fail ; fail if mem full
+          pop bc
+          dec bc
+          ld a,b
+          or c
+          jr nz,generate_labels
+          ret
+
+      END
+
+; --------------------------
+
+      IF inRom
+MAX_WIDTH = 96
+      ELSE
+MAX_WIDTH = 12          ; tests are expecting that.
+      END
+MAX_DISPLAYED_LABELS = 33
+
+      ORG &9200
+suggestions SKIP MAX_WIDTH+1
+current_indices SKIP MAX_DISPLAYED_LABELS * 2
+current_selection BYTE  ; -1 if no selection
+next_index_to_fetch WORD 
+current_buffer WORD 
+pattern_address WORD 
+
+      IF inRom:ELSE
+; only used for tests.
+pattern = &9300
+      END

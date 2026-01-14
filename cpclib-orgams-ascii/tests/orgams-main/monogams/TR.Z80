@@ -1,0 +1,5448 @@
+inRom = 1
+dev_checks = 1 AND [1-inRom]
+todo  = 1
+need_room = 1           ; if need room: put things before /gap6/
+optim = 1
+; ----------------                                  
+; TRACE for ORGAMS  (z80 emulation for step by step debuggeur)
+; ---------------- 
+
+      IF todo
+; Check if we flush tm after ADD_R
+      END
+
+; !!!! cpir / cpdr timing bugged: should be based not on bc
+     ; but on how much was scanned!  (hl1 - hl0)
+
+; [optim]: - pre-read next byte (e.g. in B)
+             ; so 'sub n'  would just be 'sub B' (no indirection)
+         ; - use de? for jump?
+ ; - Use C instead of IYL for R
+        ; - One step to free IY
+        ; - Faster!      
+
+; [todo]: in x,(x) should setup crtc bc/bd and vga?
+
+      IF need_room
+; Crazy idea: put ti_op_ihl in &d9xx
+; then add (hl) opcode can be encoded as ld e,op_add:jp ti_op_ihl
+; (takes 5 nops instead of 4, but the &d9 is opcode for EXX)
+; Note: for dev, we must then use the table in ROM 
+      END
+
+      IMPORT "monomap.i"
+
+; \/\/ 2025 \/\/\/\/\/\/\/\/\
+; --- HH Beta I ---
+; Dec
+  ; 10 bc: Expose reset_tm
+  ;  9 bb: Fix /bug#195/ wrong TM for LDIR
+; --- HH Beta D ---
+; Oct
+  ; 20 ba: popret_byhand: fix #1eb (hang). Covered by dct#1eb
+         ; move routines to fit in rom
+; ---- GG Release ---
+; May 
+  ; 25 az: Fix #195 Bunch of FD/DD 
+         ; (actually there were a regression from ay)
+bug#195
+  ; 24 ay: Fix #1c6 TM off by 256
+bug#1c6
+  ; 13 ax: Fix #1a6 TM for bit n,(hl)  /dt29/
+bug#1a6
+
+; \/\/ 2024 \/\/\/\/\/\/\/\/\
+; ---- GG beta 6-----
+; Aug
+   ;5  vaw: Fix bug#196 TM for LD A,I and co 
+; ---- GG beta 5-----
+; May                      
+   ;28   
+     ; vav: Add test for ld b,0:djnz $
+     ; vau: [no-change] export/import
+     ; vat: Re-order code to fill gaps.
+     ; vas: Count TM (as diff with reg_r increment) in IYH
+; For now priviligate speed over size
+; idea: we wouldn't have to test for overflow when n<=2 
+      ; if flushed every times R (iyl) reaches &80
+      ; e.g 'add hl,bc'  1 nop counted with R, 2 via iyh
+      ; (well, might be wrong for 128 ** add hl,bc)
+      IF need_room
+; use table lookup per opcode instead
+      END
+             ; Actually much less code due to ld_hl_or_idx factorisation
+          ; Fix ed66, ed6e (im 0), ... was previously acting as ed00
+                 ; See test "im0.o"
+                 ; Following sean young for the rest, not checked.
+              ; A contrario, ed7f wrongly did "ld r,a" 
+          ; Fix #18c: R+=3 for IX/IY opcodes
+          ; Fix #18d: Wrong pop when sp=&ffff
+          ; Remove *_tm entry points from vah:
+               ; - was wip anyway
+               ; - it's better ui-wise to always track TM and crtc
+                   ; (slowness should be fixed another way)
+          ; Fix #192: out (n),a wrongly emulated when opcode in c000
+          ; Fix #18f: wrong R emul for LDIR and LDDR
+          ; Fix #18e: RLD/RRD bug when hl in page c000
+   ;18 var: Fix #05: Tracing BRK should act like BRK.       
+          ; Also catch CALL &be00
+   ;15 vaq: Revert ao, ap: since anyway we must connect bk base
+             ; in "fast trace" (to check against target $), it's easier
+             ; to leave things as is. IYL for R  (IYH free for TM@ 
+          ; Fix regression (was setting mode 0 in rahl_wk_rmr)
+track_r = 1             ; R and base for TM
+
+   ;13 vap: [Cancelled] Use IY to jump to loop
+             ; - faster
+             ; - prerequisite for hook TM
+          ; Fix /codesize/
+     ; vao: [Cancelled] Temporary deactivate r tracking 
+          ; (so we can use IY for jump)
+
+     ; van: val was incomplete.
+             ; Must also "intercept" other looping path:
+  ; - tr_ok_ixy: was used to save a test when we knew idx flags reset
+               ; usage in /pre_flush/ is still legit (rewind)
+  ; - Well, that was the only one.
+          ; !!! slower (not perceptible, though)
+          ; dt19 less brittle (flags after in(&5))
+     ; vam: [no change] macroize 'jp ix' used to loop
+     ; val: Jump to /trace_post/ from all looping points
+          ; (preparation for JP IY)
+     ; vak: ti_ex_sp_hl: don't use iyh anymore
+            ; post_cb_com, do_out: idem
+            ; YEAH!!! IYH not used at all.
+          ; Revert regression from vah: must init I
+     ; vaj: ti_r_idx:    don't use iyh anymore
+          ; Export/import
+     ; vai: Remove ti_ld_a_hl (deadcode, now handled via ti_r_hl)
+
+   ;11 vah: *_tm version for "Cycle Precise Counting"
+               ; E.g. /mon_trace_next_tm/
+               ; WIP!!! -> Needs preliminaries
+               ; Actually we do need to replace IY use for loop hook.
+           ; Reprise ag Replace IYH use.
+               ; ld_a_hl: use R to temporary save A!
+           ; base_var: use same address for tests
+                     ; I don't know why i moved it, rather confusing.
+           ; tr_control: only when 'Z'
+                ; was called while iyl >= &80.  Too often!
+                ; If not often enough (e.g. Z missed because += 2),
+                ; we could reset bit 7.
+                ; NO!! couldn't use JR anymore, would lose 1 NOP
+                ; Verdict: keep the 'Z' test. 
+                         ; not reaching 0 is considered too unlikely
+           ; Don't setup I anymore (considered done already)
+           ; testtrace_3xxx: (Re?)enable 
+                           ; Fix R refs
+           ; testnext: WTH PPP? Was poking &df at reg_mmr+&1000
+                     ; -> with base_var change, corrupted code.
+                     ; I have no idea why i did that in the first place
+
+   ; 8 
+     ; vag: CANCELLED. Replace IYH use (for temp values)
+                       ; -> didn't make it work for ld_a_hl
+     ; vaf: [no change] macroize reg_r updates
+               ; - Makes it easier to update code 
+     ; vae: Fix #187 crash IM n
+           ; Fix #188 IND corrupt A
+     ; vad: Add testtrace_3xxx
+   ; 7 vac: Cleanup (s/&dd/ix)
+     ; vab: Inline short routines
+          ; previously "called" via:  ld ix,$+7:jp toto
+               ; - shorter
+               ; - faster
+               ; - don't waste ix
+           ; testbig: more stable (preserve bc' for firmware)
+           ; testtrace: deactivate flaky tests
+
+     ;  vaa: [nochange] s/&fd/iy (was residue from dams)
+                ; -> easier to search for iyl vs iyh
+           ; Add testbig
+
+; \/\/ 2023 \/\/\/\/\/\/\/\/\
+
+; Dec 30 vz: Revert vy! Instead, move code in gap.
+    ; 29 vy: No-change. Just burn in two parts to free gap used
+                      ; for /tr_instr_table/ &400-alignement.
+           ; Use monomap.i
+
+; \/\/ 2020 \/\/\/\/\/\/\/\/\
+
+; Dec 31 vx: Fix compile when inRom=0
+    ; 17 vw: Remove brk (now in brk.o)
+           ; R adjustement in /jump/
+
+      ORG &1000
+romthis = &1B
+
+signsize = &11
+code  = &8000 + signsize ; Same align RAM / ROM
+      IF inRom
+; Don't burn signature, as  Overridden by detect.o anyway
+codedest = tr_start + signsize
+limit = txt_mon_uncrunch
+
+      ENT burn
+      ELSE
+codedest = code
+      ENT tests
+      END
+
+bk_nrt = &C7
+work_bank_nrt = &DF     ;must match 'auto-detected' bank !?!
+
+      IF 1-inRom
+tests
+          call testtrace
+          call testtrace_3xxx
+          call testnext
+          call testnext'
+          call testbig
+          ret
+     ;;!!crash??
+          jp testsingle
+
+nrtinit
+          ld bc,&7F00+work_bank_nrt:out (c),c
+          ld a,&8E:ld (reg_rmr),a ; Must be well formed
+          ld a,c
+          ld (vo_basebk),a
+          ld i,a
+          ret
+
+      END
+
+mode  = 2               ;mode graphique !
+
+x_trace = &E000
+
+vo_romMon = &7CFB
+vo_basebk = &7CFC
+
+orgcalltest = &7D00-7
+orgtest = &7D00
+orgtest' = &3E00        ; out of bank
+tstsavesp0 = &7D80
+tstsavesp1 = &7D82
+sptest = &7E00-2
+
+brk   = &BE00           ;cannot be in page $4000 or $C000
+brk_ret = &BE29
+
+wk_signature = &7D00    ;"Monogams."   Not used anymore?
+;&7d0c: ???   
+;&7d25: free
+; work+9   free   
+; work+10  free   
+; work+11  free
+reg_tm = &7D28          ; 4 bytes
+      IF reg_tm - &7D28
+ !! shared with trui 
+      END
+;#7d2c: far_call        
+wk_routine_ld_a_hl = &7D42
+
+tr_vars = &7D60
+tr_pc_stop = tr_vars
+tr_save_sp = tr_vars+2
+tr_save_idx = tr_vars+4 ;ix+n or hl
+tr_value_to_write = tr_vars+6
+tr_sp_before_call = tr_vars+8 ;to track ret
+tr_subroutine_level = tr_vars+10
+tr_ret_in_reg = tr_vars+11 ;which register
+tr_save_tmp = tr_vars+12 ;word
+;tr_save_ret = tr_vars+14
+; 
+; Free until &7d80
+
+;0 : none
+ret_in_af = 1           ;NB : af, bc, de not tracked anyway
+ret_in_bc = 2
+ret_in_de = 3
+ret_in_hl = 4           ;!!keep this order hl,ix,iy
+ret_in_ix = 5
+ret_in_iy = 6
+
+wk_stack = &8000
+
+tr_var = &7D80
+reg_ppia = tr_var+0
+reg_ppib = tr_var+1
+reg_ppic = tr_var+2
+
+rvga  = tr_var+3
+reg_last_val = rvga     ;derniere valeur envoyee au VGA
+reg_last_port = rvga+1  ;via quel port
+reg_rmr = rvga+3
+reg_mmr = rvga+4        ;Word (eg $7ec7)
+vga_inks = rvga+6
+vga_border = rvga+22
+vga_pen = rvga+23       ;last selected ink
+reg_rom = rvga+24
+
+      IF inRom
+      IF reg_rmr - &7D86
+  !! musn't move: used by brk.o
+      END
+      END
+
+rz80  = rvga+25
+
+reg_pc = rz80
+reg_r = rz80+2
+reg_i = rz80+3
+reg_iy = rz80+4
+reg_ix = rz80+6
+reg_hl' = rz80+8
+reg_de' = rz80+10
+reg_bc' = rz80+12
+reg_af' = rz80+14
+reg_hl = rz80+16
+reg_de = rz80+18
+reg_bc = rz80+20
+reg_af = rz80+22
+reg_sp = rz80+24
+
+reg_im = rz80+26
+reg_iff = rz80+27
+
+last_out_port = rz80+28
+last_out_val = last_out_port+30
+
+last_vga = last_out_val+1
+
+
+;flags in C
+;b1 b0
+ ; 00 : stop at instr
+ ; 10 : stop at pc
+ ; 01 : stop next line
+ ; 11 : stop on ret
+
+;Nb : stop on write not supported yet
+;b2: 1=must flag call
+;b3: 1=reg contains ret adr
+;b6: 1=ix loaded in hl
+;b7: 1=iy loaded in hl
+
+stop_at_instr = 0
+stop_at_pc = 2
+stop_at_line = 1
+stop_at_ret = 3
+flag_stop_at_ret = 1
+flag_probe_call = 4
+flag_ret_in_reg = 8
+flag_ix = 64
+flag_iy = 128           ;!!don't change, cf flush_ixy
+
+      MACRO TO_CHECK
+          call &BE00    ; NO BRK case rom is connected
+      ENDM
+
+      MACRO BK_BASE
+; TODO: macroise all occurences   
+; !!! must preserve carry for ti_iff
+          ld b,&7F
+          ld a,i
+          out (c),a
+      ENDM
+
+      MACRO BK_USER
+          ld a,(reg_mmr+1):or &7C:ld b,a
+          ld a,(reg_mmr)
+          out (c),a
+      ENDM
+
+      MACRO BK_USER'
+ ;varient preserving A
+          ld hl,(reg_mmr)
+          ld b,h:ld h,a:ld a,b:or &7C:ld b,a:ld a,h
+          out (c),l
+      ENDM
+
+      MACRO LD_R_A
+;!! must change flags, for ti_ld_r_a
+      IF track_r
+          ld iyl,a
+      END
+      ENDM
+
+      MACRO LD_A_R
+      IF track_r
+          ld a,iyl
+      END
+      ENDM
+
+      MACRO LD_A_R_BIT7
+;respect R.7
+          LD_A_R()
+          add a
+          ld b,a
+          ld a,(reg_r)
+          add a
+          ld a,b
+          rra
+      ENDM
+
+      MACRO INC_R
+      IF track_r
+          inc iyl
+      END
+      ENDM
+
+      MACRO DEC_R
+      IF track_r
+          dec iyl
+      END
+      ENDM
+
+      MACRO ADD_R
+      IF track_r
+; Note: mustn't report carry (iyl rolling counter)
+; But client might have to call flush_tm beforehand,
+; otherwise wrapping not detected -> &100 tm not counted.
+          add iyl
+      END
+      ENDM
+
+      MACRO CP_R
+      IF track_r
+          cp iyl
+      END
+      ENDM
+
+      MACRO LD_TM_ n
+          ld iyh,n
+      ENDM
+
+      MACRO ADD_TM
+          add iyh:ld iyh,a
+      ENDM
+
+      MACRO ANCHOR x
+;no-op, for documentation purpose only
+      ENDM
+
+ov_savesp WORD 0        ;pour tests et ERROR
+
+kl_curr_selection = &B912
+
+      IF inRom
+burn
+          ld ix,param_burn:call _burn
+          call &BB06
+          ret
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn STR "BURN"
+param_burn WORD romthis,codesize,codedest,code
+      END
+
+extorg
+      ORG codedest,code
+
+      IF 0
+!! don't burn signature
+      BYTE 2,6,12,0
+
+      WORD rsx_table    ;for detection
+      BRK
+
+rsx_table
+      BYTE "Monogams,"+&80
+      BYTE 0
+      END
+
+
+brk_return
+      ORG brk_ret,$$
+brk_restore_rmr
+          ld bc,&7F00
+          out (c),c
+brk_restore_rom
+          ld bc,&DF00
+          out (c),c
+brk_restore_bc
+          ld bc,0
+brk_restore_iff ei
+brk_restore_pc BYTE &C3
+
+brk_size = $-brk_ret
+
+      ORG brk_return+brk_size,$$
+
+
+jump
+;retour
+          ld hl,brk_return
+          ld de,brk_ret
+          ld bc,brk_size
+          ldir
+
+          ld hl,(reg_rmr)
+          ld h,&7F      ;sanity
+          ld (brk_restore_rmr+1),hl
+          ld hl,(reg_rom)
+          ld h,&DF
+          ld (brk_restore_rom+1),hl
+          ld a,(reg_iff)
+          and 8
+          or &F3
+          ld (brk_restore_iff),a
+
+          ld sp,reg_pc
+          pop hl
+          ld (brk_restore_pc+1),hl
+          pop hl
+          ld a,l
+          add a:rl l:sub 38*2:rr l:rra
+          ld r,a
+          ld a,h
+          ld i,a
+          pop iy
+          pop ix
+          pop hl
+          pop de
+          pop bc
+          pop af
+          exx
+          ex af,af
+          pop hl
+          pop de
+          pop bc
+          ld (brk_restore_bc+1),bc
+          ld bc,(reg_mmr)
+          ld a,b:or &7C:ld b,a ;sanity
+          pop af
+          ld sp,(reg_sp)
+          out (c),c
+          jp brk_ret
+
+mon_init
+;init for trace
+;in: BK must be connected
+
+;init if not already set
+          ld a,(reg_rmr)
+          and &F0
+          cp &80
+          jr z,ri_okrmr
+          ld a,&8E
+          ld (reg_rmr),a
+ri_okrmr
+          ld hl,(reg_mmr)
+          ld a,h
+          and &7C
+          cp &7C
+          ld a,l
+          jr nz,ri_setmmr
+          and &C0
+          cp &C0
+          jr z,ri_okmmr
+ri_setmmr
+          ld hl,&7FC0
+          ld (reg_mmr),hl
+ri_okmmr
+; !!! Needed, apparently.
+          ld a,(vo_basebk)
+          ld i,a
+          ret
+
+setup_ld_a_hl
+; And returns = A orgams rmr
+          ld a,(reg_rom)
+          ld (rahl_rom+1),a ; User rom
+          ld a,(vo_romMon)
+          ld (rahl_wk_rom+1),a ; Orgams rom
+
+          ld a,(reg_rmr)
+          and &8C:or mode + &80
+          ld (rahl_rmr+1),a ; User rmr
+          and &87       ; reconnect upper 
+          ld (rahl_wk_rmr+1),a ; Orgams rmr
+          jp ix
+
+mon_trace_ret
+;assume current sp contains ret adr
+;tracking will work if ret invoked on >= adr
+
+          xor a
+          ld (tr_ret_in_reg),a
+          ld hl,(reg_sp)
+          inc hl
+          inc hl
+          ld (tr_sp_before_call),hl
+          ld c,stop_at_ret
+          jp trace_amorce
+
+mon_trace_next
+          xor a
+          ld (tr_subroutine_level),a
+          ld (tr_ret_in_reg),a
+          ld hl,(reg_sp)
+          ld (tr_sp_before_call),hl
+          ld c,stop_at_instr+flag_probe_call
+          call trace_amorce
+          ld a,(tr_subroutine_level)
+          or a
+          ret z         ;no call/rst : act like stop_at_instr
+
+          ld c,stop_at_line+flag_probe_call
+          jp trace_amorce_
+
+
+mon_trace_to_pc
+;in : hl = stop adr
+          ld (tr_pc_stop),hl
+          ld c,stop_at_pc
+          jp trace_amorce
+
+;---------------------------------
+pad   FILL -$ AND &FF,0
+
+      IF inRom
+      IF $ - &C100
+ !! Error     Should be at &c100
+      END
+      END
+
+jps
+jump_table
+          jp mon_init
+          jp mon_trace_step
+          jp mon_trace_next
+          jp mon_trace_ret
+          jp mon_trace_to_pc
+          jp jump
+          jp reset_tm
+
+;---------------------------------
+
+mon_trace_step
+;in : regs in table as expected
+    ; assume I = work bk  (connected)
+;out: work bk still connected
+;     all (real) registers are destroyed !
+
+          ld c,stop_at_instr
+;enchaine
+trace_amorce
+;load regs and connect traced ram
+
+          call reset_tm
+trace_amorce_
+          call trace_amorce_com
+          jp trace_enter
+
+trace_amorce_com
+;load regs and connect traced ram    
+;(only one client for now, as trace_amorce_tm was removed in vAS)
+
+;installe routine lecture bank #C000
+;fait a chaque fois : pas trop genant, et permet de ne pas
+;   planter si zone de travail corrompue
+          push bc
+          ld hl,routine_ld_a_hl
+          ld de,wk_routine_ld_a_hl
+          ld bc,rahl_size
+          ldir
+          pop bc
+; Note: setup_ld_a_hl also "called" in do_out emulation.
+      ; so cannot use call+ret
+          ld ix,$+7
+          jp setup_ld_a_hl
+; IX double use: - get ret address so we can change sp and connect mmr
+                ; - update sp to caller's without touching hl or c
+          pop ix
+          ld (tr_save_sp),sp
+
+          ld sp,reg_hl
+          exx           ;conserve c
+          pop hl
+          pop de
+          pop bc
+          exx
+          pop af
+          ex af,af
+          ld a,(reg_r)
+          LD_R_A()
+          LD_TM_(0)
+          ld hl,(reg_pc)
+          ld sp,(reg_sp)
+          ld a,(reg_mmr+1):or &7C:ld b,a
+          ld a,(reg_mmr)
+          out (c),a
+          jp ix         ; ret
+
+trace_exit_de
+          ex de,hl
+trace_exit
+;flush regs and connect work bank
+
+          ld a,c
+          and flag_ix+flag_iy
+          ld ix,.exit_ok_ixy
+          jp nz,flush_ixy
+.exit_ok_ixy
+; Flush must be done before reg_r is updated
+          ld ix,$+6:jr flush_tm'
+
+          BK_BASE()
+          ld (reg_pc),hl ; needed at exit time
+          ld (reg_sp),sp
+          ld sp,reg_af+2
+          ex af,af
+          push af
+          exx
+          push bc
+          push de
+          push hl
+          ld sp,(tr_save_sp)
+          ret
+
+flush_tm
+;TM += (iyl - reg_r) + (iyh)
+;Both de and hl must be saved!
+          BK_BASE()
+; Handle case 0 = 256 and other full circle.
+; Happens e.g. after 256 ** NOP (tm never flushed then)
+          ld a,(reg_r)
+          CP_R()
+          jr nz,.ok100
+; Copy pasted from /add_tm_100/ as we cannot change IX (=ret address)
+          ld (tr_save_tmp),hl
+          ld hl,reg_tm+1
+      2 ** [inc (hl):inc hl:jr nz,.ok]
+          inc (hl)
+.ok
+          ld hl,(tr_save_tmp)
+.ok100
+;enchaine
+flush_tm'
+;here iyl=0 means 0 
+          BK_BASE()     ;needed when jp flush_tm'
+          ld (tr_save_tmp),hl
+          ld a,(reg_r)
+          neg
+          ADD_R()
+          ld b,2
+.reiter   ld hl,reg_tm
+          add (hl):ld (hl),a
+          inc hl:jr nc,.ok:inc (hl)
+      2 ** [inc hl:jr nz,.ok:inc (hl)]
+.ok
+          ld a,iyh
+          djnz .reiter
+
+; since iyh was counted, must reset it (for tr_control)
+          LD_TM_(0)
+; since iyl - reg_r was counted, must sync both
+; Well, needed for exit time and tr_control
+; For ti_ld_r_a, both will be overwritten
+          LD_A_R_BIT7()
+          ld (reg_r),a
+          LD_R_A()
+
+          ld hl,(tr_save_tmp)
+          BK_USER()
+          jp ix
+
+stop_instr_or_pc
+          rra
+          jp nc,trace_exit
+
+;pc reached ?
+          BK_BASE()
+          ex de,hl
+          ld hl,(tr_pc_stop)
+          or a
+          sbc hl,de
+          ex de,hl
+          jp z,trace_exit
+          ld a,(reg_mmr+1):or &7C:ld b,a
+          ld a,(reg_mmr)
+          out (c),a
+          jr trace_enter
+
+
+tr_control
+;Test escape pour RET
+;And adjust TM (since iyl wrapped)
+
+          ld ix,$+7:jp flush_tm
+
+      IF need_room
+  ; reuse routine (monui?)
+      END
+          ld e,c
+
+          ld bc,&F40E
+          out (c),c
+          ld bc,&F6C0
+          out (c),c
+          out (c),0
+          ld bc,&F792
+          out (c),c
+          ld bc,&F648
+          out (c),c
+          ld a,&F4
+          in a,(&FF)
+          out (c),0
+          ld bc,&F782
+          out (c),c
+
+          ld c,e
+
+          bit 2,a
+          jr nz,control_ret
+          jp trace_exit
+
+
+tm1_eoi_de_connect
+; Loop points
+          ex de,hl
+tm1_eoi_connect
+tm2'_eoi_connect
+          BK_USER()
+          jr tm1_eoi
+
+tm1_post
+; Loop points 
+;tm1 means: opcode was 1 nop long.    
+;Here user AF, must switch back to work AF.
+          ex af,af
+;Here user registers, must switch back to work set
+          exx
+tm1_eoi_de
+;Here de=pc instead of hl
+          ex de,hl
+tm1_eoi                 ; +1 already counted via R: nothing to do
+tm2'_eoi                ; Idem for +2 (e.g. ld a,i or inc ixl)
+          ld a,c
+          and flag_ix+flag_iy
+          jr z,tr_ok_ixy
+
+          ld ix,tr_ok_ixy
+          jp flush_ixy
+
+tr_ok_ixy
+;loop
+          ld a,c
+          rra
+          jp nc,stop_instr_or_pc
+
+trace_enter
+;In: hl=pc, c=flags  I=bk work
+   ; iyl=R simul
+; Argl! More than 64us/opcode mainly due to /stop_instr_or_pc/
+
+;give control back from time to time
+          INC_R()
+          jr z,tr_control
+control_ret
+post_pre_flush          ; replay instruction (without INC_R)
+tr_no_stop
+;de=work adr, b=temp var
+;ix=adr ret  iyl=cpt R 
+
+          ld a,h
+          cp &C0
+          jr c,pc_ok
+
+          ld ix,pc_ret
+          jr ld_a_hl
+
+pc_ok
+          ld a,(hl)
+          inc hl
+pc_ret
+          ld e,a
+          ld d,instr_table/&0400
+          ex de,hl
+          add hl,hl
+          add hl,hl
+          ex af,af
+          ld ix,tm1_post
+          jp hl
+
+
+ld_hl_or_idx
+;-----------
+; Get (hl), (ix+n) or (iy+n)
+; and then read at address: - save room
+                          ; - *needed* by ti_op_ihl (all regs used)
+; For ld (..),_ it is useless. Nevermind.
+; -------------------------------------------------------------
+ ; If it really bothers you for optimisation reason, we could do:
+ ;TODO? ;in:   l = LSB address ret (**not** ix as usual)
+ ;TODO?         ; Implies MSB is shared by all callers
+ ;TODO?    ;  h = 0 Return normally
+ ;TODO?    ;  h = 1 Read value
+; -------------------------------------------------------------
+
+; For ld _,(..)   ld (..),_
+    ;  inc (..)  dec (..)
+    ; bit/ret/set  _,(..)
+    ; rlc/rl/rrc...  (..)[,r]
+    ; add/adc/sub..  (..)
+
+;in:  hl = L address ret 
+             ; - we need ix for tmp "calls"
+             ; - save bytes                     
+    ; de = pc
+;out
+    ;  A = (idx) where idx = hl or ix+n 
+         ; not needed for "ld (..),_", nevermind for now at is saves rom
+    ; hl = idx++ (emulated hl or ix+n)  ++ due to ld_a_de_ex
+    ; de = pc (updated in case of index)
+
+          ex de,hl      ; do it here rather than by each caller
+          ld a,c
+          and flag_ix+flag_iy
+          jr nz,.idx
+
+;put ret in IX to free DE
+          ld ixl,e
+          ld ixh,d
+;get user's hl in DE
+          exx:ld a,l:exx:ld e,a
+          exx:ld a,h:exx
+          jr _ld_com
+
+.idx
+; We know indexed access adds 3 nops to any opcode
+; +1 already counted via R (dd/fd prefix)
+          ld a,2
+_idx
+          ADD_TM()
+          jr nc,.ok_tm
+          ld ix,.ok_tm:jp add_tm_100
+.ok_tm
+          ld ix,$+7:jp ld_a_hl ; index
+;put ret in IX to free DE
+          ld ixl,e
+          ld ixh,d
+;compute ix+n address
+          ld e,a
+          add a
+          sbc a
+          ld d,a
+          ld a,e
+          exx
+          add l
+          exx
+          ld e,a
+          exx
+          ld a,h
+          exx
+          adc d
+_ld_com
+          ld d,a
+;enchaine!
+ld_a_de_ex
+;'ld a,(de)' but caller must switch back 'ex de,hl'
+          ex de,hl
+ld_a_hl
+;'ld a,(hl)' anywhere in ram  AND INC HL
+          ld a,h
+          cp &C0
+          jr nc,.far_ld_a
+; Can read directly any address in 0000-bfff
+          ld a,(hl)
+          inc hl
+          jp ix
+
+.far_ld_a
+          ld b,&7F
+          ld a,i
+          out (c),a
+
+;ROM or base RAM : must deconnecte ROM courante
+          ld a,(reg_rmr)
+          bit 3,a
+          jp z,call_routine_ld_a_hl ; HRom: mmr doesn't matter
+          ld a,(reg_mmr)
+          bit 2,a       ;eg : c4-c7
+          jp nz,call_routine_ld_a_hl
+          and 3
+          jp z,call_routine_ld_a_hl
+
+;C1, C2, C3 : switch to 4000
+          ld a,(reg_mmr)
+          or &07
+          out (c),a
+          res 7,h
+          ld a,(hl)
+; We just have to reconnect reg_mmr, but no register free.
+; We we re-use same trick than routine_ld_a_hl
+      IF need_room
+ ; Actually it would be cheaper (and faster) to use routine_ld_a_hl
+ ; inconditionnaly. Do that when more tests are added: 
+    ; e.g. rom + c3, read word at 3fff, 7fff
+      END
+          ld r,a
+; Compensate different code path than /routine_ld_a_hl/
+; which increments reg R by 8 rather 7 here without the nop.
+          nop           ; R += 1 so not really No-op.
+          ld a,i:out (c),a
+          set 7,h
+          jr ret_routine_ld_a_hl
+
+call_routine_ld_a_hl = wk_routine_ld_a_hl
+; jump back here:
+ret_routine_ld_a_hl
+; No one register free. Use R to save A.
+; One possible alternative: have all callers do the reconnection
+   ; (since then IX freed)
+          ld a,(reg_mmr+1):or &7F:ld b,a
+          ld a,(reg_mmr)
+          out (c),a
+          ld a,r
+          rlca          ; save bit 7
+          sub 16*2      ; compensate routine and ld r,a itself
+          rrca
+          inc hl
+          jp ix
+
+
+;----- Helpers ---------------------------
+
+tr_jp_rel_tm3
+          ld e,a
+          add a
+          sbc a
+          ld d,a
+          add hl,de
+          jp tm3_eoi
+
+tr_jp_rel_tm4
+;djnz version
+          ld e,a
+          add a
+          sbc a
+          ld d,a
+          add hl,de
+tm4_eoi
+tm5'_eoi
+          ld a,3        ;+1 already counted by R
+          jp add_tm_eoi
+
+add_tm_100
+;!! must preserve both HL and DE (for _idx)
+          BK_BASE()
+;!! copy pasted in /add_tm_100'/
+          ld (tr_save_tmp),hl
+          ld hl,reg_tm+1
+      2 ** [inc (hl):jr nz,ok:inc hl]
+          inc (hl)
+.ok
+          ld hl,(tr_save_tmp)
+          jp bk_user_ix
+
+count_reps_6
+;-----------                  
+; Advance R and TM based on # of repetitions 
+; Note: all repeated instruction (ldir, cpir, outir...) takes 6us/iter
+; !! bug: cpir must be based actual reps, not BC
+; Out: preserve DE!
+
+; Must flush first, otherwise iyl might wrap, missing &100 in tm count
+          ld a,ixl:ld l,a
+          ld a,ixh:ld h,a
+          ld ix,$+7:jp flush_tm
+          ld a,l:ld ixl,a
+          ld a,h:ld ixh,a
+
+          BK_BASE()
+          ld (tr_save_tmp),de
+; #-1 reps. Rationale -1 for R: already counted
+; For TM: Last iter is shorter and variable (4 for cpir, 5 for ldir).
+           ; will be added by each instruction seperately.
+        ; Plus, it handles case 0 = 65536
+          exx:ld a,c:exx:ld l,a
+          exx:ld a,b:exx:ld h,a
+          dec hl
+; BHL= (#-1) * (6-2) (2 counted via R below)
+          ld b,0
+          add hl,hl:rl b ; *2
+          ld a,l
+          ld e,h
+          ld d,b
+          add hl,hl:rl b ; *4
+; BHR += (#-1) * 2
+          ADD_R()
+          LD_R_A()
+          ld a,h:add e:ld h,a ;!! no ADC. See /ADD_R/
+          ld a,b:adc d:ld b,a
+; reg_tm += BHL
+          ex de,hl
+          ld hl,reg_tm
+          ld a,e:add (hl):ld (hl),a:inc hl
+          ld a,d:adc (hl):ld (hl),a:inc hl
+          ld a,b:adc (hl):ld (hl),a:inc hl
+          jr nc,.ok:inc (hl)
+.ok
+          ld de,(tr_save_tmp)
+          jp bk_user_ix
+
+
+;-----------------------------------------
+
+ti_ld_a_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          ld a,b
+          jp tm2_eoi_af
+
+ti_ld_a_bc
+          exx
+          ld a,c
+          exx
+          ld l,a
+          exx
+          ld a,b
+          jr ti_ld_a_icom
+
+ti_ld_a_de
+          exx
+          ld a,e
+          exx
+          ld l,a
+          exx
+          ld a,d
+ti_ld_a_icom
+          exx
+          ld h,a
+          ld ix,$+7
+          jp ld_a_hl
+          ld b,a
+          ex af,af
+          ld a,b
+          jp tm2_eoi_de
+
+ti_ld_a_inn
+          ld ix,$+7:jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          ld a,b
+tm4_eoi_de_af
+tm5'_eoi_de_af
+          ex af,af
+tm4_eoi_de
+tm5'_eoi_de
+          ex de,hl
+          jp tm4_eoi
+
+ti_ld_inn_a
+          ld ix,$+7:jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ex af,af
+          ld (de),a
+tm4_eoi_af
+tm5'_eoi_af
+          ex af,af
+          jp tm4_eoi
+
+ti_ld_b_n
+          ld ix,$+7:jp ld_a_de_ex
+          exx
+          ld b,a
+tm2_eoi_exx
+          exx
+          jp tm2_eoi
+
+ti_ld_h_n
+          ld ix,$+7
+          jp ld_a_de_ex
+          exx
+          ld h,a
+          jr tm2_eoi_exx
+
+tld_d_n
+          exx
+          ld d,a
+          jr tm2_eoi_exx
+
+
+ti_ld_bc_inn
+          exx
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,$+7:jp ld_a_de_ex
+          ld ix,$+6:jr ti_load_bc
+          exx
+          ld b,a
+          exx
+          jp tm6'_eoi_de
+
+ti_ld_inn_bc
+          exx
+          ld ix,$+7
+          jp ld_a_hl
+          ld e,a
+          ld ix,$+7
+          jp ld_a_hl
+          ld d,a
+          exx
+          ld a,c
+          exx
+          ex de,hl      ; needed to factorize exit
+          ld (hl),a:inc hl
+          exx
+          ld a,b
+          jp exx_put_hl_a_trace_eoi_de
+
+ti_ld_bc_nn
+          ld ix,$+7
+          jp ld_a_de_ex
+          ld ix,tldbc1
+ti_load_bc
+;code commun  pop bc / ld bc,(nn)
+          exx
+          ld c,a
+          exx
+          jp ld_a_hl
+
+tldbc1
+          exx
+          ld b,a
+tm3_eoi_exx
+          exx
+tm3_eoi
+tm4'_eoi                ; When R already +2
+          ld a,2
+add_tm_eoi
+          ADD_TM()
+          jp nc,tm1_eoi
+          ld ix,tm1_eoi
+          jp add_tm_100
+
+ti_ld_c_n
+          ld ix,$+7
+          jp ld_a_de_ex
+          exx
+          ld c,a
+          jp tm2_eoi_exx
+
+popbc_byhand
+          ld hl,0:add hl,sp
+          inc sp
+          inc sp
+          ld ix,$+7:jp ld_a_hl
+          ld ix,$+6:jr ti_load_bc
+;popbc1
+          exx
+          ld b,a
+          jr popbc2
+
+ti_pop_bc
+;sp reachable ?  
+          ld hl,&4001
+          add hl,sp
+          jr c,popbc_byhand
+
+          exx
+          pop bc
+popbc2
+          exx
+          ex de,hl
+          bit 0,c
+          jp z,tm3_eoi
+
+          ld e,ret_in_bc
+          jp track_ret
+
+ti_ld_de_inn
+          exx
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,$+7:jp ld_a_de_ex
+          ld ix,$+6:jr ti_load_de
+          exx
+          ld d,a
+          exx
+          jp tm6'_eoi_de
+
+ti_ld_inn_de
+          exx
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          exx
+          ld a,e
+          exx
+          ex de,hl      ; needed for common exit exx_put_hl_a_trace_eoi_de
+          ld (hl),a:inc hl
+          exx
+          ld a,d
+          jp exx_put_hl_a_trace_eoi_de
+
+
+ti_ld_de_nn
+          ld ix,$+7
+          jp ld_a_de_ex
+          ld ix,tldde1
+ti_load_de
+;code commun  pop de / ld de,(nn)
+          exx
+          ld e,a
+          exx
+          jp ld_a_hl
+
+ti_ld_e_n
+          ld ix,$+7
+          jp ld_a_de_ex
+          exx
+          ld e,a
+          jp tm2_eoi_exx
+
+tldde1
+          exx
+          ld d,a
+          jp tm3_eoi_exx
+
+popde_byhand
+          ld hl,0:add hl,sp
+          inc sp
+          inc sp
+          ld ix,$+7
+          jp ld_a_hl
+          ld ix,$+6
+          jr ti_load_de
+          exx
+          ld d,a
+          jr popde2
+
+ti_pop_de
+;sp reachable ?
+          ld hl,&4001
+          add hl,sp
+          jr c,popde_byhand
+
+          exx
+          pop de
+popde2
+          exx
+
+          ex de,hl
+          bit 0,c
+          jp z,tm3_eoi
+
+          ld e,ret_in_de
+          jp track_ret
+
+
+ti_ld_inn_sp
+          exx
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,0
+          add ix,sp
+          ld a,ixl
+          ld (de),a:inc de
+          ld a,ixh
+          ld (de),a
+          jp tm6'_eoi
+
+ti_ld_sp_inn
+          exx
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,$+7:jp ld_a_de_ex
+          ld ixl,a
+          ld ixh,0
+          ld sp,ix
+          ld ix,$+7:jp ld_a_hl
+          ld l,0
+          ld h,a
+          add hl,sp
+          ld sp,hl
+          jr tm6'_eoi_de
+
+ti_inc_ihl
+          ld hl,$+6:jp ld_hl_or_idx
+          ld b,a
+          ex af,af
+          inc b
+          jr _incdec_ihl
+
+ti_dec_ihl
+          ld hl,$+6:jp ld_hl_or_idx
+          ld b,a
+          ex af,af
+          dec b
+_incdec_ihl
+          ex af,af
+          dec hl        ; compensate inc
+          ld (hl),b
+          ex de,hl
+          jp tm3_eoi
+
+ti_ld_hl_n
+          ld hl,$+6:jp ld_hl_or_idx
+          ld ix,$+7:jp ld_a_de_ex
+          dec de        ; compensate inc from ld_hl_or_idx
+          ld (de),a
+          jp tm3_eoi
+
+ti_ld_hl_inn'           ;coming from ed jumptable
+          exx
+          ex de,hl
+ti_ld_hl_inn
+          ld ix,$+7:jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ld ix,$+7:jp ld_a_de_ex
+          ld ix,$+6:jr ti_load_hl
+          exx
+          ld h,a
+          exx
+          jp tm5_eoi_de
+
+ti_ld_inn_hl'
+          exx
+          ex de,hl
+ti_ld_inn_hl
+          ld ix,$+7
+          jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7
+          jp ld_a_hl
+          ld d,a
+          exx
+          ld a,l
+          exx
+          ex de,hl      ; needed for common exit
+          ld (hl),a:inc hl
+          exx
+          ld a,h
+exx_put_hl_a_trace_eoi_de
+          exx
+          ld (hl),a
+tm5_eoi_de
+tm6'_eoi_de
+          ex de,hl
+tm5_eoi
+; +5 for ld (nn),hl
+tm6'_eoi
+; +6 for bc and de version already accounted by +1 in R from ED opcode
+          ld a,4
+          jp add_tm_eoi
+
+
+ti_ld_sp_nn
+          ld ix,$+7
+          jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7
+          jp ld_a_hl
+          ld d,a
+          ex de,hl
+          ld sp,hl
+          ex de,hl
+          jp tm3_eoi
+
+ti_ld_hl_nn
+          ld ix,$+7:jp ld_a_de_ex
+          ld ix,tldhl1
+ti_load_hl
+;code commun  pop hl / ld hl,nn / ld hl,(nn)
+          exx
+          ld l,a
+          exx
+          jp ld_a_hl
+
+ti_ld_l_n
+          ld ix,$+7:jp ld_a_de_ex
+          exx
+          ld l,a
+          jp tm2_eoi_exx
+
+tldhl1
+          exx
+          ld h,a
+          jp tm3_eoi_exx
+
+pophl_byhand
+          ld hl,0:add hl,sp
+          inc sp
+          inc sp
+          ld ix,$+7:jp ld_a_hl
+          ld ix,$+6:jr ti_load_hl
+          exx
+          ld h,a
+          jr pophl2
+
+ti_pop_hl
+;sp reachable ?
+          ld hl,&4001
+          add hl,sp
+          jr c,pophl_byhand
+
+          exx
+          pop hl
+pophl2
+          exx
+          ex de,hl
+          ld a,c
+          rra
+          jp nc,tm3_eoi
+
+          ld e,ret_in_iy
+          add a
+          add a
+          jr c,track_ret
+          dec e
+          add a
+          jr c,track_ret
+          dec e
+track_ret
+; Only invoked for "pop rr"
+; track_eq_sp and co below also called from "ex (sp),hl"
+          BK_BASE()
+          ld a,e
+          ex de,hl
+          ld hl,(tr_sp_before_call)
+          or a
+          sbc hl,sp
+          ld ix,tm3_eoi
+          jr z,track_eq_sp
+          jr nc,track_ret_done
+; sp > sp0 shouldn't happen in 'next' mode
+; except if heavy manipulation of stack, difficult anyway to track.
+          bit 1,c
+          jr z,track_ret_done
+
+;better candidate to track !
+          ld (tr_sp_before_call),sp
+          jr track_com
+
+track_eq_sp
+          ld l,a
+          ld a,(tr_ret_in_reg)
+;if already tracked : no update
+          or a
+          jr nz,track_ret_done
+          ld a,l
+track_com
+          ld (tr_ret_in_reg),a
+          set 3,c       ;flag_ret_in_reg
+track_ret_done
+          BK_USER()
+          ex de,hl
+          jp ix
+
+
+popaf_byhand
+          ld hl,0:add hl,sp
+          inc sp
+          inc sp
+          ld ix,$+7:jp ld_a_hl
+          ex af,af
+          ld ix,$+7:jp ld_a_hl
+          ld h,a
+          ex af,af
+          ld l,a
+
+          BK_BASE()
+          ld ix,0
+          add ix,sp
+          ld sp,reg_af+2
+          push hl
+          pop af
+          ex af,af
+
+          ld sp,ix
+          BK_USER()
+          jr tipopaf1
+
+ti_pop_af
+;sp reachable ?
+          ld hl,&4001
+          add hl,sp
+          jr c,popaf_byhand
+
+          pop af
+          ex af,af
+tipopaf1
+          ex de,hl
+          bit 0,c
+          jp z,tm3_eoi
+
+          ld e,ret_in_af
+          jp track_ret
+
+ti_cpdr
+          ld ix,$+7:jp count_reps_6
+
+;pas de version rapide (fleme)
+          exx
+          ld a,h
+          exx
+          ld h,a
+          exx
+          ld a,l
+
+          exx
+          ld l,a
+          ld ix,$+7
+cpdr_lp
+          jp ld_a_hl
+          dec hl
+          dec hl
+          exx
+          ld h,bytes_store/&0100
+          ld l,a
+          ex af,af
+          cpd
+          jp z,cpdr_done
+          jp po,cpdr_done
+          ex af,af
+          exx
+          jr cpdr_lp
+
+
+ti_cpd
+          exx
+          ld a,l
+          exx
+          ld l,a
+          exx
+          ld a,h
+          exx
+          ld h,a
+          ld ix,$+7
+          jp ld_a_hl
+          dec hl
+          dec hl
+          exx
+          ld h,bytes_store/&0100
+          ld l,a
+          ex af,af
+          cpd
+          jp cpd_done
+
+
+ti_outi
+          exx
+          ex af,af
+          dec b
+
+ti_outi_com
+          ex af,af
+          ld a,l:exx:ld l,a:exx
+          ld a,h
+          inc hl
+outi_outd
+          exx:ld h,a
+          ld ix,$+7:jp ld_a_hl
+          ex de,hl
+          ld b,a
+          ld a,1
+          jp ti_out_com
+
+ti_outir
+      IF 0
+;routine is moisie anyway. bug #189.
+          ld ix,$+7:jp count_reps_6
+      END
+          exx
+          ex af,af
+          dec b
+          jr z,ti_outi_com
+          exx
+          dec hl
+          dec hl
+          exx
+          jr ti_outi_com
+
+ti_ini
+          ex de,hl
+          ld ix,post_ini
+          jp ti_in'
+post_ini
+;MAJ flag comme IN. Needed ?
+          rra
+          rl a
+          exx
+;MAJ flag comme DEC
+          dec b
+ti_ini_com
+          ld (hl),a
+          inc hl
+          exx
+          ld a,d        ;restore
+          ex af,af
+          jp tm5'_eoi
+
+ti_inir
+      IF 0
+;routine is moisie anyway. bug #189.
+          ld ix,$+7:jp count_reps_6
+      END
+          ex de,hl
+          ld ix,post_inir
+          jp ti_in'
+post_inir
+          rra
+          rl a
+          exx
+          dec b
+          jr z,ti_ini_com
+          exx
+          dec hl
+          dec hl
+          exx
+          jr ti_ini_com
+
+ti_outd
+          exx
+          ex af,af
+          dec b
+
+ti_outd_com
+          ex af,af
+          ld a,l:exx:ld l,a:exx
+          ld a,h
+          dec hl
+          jr outi_outd
+
+ti_outdr
+      IF 0
+;routine is moisie anyway. bug #189.
+          ld ix,$+7:jp count_reps_6
+      END
+          exx
+          ex af,af
+          dec b
+          jr z,ti_outd_com
+          exx
+          dec hl
+          dec hl
+          exx
+          jr ti_outd_com
+
+ti_ind
+          ex de,hl
+          ld ix,post_ind
+          jp ti_in'
+post_ind
+;MAJ flag comme IN. Needed ?
+          rra
+          rl a
+          exx
+;MAJ flag comme DEC
+          dec b
+ti_ind_com
+          ld (hl),a
+          dec hl
+          exx
+          ld a,d        ;restore
+          jp tm5'_eoi_af
+
+post_indr
+          rra
+          rl a
+          exx
+          dec b
+          jr z,ti_ind_com
+          exx
+          dec hl
+          dec hl
+          exx
+          jr ti_ind_com
+
+
+ti_indr                 ; put here to keep /gap2/ small. hu??
+      IF 0
+;routine is moisie anyway. bug #189.
+          ld ix,$+7:jp count_reps_6
+      END
+          ex de,hl
+          ld ix,post_indr
+          jp ti_in'
+
+
+ti_op_ihl
+;ADD ADC AND ... (hl) or (ix+n)
+;lookup routine 
+          and &38
+          rrca
+          ld b,a
+          rrca
+          rrca
+          add b
+          add rout_op AND &FF
+          ld l,a
+          ld h,rout_op/&0100
+          jp ld_hl_or_idx
+
+ti_r_hl
+          and &38
+          rrca
+          ld l,a
+          ld h,post_r_hl/&0100
+          jp ld_hl_or_idx
+
+
+mm
+pad2  = -$-36 AND &03FF
+      FILL pad2,&F7
+
+; Just before tr_instr_table, to reach from table
+ti_ld_sp_hl
+          ld sp,hl
+;enchaine
+tm2_post  exx
+tm2_eoi_de ex de,hl
+tm2_eoi_af ex af,af
+tm2_eoi
+tm3'_eoi
+          ld a,1
+          jp add_tm_eoi
+
+ti_ld_d_n
+          ex af,af
+          ld ix,tld_d_n ; deport to leave room here
+          jp ld_a_de_ex
+
+skip_jr
+; When branch jr ccc not taken
+; ADD tm
+          inc de
+          jr tm2_eoi_de
+
+ti_jr
+          ld ix,tr_jp_rel_tm3
+          ex af,af
+          jp ld_a_de_ex
+
+tm3_post
+          ex af,af
+          exx
+          ex de,hl
+          ld a,2
+          jp add_tm_eoi
+
+
+      MACRO JP_POST
+      IF need_room OR optim
+; Replace that by jr, so we don't have to reload IX
+; e.g. in 'nop' instruction:
+ ; ex af,af:jp tm1_eoi
+      END
+          jp ix
+      ENDM
+
+instr_table
+      IF $ AND &03FF
+ !! error align
+ ; see /gap/
+      END
+;00
+          exx:JP_POST():nop
+          ex af,af:jp ti_ld_bc_nn
+          exx:ld (bc),a:jr tm2_post
+          exx:inc bc:jr tm2_post
+          exx:inc b:JP_POST()
+          exx:dec b:JP_POST()
+          ex af,af:jp ti_ld_b_n
+          exx:rlca:JP_POST()
+;08
+          ex af,af:jp ti_ex_af
+          exx:add hl,bc:jr tm3_post
+          ex af,af:jp ti_ld_a_bc
+          exx:dec bc:jr tm2_post
+          exx:inc c:JP_POST()
+          exx:dec c:JP_POST()
+          ex af,af:jp ti_ld_c_n
+          exx:rrca:JP_POST()
+;10
+          exx:jp ti_djnz
+          ex af,af:jp ti_ld_de_nn
+          exx:ld (de),a:jr tm2_post
+          exx:inc de
+tm2_post' jr tm2_post
+          exx:inc d:JP_POST()
+          exx:dec d:JP_POST()
+          jr ti_ld_d_n
+skip_jr'  jr skip_jr
+          exx:rla:JP_POST()
+;18
+ti_jr'    jr ti_jr
+ti_jr''   jr ti_jr
+          exx:add hl,de
+tm3_post' jr tm3_post
+          ex af,af:jp ti_ld_a_de
+          exx:dec de:jr tm2_post'
+          exx:inc e:JP_POST()
+          exx:dec e:JP_POST()
+          ex af,af:jp ti_ld_e_n
+          exx:rra:JP_POST()
+;20
+          jr nz,ti_jr':jr skip_jr'
+          ex af,af:jp ti_ld_hl_nn
+          ex af,af:jp ti_ld_inn_hl
+          exx:inc hl:jr tm2_post'
+          exx:inc h:JP_POST()
+          exx:dec h:JP_POST()
+          ex af,af:jp ti_ld_h_n
+          exx:daa:JP_POST()
+;28
+          jr z,ti_jr'
+skip_jr'' jr skip_jr'
+          exx:add hl,hl
+tm3_post'' jr tm3_post'
+          ex af,af:jp ti_ld_hl_inn
+          exx:dec hl:jr tm2_post'
+          exx:inc l:JP_POST()
+          exx:dec l:JP_POST()
+          ex af,af:jp ti_ld_l_n
+          exx:cpl:JP_POST()
+;30
+          jr nc,ti_jr':jr skip_jr'
+          ex af,af:jp ti_ld_sp_nn
+          ex af,af:jp ti_ld_inn_a
+          exx:inc sp:JP_POST()
+          ex af,af:jp ti_inc_ihl
+          ex af,af:jp ti_dec_ihl
+          ex af,af:jp ti_ld_hl_n
+          exx:scf:JP_POST()
+;38
+          jr c,ti_jr'':jr skip_jr''
+          exx:add hl,sp:jr tm3_post''
+          ex af,af:jp ti_ld_a_inn
+          dec sp:jp tm2_eoi_de
+          exx:inc a:JP_POST()
+          exx:dec a:JP_POST()
+          ex af,af:jp ti_ld_a_n
+          exx:ccf:JP_POST()
+;40
+          exx:ld b,b:JP_POST()
+          exx:ld b,c:JP_POST()
+          exx:ld b,d:JP_POST()
+          exx:ld b,e:JP_POST()
+          exx:ld b,h:JP_POST()
+          exx:ld b,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld b,a:JP_POST()
+;48
+          exx:ld c,b:JP_POST()
+          exx:ld c,c:JP_POST()
+          exx:ld c,d:JP_POST()
+          exx:ld c,e:JP_POST()
+          exx:ld c,h:JP_POST()
+          exx:ld c,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld c,a:JP_POST()
+;50
+          exx:ld d,b:JP_POST()
+          exx:ld d,c:JP_POST()
+          exx:ld d,d:JP_POST()
+          exx:ld d,e:JP_POST()
+          exx:ld d,h:JP_POST()
+          exx:ld d,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld d,a:JP_POST()
+;58
+          exx:ld e,b:JP_POST()
+          exx:ld e,c:JP_POST()
+          exx:ld e,d:JP_POST()
+          exx:ld e,e:JP_POST()
+          exx:ld e,h:JP_POST()
+          exx:ld e,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld e,a:JP_POST()
+;60
+          exx:ld h,b:JP_POST()
+          exx:ld h,c:JP_POST()
+          exx:ld h,d:JP_POST()
+          exx:ld h,e:JP_POST()
+          exx:ld h,h:JP_POST()
+          exx:ld h,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld h,a:JP_POST()
+;68
+          exx:ld l,b:JP_POST()
+          exx:ld l,c:JP_POST()
+          exx:ld l,d:JP_POST()
+          exx:ld l,e:JP_POST()
+          exx:ld l,h:JP_POST()
+          exx:ld l,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld l,a:JP_POST()
+;70
+          ex af,af:jp ti_hl_r ; ld (hl),b
+          ex af,af:jp ti_hl_r ; ld (hl),c
+          ex af,af:jp ti_hl_r ; ...
+          ex af,af:jp ti_hl_r
+          ex af,af:jp ti_hl_r
+          ex af,af:jp ti_hl_r
+;halt: not supported -> NOP
+          exx:JP_POST():nop
+          ex af,af:jp ti_hl_r ; ld (hl),a
+;78
+          exx:ld a,b:JP_POST()
+          exx:ld a,c:JP_POST()
+          exx:ld a,d:JP_POST()
+          exx:ld a,e:JP_POST()
+          exx:ld a,h:JP_POST()
+          exx:ld a,l:JP_POST()
+          ex af,af:jp ti_r_hl
+          exx:ld a,a:JP_POST()
+;80
+          exx:add b:JP_POST()
+          exx:add c:JP_POST()
+          exx:add d:JP_POST()
+          exx:add e:JP_POST()
+          exx:add h:JP_POST()
+          exx:add l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:add a:JP_POST()
+;88
+          exx:adc b:JP_POST()
+          exx:adc c:JP_POST()
+          exx:adc d:JP_POST()
+          exx:adc e:JP_POST()
+          exx:adc h:JP_POST()
+          exx:adc l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:adc a:JP_POST()
+;90
+          exx:sub b:JP_POST()
+          exx:sub c:JP_POST()
+          exx:sub d:JP_POST()
+          exx:sub e:JP_POST()
+          exx:sub h:JP_POST()
+          exx:sub l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:sub a:JP_POST()
+;98
+          exx:sbc b:JP_POST()
+          exx:sbc c:JP_POST()
+          exx:sbc d:JP_POST()
+          exx:sbc e:JP_POST()
+          exx:sbc h:JP_POST()
+          exx:sbc l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:sbc a:JP_POST()
+;a0
+          exx:and b:JP_POST()
+          exx:and c:JP_POST()
+          exx:and d:JP_POST()
+          exx:and e:JP_POST()
+          exx:and h:JP_POST()
+          exx:and l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:and a:JP_POST()
+;a8
+          exx:xor b:JP_POST()
+          exx:xor c:JP_POST()
+          exx:xor d:JP_POST()
+          exx:xor e:JP_POST()
+          exx:xor h:JP_POST()
+          exx:xor l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:xor a:JP_POST()
+;b0
+          exx:or b:JP_POST()
+          exx:or c:JP_POST()
+          exx:or d:JP_POST()
+          exx:or e:JP_POST()
+          exx:or h:JP_POST()
+          exx:or l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:or a:JP_POST()
+;b8
+          exx:cp b:JP_POST()
+          exx:cp c:JP_POST()
+          exx:cp d:JP_POST()
+          exx:cp e:JP_POST()
+          exx:cp h:JP_POST()
+          exx:cp l:JP_POST()
+          ex af,af:jp ti_op_ihl
+          exx:cp a:JP_POST()
+;c0
+          jp ti_ret_nz:nop
+          ex af,af:jp ti_pop_bc
+          jp ti_jp_nz:nop
+          jp ti_jp:nop
+          jp ti_call_nz:nop
+          exx:push bc:jr tm4_post'
+          ex af,af:jp ti_add_n
+          ex af,af:jp ti_rst
+;c8
+          jp ti_ret_z:nop ; cannot reuse ti_ret: different tm
+          jp ti_ret:nop
+          jp ti_jp_z:nop
+          ex af,af:jp ti_cb
+          jp ti_call_z:nop
+          jp ti_call:nop
+          ex af,af:jp ti_adc_n
+          ex af,af:jp ti_rst
+;d0
+          jp ti_ret_nc:nop
+          ex af,af:jp ti_pop_de
+          jp ti_jp_nc:nop
+          ld b,a:jp ti_out_n
+          jp ti_call_nc:nop
+          exx:push de:jr tm4_post'
+          ex af,af:jp ti_sub_n
+          ex af,af:jp ti_rst
+;d8
+          jp ti_ret_c:nop
+          ex af,af:jp ti_exx
+          jp ti_jp_c:nop
+          ex af,af:jp ti_in_a_n
+          jp ti_call_c:nop
+          ex af,af:jp ti_dd
+          ex af,af:jp ti_sbc_n
+          ex af,af:jp ti_rst
+;e0
+          jp ti_ret_po:nop
+          ex af,af:jp ti_pop_hl
+          jp ti_jp_po:nop
+          ex af,af:jp ti_ex_sp_hl
+          jp ti_call_po:nop
+          exx:push hl
+tm4_post' jr tm4_post
+          ex af,af:jp ti_and_n
+          ex af,af:jp ti_rst
+;e8
+          jp ti_ret_pe:nop
+          ex af,af:jp ti_jp_hl
+          jp ti_jp_pe:nop
+          exx:ex de,hl:JP_POST()
+          jp ti_call_pe:nop
+          ex af,af:jp ti_ed
+          ex af,af:jp ti_xor_n
+          ex af,af:jp ti_rst
+;f0
+          jp ti_ret_p:nop
+          ex af,af:jp ti_pop_af
+          jp ti_jp_p:nop
+          ex af,af:or a:jr ti_di
+          jp ti_call_p:nop
+          exx:push af:jr tm4_post
+          ex af,af:jp ti_or_n
+          ex af,af:jp ti_rst_30
+;f8
+          jp ti_ret_m:nop
+          exx:jp ti_ld_sp_hl ; deported to chain with tm2_post
+          jp ti_jp_m:nop
+          ex af,af:scf:jr ti_ei
+          jp ti_call_m:nop
+          ex af,af:jp ti_fd
+          ex af,af:jp ti_cp_n
+          ex af,af:jp ti_rst
+
+tm4_post
+          exx
+          ex de,hl
+          ex af,af
+          ld a,3
+          jp add_tm_eoi
+
+ti_di
+ti_ei                   ; same routine, discriminate with Carry
+;in: Ca=iff
+          BK_BASE()
+          sbc a
+          ld (reg_iff),a
+          jp tm1_eoi_de_connect
+
+ti_call_nz jr nz,ti_call
+          jr ti_2skip
+ti_call_z jr z,ti_call
+          jr ti_2skip
+ti_call_nc jr nc,ti_call
+          jr ti_2skip
+ti_call_c jr c,ti_call
+          jr ti_2skip
+ti_call_po jp po,ti_call
+          jr ti_2skip
+ti_call_pe jp pe,ti_call
+          jr ti_2skip
+ti_call_p jp p,ti_call
+          jr ti_2skip
+ti_call_m jp p,ti_2skip
+
+ti_call
+          ex af,af
+          ld ix,$+7:jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld ix,tm5_eoi
+          jp call_com
+
+ti_2skip
+;Call or Jp not followed
+  ; - skip adr
+  ; - 3 Nops
+          ex af,af
+          ex de,hl
+          inc hl
+          inc hl
+          jp tm3_eoi
+
+
+
+ti_jp_nz  jr nz,ti_jp
+          jr ti_2skip
+ti_jp_z   jr z,ti_jp
+          jr ti_2skip
+ti_jp_nc  jr nc,ti_jp
+          jr ti_2skip
+ti_jp_c   jr c,ti_jp
+          jr ti_2skip
+ti_jp_po  jp po,ti_jp
+          jr ti_2skip
+ti_jp_pe  jp pe,ti_jp
+          jr ti_2skip
+ti_jp_p   jp p,ti_jp
+          jr ti_2skip
+ti_jp_m   jp p,ti_2skip
+;enchaine
+ti_jp
+          ex af,af
+          ld ix,$+7:jp ld_a_de_ex
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld d,a
+          ex de,hl
+          jp tm3_eoi
+
+ti_rst
+          ex de,hl
+          and &38
+          ld e,a
+          xor a
+          ld ix,tm4_eoi
+;enchaine
+call_com
+;AE = jump address
+;HL = pc
+          ld d,a
+;Check if &be00 to catch breakpoint 
+          cp &BE:jr nz,.okcall
+          ld a,e:or a:jr nz,.okcall
+;Check if it's breakpoint routine (very crudely: first 3 first byte)
+          ld a,(de):cp &F5:jr nz,.okcall ; push af
+          ld a,(&BE01):cp &ED:jr nz,.okcall ; ld a,i
+          ld a,(&BE02):cp &57:jr nz,.okcall
+          ex de,hl      ; de = pc = after call 
+          jr exit_brk
+.okcall
+          push hl       ; Ret adr
+          bit 2,c
+          jr z,.call_done
+;flag call
+          BK_BASE()
+;back at level 0 ? (main ret popped)
+          ld hl,(tr_sp_before_call)
+          dec hl
+          scf
+          sbc hl,sp
+          jr nz,.call_connect
+
+          ld hl,tr_subroutine_level
+          inc (hl)
+.call_connect
+          BK_USER()
+.call_done
+;Here de = jump address, must be in HL (new pc) 
+          ex de,hl
+          jp ix
+
+ti_rst_30
+; if JP &be00, Assumes it's BRK, and exit
+          ld hl,&30
+          ld a,(hl):cp &C3:jr nz,rst_no_brk
+          inc hl
+          ld a,(hl):or a:jr nz,rst_no_brk
+          inc hl
+          ld a,(hl):cp &BE:jr nz,rst_no_brk
+exit_brk
+; R: rectify R
+          DEC_R()
+          jp trace_exit_de
+rst_no_brk
+          ld a,&F7      ; opcode
+          jr ti_rst
+
+
+ti_ret_nz jr nz,ti_ret':jp tm2_eoi_de
+ti_ret_z  jr z,ti_ret':jp tm2_eoi_de
+ti_ret_nc jr nc,ti_ret':jp tm2_eoi_de
+ti_ret_c  jr c,ti_ret':jp tm2_eoi_de
+ti_ret_po jp po,ti_ret':jp tm2_eoi_de
+ti_ret_pe jp pe,ti_ret':jp tm2_eoi_de
+ti_ret_p  jp p,ti_ret':jp tm2_eoi_de
+ti_ret_m  jp p,tm2_eoi_de
+;Enchaine
+ti_ret'
+; With condition: 4 nops
+          ld ix,tm4_eoi ; !! Copy-paste in popret_byhand
+          jr ti_ret_
+ti_ret
+          ld ix,tm3_eoi ; !! Copy-paste in popret_byhand
+ti_ret_
+          ex af,af
+          ld hl,&4001
+          add hl,sp
+          jr c,popret_byhand
+
+          pop hl
+ti_ret_com
+          bit 0,c
+          jr z,_ret_done
+
+;does sp reached ret adr ?
+          BK_BASE()
+          ex de,hl
+check_sp_for_exit
+          ld hl,(tr_sp_before_call)
+          or a
+          sbc hl,sp
+          jr z,ret_eq_sp
+          jr nc,_ret_connect
+;sp > tracked sp
+;in case untrackable stack changes, prefer to exit
+       ;   BIT  1,C
+       ;   JR   Z,.ret_connect
+_exit
+;Actually must finalize instruction for proper timing.
+;So we flag to stop at instr
+      IF stop_at_instr
+ !! review that
+      END
+          res 0,c
+          res 1,c
+          jr _ret_connect
+
+ret_eq_sp
+          ld a,(tr_subroutine_level)
+          or a
+          jr z,_exit    ;may happen in 'ret' mode
+          dec a
+          ld (tr_subroutine_level),a
+          jr z,_exit
+_ret_connect
+          BK_USER()
+          ex de,hl
+_ret_done
+;hl=pc
+          jp ix
+
+popret_byhand
+          ld hl,0:add hl,sp
+          inc sp
+          inc sp
+;We must save IX. But no regs left for 16 bits
+;Since only 3 or 4 nops for ret (cc), we copy-past
+;Alternative: since we know we have to connect bk base,
+            ; we could do it here and "call" far_ld_a directly
+          ld a,ixl:cp tm3_eoi AND &FF
+          jr z,.tm3
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld ix,tm4_eoi
+          jr .com
+
+.tm3
+          ld ix,$+7:jp ld_a_hl
+          ld e,a
+          ld ix,$+7:jp ld_a_hl
+          ld ix,tm3_eoi
+.com
+          ld d,a
+          ex de,hl
+          jr ti_ret_com
+
+ti_add_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          add b
+          jp tm2_eoi_af
+ti_adc_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          adc b
+          jp tm2_eoi_af
+ti_sub_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          sub b
+          jp tm2_eoi_af
+ti_sbc_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          sbc b
+          jp tm2_eoi_af
+ti_and_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          and b
+          jp tm2_eoi_af
+ti_xor_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          xor b
+          jp tm2_eoi_af
+ti_or_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          or b
+          jp tm2_eoi_af
+ti_cp_n
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,a
+          ex af,af
+          cp b
+          jp tm2_eoi_af
+
+ti_jp_hl
+          exx:ld a,l:exx:ld l,a
+          exx:ld a,h:exx:ld h,a
+
+          ld a,c
+          and flag_stop_at_ret+flag_ret_in_reg
+          cp flag_stop_at_ret+flag_ret_in_reg
+          jp nz,tm1_eoi
+
+;try to guess if jp hl is used as ret
+
+          BK_BASE()
+          ld a,(tr_ret_in_reg)
+          cp 3          ;only de hl ix iy assumed to be ret adr
+          jp c,tm1_eoi_connect ;not comming from stack
+
+          ex de,hl
+          ld hl,(tr_sp_before_call)
+          or a
+          sbc hl,sp
+          jp nz,tm1_eoi_de_connect
+
+          ld ix,tm1_eoi
+          jp check_sp_for_exit
+
+
+ti_ex_sp_hl
+      IF need_room
+; Alternative code when IY is used for loop hook: 
+    ; de(work) := hl(user), ti_pop_hl, push de(work)
+  ; It require to reprendre la main apres ti_pop_hl
+   ; - connect BK base
+   ; - save iy
+   ; - ld iy = $+7:jp ti_pop_hl
+   ; - restore iy
+   ; - restore mmr
+; !!!! No wouldn't work, as ti_pop_hl might exist !!!!
+      END
+          ld hl,0
+          add hl,sp
+          ld ix,$+7:jp ld_a_hl
+          exx
+          ex de,hl
+          ld ixh,e
+          ex de,hl
+          ld l,a
+          exx
+          ld a,ixh
+          dec hl
+          ld (hl),a:inc hl
+
+          ld ix,$+7:jp ld_a_hl
+          exx
+          ex de,hl
+          ld ixh,d
+          ex de,hl
+          ld h,a
+          exx
+          ld a,ixh
+          dec hl
+          ld (hl),a
+
+          ex de,hl
+          ld a,c
+          rra
+          jr nc,tm6_eoi
+
+;almost like pop hl, but must cp with sp+2
+          ld e,ret_in_iy
+          add a         ; rectify rra above
+      IF flag_iy-128
+  !! review that 
+      END
+          add a
+          jr c,.track_ret2
+      IF flag_ix-64
+  !! review that 
+      END
+          dec e
+          add a
+          jr c,.track_ret2
+          dec e
+.track_ret2
+          BK_BASE()
+          ld a,e
+          ex de,hl
+          ld hl,(tr_sp_before_call)
+          dec hl
+          scf
+          sbc hl,sp
+          ld ix,tm6_eoi
+          jp z,track_eq_sp
+;don't bother if sp>sp0
+          jp track_ret_done
+
+tm6_eoi
+          ld a,5
+          jp add_tm_eoi
+
+
+ti_djnz
+          djnz djnz_follow
+          exx
+          ex af,af
+          ex de,hl
+          inc hl
+          jp tm3_eoi
+
+djnz_follow
+          exx
+          ex af,af
+          ld ix,tr_jp_rel_tm4
+          jp ld_a_de_ex
+
+
+
+ti_ex_af
+          BK_BASE()
+          ld hl,0
+          add hl,sp     ;save sp
+          ld sp,reg_af'
+          pop af
+          ex af,af
+          push af
+          jr ex_com
+
+ti_exx
+      IF todo
+; why is it needed here but not for e.g. ti_ex_af !?
+      END
+          ld a,c
+          and flag_ix+flag_iy
+          jp nz,pre_flush
+
+          BK_BASE()
+          ld hl,0
+          add hl,sp     ;save sp
+          ld sp,reg_hl'
+          exx
+          ex (sp),hl
+          pop af
+          ex de,hl
+          ex (sp),hl
+          ex de,hl
+          pop af
+          pop ix
+          push bc
+          ld c,ixl
+          ld b,ixh
+          exx
+ex_com
+          ld sp,hl
+          jp tm1_eoi_de_connect
+
+ti_ed_a0
+;1ab0cd00 to 000bacd0
+          ld b,a
+          and &90
+          cp &80
+          jp nz,tm2'_eoi ; no-op
+          xor b
+          bit 6,a
+          jr z,$+4
+          sub &30
+          rrca
+          add ed_routines2 AND &FF
+          ld e,a
+          ld d,ed_routines2/&0100
+          ex de,hl
+          ld a,(hl)
+          inc l
+          ld h,(hl)
+          ld l,a
+          jp hl
+
+ti_ed
+          ld a,c
+          and flag_ix+flag_iy
+          jr nz,pre_flush
+
+          INC_R()
+          ld ix,$+7:jp z,flush_tm
+
+          ld ix,$+7
+          jp ld_a_de_ex
+
+          sub &40
+          jp c,tm2'_eoi
+
+          add a
+          jp c,tm2'_eoi
+          add a
+          jr c,ti_ed_a0
+
+          ld ixl,a
+          ld ixh,ed_routines/&0100
+
+          ex af,af
+          exx
+          jp ix
+
+ti_dd
+          ld a,c
+          and flag_ix+flag_iy
+          jr nz,pre_flush
+
+          set 6,c
+          BK_BASE()
+          exx
+          ld (reg_hl),hl
+          ld hl,(reg_ix)
+          jr ti_ixy_com
+
+ti_fd
+          ld a,c
+          and flag_ix+flag_iy
+          jr nz,pre_flush
+
+          set 7,c
+          BK_BASE()
+          exx
+          ld (reg_hl),hl
+          ld hl,(reg_iy)
+ti_ixy_com
+          exx
+          BK_USER()
+          ex de,hl
+          INC_R()
+          ANCHOR(bug#195)
+          ANCHOR(bug#1c6)
+  ;        call z,&BE00   
+; Needed when IYL wraps on valid FD/DD prefix  (see /dt34/)
+          ld ix,$+7:jp z,flush_tm
+;after dd/fd prefix : mustn't stop, as we don't store "flag_ix/iy" state
+          jp tr_no_stop
+
+
+pre_flush
+;when invalid ixy prefix before exx, ldir, ...
+; flush and replay instr
+
+; Hence must correct R.
+; Cannot to it right now, to preserve Sign flag
+          ld ix,post_pre_flush
+
+          ex de,hl
+          dec hl
+
+flush_ixy
+;in: A=C and $C0
+          jp m,.fixy_iy
+;switch back                  
+          res 6,c
+          BK_BASE()
+          exx
+          ld (reg_ix),hl
+          jr .fixy_com
+.fixy_iy
+          res 7,c
+          BK_BASE()
+          exx
+          ld (reg_iy),hl
+.fixy_com
+          ld hl,(reg_hl)
+          exx
+bk_user_ix
+          BK_USER()
+          jp ix
+
+;----------------------------------
+
+
+pre_reg_routines
+          ld a,b:jr cb_okpre
+          ld a,c:jr cb_okpre
+          ld a,d:jr cb_okpre
+          ld a,e:jr cb_okpre
+          ld a,h:jr cb_okpre
+          ld a,l:jr cb_okpre
+          ex af,af:jr ti_cb_hl ;(hl)
+;a: no-op
+      IF $-pre_reg_routines - 7*3
+ !! error align
+      END
+cb_okpre
+          exx
+;compute ix=post routine  - for putting back value in right reg
+;        de=actual instr (rlc, bit, set, ...)
+
+; NB!  For bit, ix is discarded
+          ex af,af
+          ld a,b
+          and 7
+          or [post_cb_routines AND &FF]/4
+          add a
+          add a
+          ld ixl,a
+          ld ixh,post_cb_routines/&0100
+
+;which routine
+          ld a,b
+          and &F8
+          rrca
+          ld e,a
+          ld b,d        ;transfert backup
+          ld d,cb_routines/&0100
+          ex de,hl
+          ex af,af
+          jp hl
+
+
+ti_cb_hl
+          exx
+          ex de,hl
+          ld hl,$+6:jp ld_hl_or_idx
+          BK_BASE()
+          dec hl
+          ld (tr_save_idx),hl
+          BK_USER()
+;put value in A'  (to update F' when executing opcode)
+;already 
+          ld ix,$+7:jp ld_a_hl ; must reload (no free reg to save)
+
+          ex de,hl
+          ld e,a
+          ex af,af
+          ld d,a        ;back-up emulated A
+          ld a,e
+          ex af,af
+
+;relit opcode (no register free for backup)
+          dec hl
+          ld ix,$+7:jp ld_a_hl
+          ld ix,post_cb_hl
+          jp ti_cb_idx_com
+
+pad3
+      FILL -$-23 AND &FF,0
+post_bit
+;nothing to do compared to post_cb_routines, 
+; as no register is changed.
+;also, bit n,(hl) takes one nop less than res/set n,(hl)
+          ld a,b        ;restore
+          ex af,af
+          ex de,hl
+          ld a,c
+          res 6,c
+          res 7,c
+          ANCHOR(bug#1a6)
+; if (ix)/(iy), +3 already handled, must add +1
+; Note: test below isn't working for "bit n,(ix+offset),r"  
+          and flag_ix+flag_iy
+          jp nz,tm3'_eoi
+; (hl) or reg? 
+          ld a,ixl
+          cp post_cb_hl AND &FF
+          jp z,tm3'_eoi
+          jp tm2'_eoi
+
+cb_routines
+      IF $ AND &FF
+  !! align issue 
+      END
+          rlc a:jp ix
+          rrc a:jp ix
+          rl a:jp ix
+          rr a:jp ix
+          sla a:jp ix
+          sra a:jp ix
+          sl1 a:jp ix
+          srl a:jp ix
+      8 ** [bit #,a:jr post_bit]
+      8 ** [res #,a:jp ix]
+      8 ** [set #,a:jp ix]
+;$80
+post_cb_routines
+          exx:ld b,a:jr post_cb
+          exx:ld c,a:jr post_cb
+          exx:ld d,a:jr post_cb
+          exx:ld e,a:jr post_cb
+          exx:ld h,a:jr post_cb
+          exx:ld l,a:jr post_cb
+post_cb_hl ld h,a:ex af,af:jr post_cb_hl2
+          ld h,a:jr post_cb_norestore
+;-- end of table lookup
+      IF $ AND &FF - &9F
+  !! error align
+      END
+post_cb_hl2
+          ex de,hl
+          ex af,af
+          ld a,b
+          ex af,af
+          jr post_cb_com
+
+post_cb
+          exx
+          ld h,a
+          ld a,b        ;restore     
+;enchaine
+post_cb_norestore
+          ex af,af
+          ex de,hl
+          ld a,c
+          and flag_ix+flag_iy
+          jp z,tm2'_eoi
+
+post_cb_com
+          ld ixh,d
+          BK_BASE()
+          ld de,(tr_save_idx)
+          BK_USER()
+          ld a,ixh
+          ld (de),a
+          res 6,c
+          res 7,c
+          jp tm4'_eoi
+
+rout_op
+          ld b,a:ex af,af:add b:jr .post_op_com
+          ld b,a:ex af,af:adc b:jr .post_op_com
+          ld b,a:ex af,af:sub b:jr .post_op_com
+          ld b,a:ex af,af:sbc b:jr .post_op_com
+          ld b,a:ex af,af:and b:jr .post_op_com
+          ld b,a:ex af,af:xor b:jr .post_op_com
+          ld b,a:ex af,af:or b:jr .post_op_com
+.op_cp    ld b,a:ex af,af:cp b
+.post_op_com
+          jp tm2_eoi_de
+      IF .op_cp/&0100 - rout_op/&0100
+!! error confine
+      END
+
+
+pad4
+      FILL -$ AND &FF,0
+
+bytes_store 256 ** BYTE #
+
+      IF bytes_store AND &FF
+   !! align error
+      END
+
+
+post_r_hl
+      IF $ AND &FF
+   !! align error
+      END
+; put A=(hl) or (ix+d) in reg R
+          exx:ld b,a:jr .done
+          exx:ld c,a:jr .done
+          exx:ld d,a:jr .done
+          exx:ld e,a:jr .done
+          ld l,0:jr .pri_hl
+          ld l,1:jr .pri_hl
+          4 ** BRK      ; 76: halt (no reached)
+.ldahl    ld b,a:ex af,af:ld a,b:ex af,af ; 7e: ld a,(hl)
+          exx
+;-- end of routine lookup
+.done
+          exx
+          ex de,hl
+          jp tm2_eoi
+.pri_hl
+;must flush now, to allow   ld h,(ix+d)
+          ld h,a        ; backup
+          ld a,c
+          and flag_ix+flag_iy
+          jr z,.ok
+          ld ix,$+7:jp flush_ixy
+.ok
+          ld a,h        ; restore
+          dec l
+          exx
+          jr z,.reg_l
+          ld h,a
+          jr .done
+.reg_l
+          ld l,a
+          jr .done
+
+      IF .ldahl - post_r_hl - 7*4
+ !! error align
+      END
+      IF .ldahl/&0100 - post_r_hl/&0100
+ !! error confine
+      END
+
+post_hl_r
+; put reg R in (hl) or (ix+d)
+          exx:ld a,b:jr .done
+          exx:ld a,c:jr .done
+          exx:ld a,d:jr .done
+          exx:ld a,e:jr .done
+          ld a,c:jr .pri_h:nop
+          ld a,c:jr .pri_l:nop
+          4 ** BRK      ; 76: halt (no reached)
+.ldahl    ex af,af:ld b,a:ex af,af:ld a,b ; 7e: ld a,(hl)
+          exx
+;-- end of routine lookup  
+.done
+          exx
+          dec hl:ld (hl),a
+          ex de,hl
+          jp tm2_eoi
+.pri_h
+;must flush now, to allow   ld (ix+d),h
+          and flag_ix+flag_iy
+          jr z,.okh
+          ld ix,$+7:jp flush_ixy
+.okh
+          exx
+          ld a,h
+          jr .done
+.pri_l
+;must flush now, to allow   ld (ix+d),l
+;cannot factorise: no register left (b destroyed in flush_ixy)
+          and flag_ix+flag_iy
+          jr z,.okl
+          ld ix,$+7:jp flush_ixy
+.okl
+          exx
+          ld a,l
+          jr .done
+
+      IF .ldahl - post_hl_r - 7*4
+ !! error align
+      END
+      IF .ldahl/&0100 - post_hl_r/&0100
+ !! error confine
+      END
+
+ti_hl_r
+          and 7
+          add a
+          add a
+          add post_hl_r AND &FF
+          ld l,a
+          ld h,post_hl_r/&0100
+          jp ld_hl_or_idx
+
+;-----------------------------------------------
+ti_cb
+          ld a,c
+          and flag_ix+flag_iy
+          jr nz,ti_cb_idx
+
+          INC_R()       ; Note: not inc when already FD/DD prefix
+          ANCHOR(bug#1c6)
+          ld ix,$+7:jp z,flush_tm
+
+          ld ix,$+7:jp ld_a_de_ex
+;Put concerned reg in A'
+          ld b,a
+          and 7
+          ld e,a
+          add a
+          add e
+          ld e,a
+          ld d,0
+          ld ix,pre_reg_routines
+          add ix,de
+          ex af,af
+          ld d,a        ;save value
+          exx
+          jp ix
+
+ti_cb_idx
+;1:store pointed adr 
+          ex de,hl
+;dd cb n op: R +=2. So we must add +3 TM.
+          ld a,3
+          ld de,$+6:jp _idx
+
+          BK_BASE()
+          dec hl
+          ld (tr_save_idx),hl
+
+;must flush, for eg : ld l,rlc (ix+d)
+;BUT!! Don't reset flag, to trigger write at ix+d (tr_save_idx)
+          bit 7,c
+          exx
+          jp nz,cb_flush_iy
+;if not iy, necessarily ix
+          ld (reg_ix),hl
+          jr cb_okixy
+cb_flush_iy
+          ld (reg_iy),hl
+cb_okixy
+          ld hl,(reg_hl)
+          exx
+          BK_USER()
+;here A=already read
+;put value in A'  (to update F' when executing opcode)
+          ld ix,$+7:jp ld_a_hl
+          ex de,hl
+          ld e,a
+          ex af,af
+          ld d,a        ;back-up emulated A
+          ld a,e
+          ex af,af
+;compute ix=post routine  - for ld b,rlc(ix+4)
+;        de=actual instr (rlc, bit, set, ...)
+          ld ix,ti_cb_idx3
+          jp ld_a_hl    ; reload opcode
+
+ti_cb_com
+          ex af,af
+          ld a,b
+ti_cb_idx3
+          ld e,a        ;backup opcode
+          and 7
+          or [post_cb_routines AND &FF]/4
+          add a
+          add a
+          ld ixl,a
+          ld ixh,post_cb_routines/&0100
+
+;which routine
+          ld a,e
+ti_cb_idx_com
+          and &F8
+          rrca
+          ld e,a
+          ld b,d        ;transfert backup
+          ld d,cb_routines/&0100
+          ex de,hl
+          ex af,af
+          jp hl
+
+;-----------------------------------------
+;ED
+ti_ld_a_i
+          exx
+          BK_BASE()
+          ld a,(reg_i)
+          jr set_flags_i_r
+
+ti_ld_a_r
+          exx
+          BK_BASE()
+          LD_A_R_BIT7()
+set_flags_i_r
+; Set flags: like 'or a', but
+           ; 1/ without changing carry
+           ; 2/ p/v := iff         
+
+; For 1/ we can use ld a,r itself!!  
+          rlca:sub 4:rrca ; compensate +2 mod 128 from ld a,r
+          ld b,a
+          ex af,af      ; Get emulated carry 
+          ld a,b
+          ld r,a:ld a,r
+
+; 2/ Change p/v according to iff without touching other flags
+          ld (reg_sp),sp
+          ld sp,reg_af+2
+          push af
+          pop de
+          ld a,e
+          and &FB
+          ld e,a
+          ld a,(reg_iff)
+          and 4
+          or e
+          ld e,a
+          push de
+          pop af
+          ex af,af
+          ld sp,(reg_sp)
+tm2_eoi_connect
+tm3'_eoi_connect
+          BK_USER()
+          jp tm2_eoi
+
+ti_ld_i_a
+          exx
+          ld de,reg_i
+          jr set_reg_com
+
+ti_ld_r_a
+          exx
+; Flush iyl-reg_r before updating both
+; We also flush iyh, nevermind
+          ld ix,$+7:jp flush_tm
+          ex af,af
+          LD_R_A()
+          ex af,af
+          ld de,reg_r
+set_reg_com
+          BK_BASE()
+          ex af,af
+          ld (de),a
+          ex af,af
+          jr tm3'_eoi_connect
+
+ti_retn
+ti_reti
+          exx
+          ex de,hl
+          jp ti_ret
+
+ti_out_n
+;here B=emulated A (port and value)
+;setup port (must be done before ld_a_de_ex: bug#192) 
+          ld l,a
+          ld h,b
+          ex af,af
+          ld ix,$+7:jp ld_a_de_ex
+          ld b,d
+do_out
+;de = port, b=value
+;ixl = flag outi/outd 
+          ld ixh,b
+          BK_BASE()
+          ld a,ixl
+          ld (tr_save_tmp),a
+          ld b,ixh
+          ld a,b
+          ld (last_out_port),de
+          ld (last_out_val),a
+          ld (reg_pc),hl
+
+          bit 7,d
+          jr nz,novga
+
+          ld a,b
+          cp &C0
+          jr c,nommr
+
+          ld (reg_mmr),de ;for D
+          ld (reg_mmr),a
+; new mmr connected at exit via /BK_USER/
+nommr
+          bit 6,d
+          jr z,novga
+
+          ld (last_vga),a
+          sub &40
+          jr c,setpen
+          sub &40
+          jr c,setink
+          sub &40
+          jr nc,okvga   ;mmr already done
+
+          ld a,b
+          ld (reg_rmr),a
+          jr okvga
+setpen
+          ld a,b
+          ld (vga_pen),a
+          jr okvga
+setink
+          ld a,(vga_pen)
+          and &1F
+          cp &10
+          jr c,$+4
+          ld a,&10
+          add vga_inks AND &FF
+          ld l,a
+          ld h,vga_inks/&0100
+          ld (hl),b
+okvga
+novga
+          ld a,b
+;todo : crtc...
+
+          bit 5,d
+          jr nz,norom
+
+          ld (reg_rom),a
+norom
+; In case rmr/rom was changed, we update /routine_ld_a_hl/
+          ld ix,$+7:jp setup_ld_a_hl
+          ld b,&7F:out (c),a ; connect user lower rom/ram.
+
+          ld hl,(reg_pc)
+          ld de,(tr_save_tmp) ; for e=flag outir
+          BK_USER()
+          ld a,e:or a
+          jp z,tm4'_eoi ; works for both out (n),a / out (c),r
+          jp tm5'_eoi   ; outi/outd
+
+ti_in_a_n
+          ld ix,$+7
+          jp ld_a_de_ex
+;Port: Ann
+          ld e,a        ; nn
+          ex af,af
+          ld d,a        ; A
+          ex af,af
+          ld ix,post_in_a_n
+          jr do_in
+
+ti_in
+;ixl=0: in b,(a)  8*4: in c,(a) ...
+          exx
+          ld a,ixl
+          rrca
+          rrca
+          rrca
+          ld e,a
+          ld d,0
+          ld ix,post_in_routines
+          add ix,de
+ti_in'
+          exx
+          ld a,c
+          exx
+          ld e,a
+          exx
+          ld a,b
+          exx
+          ld d,a
+do_in
+;de: port  ix: post_in
+;ONLY support PPI F5
+          ld a,d
+          and &0B
+          dec a
+          ld e,&FF      ; Default to returned value FF
+          jr nz,in_com
+
+          ld b,&F5
+          in e,(c)
+in_com
+          ex af,af
+          ld d,a
+          ld a,e
+          jp ix
+
+post_in_routines
+          exx:ld b,a:jr post_in
+          exx:ld c,a:jr post_in
+          exx:ld d,a:jr post_in
+          exx:ld e,a:jr post_in
+          exx:ld h,a:jr post_in
+          exx:ld l,a:jr post_in
+          exx:jr post_in:nop ;in 0,(C)
+          ld d,a        ;in a,(c) ; norestore
+          exx
+post_in
+          exx
+;MAJ flag comme IN :
+;SZP, NH=00, Carry untouched
+          rra
+          rl a
+          ld a,d        ;restore
+post_in_a_n
+;in r,(c) is 4 nops
+;in a,(n) is 3
+; This distinction is already taken into account by R increment
+          ex af,af
+          jp tm3_eoi
+
+
+pad5
+      IF need_room
+; make sure this gap isn't too big
+      END
+      FILL [-$ AND &FF]-51 AND &FF,0
+ti_im_1
+          ld a,1
+ti_im
+          exx
+          ld e,a
+          BK_BASE()
+          ld a,e
+          ld (reg_im),a
+          jp tm2'_eoi_connect
+ti_im_2
+          ld a,2
+          jr ti_im
+ti_out_c_a
+          ld b,a
+          ex af,af
+          jr ti_out_com'
+
+post_tm2
+          ex af,af
+ti_ed_nop
+          exx
+          jp tm2'_eoi
+
+ti_out
+; Out (c),r
+          exx
+          ld b,a        ; b=reg
+ti_out_com'
+          xor a
+ti_out_com
+; Here b=value
+; A = flag outi/outd 
+          ld ixl,a
+          exx:ld a,c:exx:ld e,a
+          exx:ld a,b:exx:ld d,a ; de=port
+          jp do_out
+
+post_tm4
+          ex af,af
+          exx
+          jp tm4'_eoi
+
+hi2
+      IF $ AND &FF
+ !! align error
+      END
+  ; see /gap6/
+ed_routines
+;ed 40
+          ex af,af:jp ti_in
+          ex af,af:ld a,b:jr ti_out
+          sbc hl,bc:jr post_tm4
+          ex af,af:jp ti_ld_inn_bc
+          neg:jr post_tm2
+          ex af,af:jp ti_retn
+          ex af,af:xor a:jr ti_im
+          ex af,af:jp ti_ld_i_a
+;ed 48
+          ex af,af:jp ti_in
+          ex af,af:ld a,c:jr ti_out
+          adc hl,bc:jr post_tm4
+          ex af,af:jp ti_ld_bc_inn
+      BYTE &ED,&4C:jr post_tm2 ; neg*
+          ex af,af:jp ti_reti
+ti_im_0   ex af,af:xor a:jr ti_im ; *
+          ex af,af:jp ti_ld_r_a
+;ed 50
+          ex af,af:jp ti_in
+          ex af,af:ld a,d:jr ti_out
+          sbc hl,de:jr post_tm4
+          ex af,af:jp ti_ld_inn_de
+      BYTE &ED,&54
+post_tm2' jr post_tm2   ; neg*
+          ex af,af:jp ti_retn ; *
+          ex af,af:jp ti_im_1
+          ex af,af:jp ti_ld_a_i
+;ed 58
+          ex af,af:jp ti_in
+          ex af,af:ld a,e:jr ti_out
+          adc hl,de
+post_tm4' jr post_tm4
+          ex af,af:jp ti_ld_de_inn
+      BYTE &ED,&5C:jr post_tm2' ; neg
+          ex af,af:jp ti_retn ; * 
+          ex af,af:jp ti_im_2
+          ex af,af:jp ti_ld_a_r
+;ed 60
+          ex af,af:jp ti_in
+          ex af,af:ld a,h:jr ti_out'
+          sbc hl,hl:jr post_tm4'
+          ex af,af:jp ti_ld_inn_hl'
+      BYTE &ED,&64:jr post_tm2' ; neg*
+          ex af,af:jp ti_retn ; *
+          jp ti_im_0:nop ; *
+          ex af,af:jp ti_rrd
+;ed 68
+          ex af,af:jp ti_in
+          ex af,af:ld a,l:jr ti_out'
+          adc hl,hl:jr post_tm4'
+          ex af,af:jp ti_ld_hl_inn'
+      BYTE &ED,&6C
+post_tm2'' jr post_tm2' ; neg*
+          ex af,af:jp ti_retn ; *
+          jp ti_im_0:nop ;*
+          ex af,af:jp ti_rld
+;ed 70
+          ex af,af:jp ti_in
+          ex af,af:xor a:jr ti_out'
+          sbc hl,sp
+post_tm4'' jr post_tm4'
+          ex af,af:jp ti_ld_inn_sp
+      BYTE &ED,&74:jr post_tm2'' ; neg*
+          ex af,af:jp ti_retn ;* 
+          ex af,af:jp ti_im_1 ; *
+          ex af,af:jp ti_ed_nop
+;ed 78
+          ex af,af:jp ti_in
+          exx:jp ti_out_c_a
+          adc hl,sp:jr post_tm4''
+          ex af,af:jp ti_ld_sp_inn
+      BYTE &ED,&7C:jr post_tm2'' ; neg *
+          ex af,af:jp ti_retn ; *
+          ex af,af:jp ti_im_2 ; *
+          ex af,af:jp ti_ed_nop
+m
+      IF $ AND &FF
+ !! error align
+      END
+; ------------------------------
+ti_out'   jp ti_out
+
+post_tm5
+          exx
+          ex af,af
+          jp tm5'_eoi_af
+
+;--------------------------------
+ti_rld
+; We cannot execute "rld" when hl in page c000 (bug #18e)
+; Do it by hand in any case (less code, only one code path)
+      IF need_room
+; factorize mode rld/rrd
+      END
+
+          ld ix,$+7:jp ld_a_hl_emul
+          ld ixl,a
+          BK_BASE()
+          dec hl
+          ld (tr_save_idx),hl
+          ld hl,tr_save_tmp
+          ld a,ixl
+          ld (hl),a
+
+          ex af,af
+          rld
+          jr rld_rrd_com
+
+ti_rrd
+; Cf ti_rld
+          ld ix,$+7:jp ld_a_hl_emul
+          ld ixl,a
+          BK_BASE()
+          dec hl
+          ld (tr_save_idx),hl
+          ld hl,tr_save_tmp
+          ld a,ixl
+          ld (hl),a
+          ex af,af
+          rrd
+rld_rrd_com
+          ex af,af
+;put back transformed value
+          ld a,(hl)
+          ld hl,(tr_save_idx)
+          ld ixl,a
+          BK_USER()
+          ld a,ixl
+          ld (hl),a
+          jp tm5'_eoi_de
+
+ld_a_hl_emul
+; ld a,(hl')  with EXX already connect
+      IF need_room
+; factorize (hmmm... use ld_hl_or_idx as we know it's not idx?)
+      END
+          ld a,l:exx:ld e,a:exx
+          ld a,h:exx
+          jp _ld_com
+
+
+;--------------------------------
+
+ed_routines2
+      WORD ti_ldi
+      WORD ti_cpi
+      WORD ti_ini
+      WORD ti_outi
+      WORD ti_ldir
+      WORD ti_cpir
+      WORD ti_inir
+      WORD ti_outir
+      WORD ti_ldd
+      WORD ti_cpd
+      WORD ti_ind
+      WORD ti_outd
+      WORD ti_lddr
+      WORD ti_cpdr
+      WORD ti_indr
+      WORD ti_outdr
+
+      IF $-1/&0100 - ed_routines2/&0100
+ !! issue confinement
+      END
+
+ldir_byhand
+          ld a,h
+ldir_byhand_
+          exx
+          ld h,a
+          exx
+          ld a,l
+
+      IF todo
+;check that. doesn't work for hl in page c000?
+;also, are we copying the right byte? 
+      END
+          ld ixl,c
+          ld ixh,b
+          ld bc,1
+          ex af,af
+          ldi           ;to trigger flags
+          ex af,af
+          dec de
+          ld c,ixl
+          ld b,ixh
+
+          exx
+          ld l,a
+          ld ix,$+7
+ldir_lp
+          jp ld_a_hl
+
+          exx
+          ld (de),a
+          inc de
+          dec bc
+          ld a,c
+          or b
+          exx
+          jr nz,ldir_lp
+
+          ld a,l:exx:ld l,a:exx
+          ld a,h:exx:ld h,a:exx
+          jp tm5'_eoi_de
+
+
+ti_ldir
+          ld ix,$+7:jp count_reps_6
+
+;if source zone is ok, lets ldir
+          exx
+          ld a,h
+          cp &C0
+          jr nc,ldir_byhand_
+          ld a,l
+          add c
+          ld a,h
+          adc b
+          jr c,ldir_byhand
+          cp &C0
+          jr nc,ldir_byhand ;no byhand needed if hl+bc=$C000, nevermind
+
+          ex af,af
+          ldir
+          exx
+          jp tm5'_eoi_de_af
+
+ti_ldi
+          exx:ld a,l:exx:ld l,a
+          exx:ld a,h
+          ex af,af
+          ldi           ;may be wrong source : only for flags
+          dec de
+          ex af,af
+          exx
+          ld h,a
+          ld ix,$+7:jp ld_a_hl
+          exx
+          ld (de),a
+          inc de
+          exx
+          jp tm5'_eoi_de
+
+
+cpir_byhand
+          ld a,h
+cpir_byhand_
+          exx
+          ld h,a
+          exx
+          ld a,l
+;
+          exx
+          ld l,a
+          ld ix,$+7
+cpir_lp
+          jp ld_a_hl
+
+          exx
+          ld h,bytes_store/&0100
+          ld l,a
+          ex af,af
+          cpi
+          jr z,cpir_done
+          jp po,cpir_done
+          ex af,af
+          exx
+          jr cpir_lp
+
+cpir_done
+cpdr_done
+cpi_done
+cpd_done
+          ex af,af
+          exx:ld a,l:exx:ld l,a
+          exx:ld a,h:exx:ld h,a
+          exx
+          ex de,hl
+          jp tm4'_eoi
+
+
+ti_cpir
+;if source zone is ok, lets cpir
+          ld ix,$+7:jp count_reps_6
+
+          exx
+          ld a,h
+          cp &C0
+          jr nc,cpir_byhand_
+          ld a,l
+          add c
+          ld a,h
+          adc b
+          jr c,cpir_byhand
+          cp &C0
+          jr nc,cpir_byhand ;no byhand needed if hl+bc=$C000, nevermind
+
+          ex af,af
+          cpir
+          exx
+          jp tm4_eoi_de_af
+
+ti_cpi
+          exx
+          ld a,l
+          exx
+          ld l,a
+          exx
+          ld a,h
+          exx
+          ld h,a
+          ld ix,$+7
+          jp ld_a_hl
+          exx
+          ld h,bytes_store/&0100
+          ld l,a
+          ex af,af
+          cpi
+          jr cpi_done
+
+
+ti_lddr
+;pas de version rapide (fleme)
+          ld ix,$+7:jp count_reps_6
+
+          exx:ld a,h:exx:ld h,a
+          exx:ld a,l
+
+          ld ixl,c
+          ld ixh,b
+          ld bc,1
+          ex af,af
+          ldd           ;to trigger flags
+          ex af,af
+          inc de
+          ld c,ixl
+          ld b,ixh
+
+          exx
+          ld l,a
+          ld ix,$+7
+lddr_lp
+          jp ld_a_hl
+          dec hl
+          dec hl
+
+          exx
+          ld (de),a
+          dec de
+          dec bc
+          ld a,c
+          or b
+          exx
+          jr nz,lddr_lp
+
+          ld a,l:exx:ld l,a:exx
+          ld a,h:exx:ld h,a:exx
+          jp tm5'_eoi_de
+
+ti_ldd
+          exx
+          ld a,l
+          exx
+          ld l,a
+          exx
+          ld a,h
+          ex af,af
+          ldd           ;may be wrong source : only for flags
+          inc de
+          ex af,af
+          exx
+          ld h,a
+          ld ix,$+7
+          jp ld_a_hl
+          dec hl
+          dec hl
+          exx
+          ld (de),a
+          dec de
+          exx
+          jp tm5'_eoi_de
+
+reset_tm
+          ld hl,0
+          ld (reg_tm),hl
+          ld (reg_tm+2),hl
+          ret
+
+;----- Rountine to install -----------------------------------
+
+routine_ld_a_hl
+      ORG wk_routine_ld_a_hl,$$
+rahl_rmr  ld a,&8E
+          out (c),a
+          ld b,&DF
+rahl_rom  ld a,0
+          out (c),a
+          ld a,(hl)
+; Mustn't change any register but B!
+          ld r,a        ; Saved here, got back in ret_routine_ld_a_hl
+rahl_wk_rom ld a,0
+          out (c),a
+          ld b,&7F
+rahl_wk_rmr ld a,&86
+          out (c),a
+          jp ret_routine_ld_a_hl
+rahl_size = $-wk_routine_ld_a_hl
+saveobj = $$            ; to rewind after "skip"
+      SKIP tr_vars-$
+
+      ORG routine_ld_a_hl + rahl_size,saveobj
+
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+
+; codesize = $$-code   !! Too big. why?
+codesize = $-codedest
+
+;-----------------------------------------
+
+      IF 1-inRom
+
+      ORG extorg
+
+display_ret
+          pop af
+          ret
+
+display_text_nt
+          push af
+display_text_nt_lp
+          ld a,(hl)
+          inc hl
+          or a
+          jr z,display_ret
+          call &BB5A
+          jr display_text_nt_lp
+
+display_text_sized
+;hl=text b=length
+          ld a,(hl)
+          inc hl
+          push bc
+          push de
+          push hl
+          call &BB5D
+          pop hl
+          pop de
+          pop bc
+          djnz display_text_sized
+          ret
+
+display_text
+;inline. HL conserve
+          ex (sp),hl
+          call display_text_nt
+          ex (sp),hl
+          ret
+
+display_hexa_hl
+          push af
+          ld a,h
+          call display_hexa_a
+          ld a,l
+          call display_hexa_a
+          pop af
+          ret
+
+display_hexa_a
+          push af
+          push af
+          rrca
+          rrca
+          rrca
+          rrca
+          call display_hexa_q
+          pop af
+          call display_hexa_q
+          pop af
+          ret
+
+display_hexa_q
+;
+          and &0F
+          or a
+          daa
+          add &F0
+          adc &40
+          jp &BB5A
+
+compare_regs
+;in: B=correction R
+   ; C=correction tm
+   ; hl=expected ref
+
+;--- machine time      
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld a,e:or d:jr z,.notm ; Don't compare for e.g. call &bb5a
+
+          push hl
+          push bc
+          ld hl,(reg_tm)
+          xor a:ld b,a:sbc hl,bc
+          or a:sbc hl,de:add hl,de:call nz,fail
+          ld hl,(reg_tm+2):ld a,l:or h:call nz,&BE00 ; MSW must be 0
+          pop bc
+          pop hl
+.notm
+;--- reg R
+          ld de,rz80+3
+
+      IF track_r
+          ld a,(hl)     ;ref R
+          or a
+          jr z,cregs_no_r
+
+          ld a,(reg_r)
+          sub b
+          cp (hl)
+          call nz,error
+      END
+
+error = &BE00
+
+.cregs_no_r
+          inc hl
+          ld bc,23
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,error
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+
+          ret
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,error
+
+          ld a,(de)
+          or a
+          ret z
+          ld a,(hl)
+          or a
+          ret z
+          inc hl
+          inc de
+          jr compare_ntstr
+
+compare_text
+;do not display error : caller will display whole string
+          ld a,(de)
+          inc de
+          cp (hl)
+          inc hl
+          ret nz
+          or a
+          ret z
+          jr compare_text
+
+
+;-----------------------------------------
+
+
+testsingle
+;fail !!
+          ld (ov_savesp),sp
+          ld bc,&7F00+work_bank_nrt
+          out (c),c
+
+          ld c,12
+          call &B90F
+          push bc
+
+          call mon_init
+          ld hl,sptest
+          ld (reg_sp),hl
+          ld hl,tf_code
+          ld (reg_pc),hl
+          ld a,&C0
+          ld (reg_mmr),a
+          ld a,&8C
+          ld (reg_rmr),a
+
+          ld hl,tf_code_
+
+          di
+          exx
+          push bc
+          exx
+          ex af,af
+          push af
+
+          call mon_trace_to_pc
+
+          pop af
+          ex af,af
+          pop bc
+          exx
+
+          pop bc
+          call &B918
+
+          ret
+
+tf_code
+          ld a,"9"
+          call &BB5A
+tf_code_
+
+
+testtrace
+          ld hl,data_test
+;          ld hl,tst5
+          ld de,orgtest
+          call test_trace_com
+          ret
+
+testtrace_3xxx
+; Like testtrace, but out of bank for test C3/C1 etc
+          ld hl,data_test_out_ok_bank
+      IF orgtest' AND &C000 - &4000:ELSE
+ !! cannot be in bank
+      END
+          ld de,orgtest'
+          call test_trace_com
+          ret
+
+test_trace_com
+; IN: HL: tests (code + ref)
+    ; DE: where to install code under test (PC)
+          ld (ov_savesp),sp
+
+          push hl
+          call nrtinit
+          call mon_init
+          pop hl
+tt_lp
+          ld c,(hl):inc hl
+          ld b,(hl)
+          ld a,b:or c
+          jr z,tt_end
+
+          ld (nrt_cur_test),hl
+          ld (reg_pc),de
+          call display_text
+      BYTE 13,10
+      BYTE "test:"
+      BYTE 0
+          call display_hexa_hl
+
+          inc hl
+          push de
+          push bc
+          ld bc,&7FC0
+          out (c),c
+          pop bc
+          ldir
+
+          push hl
+          push de
+
+;reset regs
+          ld a,i
+          ld b,&7F
+          out (c),a
+      IF reg_pc - rz80
+ !! review that: PC will be overwritten
+      END
+          ld hl,test_regs
+          ld de,rz80+2
+          ld bc,26-2
+          ldir
+          ld a,&C0
+          ld (reg_mmr),a
+          ld a,&8C
+          ld (reg_rmr),a
+
+          pop hl        ;stop adr
+          push hl
+
+          call nrt_mon_trace_to_pc
+
+          pop de
+          ld hl,(reg_pc)
+          ld a,&82
+          or a:sbc hl,de:add hl,de
+          call nz,error
+
+          pop hl
+          ld bc,0
+          call compare_regs
+
+          pop de
+          jr tt_lp
+
+tt_end
+          jp test_end
+
+
+;-----------------------------------------
+;test 2 : next
+
+testnext
+; Check trace returns once subroutine return
+; (aka fast trace of "call toto")
+          ld (ov_savesp),sp
+
+          ld hl,data_calltest
+  ;compense r+3 and tm+11 (call / save sp) 
+          ld bc,&0300+11
+          call testnext_com
+          ret
+
+testnext'
+; Same for routines without ret (we add a footer instead)
+          ld (ov_savesp),sp
+
+          ld hl,data_test'
+  ;compense r+8 and tm+26 (header+footer) 
+          ld bc,&0800+26
+          call testnext_com
+          ret
+
+
+testnext_com
+;in: bc= correction r/tm
+          push bc:push hl
+          call nrtinit
+          call mon_init
+          pop hl:pop bc
+tnt_lp
+          push bc
+          ld c,(hl):inc hl
+          ld b,(hl)
+          ld a,b:or c
+          jp z,.tnt_end
+
+          ld (nrt_cur_test),hl
+          call display_text
+      BYTE 13,10
+      BYTE "test:"
+      BYTE 0
+          call display_hexa_hl
+
+          push bc
+          inc hl
+          ld bc,&7FC0
+          out (c),c
+
+          push hl
+          ld hl,tcallamo
+          ld de,orgcalltest
+          ld bc,7
+          ldir
+          pop hl
+          pop bc
+          ldir
+
+          push hl
+          ld hl,tcallexit
+          ld bc,9
+          ldir
+
+;marker. mustn't change, unless explicitly
+tstsp1 = &CAFE
+          ld hl,tstsp1:ld (tstsavesp1),hl
+
+;reset regs
+          ld a,i
+          ld b,&7F
+          out (c),a
+          ld hl,test_regs
+          ld de,rz80+2
+          ld bc,24
+          ldir
+          ld hl,orgcalltest
+          ld (reg_pc),hl
+          ld hl,(reg_sp) ;compensate call
+          inc hl
+          inc hl
+          ld (reg_sp),hl
+          ld hl,&7FC0
+          ld (reg_mmr),hl
+          ld a,&8C
+          ld (reg_rmr),a
+          call nrt_mon_trace_next
+
+          ld hl,(reg_pc)
+          ld de,orgcalltest+3
+          or a
+          sbc hl,de
+          add hl,de
+          ld a,&84
+          call nz,error
+
+          ld bc,&7FC0
+          out (c),c
+          ld hl,(tstsavesp1)
+          ld bc,&7F00+work_bank_nrt
+          out (c),c
+          ld (reg_sp),hl
+
+          pop hl
+          pop bc
+          push bc
+          call compare_regs
+          pop bc
+          jp tnt_lp
+
+.tnt_end
+          pop bc
+
+test_end
+          ld c,1
+          call &B90F
+
+          ld bc,&7FC0
+          out (c),c
+
+          call display_text
+      BYTE "succes"
+      BYTE 0
+          ret
+
+
+tcallamo
+          call orgcalltest+3 ;line below !
+          ld (tstsavesp0),sp
+tcallexit
+          ld (tstsavesp1),sp
+          ld sp,(tstsavesp0)
+          ret
+
+      MACRO TEST_REF x
+ ; encode size code
+      WORD x-$-2        ;-2: don't count WORD itself
+      ENDM
+
+      MACRO TM_REF n
+; To test tm counting
+; We don't test > 65535 nops
+      WORD n
+      ENDM
+
+data_calltest
+      IF 1
+          TEST_REF(.dct0)
+          ret
+.dct0
+          TM_REF(3)
+      BYTE 1+1,2
+      BYTE 3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,22
+      WORD tstsp1
+
+          TEST_REF(dct1)
+;test tracking adr ret
+          ld hl,&AABB
+          ld (tstsavesp1),hl ;since tcallexit si shortcut
+          pop hl
+          ld a,&66
+          jp hl
+dct1
+          TM_REF(14)
+      BYTE 5+1,2
+      BYTE 3,4,5,6,7,8,9,10,11,12,13,14
+      WORD orgcalltest+3
+      BYTE 17,18,19,20,21,&66
+      WORD &AABB
+
+dtst2
+;reproduit helper ffta2
+          TEST_REF(dct2)
+          ld hl,&BBCC
+          ld (tstsavesp1),hl
+          call orgtest+12
+          ld l,&EE
+          ret
+;orgtest+12
+          pop ix
+          pop hl        ;initial call
+          ex de,hl
+          push de
+          jp ix
+dct2
+          TM_REF(32)
+      BYTE 12+1,2
+      BYTE 3,4
+      WORD orgtest+9
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE &EE,18
+      WORD orgcalltest+3
+      BYTE 19,20
+      BYTE 21,22
+      WORD &BBCC
+
+
+;inception++
+          TEST_REF(dct3)
+          ld hl,&CCDD
+          ld (tstsavesp1),hl
+          call orgtest+11
+          inc h
+          ret
+;orgtest+11
+          call orgtest+17
+          ld h,&EE
+          ret
+;orgtest+17
+          pop ix
+          pop hl
+          ex de,hl
+          push de
+          jp ix
+dct3
+          TM_REF(41)
+      BYTE 15+1,2
+      BYTE 3,4
+      WORD orgtest+14
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 17,&EF
+      WORD orgtest+9
+      BYTE 19,20,&A9,22
+      WORD &CCDD
+
+dtst4
+          TEST_REF(dct4)
+          ld hl,&DDEE
+          ld (tstsavesp1),hl
+
+          ld ix,0
+          add ix,sp
+          ex (sp),iy
+          ld l,(ix+0)
+          ld h,(ix+1)
+          pop bc        ;'return' not detected if sp too low
+          jp iy
+dct4
+          TM_REF(38)
+      BYTE 15+1,2
+      WORD orgcalltest+3
+      WORD sptest
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 3,4,17,18,3,4,&2C,22
+      WORD &DDEE
+
+dtst5
+          TEST_REF(dct5)
+          ld hl,&EEFF
+          ld (tstsavesp1),hl
+
+          pop hl
+          call orgtest+11 ;sp=sp0, but mustn't stop here
+          jp hl
+;orgtest+11
+          push hl
+          inc hl
+          pop hl
+          ret
+
+dct5
+          TM_REF(29)
+      BYTE 9+1,2
+      BYTE 3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD orgcalltest+3
+      BYTE 17,18
+      BYTE 19,20,21,22
+      WORD &EEFF
+
+dtst28
+; Test read in LROM + rst
+; Like tst28, for testnext
+; Prerequisite for dtst6 (which RST in lower ROM)
+          TEST_REF(.dt28)
+          ld hl,&1234:ld (tstsavesp1),hl
+          ld bc,&7F88:out (c),c ; LROM, mode 0
+          ld de,(3)     ; should have ed,49
+          ld a,(&3B)    ; expect ret here for rest of the rest
+          cp &C9
+          jr nz,.fin
+          ld hl,&CAFE   ; code path marker
+          call &3B
+          ld a,42       ; another marker
+.fin
+          ld bc,&7F8C:out (c),c
+          ret
+.dt28
+          TM_REF(52)
+      BYTE 18+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &CAFE,&49ED,&7F8C:BYTE &4A,42
+      WORD &1234
+
+dtst6_0
+          TEST_REF(dct6_0)
+          ld hl,&CAFE:ld (tstsavesp1),hl
+          call orgtest+10 ;sp=sp0, but mustn't stop here
+          ret
+;orgtest+10
+          exx
+          ld bc,&7F8C
+          exx
+          xor a
+          ex af,af
+          pop ix
+          pop hl        ;initial call
+          ld a,33
+          call orgtest+9 ; just ret
+          push hl
+          jp ix
+dct6_0
+          TM_REF(46)
+      BYTE 18+1,2
+      BYTE 3,4
+      WORD orgtest+9    ; ix
+      BYTE 7,8,9,10,&8C,&7F,&44,0
+      WORD orgcalltest+3 ; hl
+      BYTE 17,18
+      BYTE 19,20,&0D,33
+      WORD &CAFE
+
+
+dtst6
+          TEST_REF(dct6)
+          ld hl,&EEFF
+          ld (tstsavesp1),hl
+
+          call orgtest+10 ;sp=sp0, but mustn't stop here
+          ret
+;orgtest+10
+          exx
+          ld bc,&7F8C
+          exx
+          xor a
+          ex af,af
+          pop ix
+          pop hl        ;initial call
+          ld a,33
+          call &BB5A
+          push hl
+          jp ix
+dct6
+      WORD 0            ; don't check tm
+      BYTE 0,2
+      BYTE 3,4
+      WORD orgtest+9
+      BYTE &5C,&BB,&FE,&13,&8C,&7F,&88,&8C
+      WORD orgcalltest+3
+      BYTE 17,18
+      BYTE 19,20,&0D,33
+      WORD &EEFF
+
+          TEST_REF(dct7)
+;test tracking adr ret
+          ld hl,&AABB
+          ld (tstsavesp1),hl ;since tcallexit si shortcut
+          pop iy
+          jp iy
+dct7
+          TM_REF(14)
+      BYTE 6+1,2
+      WORD orgcalltest+3
+      BYTE 5,6,7,8,9,10,11,12,13,14
+      WORD &AABB
+      BYTE 17,18,19,20,21,22
+      WORD &AABB
+      END
+
+          TEST_REF(dct#1eb)
+;ret when SP in page c000
+          ld hl,0:add hl,sp ; must save SP for test mechanism
+          ld sp,0
+          call orgtest+11
+          ld sp,hl
+          ret
+dct#1eb
+          TM_REF(22)
+      BYTE 7+1,2,3,4,5,6,7,8,9,10,11,12,13,14
+      WORD sptest:BYTE 17,18,19,20,&2C,22
+      WORD &CAFE
+
+      WORD 0            ; end of tests
+
+data_test
+      IF 1
+; When testing BRK/CALL &be00, trace exit:
+; footer won't be executed: cannot test via testnext'
+          TEST_REF(.dt0)
+          nop
+      BRK               ; bug#05 Should not follow it (and no INC_R)
+.dt0
+          TM_REF(1)
+      BYTE 1+1,2,3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,22
+      WORD sptest
+
+          TEST_REF(.dt00)
+          nop
+          call &BE00    ; bug#05
+.dt00
+          TM_REF(1)
+      BYTE 2,2,3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,22
+      WORD sptest
+
+; ----- Manipulating r: we can only check via testtrace,
+                      ; where no correction is made.
+
+; Exercise R=0 at exit via BRK
+          TEST_REF(.dt0')
+          xor a
+          ld r,a
+      BRK
+.dt0'
+          TM_REF(4)
+      BYTE 0,2,3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,&44,0
+      WORD sptest
+
+tst2
+          TEST_REF(dt2)
+          ld bc,orgtest+8-&0101
+          inc bc
+          rlca          ;(now 44)
+          inc b
+          ld (bc),a
+          ld b,0        ;replaced by 44
+          rlca          ;88
+          rr b          ;b:22
+          set 7,a       ;216  
+          ld c,a        ;c:216 %1101100
+          di
+          scf
+          ld r,a
+          ld a,r        ; F: S1 Z0 50 H0 31 PV0 (di) N0 C1  
+          push af:pop de ; e:%10001001 d:216+2
+          ei
+          or a
+          ld a,126      ; will make r wrap to 0
+          ld r,a
+          ld r,a        ; yep, twice
+          ld a,r        ; F: S0 Z1 50 H0 30 PV1 (ei) N0 C0  %01000100
+          nop
+dt2
+          TM_REF(46)
+      BYTE 1,2,3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,%10001001,218,216,22,%01000100,0
+      WORD sptest
+
+tst20
+          TEST_REF(dt20)
+
+          ld hl,&C000
+          ld (hl),&F0
+          res 4,(hl)
+          ld iy,&C001
+          set 3,(iy-1)
+          ld e,(hl)
+
+      BYTE &FD,&CB,&FF,&02 ;ld d,rlc(iy-1)
+      BYTE &FD,&CB,&FF,&ED ;ld l,set 5,(iy-1)
+
+          ld bc,&7F80
+          out (c),c
+          ld a,(iy+0)
+      BYTE &FD,&CB,&00,&09 ;ld c,rrca(iy)
+          rrca
+          xor c         ;should be 0
+          ld h,a
+          ld (iy+0),&77
+
+      BYTE &FD,&CB,&00,&70 ;<ld b,>bit 6,(iy)   :no change
+
+          ld c,&8C
+          out (c),c
+          ld ix,(&C000)
+          ld iyl,&55
+
+          ei
+          ld a,&42
+          ld i,a
+          sub &43
+          ld a,i
+          ex af,af
+          di
+          ld a,&FF
+      IF track_r
+          ld r,a
+          ld a,r
+          ld r,a        ; last instr.
+      END
+dt20
+      IF track_r
+          TM_REF(110)
+      BYTE &81          ; r wrapping mod 128
+      ELSE
+          TM_REF(0):BYTE 0
+      END
+      BYTE &42,&55,&C0,&F1,&77
+      BYTE 7,8,9,10,11,12,&05,&42 ;
+      BYTE &F1,0,&E8,&D1,&8C,&7F
+      IF track_r
+      BYTE &81,&81
+      ELSE
+      BYTE &0D,&FF
+      END
+      WORD sptest
+
+;Similar to /tst5/ with R = &7e before dummy &fd
+;to exercise DEC_R when IYL reach &80
+          TEST_REF(dt5')
+          ld a,&7E
+          ld r,a
+          2 ** BYTE &FD
+          exx
+
+dt5'
+          TM_REF(8)
+      BYTE 0+1,2,3,4,5,6 ; Hum, why 0?
+      BYTE 15,16,17,18,19,20,13,14
+      BYTE 7,8,9,10,11,12,21,&7E
+      WORD sptest
+
+;Same with R = &ff before dummy &fd
+;to exercise DEC_R when IYL reaches 0
+          TEST_REF(dt5'')
+          ld a,&FE
+          ld r,a
+          2 ** BYTE &FD
+          exx
+dt5''
+          TM_REF(8)
+      BYTE &80+1,2,3,4,5,6
+      BYTE 15,16,17,18,19,20,13,14
+      BYTE 7,8,9,10,11,12,21,&FE
+      WORD sptest
+
+          ANCHOR(bug#1c6)
+          TEST_REF(.dt30)
+          xor a
+          ld r,a
+          128 ** neg
+.dt30
+          TM_REF(260)
+      BYTE 0,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,&42,0
+      WORD sptest
+
+          ANCHOR(bug#1c6)
+          TEST_REF(dt31)
+          ld a,&FE
+          ld r,a
+          neg
+dt31
+          TM_REF(7)
+      BYTE &80,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,&13,&02
+      WORD sptest
+
+          ANCHOR(bug#1c6)
+          TEST_REF(dt32)
+          ld a,&FE
+          ld r,a
+          srl a
+dt32
+          TM_REF(7)
+      BYTE &80,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,&28,&7F
+      WORD sptest
+
+          ANCHOR(bug#195)
+          TEST_REF(dt33)
+          ld a,&7E
+          ld r,a
+          130 ** BYTE &DD
+          di
+dt33
+          TM_REF(136)
+      BYTE &01,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,&7E
+      WORD sptest
+
+          ANCHOR(bug#195)
+          TEST_REF(dt34)
+          xor a
+          ld r,a
+          127 ** neg
+          inc iyl
+          di
+dt34
+          TM_REF(261)
+      BYTE &01,2,4,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,0,0
+      WORD sptest
+
+      END
+
+          TEST_REF(.bug#1f5)
+          ld bc,255
+          ld e,l:ld d,h
+          ldir
+          xor a         ; remove F flakiness (since depends on mem contents)
+.bug#1f5
+          TM_REF(6 + 255*6 - 1)
+      BYTE 4-2+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &110E,&110E,0:BYTE &44,0
+      WORD sptest
+
+          TEST_REF(.bug#1f5')
+          ld bc,&0200
+          ld e,l:ld d,h
+          ldir
+          xor a
+.bug#1f5'
+          TM_REF(6 + &0200*6 - 1)
+      BYTE 4+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &120F,&120F,0:BYTE &44,0
+      WORD sptest
+
+          TEST_REF(.bug#1f5'')
+;with R
+          ld bc,255
+          ld e,l:ld d,h
+          ld a,&7C:ld r,a
+          ldir
+          xor a         ; remove F flakiness (since depends on mem contents)
+.bug#1f5''
+          TM_REF(11 + 255*6 - 1)
+      BYTE &7C-2+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &110E,&110E,0:BYTE &44,0
+      WORD sptest
+
+
+data_test'
+; !!! Those tests cannot use LD R,A (mess with auto-correction)
+
+      IF 1
+;trace single nop !
+          TEST_REF(dt1)
+          nop
+dt1
+          TM_REF(1)
+      BYTE 1+1,2,3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,22
+      WORD sptest
+
+          TEST_REF(dt1')
+;!! a bit brittle. rely on high impedance.
+      IF todo
+; we shouldn't execute 'in' anyway!
+      END
+          ld bc,&FFFF:in a,(c)
+          ld hl,&CAFE:ld (&C000),hl
+          ld de,(&C000)
+.dt1'
+          TM_REF(21)
+      BYTE 7+1,2,3,4,5,6,7,8,9,10,11,12,13,14
+      WORD &CAFE,&CAFE,&FFFF:BYTE &AD,&FF
+      WORD sptest
+
+; - in a,(n) musn't change pc
+; - ld a,i flag setting
+   ; - musn't change carry (bug #193)
+; - rld/rrd are ok (bug #
+          TEST_REF(.dt2)
+          ld b,0:djnz $
+          ld a,&FF:in a,(&80)
+          ld hl,&3412:ld (&C000),hl
+          ld hl,&C000
+          ld a,&56:rld:ld c,a
+          inc hl
+          ld a,&78:rrd:ld b,a
+          ld hl,(&C000)
+          xor a:scf:di:ld i,a:ld a,i ; F: S0 Z1 50 H0 30 PV0 (di) N0 C1
+          push af:pop de ;d=0 e=%01000001     
+          ld a,&FF:or a ; change flags
+          ei:ld a,i     ; F: S0 Z1 50 H0 30 PV1 (ei) N0 C0 
+.dt2
+          TM_REF(63 + &0400)
+      BYTE 30+1,0
+      BYTE 3,4,5,6,7,8,9,10,11,12,13,14
+      BYTE &26,&83,&41,0,&51,&74,&44,0
+      WORD sptest
+
+
+          TEST_REF(dt3)
+          ld bc,orgtest
+          ld a,(bc)
+          ex af,af
+          ld a,55
+          ld bc,&AABB
+          ex af,af
+dt3
+          TM_REF(12)
+      BYTE 7,2,3,4,5,6,7,8,9,10,11,12,13,55
+      BYTE 15,16,17,18,&BB,&AA,21,1
+      WORD sptest
+
+          TEST_REF(dt4)
+          ld bc,&AABB
+          exx
+          exx
+          exx
+dt4
+          TM_REF(6)
+      BYTE 4+1,2,3,4,5,6
+      BYTE 15,16,17,18,&BB,&AA,13,14
+      BYTE 7,8,9,10,11,12,21,22
+      WORD sptest
+
+tst5
+          TEST_REF(dt5)
+          ld ix,&CCDD
+          ld hl,(orgtest)
+          ld iyl,&EE
+      BYTE &FD
+          exx
+; bug#18d wrong pop when sp=&ffff
+; Note: cannot reproduce in dev, as rom isn't connected
+          ld hl,&C913
+          ld sp,&01
+          push hl
+          pop bc
+; sanity: still ok at &bfff
+          ld sp,&C001
+          push hl
+          pop de
+
+dt5
+          TM_REF(37)
+      BYTE 14+1,2,&EE,4,&DD,&CC
+      BYTE &DD,&21,17,18,19,20,13,14
+          3 ** WORD &C913:BYTE 21,22
+      WORD &C001
+
+
+          TEST_REF(dt6)
+          ld c,1
+          or a
+          jr nc,$+3     ;skip
+          inc c
+          jr c,$+3
+          dec c         ;0
+          jr z,$-1      ;-1 (jump once)
+      BYTE &DD
+          jr $+3
+          dec c
+
+dt6
+          TM_REF(19)
+      BYTE 10+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE 15,16,17,18,&FF,20,&BA,22
+      WORD sptest
+
+;
+tst7
+          TEST_REF(dt7)
+
+      BYTE &DD,&FD,&DD
+          ld bc,&0300
+          ld hl,&0304
+          ld ix,&06
+          ld (&C000),hl
+          ld (&C002),ix
+          ld d,&C0
+      BYTE &DD,&FD,&DD
+          ld e,h
+          xor a
+.dt7t
+          ld c,a
+          ld a,(de)
+          inc e
+          add c
+          djnz .dt7t    ;a=4+3+6 c=4+3
+dt7
+          TM_REF(31 + 9*3 - 1)
+      BYTE 31+1,2,3,4,&06,&00
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE &04,&03,&03,&C0,7,0,8,13
+      WORD sptest
+
+tst8
+          TEST_REF(dt8)
+          ld sp,orgtest+2
+          ld bc,&BBCC
+          push bc
+          dec bc
+          pop de
+          ld hl,(orgtest)
+          exx
+          ld hl,&8899
+          ld (&C000),hl
+          ld bc,&6677
+          ld (&C002),bc
+          ld iy,&C000
+          ld sp,iy
+          dec sp
+          pop bc
+          ld a,(&BFFF)
+          sub c
+          ld c,a
+          pop af
+dt8
+          TM_REF(59)
+      BYTE 22+1,2,&00,&C0,5,6
+      BYTE &CC,&BB,&CC,&BB,&CB,&BB,13,14
+      WORD &8899,&0A09,&9900,&7788
+      WORD &C003
+
+;
+          TEST_REF(dt9)
+dtt9
+      ORG orgtest,$$
+          ld a,6
+          or a
+          call c,.t9_fail
+          call nc,.t9_sub
+          jp c,.t9_ok
+.t9_sub
+          add 254
+          ret nc
+          inc a
+          ret
+.t9_fail
+          ld a,66
+.t9_ok
+
+dt9_  = $-orgtest
+
+      ORG dtt9+dt9_
+dt9
+          TM_REF(22)
+
+      BYTE 10,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE 15,16,17,18,19,20,&01,5
+      WORD sptest
+
+
+;swing
+          TEST_REF(dt10)
+
+          ld de,&C006
+          ex de,hl
+          ld (hl),&AA
+          ld bc,&BBCC
+          push bc
+          srl c
+          ex (sp),hl
+
+          set 0,l
+          ld e,l
+          ld d,h
+          pop af
+          ex af,af
+          ld a,4
+          ld hl,&C006
+          add (hl)
+dt10
+          TM_REF(37)
+      BYTE 18,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,&06,&C0 ;
+      BYTE &06,&C0,&CD,&BB,&66,&BB,&A8,&AE
+      WORD sptest
+
+;
+tst11
+
+          TEST_REF(dt11)
+
+          ld hl,&8899
+      BYTE &ED,&63,&10,&C0 ; LD   ($C010),HL
+          ld hl,&C010
+          ld de,&C012
+          ld bc,2
+          ldir          ; 29us
+          ldi
+          exx
+          ex af,af
+          ld hl,orgtest
+          ld de,&C020
+          ld bc,2
+          ldir          ; +27us
+          ret pe
+          ld bc,(&C013)
+          ld sp,(&C020) ; +14us
+dt11
+          TM_REF(70)
+      BYTE 26+1,2,3,4,5,6
+      BYTE &13,&C0,&15,&C0,&FF,&FF,&05,22 ;
+      WORD orgtest+2,&C022,&9988:BYTE &21,14
+      WORD &9921
+
+          TEST_REF(dt12)
+          ld de,&C9C9
+          ld (0),de
+          ld bc,&7F82
+          out (c),c
+          ld bc,&DF81
+          out (c),c
+          ld hl,(0)
+          ld de,(&C000)
+          ld bc,&7F8E   ;necessairy when test in 0000-3FFF
+          out (c),c
+dt12
+          TM_REF(41)
+      BYTE 15+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE &01,&89,&80,&01,&8E,&7F,21,22
+      WORD sptest
+
+;
+          TEST_REF(dt13)
+          ld bc,&7F8D
+          out (c),c
+          ld a,1
+          ld (0),a
+          ld ix,1
+          ld (ix-1),&C9
+          ld (ix+0),c
+          ld ix,(0)
+          rst 0
+dt13
+          TM_REF(41)
+      BYTE 15+1,2,3,4,&C9,&8D
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE 15,16,17,18,&8D,&7F,21,1
+      WORD sptest
+
+          TEST_REF(dt14)
+          ld hl,&C028
+          ld (hl),a
+          inc l
+          ld (hl),c
+          inc (hl)
+          inc l
+          ld (hl),l
+          inc l
+          ld (hl),h
+          ld bc,(&C028)
+          ld ix,(&C02A) ; R+= 13
+          ld iy,&BFFF
+          ld (iy+&2D),14
+          ld (iy+&2E),l
+          ld de,(&C02C) ; R+=8
+          exx
+          ld hl,&C028
+          ld c,(hl)
+          inc l
+          ld b,(hl)
+          inc l
+          ld e,(hl)
+          inc l
+          ld l,(hl)     ; R+=9
+          ld h,(iy+&2D)
+          ld a,(iy+&2E)
+dt14
+          TM_REF(75)
+      BYTE 34+1,2,&FF,&BF,&2A,&C0
+      BYTE &2B,&C0,14,&2B,22,20,13,14 ;
+      BYTE &C0,14,&2A,10,22,20,&29,&2B
+      WORD sptest
+
+;
+          TEST_REF(dt15)
+
+          ld bc,&7F80
+          out (c),c
+          ld hl,&3FFE
+          ld iy,&4002
+          ld e,(iy-4)
+          ld d,(iy-3)
+          inc (hl)
+          inc (iy-3)
+          ld c,&8C
+          out (c),c
+          ld a,(hl)
+          sub e
+          ex af,af
+          inc l
+          ld a,(hl)
+          sub d
+          push iy
+          pop de
+dt15
+          TM_REF(55)
+      BYTE 25+1,2,&02,&40,5,6
+      BYTE 7,8,9,10,11,12,2,1
+      BYTE &FF,&3F,&02,&40,&8C,&7F,2,1
+      WORD sptest
+
+;
+          TEST_REF(dt16)
+          ld hl,&C000
+          ld (hl),&55
+          xor a
+          add (hl)
+          ld b,a
+          xor (hl)
+          ld c,a
+          or (hl)
+          cp (hl)
+          ex af,af
+          ld ix,&BFFF
+          ld (ix+4),&C2
+          xor a
+          scf
+          adc (ix+4)
+          ld d,a
+          sub (ix+4)
+          ld e,a
+          ld a,&FF
+          and (ix+4)
+dt16
+          TM_REF(49)
+      BYTE 25+1,2,3,4,&FF,&BF
+      BYTE 7,8,9,10,11,12,&42,&55 ;
+      BYTE &00,&C0,1,&C3,&00,&55,&90,&C2
+      WORD sptest
+
+;
+tst17
+          TEST_REF(dt17)
+          jr tst_hop
+;orgtest+2
+          pop iy
+          jp iy
+tst_hop
+          call orgtest+2
+dt17
+          TM_REF(14)
+      BYTE 6+1,2
+      WORD orgtest+9
+      BYTE 5,6
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE 15,16,17,18,19,20,21,22
+      WORD sptest
+
+tst18
+          TEST_REF(dt18)
+
+          ld bc,&7F8C
+          exx
+          xor a
+          ex af,af
+          ld a,33
+          call &BB5A
+dt18
+          TM_REF(0)
+      BYTE 0,2,3,4,5,6
+      BYTE &5C,&BB,&FE,&13,&8C,&7F,&88,&8C
+      BYTE 7,8,9,10,11,12,13,33
+      WORD sptest
+
+          TEST_REF(dt19)
+          ld b,&F5
+          in d,(c)
+          xor a         ; flags &f5 too brittle
+          ld d,&DD      ;discard
+dt19
+          TM_REF(9)
+      BYTE 6,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14 ;
+      BYTE 15,16,17,&DD,19,&F5,&44,0
+      WORD sptest
+
+          TEST_REF(dt21)
+          ld b,&F5
+          ld hl,&C000
+          ini
+dt21
+          TM_REF(10)
+      BYTE 4+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE &01,&C0,17,18,19,&F4,&A3,22
+      WORD sptest
+
+          TEST_REF(dt25)
+          ld hl,&C000
+          ld (&C000),hl
+          ld a,&F5
+          ld bc,2
+          cpir
+dt25
+          TM_REF(23)
+      BYTE 8+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &C002:BYTE 17,18:WORD 0:BYTE &03,&F5
+      WORD sptest
+
+
+          TEST_REF(dt26)
+          ld hl,$+3
+.t26      ld bc,&0302   ; 1,2,3 in mem
+.t26_
+          xor a         ; reset CF
+          cpi:push af:pop bc:ld d,c ; 12  
+          ld a,2
+          scf
+          cpi:push af:pop bc:ld e,c ; 12
+          ld a,4
+          ld bc,1
+          cpi:push af:pop bc:ld ixh,c ; 13. 52
+
+          ld a,1
+          ld bc,20
+          dec hl
+          cpdr          ; 3 iters. 16
+          push bc
+          push af:pop bc:ld ixl,c
+          push hl:pop iy ; hl points before .t26:01
+
+          ld a,4
+          ld bc,2
+          inc hl
+          cpir          ; 2 iters 10
+          pop bc
+.dt26
+      IF todo
+; reactivate. bug #191
+;          TM_REF(124):BYTE 48+1
+      END
+          TM_REF(0):BYTE 0
+      BYTE 2
+      WORD .t26-1:BYTE &47,&03
+      BYTE 7,8,9,10,11,12,13,14
+      WORD .t26_-1:BYTE &47,&BE,20-3,0,&23,4
+      WORD sptest
+
+
+tst27
+          TEST_REF(dt27)
+          im 1
+tt        ld hl,&BFFF
+          ld ix,&BFFE
+          ld (hl),l
+          ld a,l
+          res 7,(hl)
+          res 5,(ix+1)
+          ld l,(hl)
+          res 0,h
+          im 1
+          ld hl,&C000
+          ind
+;!!! Ind brittle regarding F flag
+dt27
+          TM_REF(37)
+      BYTE 19+1,2,3,4:WORD &BFFE
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &BFFF:BYTE 17,18,19,19:BYTE &03,&FF
+      WORD sptest
+
+tst28
+; Test read in LROM + rst
+          TEST_REF(dt28)
+          ld bc,&7F88:out (c),c ; LROM, mode 0
+          ld de,(3)     ; should have ed,49
+          ld a,(&3B)    ; expect ret here for rest of the rest
+          cp &C9
+          jr nz,.fin    ; Z here
+          ld hl,&CAFE   ; code path marker
+          call &3B
+          ld a,42       ; another marker
+.fin
+          ld (&C000),sp
+          ld bc,&7F8C:out (c),c
+dt28
+          TM_REF(47)
+      BYTE 17+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &CAFE,&49ED,&7F8C:BYTE &4A,42
+      WORD sptest
+
+      END
+
+
+
+      WORD 0            ;end of tests
+
+data_test_out_ok_bank
+
+          TEST_REF(dt22)
+          ld a,&C0
+          ld bc,&7FC3
+          out (c),c
+          ld (&4000),a
+          out (c),a
+          ld a,(&C000)
+dt22
+          TM_REF(21)
+      BYTE 8+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,&C3,&7F,&15,&C0
+      WORD sptest
+
+          TEST_REF(dt23)
+          ld a,&77
+          ld bc,&7FC0
+          ld e,&C3
+          out (c),c
+          ld (&C001),a
+          out (c),e
+          ld a,(&4001)
+          out (c),c
+dt23
+          TM_REF(27)
+      BYTE 11+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,&C3,18,&C0,&7F,&15,&77
+      WORD sptest
+
+          TEST_REF(dt24)
+          ld a,&CC
+          ld hl,&00
+          ld (hl),&C3
+          ld bc,&80C0
+          outi
+          ld (&4000),a
+          out (c),c
+          ld a,(&C000)
+dt24
+          TM_REF(28)
+      BYTE 10+1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 1,0,17,18,&C0,&7F,&3F,&CC
+      WORD sptest
+
+;Test connection C1/C3 at C000
+          TEST_REF(.dt25)
+          ld hl,orgtest'+4:jp hl ; test jp hl also!
+          ld ix,orgtest'+10:jp ix ; test jp hl also!
+
+          ld bc,&7FC7:out (c),c
+          ld hl,&C3C1:ld (&4000),hl
+          ld c,&C1:out (c),c
+          ld a,(&C000):ld i,a ; I must be c1
+          ld c,&C3:out (c),c
+          ld a,(&C001)  ; A must be c3
+          ld hl,(&C000)
+.dt25
+          TM_REF(53)
+      BYTE 22+1,&C1,3,4:WORD orgtest'+10
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &C3C1:BYTE 17,18,&C3,&7F,&15,&C3
+      WORD sptest
+
+          TEST_REF(.dt29)
+          bit 5,h       ; 2
+          res 5,h       ; 2
+          ld hl,&C000   ; for res
+          bit 7,(hl)    ; 3
+          res 7,(hl)    ; 4
+          ld ix,&00
+          bit 0,(ix)    ; 6
+          res 7,(ix)    ; 7
+      BYTE &DD,&CB,&00,&70 ; 6 "bit 5,(ix),b" (actually no change in b)
+.dt29
+          TM_REF(37)
+      BYTE 17+1,2,3,4:WORD &00
+      BYTE 7,8,9,10,11,12,13,14
+      WORD &C000:BYTE 17,18,19,20,&11,22
+      WORD sptest
+
+
+      WORD 0            ;end of tests
+
+
+test_regs
+; All regs expect /reg_pc/ 
+      BYTE 1,2,3,4,5,6
+      BYTE 7,8,9,10,11,12,13,14
+      BYTE 15,16,17,18,19,20,21,22
+      WORD sptest
+
+
+testbig
+; Test almost all non-prefixed opcodes, and &ed-prefixed ones.
+
+          call nrtinit
+          call mon_init
+
+; Setup variables "in"
+          ld hl,var_in
+.lp       ld (hl),l:inc l:jr nz,.lp
+; Cleanup variables "out"
+          ld hl,var_out
+.lp'      ld (hl),0:inc l:jr nz,.lp'
+
+; Others registers are setup by code at data_big instead
+          ld hl,data_big:ld (reg_pc),hl
+;          ld hl,&3192:ld (reg_pc),hl
+tb_stop = &327A
+;tb_stop = &31EB
+          ld hl,tb_stop
+          call nrt_mon_trace_to_pc
+
+; Check registers (except R for now as emulation incomplete)
+          ld hl,.ref_regs
+          ld de,reg_pc
+          ld bc,2       ; PC
+          call compare
+          inc hl:inc de
+          ld bc,23
+          call compare
+
+; Check updated variables
+          ld hl,.ref_var
+          ld de,var_out
+          ld bc,ref_var_
+          call compare
+
+; Check variables in unchanged    
+fail  = &BE00
+          ld hl,var_in
+.lpc      ld a,(hl):cp l:call nz,fail
+          inc l
+          jr nz,.lpc
+          ret
+
+.ref_regs
+      WORD tb_stop      ; pc
+      BYTE &89          ; r (not checked)
+      BYTE &CC          ; i
+      WORD &3402,&FF05  ; iy, ix
+      WORD &3309,&0B0A,&0909,&0122 ; hl' de' bc' af'
+      WORD &3400,&3300,&00,&DDBA ; hl de bc af
+      WORD &340E        ; sp
+
+.ref_var
+      BYTE &81,&40,&04,&04,&37,&3F,&09,&09
+      BYTE &68,&31,&0A,&0B,&BB,&31,&0E,&0F
+      BYTE &0F,&BC,&12,&BC
+      IF track_r
+      WORD &FFFF
+      ELSE
+      WORD 0
+      END
+      BYTE &16,&00
+      BYTE &00,&19,&1A,&1B,&00,&05,&FF,&00
+      BYTE &3F,&2A,&22
+ref_var_ = $ - .ref_var
+
+nrt_mon_trace_to_pc
+          di
+          exx:push bc:exx
+          call mon_trace_to_pc
+          exx:pop bc:exx
+          ret
+
+nrt_mon_trace_next
+          di
+          exx:push bc:exx
+          call mon_trace_next
+          exx:pop bc:exx
+          ret
+
+nrt_cur_test WORD 
+
+;----------------------------------------
+      SKIP &3000 - $    ; !! broken if relocated elsewhere !!!
+data_big
+      LOAD ":org/trtest2.bin"
+      SKIP &3300 - $
+var_in SKIP 256
+var_out SKIP 35
+
+      SKIP orgtest' - $
+      END
+
+ ;; !!! No code here
+;----------------------------------------
+
+

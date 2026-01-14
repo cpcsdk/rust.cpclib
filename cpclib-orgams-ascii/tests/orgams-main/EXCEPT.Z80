@@ -1,0 +1,499 @@
+inRom = 1               ;0: test. 1:auto-install
+dev_checks = 1
+orgass = 1              ;0: orgext (see warning below)
+; <<< Nested Exceptions >>>
+; Escape a routine in case of failure without stack concern.
+
+; !!!TODO: burn orgass version
+         ; for now it is a residue of orgext, 
+
+; Interface:
+   ; call except_enter
+   ;   jp except_ret
+   ; call unwind
+   ; call abort
+
+; !!Warning!! Cannot be invoked cross-ROMs:
+                ; all routines assumed they are CALLed.
+            ; Stack manipulation doesn't go well with FAR CALL and co.
+
+      IF orgass
+      IMPORT "assmap.i"
+      ELSE
+      IMPORT "extmap.i"
+      END
+; ===========
+; How to use:  (also see /tests/)
+; ===========
+      IF 0
+my_routine
+          call except_enter ; to call first thig
+:      [...]                   
+
+;      ; if fatal error abort with e.g.:
+          call nc,abort ;!! no return from here
+;      ; NB 1: We use call to get the current PC for reporting purpose.
+             ; (E.g. ability to print where the failure comes from,
+             ;  akin to call &be00 for a breakpoint).
+       ; NB 2: Abort can be called in any sub-routine,
+             ; since the stack is restored.
+
+          jp except_ret ; End of my_routine  !! Cannot use ret anymore.
+      END
+
+; NB 3: If no failure occurs, except_enter & except_ret does nothing
+      ; more than internal housekeeping:
+      ;   -- 9E00 - 9E04 are trashed
+      ;   --
+      ;   -- put previous sp in stack (that's why you cannot use RET).
+
+; NB 4: The mecanism can be nested.
+      ; Eg: - my_routine calls my_sub.
+          ; - my_sub uses except_enter/except_exit pair. 
+          ; Then:
+          ; - if abort is called in my_sub, my_sub returns.
+          ; In any case, my_routine can still call abort.
+
+          ; As a reminder, if my_sub doesn't use the mecanism and calls
+          ; exit_routine, then my_routine (or any parent having last
+          ; set the mecanism) returns directly.
+
+; -----------------------------
+; ---- 2025 --------------------
+   ; Aug 20 v8: Version for orgass=1
+
+; ---- 2024 --------------------
+   ; Jun 10 v7: Remove check about ret address.
+                  ; Faster and shorter
+                  ; Test was too strict
+check_ret = 0
+          ; v6: [no change] Use extmap.i
+; ---- 2023? -------------------
+   ; Oct 9 v5: Add /check_frame/ in /unwind/
+             ; CANCELLED: Add /check_sphl/ for /unwind/
+                  ; We must first ensure 98f0 is init with 00.
+             ; Add /test_unwind_nested/
+      ; 28 v4: Add goto_parent
+         ; v3: Add /check_sp/ and check pc at /except_ret/
+      ; 26 v2: Add /check_frame/ and /check_frame_lt/
+; 2021 Sep v1: Ok. Used by org-dn
+
+; -----------------------------                     
+
+      IF orgass
+rom   = &1D
+codedest = except
+limit = impeva_module
+codedest2 = except_jp
+limit2 = count_jp
+      ELSE
+rom   = &1A
+codedest = except_ext
+limit = orgui
+codedest2 = except_jp
+limit2 = disa_jp
+      END
+
+break = &BE00
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+
+; ========================================
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+fail  = &BE00
+
+tests
+          call test_unwind
+          call test_unwind_nested
+          call test_no_failure
+          call test_failure
+          call test_check_frame
+          ret
+
+test_unwind
+;----------
+          ld hl,0:ld (nrtmark),hl
+          call .rout
+          ld a,(nrtmark):cp "A":call nz,&BE00
+          ld a,(nrtmark+1):cp "B":call nz,&BE00
+          ret
+.rout
+          call .sub
+          ld a,"B":ld (nrtmark+1),a
+          ret
+
+.sub
+          call except_enter
+          call unwind
+          ld a,"A":ld (nrtmark),a
+          ret           ; should go back 
+
+test_unwind_nested
+;-----------------
+;Try to reproduce CHECK_FRAME failing after fix_error_lines.
+
+          ld hl,0
+          ld (nrtmark),hl
+          ld (nrtmark+2),hl
+          call .nrtass
+          ld a,(nrtmark):cp "Q":call nz,fail
+          ld a,(nrtmark+1):cp "P":call nz,fail
+          ld a,(nrtmark+2):cp "O":call nz,fail
+          ld a,(nrtmark+3):cp "N":call nz,fail
+          ret
+
+.nrtass
+          call .ass_init ;simule phase2
+          ld a,"P":ld (nrtmark+1),a
+          ret
+
+.ass_init
+          call except_enter
+          call .ass_common
+          ld a,"Q":ld (nrtmark),a
+          jp except_ret
+
+.ass_common
+          call ._ass_amorce
+;simule finitions
+          call .fix     ; simule 2 sources2line
+          call .fix
+          ld a,"O":ld (nrtmark+2),a
+          ret
+
+.ass_amorce
+          call except_enter
+          jp ix
+
+._ass_amorce
+          call check_frame
+          ret
+
+.fix
+          ld bc,&BABE
+          push bc
+          ld ix,.hook
+          call .ass_amorce
+.return
+      BRK               ;shouldn't be reached
+
+.hook
+          call unwind
+          pop hl        ; discard .ass_amorce
+          CHECK_HL_EQ(.return)
+          pop hl
+          CHECK_HL_EQ(&BABE)
+          ld a,"N":ld (nrtmark+3),a
+          ret           ; return to .ass_common
+
+
+test_no_failure
+;--------------
+          ld hl,0:ld (nrtmark),hl
+          call .rout
+          ld a,(nrtmark):cp "A":call nz,&BE00
+          ld a,(nrtmark+1):cp "B":call nz,&BE00
+          ret
+.rout
+          call .nofail
+          ld a,"B":ld (nrtmark+1),a
+          ret
+
+.nofail
+          call except_enter
+          ld a,"A":ld (nrtmark),a
+          jp except_ret
+
+test_failure
+;-----------
+          ld hl,0:ld (nrtmark),hl
+          call .rout
+          ld a,(nrtmark):or a:call nz,&BE00
+          ld a,(nrtmark+1):cp "Y":call nz,&BE00
+          ret
+.rout
+          call .fail
+          ld a,"Y":ld (nrtmark+1),a
+          ret
+
+.fail
+          call except_enter
+          call abort
+          ld a,"X":ld (nrtmark),a ;won't be reached
+          jp except_ret
+
+test_check_frame
+;---------------
+;ensure assert not triggered when sp just set at this level
+          call except_enter
+          call check_frame
+          push hl
+          call check_frame_lt
+          pop hl
+          jp except_ret
+
+
+nrtmark SKIP 4
+      END
+; ========================================
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+
+except_enter
+; Push parent context, save current one.
+
+; In: stack: ret address, parent's ret address (untouched)
+
+;Out: stack: (v_save_sp)  (sp from parent scope)
+    ; (v_save_sp): sp+2   (ret address of current scope
+                          ;--the one calling us)
+    ; All register preserved     
+
+; Put hl and the ret aside.
+          call save_ret_hl
+; put v_save_sp on top of stack
+          ld hl,(v_save_sp):push hl
+          ld (v_save_sp),sp
+          call check_sp
+_ret
+          ld hl,(v_save_hl)
+          jp v_save_ret
+
+abort
+;IN: v_save_sp set (except_enter must have called beforehand!).
+   ; stack: failure PC
+          ; (that's why you use call abort rather than jp abort)
+
+;Out: Ret from routine that called except_enter last.
+    ; Set v_save_sp to parent context (if any).
+    ; (v_save_abort) = address of failure
+
+          ex (sp),hl    ; get failure address to report
+          ld (v_save_abort),hl
+          ex (sp),hl
+;Enchaine
+except_ret
+; Pop parent context and return.
+; !!! Usage: JP except_ret  ; !! Not call.
+; Equivalent to:
+;  call unwind
+;  ret
+
+; Out: stack: empty
+     ; (v_save_sp)= parent's sp
+     ; pc = parent's ret address (well, that's a "RET")
+     ; All registers preserved.
+
+          call unwind
+      IF dev_checks AND check_ret
+; Check ret value                   
+          ex (sp),hl
+          push af
+; -> we don't expect any address < &4000
+   ; !! actually there are: NRTs. So, check >= &1000 instead. 
+  !! oups, ass nrts now starts at &200. Deactivate alltogher
+          ld a,h:cp &10:call c,break
+          pop af
+          ex (sp),hl
+      END
+          ret
+
+unwind
+; Restore stack (same level than when 'call enter_except')
+; Pop parent's exception scope.
+; All registers preserved.
+;    
+; E.g. when you have:
+
+; X   call Y
+; X_
+;    [...] 
+; Y
+;    call except_enter
+;    [...]
+;    jp c,hook
+;    [...]
+;    jp except_ret
+
+; hook  call abort  ; "Returns to X_"                          
+        ; never reached here 
+
+; hook  call goto_parent  ; SP same levels than X_, but returns
+        ; continue here (Y dismissed, X_ still on stack)
+
+          call check_frame
+          call save_ret_hl
+          call pop_parent
+          jr _ret
+
+
+pop_parent
+; sp <- v_save_sp  (discard current stack)
+; pop old_sp       (now sp point to parent's ret)
+; v_save_sp <- old_sp
+
+          call check_sp
+          ld (v_save_hl2),hl ;1st one already use by save_ret 
+; encode ret address N as JP N        
+; this is the ret for this helper routine.
+          ld l,&C3:ld (v_save_ret2),hl:pop hl:ld (v_save_ret2+1),hl
+
+          ld sp,(v_save_sp)
+          pop hl        ; old_sp
+          ld (v_save_sp),hl
+
+          ld hl,(v_save_hl2)
+          jp v_save_ret2
+
+
+save_ret_hl
+; Save ret **from caller point of view.**
+; out : sp = sp-4
+
+          ld (v_save_hl),hl
+; encode ret address N as JP N        
+; this is the ret for this helper routine.
+          ld l,&C3:ld (v_save_ret2),hl:pop hl:ld (v_save_ret2+1),hl
+; this is the real RET we want to save.
+          ld l,&C3:ld (v_save_ret),hl:pop hl:ld (v_save_ret+1),hl
+          jp v_save_ret2
+
+check_frame
+; check sp+2 <= va_savesp
+  ; aka sp+1 <  va_savesp
+; That is: we must go back to higher frame.
+; That also covers the case va_savesp not set (0)
+          push hl
+          ld hl,1+6
+_check_frame_com
+          push bc:push af
+          add hl,sp     ;+4 to correct push
+          ld bc,(v_save_sp)
+          or a:sbc hl,bc:call nc,break
+          pop af:pop bc:pop hl
+          ret
+
+check_frame_lt
+; Idem but cannot be same frame:
+;   sp+2 < va_savesp
+  ; aka sp+1 <  va_savesp
+; That is: we must go back to higher frame.
+; That also covers the case va_savesp not set (0)
+          push hl
+          ld hl,2+6
+          jr _check_frame_com
+
+check_sp
+          push af
+          ld a,(v_save_sp+1)
+          cp &BF:jr z,.ok
+          cp &BE:jr z,.ok
+          cp &9F:call nz,break
+.ok
+          pop af
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp check_frame
+          jp check_frame_lt
+          jp except_enter
+          jp except_ret
+          jp abort
+          jp unwind
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+;------------------------
+      ORG &98F0         ; after ass
+v_save_sp WORD 
+v_save_abort WORD       ; Save address of abort
+
+      SKIP &98FE-$      ; org
+
+      ORG &9E00
+v_save_hl WORD 
+v_save_hl2 WORD 
+v_save_ret SKIP 3
+v_save_ret2 SKIP 3

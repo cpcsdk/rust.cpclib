@@ -1,0 +1,629 @@
+; <<<<< Decode expression (tokens -> ascii) >>>>>
+; Also used for disassemble (monogams AND trace): shared routine for hex
+; Check decexpt.o for tests
+
+; Used by: disa 
+; Uses: aap (getkey)  
+
+; !! TODO: factorize helper (put_hexa, ...) with ed and 
+   ; Prerequisites: -proper unified far call.
+                  ; -replace put_a by proper ld (de),a:inc de?
+
+         ; Requires: check that disa doesn't expect carry like in bug#f9
+
+      IMPORT "monique.i"
+
+; 2025
+ ; --- HH Beta 1 ---
+  ; Jul 18 D: Binary op < <= etc
+      ; 17 C: Imported by disa.o now
+            ; Move e_* definition in monique.i
+
+ ; --- GG release ---
+      ; 01 B: [No-change] Use orgmap.i. Moved
+
+; 2023
+  ; May 08 A: [cosmetic] Use call_bric_from_main for aap_getkey
+              ; -> No need to distinguish firm / no_firm anymore
+              ; -> Less code, and simplify disa.decode, org_getline
+
+; 2021         
+  ; sep 03 9: Display binary on 8 bits
+  ; jan 15 8: Fix todo_hack (NRT) by using connect_source_begin
+            ; Handle local ref (jr .ok) /deva_local/. Tested in disp1o
+; 2020      
+         ; 7: Move jps from &feb8 to &c0c1 to make room at end of rom.
+  ; apr  2 6: Don't return carry anymore (see disa for rationale).
+               ; Requires disa1i!!
+
+  ; mar 31 5: Fix NRT (now bk_source_nrt = bk_dev-3)
+
+  ; Dec 14 v4: Fix NRT (since lastmet no more copied)
+                ; Should have been done earlier!
+
+         ; 29   v3: Slight optim label_com
+                  ; Import test_labelpick from disa
+     ; Nov 10   v2: add test.
+; 2019 Sept 26  v1: extracted from disa1b.o
+
+vd    = &7CD0
+
+; ---- In this rom aka orgext -------------------------------------
+farcall = &FF12
+call_bric_from_ext = farcall+18
+
+; ---- In bricbrac ROM --------------------------------------------
+aap   = &FE30
+aap_getkey = aap+9
+
+; --- Handy aliases -------------------------------------------------
+fail  = &BE00           ; Breakpoint on failures
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_BRIC rout
+          call call_bric_from_ext:WORD rout
+      ENDM
+
+; -----------------------
+
+deco_exp
+          inc ix        ; skip size
+_deco_exp
+;In: IX= encoded expression
+   ; DE= buffer dest
+
+          ld a,(ix+0)
+          inc ix
+deco_exp_a
+          cp short_decimal_max+1
+          jp c,put_deci_a
+          cp short_label
+          jp nc,deva_label
+
+          sub e__start
+          push bc
+          add a
+          ld c,a
+          ld b,0
+          ld hl,deva_jumptable
+          add hl,bc
+          ld c,(hl)
+          inc hl
+          ld b,(hl)
+          call jp_bc
+          pop bc
+          ret
+jp_bc
+          push bc
+          ret
+
+;--
+
+deco_asis_com
+          push ix
+          pop hl
+          ld a,(hl)     ;length
+          inc l
+          or a
+          jr z,deco_empty ;ok (eg: single ";")
+          ld c,a
+          call safe_ldir
+deco_empty
+          push hl
+          pop ix
+          ret
+
+safe_ldir
+          ld b,a
+;NB : size in C only
+sldir_lp
+          ld a,(hl)
+          inc hl
+          call put_a
+          dec c
+          jr nz,sldir_lp
+          ld a,b
+          ret
+
+
+deva_declong
+deva_hexlong
+deva_binlong
+notimpl
+          call put_error
+      BYTE "~~Argl~~"
+      BYTE 0
+
+;;;
+deva_jumptable
+; !"#$%&'
+      WORD deva_space,deva_xor,deva_string,deva_neg
+      WORD deva_pc,deva_mod,deva_and,notimpl
+;()*+,-./
+      WORD deva_paren_open,deva_paren_close,deva_mul,deva_add
+      WORD notimpl,deva_sub,deva_local,deva_div
+;$30
+      WORD deva_dec8,deva_dec16,deva_declong,notimpl
+      WORD deva_hex8,deva_hex16,deva_hexlong,notimpl
+      WORD deva_bin8,deva_bin16,deva_binlong,notimpl
+;<=>?
+      WORD deva_lt,deva_eq,deva_gt,notimpl
+;$40
+;@ABC
+      WORD deva_or,deva_end_exp,deva_begin_exp,deva_cos
+      WORD deva_objc,deva_end_exp,deva_forward,deva_backward
+;HIJK
+      WORD notimpl,deva_iter1,deva_iter2,deva_iter3
+;LMNO
+      WORD deva_le,deva_ge,deva_neq,notimpl
+;PQRS
+      WORD notimpl,notimpl,notimpl,deva_sin
+;TUVW
+      WORD notimpl,notimpl,deva_abs,notimpl
+;XYZ[
+      WORD notimpl,notimpl,notimpl,notimpl
+;\]^_
+      WORD notimpl,notimpl,notimpl,notimpl
+
+deva_backward
+          call put_tnt
+      BYTE "<<"
+      BYTE 0
+deva_mod
+          call put_tnt
+      BYTE "MOD"
+      BYTE 0
+deva_and
+          call put_tnt
+      BYTE "AND"
+      BYTE 0
+deva_or
+          call put_tnt
+      BYTE "OR"
+      BYTE 0
+deva_xor
+          call put_tnt  ;no return
+      BYTE "XOR"
+      BYTE 0
+deva_objc
+          call put_tnt
+      BYTE "$$"
+      BYTE 0
+deva_neg
+          ld a,"-"
+          call put_a
+          jp _deco_exp  ;"-" always followed by exp
+deva_iter3
+          ld a,"#"
+          call put_a
+deva_iter2
+          ld a,"#"
+          call put_a
+deva_iter1
+          ld a,"#"
+          jr put_a
+deva_space
+          ld a," "
+          jr put_a
+deva_string
+          call put_quote
+          call deco_asis_com
+;echaine
+put_quote
+          ld a,&22
+          jr put_a
+deva_pc
+          ld a,"$"
+          jr put_a
+deva_forward
+          ld a,"_"
+          jr put_a
+
+deva_mul  ld a,"*":jr put_a
+deva_add  ld a,"+":jr put_a
+deva_sub  ld a,"-":jr put_a
+deva_div  ld a,"/":jr put_a
+deva_lt   ld a,"<":jr put_a
+deva_le   ld a,"<":call put_a:jr put_eq
+deva_gt   ld a,">":jr put_a
+deva_ge   ld a,">":call put_a:jr put_eq
+deva_neq  ld a,"!":call put_a:jr put_eq
+deva_eq   ld a,"=":call put_a
+; enchaine    
+put_eq
+          ld a,"="
+; enchaine
+put_a
+          ld (de),a
+          inc e
+          ret nz
+          dec e
+          jr exit_error
+
+deva_abs
+          ld hl,tx_abs
+          jr deva_func
+tx_abs BYTE "ABS("
+      BYTE 0
+
+deva_cos
+          ld hl,tx_cos
+          jr deva_func
+tx_cos BYTE "COS("
+      BYTE 0
+
+tx_sin BYTE "SIN("
+      BYTE 0
+deva_sin
+          ld hl,tx_sin
+deva_func
+          call put_tnt_lp
+          call _deco_exp
+          ld a,")"
+          jr put_a
+
+;-- yes, shared by both
+
+call_put_tnt
+          ex (sp),hl
+          call put_tnt_lp
+          ex (sp),hl
+          ret
+
+put_error
+          pop hl
+          call put_tnt_lp
+exit_error
+          ld sp,(vd_savesp)
+          push ix
+          pop hl
+          xor a
+          ld (de),a
+          ret
+
+
+put_tnt
+          pop hl
+put_tnt_lp
+          ld a,(hl)
+          or a
+          ret z
+          inc hl
+          ld (de),a
+          inc e
+          jr nz,put_tnt_lp
+          dec e
+          jr exit_error
+
+deva_dec8
+          ld a,(ix+0)
+          inc ix
+          jp put_deci_a
+deva_dec16
+          ld l,(ix+0)
+          inc ix
+          ld h,(ix+0)
+          inc ix
+          jp put_deci_hl
+
+deva_hex8
+          ld l,(ix+0)
+          inc ix
+          jp disa_hexa_l
+deva_hex16
+          ld l,(ix+0)
+          inc ix
+          ld h,(ix+0)
+          inc ix
+disa_hexa_hl
+          ld (vd_word_met),hl
+          ld a,"&"
+          ld (vd_is_word_met),a
+          call put_a
+put_hexa_hl
+          push af
+          ld a,h
+          call put_hexa_a
+put_hexa_l_
+          ld a,l
+          call put_hexa_a
+          pop af
+          ret
+
+disa_hexa_l
+          ld a,"&"
+          call put_a
+put_hexa_l
+          push af
+          jr put_hexa_l_
+
+
+
+deva_bin8
+          ld l,(ix+0)
+          inc ix
+          jp put_bin_l
+deva_bin16
+          ld l,(ix+0)
+          inc ix
+          ld h,(ix+0)
+          inc ix
+          jp put_bin_hl
+
+deva_local
+          ld a,".":call put_a
+          jp _deco_exp
+
+deva_label
+; label in expression
+
+          call label_com
+
+;Set 1st label !!NON DEF!! apres curseur (pos<e)
+          cp e:ccf:ret c
+          ld a,(vd_first_from_cursor_nondef+1)
+          add a:ccf:ret c
+          ld (vd_first_from_cursor_nondef),hl
+          ret
+
+put_label
+; def or equ
+
+          ld hl,vd_flags_line
+          set 0,(hl)    ;flag pour separateur comment
+          ld a,(ix+0)
+          inc ix
+
+label_com
+; print label and return HL = id label, A = vd_cursor_pos
+
+          sub short_label
+          jr c,label_error
+          ex de,hl
+          ld e,a
+          ld d,0
+          sub long_label-short_label
+          jr c,_lc_short ;short
+;long
+          ld d,a
+          ld a,(ix+0)
+          inc ix
+          add &80
+          ld e,a
+          jr nc,$+3
+          inc d
+
+_lc_short
+          push de
+          CALL_BRIC(aap_getkey)
+          ex de,hl
+          pop hl
+          ld (vd_last_met),hl
+
+;MAJ 1er label quand curseur depasse (e>pos)
+          ld a,(vd_cursor_pos)
+          cp e:ccf:ret c
+          ld bc,(vd_first_from_cursor)
+;We don't have id >= &8000. So bit 7 set means: &ffff
+          bit 7,b:ret z
+          ld (vd_first_from_cursor),hl
+          ret
+
+
+label_error
+          call put_error
+      BYTE "~laberr~"
+      BYTE 0
+
+
+deva_paren_open
+          ld a,"["
+          call put_a
+;TODO? robust to garbage (ie unmatched pairs)
+dp_lp
+          ld a,(ix+0)
+          inc ix
+          cp e_paren_close
+          jr z,dp_end
+          call deco_exp_a
+          jr dp_lp
+
+dp_end
+          ld a,"]"
+          jp put_a
+
+deva_begin_exp
+;TODO? robust to garbage (ie unmatched pairs)
+
+          ld a,(ix+0)
+          inc ix
+          cp e_end
+          ret z
+          call deco_exp_a
+          jr deva_begin_exp
+
+deva_end_exp
+deva_paren_close
+;musn't be met directly
+          call put_error
+      BYTE "~Unexpected~"
+      BYTE 0
+
+put_hexa_a
+          push af
+          call put_hexa_qh
+          pop af
+          push af
+          call put_hexa_ql
+          pop af
+          ret
+
+put_hexa_qh
+          rrca
+          rrca
+          rrca
+          rrca
+put_hexa_ql
+          and &0F
+          or a
+          daa
+          add &F0
+          adc &40
+          jp put_a
+
+;
+put_deci_hl
+;Affiche "hl" en decimal
+;
+          push bc
+          ld bc,10000
+          call pwfigno0
+          ld bc,1000
+          jr nz,pwdec4
+          call pwfigno0
+          ld bc,100
+          jr nz,pwdec3
+          call pwfigno0
+          ld a,l
+          ld b,10
+          jr nz,ddec100
+          jr put_dec_
+pwdec4
+;>=10000 il faut afficher nombre des 1000
+;
+          call pwfig
+          ld bc,100
+pwdec3
+          call pwfig
+          ld a,l
+          ld b,10
+          jr ddec100
+;
+pwfig
+          xor a
+pwfigwf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfigwf
+;
+          add hl,bc
+          dec a
+          or &30
+          jp put_a
+;
+pwfigno0
+          xor a
+pwfn0wf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfn0wf
+          add hl,bc
+          dec a
+          ret z
+;
+          or &30
+          call put_a
+          or &30        ;force nz
+          ret
+
+put_deci_a
+          push bc
+          ld b,100
+          call dpfigno0
+          ld b,10
+          jr nz,ddec100
+put_dec_
+          call dpfigno0
+          jr ddecunit
+ddec100
+;>=100 il faut afficher nombre des dizaines
+;
+          call dpfig
+ddecunit
+          or &30
+          pop bc
+          jp put_a
+dpfig
+          ld c,-1
+dpfigwf
+          inc c
+          sub b
+          jr nc,dpfigwf
+          add b
+          ld b,a
+          ld a,c
+          or &30
+          call put_a
+          ld a,b
+          ret
+;
+dpfigno0
+          ld c,-1
+dpfn0wf
+          inc c
+          sub b
+          jr nc,dpfn0wf
+          add b
+          ld b,a
+          ld a,c
+          and a
+          jr z,dpfn0ret
+;
+          or &30
+          call put_a
+          or &30        ;force nz
+dpfn0ret
+          ld a,b
+          ret
+
+put_bin_l
+          ld h,l
+          ld b,8
+          jr put_bin_
+put_bin_hl
+          ld b,16
+put_bin_
+          ld a,"%"
+          call put_a
+pb_lp     add hl,hl
+          ld a,0
+          adc "0"
+          call put_a
+          djnz pb_lp
+          ret
+
+
+vd_flags_line = vd+4    ;!!not reset between instr. For decode only
+;fl_factor = 2      ;factor (disable tab and ":")
+;fl_command = 1         ;command/label met. For separator / tab comment
+
+vd_dest0 = vd+5
+vd_cur_opcode = vd+7
+vd_nb_instr = vd+8      ;nb instr met (in decode). Used for padding
+
+
+vd_savesp = vd+9
+vd_word_met = vd+11     ; for CTRL-ENTER in trace
+vd_is_word_met = vd+13
+
+vd_cursor_pos = vd+14
+
+;  ----------
+; Following fields must be cleared (&ffff) by client before use.
+; Rationale: - client must know the address anyway to read back value
+           ; - economie de l'init si inutilise
+
+vd_first_from_cursor = vd+15 ;shared (for CTRL-*)
+vd_first_from_cursor_nondef = vd+17 ;shared (for CTRL-ENTER)
+vd_last_met = vd+19
+;  ----------              
+
+; only 3 bytes free here 
+
+vo_romed = &7CF9
+;vo_romext = &7CFA
+vo_rombric = &7CFF
+

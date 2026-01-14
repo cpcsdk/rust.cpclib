@@ -1,0 +1,160 @@
+inRom = 1
+rom   = &1A             ; In orgext for fast access to parse.is_sep 
+; <<<< Token >>>>> Helper to delimitate currently typed label.
+
+; Depends on parse.is_sep
+; Used by: ed (completion)
+
+; /--- 2025 ---/ 
+; Aug  1. v2: Move to orgext (since parse is there)
+
+; /--- 202x ---/ 
+; Oct 21. v1: basic tests passing.
+
+bufnrt = &3000
+
+      IMPORT "extmap.i"
+
+      ORG &1000
+
+; ---------------------------             
+codedest = token
+limit = swap_module     ; chunk
+codedest2 = token_jp
+limit2 = swap_jp
+
+; ----- In this ROM ---------    
+parse = &FE93
+is_sep = parse+6
+; ---------------------------             
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+
+tests
+          call test_setup
+          call test_get_start_of_label
+          ret
+
+
+test_setup
+; No orgams init: that's a very low-level module.
+; Just connect ROM since we depend on parse.
+
+kl_rom_select = &B90F
+          ld c,rom:call kl_rom_select
+          ret
+
+test_get_start_of_label
+          ld hl,.nrt
+.lp
+          ld de,bufnrt
+.cp       ld a,(hl):inc hl
+          ld (de),a:inc de
+          or a
+          jr nz,.cp
+          ld a,(hl):inc hl ; pos
+          push hl
+          ld h,d:ld l,a
+
+          call get_start_of_label
+
+          pop hl
+          ld a,e:cp (hl):call nz,fail
+          inc hl
+          ld a,(hl):add a
+          jr nc,.lp
+          ret
+
+.nrt
+; Buffer content, NT, pos in buffer, expected start.
+      BYTE 0,0,0        ;empty buffer
+      BYTE "a",0,1,0    ;just after entering a
+      BYTE "ab",0,2,0
+      BYTE "ld a,pi",0,7,5
+      BYTE "ld a,pi+pi",0,10,8
+      BYTE &FF          ; end of tests
+
+      END
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ------------------
+fail  = &BE00
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+get_start_of_label
+; In: hl = end pos in &100-aligned buffer 
+; Out:de = start of label (can be l if no label pointed by pos)
+     ;hl preserved
+
+          ld e,l:ld d,h
+.lp
+          ld a,e:or a:ret z ; pre-start considered as separator
+          dec e
+          ld a,(de)
+          call is_sep
+          jr nc,.lp
+
+          inc e         ; First char after separator
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp get_start_of_label
+
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+; ========================================
+
+

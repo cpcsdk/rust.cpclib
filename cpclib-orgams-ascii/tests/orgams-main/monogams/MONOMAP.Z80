@@ -1,0 +1,29 @@
+; Address map for MONOGAMS.ROM
+
+tr_start = &C000        ; 0 free
+txt_mon_data = &C8E3
+tr_start' = &CC00-27    ; &70 free
+txt_mon_uncrunch = &D900 ; followed by dico
+mon_farcall = &DF24
+
+mon_rom = &DF46         ; !! palette at &e000-6
+                        ; 2 free
+rsx_rom = &E7AA         ; &5 free
+trui_rom = &E850        ; &f free
+monui_rom = &F100       ; 1 free
+monhelp_rom = &F7C0     ; 5 free
+monui_rom' = &F900      ; 0 free
+mon_rom' = &FAA0        ; 0 
+bt    = &FDCF           ; 0 free
+bt_   = &FDFA           ; ???
+histriom = &FE00
+mon_farcall_new = &FF00
+txt_beta_date = &FF88
+
+; ---------- JUMPS -------------------
+rsx_jp = &FF9D
+trui_jp = &FFA0
+histriom_jp = &FFBA
+monhelp_jp = &FFC6
+bt_jp = &FFF9
+bt_jp_ = &FFFF

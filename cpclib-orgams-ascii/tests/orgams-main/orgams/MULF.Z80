@@ -1,0 +1,537 @@
+inRom = 1
+; <<<<<< multiface two handling >>>>>>
+
+; dependencies: brk.o (to finish setup and jump to trace)
+; use by: init (install direct jump), brk (detect_mf2)
+
+; [optim space] if crutially needed, factorize mf2_jump with brk_jump
+              ; and/or reorder registers (so ours match multiface's)
+
+; 2025
+  ; Jul 
+; --- HH beta 2 -----
+    ; 19 Move code to leave room for txt.
+       ; mf2_code: Unpage ASIC (for Pause Button)
+; --- Failed try to rearm
+do_rearm = 0
+       ; mf2_code: call mf2_rearm
+       ; mf2_jump: Try call RETN before _mf2_disconnect
+
+; --- HH beta 1 -----
+    ; 17 _mf2_disconnect: Use RETN (DEACTIVATED)
+
+; --- GG beta 1 -----
+; 2024
+  ; Feb
+    ;28 vC Unsplit and moved at cf40 (new orgmap.i)
+  ; Jan 
+    ;11 vB No-change: Use "orgmap.i"
+
+; --- For release FF -----
+; 2023 
+  ; May
+    ;31 vA Remap: fix missing sentinel (byte 0)
+         ; Copy mf2_mmr_live to reg_mmr
+    ;28 v9 Fix regs mapping: we weren't reading from the right place!
+         ; Try mf2_rearm 
+    ;27 v8 Optimise regs mapping code. See /remap/
+      ; v7 Fix mf2_code and mf2_jump. 
+    ;26 v6 Revert to v4 (putting routine in 2008 is ok).
+      ; v5 Direct JUMP -> jump to base_bk (doesn't work any better)
+
+; --------------------------------
+            ; v4: WIP, disable direct JUMP (doesn't work)
+
+            ; v3: Next: Split again, to fit in rom.
+
+            ; v2:  WIP MF2 Jump to Trace /mf2_jump/  !! Not working !!
+                ; !! Require BRK8 (no need to save BC in detect_mf2)
+                ; Separate detection and installation:
+  ; - detection is called at each BRK (with few regs avail) to peek MMR
+  ; - installation is only needed at Orgams setup (|o etc invokation)
+
+; 2021 Jan 23 v1: Detection extracted from br7 and rewritten.
+                ; Install direct jump /detect_mf2_and_install_jump/.
+                ; -> goto &be00 for now (MF2 still connected!)
+
+      IMPORT "orgmap.i"
+
+rom   = 10
+
+sp_work = &8000
+
+codedest = mulf
+limit = mirror'
+codedest3 = mulf_jp
+limit3 = brk_jp
+
+; ---- In this Rom ----
+brk_o = &FEF1
+Jump_com = brk_o
+
+memmap
+tr_var = &7D80          ; Shared with tr, mon...
+
+      ORG &8000         ; exec in &8000 for tests mf2
+
+kl_l_rom_enable = &B906
+;kl_l_rom_disable = &B909
+kl_l_rom_restore = &B90C
+;kl_rom_select = &B90F
+;kl_curr_selection = &B912
+
+mf2_rearm = &65         ; just a ret here, but monitored by mf2
+mf2_connect = &FEE8
+mf2_disconnect = &FEEA
+
+mf2_dest = &2000
+mf2_mmr_live = &3FFF
+; See other mf2 variables (mf2_rmr, ...) at the end
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+;!! One will fail (on purpose, so I don't forget to test both cases)
+          call test_mf2 ; Deactivate if you don't have MF2
+ ;         call test_no_mf2 ; Make MF2 invisible to pass this one 
+
+          di
+          call detect_mf2
+ ;         ld bc,mf2_disconnect:out (c),c  done by routine
+          ld bc,&7F86:out (c),c ; re-enable lower RAM (allows BRK)
+          ret z
+
+; -- tests requiring mf2 --
+      IF 1
+; -- manual test
+          call test_manual
+      END
+          ret
+
+bk_nrt = &C7
+
+      MACRO CHECK_WORD_AT_HL val
+          ld a,(hl):cp val AND 255:call nz,&BE00
+          inc hl
+          ld a,(hl):cp val/&0100:call nz,&BE00
+          inc hl
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ val
+          push hl
+          ld hl,val
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+fail  = &BE00
+
+test_mf2
+          call detect_mf2
+          call z,&BE00
+; !! Make MF2 visible to pass this one (hard reset)
+          ret
+
+
+test_no_mf2
+          call detect_mf2
+          call nz,&BE00
+; !! Make MF2 invisible to pass this one 
+          ret
+
+back_to_nrt ld hl,0
+;-- sanity: must have been saved
+          ld a,h:cp &BF:call nz,&BE00
+          ld sp,hl
+          ret
+
+test_manual
+;copy MF2 ROM+RAM in c4:&4000.
+;(so it's easy to disassemble as C2:0000)
+          di
+          ld bc,&7FC4:out (c),c
+          ld bc,mf2_connect:out (c),c
+          ld bc,&7F82:out (c),c
+          ld hl,0
+          ld de,&4000
+          ld bc,&4000
+          ldir
+          ld bc,mf2_disconnect:out (c),c
+          ret
+
+
+;-------------------------------------
+burn
+          ld ix,param_burn:call _burn
+          ld ix,param_burn3:call _burn
+          call &BB06
+          ret
+
+_burn
+          push ix:ld hl,nburn:call &BCD4:pop ix
+          ret nc        ;No-op if not found
+          ld a,4:jp &1B
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn3 WORD rom,codesize3,codedest3,code3
+;--------------------
+
+code
+      IF inRom
+      ORG codedest,$$
+      ELSE
+      SKIP -$ AND &FF
+      END
+
+;-----------------------------
+install_mf2_jump
+; Install routine  Direct Jump (thanks quasar!)
+
+          call kl_l_rom_enable ; just to get current state
+          push af
+          di
+          call detect_mf2
+
+          call nz,_install_jump ; No mf2, no install
+
+          pop af
+          jp kl_l_rom_restore
+
+
+_install_jump
+; (Re)install and disconnect.
+          ld bc,mf2_connect:out (c),c ; detect_mf2 disconnect at the end
+
+          ld hl,mf2_head
+          ld de,mf2_dest
+          ld bc,mf2_size
+          ldir
+
+          ld a,(vo_romEd) ; mf2 must jump to this rom
+          ld (brk_rom+1),a
+          ld a,(vo_basebk) ; I not set when called from jump itself
+          ld (brk_bk+1),a ; bk base must be connected
+          jp _mf2_disconnect
+
+;-------------------------------------
+detect_mf2
+; Called by breakpoint (to read MMR robustly)
+; Called by init (to install MF2 Direct Jump)
+
+; Assume firmware's ROM starts with ld bc,&xx89
+; and that mf2's ROM does *not* start by ld bc,&xx89
+
+; In : N/A           
+; Out: If detected:
+        ; NZ. A=MMR
+     ; If non detected:
+        ;  Z.
+     ; In any case:
+       ; Lower RAM disabled. Mf2 disconnected.
+       ; A, HL trashed. 
+
+; !! cannot use another call here:
+;    sp is &be02, when routine called from brk:brk_jump routine,
+;    i.e. at breakpoint time (ROM part of the BRK).
+; !! Can only use HL and AF (other regs not saved).
+
+; Must preserve DE (not yet saved)
+; Must preserve ixl (R). IXH is free.
+
+          ld bc,&7F82:out (c),c ; Lower ROM must be enabled
+          ld a,(mf2_mmr_live) ; marker ref.
+          ld bc,mf2_connect:out (c),c
+          ld b,a
+          ld c,&C0
+          and c:xor c   ; use XOR to CP + reset A
+          jr z,.mmr_done ; Marker ref %11xxxxxx -> cannot test
+
+          ld a,(mf2_mmr_live):cp b:jr z,.ko ; Same value -> no mf2
+;mf2: we expect %11xxxxxx.
+          and c:xor c:jr nz,.ko ; !! use XOR to CP + reset A
+.mmr_done
+; Here A=0    
+          ld c,a:ld b,a
+          ld a,(bc):dec a:jr nz,.ok ; Not 01 -> detected
+          inc c
+          ld a,(bc):cp &89:jr z,.ko ; 01, 89 -> not detected
+.ok
+          ld a,(mf2_mmr_live)
+; !! Hack: cp &af: skip xor a and set NZ.
+; !! Nb: we know for sure mf2_mmr <> &af (well, since MMR).
+      BYTE &FE
+.ko
+          xor a
+_mf2_disconnect
+          ld bc,mf2_disconnect:out (c),c ;done for ko, that's... ok!
+          ret
+;_retn     retn          ; Try to re-trigger MF2
+
+;-------------------------------------
+; MF2 header and routine for direct jump.
+
+mf2_head
+      ORG mf2_dest,$$
+; Merci Quasar
+      WORD mf2_code
+      BYTE &82          ; config RMR (actually written to by mf2!)
+      BYTE &FF          ; config MMR (actually written to by mf2!)
+      BYTE 0            ; N/A
+      BYTE "RUN"        ; For direct jump
+
+mf2_code
+;Routine installed in MF2 instead
+;First Get HL= SP
+         ; DE= PC
+;!!! Before any rom/bank connection.
+; It doesn't work for SP < &4000, this is handled at the end of mf2_jump
+; routine
+
+          ld hl,(mf2_sp)
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+
+brk_rom   ld bc,&DF0A:out (c),c ; setup at install
+          ld a,(mf2_mmr_live) ; before we connect work bk
+
+          ld bc,&7FA0:out (c),c ; Unpage ASIC
+          ld c,&82:out (c),c ; low and up rom
+brk_bk    ld c,&FF:out (c),c ; setup at install
+          jp mf2_jump
+mf2_end
+mf2_size = mf2_end-mf2_dest
+
+      ORG mf2_head+mf2_size,$$
+;-------------------------------------
+
+mf2_jump
+;-------     
+;Custom routine MF2 continued in rom
+;Comes from mf2_code
+; Store registers for trace.
+; Akin to brk.brk_jump, but directly read registers in MF2 RAM
+; rather than pushing them in BE00-BE0F
+; Much more transparent routine!
+
+; TODO: crtc, ink etc...
+
+; Don't use mf2's stack, as:
+  ; - we want to restore de/hl after mf2 has been deconnected.
+  ; - more importantly, we want to be able to call _mf2_disconnect
+                           ; (or install_jump maybe)
+    ; If sp still in mf2 -> would crash.            
+
+          ld (reg_mmr),a
+          ld a,c:ld i,a
+
+          ld sp,sp_work
+          push de:push hl
+
+; --- copy regs from mf2 to orgams z80 emulator.
+          ld hl,mf2_rmr
+          ld de,reg_rmr
+          ldi:ldi       ; rmr and mmr
+
+          ld hl,mf2_r_+1
+          ld e,reg_r AND &FF
+          ldi
+          inc l
+          ldi           ;i
+          ld bc,remap
+.maplp
+          ld a,(bc)
+          push bc
+          ld l,a
+          ldi:ldi
+          pop bc
+          inc bc
+          ld a,(bc)
+          or a
+          jr nz,.maplp
+
+          ld hl,mf2_im:ldi ; H was changed by ldi
+          ld l,mf2_ei AND &FF:ldi ; TODO: check this one
+
+;--- needed so that we can retrigger mf2.
+; (copied from return routine in mf2 firmware)
+
+      IF 0
+          ld hl,&7C00
+          ld de,&A000
+          ld bc,&0200
+          ldir
+          ld hl,(&2000)
+      END
+
+      IF do_rearm
+ !! no. call mf2_rearm act like the PAUSE is triggered
+; Or maybe if should set mf2_mmr_ret and co
+          call mf2_rearm
+; Temp test doesn't rearm
+       ;   ld a,(mf2_rearm)  ; Didn't work
+; --- Try re-arm (via reset all peripherial)
+; Doesn't help
+ ;          ld bc,&F8FF:out (c),c
+           ; call _retn    ; try rearm: doesn't work
+      END
+
+;--- Reinstall shoudn't be necessary.
+   ; Tried it to re-arm. Without succes 
+    ;      call _install_jump ; re-enable jump and disconnect mf2.
+          call _mf2_disconnect
+
+; If SP was < &4000, we read the wrong sp, since mf2 was connected.
+; Let's correct that now.
+; Note: Connect lower RAM no matter what. If ROM was selected, 
+      ; push PC would have written in ram anyway.
+          ld bc,&7F86:out (c),c
+
+          pop hl:pop de
+          ld (reg_sp),hl ; sp+2 (we poped PC)
+          dec hl
+          ld a,h:and &C0:jr nz,.okmsb
+          ld d,(hl)
+.okmsb
+          dec hl
+          ld a,h:and &C0:jr nz,.oklsb
+          ld e,(hl)
+.oklsb
+          ld (reg_pc),de
+
+          ld bc,(reg_bc') ; used from ROM# guess
+          jp Jump_com
+
+remap
+      BYTE mf2_iy AND &FF
+      BYTE mf2_ix AND &FF
+      BYTE mf2_hl' AND &FF
+      BYTE mf2_deg AND &FF
+      BYTE mf2_bc' AND &FF
+      BYTE mf2_af' AND &FF
+      BYTE mf2_hl AND &FF
+      BYTE mf2_de AND &FF
+      BYTE mf2_bc AND &FF
+      BYTE mf2_af AND &FF
+      BYTE mf2_sp AND &FF
+;!! sp is overwritten. we just use ldir to set DE = reg_im 
+      BYTE 0            ; end
+
+;-------------------------------------
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+;-------------------------------------
+
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+
+          jp detect_mf2
+          jp install_mf2_jump
+
+realsize3 = $$-code3
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+;--------------------------------
+; No more code
+;--------------------------------
+
+mf2_rmr_ret = &2002
+mf2_mmr_ret = &2003
+
+      ORG &3A92,$$
+; Register values at stop time.
+mf2_rmr BYTE 
+mf2_mmr BYTE 
+mf2_im BYTE 
+mf2_ei BYTE 
+      ORG &3EE6,$$
+mf2_iy WORD 
+mf2_ix WORD 
+mf2_bc' WORD 
+mf2_deg WORD 
+mf2_hl' WORD 
+mf2_af' WORD 
+mf2_bc WORD 
+mf2_de WORD 
+mf2_r_ WORD 
+mf2_i_ WORD             ; In MF2, the LSB is flaged as Im. What is it?
+mf2_hl WORD 
+mf2_af WORD 
+mf2_sp WORD 
+
+rvga  = tr_var+3
+reg_rmr = rvga+3
+reg_mmr = rvga+4        ;Word (eg $7ec7)
+;vga_inks = rvga+6
+;vga_border = rvga+22
+;vga_pen = rvga+23       ;last selected ink
+
+reg_rom = rvga+24
+
+rz80  = rvga+25
+
+reg_pc = rz80
+reg_r = rz80+2
+reg_i = rz80+3
+;reg_iy = rz80+4
+;reg_ix = rz80+6
+;reg_hl' = rz80+8
+;reg_de' = rz80+10
+reg_bc' = rz80+12
+reg_af' = rz80+14
+reg_hl = rz80+16
+reg_de = rz80+18
+reg_bc = rz80+20
+reg_af = rz80+22
+reg_sp = rz80+24
+
+reg_im = rz80+26
+reg_iff = rz80+27
+
+vo_romEd = &7CF9
+vo_romMon = &7CFB
+vo_basebk = &7CFC
+

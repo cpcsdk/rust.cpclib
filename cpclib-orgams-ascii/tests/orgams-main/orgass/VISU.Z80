@@ -1,0 +1,2156 @@
+inRom = 1
+rom   = &1D
+main_rom = &0A          ; ORGAMS.ROM
+dev_checks = 1
+dev_checks_nrt = 1-inRom
+todo  = 1
+need_room = 1
+; ======= Routines for source visualisation in trace ======
+; Plus, dump in editor.
+
+; TODO: sk_if: where is it written?
+
+; TODO: death test that trigger abort in glfp_scan.
+      ;   Why: Check abort mecanism.
+      ;   How: Fabricating "corrupted" source with abort bytecode.
+
+;TODO: [get_line_from_pc] why get_line_from_source+increment line (de')
+      ; instead of get_line_from_source at the end?
+
+      ORG &1000
+      BRK               ; catch when jumping anywhere
+
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+      IMPORT "assmap.i"
+      IMPORT "memmap.i" ; symbol_index_live, va_curbk
+      IMPORT "const.i"  ; source_header_size
+      IMPORT "macro.i"  ; ASSERT
+      IMPORT "prof.o"
+      IMPORT "testlib.o"
+
+; \/\/\/\/ 2025 \/\/\/\/\/\/\/\
+; ---- HH Beta i ----
+ ; Dec 10 ae: s/vo_curbk/va_curbk
+ ; Nov 28 ad: Use set_cur_source to remove dep on vo_cur_bk
+ ; 
+; ---- HH Beta 7 ----
+ ; Sep
+    ;2 ac Fix glfp_gross
+    ;1 ab test_get_line_from_pc: Add bug#1de'
+ ; Aug
+   ;29 aa Add test_imported_macro                
+        ; Fix #1de
+        ; Move visu_store/visu_restore in swap
+; ---- HH Beta 6 ----
+   ;14 z Add assert
+   ;12 y Fix nrt_sy_reset_table
+       ; Repair tests
+; ---- HH Beta 1 ----
+ ; Jul
+   ;10 x [Adapt rom ass] Use CALL_EXT / pagefirm
+
+; \/\/\/\/ 2024 \/\/\/\/\/\/\/\
+ ; TODO: 
+  ; - get_pc_from_line: return nb opcode for this line
+        ; -> requires to go past line in ass
+           ; Wait for rewrite (fast pc increment)?
+           ; For now too much work for little value.
+  ; - re-enable actual check (get back same PC) 
+
+; --------- GG Beta 5 -----------
+ ; Jun
+  ;  2 vw: WIP No "di" anymore for get_pc_from_line
+         ; !!! Sometimes BC' <> 7fxx while doing b941 routine
+             ; (despite ld bc,&7fxx ok in screen.o int routine)
+         ; TODO: activate status bar for tests?
+; Cancelled: keep the "di" for now.
+vw    = 0
+
+ ; May   
+  ; 29 vv: /manual_test/ for line 435->436
+         ; Fix "prof.o" imported at 9000
+  ; 19 vu: Add profiling in test_bimatch.
+           ; -> Break for now, since too slow
+     ; vt: test_get_pc_from_line_load: reproduce!
+         ; Fix it: set vt_rom_firmforbid 
+  ;  8 vs: Add test_get_pc_from_line_load (doesn't reproduce for now)
+         ; _lpc_com: fix Carry when cur=target
+
+; --------- GG Beta 4 -----------
+ ; Apr
+  ;  4 vr: Add test_remove_macro
+ ; Mar
+  ; 18 vq: glfp_from_chunk: Rollback /init_var/ change from vo: 
+                          ; Hack! Call sy_reset_scope
+  ; 17 vp: test_bimatch: fix test itself (DI was cancelled by CALL_BRIC)
+                       ; and co.
+         ; still failing at pc = &d73e (line was 1729)
+           ; makes no sense as 1729 is &d727
+
+
+  ; 10 vo: Add test_reset
+         ; Fix #17b Trace macro may corrupt memory
+            ; Do not store/restore anymore:
+                ; - We cannot store macro buffer anyway
+            ; Instead, restore reset variables
+         ; get_line_from_pc: set sk_* ourself after glfp_scan
+                 ; (remove spurious dependency from ass)
+         ; call init_var:
+              ; at glfp_from_start: ensure proper state
+              ; not at glfp_from_chunk: allow incremental
+  ;  9 vn: DISCARDED: instead of putting everything in bank,
+                    ; move vars out of bank. See vo
+         ; va_if = &7c4e (to match ass-fl)
+         ; Don't call init_var: full state back in bank.
+  ;  4 vm: Test: add test_bimatch 
+               ; add test_gpc7
+         ; test_get_pc_from_line_modif: fix ref.
+         ; visu_store/restore: don't check against C (obsolete)
+; --------- Release GG Beta 1 -----------
+ ; Feb
+  ; 14 vl: Test: add test_get_pc_from_line_modif
+  ;  8 vk: Fix when target = cur_line (from_start).
+         ; Happens at beginning of bloc.
+  ;  7 vj: New test. Fixed in ass-fi.  
+  ;  3 vi: Add test with comment 
+ ; Jan
+  ; 28 vh: Introduce /get_pc_from_line/ for inline dump in ed.
+           ; (requires ass-fh)
+         ; Test: org_assemble now in org+111
+         ; use "extmap.i"
+
+; \/\/\/\/ 2023 \/\/\/\/\/\/\/\
+; --------- Release FF -----------
+
+ ; Jul
+  ; 2 vg: Add /nrt_if/
+
+ ; May
+  ; 6 & 11 vf: Simplify call to gflp_scan_ 
+             ; (since now returns directly in any case)
+
+ ; Apr        
+  ; 24 vE: Add checks.
+
+  ; 23 vD: Rollback vC, as it was the version burnt in rom for ages.
+         ; (maybe to avoid infinite loop in debugger)
+         ; Move va3 @ 76f0
+vc    = 0
+      IF vc
+ !! Cannot use check_frame without except_enter
+      END
+
+; \/\/\/\/ 2021 \/\/\/\/\/\/\/\
+
+     ; Oct 9 vC: Add check /CHECK_FRAME/
+
+        ; 28 vB: don't try to recover stack by hand after 
+               ; call to /ass_amorce/: too britle!
+               ; Indeed, was broken by ass-do refactoring.
+
+        ; 26: vA Remove va_savesp. !! Requires ass-do
+            ; Let ass do the nested scoping:
+               ; Fix issue were source2line overwrote va_savesp
+               ; with lower frame (ultimately dangling).
+            ; !! Wasn't enough -> for hook we need to recover from frame
+
+; 2021 Sep 3: v9 New test /nrt_122a/  (bug #122)
+            ; Not fixed -> deactivated. 
+
+; Dec 30 v8 Fix NRT itself /src_mcc/. Expected line is 70.
+
+; May 17 v7 Remove org_assemble_nrt, use org_assemble. Rationale:
+            ; - Never out of sync.
+            ; - More integrated tests.
+            ; - We don't mind if firmware is copied.
+          ; NRT: Add /test_macro_cross_chunks/ (#DEb). Fixed in asscl.
+
+         ; 17  v6. NRT: Use aap_get# since address has moved.
+                 ; Add /test_multi_sources/  !! STILL FAILING !!
+                 ; Add /visu_store/restore
+                 ; Move tmp_sk from 40FD to 48FD
+             ; v5. Load directive: introduce /nrt_load/ (fixed in assch)
+     ; Apr  9: v4. NRT: Must call chunk_init_custom.
+                 ; NRT: Must call sy_reset for /org_assemble_nrt/
+; 2020 Mar 30: v3. Introduce /nrtc0d/. !!ON HOLD!
+
+; v2 Fix nrtc0c itself. Works with assbr.
+; v1 extracted from assbq. + test_line_macros from assnrt4 (fails now)
+   ; Requires assbr! 
+
+rast  = 1-inRom         ; for trace debug
+
+bk_dev = &D7            ; d7: enough room for test_bimatch
+nb_chunks = &FF
+
+codedest = visu_module  ; after asseva
+limit = scan
+codedest2 = visu_jp
+limit2 = import_jp3
+codedest3 = visu_jp'
+limit3 = symb_jp'
+
+nrt_buf = &0F00
+
+; ---- In this rom (ORGASS.ROM) -----------------
+connect_bk_base = pagefirm_jp ; All regs saved
+connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+connect_next_chunk = &C200 ;A corrupted
+
+asseto = &FFAE
+asseto_init = asseto
+
+except = &FF7E
+check_frame = except
+unwind = except+15
+
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+; ---- In ORGAMS.ROM aka main_rom ---------------
+
+setup_custom = &E839    ; Trust me on this
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+;org_chead_source = org+&5B ; Not a routine! Just the value
+org_count_lines = org+&63
+seek_source_begin = org+66
+;connect_line_start_end = org+&78
+connect_line_chunk = org+&1B
+
+
+; ---- for nrt ------
+org_init = org
+org_source_init = org + &84
+org_select = org + &3F
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+;org_delete_line = org+15
+org_load = org+18
+;org_save = org+21
+org_assemble = org+111
+
+; ---------- In bric ROM  ----
+chunk = &FE00
+chunk_init_custom = chunk + 33
+
+aap   = &FE30
+aap_get# = aap+21
+
+disp  = &FF14
+disp_nl = disp+&42      ; nrt
+disp_deci_hl = disp+&51 ; nrt
+disp_hexa_hl = disp+&63 ; nrt
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+fail_nrt = &BE00        ; Breakpoint on failures
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG ad ; CALL_EXT in some sources
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_BRIC ad ; for nrt
+          call call_bric_from_ass:WORD ad
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop de
+      ENDM
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop hl
+      ENDM
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+;====
+setup_nrt
+;====
+      IF todo
+; use init_nrt
+      END
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom
+
+; vt_romass unused for farcall
+vr_romass = &9D08
+vr_currom = &9D0A
+          ld a,rom
+          ld (vr_romass),a
+          ld (vr_currom),a
+
+; -- Cold start
+          ld c,rom:call kl_rom_select
+
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          call setup_nrt
+          call test_macro_cross_chunks
+      BRK
+;          call test_gpc7   !!! too brittle
+          call test_get_pc_from_line
+          call test_get_pc_from_line_modif
+          call test_get_pc_from_line_load
+          call test_get_line_from_pc ; Requires 123.Nrt in cwd
+          call test_reset
+          call test_macro_cross_chunks
+          call test_multi_sources
+          call test_remove_macro
+          call test_imported_macro
+; long test!
+          call test_bimatch
+          ret
+
+; ----
+ass   = &FE20
+ass'  = &FE87
+;ass_init_and_amorce = ass
+ass_amorce = ass+3      ;phase 0
+init_var = ass+12       ;setup macro/rep pointers. bc,de saved
+;get_nb_errors = ass+15
+get_error = ass+18
+;lab_stat = ass+30
+glfp_scan_ = ass+27
+ass_get_pc_from_line = ass'+15
+set_cur_source = ass'+18
+ass_entry0 = ass+39     ; NRT
+is_in_macro = ass+6     ; NRT
+
+sy    = &FFD8
+sy'   = &FF93
+nrt_sy_init = sy+18
+nrt_sy_reset_table = sy+6
+sy_reset_scope = sy'+9
+
+
+test_get_pc_from_line
+; Check we get proper $ given line number
+
+;--reset cache.
+      IF todo
+  ; Should be done at init time instead.
+  ; For now we might have weird bugs at first use
+      END
+          ld hl,0:ld (lpc_cur_line),hl
+
+          ld hl,.src
+.lp
+          call nrtsetsource
+          call assemble_com
+          call check_pc_from_line
+          ld a,(hl)
+          or a:jr nz,.lp
+          ret
+
+.src
+      BYTE ";",0
+      BYTE "org &1234",0
+      BYTE "nop",0
+      BYTE ";",0
+      BYTE 0
+      WORD 1,pcnrt
+      WORD 2,pcnrt
+      WORD 3,pcnrt
+      WORD 4,pcnrt+1
+      WORD 0
+
+      BYTE "org &1234",0
+      BYTE "nop",0
+      BYTE "org &ccc,$$",0
+      BYTE ";",0
+      BYTE "r skip &100",0
+      BYTE ";",0
+      BYTE 0
+      WORD 4,&0CCC
+      WORD 5,&0CCC
+      WORD 6,&0DCC
+      WORD 5,&0CCC
+      WORD 4,&0CCC
+      WORD 0
+
+      BYTE "org &1234",0
+      BYTE "if 0",0
+      BYTE ";",0
+      BYTE "end",0
+      BYTE 0
+      WORD 4,pcnrt
+      WORD 3,pcnrt
+      WORD 2,pcnrt
+      WORD 0
+
+      BYTE "org &1234",0
+      BYTE "di",0
+      BYTE "neg",0
+      BYTE "if 0",0
+      BYTE "100**ei",0  ;5
+      BYTE "end",0
+      BYTE "di",0
+      BYTE "2**ei",0
+      BYTE ";",0
+      BYTE 0
+pcnrt = &1234
+      WORD 2,pcnrt
+      WORD 3,pcnrt+1
+      WORD 4,pcnrt+3
+      WORD 4,pcnrt+3    ; same line
+      WORD 5,pcnrt+3    ; after if 0
+      WORD 6,pcnrt+3
+      WORD 7,pcnrt+3
+      WORD 8,pcnrt+4
+      WORD 9,pcnrt+6
+;now backward
+      WORD 8,pcnrt+4
+      WORD 7,pcnrt+3
+      WORD 6,pcnrt+3
+      WORD 5,pcnrt+3
+      WORD 4,pcnrt+3
+      WORD 3,pcnrt+1
+      WORD 2,pcnrt
+      WORD 0
+
+      BYTE 0
+
+test_get_pc_from_line_modif
+;--------------------------
+; At some point it was crashing after adding a line
+
+          ld hl,.src
+          call nrt_org_load
+; erroneous assemble. Nevermind
+          ld bc,&CAFE
+          ld de,destnrt
+          CALL_ORG(org_assemble)
+; probleme 1: shouldn't be seen as assembled
+          call is_assembled:call c,fail_nrt
+
+; not assembled, still able to give coherent result.
+          ld de,24
+          call get_pc_from_line_nrt
+          CHECK_DE_EQ(&3A)
+
+          ld de,24
+          ld hl,.line
+          CALL_ORG(org_insert_line)
+; was crashing since unknown label: was trying to resolve import
+; (firmware calls -> crash)
+          ld de,25
+          call get_pc_from_line_nrt
+          CHECK_DE_EQ(&3A)
+          ret
+
+.src  BYTE ":orgbug/gpc1.o",0
+.line BYTE "if dev",0
+
+break_nrt
+; Stop, allows to see the screen
+          di
+          push af:push bc:push de:push hl
+          exx:ld bc,&7F86:exx ; poor's man system restore
+          ld bc,&0E04:call &BC38
+          call &BB06
+          pop hl:pop de:pop bc:pop af
+      BRK
+          ret
+
+
+
+      IF 0
+test_gpc7
+;--------
+;Reproduce from state after CTRL-2  (used to crash)
+;Discarded: too brittle as it use orgams state from GG beta 3.
+; If some variables have moved: invalid.
+          ld a,&C4:ld hl,.fc4:call nrt_load_bank
+          ld a,&C7:ld hl,.fc7:call nrt_load_bank
+
+          ld a,&C7:ld i,a:ld b,&7F:out (c),a
+
+          ld de,34
+          call get_pc_from_line:call nc,fail
+          CHECK_DE_EQ(&2024)
+          ld de,35
+          call get_pc_from_line:call nc,fail
+          CHECK_DE_EQ(&2029)
+
+;check 0000 zone wasn't overwriten
+          ld hl,0
+          ld de,ref0000
+          ld b,8
+          call compare_sized
+
+ ; restore proper test state
+          call setup_nrt
+          ret
+
+.fc4  BYTE ":orgbug/gpc7.c4",0
+.fc7  BYTE ":orgbug/gpc7.c7",0
+
+      END
+
+test_reset
+; Reproduce bug #17b      
+          call visu_restore
+          ld hl,.src
+          call nrtsetsource
+          call assemble_com
+          ld ix,.check_reset
+          call check_com_
+; must restore workzone (farcall notably) for other tests (orgload...)
+          call setup_nrt
+          ret
+
+.check_reset
+; Check 0 wasn't overwriten,
+; and clear workzone to mimick reset
+
+          ld hl,0
+          ld de,ref0000
+          ld b,8
+          call compare_sized
+; Don't clear farcall though, since it is reinstalled
+          ld hl,&9000:ld de,&9001:ld bc,&0CFF:ld (hl),0:ldir
+          ld hl,vars:ld b,vars_
+.raz      ld (hl),0:inc l:djnz .raz
+          ret
+
+.src
+      BYTE "macro m n",0
+      BYTE "word n",0
+      BYTE "endm",0
+      BYTE "m(&be00)",0
+      BYTE "ei",0,0
+  ;    WORD destnrt,4
+      WORD destnrt+1,4
+      WORD destnrt+2,5
+      WORD 0
+
+ref0000
+      BYTE &01,&89,&7F,&ED,&49,&C3,&91,&05
+
+test_remove_macro
+;----------------
+; We got an assertion after removing macro
+          call setup_nrt
+          ld hl,.src
+          call nrtsetsource
+          call assemble_com
+; Sanity checks
+          ld de,2:ld bc,destnrt:call check_gpc
+          ld de,3:ld bc,destnrt+1:call check_gpc
+; Remove macro
+          ld hl,.empty
+          ld de,1
+          CALL_ORG(org_set_line)
+; Try again
+          ld de,2:ld bc,destnrt:call check_gpc
+          ld de,3:ld bc,destnrt:call check_gpc
+          ret
+
+.src
+      BYTE "macro m n:byte n:endm",0
+      BYTE "m(1)",0
+      BYTE "m(2)",0,0
+.empty BYTE 0
+
+test_get_pc_from_line_load
+;-------------------------
+; We got garbagge or crash after LOAD directive
+          call setup_nrt
+          ld hl,.src0
+          call nrtsetsource
+          call assemble_com
+          ld hl,.src
+          call nrtaddsource
+          ld de,1:ld bc,destnrt:call check_gpc
+;Note: size not known, so random PC is returned.
+;Still get_pc_from_line returns carry (the failure in
+;ass.get_file via ass.cpt_load isn't bubbling up).
+;We don't check anything, apart that it doesn't crash!
+          ld de,2:call get_pc_from_line
+          ld de,3:call get_pc_from_line
+          ret
+
+.src0
+      BYTE "brk",0
+      BYTE 0,0
+.src
+      BYTE "load",34,"123.nrt",34,0
+      BYTE "load",34,"nonexistww",34,0
+      BYTE ";",0,0
+
+
+nrt_load_bank
+          ld b,&7F:out (c),a
+          call nrt_get_len
+nrt_io_buf = &8000
+          ld de,nrt_io_buf
+          call &BC77:call nc,fail_nrt
+          ld hl,&4000
+          call &BC83:call nc,fail_nrt
+          call &BC7A
+          ret
+
+nrt_get_len
+          push hl
+.lp       ld a,(hl):or a:jr z,.ok
+          inc hl
+          jr .lp
+.ok
+          ld a,l
+          pop hl
+          sub l
+          ld b,a
+          ret
+
+test_bimatch
+;-----------
+; Full test pc->line->pc
+
+          ld hl,.src
+          call nrt_org_load
+          call assemble_com
+
+.test_manual
+; for profiling!
+          ld de,435:ld bc,&2000:call .check_gpc
+          ld de,436:ld bc,&2007:call .check_gpc
+          ld de,437:ld bc,&200E:call .check_gpc
+          ld de,443:ld bc,&2018:call .check_gpc
+          ld de,444:ld bc,&2018:call .check_gpc
+; profile returned hl=11764  
+; mesure via trace = 31000+  (oh yes profile cannot measure > frame)
+          ld de,445:ld bc,&201B:call .check_gpc
+          ld de,599:ld bc,&2089:call .check_gpc
+          ld de,600:ld bc,&208E:call .check_gpc
+; 58 raster lines incrementally?!?
+; it's 600:CALL_ORG(asseto_init)
+; note 599:CALL_ORG(org_init) just before didn't cause issue
+          ld de,601:ld bc,&2093:call .check_gpc
+;---
+;Some sanity check
+;More than that! Check we aren't lost when entering macro
+; For some reason d723 and d727 we enter macro?
+      IF todo
+ ; Check why (for d727)
+      END
+; Then there was a bug for d724: (restarting in glfp_com de'=1706)
+   ; line# not incremented since was falsely thinking "is_in_macro"
+          ld bc,&D6F1:ld hl,1703:call .check_one ; CALL_ORG()
+          ld bc,&D6F5:ld hl,1703:call .check_one ; CALL_ORG()
+          ld bc,&D6F6:ld hl,1704:call .check_one ; past CALL_ORG()
+
+          ld bc,&D723:ld hl,1725:call .check_one
+          ld bc,&D724:ld hl,1727:call .check_one
+          ld bc,&D722:ld hl,1725:call .check_one
+          ld bc,&D723:ld hl,1725:call .check_one
+          ld bc,&D724:ld hl,1727:call .check_one
+          ld bc,&D727:ld hl,1731:call .check_one
+          ld bc,&D72A:ld hl,1732:call .check_one
+
+          ld bc,&D0FC:ld hl,661:call .check_one ; CALL_ORG()
+          ld bc,&D0FD:ld hl,661:call .check_one
+          ld bc,&D0FE:ld hl,661:call .check_one
+          ld bc,&D0FF:ld hl,661:call .check_one
+          ld bc,&D100:ld hl,661:call .check_one
+          ld bc,&D101:ld hl,662:call .check_one ; past CALL_ORG()
+
+          ld bc,&E462:ld hl,3967:call .check_one
+      IF todo
+; fix that (glfp_gross doesn't pick the right chunk)
+; we have chunk cc:4d  pc=&e463
+              ; cc:4e  pc=&e240 (out of order)
+      END
+ ;         ld bc,&E463:ld hl,3980:BRK:call .check_one
+
+          ld de,598:ld bc,&2084:call .check_gpc
+
+          ld bc,&2000:ld hl,&20B5:call .check_bimatch
+          ld bc,&D0DD:ld hl,&E13D:call .check_bimatch
+          ld bc,&E240:ld hl,&E270:call .check_bimatch
+      IF todo
+; reactiveate full range when bug above fixed.
+      END
+          ld bc,&E3ED:ld hl,&E462:call .check_bimatch
+;          ld bc,&E3ED:ld hl,&E471:call .check_bimatch
+          ret
+
+.check_one
+          push hl
+          di:call get_line_from_pc_safe:call nc,fail_nrt
+          pop hl:or a:sbc hl,de:add hl,de:call nz,fail_nrt
+          ret
+
+.check_gpc
+          push bc
+          call get_pc_from_line:call nc,fail_nrt
+          pop hl:or a:sbc hl,de:add hl,de:call nz,fail_nrt
+          ret
+
+.src  BYTE ":orgbug/gpc2.o",0
+
+.check_bimatch
+;In: BC=start
+   ; HL=last
+
+          ld de,0:ld (.curline+1),de
+.lp
+          push hl
+          push bc
+          ld l,c:ld h,b:CALL_BRIC(disp_hexa_hl)
+          di            ; needed after CALL_BRIC
+          push bc:ld bc,&7F10:out (c),c:ld c,&5F:out (c),c:pop bc
+;          ld de,&D0FA:or a:sbc hl,de:call z,break_nrt
+
+          call get_line_from_pc_safe:call nc,break_nrt
+
+          ld bc,&7F10:out (c),c:ld c,&54:out (c),c
+          ld a,e:or d:call z,break_nrt
+; only check line->pc for new line          
+.curline  ld hl,0
+          or a:sbc hl,de:jr z,.next
+          ld (.curdiff+1),hl
+          ld (.curline+1),de
+          ld l,e:ld h,d
+          CALL_BRIC(disp_deci_hl)
+          CALL_BRIC(disp_nl)
+          ld bc,&7F10:out (c),c:ld c,&43:out (c),c
+
+; hack: get_pc_from_line never returns in-macro
+  ; but get_line_from_pc may. So we reset the state if needed
+          call is_in_macro:jr z,.okmac
+          call init_var
+      IF todo
+;todo instead? let get_line_from_pc invalidate gpc state?
+; - Might solve some bugs when jumping from trace to editor
+; But would prevent testing incremental path
+   ; (and would be very slow!)
+      END
+; Now we pertubed get_line_from_pc state. Invalidate for next iter
+          ld hl,0:ld (sk_cur_line),hl
+          ld (.curdiff+1),hl ; no profiling when start is reset
+
+.okmac
+; If diff = -1, it means "next line". In that case, we profile.
+.curdiff  ld hl,0
+          ld a,l:and h:inc a:jr nz,.noprof
+
+          push de
+          ld (prof_line+1),de
+          xor a:ld (nrt_flag_from_start),a
+          ld hl,prof_get_pc_from_line
+          call profile
+          ld a,(nrt_flag_from_start)
+          or a
+          jr nz,.was_from_start
+       ;   ld de,64*10
+          ld de,64*20   ; 1280
+; line 607:  3511 
+      IF todo
+; fix that! the slowness but more importantly the flakiness
+      END
+; line 654:  3906. sometimes flaky (10845) why???
+          ld de,11000
+          jr .profcom
+.was_from_start
+; Even when just incrementing line #, we might rewind from start
+; See explanation around lpc_next_line
+          ld a,(nrt_#_from_start)
+          inc a
+        ;  cp 3:call nc,break_nrt
+          ld (nrt_#_from_start),a
+ ; allow more when from start
+         ; ld de,64*30
+      IF todo
+; fix that!       
+;line 1024:14410 
+;line 1281:16800
+      END
+          jr .noprof'   ; cannot mesure > 20000 anyway
+;enchaine
+.profcom
+          or a:sbc hl,de:add hl,de:call nc,break_nrt
+.noprof'
+          pop de
+; Rerun for "nc test"
+.noprof
+          call get_pc_from_line:call nc,break_nrt
+
+          ld bc,&7F10:out (c),c:ld c,&54:out (c),c
+          pop hl:push hl
+      ;    or a:sbc hl,de:call nz,fail ; must find back same PC
+.next
+          pop bc
+          pop hl
+          inc bc
+          or a:sbc hl,bc:add hl,bc
+          jp nc,.lp
+          ret
+
+nrt_flag_from_start BYTE 
+nrt_#_from_start BYTE 0
+
+prof_get_pc_from_line
+prof_line ld de,0
+          jp get_pc_from_line
+
+check_gpc
+          push bc
+          call get_pc_from_line:call nc,fail_nrt
+          pop hl:or a:sbc hl,de:add hl,de:call nz,fail_nrt
+          ret
+
+
+nrt_org_load
+          ld bc,0
+          CALL_ORG(org_load):call nc,fail_nrt
+          ret
+
+
+check_pc_from_line
+;-----------------
+; In:  hl=ref to check
+; Out: hl=past ref
+
+repeat' = 1
+lmlp
+          ld b,repeat'
+lmretry
+          push bc:push hl
+          ld ix,noop
+          call _check_pc
+          pop hl:pop bc
+          djnz lmretry
+
+          4 ** inc hl
+          ld a,(hl):inc hl
+          or (hl):dec hl
+          jr nz,lmlp
+
+          2 ** inc hl
+          ret
+
+_check_pc
+; in: ix= subroutine (ret or lfp_connect)
+
+.lp
+          push ix
+          di
+          ld bc,&7F10:out (c),c:ld c,&4E:out (c),c
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          push hl
+          call get_pc_from_line
+          ld bc,&7F10:out (c),c:ld c,&54:out (c),c
+
+          pop hl
+          ld bc,&BADC
+          ld a,(hl):cp e:call nz,&BE00
+          inc hl
+          ld a,(hl):cp d:call nz,&BE00
+          inc hl
+
+          pop ix
+          push hl
+          call jp_ix
+          pop hl
+
+          ld a,(hl):inc hl:or (hl):dec hl
+          or a
+          jr nz,.lp
+
+; Last check was on activated line. 
+          ld a,(va_if):cp &FF:call nz,fail
+          ld a,(lpc_if):cp &FF:call nz,fail
+
+          inc hl:inc hl
+          ret
+
+
+test_get_line_from_pc
+; Check we get proper line number given $.    
+
+; NB: Rerun 'get_line_from_pc' several times to check
+;     macro SP is properly reset and that we don't depend on state.
+
+; More complex tests are done in /orgnrt/assnrt.o
+          call visu_restore
+
+          ld hl,src_visu
+.lmsrclp
+          call nrtsetsource
+          call assemble_com
+          call check_com
+          ld a,(hl)
+          or a:jr nz,.lmsrclp
+          ret
+
+
+test_macro_cross_chunks
+; bug #DEb: Macro invocation was setting 'emitted' flag.
+          ld hl,src_mcc
+          call nrtsetsource_crosschunks
+          call assemble_com
+          call check_com
+          ret
+
+src_mcc
+      BYTE "org &3100",0
+      BYTE "MACRO mamamia:2 ** inc e",0
+      BYTE "endm",0
+      BYTE "org &3000:inc d",0
+      BYTE "mamamia()",0,0
+      WORD &3000,4 + 3*lines#perchunk
+      WORD 0
+
+
+test_multi_sources
+;-----------------
+; Check we still get proper lines when switching sources.
+          xor a:CALL_ORG(org_select):call nc,&BE00
+          CALL_ORG(org_source_init)
+
+          ld hl,nrt_source0
+          call nrtsetsource
+          call assemble_com
+          push hl       ; adr ref1
+          call check_com ; sanity
+          pop hl
+          push hl
+  ; double sanity: we can replay even without switching
+          call check_com
+
+; Switch to new source
+
+          ld a,1:CALL_ORG(org_select):call nc,&BE00
+          CALL_ORG(org_source_init)
+
+          ld hl,nrt_source1
+          call nrtsetsource
+          call assemble_com
+          push hl       ; adr ref1
+          call check_com
+
+; Back to source 0
+          xor a:CALL_ORG(org_select):call nc,&BE00
+          pop de
+          pop hl
+          push de
+          call check_com
+
+; Now source 1
+          ld a,1:CALL_ORG(org_select):call nc,&BE00
+          pop hl
+          call check_com
+          ret
+
+test_imported_macro
+;------------------
+          call setup_nrt
+          ld hl,.dir
+          call change_dir
+          ld hl,.src
+          call nrt_org_load
+          call assemble_com
+          ld hl,dir_root
+          call change_dir
+
+          ld hl,.ref
+          call check_com
+          ret
+
+.dir  BYTE "testdata/#1de",0
+.src  BYTE "timernrt.o",0
+;.src  BYTE "main.o",0
+.ref
+      WORD &0856,287    ; ass with $=0, past timer.o
+      WORD &0857,290    ; skip BRK
+      WORD &0858,290    ; still in macro
+      WORD &08A2,291    ; post macro
+      WORD 0
+
+dir_root BYTE ":org",0
+
+
+assemble_com
+;-----------
+; In:  hl=source to assemble
+; Out: hl=past ref
+          push hl
+destnrt = &2000
+          ld bc,destnrt
+          ld de,destnrt
+          CALL_ORG(org_assemble)
+          jr c,lms_ok
+          xor a:call get_error
+      BRK
+;!! here de=line, a=error code
+lms_ok
+          pop hl:inc hl
+          ret
+
+check_com
+;--------
+; In:  hl=ref to check
+; Out: hl=past ref
+
+repeat = 4
+          ld ix,noop
+check_com_
+          di
+.lmlp
+          ld b,repeat
+.lmretry
+          push bc:push hl
+          call lfp_com
+          pop hl:pop bc
+          djnz .lmretry
+
+          4 ** inc hl
+          ld a,(hl):inc hl
+          or (hl):dec hl
+          jr nz,.lmlp
+
+          2 ** inc hl
+          ret
+
+
+
+src_visu
+; Different isolated sources and expected $ -> line mapping.
+dn    = destnrt
+
+      IF 0
+nrtc0d
+; this happens often.
+      IF 0
+; On hold: to fix it, we should provide better information in header
+         ; (min $, max $, ...).
+         ; To be considered together with design for:
+            ; Area tracking (to detect overlap).
+            ; IF/END and label tracking? (see notebook).
+; Easy workaround: make sure the source is monotone.
+
+      BYTE "org &8000,$$",0
+      BYTE "org &c000,$$",0
+      BYTE " ld a,1",0
+      BYTE "org &9000,$$",0
+      BYTE "t",0
+      BYTE " ld a,2",0
+      BYTE 0
+      WORD &9000,6
+      WORD 0
+      END
+
+
+nrt_load
+; NB: "123.nrt" file must be present
+      BYTE "ld a,10",0
+      BYTE "load",34,"123.nrt",34,0
+      BYTE "ld a,12",0
+      BYTE 0
+      WORD dn+0,1
+      WORD dn+2,2
+      WORD dn+5,3
+      WORD 0
+
+
+nrt_122a
+;sanity: works with 1 level
+      BYTE "10 ** [",0
+      BYTE "inc bc",0
+      BYTE "inc de",0
+      BYTE "]",0
+      BYTE "ld hl,3",0
+      BYTE 0
+      WORD dn+0,2
+      WORD dn+1,3
+      WORD dn+2,2
+      WORD dn+3,3
+      WORD dn+4,2
+      WORD dn+20,5
+      WORD 0
+
+      IF 0
+nrt_122b
+;wasn't working with 2 levels
+      BYTE "10 ** [",0
+      BYTE "inc hl",0
+      BYTE "2 ** inc sp",0
+      BYTE "]",0
+      BYTE "ld bc,1",0
+      BYTE 0
+      WORD dn+0,2
+      WORD dn+1,3
+      WORD dn+2,3
+      WORD dn+3,2
+      WORD dn+4,3
+      WORD dn+5,3
+      WORD dn+6,2
+      WORD dn+30,5
+      WORD 0
+      END
+
+      IF 0
+ !! still note fixed. see bug#122
+nrt_122c
+;try with explicit levels
+      BYTE "10 ** [",0
+      BYTE "inc a",0
+      BYTE "2 ** [inc b]",0
+      BYTE "]",0
+      BYTE "ld c,2",0
+      BYTE 0
+      WORD dn+0,2
+      WORD dn+1,3
+      WORD dn+2,3
+      WORD dn+3,2
+      WORD dn+4,3
+      WORD dn+5,3
+      WORD dn+6,2
+      WORD dn+30,5
+      WORD 0
+      END
+
+nrt_122d
+;try with 2 instructions.
+      BYTE "10 ** [",0
+      BYTE "inc c",0
+      BYTE "inc d:inc d",0
+      BYTE "]",0
+      BYTE "ld e,2",0
+      BYTE 0
+    ;  WORD dn+0,2
+    ;  WORD dn+1,3
+    ;  WORD dn+2,3
+    ;  WORD dn+3,2
+      WORD dn+4,3
+      WORD dn+5,3
+      WORD dn+6,2
+      WORD dn+30,5
+      WORD 0
+
+nrt_if
+      BYTE "if 1",0
+      BYTE "ldi",0
+      BYTE "end",0
+      BYTE "di",0,0
+      WORD dn+1,2
+      WORD dn+2,4
+      WORD 0
+
+nrt_if0
+      BYTE "if 0",0
+      BYTE "!! prout",0
+      BYTE "end",0
+      BYTE "ei",0,0
+      WORD dn,4
+      WORD 0
+
+      BYTE "import",34,"testdata/#1de'/host.o",0
+      BYTE "di",0
+      BYTE "di",0,0
+      WORD dn+4,2
+      WORD dn+1,1
+      WORD dn+4,2
+      WORD 0
+
+      BYTE "org &1000,$$:di",0
+      BYTE "org &1001,$$:di",0
+      BYTE "org 42",0,0
+      WORD &1000,1
+      WORD 0
+
+      END
+
+;like /src_mcc/ but with regular line#
+      IF 0
+; Bugged for now: chead_pc indicates &3000 (as it should)
+; When we encounter org &3100 > target_pc, we stop.
+; solving this corner case would require some work
+      BYTE "org &3100",0
+      BYTE "MACRO mamamia:2 ** inc e",0
+      BYTE "endm",0
+      BYTE "org &3000:inc d",0
+      BYTE "mamamia()",0,0
+      WORD &3000,4
+      WORD 0
+      END
+
+; <<< New test goes here >>>
+;All those kept at the end, since used by two tests.
+nrt_source0
+      BYTE ";nrt7",0    ; macro with parameters
+      BYTE "org 2",0
+      BYTE "macro x n",0
+      BYTE " ld a,n+n",0
+      BYTE "endm",0
+      BYTE "nop",0      ; l6:2
+      BYTE "x(2)",0
+      BYTE "nop",0      ; :5
+      BYTE "x(2)",0
+      BYTE "nop",0,0    ; :8
+      WORD 8,10         ; backward
+      WORD 5,8
+      WORD 2,6
+      WORD 0
+
+
+nrt_source1
+;keep at the end, since used by two tests.
+nrtc0c
+; Reproduce "bugshift.o"
+; some labels not defined: nevermind
+      BYTE "MACRO TEST_DISP desc,expected",0
+      BYTE "ld hl,desc",0
+      BYTE "call 1",0
+      BYTE " ",0
+      BYTE "; Dummy comment 1",0
+      BYTE "ld hl,2",0
+      BYTE "ld de,expected",0
+      BYTE "jp 3",0
+      BYTE "ENDM",0
+      BYTE " ",0
+      BYTE "test_disp_text",0
+      BYTE "; Dummy comment Florette",0
+      BYTE "TEST_DISP(nrt_text_ui,nrt_text_expected)",0 ; l13
+      BYTE " ",0
+      BYTE "nrt_text_ui BYTE 3,",34,"OvL!",34,0
+      BYTE "nrt_text_expected BYTE ",34,"OvL!",34,"-1",0
+      BYTE " ",0
+      BYTE 0
+      WORD destnrt,13   ; macro invokation
+      WORD destnrt+3,13
+      WORD destnrt+6,13
+      WORD destnrt+9,13
+      WORD destnrt+12,13
+      WORD destnrt+15,15 ; fst line byte
+      WORD destnrt+16,15
+      WORD destnrt+17,15
+      WORD destnrt+18,15
+      WORD destnrt+19,15
+      WORD destnrt+22,16 ; snd line byte
+      WORD 0
+
+      BYTE 0            ; end of tests
+
+; -----------------------------------------------------
+
+
+nrtsetsource
+          push hl
+          CALL_ORG(org_source_init)
+          pop hl
+nrtaddsource
+          ld de,1
+nss_
+          ld bc,0       ;no comments between lines
+          jr nss_com_
+
+lines#perchunk = 22     ; fill 1 chunk
+lines#perbank = 22 * &30 ; fill 1 bank
+
+nrtsetsource_crosschunks
+
+          ld de,lines#perchunk
+          jr nss_com
+
+
+nrtsetsource_crossbanks
+
+          ld de,lines#perbank
+nss_com
+;in de: nb lines#perchunk
+          push de
+          push hl
+          call setup_nrt
+          pop hl
+          pop bc
+          ld de,1
+nss_com_
+atlnlp
+          push bc:push de
+; for debug: show lines
+          push hl:call display_text_hl:pop hl
+          push hl:CALL_ORG(org_insert_line):pop de
+          call nc,&BE00:ld a,"/":call &BB5A
+          pop de:pop bc
+          inc de
+          push bc:push hl
+atlnlpc
+          ld a,c:or b:jr z,atlnend
+          push bc
+          push de
+          ld hl,nrtcomment
+          CALL_ORG(org_insert_line)
+          pop de
+          call nc,&BE00
+          inc de
+          pop bc
+          dec bc
+          jr atlnlpc
+atlnend
+          pop hl:pop bc
+          ld a,(hl)
+          or a
+          jr nz,atlnlp
+
+          call test_de_untouched
+          ret
+
+nrtcomment BYTE "; comment",0
+
+      IF 0
+nrtsetsource_crosschunks'
+; Read # of interlines comments
+
+          ld bc,&DFFF   ; 5+ banks for cross-chunks nrts
+          push hl
+          call nrt_init_custom
+          pop hl
+          ld de,1
+atlnlp'
+          push de
+; for debug: show lines
+          push hl:call display_text_hl:pop hl
+          push hl:CALL_ORG(org_insert_line):pop de
+          call nc,&BE00:ld a,"/":call &BB5A
+          pop de
+          inc de
+          ld c,(hl):inc hl
+          ld b,(hl):inc hl
+          push hl
+atlnlpc'
+          ld a,c:or b:jr z,atlnend'
+          push bc
+          push de
+          ld hl,nrtcomment
+          CALL_ORG(org_insert_line)
+          pop de
+          call nc,&BE00
+          inc de
+          pop bc
+          dec bc
+          jr atlnlpc'
+atlnend'
+          pop hl
+          ld a,(hl)
+          or a
+          jr nz,atlnlp'
+          call test_de_untouched
+          ret
+      END
+
+lfp_com
+; in: ix= subroutine (ret or lfp_connect)
+
+lfp_linelp
+          push ix
+          di
+          ld bc,&7F10:out (c),c:ld c,&45:out (c),c
+          ld c,(hl):inc hl
+          ld b,(hl):inc hl
+          push hl
+
+          call get_line_from_pc_safe:call nc,fail_nrt
+          ld bc,&7F10:out (c),c:ld c,&54:out (c),c
+
+          pop hl
+          ld bc,&BADC
+          ld a,(hl):cp e:call nz,fail_nrt
+          inc hl
+          ld a,(hl):cp d:call nz,fail_nrt
+          inc hl
+
+          pop ix
+          push hl
+          call jp_ix
+          pop hl
+
+          ld a,(hl):inc hl:or (hl):dec hl
+          or a
+          jr nz,lfp_linelp
+
+          inc hl:inc hl
+          ret
+
+jp_ix     jp ix
+noop      ret
+
+
+display_text_hl
+          push af
+dt_lp
+          ld a,(hl)
+          inc hl
+          call &BB5A
+          or a
+          jr nz,dt_lp
+          pop af
+          ret
+
+test_de_untouched
+ ; In phase 0, DE must be kept for various scanning purpose
+          push bc:push de:push hl
+          CALL_ORG(seek_source_begin)
+          ld de,&CAF5
+          ld ix,(ass_entry0+1):dec ix ; Hack for ass_loop0
+          call ass_amorce
+          ld hl,&CAF5:or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop hl:pop de:pop bc
+          ret
+
+; ---------------------------             
+
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          call &BB06
+          ret
+
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+;---
+
+chead_line# = 4
+chead_flags = chead_line#+1
+ch_flag_code_emitted = 0 ; if code never emitted in the chunk
+chead_pc = chead_flags+1 ; pc at start of chunk
+chead_if = chead_pc+2   ; if state
+chead_start = &20
+
+tmp_sk = &48FD
+
+va2   = &9800
+va_if = va2+4
+;va_nxt_msp = va2+8
+
+vars  = &9D9D
+
+;TODO
+;va_savesp WORD 
+
+is_assembled
+; Return C if yes
+; NC and DE=0 if no
+          ld a,(vo_flags) ;shared flags (init by ORG)
+          bit vf_isphase1ok,a
+          scf
+          ret nz
+          xor a         ; NC
+          ld e,a
+          ld d,a
+          ret
+
+
+get_pc_from_line
+;---------------
+;in: DE= line
+;out:Carry, DE= PC if ok
+    ;NC if not found (or not assemble)
+          call is_assembled
+          ret nc
+
+get_pc_from_line_nrt
+
+      IF dev_checks_nrt
+; input state can never be in macro invocation.
+          call is_in_macro:call nz,fail_nrt
+      END
+
+;todo: check if still needed, as ass_get_line_from_pc uses except.o
+          ld (va_savesp),sp ; for ass_loop4 
+
+      IF 1-vw
+; From editor: int ok (screen.o restore BC' for status bar)
+          di
+      END
+; We still need to restore BC', to use firmware calls afterwards
+          exx:push bc:exx
+          push de
+
+; Since exx used, cannot use firmware anymore.
+; (note: actually could by restoring BC' as it is done in screen.o)
+; Checked in e.g. asseto for LOAD directive: already loaded, or cancel.
+; If not (LOAD added after assembling), asseto.load_if_absent returns NC
+          ld a,vt_rom_firmforbid:ld (vt_rom_firmflag),a
+
+; When line modified, must recompute from scratch
+; Otherwise, dangling pointer -> Crash
+          ld a,(up_to_date_since_visu_pc)
+          or a:jr z,.from_start
+          cp pc_marker:call nz,fail
+
+          ld hl,(lpc_cur_line)
+          ld a,l:or h:jr z,.from_start
+
+          or a
+          sbc hl,de
+          jr z,.same
+          jr nc,.from_start ; new line < cur -> from start
+
+; If target > line at next chunk, 
+  ; - don't do incremental line-by-line (since could be too slow)
+  ; - don't do incremental chunk (not worth it)
+; Note: spurious "from_start" may occur here, as lpc_next_line isn't
+      ; updated when new chunk is reached incrementaly. Nevermind.
+          ld hl,(lpc_next_line)
+          or a
+          sbc hl,de
+          jr c,.from_start
+
+          exx
+          ld de,(lpc_cur_line) ; current line #
+          pop bc        ; target line #
+          exx
+
+; Read state before changing bk
+          ld a,(lpc_if)
+          push af
+          ld de,(lpc_cur_pc)
+          ld hl,(lpc_cur_src)
+          ld a,(lpc_cur_src+2)
+          call org_connect_source_chunk_from_id
+          ld l,a
+          pop af
+          call _lpc_com
+          jr _lpc_exit
+
+.same
+          pop de
+          ld de,(lpc_cur_pc)
+          scf
+          jr _lpc_exit
+
+.from_start
+      IF 1-inRom
+          ld a,1:ld (nrt_flag_from_start),a
+      END
+          call init_var
+          call sy_reset_scope ; see rationale in /glfp_from_chunk/
+; Get start of chunk (since PC is only known here)
+          CALL_ORG(connect_line_chunk)
+          pop bc
+          jr nc,_lpc_exit
+          push bc
+          ld a,c:sub e:ld c,a
+          ld a,b:sbc d:ld b,a ; bc=line at start of chunk
+          push bc
+
+          ld l,chead_line#
+          ld a,(hl):add c:ld c,a:jr nc,$+3:inc b
+          ld l,chead_pc
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+      IF chead_if - chead_pc - 2
+ !! error
+      END
+          ld a,(hl)
+          exx
+          pop de        ; current line #
+          pop bc        ; target line #
+          exx
+          ld l,chead_start
+          push bc
+          call _lpc_com
+          pop hl
+;Couldn't do it before, since bk_base wasn't connected
+          ld (lpc_next_line),hl
+_lpc_exit
+          exx:pop bc:exx
+          ld a,vt_rom_firmenable:ld (vt_rom_firmflag),a
+          ei
+          ret
+
+_lpc_com
+;First test if line = target (since ass_get_pc_from_line consume at
+;least 1 line)
+      IF todo
+ ; check get_line_from_pc if it has to do a similar test.
+ ; if yes, change ass.pc_count to call IX first (do test before consume)
+ ; Then we can remove the pre-check here.
+      END
+          exx
+          ld l,e:ld h,d:or a:sbc hl,bc
+          exx
+          scf:jr z,.same
+      IF dev_checks_nrt
+          push af
+          ld a,(vt_rom_cur):cp rom:call nz,fail_nrt
+          pop af
+      END
+          call ass_get_pc_from_line
+          ret nc        ; shouldn't happen, but hey.
+          inc l
+.same
+;store state for incremental resolution
+          push de
+;TODO here: test if equ
+          push de
+          call connect_bk_base
+          exx
+          ld (lpc_cur_line),bc
+          exx
+          ex de,hl
+          ld hl,lpc_cur_src
+          call set_cur_source
+          ld a,(va_if):ld (lpc_if),a
+pc_marker = "P"
+          ld a,pc_marker:ld (up_to_date_since_visu_pc),a
+          pop de        ; alt address if equ
+          pop hl
+          ld (lpc_cur_pc),hl ; real pc
+          ret
+
+
+get_line_from_pc
+;---------------
+;in: BC= target PC
+;out:Carry, DE= line if OK
+    ;NC or DE=0 if not found
+;!!! change EXX
+          call is_assembled
+          ret nc
+
+          ld (va_savesp),sp ;for both ass_loop4 & source2line
+
+          ld hl,(sk_cur_line)
+          ld a,l:or h:jr z,glfp_from_start
+          ex de,hl      ; de=line
+
+          ld hl,(sk_prev_target)
+          scf:sbc hl,bc:jr nc,glfp_from_start ;old > target
+
+          ld hl,(sk_cur_adr)
+;Carry here
+          sbc hl,bc:jp nc,glfp_sameline ;old <= target < cur
+
+;is current chunk ok for target?
+          ld hl,(sk_pc_hi)
+;Carry here
+          sbc hl,bc
+          exx
+          ld hl,(sk_cur_src)
+          jr nc,.reprise
+
+; new target far away
+          call org_connect_source_chunk_from_id
+          call connect_bk_base
+          call glfp_gross
+          jr glfp_from_chunk
+
+.reprise
+;same chunk
+          call org_connect_source_chunk_from_id ;must switch good bk
+          call connect_bk_base
+          ld a,(sk_cur_src+2):ld l,a
+          ld de,(sk_cur_adr)
+          ld a,(sk_if)
+          jr glfp_com
+
+glfp_from_start
+          exx
+          CALL_ORG(seek_source_begin)
+          call glfp_gross
+
+glfp_from_chunk
+;in: DE=chunk with (pos < target)  
+          ld a,e:or d:ret z
+
+;get start line for this chunk (must compute it from start)
+          push de
+          ld hl,tmp_sk+2
+          ld a,source_header_size
+          ld (hl),a:dec hl
+          ld (hl),d:dec hl
+          ld (hl),e
+      IF rast:call col:BYTE &44:END
+          call source2line
+          jr c,.ok
+          pop de
+          ret
+.ok
+      IF rast:call col:BYTE &55:END
+          push bc:exx:pop de:exx
+
+; When restarting from chunk, we aren't in macro invokation
+; init_var flags that.
+; Otherwise thinks "is_in_macro" and DE' (line#) isn't incremented
+; Note: other variables are init:
+   ; - va_if: doesn't matter, as set in glfp_scan
+; Note2: we do it now since init_var trashes hl
+          call init_var
+; Reset pointers for scope.
+ ; Otherwise, as we enter several time the same macro without exiting
+ ; it, pnt is incremented. Then we might reach end of array, which
+ ; aborts glfp_scan_.
+; The issue is that the id is reset as well, so we might get the wrong
+; scope (bug#17f)
+          call sy_reset_scope
+
+          pop hl
+          call org_connect_source_chunk_from_id
+          ld l,chead_pc
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+      IF chead_if - chead_pc - 2
+ !! error
+      END
+          ld c,(hl)
+      IF need_room
+; Replace by ld l,chead_source (use import for consistency)
+; e.G. extmap.i since already used by ass.
+      END
+          ld l,source_header_size
+          call connect_bk_base
+; va_if has been changed by source2line
+; reset it to value at start of chunk
+          ld a,c
+
+      IF dev_checks_nrt
+          push af
+          call is_in_macro:call nz,fail_nrt
+          pop af
+      END
+
+glfp_com
+;glfp_scan
+;Itere opcodes tant que current $ <= target $
+;In A  = va_if   
+ ; hl  = source pointer (with vo_curbk)
+ ; de  = current $
+ ; bc' = target $
+ ; de' = line #
+;Out: nc if not found
+    ; If found: Carry
+              ; DE = cur_line
+
+          call glfp_scan_
+          jr nc,.ko
+
+          ld (sk_if),a
+          ex de,hl
+          ld (sk_cur_adr),hl
+          ld hl,sk_cur_src
+          call set_cur_source
+          exx
+          ld (sk_prev_target),bc
+          ld (sk_cur_line),de
+          scf
+          ret
+
+.ko
+      IF need_room
+; actually, shouldn't reset de = 0  when NC
+; that's ridiculous API.
+      END
+          ld de,0
+          ret
+
+
+glfp_gross
+;Find last chunk such as target < next_chung.first
+;in:  hl= starting chunk id
+;out: de= chunk id (0 if not found)
+;!!! It won't handle all cases of decreasing ORG inside chunk
+
+      IF dev_checks_nrt
+ ; ensure rom is connected
+          ld a,(connect_bk_source):cp &18:call nz,fail
+          ld a,(connect_next_chunk):cp &18:call nz,fail
+ ; mustn't be in ei mode
+          ld a,i:call pe,fail
+      END
+
+          ld de,0       ;current chunck
+          ld (sk_pc_hi),de ; reset
+          call connect_bk_source
+.glfg_loop
+          ld l,chead_flags
+          bit ch_flag_code_emitted,(hl)
+          jr z,.glfp_next
+
+          ld l,chead_pc:ld a,(hl):exx:ld l,a:exx
+          inc l:ld a,(hl):exx:ld h,a
+          ld (sk_pc_hi),hl
+          scf:sbc hl,bc
+          exx
+          jr nc,.glfg_depasse
+
+          ld de,(va_curbk):ld d,h ;current chunk
+
+.glfp_next
+          call connect_next_chunk
+          jr nz,.glfg_loop
+;no more chunk. set hi to +inf
+          ld hl,&FFFF:ld (sk_pc_hi),hl
+          jr .exit
+
+.glfg_depasse
+;if de = 0, ORGs might be out of order, try next chunks
+          inc d:dec d
+          jr z,.glfp_next
+.exit
+          jp connect_bk_base
+
+glfp_sameline
+          ld de,(sk_cur_line)
+          scf
+          ret
+
+source2line
+;in: (hl)=bk,posH,posL 
+;out: If ok, carry bc =line 
+    ; If ko, NC
+          push hl
+          CALL_ORG(seek_source_begin)
+          ex de,hl
+          pop hl
+          ld bc,0
+      IF 0
+          ld (dbg2),bc
+      END
+source2line_lp
+
+;in: (hl)=bk,posH,posL 
+   ; (vo_curbk), de = cur pos 
+   ;  bc =cur line
+;out: bc =line 
+
+;flagged pos may be in middle of line :
+;we stop as soon as flaggedpos < curpos (ie start of next line)
+
+          ld a,(va_curbk)
+          cp (hl)
+          inc hl
+          jr nz,s2l_next_chunk
+          ld a,(hl)
+          cp d
+          jr nz,s2l_next_chunk
+          inc hl
+          ld a,(hl)
+          cp e
+          dec hl
+          ret c         ;found
+
+;find in chunk
+
+          dec hl
+s2l_iter
+          ld ix,s2l_nl
+          push hl
+          push bc
+          ex de,hl
+      IF vc
+!! cannot do before except_enter, done by ass_amorce
+          call check_frame
+      END
+          call ass_amorce
+_ret_from_ass
+;Mess: line not found
+      IF vc
+!! cannot do after except_ret, done by ass_amorce
+          call check_frame
+      END
+      IF 1-inRom
+      BRK
+      END
+          dec l         ;rewind eof
+          ex de,hl
+;          ld bc,&7F10:out (c),c:ld c,&5C:out (c),c ;visual debug!
+s2l_exit_fail
+          pop bc
+          pop hl
+          xor a         ;nc
+          ld b,a        ;dummy line number
+          ld c,a
+          ret
+
+s2l_nl
+          call unwind   ; ok since ass_amorce called except_enter
+          pop bc        ;-ret
+mess  = &BE00           ;  TODO: in-rom jump instead. See bug#15a
+          inc l         ;skip eol
+          call connect_bk_base
+          ex de,hl
+          pop bc
+          pop hl
+          inc bc
+          jr source2line_lp
+
+s2l_next_chunk
+
+          dec hl
+;if not start of chunk, we must keep counting line by line
+          ld a,e
+          cp source_header_size:jr nz,s2l_iter
+
+          push hl
+          push bc
+
+          ex de,hl
+          CALL_ORG(org_count_lines)
+          call connect_bk_source
+          call connect_next_chunk
+          jr nz,.ok
+; can happen if trying to follow chunks from imported macro:
+; we are not it the right source
+; it should not happen, but ...
+          ld bc,&7F10:out (c),c:ld c,&44:out (c),c ;visual debug!
+          jr s2l_exit_fail
+
+.ok
+          call connect_bk_base
+          ex de,hl
+
+          ld b,0
+          pop hl:add hl,bc
+          ld c,l:ld b,h
+
+          pop hl
+          jr source2line_lp
+
+get_line_from_pc_safe
+          exx:push bc:push de:push hl:exx
+          call get_line_from_pc
+          exx:pop hl:pop de:pop bc:exx
+          ret
+
+visu_store
+; For org_select
+; No-op  (actually not called anymore by org_select)
+          ret
+visu_restore
+; For org_select and init.o
+; !! if we switch back to regular "restore" operation,
+; !! we'll have to make a distinct visu_init.
+; Reinit: when switching tab or after reset, macro_stack
+        ; isn't restored, so we cannot use incremental processing.
+; OUT: BC,DE preserved (when coming from org.set_modified)
+     ; HL preserved (idem + org.org_select)
+          push bc:push de ; When coming from org
+          ld de,vars
+          ld b,vars_
+          xor a
+.lp       ld (de),a:inc de:djnz .lp
+          pop de:pop bc
+          ret
+
+      IF rast
+col
+;!! must preserve A
+          ex (sp),hl
+          push bc
+          ld b,&7F:ld c,(hl):inc hl
+          out (c),c
+          pop bc
+          ex (sp),hl
+          ret
+      END
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp get_pc_from_line
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+; ------------------
+
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+
+jps'
+          jp source2line ; used by ass.fix_error_lines and ??
+          jp get_line_from_pc_safe ; user by trui, ass and ??
+          jp visu_store
+          jp visu_restore
+
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      ELSE
+      SKIP destnrt-$
+      END
+codesize3 = $$-code3
+; ------------------
+
+      IF vt_rom_firmflag - &9D0C
+ !! shared with farcall, tr, asseto, count
+      END
+
+      ORG vars
+; Not persistent: since we don't store macro_stack and co, it's
+     ; better to reset and start from scratch.
+; but stored for source switch for now
+sk_cur_line WORD 
+sk_prev_target WORD 
+sk_cur_adr WORD 
+sk_cur_src BYTE :WORD 
+sk_if BYTE              ; Backuk: va_if modified when connecting line
+lpc_cur_line WORD 
+lpc_cur_pc WORD 
+lpc_cur_src BYTE :WORD 
+lpc_next_line WORD 
+;lpc_next_pc WORD 
+lpc_if BYTE 
+;dbg   WORD 
+;dbg2  WORD 
+;dbg4  WORD 
+
+;Keep start address of chunk following invoking one.
+;Handle the fact that current chunk might be macro chunk, so its
+;following chunk's chead_pc is meanlingless, and we cannot use
+;glfp_gross to skip it.
+sk_pc_hi WORD 
+
+vars_ = $-vars
+
+      SKIP symbol_index_live - $
+
+          ASSERT(sk_cur_src == &9DA3) ; shared with ass
+
+
+vo    = &7CE8
+vo_flags = vo
+vf_isphase1ok = 0
+
+va_savesp = va2 + &19
+
+up_to_date_since_visu_pc = &7097 ; Defined by org
+
+      IF up_to_date_since_visu_pc - &7097
+  !! defined in org for init and (re)store. Reset by cache.
+      END
+

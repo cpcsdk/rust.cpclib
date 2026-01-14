@@ -1,0 +1,17 @@
+[package]
+name = "cpclib-orgams-ascii"
+version.workspace = true
+description = "Orgams ASCII format support for Amstrad CPC"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+#cpclib-asm = { workspace = true }
+cpclib-common = { workspace = true }

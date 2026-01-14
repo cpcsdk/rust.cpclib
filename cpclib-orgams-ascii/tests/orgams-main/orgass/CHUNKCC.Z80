@@ -1,0 +1,89 @@
+; <<<<< Chunk common code >>>>>
+; Very small routines
+
+      IMPORT "const.i"  ; chead_next
+;      IMPORT "memmap.i"
+      IMPORT "assmap.i"
+
+; -- HH Beta F --
+; Nov 1: connect_next_chunk/get_next: preserve HL when last chunk 
+
+      ORG &1000
+      ENT burn
+
+mess  = &BE00
+
+rom   = &1D
+codedest = chunkcc_jp
+limit = find
+
+; ----- In this rom -----
+org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+;---------------------------------------------
+
+code  = $$
+      ORG codedest,$$
+
+          jr connect_next_chunk
+
+connect_next_chunk
+;-----------------
+;Compared to org.o's version: All regs preserved (But AF, HL)
+                            ; Carry irrelevant
+;in : hl pointe dans chunk
+;out: If ok, NZ: hl=chunk start
+    ; If no such chunk : Z, HL unchanged (for append, and ass.ass_eoc)
+
+          call get_next:ret z
+          jp org_connect_source_chunk_from_id
+
+get_next
+;.......
+; Get id of next chunk (0 if last chunk)
+; Out: Z if id == 0, HL unchanged
+     ; NZ otherwise, HL=new id.
+ ; A trashed
+ ; BRK if H not in bank (denote programmation error)
+
+          ld a,h:and &C0:cp &40:call nz,mess
+          push hl
+          ld l,chead_next
+          ld a,(hl)
+          or a          ; Just checking bk is enough
+          pop hl
+          ret z
+          ld l,chead_next+1
+          ld h,(hl)
+          ld l,a
+          ret
+
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+t     = $$
+      ORG $$
+
+burn
+;
+;install in rom
+;         
+          ld ix,param_burn:call _burn
+          call &BB06
+          ret
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BUR"
+      BYTE "N"+&80
+param_burn WORD rom,codesize,codedest,code
+

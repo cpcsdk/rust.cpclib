@@ -1,0 +1,615 @@
+;   <<<<<<< Monagams helpers unlikely to change >>>>>>>
+
+inRom = 1
+rom   = &1B
+
+  ;TODO: Continue #C3 (for ext_far_call etc...)
+
+  ;TODO: Remove firm calls.
+            ; Rationale: we have no_firm calls anyway,
+                       ; and there are faster.
+; The only risk is for transitive calls.
+ ; If we call org with no_firm, and org uses RST &18, the
+ ; return rom will be wrong.
+
+  ; -> Start by bricbrac, which should have no dependencies (check that)
+      ; -> Start with disp
+  ; -> Do the same in other roms firsts (from leaves to root).
+
+; Also, workaround: update firmware curr selection! (&b8d6)
+
+; TODO3 simplify *_far_call by simplifying far_call (should be here)
+
+; TODO2 [if space needed]: remove jp table, since routines are stable.
+
+      IMPORT "extmap.i"
+
+; \/\/\/\/ 2025 \/\/\/\/\/\/\/\/\/\/\/\/\/
+; ----- HH beta I ----
+; Nov 27 vG: copyThereMirror s/vo_basebk/I/ 
+
+; ----- HH beta 2 ----
+; Jul
+    ;18 vF: Use mGetPcBackward in orgext (disa moved)
+; ----- HH beta 1 ----
+    ; 2 vE: Remove getLine 
+
+; ----- GG beta h ----
+; Mar 25  vD: Move vm_far_call a &7e84 (make room for org.o)
+
+; \/\/\/\/ 2024 \/\/\/\/\/\/\/\/\/\/\/\/\/
+;  Oct  1 vC: Fix #1a4. getPCbck set DE=buffer.
+
+; \/\/\/\/ 2023 \/\/\/\/\/\/\/\/\/\/\/\/\/
+;  May  8 vB: Use regular org_get_line, now firmware-agnostic.
+
+; \/\/\/\/ 2020 \/\/\/\/\/\/\/\/\/\/\/\/\/
+
+;  May  3 vA: Sanity check at _far_call_firm: is curr_sel in sync?
+            ; NRT: Remove call to org_init_custom:
+                 ; - doesn't exist anymore
+                 ; - not needed anyway
+            ; NRT: Fix test_copyHere itself. valMMR's MSB must be set.
+
+; \/\/\/\/ 2019 \/\/\/\/\/\/\/\/\/\/\/\/\/
+
+ ; Dec 15 v9: Update get_line_from_pc. Needed with visu and assbr.
+; Sept 21 v8: NRT transbkmirror: make sure DE=proper adr at return
+      ; v7: Remove get_command_with_params (directly call in mon)
+      ; v6: Use mirror from rom ed
+          ; Yet new rom#  
+      ; v5: Set new rom#   + test_copyHereMirror
+      ; v4: Add test_copyHereMirror
+          ; Add test_getSrc
+      ; v3: Done #c3/a Improved bricbrac_far_call (no firm)
+          ; Move @ F7C0
+          ; Add test_copyhere.
+      ; v2: Move @ F800
+          ; Remove raster (let client do that).
+; 7 Jul v1: Extracted from monoai
+
+
+
+codedest = &F7C0
+limit = &F900
+codedest2 = &FFC6
+limit2 = &FFF9
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+mirror = &E7F2
+;restore_8000 = mirror+9
+;ext_swap_8000 = mirror+12
+;ext_swap_8c00 = mirror+27
+mCopy = mirror+21       ;copyhere
+mCopyTransBkMirror = mirror+18
+mCopyMirror = mirror+24
+
+disassemble = disa_jp
+mGetPcBackward = disa_jp+6
+;in: bc=pc  de=buf dest  hl=buf opcodes (4)
+
+org_get_line = &C008+6
+
+kl_rom_select = &B90F
+kl_curr_sel = &B912
+
+;========================================
+
+tests
+          call dev_init
+          call test_copyHere
+          call test_copyHereMirror
+          call test_copyThereMirror_post
+          ret
+
+dev_init
+
+          ld c,rom:call kl_rom_select
+
+bk_dev = &C7            ; <>#ff pour eviter conflit
+          ld bc,&7F00+bk_dev:out (c),c
+
+val   = &7D80
+valRMR = val+6
+valMMR = val+7          ; Connected bank in monogams
+
+          ld hl,valRMR
+          set 2,(hl)    ; RAM at page 0000, since dev code is here
+
+romOrg_dev = &0A
+romExt_dev = &1A
+romBric_dev = &0B
+
+          ld a,rom:ld (vo_romMon),a
+;must be called before org_init 
+install_farcall = &DF24
+          call install_farcall
+          ld a,romExt_dev:ld (vo_romExt),a
+          ld a,romOrg_dev:ld (vo_romEd),a
+          ld a,romBric_dev:ld (vo_romBric),a
+
+mtr   = &C100
+mtrInit = mtr
+          call mtrInit  ; for I=base_bk
+          ret
+
+test_copyHere
+bk_test = &C4
+source_test = &5000
+target_test = &7F80
+size_test = 10
+          ld bc,&7F00+bk_test:out (c),c
+          ld hl,source_test:ld a,4:ld b,size_test:call nrt_fill
+
+;trash dest for proper verification
+          ld bc,&7F00+bk_dev:out (c),c
+          ld hl,target_test:xor a:ld b,size_test:call nrt_fill
+
+          ld hl,&7F00+bk_test:ld (valMMR),hl
+          ld hl,source_test
+          ld de,target_test
+          ld c,size_test
+          call copyHere
+
+          ld a,c:or a:call nz,&BE00
+          ld bc,source_test+size_test
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ex de,hl
+          ld bc,target_test+size_test
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+          ld hl,target_test
+          ld a,4
+          ld b,size_test
+          call nrt_check
+          ret
+
+nrt_fill
+;Fill a, a+1, ... 
+          ld (hl),a:inc l:inc a:djnz nrt_fill
+          ret
+
+nrt_check
+          cp (hl):call nz,&BE00:inc l:inc a:djnz nrt_check
+          ret
+
+
+test_copyHereMirror
+;------------------
+; preparation: on remplit &7f00-&7fff 
+
+          ld bc,&7FC0:out (c),c
+          ld hl,&7F00
+tchm_fill ld (hl),l:inc l:jr nz,tchm_fill
+
+          ld bc,&7F00+bk_dev:out (c),c
+nrt_buf = &4000
+
+          ld hl,&7FC0:ld (valMMR),hl
+
+; on repete n fois le meme test,
+; car le probleme n'est pas deterministe
+; (intervient quant int au mauvais moment)
+
+          ld b,17
+tchm_lp
+          push bc
+
+          ld hl,nrt_buf
+tchm_clr  ld (hl),0:inc l:jr nz,tchm_clr
+
+          ld hl,&7F00
+          ld de,nrt_buf
+          ld bc,&0100
+          call copyHereMirror
+;check
+          ld hl,nrt_buf
+tchm_chk  ld a,(hl):cp l:call nz,&BE00
+          inc l:jr nz,tchm_chk
+          pop bc
+          djnz tchm_lp
+          ret
+
+test_copyThereMirror_post
+;------------------
+; Just check HL, DE at return.
+
+          ld iyh,&C7
+          ld a,&C0
+          ld hl,&4000
+          ld de,0
+          ld c,&10
+          call copyThereMirror
+          ld bc,&4010:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&10:or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          call &BB06
+          ret
+
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+
+;====================================
+code2
+jp
+      IF inRom
+      ORG codedest2,$$
+      END
+          jp copyHereMirror ; Mon
+          jp copyThereMirror ; Mon (clear)
+          jp copyHere   ;trui
+          3 ** BRK
+          jp getPCbck   ;trui
+          jp getDisa    ;trui
+          jp getDisa_from_opcodes ;trui
+          3 ** BRK      ; was jp getLine    ;trui
+          jp getSrc     ;trui
+          3 ** BRK
+
+          jp bricbrac_far_call_firm ; Mon, Monui
+          jp ed_far_call_1b ; Mon, Monui, RSX
+          jp ed_far_call_firm ; Mon, Monui
+          jp ext_far_call_firm
+          jp bricbrac_far_call ; Tr and all for Disp.
+          jp ext_far_call ;tr and trui
+          jp ed_far_call ;tr, monui
+
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$-code2
+
+;====================================
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+;        get_disassemble
+
+;        IN :  HL = adr to disa
+;              DE = buffer for text
+
+;        OUT : HL = next adr
+;              DE = point end of text (0)
+;              A, BC, IX, IY corrupted
+
+
+getDisa
+;in   hl:addr
+  ;   de:buf disa
+  ;   bc:buffer for opcodes
+;out: hl:addr post opcodes
+
+
+          push de
+          push hl
+          ld e,c:ld d,b
+          push de
+          ld c,4
+          call copyHere
+          pop hl        ; bufCtxt
+          pop bc        ; pc
+          pop de        ; bufdisa
+
+; enchaine avec getDisa_from_opcodes
+
+getDisa_from_opcodes
+; In:  bc: pc
+     ; de: dest buffer
+     ; hl: opcodes already fetched (e.g. history)
+; Out:
+     ; hl: pc post opcodes
+     ;  a: nb opcodes
+
+          push iy
+          push bc
+          push hl
+          ld iy,disassemble
+          call ext_far_call
+          ld a,l
+          pop hl
+          sub l         ; nb opcodes lus
+          pop bc        ; previous pc
+          ld l,a:ld h,0
+          add hl,bc
+          pop iy
+          ret
+
+
+getPCbck
+;        get_pc_backward
+
+;        IN :  HL = current PC adr
+;              B  = nb opcode to rewind (0 to 63)
+
+;        OUT : HL = adr B opcode backward
+;              B preserved ?
+;              A, C, DE, IX, IY corrupted
+
+          push hl
+; on recupere du contexte
+          ld a,b
+          add a:add a:ld c,a
+          push bc
+          ld b,0
+          sbc hl,bc     ; NC for add a above
+; We use bufDisa + bufCtxt (contiguous),
+; since the later is too short (32, needs 44 bytes of context)
+bufDisa = &762A         ; Defined by mon
+          ld de,bufDisa
+          call copyHere:pop bc
+          push de       ; de = buffer end
+          ex de,hl      ; hl = buffer end
+
+          ld iy,mGetPcBackward
+          call ext_far_call
+
+          pop de:or a:sbc hl,de ; hl = offset (cur - end) < 0
+          pop de:add hl,de ; apply offset to actual $
+          ret
+
+
+getSrc
+          ld (hl),0
+          push bc:push de:push hl:push ix:push iy
+
+          ld iy,org_get_line:call ext_far_call
+
+          pop iy:pop ix:pop hl:pop de:pop bc
+
+          ccf:ret c     ; No line
+          ld a,(hl):or a:ret z ; NC: blank line
+          scf
+          ret
+
+
+copyHere
+; Used to peek things from arbitrary ram.
+
+; !! Must be used when firmware is absent (i.e. by TRACE)
+
+
+;     IN :  HL = source dans connexion memoire signal{e par moniteur
+;           DE = dest dans bank travail orgams, connect{e classiquement
+;           C = lng (0 pour 256)
+
+;     OUT : A verifier !
+;           DE = dest + lng
+;           C = 0    B Trashed
+;           F maj
+
+          push af       ;Why?
+          push iy       ; to remove when using 
+          ld iy,mCopy:call ed_far_call
+          pop iy
+          pop af
+          ret
+
+
+copyHereMirror
+
+; Used to peek things from arbitrary ram.
+
+; !! Must be used IF AND ONLY IF firmware is present (i.e. by mon)
+; Beware ! Here full BC lenght is used
+
+; hl=source in current BK/RAM connection.
+; de=dest in workbank.
+; bc=length 
+
+; Tmp DI done by mCopyMirror to allow temporary C1/C2/C3 connexion)
+          push iy
+          call ed_far_call_firm:WORD mCopyMirror
+          jr copy_ret_
+
+copyThereMirror
+; Used to poke things in arbitrary ram
+
+; hl=source in base bk 
+; de=dest   in bank A   (any connection)
+;  c=length (0 for 256)
+
+; out: hl and de advanced like ldir. bc trashed.
+
+          di            ;allow temporary C1/C2/C3 connexion
+          push iy
+          ld b,a
+          ld a,i:ld ixh,a ; source bk = base bk
+          ld a,b
+          ld ixl,c
+          call ed_far_call_firm:WORD mCopyTransBkMirror
+copy_ret_
+          ei
+          pop iy
+          ret
+
+bricbrac_far_call_firm
+;Appel rom Logo via firmware
+;usage: CALL logo_far_call_firm:WORD address
+
+          ex (sp),hl
+          push af
+          ld a,(vo_romBric)
+          jr _far_call_firm
+
+ed_far_call_1b
+;Appel orgams.rom via firmware
+;in: hl= adresse
+          push af
+          ld a,(vo_romEd)
+          ld c,a
+          pop af
+          jp &1B
+
+ed_far_call_firm
+;Appel orgext.rom via firmware
+;usage: CALL ed_far_call_firm:WORD address
+
+          ex (sp),hl
+          push af
+          ld a,(vo_romEd)
+          jr _far_call_firm
+
+
+ext_far_call_firm
+;Appel romExt via firmware
+;usage: CALL ext_far_call_firm:WORD address
+
+          ex (sp),hl
+          push af
+          ld a,(vo_romExt)
+_far_call_firm
+          push bc
+          push de
+          ld de,vm_far_call
+          2 ** ldi
+          ld (de),a
+
+; Sanity check: if firm rom# in sync? (see bug #101, brk from basic)
+; NB: we could force it systematically, but we take the occasion
+    ; to detect programming error.
+          ld a,(vo_romMon):ld c,a
+          call kl_curr_sel
+          cp c:jr z,_fc_ok
+
+          ld (error_rom),a
+; -- Fix the issue
+          call kl_rom_select
+; -- Warn about the issue
+          ld bc,&7F10:out (c),c:ld c,&4C:out (c),c
+fail_firm_not_sync = &80
+          ld a,fail_firm_not_sync:ld (error_code),a
+          ld de,$:ld (error_pos),de
+
+_fc_ok
+          pop de
+          pop bc
+          pop af
+          ex (sp),hl    ;correct RET address
+          rst &18:WORD vm_far_call
+          ret
+
+bricbrac_far_call
+; Pass all regs both ways, except:
+; In:   IY isn't passed.
+; Out:  IY is restored.
+; Usage: call bricbrac_far_call:word adr
+
+; TODO: optimize that with new far_call routine
+      ; requires first merging in a new module in chef ROM.
+
+; In:   (sp) = ret
+; We want: (sp) = vo_romRom, iy, ret+2   iy=((sp))
+
+          push iy
+          ld iy,0:add iy,sp
+          push hl
+          push de
+          push af
+          ld a,(vo_romBric):ld (fc_in),a
+          ld l,(iy+2)
+          ld h,(iy+3)   ;hl=ret adr
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld (iy+2),l
+          ld (iy+3),h
+          ld iyl,e
+          ld iyh,d      ;iy=jump adr
+          ld hl,(vo_romMon-1) ; H=vo_romMon
+          pop af
+          pop de
+          ex (sp),hl
+
+          call far_call
+          pop iy
+          ret
+
+ext_far_call
+;Appel romExt sans passer par firmware
+;IN : IY= adresse routine 
+    ; C = A backup if needed.
+
+          ld a,(vo_romExt)
+          jr _com_far
+
+ed_far_call
+;Appel romEd sans passer par firmware
+;IN : IY= adresse routine 
+    ; C = A backup if needed to pass A as parameter 
+    ; anyway C passed as is.
+
+          ld a,(vo_romEd)
+_com_far
+far_call = &7D2C
+fc_in = far_call+2
+
+          ld (fc_in),a
+          ld a,(vo_romMon)
+          push af       ;poped by far_call
+          ld a,c
+; !! No JP here due to stack manipulation (even with SP in central RAM)
+; far_call expect:  $+3, (vo_romMon), final ret
+; with jp, we have: (vo_romMon), final ret
+; TODO: simplify that!
+          call far_call
+          ret
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ==============================
+
+vo_romEd = &7CF9
+vo_romExt = &7CFA
+vo_romMon = &7CFB
+vo_romBric = &7CFF
+
+error_code = &7E80
+error_rom = &7E81
+error_pos = &7E82
+vm_far_call = &7E84     ; 3 bytes
+; ==============================

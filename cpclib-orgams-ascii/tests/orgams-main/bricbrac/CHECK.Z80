@@ -1,0 +1,222 @@
+inRom = 1
+dev_checks = 1
+
+; Check chunk id and co (chunk id ...)
+    ; - Don't BRK (except for internal asserts).
+    ; - Always available.
+    ; Since used externally for sanity checks (corruption detection)
+
+; -Needs    : chunk (for linked list traversal)
+; -Needed by: chunk (asserts), aap.
+; Todo: fix cycling dependency!
+      ; -> Factorize goto_end, connect_next, ...
+
+; NB: chunk.o was kind of full (jp table and co),
+    ; that's why I introduced this module.
+
+; -- HH Beta I --
+; 2025 Nov 25
+; v2: [nochange] use bricmap.i
+
+; -- FFAlpha7 --
+; v1: check_id0_de, check_linked_list
+
+      IMPORT "bricmap.i"
+      IMPORT "const.i"  ; chunks_per_bk 
+
+rom   = &1C
+codedest = check
+limit = string
+codedest2 = check_jp
+limit2 = liszt_jp3
+
+BK_PORT = &7F           ; might change for Y-MEM
+chunk_offset = &40
+
+chead_next = 0
+
+break = &BE00
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+      BRK
+;TODO
+          ret
+
+
+; ========================================
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+
+check_id0_de
+; Check id validity (0 accepted)
+; Return Carry if ok.
+; A trashed
+          ld a,e:or d:scf:ret z
+          ld a,e:and &C4:xor &C4:ret nz
+;TODO: check <> I as well?
+          ld a,d:cp chunk_offset:ccf:ret nc
+          cp chunk_offset+chunks_per_bk
+          ret
+
+check_id_hl
+          ld a,l:or h:ret z ; NC if 0
+;enchaine
+check_id0_hl
+;Accept null
+          ex de,hl
+          call check_id0_de
+          ex de,hl
+          ret
+
+
+check_linked_list
+; Check all links validity
+; In: HL= id (0 accepted)
+; Return Carry if ok.
+; OUT: !!! Last chunk connected.
+     ;    Rationale for not reconnecting the bank:
+   ; - we don't want to rely on vo_this_bk, which is an orgams stuff.
+   ; - simpler code. Caller can always reconnect as wished.
+     ; A, BC, HL trashed          
+
+          ld a,l:or h:scf:ret z
+; Enchaine
+goto_end
+;Connect last chunk of list, and return list length.
+;NB: As chunk.goto_end, except we don't break in case of mess.
+         ; (we kept chunk counting. nevermind for now)
+;In:  HL: head id (mustn't be null).
+;Out: HL: last id (connected). Rationale: respect chunk.goto_end api.
+    ; BC: nb chunks in list    Rationale: idem.
+    ; AF trashed. All other registers preserved.   
+    ; TODO: Save A to respect chunk.goto_end api
+          call connect_chunk_from_id
+          ret nc
+          ld bc,0
+          ret z
+.lp
+          inc bc
+          call connect_next:ret nc
+          jr nz,.lp
+          ret
+
+connect_next
+; Link chunk.connect_next, but return NC if invalid id/chunk.
+; In: chunk connect
+    ; h points in chunk
+;Out: If ok,      Carry, NZ, chunk is connected and hl=id
+    ; If no next, Carry, Z, HL unchanged.
+    ; If invalid link, NC.
+
+; All other register preserved (including A)
+
+          push de
+          push af
+          ld d,l
+          ld l,chead_next
+          ld e,(hl):inc l
+          ld a,(hl)     ; save d for now
+          or e:jr z,.null
+          ld d,(hl)
+          ex de,hl
+          call connect_chunk_from_id
+;Force nz (nb: only matters if Carry)
+          inc l:dec l
+      IF dev_checks
+          call z,break  ; cannot possibly be 0
+      END
+          jr .ret
+
+.null
+          ld l,d
+          scf
+.ret
+; restore A and DE without touching flags.
+          pop de:ld a,d
+          pop de
+          ret
+
+connect_chunk_from_id
+;like chunk.connect_chunk_from_id, but don't brk and TRASH A.
+;in : h=MSB, l=bk 
+;out: Bk connected, A trashed, all registers preserved
+    ; TODO: save A (for factorization for chunk)
+
+          call check_id_hl
+          ret nc
+          push bc
+          ld b,&7F:out (c),l
+          pop bc
+          ret
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp check_linked_list
+          jp check_id0_de
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+

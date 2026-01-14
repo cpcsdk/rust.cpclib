@@ -1,0 +1,6455 @@
+inRom = 0
+rom   = &1A             ;for burn & nrt
+romedNrt = &0A
+rommonNrt = &1B
+rombricNrt = &1C
+romassNrt = &1E
+testload = 1            ; 1 to run tests which needs files.
+dev_checks = 1
+opt_checks = 1          ; Optional checks (to make room)
+use_space = 1           ; CTRL-* to cycle where space could be saved.
+need_room = 1           ; idem
+todo  = 1
+
+      IF todo
+;!!! connect_bk_base should save B
+;!!! Start isolating that in dedicated module?
+      END
+
+      IMPORT "extmap.i"
+      IMPORT "assmap.i" ; for cocopy_jp and co
+      IMPORT "memmap.i"
+      IMPORT "const.i"
+      IMPORT "swapi.i"
+
+;  <<<<<<< codec >>>>>>>                         
+
+; use bitset, string, txt, orgui, chunk, ass, ...
+
+; Sommaire (CONTROL-ENTER to go directly to one these entries):
+   ; - hist                               
+   ; - params
+   ; - memmap
+
+ ; TODO: ??? remove skip_line + other routines now in chunk & find
+       ; !!! seek_source_begin should stay here, so find.o can call it
+           ; without far_call (no firm and takes less space).
+       ; So, all bk source related should stay here
+ ; TODO: ??? use org_new etc in chunk bank.  Why?? [-> if room needed]
+ ; TODO: move vo_savesp in RAM (check who is shared with).
+ ; TODO: org insert new chunk: simplify, by leaving new chunk connected
+       ; and/or factorize with chunk.o
+ ; TODO: factorization (cf _insert_line occurences)
+
+hist
+; In 2025 \/
+; ----- HH Beta i -----
+  ; Dec 
+    ;11 ib: check_internal: mustn't check va_curbk which is zeroed
+                          ; after reset
+      ; ia: Remove vo_curbk
+    ;10 hz: Also populate va_curbk (out of bank)
+          ; + GET_CURBK()
+  ; Nov  
+    ;27 hy: do not set vo_basebk in source banks.
+    ;26 hx: remove vo_this_bk handling
+; ----- HH Beta C -----
+  ; Oct   
+    ;12 hw: Add test_#1e9_live_symbols
+    ; 8 hv: Don't invalidate imported labels (bug#133 slowness)
+          ; Add test_dangling_invalidated
+; ----- HH Beta 7 -----
+  ; Aug
+    ;29 hu: Fix #1dd (split init_phase2_main / init_phase2_all)
+    ;27 ht: init_phase1: also release imported's local (fix #1dc)
+; ----- HH Beta 6 -----
+    ;19 hs: test_connect_var: update (ass store shrinked)
+    ;18 hr: same for depsrec (since CHECK_DEPS called)
+    ;17 hq: org_source_init: call clear_deps (for CTRL-ENTER)
+      ; hp: CANCELLED. Add org_select_if_needed
+    ;13 ho: Revert to hm
+     ;  hn: Add imported_macro_list (and handle life cycle)
+          ; !!! it was an error. Not same life cycle than save_list,
+          ; !!! only temporary list at ass time.
+    ;10 hm: org_get_current_selection: connect bk base
+  ; Jul 
+    ;31 hl: org_get_nb_lines: cleanup code
+; ----- HH Beta 2 -----
+    ;29 hk: Update tests (since save_list allocated for source)
+    ;28 hj: Add test_connect_bk_source. Cannot reproduce problem.
+    ;27 hi: Handle /save_list/ (continued)
+      ; hl: inc_crossed_chunks: not need to connect_bk_base
+          ; Use swap.o (single source of truth for store lengths)
+    ;26 hk: Move /save_list/ here. See rationale there
+          ; !!!ON HOLD  Mainy things to remaniate beforhand
+sl    = 1
+    ;12 hj: org_assemble: call init_var_once (for save list)
+          ; Adapt memory full tests (since save list burns a chunk)
+    ;18 hi: Use disa in this rom
+; ----- HH Beta 1 -----
+    ;13 hi: Use parse in this rom
+    ;11 hz: CALL_ASS: Use ASS in its rom 
+    ;01 hy: [nochange] Add slot for /vo_romAss/
+; ----- GG Beta N -----
+  ; Jun
+    ;27 hx: Add test_ambigous_import (fixed in import-au)
+    ;22 hy: Remove dead code /check_install/
+; ----- GG Beta M -----
+    ;11 hx: Remove jp connect_store' (symbol_index now in first chunk)
+          ; org_select: filename last, to be confined in second chunk
+    ;10 hw: [No source change] Updated (re)store lengths (in const.i)
+
+    ; 9 hv: Add /test_1cb/ 
+  ; May 
+    ;30 hu: init_phase1: call sy_reset_imported when flagged so
+                       ; (needed for diamond config)
+    ;28 ht: Add /test_incremental'/
+          ; Clean history < 2025
+      ; hs: init_phase1:s/sy_reset_table/sy_reset_table_except_imported
+          ; -> Doesn't work once burnt
+    ;26 hr: Add /test_incremental/
+          ; Add /vf_imported_labels_cleared/
+          ; init_phase1: Set all vo_flags to 0 
+                       ; (instead of just vf_isphase1ok vf_codeinC000)
+
+; ----- GG beta J -----
+  ; Apr         
+    ;11 hq: Adapt test_macro_big: ass-gm doesn't allow nested macro
+    ; 9 hp: Use new farcall for everybody
+; ----- GG beta I -----
+  ; Mar
+    ;25 ho: Add /orgunset/
+    ;24 hn: Add /orgset/orgget/
+      ; hm Reactivate /opt_checks/
+dz    = 0               ; keep that way for bug 11d
+
+      ORG 0:BRK
+nrtbuf0 = &0100
+      ORG &0150
+_org
+code  = &1000           ;!! Don't touch (for external NRTs)
+
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+codedest = org
+limit = org_end         ; jp ass
+codedest2 = org2
+limit2 = disa_module
+codedest3 = org3
+limit3 = parse
+codedest4 = org4
+limit4 = token
+codedest5 = org5
+limit5 = farcallx
+
+; ------ in main rom ------
+ed    = &D200
+ed_source_init = ed+42
+ed_store = ed+33
+ed_restore = ed+36
+
+mirror = &E7F2
+put_firmware = mirror +6 ; nrt
+
+; ------ in this rom ------
+
+ ;     IMPORT "filename.jp"
+filename_o = &FF66
+set_filename = filename_o+6
+
+; Cannot use now !
+      IF todo
+; Remove the code
+      END
+;farcall = &C0BC
+;farcall_ed = farcall
+;farcall_mon = farcall+6
+;farcall_bric = farcall+12
+farcall = &FF12
+call_ed_from_ext = farcall + 6
+;call_mon_from_ext = farcall + 12
+call_bric_from_ext = farcall + 18
+call_ass_from_ext = farcall
+
+except = &FF7E
+unwind = except+15
+
+preassemble = parse_jp
+; parse_command = parse_jp + 3
+
+print = &FF33           ; in orgui
+get_text_len = print    ; in: HL= nt string, Out: A=len, all regs saved
+print_file_op = print+3
+print_tag = print+9     ; nl + tag + reset progress bar
+print_phase = print+12
+print_msg = print+18    ; just for 'in tab'
+;print_msg_nl = print+21
+;print_txt_sized = print+30
+;print_chr = print+36
+print_space = print+39
+print_nl = print+42
+
+swap  = &FE69
+connect_filename_size = swap
+connect_ass_store = swap+3
+connect_aap_pool = swap+6
+connect_symbol_index = swap+9
+;connect_depsrec=swap+
+;connect_up_to_date_since_visu_pc;=swap+
+;connect_up_to_date_since_ass;=swap+
+connect_var_in_store = swap+21
+store_all = swap+24
+restore_all = swap+27
+get_source_id = swap+30
+;In: a= source #
+;Out: HL= pnt MSB in tab (!!expected by org_select)
+;   ; If no source, Z and DE=0
+    ; Otherwise,   NZ and DE=id
+    ; A preserved
+
+; NB: BRK if out of range, since it must be a programming error
+check_id_or_null = swap+33
+check_id = swap+36
+
+; ------- in ASS ROM ------
+
+cache = &FE6F
+invalidate_dependent_labels = cache
+cache_set_modified = cache+6 ; Act as "force assemble"  Corrupt: A
+set_uptodate = cache+9
+is_uptodate = cache+12
+
+;clear_visited = cache+9
+;set_visited = cache+12   ; import 
+;get_visited = cache+15   ; import
+
+sy    = &FFD8
+sy'   = &FF93
+sy_init = sy+18
+sy_reset = sy+24        ; reset module itself
+sy_reset_imported = sy+9 ;nrt
+sy_reset_table_except_imported = sy+6 ; In: HL = nb symbols#
+sy_reset_scope = sy'+9
+sy_get = sy+30          ; in:hl=id  out:carry if set, cde=val !!set bit4
+sy_sync_cur_index_to_live = sy
+sy_sync_ext_index_to_live = sy+3
+release_locals = sy+21
+
+visu  = &FFCC
+; visu_store = visu+6   ; No-op
+visu_restore = visu+9   ; A corrupt
+
+ass   = &FE20-4
+
+ass_init_and_amorce = ass+4
+ass_amorce = &BE00      ; !!! Cannot be used cross-rom
+;is_pseudo_instr = ass+&0A
+;flush = ass+&0D
+ass_get_nb_errors = ass+&13 ; nrt
+ass_get_error = ass+&16
+;ass_scan_label = ass+&19
+;ass_read_label = ass+&1C
+
+ass'  = &C0A4
+ass_init = ass'         ; init at orgams invocation
+ass'' = &FE87
+ass_skip_line = ass''+24 ; exception handled by ass
+init_var_once = ass''+27
+
+asseto = &FFAE
+asseto_init = asseto
+;asseto_reset no used. cf org_source_init.reset
+asseto_free = asseto+3  ; For nrt
+
+cocopy_jp = &FE02
+cocopy_init = cocopy_jp+21
+cocopy_reset = cocopy_jp+6
+;cocopy_copycode = cocopy+9   for imported code.
+cocopy_amorce = cocopy_jp+12
+;store_code = cocopy+15
+install_code = cocopy_jp+18
+cocopy_store = cocopy_jp+24
+cocopy_restore = cocopy_jp+27
+v_code_start = &7EFE    ; For nrt
+
+
+; ----- in bricbrac -------
+
+bitset = &FED0
+bs_init = bitset
+bs_get = bitset+6
+bs_set = bitset+9
+
+string = &FD82
+bric_get_len = string
+
+      IF todo
+; move in orgui?
+      END
+disp  = &FF14
+disp_deci_a = disp+&48  ; for tab #
+
+heap  = &FEAF
+new_heap_chunk = heap   ;out: id 
+connect_heap_chunk = heap+3 ;out: ahl=pos (connected) BC DE F preserved
+append_raw = heap+6     ;in: bd=id last chunk (append only)
+read_raw = heap+9       ;bhl=source de:dest c=size
+      IF heap_chunk_start - 5 ; const.i
+  !! unexpected
+      END
+
+chunk = &FDFA
+get_max_chunks = chunk+9
+new_chunk_no_init = chunk+15 ; !! Reconnect bk base
+new_chunk = chunk+21    ; connected. Use org_new_chunk for source chunk
+free  = chunk+30        ; Free single chunk (link-agnostic)
+free_list = chunk+33
+connect_chunk = chunk+42 ; !! don't change vo_curbk
+connect_next_chunk_raw = chunk+45 ; !! idem    Also preserve Carry
+      IF 0
+; Don't use it: we directly read it instead for now (for move/copy)
+; Switch only when strictly needed (e.g. address will move). 
+get_free# = chunk+36
+      END
+
+liszt = &FEDC
+list4_new = liszt       ; return empty list (cde). all other reg preserv
+list4_append = liszt+3  ;NRT in: cde= pnt head list. 
+                        ;out: cde conserved
+                            ;  hl= pnt cell body (4 bytes)
+                                ; bk cell connected
+list4_free = liszt+6    ;in:cde. all register conserved
+
+aap   = &FE30           ;jumps
+aap_init = aap
+aap_reset = aap+3
+aap_get = aap+6         ; In: HL=string  out: de=id
+aap_getkey = aap+9      ; nrt
+aap_load = aap+12
+aap_save = aap+15
+aap_get# = aap+21       ; out: HL=nb labels
+progress_bar = aap+24   ; BK agnostic! 
+aap'  = &FDDF
+aap_store = aap'
+aap_restore = aap'+3
+aap_check_valid = aap'+6
+aap_pool = &6FE6        ; nrt
+
+io    = &FFCE
+
+txtfirm = &FCEE
+locate_orgams = txtfirm+9 ; preserve af,hl
+
+; ---------------------------
+params
+
+chunks_per_bk = &40     ; For NRT. Must follow chunk.o setting.
+chunk_offset = &40      ; MSB in bank
+max_chunks = &01E0      ; Use 10 banks
+
+      IF max_sources - 64
+ !! shared with impeva, ch, ed and mon
+      END
+
+memmap
+
+nrtply = &4000          ; !!must be = plyref.o's ORG!!
+nrtply_ = &12AD         ; size
+destnrt = &3000         ;overlap with nrtply: nevermind
+nrt   = &3300
+disa_ass_test = nrt
+exp8_test = nrt+6
+lab_test = nrt+12
+nrtplyref = &6000       ; in c0
+
+ass_mess_buf = &4000    ;for ass errors
+command_result = &4000
+
+;7000 reserved for org
+;Variables put in bank.
+ ; - Works from trace (e.g. source_begin)
+ ; - We have room here anywhere
+;TODO: move other source-state related var (vo_cur_line) here
+     ; for easier swap when multifiles.
+     ; (check which are shared) 
+      IF sources_index != &7000
+ !! error
+      END
+      IF vo0 != &7080
+  !! shared with cache, save
+      END
+vg    = &70F0           ; Global vars
+;7100 buffer for txt decrunch.
+
+ve    = &79F0
+decode_buffer = &7A00   ;remonte line source
+line_sink_dummy = &7B00 ;pour seek label by id
+getkey_tmp = &7B00      ;pour seek label
+;values_buffer = $7B00     ;$100 pour stack arithm
+
+vp    = &7CA0
+vd    = &7CD0
+vo    = &7CE8
+vo'   = &98FA           ;after except
+vo'_end = &9900
+vo2   = &9E00
+;$7D00 : monogams + connection hors systeme
+log   = &7C8E           ; use for tmp debug (store values)
+
+; size + name. See rationale in filename.o
+      IF filename - &7E00
+ !! Shared with ed, import (for no-self-import sanity check), mon, swab
+      END
+
+disc_buffer = &8000
+tmp_chunk = &8800
+tmp_checksums = &8B00   ; max_chunks
+
+parse_buffer = &9400
+
+      IF max_sources - 64
+  !! set by org
+      END
+
+      IF sources_index - &7000
+ !! set by org
+      END
+
+
+;positions dans chunk header
+chead_next = 0
+chead_last = 2
+chead_checksum = 3
+chead_lines# = 4        ;0 if empty, -1 if unknown
+chead_flags = 5
+;bit 0 = 0 if code never emitted in the chunk
+chead_pc = chead_flags+1 ;pc at start of chunk
+chunk_header_size = 32
+chunk_init_size = chunk_header_size+2 ;2 = room for "eoc"
+
+      IF chunk_header_size - 32
+  !! must update ass
+      END
+
+chunk_aap_header_size = 4
+
+; err_syntaxerror = 0
+; err_unknownlabel = 25
+
+fail_opening = 255
+fail_doserror = 254
+fail_unknownfiletype = 253
+fail_unexpectedeof = 252
+fail_memoryfull = 251
+fail_checksum = 249
+fail_unexpectedmess = 247
+fail_missinginstall = fail_unexpectedmess ; reuse for now
+fail_bufferoverflow = 246
+fail_invalidlinenumber = 244
+
+fail_badversion = 242
+fail_noblocdefined = 241
+fail_cannotcopyhere = 240
+
+fail_labelfull = 238
+
+
+flag_ix = &40
+flag_iy = &80
+
+decode = disa_jp + 3
+disassemble = disa_jp
+
+romnrt = 16
+addrnrt = &E900
+
+kl_rom_select = &B90F
+kl_curr_selection = &B912
+
+      MACRO ASSERT pred
+      IF pred:ELSE
+ !!fail
+      END
+      ENDM
+
+      MACRO ANCHOR x
+  ; no-op. Just for documentation
+      ENDM
+
+      MACRO BK_BASE
+      IF opt_checks
+          call get_bk_base
+      ELSE
+          ld a,i
+      END
+      ENDM
+
+      MACRO CHECK_ROM
+      IF 1-inRom
+          call _check_rom
+      END
+      ENDM
+
+      MACRO CALL_ED adr
+          CHECK_ROM()
+          call call_ed_from_ext:WORD adr
+          CHECK_ROM()
+      ENDM
+
+      MACRO CALL_BRIC adr
+          CHECK_ROM()
+          call call_bric_from_ext:WORD adr
+          CHECK_ROM()
+      ENDM
+
+      MACRO CALL_AAP adr
+          CHECK_ROM()
+          call call_bric_from_ext:WORD adr
+          CHECK_ROM()
+      ENDM
+
+      MACRO CALL_PARSE adr
+          CHECK_ROM()
+          call adr      ; Same rom now
+          CHECK_ROM()
+      ENDM
+
+      MACRO CALL_ASS adr
+          CHECK_ROM()
+          call call_ass_from_ext:WORD adr
+          CHECK_ROM()
+      ENDM
+
+      MACRO NRT_HOOK hook
+; Use indirection, since global label (e.g. nrt_hook1)
+; would prevent further local labels to be seen
+      IF 1-inRom
+          call hook
+      END
+      ENDM
+
+      MACRO GET_CURBK
+      IF dev_checks
+          call get_curbk
+      ELSE
+          ld a,(va_curbk)
+      END
+      ENDM
+
+
+      IF $/&0100 - &01
+ !! check ORG directive was set
+      END
+
+;One indirection for each hook site.
+nrt_hook1 jp nrt_no_hook
+nrt_hook2 jp nrt_no_hook
+nrt_hook3 jp nrt_no_hook
+;... Add as needed, but don't forget add it too in /set_all_hooks/.
+
+nrt_no_hook ret
+
+
+
+      MACRO CHECK_BKBASE
+; only for dev:
+; - it would take too much space for few interest
+; - only to catch silly programing errors notably when writing new test
+      IF 1-inRom
+          call nrt_check_bkbase
+      END
+      ENDM
+
+      IF 1-inRom
+      MACRO CHECK_FREE n
+; Check we got the expected # of free chunks.
+          push de
+          ld de,n
+          call _check_free ; explicit call (for stack trace)
+          pop de
+      ENDM
+
+_check_free
+          ld hl,(vo_free_chunks)
+          or a:sbc hl,de:add hl,de:call nz,&BE00 ; Ok # of free chunks?
+          ret
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          call nrt_insert_line
+      ENDM
+
+nrt_insert_line
+          call org_insert_line
+          ret c
+      BRK
+
+      MACRO SET_LINE num,string
+          ld de,num
+          ld hl,string
+          call nrt_set_line
+      ENDM
+
+nrt_set_line
+          call org_set_line
+          ret c
+      BRK
+
+
+      MACRO CHECK_HL_EQUAL val
+; Break if <>  
+          push de
+          ld de,val
+          call _check_hl_eq_de
+          pop de
+      ENDM
+
+      MACRO CHECK_BC_EQUAL val
+; Break if <>  
+          push hl
+          ld hl,val
+          call _check_hl_eq_bc
+          pop hl
+      ENDM
+
+_check_hl_eq_de
+          push af
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop af
+          ret
+
+_check_hl_eq_bc
+          push af
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          pop af
+          ret
+
+
+      MACRO CHECK_NB_LINES total
+          ld hl,total
+          call _check_nb_lines
+      ENDM
+
+
+      MACRO CHECK_LINE num,string
+          ld hl,string
+          ld de,num
+          call _check_line
+      ENDM
+
+_check_nb_lines
+          push hl
+          call org_get_nb_lines
+          pop hl
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+;FAIL! HL=expected # of lines.  DE=returned # of lines
+          ret
+
+_check_line
+          push hl
+          ld hl,destnrt
+          call org_get_line:call nc,fail
+          pop hl
+          ld de,destnrt
+          call compare_ntstr
+          ret
+      END
+
+fail  = &BE00           ; TODO: proper entry in debug (bug #15a)
+nrtfail = &BE00         ; more explicit 
+
+      IF inRom
+burn
+;
+;install in rom
+;
+          ld ix,param_burn:call _burn
+          ld ix,param_burn2:call _burn
+          ld ix,param_burn3:call _burn
+          ld ix,param_burn4:call _burn
+          ld ix,param_burn5:call _burn
+          call &BB06
+          ret
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+param_burn4
+      WORD rom
+      WORD codesize4
+      WORD codedest4
+      WORD code4
+param_burn5
+      WORD rom
+      WORD codesize5
+      WORD codedest5
+      WORD code5
+
+      ELSE
+
+tests
+nrtrep = 2
+;>>>>>    
+          ld hl,&9D00
+.raz      ld (hl),&F7:inc l:jr nz,.raz
+
+; !!! Rom's version of org_init will be called!!!
+          call nrt_org_init
+
+          call test_checksum
+      BRK
+
+; -- recent tests
+      IF 0
+          call nrt_init_big ; reserve more space
+          nrtrep ** call test_label_transbk
+      BRK
+          ld a,nrt_bk_big
+          ld hl,&0100
+          call nrt_init_custom
+          call test_macro_big
+      BRK
+      END
+
+;--- minimal tests (don't insert_line) ------
+      IF 1
+          call nrt_org_init
+          nrtrep ** call test_getline
+        ;  nrtrep ** call test_delete_oor
+          nrtrep ** call test_connect_filename
+          nrtrep ** call test_empty_source
+          call test_is_empty
+          call test_connect_bk_source
+      IF 0
+;Too long and doesn't bring much
+          call test_connect_bk_source'
+      END
+
+;--- Use ass (for skip_line) ----------------
+          nrtrep ** call test_delete_post
+
+;--- Insert lines (use presassemble and parse_buffer) -------
+
+          nrtrep ** call test_insert1st
+          nrtrep ** call test_set1st
+          nrtrep ** call test_getlines#
+          nrtrep ** call test_checksum
+          nrtrep ** call test_copy
+          nrtrep ** call test_set1st
+          nrtrep ** call test_is_modified
+
+ ;          call test_bug_getline   missing nrt-line.o
+ ;         call test_bug_insert  missing H.o  reproduced in jpnrt anyway
+ ;         call instest_tmp
+ ;         call smalltest
+
+;--- custom init. -------------------
+          call nrt_init_big
+
+          nrtrep ** call test_copy_bloc
+          nrtrep ** call test_new_chunk_setup
+
+;--- Test using constrained chunks # -----
+          nrtrep ** call test_no_leak
+          nrtrep ** call test_copy_bloc_full
+
+          nrtrep ** call test_select_memory_full
+          nrtrep ** call test_select_memory_full2
+
+;--- use disa via org_get_line ------
+; (NB: still using /just_enough/ chunks)
+ ; Removed. Now in orgnrt
+     ;     call nrt_just_enough
+     ;     nrtrep ** call test_labelfull
+
+;----- Use assemble ----------------------
+          nrtrep ** call test_memory_full_from_start
+          nrtrep ** call test_ass_empty_source
+          nrtrep ** call test_source_init
+          nrtrep ** call test_orgent
+          nrtrep ** call test_firmware_reset
+          call test_load_nrtimp1
+
+          call nrt_init_big ; reserve more space
+          nrtrep ** call test_label_transbk
+          nrtrep ** call test_assemble_memory_full
+          nrtrep ** call test_cache
+          call test_#1e9_live_symbols
+
+;--- select another source ------
+          call nrt_org_init
+;          nrtrep ** call test_select_leak
+          nrtrep ** call test_select_label_clean
+
+          nrtrep ** call test_select_labels
+          nrtrep ** call test_select
+          nrtrep ** call test_select_invalid
+          nrtrep ** call test_select_ed
+          nrtrep ** call test_select_memory_full2
+          nrtrep ** call test_select_noname
+          call test_select_empty
+          call test_select_phase
+      END
+          call test_connect_var
+
+;---- save --------------------------
+          call test_fail_disc_out_close_empty
+          call test_fail_disc_out_close_with_labels
+
+;---- load --------------------------
+
+      IF testload
+          nrtrep ** call test_load_11d
+          nrtrep ** call test_load_label
+          nrtrep ** call test_load_nblines
+          nrtrep ** call test_load_badchecksum
+          nrtrep ** call test_load_filename
+          nrtrep ** call test_save
+     ;       call tstload   Already done in test_save
+          nrtrep ** call test_savebig
+     ;       call tstloadbig ;   Already done in test_savebig
+          nrtrep ** call test_nocache
+          call test_incremental
+          call test_incremental'
+          call test_1cb
+          call test_1cb'
+          call test_1dc
+          call test_ambigous_import
+          call test_dangling_invalidated
+
+;--- Tests using constrained chunks # -----
+          ld a,nrt_bk_c7
+          ld hl,tlm#
+          call nrt_init_custom
+          nrtrep ** call test_load_memfull
+
+          ld a,nrt_bk_c7
+          ld hl,tcr#
+          call nrt_init_custom
+          nrtrep ** call test_cache_reset ; load & assemble
+
+; --- big file --
+          call nrt_init_big
+;          nrtrep ** call test_load_bigchecksum
+
+;          nrtrep ** call test_connect_eof
+
+; --- misc ----
+          call test_orgset
+
+; ----- Full check ------------------------
+          ld a,nrt_bk_big
+          ld hl,&0100
+          call nrt_init_custom
+          call test_macro_big
+      END
+
+      IF 0
+          call test_corrupt_ed ;  !! inutile
+      END
+
+; --- External tests with assemble --------
+; Code in :orgnrt/orgnrt.o
+          call ext_tests
+          call nrt_org_init:call exp8_test
+          call nrt_org_init:call lab_test
+          call nrt_org_init:call disa_ass_test
+          ret
+
+; ===========================
+ext_tests
+          ld c,romnrt
+          call &B90F
+          push bc
+          di
+          ld bc,&DF00+romnrt
+          out (c),c
+          ld bc,&7F85
+          out (c),c
+
+          ld hl,addrnrt
+          call seekovl
+          call nz,&BE00 ; !! tests not found
+
+          ld c,(hl)
+          inc hl
+          ld b,(hl)
+          inc hl
+          ld de,nrt
+          ldir
+
+          ld bc,&7FC0
+          out (c),c
+
+okdide
+          pop bc
+          call &B918
+          ret
+
+; ===========================
+
+cls_nrt
+;TODO: Call ch.cls instead, which reset offset.
+     ; -> Closer to truth.
+          CALL_BRIC(disp+3)
+          ret
+
+
+nrt_fill_bank
+; Allocate all bank (&4000 - &7b00)
+; Out: hl=id last chunk
+          call org_new_chunk:call nc,&BE00
+          ld a,h:cp chunk_offset + chunks_per_bk - 1
+          jr nz,nrt_fill_bank
+          ret
+
+nrt_no_mem
+          ld a,nrt_bk_c7
+          ld hl,0
+          jr nrt_init_custom
+
+nrt_not_enough
+          ld a,nrt_bk_c7
+          ld hl,just_enough-1
+          jr nrt_init_custom
+
+nrt_just_enough
+;Just enough chunks for tests without assemble.
+          ld a,nrt_bk_c7
+          ld hl,just_enough
+          jr nrt_init_custom
+
+nrt_just_enough_for_assemble
+;Just enough chunks for tests with assemble.
+;TODO: CLEAN: actually same that nrt_just_enough.
+; Maybe so tests could s/just_enough/not_enough
+          ld a,nrt_bk_c7
+          ld hl,just_enough'
+          jr nrt_init_custom
+
+nrt_init_big
+          ld a,nrt_bk_big
+          ld hl,nrt_big
+          jr nrt_init_custom
+
+nrt_org_init
+
+      IF 1
+;clean    
+
+; Clean bank c0 so we can fill c4 with 00 
+; yet have proper bank detection when BRK.
+          ld bc,&C0C0:call fillbank
+          ld bc,&3300+nrt_bk_big:call fillbank
+          ld bc,&2200+nrt_bk_c7:call fillbank
+          ld bc,&00+nrt_src_c7:call fillbank
+      END
+
+nrt_bk_c7 = &C7
+nrt_bk_big = &CF
+nrt_src_c7 = &C4
+nrt_src_cf = &CC
+nrt_chunks = &31
+nrt_big = &0110
+just_enough = 2         ; + symb chunk, aap amorce
+just_enough' = 2        ; for assemble
+
+          ld a,nrt_bk_c7
+          ld hl,nrt_chunks
+nrt_init_custom
+;In: a=bk          
+   ; hl=nb chunks free wanted.
+
+          push af:push hl
+
+          push af
+          ld c,romedNrt:call &B90F
+
+; -- Check this is Orgams ROM. If fail: correct rom
+          ld hl,(&C004)
+          ld de,signatureed
+          ld bc,signatureed_
+          call compare
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af
+          call setup_custom
+
+; ----- tmp dispatch to alternative rom for test purpose ------
+          ld a,rombricNrt
+          ld (vt_rombric),a
+          ld (vo_romBric),a
+          ld a,romassNrt
+          ld (vt_romass),a
+;vo_romAss not use by any farcall
+          ld a,romedNrt
+          ld (vt_romed),a
+          ld (vo_romEd),a
+          ld a,rom
+          ld (vt_currom),a
+          ld (vt_romext),a
+          ld (vo_romExt),a
+; -------------------------------------------------------------
+
+; -- Cold start 
+          ld c,rom:call &B90F
+
+; Already done by setup_custom, but the ROM version is called!
+; Previously allocated chunks are leaking, nevermind.
+          call org_init
+
+          pop hl:pop af
+
+; reserve chunks until amount needed
+.consume
+          ld de,(vo_free_chunks)
+          or a:sbc hl,de:add hl,de:jr z,.ok
+          call nc,fail  ; Asking more chunks than available -> fail
+          push hl
+          CALL_BRIC(new_chunk_no_init):call nc,fail ; !! leak on purpose.
+          pop hl
+          jr .consume
+.ok
+;Enchaine
+reset_all_hooks
+          ld hl,nrt_no_hook
+          jp set_all_hooks
+;---End of setup         
+
+set_all_hooks
+          ld (nrt_hook1+1),hl
+          ld (nrt_hook2+1),hl
+          ld (nrt_hook3+1),hl
+          ret
+
+
+signatureed BYTE "Orgams"
+signatureed_ = $-signatureed
+
+nrt_disassemble
+          call disassemble
+          ret
+
+
+fillbank
+          ld a,b:ld b,&7F:out (c),c
+          ld hl,&4000:ld de,&4001:ld bc,&3FF0:ld (hl),a:ldir
+          ret
+
+;--------------
+test_macro_big
+; Actually 2 tests:
+    ; Check plynrt is assembled as expected.
+    ; Define first part of source as MACRO (different size),
+      ; so that we cover: Macro def nested, Macro invokation in macro.
+   ; !!! No, since GG Beta J we don't allow nested macro anymore.
+       ; 
+          ld hl,fileplyref
+          call nrt_load_bin
+
+          call org_source_init
+          ld hl,fileply
+          ld bc,0
+          call org_load
+          call nc,&BE00
+
+          call tmb_check
+
+; --- phase2 --------
+          ld hl,nrtmacrostart
+          ld de,1
+          call org_insert_line:call nc,&BE00
+          ld hl,nrtmacroend ; deleted and reinserted at first iter
+          ld de,6
+          call org_insert_line:call nc,&BE00
+          ld de,6
+tmb_step = 100
+          ld b,2        ; nb iter (macro defined at 259)
+tmb_loop
+          ld a,"m":call &BB5A
+          push bc
+          push de
+          call org_delete_line
+          pop de
+          ld hl,tmb_step
+          add hl,de
+          ex de,hl
+          ld hl,nrtmacroend
+          push de
+          call org_insert_line
+          call tmb_check
+          pop de
+          pop bc
+          djnz tmb_loop
+          ret
+
+nrtmacrostart BYTE "MACRO HUGE_NRT_MACRO",0
+; Create a big line (in order to force chunk reorganization)
+nrtmacroend BYTE "ENDM:HUGE_NRT_MACRO()":FILL 50,";"
+
+tmb_check
+;Fill with 00 to check skip.
+;Need to clean anyway between tests.
+          ld bc,&7FC0:out (c),c
+          ld hl,nrtply
+          ld de,nrtply+1
+          ld bc,nrtply_-1
+          ld (hl),&00
+          ldir
+          call connect_bk_base
+
+          ld de,nrtply
+          ld bc,nrtply
+          call nrt_assemble_
+
+          ld hl,nrtply
+          ld bc,nrtply_
+          call compare_ref
+
+          ret
+
+fileply BYTE ":orgnrt/orgdata/plyref40.o",0
+fileplyref BYTE ":orgnrt/orgdata/plyref40.bin",0
+
+test_copy_bloc
+          call org_source_init
+; Sanity check (-1 for source, -1 for aap amorces)
+          CHECK_FREE(nrt_big)
+
+          ld b,16
+          call nrt_fill_chunks
+
+;sanity one. 1st was already alocated, 15 new ones.
+          CHECK_FREE(nrt_big-15)
+
+;sanity check
+          call org_get_nb_lines
+          ld hl,nrt_lines_per_chunk * 16 + 1
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,1
+          ld bc,60
+          ld de,100
+          call org_copy_bloc
+          call nc,&BE00
+
+          call org_get_nb_lines
+          ld hl,nrt_lines_per_chunk * 16 + 61
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+test_no_leak
+; org_source_init must free chunks reserved by 
+          call nrt_just_enough
+          ld hl,nrtonelabel
+          call nrt_set_source ; calls org_source_init
+
+; 2nd time must work as wll
+          ld hl,nrtonelabel
+          call nrt_set_source
+          ret
+
+test_copy_bloc_full
+; bug#b9 : must copy all or nothing
+          call nrt_just_enough
+          call org_source_init
+
+          ld b,25       ;1.5 chunck
+          ld de,1
+          call nfc
+
+          ld b,7        ;0.5 chunck 
+          ld de,18      ;in the middle
+          call nfc_line
+tcbf  = 32+1            ;total
+
+;sanity check
+          call org_get_nb_lines
+          ld hl,tcbf
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,1
+          ld bc,18
+          ld de,22
+          call org_copy_bloc
+          call c,&BE00  ; should have fail
+
+          call org_get_nb_lines
+          ld hl,tcbf
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+
+test_new_chunk_setup
+; Check va_curbk cross banks.
+
+          call org_source_init
+          call nrt_fill_bank
+          call .check_curbk ; sanity and get ref in c
+          push bc
+
+          call insert_new_chunk_from_hl_adr:call nc,&BE00
+;curbk unchanged
+          pop bc
+          GET_CURBK():cp c:call nz,&BE00
+
+          call connect_next_chunk:call nc,&BE00
+          call .check_curbk
+
+          call connect_bk_base
+          call .check_curbk ; sanity and get ref in c
+          ret
+
+.check_curbk
+          GET_CURBK()
+          ld c,a
+          and &C4:cp &C4:ret z
+      BRK               ; fail
+
+test_load_nrtimp1
+;----------------
+; At some point assnrt.test_files's load was trashing
+tln_size = _org-nrtbuf0
+          ld hl,nrtbuf0
+          ld b,tln_size
+.lp       ld (hl),l:inc l:djnz .lp
+
+          ld hl,.name
+          ld bc,0
+          call org_load:call nc,fail
+
+          ld hl,nrtbuf0
+          ld b,tln_size
+.chk      ld a,(hl):cp l:call nz,fail:inc l:djnz .chk
+          ret
+
+.name BYTE ":orgnrt/nrtimp1.o",0
+
+test_load_memfull
+; memory full in org_load:aap_load
+tlm#  = &25
+
+          ld hl,tstfile0
+          ld bc,0
+          call org_load
+          call c,&BE00
+          cp fail_labelfull
+          call nz,&BE00
+          ret
+
+
+test_delete_post
+;delete line 1 on empty source
+;#b6: report error 
+; Modified 30 Dec 2023: there is no "empty source" anymore
+
+          call org_source_init
+          ld de,1
+          call org_delete_line
+          call nc,nrtfail
+          ret
+
+test_empty_source
+; check nb line = 1 for empty source 
+; (1 empty line is automatically added)
+          call org_source_init
+          call org_get_nb_lines
+          dec de:ld a,e:or d:call nz,fail
+          ret
+
+test_getline
+;getline on empty source
+          call org_source_init
+          ld de,-1
+          call org_get_line
+          call c,&BE00
+          ret
+
+test_checksum
+          call org_source_init
+          ld de,1
+          ld hl,nrtlines
+          call org_insert_line
+
+          call check_internal
+          call nc,&BE00
+
+;corrupt on purpose
+          call connect_source_begin
+          ld l,chunk_header_size ; 1st byte
+          ld a,(hl):cpl:ld (hl),a
+          call connect_bk_base
+
+; Mimic flagging "go to basic" or "exec"
+          ld hl,checksumdone
+          ld a,max_sources
+          CALL_BRIC(bs_init)
+
+          call check_internal
+          call c,&BE00
+          call z,&BE00
+          ret
+
+test_copy
+          call org_source_init
+          SET_LINE(1,nrtlines)
+          ld de,2
+          call org_insert_line
+
+          ld hl,1
+          ld bc,2
+          ld de,1
+          call org_copy_bloc
+          call org_get_nb_lines
+          ld a,e
+          cp 4
+          call nz,&30
+
+          ld hl,1
+          ld bc,4
+          ld de,5
+          call org_copy_bloc
+          call org_get_nb_lines
+          ld a,e
+          cp 8
+          call nz,&30
+
+          ld hl,1
+          ld bc,4
+          ld de,4
+; Destination inside bloc isn't supported.
+; We check NC is returned and source untouched.
+          call org_copy_bloc
+          call c,&30
+          call org_get_nb_lines
+          ld a,e
+          cp 8
+          call nz,&30
+
+          ld hl,1
+          ld bc,2
+          ld de,2
+; Destination inside bloc isn't supported.
+; We check NC is returned and source untouched.
+          call org_copy_bloc
+          call c,&30
+          call org_get_nb_lines
+          ld a,e
+          cp 8
+          call nz,&30
+
+          ld b,0
+tcplp
+          push bc
+          ld hl,14
+          ld de,140
+          ld de,2
+          call org_copy_bloc
+          call c,&30
+          pop bc
+          djnz tcplp
+          call org_get_nb_lines
+          ld a,e
+          cp 8
+          call nz,&30
+          ret
+
+test_bug_getline
+      IF 1
+      BRK
+;deactivated to make room!
+      ELSE
+
+      IF 0              ; for debug only
+          ld a,(destnrt)
+          cp &AA
+          jr z,.shortcut
+          ld a,&AA
+          ld (destnrt),a
+      END
+
+          call org_source_init
+          ld hl,tbg_name
+          ld de,0
+          ld bc,0
+          call org_load
+
+.shortcut
+          ld bc,&7FCF
+          out (c),c
+;
+;Trigger line count
+          ld de,2105
+          ld hl,destnrt+1
+          call org_get_line
+
+          ld de,1027
+          ld hl,destnrt+1
+          call org_get_line
+
+          ld hl,destnrt+1
+          ld de,tbg_ref
+          ld bc,tbg_ref_
+          call compare
+
+          ret
+
+tbg_ref BYTE "gcok"
+tbg_ref_ = $-tbg_ref
+      END
+
+test_bug_insert
+;NB: reproduced by tst25 in jpnrt7
+      IF 1
+      BRK
+      ELSE
+          call org_source_init
+          ld hl,tbi_name
+          ld de,0
+          ld bc,0
+          call org_load
+;
+          call .nrt_check_chunks
+          ld a,1
+          call nc,&30
+
+          ld hl,tbi_line
+          ld de,7
+          call org_insert_line
+          call .nrt_check_chunks
+          ld a,2
+          call nc,&30
+          ld de,8
+          call org_delete_line
+          call .nrt_check_chunks
+          ld a,3
+          call nc,&30
+          ret
+
+.nrt_check_chunks
+;out: C if ok
+          ld (vo_savesp),sp
+
+          call connect_source_begin
+
+;1st: check coherence 'last'
+chch_lp
+          ld l,chead_last
+          ld l,(hl)
+          ld a,(hl)
+          cp ec2_eoc
+          jr nz,chch_ko
+          dec l
+          ld a,(hl)
+          cp ec_esc
+          jr nz,chch_ko
+          call connect_next_chunk
+          jr nz,chch_lp
+
+          jp connect_bk_base_ok
+
+chch_ko
+          or a
+          jp connect_bk_base
+
+
+tbi_line FILL 72,";"
+      BYTE 0
+      END
+
+
+instest_tmp
+          call org_source_init
+          ld de,1
+instilp
+          push de
+          ld hl,dummyline
+          ld de,1
+          call org_insert_line
+          ld a,">"
+          call &BB5A
+          pop de
+          inc de
+          ld a,e
+          cp 2
+          jr nz,instilp
+
+          ld de,1
+          ld hl,youpi
+          call org_get_line
+
+          ld bc,youpi
+          ret
+
+youpi FILL 80,0
+
+dummyline BYTE "ld ,[$&$ff]"
+      BYTE 0
+
+test_connect_eof
+      IF 1
+;deactivated to make room
+      BRK
+      ELSE
+          call org_source_init
+
+          ld de,1
+          call connect_line
+          call nc,&BE00
+
+          call connect_bk_base
+
+          ld de,2
+          call connect_line
+          call c,&BE00
+          call nz,&BE00
+
+
+;adding one line
+          ld de,1
+          ld hl,dummyline
+          call org_set_line:call nc,&BE00
+
+          ld de,1
+          call connect_line
+          call nc,&BE00
+
+          call connect_bk_base
+
+          ld de,2
+          call connect_line
+          call nc,&BE00
+
+          call connect_bk_base
+
+          ld de,3
+          call connect_line
+          call c,&BE00
+          call nz,&BE00
+
+; -----
+; now for connect_line_start_end
+; -----
+          call org_source_init
+
+          ld de,1
+          call connect_line_start_end
+          call c,&BE00
+          call z,&BE00  ;NZ: EOF
+
+          ld de,2
+          call connect_line_start_end
+          call c,&BE00
+          call nz,&BE00 ;Z: other other (way past eof)
+
+;adding one line
+          ld de,1
+          ld hl,dummyline
+          call org_set_line:call nc,&BE00
+
+          ld de,1
+          call connect_line_start_end
+          call nc,&BE00
+
+          call connect_bk_base
+
+          ld de,2
+          call connect_line_start_end
+          call c,&BE00
+          call z,&BE00
+
+          ld de,3
+          call connect_line_start_end
+          call c,&BE00
+          call nz,&BE00
+
+          ret
+      END
+
+test_set1st
+;Set post last line (eg quand source vide) doit renvoyer OK
+
+          call nrt_dummy_source
+          ret
+
+nrt_dummy_source
+          call org_source_init
+          ld de,1
+          ld hl,dummyline
+          call org_set_line:call nc,fail
+          ret
+
+test_is_modified
+;---------------
+;
+          call nrt_org_init
+
+; Ok, for now, we don't call set_saved 
+          xor a
+          call is_modified_since_save
+          call nz,nrtfail ; New source mustn't be seen as modified
+
+          ld a,1:call nrt_select
+          xor a
+          call is_modified_since_save
+          call nz,nrtfail ; Same thing from unselected source
+
+          xor a:call nrt_select
+          call nrt_dummy_source
+          xor a
+          call is_modified_since_save
+          call z,nrtfail
+
+          ld a,1:call nrt_select
+          xor a
+          call is_modified_since_save
+          call z,nrtfail
+          ret
+
+
+test_insert1st
+;Insert post last line (eg quand source vide) doit renvoyer OK
+; Modified 30 Dec 2023: there is no "empty source" anymore
+          call org_source_init:call nc,fail
+          SET_LINE(1,dummyline)
+          CHECK_NB_LINES(1)
+          ret
+
+test_getlines#
+          call org_source_init
+          SET_LINE(1,dummyline)
+          call org_get_nb_lines:ld a,e:dec a:or d:call nz,&BE00
+;repeat
+          call org_get_nb_lines:ld a,e:dec a:or d:call nz,&BE00
+;delete post eof (no-op)
+          ld de,2
+          call org_delete_line
+          call org_get_nb_lines:ld a,e:dec a:or d:call nz,&BE00
+          ret
+
+nrt_set_source
+          push hl
+          call org_source_init:call nc,&BE00
+          ld de,1
+          pop hl
+.lp
+          push de
+          call org_set_line:call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+nrt_append_source
+.lp
+          push de
+          call org_insert_line:call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+nrt_assemble_com
+; Assemble and check no errors.
+          ld de,destnrt
+          ld bc,destnrt
+nrt_assemble_
+          call org_assemble_nrt:call nc,fail
+          call nrt_check_bkbase
+          CALL_ASS(ass_get_nb_errors)
+          or a:ret z    ;exit here if ok
+          xor a:CALL_ASS(ass_get_error)
+      BRK
+;Here de=line, a=error code, bc=meta data
+          ret
+
+nrt_check_bkbase
+          push af
+          ld a,i:and &C5:cp &C5:call nz,fail
+          ld a,(edsign_pos):cp "O":call nz,fail
+          ld a,(edsign_pos+1):cp "r":call nz,fail
+          ld a,(edsign_pos+2):cp "g":call nz,fail
+          pop af
+          ret
+
+org_assemble_nrt
+;---------------
+; I/O like org_assemble
+          call org_assemble
+          ret nc
+;enchaine
+;org_install
+;----------
+      IF todo
+; Remove it, since done directly by ch:                  
+    ; - allow message display before final install in c000.
+    ; - such manipulations makes more sense in orgams.rom
+    ; - case on pointM put_firmware is in orgams.rom
+; For nrt: should use a dedicated routine (e.g. in nrttools.o)
+      END
+
+          push bc
+          push de
+          push hl
+;must store firmware before code is installed.
+;because $$ in #9800-#BFFF will be put in backup bank:
+; in that case it might overwrite firmware, but we doesn't want
+; the other way around.
+          CALL_ED(put_firmware)
+          ei            ; needed?
+          CALL_ASS(install_code)
+          call connect_bk_base
+          pop hl
+          pop de
+          pop bc
+          scf
+          ret
+
+
+test_delete_oor
+; test out of range doesn't bring inconsistent state
+
+          call org_source_init:call nc,fail
+; bug #b6: wrongly set vo_curline
+          ld de,34:call org_delete_line:call c,fail
+          ld de,64:call org_delete_line:call c,&BE00
+          ret
+
+test_label_transbk
+;check sy_get via ass when labels in other bk
+;todo: copy/move in ass
+;CRASH with aapj!
+
+          call org_source_init
+
+          ld b,chunks_per_bk - just_enough'
+          call nrt_fill_chunks
+
+          ld hl,nrt_comment
+          call nrt_append_source ; prime last chunk in bank &cc
+
+          ld hl,nrt_labels
+          call nrt_append_source ; will define label in &c7 (TODO:check)
+
+          call nrt_assemble_com
+
+          ld a,(destnrt+1):cp 25:call nz,&BE00
+          ld a,(destnrt+3):cp 156:call nz,&BE00
+          ret
+
+
+nrt_comment BYTE "; ---comment---",0
+      BYTE 0
+
+nrt_labels
+      BYTE "ab = ac-1",0
+      BYTE "ld a,ab+ac",0
+      BYTE "ld a,ab*ac",0
+      BYTE "ac = 13",0
+      BYTE 0
+
+test_select_label_clean
+; Check new source is in a clean state
+
+; -- Sanity: source 0 properly set up    
+          call nrt_org_init
+          SET_LINE(1,nrtlbl0)
+          ld hl,nrtlbl0
+          call _check_lbl
+
+; -- Test internals (brittle, nevermind)
+          ld hl,(aap_pool)
+          CHECK_HL_EQUAL(&44C4)
+
+; -- New source, with different label
+          ld a,1:call nrt_select
+          call org_source_init
+          SET_LINE(1,nrtlbl1)
+          ld hl,nrtlbl1
+          call _check_lbl
+
+; -- Check back source 0
+          xor a:call nrt_select
+; -- Test internals (brittle, nevermind)
+          ld hl,(aap_pool)
+          CHECK_HL_EQUAL(&44C4)
+; -- Get back same label
+          ld hl,nrtlbl0
+          call _check_lbl
+          ret
+
+test_cache
+          call nrt_org_init
+; reuse test_select_labels source and checks
+          SET_LINE(1,nrtsource0_1)
+          SET_LINE(2,nrtsource0_2)
+          SET_LINE(3,nrtsource0_3)
+; assemble and check
+          call ts_source0_ass
+; check cache gives the same result
+          call ts_source0_ass
+          ret
+
+test_#1e9_live_symbols
+          call nrt_org_init
+          ld hl,.src
+          call nrt_set_source
+          call org_assemble_nrt:call c,fail ; fail
+          call org_get_current_selection
+          or a:call nz,fail
+;check symbol in sync
+          ld hl,(symbol_index_live)
+          ld de,(symbol_index)
+          or a:sbc hl,de:add hl,de:call nz,fail
+;sanity check, t=77
+          ld hl,0:CALL_ASS(sy_get):call nc,fail
+          ld a,c:or a:call nz,fail
+          ld a,d:or a:call nz,fail
+          ld a,e:cp 77:call nz,fail
+          ret
+
+.src  BYTE "t=77",0
+      BYTE "import",34,"testdata/impmac0.o",0
+      BYTE "m()",0,0    ; arg mismatch
+
+test_select_labels
+; Check init a new source doesn't remove labels on previous one
+
+; -- Sanity: source 0 properly set up    
+          call nrt_org_init
+          SET_LINE(1,nrtsource0_1)
+          call ts_source0
+          SET_LINE(2,nrtsource0_2)
+          SET_LINE(3,nrtsource0_3)
+          call ts_source0_ass
+
+; -- Create new source and go back
+          ld a,1:call nrt_select
+          call org_source_init
+          ld a,0:call nrt_select
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(1)
+          call nrt_check_cache
+          call ts_source0_ass
+          ret
+
+nrt_check_cache
+          ld hl,(v_code_start)
+          call connect_chunk_from_id
+          ld l,8
+          ld a,(hl):cp &C0:call nz,&BE00
+          call connect_bk_base
+          ret
+
+nrt_set_filename
+;long filename, so that meta-data takes 2 chunks
+          ld hl,filename
+          ld b,max_filename_len
+          ld (hl),b:inc hl
+.fil      ld (hl),"x":inc l:djnz .fil
+          ld (hl),0
+          ret
+
+test_select_leak
+; Check no leak !
+
+          call nrt_org_init
+; Already done by nrt_org_init, but the ROM version is called!
+          call org_init
+
+          call nrt_set_filename
+
+; Preallocated plus expected leak from calling org_init again.
+; Todo: doesn't really square !
+          CHECK_FREE(nrt_chunks - 3) ; sanity check
+
+; -- Switch to new source
+          ld a,1:call nrt_select
+
+; 5 chunks (source, aap, 2 store)
+          CHECK_FREE(nrt_chunks - 8) ; reference
+
+          ld b,10       ; bunch of switches
+.loop
+          push bc
+          ld a,0:call nrt_select
+          ld a,1:call nrt_select
+          pop bc
+          djnz .loop
+
+          CHECK_FREE(nrt_chunks - 8)
+          ret
+
+test_select_ed
+; Check vars for ED are properly copied.
+; (we pick ED vars since we can corrupt them for test purpose,
+;  and because ED is the last module stored).
+
+; Already done by setup_custom, but the ROM version is called!
+          call org_init
+
+          call nrt_set_filename
+
+;trash ed var on purpose 
+POS_LINE = &780F        ; in ED var 
+ED_DUMMY = &7850
+          ld b,16
+          ld hl,POS_LINE
+.trash    ld (hl),l:inc l:djnz .trash
+
+          ld a,"o":ld (ED_DUMMY),a
+
+; -- Switch to new source
+          ld a,1:call nrt_select
+          call org_source_init
+          ld b,16
+          ld hl,POS_LINE
+.raz      ld (hl),0:inc l:djnz .raz
+
+; -- Check internal stored chunks (a bit brittle, nevermind)
+          ld hl,(sources_index)
+          call connect_chunk_from_id
+          ld l,heap_chunk_start
+          ld a,(hl):cp type_orgams:call nz,fail
+          xor a:call connect_filename_size
+          call check_filename
+
+; -- Go back.   
+          ld a,0:call nrt_select
+          call tse_check
+; reselect ourselves! 
+          ld a,0:call nrt_select
+          call tse_check
+          ret
+
+tse_check
+          ld hl,filename
+          call check_filename
+;check ed "vars"
+          ld b,16
+          ld hl,POS_LINE
+.check2   ld a,(hl):cp l:call nz,fail
+          inc l:djnz .check2
+          ld a,(ED_DUMMY):cp "o":call nz,&BE00
+          ret
+
+check_filename
+; Check dummy filename set by /nrt_set_filename/: 64 ** byte 'x'
+          ld b,max_filename_len
+          ld a,(hl):cp b:call nz,fail
+          inc l
+.check1   ld a,(hl):cp "x":call nz,fail
+          inc l:djnz .check1
+          ld a,(hl):or a:call nz,fail ; NT string
+          ret
+
+
+
+test_select
+; Various tests around source switching
+
+; -- Sanity: 0 should be selected after init
+          call nrt_org_init
+          SET_LINE(1,nrtsource0_1)
+
+          call ts_source0
+
+; -- Now test another source
+          ld a,1:call nrt_select
+          ld a,(current_source):cp 1:call nz,&BE00
+          call org_source_init ; Should be no-op (already done)
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(0)
+
+          SET_LINE(1,nrtsource1_1)
+          SET_LINE(2,nrtsource1_2)
+
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(0)
+          CHECK_NB_LINES(2)
+          CHECK_LINE(1,nrtsource1_1)
+          CHECK_LINE(2,nrtsource1_2)
+
+; -- Test first source is still there
+          call ts_source0
+
+; -- Now with labels + assemblage
+          INSERT_LINE(2,nrtsource0_2)
+          ld hl,nrtlbl0
+          call _check_lbl
+          INSERT_LINE(3,nrtsource0_3)
+
+          call ts_source0_ass
+
+; -- source 1 
+          ld a,1:call nrt_select
+          ld a,(current_source):cp 1:call nz,&BE00
+
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(0)
+
+          INSERT_LINE(3,nrtsource1_3)
+          ld hl,nrtlbl1
+          call _check_lbl
+          INSERT_LINE(4,nrtsource1_4)
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(1)
+
+          call nrt_assemble_com
+
+          ld hl,(destnrt)
+          CHECK_HL_EQUAL(&BB06) ; ld b,&bb
+
+; -- back to source 0
+          ld a,(current_source):cp 1:call nz,&BE00
+          call ts_source0_ass
+
+; -- Test labels aren't shared                             
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(1)
+
+; Line from source 1 in source 0
+          INSERT_LINE(4,nrtsource1_4)
+
+; Shouldn't assemble
+          ld de,destnrt
+          ld bc,destnrt
+          call org_assemble:call c,&BE00
+          ret
+
+_check_lbl
+;Expect label is present, with id=0
+;In: hl=str    
+          push hl
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(1)
+          pop hl
+          CALL_AAP(aap_get):call nc,&BE00
+          ld a,e:or d:call nz,&BE00
+          ret
+
+ts_source0
+          xor a:call nrt_select ; should be no-op
+
+          ld a,(current_source):or a:call nz,&BE00
+          CHECK_NB_LINES(1)
+          CHECK_LINE(1,nrtsource0_1)
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(0)
+          ret
+
+ts_source0_ass
+          xor a
+          call nrt_select
+
+          CHECK_NB_LINES(3)
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(1)
+          CHECK_LINE(2,nrtsource0_2)
+          CHECK_LINE(3,nrtsource0_3)
+
+          call nrt_assemble_com
+          call nrt_check_cache
+
+          ld hl,(destnrt)
+          CHECK_HL_EQUAL(&AA3E) ; ld a,&aa
+          ret
+
+test_select_empty
+; When going from named source to empty -> filename must be emptyied
+
+          call nrt_org_init
+
+; -- Reset filename (normally done by ED)
+          ld hl,0:ld (filename),hl ; empty name: size & sentinelle
+
+; -- Leave source 0 empty.
+          ld a,1:call nrt_select
+          ld a,(current_source):cp 1:call nz,&BE00 ;sanity
+
+; -- set name (normally done by ED) 
+          ld hl,.name
+          ld de,filename
+          ld bc,6
+          ldir
+
+; -- main test: we get back empty filename
+          ld a,0:call nrt_select
+          ld hl,(filename):ld a,l:or h:call nz,&BE00
+          ret
+
+.name BYTE 4,"marc",0
+
+test_select_phase
+; Check phase is preserved after select
+          call nrt_org_init
+          ld a,1:ld (va_phase),a
+          ld a,1:call nrt_select
+          ld a,(va_phase):cp 1:call nz,fail
+          ret
+
+indent_instr = 10       ; For comparison purpose.
+
+nrtsource0_1 BYTE ";from source 0",0
+nrtsource0_2 BYTE "labelsource0 = &AA",0
+nrtsource0_3 FILL indent_instr," ":BYTE "ld a,"
+nrtlbl0 BYTE "labelsource0",0
+
+nrtsource1_1 BYTE ";from source 1",0
+nrtsource1_2 BYTE ";another line source 1",0
+nrtsource1_3 BYTE "labelsource1 = &BB",0
+nrtsource1_4 FILL indent_instr," ":BYTE "ld b,"
+nrtlbl1 BYTE "labelsource1",0
+
+
+test_select_invalid
+; Cannot test it right now: we BRK 
+; TODO: mock prog_error.
+          ret
+
+          call org_source_init
+          SET_LINE(1,nrtsource0_1)
+
+          ld a,max_sources
+          call org_select:call c,&BE00
+
+; Sanity: check we stayed on source 0
+          call ts_source0
+          ret
+
+test_select_memory_full
+; TODO: less brittle test! 
+; Rely on previous test memory full
+          call nrt_not_enough
+          call org_source_init
+          SET_LINE(1,nrtsource0_1)
+
+          ld a,1:call org_select:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+
+; Sanity: check we stayed on source 0
+          call ts_source0
+          ret
+
+test_select_memory_full2
+          call nrt_not_enough
+
+          call org_source_init
+          SET_LINE(1,nrtsource0_1)
+
+          call nrt_set_filename
+
+          CHECK_FREE(1)
+
+          ld a,1:call org_select:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+
+; Sanity: check we stayed on source 0
+          call ts_source0
+          ret
+
+nrt_select
+; org_select + additional checks
+          push af
+va_if = &9804
+          ld a,-1:ld (va_if),a
+          pop af
+          call org_select:call nc,&BE00
+          push af
+          ld a,(va_if):cp -1:call nz,&BE00
+          pop af
+          ret
+
+test_connect_var
+;Prerequisite: test_selectt*
+          call nrt_org_init
+          ld a,1:call nrt_select
+;Add label
+          INSERT_LINE(1,nrtsource1_3)
+;Assemble to init ass var
+          ld bc,&CAFE
+          call org_assemble:call nc,nrtfail
+          xor a:call nrt_select
+
+;Check first org variable
+          ld l,source_begin-vo0 ; +1: skip type
+          ld a,1
+          call connect_var_in_store
+          ld e,(hl):inc l
+          ld d,(hl)
+          ex de,hl
+          call check_id
+;Check last org variable
+          ld l,vo_curline_end-vo + meta_org_len1
+          ld a,1
+          call connect_var_in_store
+          ld a,(hl):cp nrt_src_c7:call nz,&BE00
+
+;Check first ass variable+: va_pre_pc = &cafe (brittle!)
+          ld l,ass_store_offset+4
+          ld a,1
+          call connect_var_in_store
+          ld a,(hl):cp &FE:call nz,nrtfail
+          inc l
+          ld a,(hl):cp &CA:call nz,nrtfail
+
+;Check first app variable: labels#
+          ld l,aap_store_offset
+          ld a,1
+          call connect_var_in_store
+          ld a,(hl):cp 1:call nz,nrtfail
+          inc l
+          ld a,(hl):or a:call nz,nrtfail
+          ret
+
+test_assemble_memory_full
+; If symb cannot allocate chunk, org_assemble must return 1 single
+; failure: memory_full
+
+          call nrt_just_enough_for_assemble
+
+          ld hl,nrtlabel_noerror
+          call nrt_set_source
+
+; Steal last chunk
+          CALL_BRIC(new_chunk_no_init):call nc,&BE00
+          push hl
+
+          ld de,destnrt
+          ld bc,destnrt
+          call org_assemble:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+; 1 Failure but 0 errors
+; Right now: doesn't work: nb errors isn't reset.
+;          call ass_get_nb_errors:or a:call nz,&BE00
+
+; Now check that org_assemble works once we give back memory
+; (also, prevent leak for next test!)
+          pop hl
+          CALL_BRIC(free) ; call nc,&BE00. Free doesn't return carry!
+
+          call nrt_assemble_com
+          ret
+
+test_memory_full_from_start
+; Even empty source wouldn't assemble,
+; since cocopy want to allocate 1 chunk
+          call nrt_not_enough ;just 1 chunk for insert line
+
+          ld hl,nrtlabel_noerror:call nrt_set_source
+          ld de,destnrt:call org_assemble:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+          ret
+
+test_ass_empty_source
+          call nrt_just_enough_for_assemble
+          call org_source_init
+          call nrt_assemble_com
+          ret
+
+test_source_init
+; Test memory is reclaimed.
+; some garbage)
+          call nrt_just_enough_for_assemble
+
+; TODO vv: Fix this comment!
+; Sanity: free chunk for symb's, new index, code store.
+          CHECK_FREE(just_enough)
+          ld hl,nrtlabel_noerror
+          call nrt_set_source
+          call nrt_assemble_com
+          CHECK_FREE(0)
+
+;Clear status screen
+          ld hl,&8000
+          ld de,&8001
+          ld bc,&0FFF
+          ld (hl),l
+          ldir
+
+          call org_source_init
+          CHECK_FREE(just_enough')
+
+;Check memory wasn't trashed
+          ld hl,&8000
+          ld bc,&1000
+.check    ld a,(hl):or a:call nz,&BE00
+          inc hl
+          dec bc
+          ld a,b:or c
+          jr nz,.check
+          ret
+
+nrtlabel_noerror
+      BYTE "tit jr tit",0,0
+
+
+test_orgent
+; Check low/hi value are correctly set.
+; (not to be confused with first/last).
+; Bug until dg was:
+    ; - va_low_pc & co reset in both phases
+    ; - only set in phase 1
+    ; - copied back to vo_low_pc in both phases
+    ; -> After phase 2, we got the default values!
+
+          call nrt_org_init
+
+          ld hl,.src
+          call nrt_set_source
+          ld b,3
+.lp
+; loop to test with cache
+          push bc
+          call nrt_assemble_com
+          call connect_bk_base
+vo_low_pc = &7C02       ;lowest pc   
+          ld hl,vo_low_pc
+          ld de,.ref
+          ld bc,5*2
+          call compare
+          pop bc
+          djnz .lp
+          ret
+
+.src
+      BYTE "org &2345,$$",0
+      BYTE "ent fw",0
+      BYTE "fill &ff,&aa",0
+      BYTE "fw",0,0
+      BYTE 6            ; just check first bytes
+      FILL 6,&AA
+
+.ref  WORD &2345        ;low pc
+      WORD destnrt      ;low obj
+      WORD &2345+&FF-1  ;hi pc (inclusive)
+      WORD destnrt+&FF-1 ;hi obj (inclusive)
+      WORD &2345+&FF    ; ent
+
+
+test_is_empty
+;------------
+; /org_is_empty/ is used by import and |o,"file.o".
+; Check it works properly!
+;Prerequisite: test_connect_line
+
+          call nrt_org_init
+
+;When called from import, va_phase mustn't change
+;we verify that.
+;Note: org_source_init add one empty line
+     ;  (so tot_lines = 1 rather than 0)
+; this must still be see as empty
+          ld a,1:ld (va_phase),a
+          call org_is_empty:call nz,nrtfail
+          ld a,(va_phase):cp 1:call nz,nrtfail
+
+; if we replace by non-empty str, now it's not empty anymore
+          ld de,1:ld hl,.nonempty
+          call org_set_line ; this put va_phase=0, ok!
+          ld a,1:ld (va_phase),a
+          call org_is_empty:call z,nrtfail
+          ld a,(va_phase):cp 1:call nz,nrtfail
+          ret
+
+.nonempty BYTE ";",0
+.empty BYTE 0
+
+
+
+
+      IF 0
+test_corrupt_ed
+; ed.o was wrongly saved via unidos (ref needed)
+; Renommed bughe2.o, chunk &bc is corrupted.
+; It is detected as checksum error, 
+; but then trying to get_nb_lines will hang.
+; I don't plan to fix that now, so this test is useless. 
+          call nrt_init_big
+          ld hl,.bug#158
+          ld bc,0:call org_load:call c,nrtfail
+          cp fail_checksum:call nz,nrtfail
+
+          call org_get_nb_lines
+          ld hl,3333:or a:sbc hl,de:call nc,nrtfail
+          ret
+
+.bug#158 BYTE ":orgnrt/bughe2.o",0
+      END
+
+      END
+ho
+      IF $/&0100 - code/&0100:ELSE
+!! error code overlap. 
+; Please move stuff at /nrt2/
+      END
+
+      IF inRom
+      ORG codedest,code
+      ELSE
+      ORG code
+      END
+
+   ;   BYTE 2,1,4,0   <--- done by detect
+
+jps
+jptable
+ ; !! Must stay here !!! (@ 1004)
+ ; !! Use by orgnrt
+
+      WORD signature
+          ret:ret
+
+          jp org_init   ; !!Only init.o must call it (to prevent leaks)
+          jp org_get_nb_lines
+          jp org_get_line
+          jp org_set_line
+          jp org_insert_line
+          jp org_delete_line
+          jp org_load
+          jp org_save
+          jp org_is_empty
+      IF inRom
+          jp connect_line_chunk
+      ELSE
+          jp org_assemble_nrt ; TODO: move that in orgnrt.o
+      END
+          jp init_phase1_all
+          jp upd_curline ; find
+          jp insert_new_chunk_from_hl_adr ;???
+          jp exit_mess  ; load, orgui, ???
+          jp exit_err   ; load, find, Parser (memory full) important!
+          jp check_deps ; cache, impeva, ass 
+          jp org_get_current_selection ; ed, truinrt
+      IF inRom
+          3 ** BRK      ; was  jp disassemble ; for orgnrt
+      ELSE
+          jp nrt_disassemble ; TODO: move in orgnrt
+      END
+          jp org_select_if_exist
+          jp connect_line ;parser nrt
+          jp connect_next_chunk ; ass, load
+          jp org_select
+          jp org_seek_source_begin ; ass and find  C04a
+          jp get_bk_base ;for ch
+          jp connect_bk_source
+          jp check_internal ;for ch via init : is init ok ?
+          jp org_copy_bloc ; !! beware, reuse addr used by mon
+          jp org_move_bloc ; !! idem
+          jp is_current_modified
+          3 ** BRK      ; was old far_call_bric
+      BRK
+      BYTE chunk_header_size ; For ass
+      BRK
+          jp connect_chunk_from_id ; ass, cache
+
+          jp org_is_self_selected ;ed (avoid flickering) symb (check)
+                                  ;import (check) swap (store_all)
+          jp count_lines_in_chunk ;Visu (source2line) 
+
+          jp set_saved
+          jp org_insert_new_chunk
+          jp org_copy_current ; ed
+          jp org_assemble ; ch. truinrt. Without org_install.
+          jp init_phase1_main ; ass.nrt, impeva.nrt
+          jp init_phase2_main ; ass.nrt
+
+          jp connect_line_start_end ; ass, visu
+          jp connect_bk_base ; ch, load, ass, scan, cocopy, find, cache
+                             ; ed, evacmd, swap
+
+          jp skip_line
+
+          jp connect_source_begin ;???  ass nrt
+
+          jp org_source_init ; ed:new, load, ext nrt 
+          jp cc_custom  ; load
+          jp merge_chunks ; load
+          jp finalize_chunk ; load
+
+          jp orgset
+;!!! no more room. See /jps2/
+codesize = $-codedest
+
+signature
+; TODO: If we neeed to change signature, we must add that in detect.o
+      ; (i.e. burning at &c09b) to be sure to be kept in sync.
+      IF inRom
+      IF $-&C09B
+!! error align
+      END
+      END
+
+; Don't rewrite signature, to keep current versionning set by detect.o
+codesize = $-codedest
+
+hi
+      IF inRom
+      SKIP limit-$      ; sanity check.
+
+      ORG codedest2,$$
+      END
+code2 = $$
+
+jps2
+          jp org_connect_filename_last ; ed
+          jp is_modified_since_save
+          jp connect_bk_base_save_bc
+          jp connect_ass_store ; (jump in swap)
+          jp is_modified_since_ass ; cache
+          jp is_selected_modified_since_ass ; ed (dump), mon (tabs)
+m         jp init_phase2_all ; import
+          jp connect_filename_size ; import (jump in swap)
+          jp get_save_list
+          jp orgget
+          jp orgunset
+
+chunk_def
+      BYTE 0,0,chunk_init_size-1 ;next (bk, MSB), pos last
+      FILL 5,0          ;csum, line, flags, pc start  
+      BYTE &FF          ;chead_if first chunk: must match initial va_if
+; (the state for other chunks is set while assembling)
+      FILL chunk_header_size-9,0
+;code EOC
+      BYTE ec_esc,ec2_eoc
+
+;----------------------
+      MACRO CHECK_Z
+;TODO: jr instead of jp!
+      IF inRom
+          jp nz,os_error
+      ELSE
+          call nz,&BE00
+      END
+      ENDM
+
+      MACRO CHECK_OS_ERROR ; os: org save
+;TODO: jr instead of jp!
+      IF inRom
+          jp nc,os_error
+      ELSE
+          call nc,&BE00
+      END
+      ENDM
+
+      MACRO CHECK_OL_ERROR
+      IF inRom
+          jp nc,ol_error
+      ELSE
+          call nc,&BE00
+      END
+      ENDM
+
+      MACRO CHECK_DOS_ERROR ; dos: disc org save
+      IF inRom
+          jp nc,os_err_dos
+      ELSE
+          call nc,&BE00
+      END
+      ENDM
+
+      MACRO CHECK_DOL_ERROR ; dos: disc org save
+      IF inRom
+          jp nc,ol_err_dos
+      ELSE
+          call nc,&BE00
+      END
+      ENDM
+
+;----------------------
+
+io_load_bloc
+;in: de=dest, bc=size
+          CALL_BRIC(progress_bar)
+          CALL_BRIC(io)
+      IF dz
+!! Wrong
+; When we reload &100 buf for checksums, we might go past
+; hard end of file. We should discard the error then, not be trigerred
+; like a woke genz.
+; A possible solution: have 2 versions, one without check for chcks.
+; BUT... then there is another thing to fix:
+; it seems error isn't properly reported (cf AST report: 
+; "dos error" in chcks phase, source should be properly loaded
+; nevertheless, yet that's not the case). 
+          CHECK_DOS_ERROR()
+      END
+          ret
+
+io_save_bloc
+          CALL_BRIC(progress_bar)
+          CALL_BRIC(io+6)
+      IF dz
+!! Tocheck -> might be wrong regarding stack
+          CHECK_DOS_ERROR()
+      END
+          ret
+
+ec_label_adr = &40
+ec_label_equ = &64
+ec_macro_def = &6D
+
+ec_nl = "J"
+ec_esc = &7F
+ec2_eoc = 0             ;end of chunk  !! must remain 0
+ec2_store_pc_line = 2
+ec2_store_pc_instr = 3
+
+org_connect_filename_last
+;------------------------
+; Connect last part of path
+; In: A = source id
+    ; bk agnostic
+;Out: If ok: Carry, HL = filename (connected)
+    ; NC otherwise.
+    ; A, BC, DE preserved   
+
+          call connect_filename_size
+          ret nc
+;goto_past_last_chr
+; Goto past "/" if exists (otherwise same)
+; IN: hl=nt string
+; OUT: hl=new pos (or same if C not found)
+          push af       ; Save A and Carry
+          push de
+          inc l         ; skip skip
+          ld e,l:ld d,h
+.lp       ld a,(hl):inc hl
+          cp "/":jr nz,.nxt
+          ld e,l:ld d,h ; save last met
+.nxt
+          or a
+          jr nz,.lp
+          ex de,hl
+          pop de
+          pop af
+          ret
+
+
+org_is_self_selected
+;-------------------
+; In:  A = source id
+; Out: NC, Z if current source is A
+     ; A preserved
+
+; Reconnect bk base as a convienence for caller's caller  
+; (ed calling org_connect_filename)
+; which typically iterate through tabs.
+          call connect_bk_base_save_bc
+
+          push hl
+          ld hl,current_source
+          cp (hl)
+          pop hl
+          ret
+
+
+
+org_select_if_exist
+;------------------
+; Only select if there is an actual source (for monogams.tabs)
+; -> we don't want to init a new source 
+; Don't change current_source' (tab in ed)
+;In = A source id.
+;Out= Z if no source
+    ; Otherwise, like org_select'
+    ; A trashed anyway
+
+; First, self detection 
+          call org_is_self_selected
+          jr nz,_notself
+carry_nz
+          scf:sbc a
+          ret
+_notself
+          call get_source_id
+          ret z
+org_select'
+;----------
+; Store current source's metadata, that is all needed source var, 
+;   + the ones we could recompute (vo_curline),
+;   for speed reason (especially visu). 
+; Then restore or init wanted one.            
+
+; In: A= id                                    
+; Out: All registers trashed (but ix, iyh).
+     ; Carry if ok, then:
+           ;  Z = new source
+           ; NZ = existing (stored) source
+
+; Prepare what to store out of bank:
+;  - simpler/shorter than copy transbk.
+;  - we can rollback if aap/symb fails.
+
+;If select current: no-op.
+;Explicit test, otherwise we try to allocate store just to free it
+;after: possibility of spurious memory full. 
+;Plus, we want tom remain super fast for self-selection (for ed ui sake)
+   ; call connect_bk_base   ; done by org_is_self_selected
+          call org_is_self_selected
+          jr z,carry_nz ; C, NZ for ed (source exists -> no init_ed)
+
+; ======= Part 1: store current source metadata ========
+          ld iyl,a      ; save id
+
+          ld a,(current_source)
+      IF sources_index AND &FF
+!! to be corrected
+      END
+          add a:ld e,a
+          ld d,sources_index/&0100
+
+          call store_all
+          ret nc
+
+; ======= Part 2: Now switch to wanted source ==========
+          ld a,iyl      ; id 
+; --- connect meta
+; In:   a=source id
+; Out: hl:slot in sources_index
+     ; de=associated meta id.
+          call get_source_id
+          jp z,_new_source ; init new source, nothing to restore
+
+          jp restore_all
+
+ret_bc
+; Used when stack must be corrected and we want to keep AF 
+   ; - error code
+   ; - C vs NC
+          pop bc
+          ret
+
+
+org_get_current_selection
+; bk base needed coming from ass.fix_error_lines
+          call connect_bk_base_save_bc
+          ld a,(current_source)
+          ret
+
+
+org_init
+;-------         
+; Called once at first orgams invocation.
+
+;NB: system used.
+;IN: !! Work bk connected with proper vo_rom*
+
+          ld hl,sources_index ; Id of backup metadata
+          ld b,max_sources*2
+razsi     ld (hl),0:inc hl
+          djnz razsi
+
+          xor a
+; Enchaine
+_new_source
+; Setup everything when tab first used.
+
+; Here: A = source ID.
+; One chunk for backup store.
+; Return C, Z if ok (see org_select)
+      ; NC otherwise
+          cp max_sources:call nc,prog_error
+          push af       ; save (set /current_source/ only if success)
+
+; AAP preallocate one chunk. Can fail if memory full.
+          CALL_AAP(aap_init):jr nc,ret_bc
+
+; Following inits cannot fail.  
+          CALL_ASS(ass_init)
+      IF need_room
+; Let ass call all its dependencies
+      END
+          CALL_ASS(sy_init)
+          CALL_ASS(asseto_init)
+          CALL_ASS(cocopy_init)
+      IF todo OR need_room
+; remove that since done in _source_init
+      END
+; Init source.
+;-> so we preallocate what is needed and we don't have to test
+  ; later for futher lazy init.
+          call _source_init:jr nc,ret_bc
+          pop af
+          ld (current_source),a
+          call org_copy_current
+          call _ed_init
+          cp a:scf      ; C, Z
+          ret
+
+org_source_init
+;--------------
+;In: N/A
+;Out: Return nc if issue (memory full):
+;     !!For now only checked by nrts! 
+
+          call _source_init_for_load
+_ed_init
+;We must save phase (for org_select called from import).
+;We do it here rather than at around ass_amorce, 
+ ; so that skip_line doesn't become too slow.
+          ld hl,(va_phase) ; phase and backup
+          push hl
+; Call ed_source_init before using EMPTY_STR
+          CALL_ED(ed_source_init)
+
+      IF need_room
+; move that back in ed
+      END
+
+; Add one empty line to avoid incongruites in ED (e.g. 0 line)
+; Added benefits:
+  ; Force assembly. Prevent garbage value at _up_to_date_since_ass
+  ; which would assert in cache.o   
+EMPTY_STR = &780A
+          ld hl,EMPTY_STR
+          ld de,1
+          call org_set_line
+
+          pop hl
+          ld (va_phase),hl
+; This inserted line flags the file as modified
+; we want to clear that, as it is a new source!
+          jp set_saved
+
+_source_init_for_load
+; We musn't call ed init:
+   ; - would erase passed filename (ed.NAME_LOAD)
+   ; - would add an empty line which becomes annoying in load context
+   ; - Anyway ed vars are properly reset via loading of meta info
+          call connect_bk_base
+
+.release
+          call release_save_list
+          ld hl,(source_begin):CALL_BRIC(free_list)
+          call orgunset_
+
+; Flag as modified to notify dependent sources
+; Do it here (needed for both CTRL-N / CTRL-O)
+; No need at _source_init (only called for brand new source)
+          call set_modified_since_ass
+          call org_get_current_selection
+          CALL_ASS(invalidate_dependent_labels)
+
+_source_init
+          ld hl,vo
+          ld b,to_be_RAZ
+.raz      ld (hl),0:inc hl:djnz .raz
+
+; Clear filename from previously selected tab.
+; Was previously done by ed.
+;  -> problem when org_select was coming from import.o
+          ld l,b:ld h,b:ld (filename),hl
+
+; CRTL-ENTER could use dangling bits
+; Also, we release locals of (previous) deps in init_phase1
+; For new source, it must be clean.
+          call clear_deps
+
+          call org_new_chunk:ret nc
+          push hl
+
+todo2 = todo AND 0      ;hum ?
+      IF todo2
+;sanity: init to 0. Avoid issue clean-up issue if last chunk left
+          ld l,meta_source_begin
+          ld (hl),0:inc l:ld (hl),0
+      END
+
+          call update_checksum
+          call connect_bk_base
+          pop de
+          ld (source_begin),de ; in bk_base!
+          call alloc_save_list
+          ret nc
+
+      IF todo2
+          pop hl
+          ld (sources_index),hl
+          call org_connect_chunk_from_id:call nc,&BE00
+          ld l,meta_source_begin
+          ld (hl),e:inc l:ld (hl),d
+          call connect_bk_base
+          ret nc
+      END
+;.reset
+          CALL_AAP(aap_reset)
+          CALL_ASS(sy_reset)
+          CALL_ASS(cocopy_reset)
+;NB: no asseto_reset since we want to conserve assets cross sources.
+;!!! Can lead to leak. Do ref counting instead?
+          scf
+          ret
+
+      MACRO FAILZ_IF_NZ
+;If nz, fails with NC, Z
+      IF inRom
+          jr nz,ci_fail
+      ELSE
+          call nz,fail
+      END
+      ENDM
+
+      MACRO FAILZ_IF_NC
+;If nc, fails with NC, Z
+      IF inRom
+          jr nc,ci_fail
+      ELSE
+          call nc,fail
+      END
+      ENDM
+
+      MACRO FAILNZ_IF_NC
+;If nc, fails with NC, NZ
+      IF brk_on_failure
+          call nc,fail
+      ELSE
+          jr nc,ccs_fail
+      END
+      ENDM
+
+      MACRO FAILNZ_IF_NZ
+;If nc, fails with NC, NZ
+      IF brk_on_failure
+          call nz,fail
+      ELSE
+          jr nz,ccs_fail
+      END
+      ENDM
+
+
+
+check_internal
+;Non intrusive check -> NO BRK if anything goes wrong.
+; Well, except if:
+brk_on_failure = 0      ; for tmp debug in rom
+;In: bk base connected
+;OUT: C if OK
+    ;NC+Z : nothing detected 
+    ;NC+NZ: ok but checksum
+
+; --- First sanity checks. If failing, consider nothing was installed. 
+
+          ld a,(vo_basebk):and &C5:xor &C5:FAILZ_IF_NZ()
+          ld a,i:and &C5:xor &C5:FAILZ_IF_NZ()
+
+          ld (vo_savesp),sp
+
+;NB: cannot call connect_source_being directly,
+   ; since it would BRK in case of error.
+          ld hl,(source_begin)
+; We don't check for 0:
+   ; - Takes some bytes.
+   ; - That would mean init has failed (memory full), and it should 
+     ; have been handled by editor (i.e. stay on valid source). 
+          call check_id:FAILZ_IF_NC()
+
+; --- Only verify checkum and aap when flaged so.
+    ; -> otherwise org_select is too long for import and tab change
+          ld hl,checksumdone
+          call org_get_current_selection
+          CALL_BRIC(bs_get)
+          scf
+          ret nz
+
+          CALL_BRIC(aap_check_valid)
+;NB: connect_bk_base **will BRK** if I isn't set.
+   ; That's ok, since considered programming error.
+          call connect_bk_base
+          FAILZ_IF_NC()
+
+; --- From now any mess is considered memory corruption.
+
+;Checksum / sanity                                
+          call connect_source_begin
+.ccs_lp
+          push hl
+          call compute_checksum
+          ld l,chead_checksum
+          cp (hl)
+          pop hl
+          FAILNZ_IF_NZ()
+; Cannot call connect_next_chunk: would BRK 
+          call get_next:jr z,checksum_is_ok ; End: OK
+          call check_id
+          FAILNZ_IF_NC()
+          call connect_chunk_from_id
+          jr .ccs_lp
+
+checksum_is_ok
+;Checksum done and OK. Flag it as so, to avoid superflous re-checking.
+          call connect_bk_base
+          ld hl,checksumdone
+          call org_get_current_selection
+          CALL_BRIC(bs_set)
+          scf
+          ret
+
+ci_fail
+          xor a
+          ret
+
+ccs_fail
+          call connect_bk_base
+          xor a
+          inc a
+          ret
+
+set_border = &BC38
+
+disc_in_open = &BC77
+disc_in_close = &BC7A
+disc_in_abandon = &BC7D
+disc_test_eof = &BC89   ; NC if eof
+disc_in_direct = &BC83  ; for nrt
+
+disc_out_open = &BC8C
+disc_out_close = &BC8F
+disc_out_abandon = &BC92
+
+version = 2
+
+msg_load = 0
+msg_save = 1
+msg_intab = 8
+
+;-------
+org_load
+;in hl: adr filename (nt)
+;   de: dest meta_data
+;   bc: longueur max meta_data
+;out bc: longueur really copied
+
+          ld (vo_savesp),sp
+          call check_save_sp
+
+;We don't want to overwriten name for editor until we
+;reach critical section
+          ld (save_filename),hl
+
+          push de
+          push bc
+          push hl
+          call disc_in_abandon
+
+          ld hl,tmp_checksums:ld (vt_checksum_pnt),hl
+
+          pop hl
+          ld a,msg_load
+          call file_op  ; loading "toto"
+;Print tab: useful to see where it is imported!
+          push hl
+          ld a,msg_intab:call print_msg
+          call org_get_current_selection
+          inc a
+          CALL_BRIC(disp_deci_a)
+          pop hl
+
+          call get_text_len:ld b,a
+          ld de,disc_buffer
+          call disc_in_open
+          call check_save_sp
+          ld a,fail_opening
+          CHECK_OL_ERROR()
+          ld hl,tag_orga
+          call check_tag
+          call _source_init_for_load
+
+          call load_bc:call check_save_sp
+          pop hl        ;len meta_data
+          or a
+          sbc hl,bc
+          add hl,bc
+          jr nc,ol_wantge
+
+;copy len indicated by caller (hl here), skip the rest.
+
+          pop de
+          push bc
+          ld c,l
+          ld b,h
+          push bc
+          call io_load_bloc
+
+          pop bc
+          pop hl
+
+          or a
+          sbc hl,bc
+          ld c,l
+          ld b,h
+          call skip_bloc
+          jr ol_com
+
+ol_wantge
+;copy len indicated by file (bc) <= wanted len
+          pop de
+          call io_load_bloc
+
+ol_com
+          call check_save_sp
+          ld hl,tag_chunks
+          call check_tag
+
+          ld hl,(save_filename)
+          call get_text_len
+          ld de,filename
+          ld (de),a:inc de
+          call copy_nt
+
+          call set_modified ; why?
+;From now : every error is fatal,
+          ; and we don't want to leave we half-loaded source
+          call load_critical
+          call print_nl ; a is saved
+;Flag *internal* checksum as ok (since each chunk has a consistent
+;checksum thanks to finalize_chunk).
+;If it doesn't match on-disk checksum, we return NC,Z.
+          push af
+          call checksum_is_ok
+          pop af
+          jp c,set_saved ; Exit OK
+; Give the opportunity to see the source if just checksum error.
+          cp fail_checksum
+          ret z         ; Exit OK with flag 'modified' and error code.
+
+; Clean rather than crash.
+          push af       ; keep error code.
+          call org_source_init
+          pop af
+          or a
+          ret
+
+load_critical
+          ld (vo_savesp),sp ; overide previous: that's ok
+
+;1ere iteration : use first bloc
+          call connect_source_begin
+
+ol_chloop
+
+;len bloc
+          call load_a
+          or a
+          jr z,ol_chend
+
+; in : a=size (>0)    
+          ld c,a:ld b,0
+; ---- load chunk in tmp buffer ----
+          ld de,tmp_chunk
+          push de
+          push hl
+          push bc
+          call io_load_bloc
+; ---- compute checksum of loaded chunk ----
+          pop bc
+          dec de        ;last byte
+          ex de,hl
+          ld b,c
+          ld a,c
+          inc a:inc a:rrca ; hack: checksum must include EOC marker
+      IF ec2_eoc:add ec2_eoc:END
+          rrca:add ec_esc
+          call cc_custom
+          ld hl,(vt_checksum_pnt):ld (hl),a:inc hl
+          ld (vt_checksum_pnt),hl
+; ---- merge into connected chunk
+          pop hl
+          pop de
+ol_merge
+; de= pos in buffer
+; hl= destination
+;  c= len
+          ex de,hl
+          call merge_chunks
+          ex de,hl
+          jr c,ol_chloop ; Fully copied, load next one
+
+; ---- new dest chunk is needed  
+          push bc
+          call finalize_chunk
+          call insert_new_chunk_from_hl_adr
+          call connect_next_chunk
+          pop bc
+          jr ol_merge
+ol_chend
+          call finalize_chunk
+
+          call connect_bk_base
+          call check_save_sp
+
+;--load labels-----
+          ld hl,tag_labels
+          call check_tag
+
+          CALL_AAP(aap_load):jp nc,exit_err
+
+; here: bc points to next byte to read in buffer
+
+;--load checksum-----
+          call check_save_sp
+
+;!!HACK!! Since aap_load has read too much (&100 buffer, not knowing 
+; when labels would end), we cannot use load_* nor disc_test_eof
+; we had to read in buffer and refill it by hand.
+
+          ld e,c:ld d,b
+          ld hl,tag_checksums
+          call peek_tag'
+          jr nz,ol_close ; old sources: no such tag, that's ok
+
+          ld bc,(vt_checksum_pnt)
+          ld hl,tmp_checksums
+;Do not support empty files. We don't have such things.
+ol_chckloop
+          call load_a'
+          cp (hl):inc hl
+          ld a,fail_checksum
+;NB: Don't BRK in dev mode, since there is test_load_badchecksum
+          jr nz,ol_error
+          or a:sbc hl,bc:add hl,bc:jr nz,ol_chckloop
+
+ol_close
+;No sanity check : EOF may not be set.
+          call disc_in_close
+          ret c         ; ! Ok 
+          ld a,fail_doserror
+      IF 1-inRom
+      BRK
+      END
+;Enchaine
+ol_error
+          call check_save_sp
+          push af       ; Just for A. NC & Z will be set anyway
+          call disc_in_abandon
+          pop af
+          jp exit_err
+
+file_op
+; In: A= msg code (load/save)
+    ; HL= name
+
+; Locate used to be facultative, since we were clearing screen.
+; But for |orgload that's needed.
+          CALL_BRIC(locate_orgams)
+;Print name: useful to see what is imported.
+          jp print_file_op
+
+check_save_sp
+; !! Warning: test not adapted when coming from trace (get_line_nofirm).
+          push af
+          ld a,(vo_savesp+1)
+          and &BE:cp &BE:call nz,&BE00
+          pop af
+          ret
+
+
+check_tag
+;Exit in case of error
+          call peek_tag
+          ret z
+      IF inRom
+          jr ol_error
+      ELSE
+      BRK
+      END
+
+peek_tag
+; Return Z if ok, NZ otherwise (A=error)
+          call print_tag
+
+;check 4-bytes tag
+          call check_tag_:ret nz
+          call check_tag_:ret nz
+;version 1 for all : factorize
+          call load_a
+          cp version
+          ld a,fail_badversion
+          ret           ; Z if ok
+
+check_tag_
+          push bc
+          call load_bc
+          ld a,c
+          cp (hl)
+          jr nz,_ct_
+          inc hl
+          ld a,b
+          cp (hl)
+_ct_
+          ld a,fail_unknownfiletype
+          inc hl
+          pop bc
+          ret           ; Z if ok
+
+peek_tag'
+; Return Z if ok, NZ otherwise (A=error)
+; like peek_tag, but read directly in buffer
+
+          call print_tag
+          ld b,5
+pt'       call load_a'
+          cp (hl):inc hl
+          ld a,fail_badversion
+          ret nz
+          djnz pt'
+          ret
+
+load_a
+          push hl
+          push de
+          push bc
+          ld de,vt_temp_word
+          ld bc,1
+          call io_load_bloc
+          dec de
+          ld a,(de)
+          pop bc
+          pop de
+          pop hl
+          ret c
+ol_err_eof
+          ld a,fail_unexpectedeof
+      IF inRom
+          jp ol_error
+      ELSE
+      BRK
+      END
+
+load_a'
+          ld a,(de):inc e
+          ret nz
+          push af:push bc:push de:push hl
+          ld bc,&0100
+          call io_load_bloc
+                        ; for some reason DE<>buffer+&100
+          pop hl:pop de:pop bc:pop af
+          ret
+
+load_bc
+          push hl
+          push de
+          ld de,vt_temp_word
+          ld bc,2
+          call io_load_bloc
+          ld bc,(vt_temp_word)
+          pop de
+          pop hl
+          ret c
+          jr ol_err_eof
+
+
+skip_bloc
+;bc = size
+          ld a,b
+          or c
+          ret z
+          call load_a
+          dec bc
+          jr skip_bloc
+
+tag_orga BYTE "ORGA"
+tag_labels BYTE "LBLs"
+tag_chunks BYTE "SRCc"
+tag_checksums BYTE "ChCk",version ; Check Chunks
+faketag_end BYTE "End"
+faketag_ok BYTE "Ok!"
+;NB: Tags shouldn't be moved in TXT.O,
+   ; since also used in check_tag.
+
+;-------
+org_save
+;in : hl pointe sur nt name
+;     de sur data custom
+;     bc longueur data custom
+
+          ld (vo_savesp),sp
+          call check_save_sp
+
+          push hl
+          push bc
+          push de
+          push hl
+          call disc_out_abandon
+
+          pop hl
+          ld a,msg_save
+          call file_op  ; saving "toto"
+
+          call get_text_len:ld b,a
+          ld de,disc_buffer
+          call disc_out_open
+          call check_save_sp
+          ld a,fail_opening
+          CHECK_OS_ERROR()
+
+          ld hl,tag_orga
+          call save_tag
+
+          pop hl
+          pop bc
+;bloc avec data custom (peut etre de longueur 0)
+
+          call save_bc
+          call io_save_bloc
+          CHECK_DOS_ERROR()
+
+          ld hl,tag_chunks
+          call save_tag
+          call connect_source_begin
+os_chloop
+          ld l,chead_last
+          ld a,(hl)
+          ld l,chunk_header_size
+          sub l
+          dec a
+          jr z,os_chnext ;skip empty chunk
+
+          call save_a
+
+          ld c,a:ld b,0
+          call io_save_bloc
+          CHECK_DOS_ERROR()
+
+os_chnext
+;sanity check
+          ld a,(hl)
+          cp ec_esc
+          ld a,fail_unexpectedmess
+          CHECK_Z()
+          inc l
+          ld a,(hl)
+          cp ec2_eoc
+          ld a,fail_unexpectedmess
+          CHECK_Z()
+          call connect_next_chunk
+          jr nz,os_chloop
+
+          xor a
+          call save_a
+
+          call connect_bk_base
+
+          ld hl,tag_labels
+          call save_tag
+
+          CALL_AAP(aap_save)
+          CHECK_DOS_ERROR()
+;here bc: last pos writen in buff
+          ld h,b:ld l,0
+          ld b,l
+          inc bc
+          call io_save_bloc
+
+          ld hl,tag_checksums
+          call save_tag
+          call connect_source_begin
+os_chckloop
+          ld l,chead_last
+          ld a,(hl)
+          inc l         ; to do before dec
+          sub chunk_header_size
+          dec a
+          ld a,(hl)     ;chead_checksum
+          call nz,save_a
+
+          call connect_next_chunk
+          jr nz,os_chckloop
+
+          call connect_bk_base
+
+          ld hl,faketag_end:call print_tag
+      IF opt_checks
+          call kl_curr_selection
+          ld hl,vt_romext
+          cp (hl):call nz,fail
+          ld a,"x":ld (log),a
+      END
+          NRT_HOOK(nrt_hook1)
+
+          call disc_out_close
+      IF opt_checks
+          ld a,"y":ld (log),a
+      END
+          jp nc,os_err_dos
+
+os_ok
+; Before ed-brag, ED was writing directly in filename buffer.
+; Now that there is a dedicated buffer, we must set the name.
+; NB: ED could call set_filename itself, but room was lacking.
+
+          ld hl,faketag_ok:call print_tag
+          pop hl
+          call set_filename
+          scf
+set_saved
+; Clear 'modified' status in editor.
+; Don't touch F
+          ld a,flag_uptodate
+_set_not_saved
+          ld (up_to_date_since_save),a
+          ret
+
+is_current_modified
+;------------------
+; NZ if modified
+          ld a,(up_to_date_since_save)
+          cp flag_uptodate
+          ret
+
+is_modified_since_save
+;---------------------
+; In: A = source ID 
+; Out: NZ if modified 
+     ; N/A if source doesn't exist
+          push bc:ld b,a ; 'PUSH A'
+          call read_byte_in_store:BYTE up_to_date_since_save - vo0
+          jr _mod_com
+
+is_selected_modified_since_ass
+;-----------------------------
+; In: N/A
+; Out:NZ if modified (must assemble)
+     ; Z if uptodate
+          ld a,(current_source)
+;enchaine
+is_modified_since_ass
+;--------------------
+; In: A = source ID 
+; Out:NZ if modified (must assemble)
+     ; Z if uptodate
+     ; N/A if source doesn't exist
+          push bc:ld b,a ; 'PUSH A'
+          call read_byte_in_store:BYTE up_to_date_since_ass - vo0
+_mod_com
+          cp flag_uptodate
+          ld a,b:pop bc ; 'POP A'
+          ret
+
+set_modified
+          xor a
+          call _set_not_saved
+set_modified_since_ass
+;We must invalidate all visu cache,
+;since src pnt might become dangling.
+visu_init = visu_restore
+          CALL_ASS(visu_init)
+          CALL_ASS(cache_set_modified)
+          ret
+
+flag_uptodate = "C"
+
+os_err_dos
+          ld a,fail_doserror
+os_error
+          push af
+          call disc_out_abandon
+          pop af
+          jp exit_err
+
+save_tag
+          call print_tag
+
+          call save_tag_
+          call save_tag_
+          ld a,version
+          jp save_a
+save_tag_
+          ld c,(hl)
+          inc hl
+          ld b,(hl)
+          inc hl
+          call save_bc
+          CHECK_DOS_ERROR()
+          ret
+
+
+
+save_bc
+;bk base connected
+          push hl
+          push de
+          push bc
+
+          ld (vt_temp_word),bc
+          ld hl,vt_temp_word
+          ld bc,2
+          call io_save_bloc
+
+          pop bc
+          pop de
+          pop hl
+          ret
+
+save_a
+;bk base connected
+          push hl
+          push de
+          push bc
+          push af
+
+          ld (vt_temp_word),a
+          ld hl,vt_temp_word
+          ld bc,1
+          call io_save_bloc
+
+          pop af
+          pop bc
+          pop de
+          pop hl
+          ret
+
+
+
+;---------------
+org_get_nb_lines
+; Out: DE= nb lines
+          ld (vo_savesp),sp
+
+; connect_line uses chead_lines# for fast couting.
+
+          ld de,-1
+          push de
+          call connect_line
+          pop hl
+          scf:sbc hl,de
+          ex de,hl
+          ret
+
+
+connect_line_start_end
+;i/o as connect_line, except:
+;out: de = pos in source (start of actual line)
+    ; hl = end of actual line           
+    ; 
+     ;  C & NZ if ok.
+     ;  NC & NZ if eof met    (base connected)   <- only paste line?
+     ;  NC & Z if other error (base connected)
+
+          call connect_line
+          ret nc
+
+.passeoc
+          call isendofchunk
+          jr nz,clse_insidechunk
+          call inc_crossed_chunks
+          call connect_next_chunk
+          jr nz,.passeoc
+;eof
+          call connect_bk_base
+          xor a:inc a   ; NC, NZ
+          ret
+
+clse_insidechunk
+          ex de,hl
+          call connect_bk_base
+          ld hl,(vo_curline_end+1)
+
+          scf
+          jp connect_bk_source
+
+isendofchunk
+;Z if yes
+      IF 0
+          ld a,(hl)
+          cp ec_esc
+          ret nz
+          inc l
+          ld a,(hl)
+          dec l
+          cp ec2_eoc
+      ELSE
+;memory optimised
+          ld a,(hl)
+          sub ec_esc
+          ret nz
+          inc l
+          or (hl)
+          dec hl
+      END
+          ret
+
+connect_line
+;in : de = num ligne >0
+;out : hl = pos in source, at end of previous line !!
+          ; Typically, that's the start of the wanted line,
+          ; expect in one case: might be 'eoc' tag of previous chunk.
+          ; (Useful to insert line)
+     ; (vo_curbk) = bank (connected)
+     ;  C & NZ if ok. DE corrupted                         
+     ;  NC & Z if *past* oef. DE = line remainings - 1
+ ; !! NB : hl = eof is possible,
+         ; since positionning at end of previous line
+;!!BC IY corrupted
+; Call /fatal/ if corrupted
+
+          CHECK_BKBASE()
+          ld a,e
+          or d
+          ld a,fail_invalidlinenumber
+          ret z
+
+          push ix
+          ld hl,(vo_curline)
+          ld a,l
+          or h
+          jr z,cl_first_
+          sbc hl,de
+          jp z,cl_cur   ;nothing to do
+
+          push de
+
+          jr nc,cl_first ;backward : reprend du debut
+
+          inc hl
+          ld a,l
+          or h
+          jp z,cl_next
+
+;on repart de ligne courante
+          ex de,hl
+          ld hl,1
+          sbc hl,de
+          ex de,hl      ;de = nb line to skip
+          call seek_curline_start
+
+cl_reprise
+          call skip_line_bk_base
+          jr nc,cl_eof
+          dec de
+          ld a,e
+          or d
+          jp z,cl_ok
+
+          call connect_bk_source
+          call isendofchunk
+          jr nz,cl_reprise
+
+cl_next_chunk
+          call inc_crossed_chunks
+
+          call connect_next_chunk
+          jr nz,cl_gross
+          call connect_bk_base
+cl_eof
+; Past EOF
+          pop af        ; discard to keep de = remaining lines
+          pop ix
+          xor a
+          ld a,fail_invalidlinenumber
+          ret
+
+
+inc_crossed_chunks
+          push hl
+          ld hl,(vo_crossed_chunks)
+          inc hl
+          ld (vo_crossed_chunks),hl
+          pop hl
+          ret
+
+cl_first_
+          push de
+cl_first
+          call connect_source_begin
+          dec de
+cl_gross
+          call connect_line_chunk_
+          jr nc,cl_eof
+;-- now precise line in chunk
+          ld l,chunk_header_size ; start
+          inc de
+cl_finelp
+          call connect_bk_base
+          dec de
+          ld a,e
+          or d
+          jr z,cl_ok
+
+          call skip_line
+          jr nc,cl_eof
+
+          call connect_bk_source
+          call isendofchunk
+          jr nz,cl_finelp
+
+;!?! A revoir 
+;Why 'dec de' here and test!?!
+; oh, maybe to stay at end of chunk (needed for insert)
+          dec de
+          ld a,e
+          or d
+          jr nz,cl_next_chunk
+
+          call connect_bk_base
+          jr cl_ok
+
+cl_next
+          ld a,(vo_curline_end)
+          or a
+          jr z,cl_eof
+          ld (va_curbk),a
+          ld hl,(vo_curline_end+1)
+cl_ok
+          pop de
+          call upd_curline
+cl_cur
+          call seek_curline_start
+
+          scf
+          pop ix
+;enchaine!!!
+; connect source and RET
+connect_bk_source
+;assume we are in bk base
+          GET_CURBK()
+          ld b,&7F:out (c),a
+          ret
+
+seek_curline_start
+          ld hl,(vo_curline_start+1)
+          ld a,h:and &C0:cp &40:call nz,exit_mess
+          ld a,(vo_curline_start)
+          ld (va_curbk),a
+          and &C4:cp &C4:call nz,exit_mess
+          ret
+
+upd_curline
+; consistent update
+          GET_CURBK()
+          ld (vo_curline_start),a
+          ld (vo_curline_start+1),hl
+          ld (vo_curline),de
+;enchaine:
+upd_curline_end
+;maj end for fast access to next line
+
+          call skip_line
+          GET_CURBK()
+          jr c,$+3
+          xor a         ;mark eof (happens when DE=post last line)
+          ld (vo_curline_end),a
+          ld (vo_curline_end+1),hl
+          ret
+
+connect_line_chunk
+;----------------- 
+; Connect chunk containing line DE
+; In: DE = line > 0
+;Out: Carry if ok. 
+    ; DE = nb lines left in chunk to reach target line.  > 0
+; Call /fatal/ if corrupted
+          call connect_source_begin
+          dec de
+connect_line_chunk_
+; Call /fatal/ if corrupted
+.grosslp
+          call count_lines_in_chunk_
+          ex de,hl
+          xor a:ld b,a  ; NC
+          sbc hl,bc
+          jr c,.reached
+          jr z,.reached
+          ex de,hl
+;next         
+          call inc_crossed_chunks
+          call connect_next_chunk
+          jr nz,.grosslp
+
+          call connect_bk_base
+          xor a
+          ld a,fail_invalidlinenumber
+          ret
+
+.reached
+          add hl,bc
+          ex de,hl
+          scf
+          ret
+
+;--------------
+count_lines_in_chunk
+; In : H=chunk
+; OUT: C=nb lines
+    ; chead_lines updated
+    ; DE preserved
+          call connect_bk_source
+count_lines_in_chunk_
+          ld l,chead_lines#
+          ld c,(hl)
+          ld a,c:inc a
+          ret nz        ; Already cached
+
+          ld c,a        ;0
+          ld l,chunk_header_size
+.lp
+          call connect_bk_source
+          call isendofchunk
+          jr z,.done
+          push bc
+          call skip_line_bk_base
+          pop bc
+          inc c
+          jr c,.lp
+
+;failure. Nothing much we can do
+.done
+          ld l,chead_lines#
+          ld (hl),c
+          ret
+
+;--------------    
+org_move_bloc
+;in: hl=first line. bc=last line.  de=dest line
+
+      IF use_space
+;!! remove, not plugged anyway  
+      BRK
+      ELSE
+          ld (vo_savesp),sp
+
+          push hl
+          push de
+          push bc
+
+;Check we have enough space
+
+          ld hl,(vo_free_chunks)
+          ld a,h:add a:add a:or l
+          cp 3
+          call c,memory_full
+
+          call set_modified
+
+          pop hl        ;last
+          pop bc        ;dest
+          or a
+          sbc hl,bc
+          add hl,bc
+          jr c,move_after
+
+          ex de,hl
+          pop hl        ;first
+          or a
+          sbc hl,bc
+          add hl,bc
+          jr nc,move_before
+
+;dest inside source : no-op
+          scf
+          ret
+
+move_after
+      IF use_space
+; factorize with move_before
+      END
+
+          pop de        ;first
+          or a
+          sbc hl,de
+
+          ld a,fail_noblocdefined
+          call c,exit_err
+
+          inc hl        ;nb lines to move
+malp
+          push hl
+          push de
+          push bc
+
+          call copy_line_in_parse_buffer
+
+          pop bc        ;dest
+          pop hl        ;source
+          push hl
+          push bc
+
+          push de
+          ex de,hl
+          call org_delete_line
+          call nc,exit_mess
+
+          pop ix
+          pop de
+          push de
+          call _insert_line
+
+          pop bc
+          pop de
+          pop hl
+          inc bc
+          inc de
+          dec hl
+          ld a,l
+          or h
+          jr nz,malp
+
+          scf
+          ret
+
+
+move_before
+
+          ex de,hl
+          or a
+          sbc hl,de
+
+          ld a,fail_noblocdefined
+          call c,exit_err
+
+          inc hl        ;nb lines to move
+mblp
+          push hl
+          push de
+          push bc
+
+          call copy_line_in_parse_buffer
+
+          pop bc        ;dest
+          pop hl        ;source
+          push hl
+          push bc
+
+          push de
+          ex de,hl
+          call org_delete_line
+          call nc,exit_mess
+
+          pop ix
+          pop de
+          push de
+          call _insert_line
+
+          pop bc
+          pop de
+          pop hl
+          inc bc
+          inc de
+          dec hl
+          ld a,l
+          or h
+          jr nz,mblp
+
+          scf
+          ret
+
+      END
+
+;--------------
+org_copy_bloc
+;in: hl=first line. bc=last line.  de=dest line
+
+          ld (vo_savesp),sp
+
+;Check we have enough space (count crossed chunks)
+
+          push hl
+          push de
+          push bc
+
+          push bc
+          ex de,hl
+          call connect_line_start_end
+          ld hl,0:ld (vo_crossed_chunks),hl
+          call connect_bk_base
+          pop de
+          call connect_line_start_end
+          call connect_bk_base
+          ld bc,(vo_crossed_chunks)
+          ld hl,(vo_free_chunks)
+          scf           ;bug#b9. count initial chunk as well
+          sbc hl,bc
+          call c,memory_full
+
+          call set_modified
+
+;NB : we could use crossed_chunks nb to copy by chunk.
+
+          pop hl        ;last
+          pop bc        ;dest
+          or a
+          sbc hl,bc
+          add hl,bc
+          jr c,copy_after
+
+; Destination is before bloc
+
+          ex de,hl
+          pop hl        ;first
+          or a
+          sbc hl,bc
+          add hl,bc
+          jr nc,copy_before
+
+; Destination in bloc: not supported.
+          ld a,fail_cannotcopyhere
+          or a
+          ret
+
+copy_after
+; Destination is after bloc
+
+          pop de        ;first
+          or a
+          sbc hl,de
+
+          ld a,fail_noblocdefined
+          call c,exit_err
+
+          inc hl        ;nb lines to copy
+calp
+          push hl
+          push de
+          push bc
+
+          call copy_line_in_parse_buffer
+
+          push de
+          pop ix
+          pop de
+          push de
+          call _insert_line
+          pop bc
+          pop de
+          pop hl
+          inc bc
+          inc de
+          dec hl
+          ld a,l
+          or h
+          jr nz,calp
+
+          scf
+          ret
+
+copy_before
+; Destination is before bloc
+          ex de,hl
+          or a
+          sbc hl,de
+
+          ld a,fail_noblocdefined
+          call c,exit_err
+
+          inc hl        ;nb lines to copy
+cblp
+          push hl
+          push de
+          push bc
+
+          call copy_line_in_parse_buffer
+
+          push de
+          pop ix
+          pop de
+          push de
+          call _insert_line
+          pop bc
+          pop de
+          pop hl
+          inc bc
+          inc de
+          inc de        ;source has moved
+          dec hl
+          ld a,l
+          or h
+          jr nz,cblp
+
+          scf
+          ret
+
+
+;--------------
+org_insert_line
+;in: de=num ligne. hl=nt text
+;out: hl=post text.   MAJ curline_end
+
+          ld (vo_savesp),sp
+
+          push de
+          ld ix,parse_buffer
+          CALL_PARSE(preassemble)
+          pop de
+          ret nc
+
+_insert_line
+;in: de: ix: end of line
+;out: hl preserved
+          call set_modified
+
+          push hl
+
+          call connect_line
+          call nc,exit_err
+
+          ex de,hl
+          ld b,ixl
+          push ix
+          pop hl
+          dec hl
+          call ins_in_chunk_from_base
+          jp c,oil_ok
+
+;ix=store initial chunk
+          GET_CURBK()
+          ld ixl,a
+          ld ixh,d
+
+;copy trailing...
+          ld c,e
+          ld e,chead_last
+          ld a,(de)
+          dec a
+          sub c
+          ld e,c
+          jr z,iol_notrailing
+
+          ld b,a        ;len w/o EOC tag
+
+          ld e,chead_lines#
+          ld a,255
+          ld (de),a
+          ld e,c
+          ld a,b
+
+          push hl
+          push de
+
+          add c
+          dec a
+          ld e,a        ;last w/o EOC tag)
+
+;...in following chunk
+          ld h,d
+          call connect_next_chunk
+          jr nz,okchtr
+          call insert_new_chunk_from_hl_adr
+          call connect_next_chunk
+okchtr
+          ex de,hl
+          ld a,ixl
+          call ins_in_chunk
+          jr c,oil_okmerge
+
+;...in brand new chunk
+          ex de,hl
+          push ix
+          pop hl
+          call connect_chunk_from_id
+          call insert_new_chunk_from_hl_adr
+          call connect_next_chunk
+
+          ex de,hl
+          ld a,ixl
+          call ins_in_chunk
+          call nc,exit_mess
+
+oil_okmerge
+
+          ld h,d
+          ld l,chead_lines#
+          ld (hl),255
+          call update_checksum
+
+          push ix
+          pop hl
+          call connect_chunk_from_id
+
+          pop hl
+          ld (hl),ec_esc
+          inc l
+          ld (hl),ec2_eoc
+          ld e,l
+          ld d,h
+          ld l,chead_last
+          ld (hl),e
+          dec e
+          call update_checksum
+
+;retry, now that trailing was removed
+          pop hl
+          ld b,l
+          inc b
+          call ins_in_chunk_from_base
+          jr c,oil_ok
+
+;try in following chunk
+
+iol_notrailing
+          ex de,hl
+          call connect_next_chunk
+          jr nz,okchtr2
+          call insert_new_chunk_from_hl_adr
+          call connect_next_chunk
+okchtr2
+          ex de,hl
+          call ins_in_chunk_from_base
+          jr c,oil_ok
+
+;dedicated chunck
+          ex de,hl
+          push ix
+          pop hl
+          call connect_chunk_from_id
+          call insert_new_chunk_from_hl_adr
+          call connect_next_chunk
+          ex de,hl
+          call ins_in_chunk_from_base
+oil_ok
+          ld e,chead_lines#
+          ld a,(de)
+          inc a
+          jr z,$+3
+          ld (de),a
+
+          ex de,hl
+          call update_checksum
+          ex de,hl
+
+          call connect_bk_base
+
+          call seek_curline_start
+          call upd_curline_end
+
+          pop hl
+          scf
+          ret
+
+merge_chunks
+; In:
+; HL = lines to merge (raw, i.e. no chunk header)
+; DE = dest in chunk (must be connected) (*)
+;  c = length to merge.                     
+; Out:
+;   Carry: Ok, everything copied
+;   NC: Chunked filled and header setup.
+;     ; HL = remaining lines
+;     ; DE = last in chunk
+;     ;  c = remaining len
+
+; (*) Chunk header doesn't need to be setup, and won't be for full copy.
+
+          ld a,e:inc a:inc a:add c ; fits with room for esc_eof? 
+          jr nc,mc_ok   ; If so: simply copy
+
+; --- Copy line by line until chunk is full ---
+mc_loop
+          push bc
+          push de:push hl
+          call skip_line_bk_base
+          call connect_bk_source
+          ld a,l        ; end
+          pop hl:pop de
+          sub l:ld c,a  ; line len
+          inc a:inc a
+          add e:jr c,mc_full
+          ld a,c
+          ld b,0:ldir
+          pop bc
+          neg:add c:ld c,a
+          call z,exit_mess ; Impossible: mustn't fit.
+          call nc,exit_mess ; Idem 
+          jr mc_loop
+
+mc_full
+          pop bc
+          or a
+          ret
+
+mc_ok
+          inc c:dec c:call z,exit_mess ; sanity check
+          ld b,0:ldir
+          scf
+          ret
+
+
+ins_in_chunk_from_base
+          call get_bk_base
+ins_in_chunk
+;hl:source_end b:len de:dest in chunk (connected)
+;A:bk source
+;return NC if no more room
+
+          ld iyh,a
+
+          ld c,e
+          ld e,chead_last
+          ld a,(de)
+          add b
+          ld e,c
+          ccf
+          ret nc
+          ld e,chead_last
+          ld (de),a
+          ld e,a
+          sub b
+          push hl
+          ld l,a
+          ld h,d
+          sub c
+          inc a
+          call z,exit_mess
+          ld c,a
+          ld a,b
+          ld b,0
+          lddr
+
+          pop hl
+
+          or a
+          call z,exit_mess
+
+          ld iyl,a
+          GET_CURBK()
+copy_trans_bk_reverse
+;in : HL=source last DE=dest last iyl=size  iyh=bk source  a=bk dest
+          ld c,a
+          ld b,&7F
+ctbkrev_lp
+          ld a,iyh
+          out (c),a
+          ld a,(hl)
+          dec hl
+          out (c),c
+          ld (de),a
+          dec de
+          dec iyl
+          jr nz,ctbkrev_lp
+          scf
+          ret
+
+copy_line_in_parse_buffer
+          call connect_line_start_end
+          call nc,exit_mess
+          ld a,l
+          sub e
+          call z,exit_mess
+          ld c,a
+          ld b,0
+          ex de,hl
+          ld de,parse_buffer
+          ldir
+          jp connect_bk_base
+
+finalize_chunk
+;In: hl= point to end.
+;Out: Carry if ok
+    ; NC if overflow.
+          ld a,fail_bufferoverflow
+          or a
+          ld (hl),ec_esc:inc l:ret z ; PB
+          ld (hl),ec2_eoc
+
+          ld a,l
+          ld l,chead_lines#
+          ld (hl),255
+          ld l,chead_last
+          ld (hl),a
+;enchaine
+update_checksum
+; in : hl pointe sur chunk
+;out : a = checksum. carry (for finalize chunk)
+
+          push hl       ;needed?
+          call compute_checksum
+          ld l,chead_checksum
+          ld (hl),a
+          scf
+_pophl_ret
+          pop hl
+          ret
+
+compute_checksum
+          ld l,chead_last
+          ld a,(hl)
+          ld l,a
+          sub chunk_header_size-1 ;all but header
+          ld b,a
+cc_custom
+;in: hl=last, b=len
+          push bc
+cc_lp     rrca
+          add (hl)
+          dec l
+          djnz cc_lp
+          pop bc
+          ret
+
+;-----------
+org_get_line
+; Print line in buffer
+; Works both from ED or Trace (visu).
+; in : de = line#
+     ; hl = text buffer
+          ld (vo_savesp),sp
+
+      IF todo
+; Copy in buffer free in 9800-9fff (workzone available from trace)
+; -> Faster and less code.
+      END
+
+          push hl
+;1--- copy encoded line in base in /decode_buffer/
+          call connect_line_start_end
+;!! Cannot use exit_err when coming from trace, since
+;!! it would trigger check_save_sp.
+; Also, post EOF is not considered fatal error.
+; An alternative would be a less strict check_save_sp.
+          jr nc,_pophl_ret
+
+          call connect_bk_base ;pour appel copy_trans_bk
+          ld a,l
+          sub e
+          ld iyl,a      ;size
+          dec hl        ;hl=source last
+          ld d,decode_buffer/&0100
+          ld e,a
+          dec e
+
+          GET_CURBK()
+          ld iyh,a
+          call get_bk_base
+
+          call copy_trans_bk_reverse
+
+;2---- Actual decoding
+;here : base bk connected
+          ld hl,decode_buffer
+          pop de
+          call decode
+          ex de,hl
+          scf
+          ret
+
+
+;--------------
+org_delete_line
+; de = line#
+; out = c if ok
+;     = nc & z if delete post last line (used by org_insert)
+;     = nc & nz if other error
+
+          ld (vo_savesp),sp
+          call set_modified
+
+;For insertion we needed to be at the end of the previous line :
+; ie, before eoc marker.
+;But here we need to be at the real start of the current line :
+; if eoc, we must go to next chunk
+
+          call connect_line_start_end
+;bug #b6: return nc is non existant line
+          ret nc
+
+;hl=end, de=start
+          ld c,e
+          ld e,chead_last
+          ld a,(de)
+          ld e,c
+          sub l
+          inc a
+          ld c,a
+          ld b,0
+;assert same chunck
+          ld a,d
+          cp h
+          ld a,7
+          call nz,exit_mess
+
+          ldir          ; <- that's the delete part!
+
+;correct 'last'
+          ld h,d        ;!!H ovf when last was $ff
+          ld l,chead_last
+          dec e
+          ld (hl),e
+          ld l,chead_lines#
+          ld a,(hl)
+          inc a
+          jr z,$+3      ;unknown ?
+          dec (hl)
+
+          call update_checksum
+
+          call connect_bk_base
+          call seek_curline_start
+          call upd_curline_end
+          scf
+          ret
+
+get_bk_base
+; needed by ch
+      IF opt_checks
+          ld a,i:and &C5:cp &C5:call nz,&BE00
+      END
+          ld a,i
+          ret
+
+      IF 0
+org_select_if_needed
+;-------------------
+; ON HOLD. Simpler to leave as-is: ED checks self selection itself.
+; For ed (CTRL-fn, CTRL-4)
+;Out: NC, Z if self selected 
+    ; NC, NZ if error (not handled yet by caller)
+!!! todo, ensure org_select' returns NZ if error
+    ; C, NZ: ok different source
+    ; C, Z: new source (CTRL-fn, shouldn't happen with CTRL-4)
+          call org_is_self_selected
+          ret z
+      END
+org_select
+;---------
+; Version for mon. See API at /org_select'/
+; Change current_source' (status bar)
+; Debugguer cannot change
+; !!!potential bug: si source changed in debuggeur for visu,
+; !!!potential solution -> switch just for visu, but switch back   
+
+          call org_select'
+          ret nc
+org_copy_current
+; Needed when coming from basic and re-installing status bar.
+          ld a,(current_source)
+          ld (current_source'),a
+          ret
+
+alloc_save_list
+;Out: Carry if ok 
+          ld hl,save_list
+;IN: HL=var pnt
+   ; If ok, carry, CDE put in list
+          CALL_BRIC(list4_new)
+          call connect_bk_base_save_bc
+          jr c,.ok
+          ld c,0        ; mark unitialised
+.ok
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          ld (hl),c
+          ret
+
+release_save_list
+          call get_save_list
+          inc c:dec c
+          ret z
+          CALL_BRIC(list4_free)
+          ret
+
+get_save_list
+          call connect_bk_base
+          ld bc,(save_list+2) ; for C 
+          ld de,(save_list)
+          ret
+
+      IF dev_checks
+get_curbk
+          push af
+          ld a,(va_curbk):and &C4:cp &C4:call nz,fail
+          pop af
+          ld a,(va_curbk)
+          ret
+      END
+
+;----------------------    
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+;----------------------    
+
+code3 = $$
+      IF inRom
+      ORG codedest3,$$
+      END
+
+get_next
+; Get id of next chunk (0 if last chunk)
+; Out: Z if id == 0, H  unchanged
+     ; NZ otherwise, HL=new id.
+ ; BRK if H not in bank (denote programmation error)
+
+          ld a,h:and &C0:cp &40:call nz,fatal
+          ld l,chead_next
+          ld a,(hl)
+          or a          ; Just checking bk is enough
+          ret z
+          inc l         ; Still NZ
+          ld h,(hl)
+          ld l,a
+          ret
+
+
+;-----------
+org_set_line
+; I/O as org_insert_line
+
+          ld (vo_savesp),sp
+          push de
+          call org_insert_line
+          pop de
+          ret nc
+          inc de
+          push hl
+          call org_delete_line
+          pop hl
+          ret c
+          ret z         ; not eof -> real error
+;bug #b6
+;allow insert post last line: no line to delete
+          scf
+          ret
+
+
+org_new_chunk
+; Pick new chunk
+; In: N/A
+; Out: H: MSB, L: bk
+;    : DE preserved
+;    ; Chunk connected    
+     ; Setup BANK and UPDATE curbk.
+;    ; Carry if OK, NC otherwise
+
+; !! Don't use chunk:new_chunk, since we must call connect_chunk_from_id
+; !! anyway.
+          CALL_BRIC(new_chunk_no_init):ret nc
+; id is necessarily valid here. If not: fail hard. 
+          push hl
+          call connect_chunk_from_id
+; header
+          push de
+          ld d,h
+          ld hl,chunk_def
+          ld bc,chunk_init_size
+          ld e,b
+          ldir
+          pop de
+          pop hl
+          scf
+          ret
+
+break = &BE00
+exit_mess
+          ld a,fail_unexpectedmess
+
+memory_full
+          ld a,fail_memoryfull
+;enchaine
+exit_err
+; !! Mustn't BRK here, even for dev, since it is used to simplify
+; !! error handling (e.g. early return for invalid line# or memory full)
+; -> For unrecoverable issues, use fatal. 
+          pop hl        ;adr error
+          push hl
+          ld c,a
+          call connect_bk_base
+          xor a         ;nc & Z
+          ld e,a
+          ld d,a
+          ld (vo_curline),de ;invalidate
+          ld a,c
+          call check_save_sp ; Remove? Inaccurate when coming from trace
+          ld sp,(vo_savesp)
+          ret
+
+
+fatal = &BE00
+prog_error = &BE00      ; Misuse in API.
+
+skip_line_bk_base
+          call connect_bk_base
+skip_line
+          CALL_ASS(ass_skip_line)
+          ret
+
+insert_new_chunk_from_hl_adr
+;hl in cur chunk
+;cf below       
+          GET_CURBK()
+          call org_insert_new_chunk
+          ret c
+          call exit_mess
+
+org_insert_new_chunk
+;a= cur bk
+;h= msb cur chunk
+;ret: C if ok
+
+          ld ixl,a
+          ld a,h
+          ld ixh,a
+          and &C0:cp &40:call nz,nc_mess
+
+;in: ix = connexion current chunk
+;out: !!reconnect input chunk, for stack purpose.
+; NC if memory full or mess
+
+          push bc
+          push de
+          ld l,chead_next
+          ld e,(hl)
+          inc l
+          ld d,(hl)
+
+          call org_new_chunk:jr nc,oinc_end
+
+          ld l,chead_next
+          ld (hl),e
+          inc l
+          ld (hl),d
+
+          GET_CURBK()
+          ld e,a
+          ld d,h
+
+          push ix
+          pop hl
+          call org_connect_chunk_from_id
+          jr nc,oinc_end
+          ld l,chead_next
+          ld (hl),e
+          inc l
+          ld (hl),d
+          scf
+oinc_end
+          pop de
+          pop bc
+          ret
+
+init_phase1_main
+;---------------
+;In/out: like init_phase1
+
+;-- release locals of (recursively) imported sources (fix #1dc)
+;Mustn't be done for import: problems if cycle
+          ld hl,depsrec
+          xor a
+.rellp
+          CALL_BRIC(bs_get)
+          jr z,.relnxt
+; Can happen when cycles
+          call org_is_self_selected
+          jr z,.relnxt
+          push af:push hl
+          CALL_ASS(sy_sync_ext_index_to_live)
+          CALL_ASS(release_locals)
+          call connect_bk_base ; for bs_get and loop exit
+          pop hl:pop af
+.relnxt
+          inc a
+          cp max_sources
+          jr c,.rellp
+
+          CALL_ASS(sy_sync_cur_index_to_live) ;restore
+; Scope shared across sources, to handle import in macros (bug #1dd)
+          CALL_ASS(sy_reset_scope)
+;Enchaine
+init_phase1_all
+;--------------
+; Called for imported source as well
+; In: Nothing
+;Out: Carry if ok, NC otherwise.
+    ; All register trashed.
+          ld hl,vo_flags
+          ANCHOR(vf_isphase1ok)
+          ld (hl),0
+
+          CALL_BRIC(aap_get#):CALL_ASS(sy_reset_table_except_imported)
+          ret nc        ;exit if mem full
+
+;-- deps only init in phase1, since used in phase2 to resolve labels
+;-- depsrec init in both via clear_visited. See rationale in cache.o
+          call clear_deps
+
+          jr _init_phase_com
+
+init_phase2_main
+;---------------     
+          CALL_ASS(sy_reset_scope)
+init_phase2_all
+;--------------                
+; I/O: Like above
+          ld hl,vo_flags
+          set vf_isphase1ok,(hl)
+
+      IF opt_checks
+          call check_deps
+      END
+
+_init_phase_com
+;!! Each source must have its own store, used when import is cached
+; phase1: Done to free previous cache (prevent mem full).
+; phase2: Ensure v_store_cur is properly set
+          CALL_ASS(cocopy_amorce):ret nc
+;Enchaine (Carry will be set)
+org_seek_source_begin
+; We must connect bk base, otherwise wrong id read.
+; Worse, since sp saved in wrong bank, the exit_mess mecanism crashes.
+          push bc       ; implicit api was to save B. todo: cleanup
+          call connect_bk_base
+          pop bc
+          ld (vo_savesp),sp
+seek_source_begin
+          call connect_source_begin ; set curbk and HL
+; enchaine
+connect_bk_base_ok
+          scf
+connect_bk_base
+          push af
+          BK_BASE()
+          ld b,&7F:out (c),a
+          pop af
+          ret
+
+clear_deps
+          ld hl,deps:ld a,max_sources:CALL_BRIC(bs_init)
+          ld hl,depsrec:ld a,max_sources:CALL_BRIC(bs_init)
+          ret
+
+read_byte_in_store
+;-----------------
+; In store or directly if we already are connected
+; In: A = source ID (may not exist: ed call is_modified_since_save
+                                  ; even for empty tabs)
+    ; (sp) = offset 
+    ; bk agnostic
+;Out: A = (vo0 + offset) if source exists
+    ; garbage otherwise
+          ex (sp),hl
+          push bc
+          ld c,(hl):inc hl
+          push hl
+          ld l,c
+          call connect_var_in_store
+          ld a,(hl)
+          pop hl
+          pop bc
+          ex (sp),hl
+;Enchaine
+connect_bk_base_save_bc
+      IF need_room
+; Just have one version
+      END
+          push bc
+          call connect_bk_base
+          pop bc
+          ret
+
+org_assemble
+;-----------
+;in : de= org (obj), ie dest
+;     bc= org (pc)
+;out: if Ok: Carry
+    ; NC NZ if ass error. A= err code  < 128
+    ; NC  Z if failure.   A= fail code >= 128
+  ;If ok **and cache not used** HL= first obj, DE= last obj, BC= exec
+
+          CALL_ASS(is_uptodate):scf:ret nz ; nz = use cache
+
+      IF need_room
+; move that in ass.init_var_once
+      END
+;Bug#175. Must flag host itself as *not* uptodate.
+; Otherwise, when imported file fails, it is not flagged as dep,
+; and recursive is_uptodate is not valid anymore.
+          CALL_ASS(cache_set_modified)
+
+          push de:push bc
+          call release_save_list
+          call alloc_save_list:jr nc,ass_failure
+          CALL_ASS(init_var_once):jr nc,ass_failure ; global ass init
+          call init_phase1_main:jr nc,ass_failure
+          ld a,1
+          call print_phase
+          pop bc:pop de
+          push de:push bc
+          CALL_ASS(ass_init_and_amorce):jr nc,ass_err_phase1
+
+          call init_phase2_main:jr nc,ass_failure
+
+          pop bc:pop de
+          ld a,2
+          call print_phase
+          CALL_ASS(ass_init_and_amorce)
+          ret nc
+          CALL_ASS(set_uptodate)
+          ret
+
+ass_err_phase1
+          pop bc
+popde_ret
+          pop de
+          ret
+
+ass_failure
+          pop bc
+          pop de
+          cp a          ; Must flag NC, Z for ch.o to report failure
+          ret           ; return to ch or ass_import.
+
+;-------------------
+org_is_empty
+; Out: Z if 0 lines or 1 empty line.
+; !!! MUSTN'T change va_phase (and va_phase_backup)
+          call connect_source_begin
+
+; if empty line just skip it
+          ld a,(hl):cp ec_nl:jr nz,$+3:inc l
+; Now must be the end
+          call isendofchunk
+; Mustn't have next chunk
+          call z,get_next ; Z = no next chunk = empty
+          jp connect_bk_base
+
+
+orgunset
+;------- 
+;Remove externaly set equs
+          call set_modified_since_ass
+orgunset_
+          ld hl,(orgset_store)
+          CALL_BRIC(free)
+          ld hl,0
+          ld (orgset_store),hl
+          ret
+
+;----------------------    
+hi3
+realsize3 = $$-code3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+;----------------------    
+code4 = $$
+      IF inRom
+      ORG codedest4,$$
+      END
+;----------------------
+
+check_deps
+      IF need_room
+; Remove that
+      END
+; In assembly time, deps should not have been overwritten.
+; It's checked as often as reasonable, for early fail.
+          push af
+          ld a,(deps):cp max_sources-1:call nz,fail
+          ld a,(depsrec):cp max_sources-1:call nz,fail
+          pop af
+          ret
+
+assert_id_or_null
+          call check_id_or_null
+          ret c
+      BRK
+
+connect_source_begin
+          CHECK_BKBASE()
+          ld hl,(source_begin)
+          jr connect_chunk_from_id
+
+
+connect_next_chunk
+;in : hl pointe dans chunk
+;out: hl=chunk start
+;if no such chunk : NC, Z, H unchanged (for append)
+;!! C corrupted
+; Call /fatal/ if corrupted
+
+          call get_next:ret z
+
+connect_chunk_from_id
+;like org_connect_chunk_from_id, but escape in case of error.
+      IF todo
+;!!! bugged: /org_connect_chunk_from_id/ always return Carry
+;Todo: discard this version
+      END
+;!! That's the one exposed externally.
+;!! Return NC for bad failure!
+; -> Caller might want to use chunk+42 instead.
+
+      IF opt_checks
+;if no check: won't fail an
+          call org_connect_chunk_from_id
+          ret c
+          call exit_err
+      END
+
+org_connect_chunk_from_id
+;in : h=MSB, l=bk
+;out: bk connect, hl=chunk start, NZ, Carry.
+; UPDATE curbk.
+    ; AF trashed.   
+      IF todo
+;!!! bugged: if invalid id, continue! 
+;Todo: use pagefirm's version (and make sure we don't rely on out flags)
+      END
+      IF opt_checks
+          call check_id:call nc,nc_mess
+      END
+
+          push bc
+          ld a,l:ld (va_curbk),a
+          ld b,&7F:out (c),l
+          pop bc
+
+          ld l,chunk_header_size
+          or l          ;nz
+          scf
+          ret
+
+nc_mess
+      IF [1-inRom]
+      BRK
+          ld bc,&BAD1
+      END
+          ld a,fail_unexpectedmess
+          or a
+          ret
+
+copy_nt
+; TODO: use the one in bric-brac
+; copy including ending 0
+; out: past 0
+          ld a,(hl):inc hl
+          ld (de),a:inc de
+          or a
+          jr nz,copy_nt
+          ret
+
+
+orgget
+;-----
+;Externally get label
+;In: hl=label nt string
+;Out: de=value
+          CALL_BRIC(aap_get) ; out: de= id
+          ld a,err_undefined
+          ret nc
+          ex de,hl
+          CALL_ASS(sy_get) ; returns error code
+          ret nc
+;if 24 bits, won't fit in basic integer
+          ld a,c:or a
+          ld a,err_overflow16
+          ret nz
+          scf
+          ret
+
+
+;----------------------    
+hi4
+realsize4 = $$-code4
+      IF inRom
+      FILL limit4-$,&F7
+      END
+codesize4 = $$-code4
+;----------------------    
+code5 = $$
+      IF inRom
+      ORG codedest5,$$
+      END
+;----------------------
+
+orgset
+;-----
+;Externally set label
+;In: hl=label nt string
+   ; bc=value
+err_undefined = 1       ; for nrt (sent by symb via asseva)
+err_overflow16 = 4
+          call set_modified_since_ass
+          push bc
+          CALL_BRIC(aap_get) ; out: de= id
+          pop bc
+          ld a,err_undefined
+          ret nc
+          ld hl,orgset_store
+          call fetch_chunk_lazy
+          ret nc
+;We don't care about setting vo_curbk
+;but we want to BRK in case of error
+;connect_chunk_from_id would call exit_err, but sp isn't stored
+          call org_connect_chunk_from_id
+;Is id already set
+;for now, single chunk: 63 labels max
+          ld l,chead_last
+          ld l,(hl)     ; start at end
+.search
+          ld a,l:cp chead_last0 ; in const.i
+          dec hl        ; don't change z flag
+          jr z,.append  ; nope -> append
+          dec l
+          ld a,(hl):cp d
+          dec hl        ; don't change z flag
+          jr nz,.next
+          ld a,(hl):cp e
+          jr z,.change
+.next
+          dec l
+          jr .search
+
+.append
+      IF chead_last0-chead_last-1
+ !! review
+      END
+;update chead_last
+          ld a,(hl)
+          add 4
+          jr c,.memfull
+          ld (hl),a
+          sub 3:ld l,a  ; new entry
+.change
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          ld (hl),c:inc l
+          ld (hl),b
+          scf
+.exit
+;We don't really need to save bc, but that's the routine of choice
+          jp connect_bk_base_save_bc
+.memfull
+          ld a,fail_memoryfull
+          or a
+          jr .exit
+
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          ld (hl),c:inc l
+          ld (hl),b
+          scf
+
+
+fetch_chunk_lazy
+;In: HL = pnt to id chunk (not id itself)
+;Out: If (hl) = 0, create new chunk and set it in (hl)
+    ; In both case, HL = id chunk
+          push de
+          ld e,(hl):inc hl
+          ld d,(hl)
+          ex de,hl
+          inc h:dec h
+          jr nz,.exit
+          CALL_BRIC(new_chunk)
+          jr nc,.exit
+;setup chunk while connected
+          push hl
+          ld l,chead_last
+          ld (hl),chead_last0
+          pop hl
+          call connect_bk_base_save_bc
+          ex de,hl
+          ld (hl),d:dec hl
+          ld (hl),e
+          ex de,hl
+.exit
+          pop de
+          ret
+
+;----------------------    
+hi5
+realsize5 = $$-code5
+      IF inRom
+      FILL limit5-$,&F7
+      END
+codesize5 = $$-code5
+;----------------------    
+
+
+nrt2
+;-----------------------------
+; NRT part 2
+; No more room before code @ &1000! 
+;-----------------------------
+      IF 1-inRom
+
+tstfile0 BYTE ":orgnrt/orgnrtf.o",0 ;in orgams79
+tstfile0' BYTE ":orgnrt/orgnrtf'.o",0
+tstfile1 BYTE ":orgnrt/41lines.o",0 ;idem
+;tbg_name BYTE "nrt-line.o",0 ;where ??
+;tbi_name BYTE "h.o",0   ;where ??
+tstfilename BYTE "tmpsaved.o",0
+tstfile2 BYTE "savedbig.o",0
+tstfilebigchck BYTE ":orgnrt/bigchck.o",0
+tstbadchecksum BYTE ":orgnrt/badcheck.o",0
+tstbug#164 BYTE "testdata/bug164/main.o",0 ; TODO: merge test dirs
+tstchunk BYTE ":orgnrt/orgdata/chunk-am.o",0
+
+metatoto BYTE "MetaToto",0
+
+      IF 0
+smalltest
+          call org_source_init
+          ld de,1
+          ld hl,nrtlines
+sttilp
+          push de
+          call org_insert_line
+          ld a,">"
+          call &BB5A
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,sttilp
+
+; Don't use nrt_assemble_com: we want to check errors
+          ld de,destnrt
+          ld bc,destnrt
+          call org_assemble
+
+          ld a,0
+stlp      push af
+          CALL_ASS(ass_get_error)
+          pop af
+          inc a
+          cp 4
+          jr c,stlp
+          ret
+      END
+
+test_connect_bk_source
+;---------------------
+; Check we can reconnect bk source after new chunk 
+          call nrt_init_big
+          call seek_source_begin
+          GET_CURBK():ld e,a ; Ref
+; get new chunk 
+.lp
+          CALL_BRIC(new_chunk):call nc,nrtfail
+          call connect_bk_base
+          ld a,l
+          cp e
+          jr z,.lp
+
+          GET_CURBK():cp e:call nz,nrtfail
+          ret
+
+test_connect_bk_source'
+;----------------------
+; Idem via list4_append
+          call nrt_init_big
+          call seek_source_begin
+          GET_CURBK():ld ixl,a ; Ref
+          CALL_BRIC(list4_new):call nc,nrtfail
+.lp
+          CALL_BRIC(list4_append):call nc,nrtfail
+          call connect_bk_base
+          ld a,h
+          cp &40        ; 40 means new bank reached
+          jr nz,.lp
+
+          GET_CURBK():cp ixl:call nz,nrtfail
+          ret
+
+
+test_firmware_reset
+; Check firmware is properly setup at each assembling 
+; (even when using cache)
+; There was a bug in FF-alpha3, eg: b941 modified by ed (dev mode)
+; would crash when re-executing.
+
+          call nrt_org_init
+
+          ld hl,.src
+          call nrt_set_source
+
+          ld bc,&7F00+nrt_bk_c7-1 ; mirror
+          out (c),c
+
+          ld b,3
+.lp
+; loop to test with cache
+          push bc
+
+; Marker (e.g. memory modified after source execution)
+          ld bc,&7F00+nrt_bk_c7-1:out (c),c ; mirror
+          ld a,&F7:ld (&B941-&4000),a
+          ld bc,&7F00+nrt_bk_c7:out (c),c ; mirror
+
+          call nrt_assemble_com
+
+; Assemblage must reset firmware.
+          ld bc,&7F00+nrt_bk_c7-1:out (c),c ; mirror
+; assume firmware 3.1
+          ld a,(&B941-&4000):cp &F3:call nz,&BE00
+          ld bc,&7F00+nrt_bk_c7:out (c),c ; mirror
+
+          pop bc
+          djnz .lp
+          ret
+
+.src
+      BYTE "ei",0,0     ; Doesn't matter
+
+
+
+test_cache_reset
+; We check absence of memory leak when resetting cache.
+; File is &1000 long. Takes 17 chunks (due to header in each chunk).
+
+tcr#  = 17*2 + just_enough
+
+          ld hl,nrt_loadbin
+          call nrt_set_source ; prime last chunk in bank &cc
+
+          ld b,3
+tcr_lp
+          push bc
+
+; We take the occasion to actually check the file is loaded
+          call clear_destnrt
+
+          call nrt_assemble_com
+vo_low_obj = &7C04
+          ld hl,(vo_low_obj)
+          CHECK_HL_EQUAL(destnrt)
+          call check_msbxlsb
+
+          CALL_ASS(asseto_free)
+
+          pop bc
+          djnz tcr_lp
+          ret
+
+nrt_loadbin
+      BYTE "load",34,":orgnrt/msbxlsb.nrt",34,0,0
+
+
+clear_destnrt
+      IF destnrt+&0FFF AND &4000
+ !! error overlap bank !!
+      END
+          ld hl,destnrt
+          ld de,destnrt+1
+          ld bc,&0FFF
+          ld (hl),0
+          ldir
+          ret
+
+check_msbxlsb
+; file was constructed [msb(i) ^ lsb(i) for i in range(&1000)]
+          ld de,0
+          ld bc,&1000
+msbxlsb_lp
+          ld a,e:xor d:cp (hl):call nz,&BE00
+          inc hl
+          inc de
+          dec bc
+          ld a,c:or b
+          jr nz,msbxlsb_lp
+          ret
+
+
+nrt_fill_chunks
+          ld de,1
+tlt
+          push bc
+          call nrt_fill_chunk
+          pop bc
+          djnz tlt
+
+          ret
+
+
+nrt_fill_chunk
+;in: de= line           
+      IF chunk_header_size - 32
+nrt_lines_per_chunk = 15 ; 8 
+      ELSE
+nrt_lines_per_chunk = 13 ; 32
+      END
+          ld b,nrt_lines_per_chunk
+nfc
+          push bc
+          ld hl,nrt_comment
+          call nrt_append_source
+          pop bc
+          djnz nfc
+          ret
+
+nfc_line
+;insert at same line
+          push bc:push de
+          ld hl,nrt_comment
+          call nrt_append_source
+          pop de:pop bc
+          djnz nfc_line
+          ret
+
+
+
+test_fail_disc_out_close_empty
+; Check exit when last steps fails. (Empty file)
+          call nrt_org_init
+          call _test_fail_disc_out_close
+          ret
+
+test_fail_disc_out_close_with_labels
+          call nrt_org_init
+          SET_LINE(1,.src)
+          call _test_fail_disc_out_close
+          ret
+.src  BYTE "ab call ac",0
+
+_test_fail_disc_out_close
+          ld a,0:ld (destnrt),a
+; Will force "erroneous exit".
+          ld hl,.hook:ld (nrt_hook1+1),hl
+
+          ld hl,tstfilename
+          ld bc,0
+          call org_save
+          call c,fail
+          cp "E":call nz,fail ; fake error code
+          ld a,(destnrt):cp "Q":call nz,fail
+
+          call reset_all_hooks
+          ret
+.hook
+          ld a,"Q":ld (destnrt),a
+          ld a,"E"
+          jp os_error
+
+
+test_select_noname
+; When switching to new tab: must clear filename.
+
+          call nrt_org_init
+          call nrt_set_filename
+          ld a,1
+  ; cannot use nrt_select as we want to check flag
+          call org_select:call nc,fail
+  ; we expect Z= new source
+          call nz,fail
+  ; both size and marker must be 0 (since ED doesn't use size)
+          ld hl,(filename)
+          CHECK_HL_EQUAL(0)
+          ret
+
+test_connect_filename
+; Also tested below in test_load_11d
+; Here we just check NC for empty tab
+          call nrt_org_init
+          ld a,1:call org_connect_filename_last
+          call c,nrtfail
+          ret
+
+test_load_11d
+; Just check it loads properly (Checksum chunk) 
+; See bug #11d for details
+; NB: SHOULD BE RUN ON A, BECAUSE CUBEMDOS HIDES THE BUG.
+
+          call nrt_org_init
+          ld hl,_bug11d
+          ld bc,0:call org_load:call nc,&BE00
+          CHECK_NB_LINES(17)
+;enchaine
+_test_set_name
+; Name must be set, for when org_load is called by import.o
+; Otherwise source not found back in phase2.
+          ld hl,_bug11d_
+          ld de,filename
+          call compare_ntstr
+; Now check org_connect_filename
+; - for currently selected source
+          call _test_connect_filename
+; - for other source
+          ld a,1:call nrt_select
+          call _test_connect_filename
+          ret
+
+_test_connect_filename
+; We get filename without the whole path
+          xor a
+          call org_connect_filename_last
+          ld de,_bug11d_filename
+          call compare_ntstr
+          ret
+
+_bug11d_ BYTE _bug11d_size ;str size (first)
+_bug11d BYTE ":orgnrt/" ; also present in /org
+_bug11d_filename BYTE "BUG11D.O",0
+_bug11d_size = $-_bug11d -1
+
+test_load_label
+;--------------
+          ld a,2:call &BC0E
+          call nrt_init_big
+
+          ld hl,tstfile0
+          call tll_
+
+; same tests on saved file
+          ld hl,tstfile0'
+          ld bc,0
+          call org_save
+          call nc,&BE00
+          ld hl,tstfile0'
+tll_
+          ld bc,0:call org_load:call nc,&BE00
+
+          ld de,29
+          ld hl,destnrt
+          push hl
+          CALL_AAP(aap_getkey)
+          pop hl
+          ld de,tl_ref
+          call compare_ntstr
+
+          CALL_AAP(aap_get#)
+          CHECK_HL_EQUAL(&72)
+
+;test we find label
+          ld hl,nrtsign
+          CALL_AAP(aap_get)
+          call nc,&BE00
+          ld hl,&21:or a:sbc hl,de:add hl,de:call nz,&BE00
+;test via set_line
+
+          ld hl,nrtsign
+          ld de,400
+          ld (vo_savesp),sp
+          ld ix,parse_buffer
+          CALL_PARSE(preassemble)
+          ld hl,parse_buffer
+          ld de,nrtsignref
+          ld bc,3
+          call compare
+
+;test we can read first 256 lines without crashing !
+
+          ld b,1
+          ld de,77
+tll_lp
+          push bc:push de
+          ld hl,destnrt
+          call org_get_line
+          call nc,&BE00
+          pop de
+          inc de
+          pop bc
+          djnz tll_lp
+          ret
+
+tl_ref BYTE "nburn",0
+nrtsign BYTE "sign",0
+nrtsignref BYTE "@",&60+&21,"J"
+
+test_load_nblines
+          ld a,2:call &BC0E
+          ld hl,tstfile1
+          ld de,destnrt
+          ld bc,0
+          call org_load
+          call nc,&BE00
+
+          call org_get_nb_lines
+          ld hl,41
+          or a:sbc hl,de:call nz,&BE00
+          ret
+
+
+
+test_load_badchecksum
+          ld hl,tstbadchecksum
+          ld bc,0
+          call org_load
+          call c,&BE00
+          cp fail_checksum
+          call nz,&BE00
+          ret
+
+
+test_load_filename
+; Now that org_source_init calls ed_source_init,
+; check filename isn't erase in the process
+
+ed_filename = &6C00     ; aka ed.NAME_LOAD
+ed_meta = &780F
+ed_meta_ = &2F
+
+          call nrt_init_big
+
+          ld hl,tstchunk
+          ld de,ed_filename
+          call copy_nt
+
+          ld hl,ed_filename
+          ld de,ed_meta
+          ld bc,ed_meta_
+          call org_load:call nc,nrtfail
+
+          ld hl,tstchunk
+          ld de,filename+1
+          call compare_ntstr
+
+; Sanity check: first line is correct
+          ld hl,nrtbuf0
+          ld de,1
+          call org_get_line
+          ld hl,nrtbuf0
+          ld de,.ref
+          call compare_ntstr
+          ret
+.ref  BYTE "dev_checks = 1",0
+
+test_save
+          ld hl,nrtlines
+          call nrt_set_source
+
+          call cls_nrt
+
+          ld hl,tstfilename
+          ld de,metatoto
+          ld bc,8
+          call org_save
+          push af:call nc,&BB06:pop af
+          call nc,&BE00
+
+          call org_source_init
+tstload
+          ld a,2:call &BC0E
+          ld hl,tstfilename
+          ld bc,0
+          call org_load
+          call nc,&BE00
+
+          call org_get_nb_lines
+          ld hl,11:or a:sbc hl,de:call nz,&BE00
+;TODO: more tests to compare against source
+          ret
+
+      IF 0
+; TODO: move in nrt.
+test_load_bigchecksum
+; when checksums overlap custom buffer
+; !! Previous file was corrupted (CubeDos failure)
+; !! Not sure the new one (arbitrarily picked) exercice the test.
+
+          ld hl,tstfilebigchck
+          ld bc,0
+          call org_load
+          call nc,&BE00 ;main test: no checksum error
+
+;sanity
+          call org_get_nb_lines
+          ld hl,3509:or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+      END
+
+test_savebig
+          ld hl,nrtlines
+          call nrt_set_source
+          ld b,32
+tsb_lp
+          push bc
+          ld hl,nrtlines
+          call nrt_append_source
+          pop bc
+          djnz tsb_lp
+
+          call cls_nrt
+
+          ld hl,tstfile2
+          ld de,metatoto
+          ld bc,8
+          call org_save
+          call nc,&BE00
+
+tstloadbig
+          call org_source_init
+          ld a,2:call &BC0E
+          ld hl,tstfile2
+          ld bc,0
+          call org_load
+          call nc,&BE00
+
+          call org_get_nb_lines
+          ld hl,11*33:or a:sbc hl,de:call nz,&BE00
+          ret
+
+test_nocache
+; After assembling nrtfiles, 
+          call nrt_init_big
+
+          ld hl,tstbug#164
+          ld bc,0:call org_load:call nc,fail
+
+; Expect error in imported file
+          ld de,destnrt
+          ld bc,destnrt
+          call org_assemble_nrt:call c,fail
+
+; We fix error and assemble the **imported file**
+          ld a,1:call org_select:call nc,fail
+          ld hl,.fix
+          ld de,1
+          call org_set_line:call nc,fail
+          call nrt_assemble_com
+
+; Switching back to tab1. Should reassemble
+          ld a,0:call org_select:call nc,fail
+          call nrt_assemble_com
+
+          ld hl,destnrt
+          ld de,.ref
+          ld bc,6
+          call compare
+          ret
+
+.fix  BYTE "if 0",0
+.ref      ld a,0:ld a,1:ld a,2
+
+test_incremental
+;---------------
+; Like ass.check_incremental (but allow to check local changes)
+; Check CTRL-1 vs CTRL-5 after adding one line on tab1..4, line 5
+; Designed to detect potential error after reuse of import labels.
+; Note: independent from "cache ass". We want import labels to be
+      ; persistent even when *not* using cache for host.
+
+          call nrt_org_init
+
+          ld hl,.name
+          ld bc,0:call org_load:call nc,fail
+
+;Base assembly to exercice "reuse of import labels"
+          call nrt_assemble_com
+
+          xor a         ; tab id
+.tablp
+          push af
+; -- add "word $" in line 5 of tab 0..3
+          call nrt_select
+          ld de,5
+          ld hl,.code
+          call org_insert_line:call nc,fail
+          xor a
+          call nrt_select
+
+          call nrt_assemble_com
+; -- store 
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&20     ; max size
+          ldir
+
+; -- reassemble after explicitly clearing import labels
+; (to simulate CTRL-5)
+          CALL_ASS(sy_reset_imported)
+          call nrt_assemble_com
+
+; -- must be same
+          ld hl,destnrt
+          ld de,destnrt+&0100
+          ld bc,&20
+          call compare
+
+          pop af
+          inc a
+          cp 4
+          jr c,.tablp
+
+          ret
+
+.name BYTE "testdata/useimpa.o",0
+.code BYTE "w $",0
+
+test_incremental'
+;----------------
+
+          call nrt_init_big
+
+          ld hl,.name
+          ld bc,0:call org_load:call nc,fail
+
+          call nrt_assemble_com
+
+          ld a,1:call nrt_select
+          ld hl,.code
+          ld de,24
+          call org_set_line:call nc,nrtfail
+
+          ld a,0:call nrt_select
+          call nrt_assemble_com
+
+          ld hl,(destnrt)
+          CHECK_HL_EQUAL(&D832)
+          ret
+
+.name BYTE "testdata/useimpa'.o",0
+.code BYTE "org3=&D832",0
+
+test_1cb
+;-------
+;At some point old cached version of c.o (generated at &9000 from b.o)
+;was used instead of version instanciated at &40 from a.o
+
+          call nrt_org_init
+
+          ld hl,name#1cb
+          ld bc,0:call org_load:call nc,fail
+
+;First assembly: ok
+          call check#1cb
+
+          ld a,2:call nrt_select ; "b.o"
+          call set_modified_since_ass
+;Assemble import: error (on purpose)
+          ld bc,destnrt:ld de,destnrt:call org_assemble_nrt
+          call c,fail
+
+;Reassemble from start
+          ld a,0:call nrt_select
+          call check#1cb
+          ret
+
+name#1cb BYTE ":orgnrt/#1cb/a.o",0
+check#1cb
+          call nrt_assemble_com
+ref40 = &40
+          ld hl,(destnrt)
+          CHECK_HL_EQUAL(ref40)
+          ret
+
+test_1cb'
+;--------
+;Same when "b.o" directly is ok.
+
+          call nrt_org_init
+
+          ld hl,name#1cb
+          ld bc,0:call org_load:call nc,fail
+
+;First assembly: ok (and imports b.o)
+          call check#1cb
+
+          ld a,2:call nrt_select ; "b.o"
+; Remove "!! error" line                   
+          ld de,4:call org_delete_line:call nc,fail
+          call nrt_assemble_com
+;sanity: updated labc
+          ld hl,(destnrt)
+          CHECK_HL_EQUAL(destnrt)
+
+;Reassemble for start
+          ld a,0:call nrt_select
+          call check#1cb
+          ret
+
+test_1dc
+; just check 2nd assemble doesn't error
+; content is checked in ass.test_files
+          call nrt_org_init
+
+          ld hl,.name
+          ld bc,0:call org_load:call nc,fail
+
+          call nrt_assemble_com
+          INSERT_LINE(1,EMPTY_STR)
+          call nrt_assemble_com
+          ret
+
+.name BYTE "testdata/#1dc.o",0
+
+
+      IF 0
+; memory full, even with nrt_bk_big=&e7
+; Anyway, reproduced more simply via test_incremental'
+test_incremental''
+;----------------
+; This one was failing in real-life after burning 
+
+          call nrt_init_big
+
+          ld hl,.ref
+          call nrt_load_bin
+          push bc
+
+          ld hl,.name
+          ld bc,0:call org_load:call nc,fail
+
+          call nrt_assemble_com
+
+          ld a,1:call nrt_select
+          ld hl,.code
+          ld de,24
+          call org_set_line:call nc,nrtfail
+
+          ld a,0:call nrt_select
+          ld bc,nrtply:ld de,nrtply:call nrt_assemble_
+
+          ld hl,nrtply
+          pop bc
+          call compare_ref
+          ret
+
+.ref  BYTE "testdata/org-hs'.bin",0
+.name BYTE "testdata/org-hs.o",0
+.code BYTE "org3=&D832",0
+      END
+
+test_ambigous_import
+          call nrt_org_init
+
+          ld hl,name#1cb ; doesn't matter which
+          call nrt_load
+; Same in tab2
+          ld a,1:call nrt_select
+          ld hl,name#1cb ; doesn't matter which
+          call nrt_load
+          ld a,2:call nrt_select
+          ld hl,.src
+          call nrt_set_source
+          ld de,destnrt
+          call org_assemble_nrt:call c,fail
+          xor a:CALL_ASS(ass_get_error)
+err_ambiguousimport = 31
+          cp err_ambiguousimport:call nz,fail
+          ret
+.src  BYTE "import",34,":orgnrt/#1cb/a.o",0,0
+
+test_ass
+;Check source is encoded as expected (no superfluous token)
+
+          call org_source_init
+          ld de,1
+          ld hl,nrt_ass_lines
+ta_lp
+          push de
+          call org_insert_line
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,ta_lp
+
+          push hl
+          ld de,1
+          call connect_line
+          ex de,hl
+          pop hl
+          inc hl
+          ld c,(hl)
+          inc hl
+          ld b,0
+
+          call compare
+          ret
+
+nrt_ass_lines
+nrtlines                ; !! assemble with errors
+      BYTE "otherlab",0
+      BYTE " ld a,lab23",0
+      BYTE " ld a,lab24",0
+      BYTE " ld a,$100",0
+      BYTE "ld a,mou:ld a,ton",0
+      BYTE " call $a000*2",0
+      BYTE " nop:jr $",0
+      BYTE " jr 0",0
+      BYTE " ld a,(ix-$100)",0
+nrtonelabel
+      BYTE " ld a,mou",0
+      BYTE ";-------",0
+      BYTE 0
+
+test_dangling_invalidated
+;------------------------
+; Since we pin imported label to source containing them,
+; when the imported source is reset, we must invalidate dependent labels
+          call nrt_org_init
+
+          ld hl,.name
+          call nrt_load
+          call nrt_assemble_com
+          ld a,(destnrt+1):cp 3:call nz,fail
+;sanity check
+          ld hl,0:CALL_ASS(sy_get):call nc,fail
+          ld a,c:cp 1:call nz,fail ; tab
+          ld a,d:or a:call nz,fail ; id
+          ld a,e:or a:call nz,fail
+;reset imported
+          ld a,1:call nrt_select
+          call org_source_init
+          xor a:call nrt_select
+;now must be undefined rather than dangling
+          ld hl,0:CALL_ASS(sy_get):call c,fail
+          cp err_undefined:call nz,fail
+;reassemble should reload
+          xor a:ld (destnrt+1),a
+          call nrt_assemble_com
+          ld a,(destnrt+1):cp 3:call nz,fail
+          ret
+.name BYTE ":orgnrt/testdata/#1e7/host.o",0
+
+test_orgset
+          call nrt_org_init
+          ld hl,.src
+          call nrt_set_source
+; Check undefined
+          ld hl,.z:call orgset:call c,nrtfail
+          cp err_undefined:call nz,nrtfail
+; Define 
+          ld hl,.x:ld bc,&CAFE:call orgset:call nc,nrtfail
+          ld hl,.x:ld de,&CAFE:call .check_orgget
+; Define other
+          ld hl,.y:ld bc,&BABE:call orgset:call nc,nrtfail
+          ld hl,.y:ld de,&BABE:call .check_orgget
+; x still ok
+          ld hl,.x:ld de,&CAFE:call .check_orgget
+; Redefine x
+          ld hl,.x:ld bc,&FACE:call orgset:call nc,nrtfail
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; y still ok
+          ld hl,.y:ld de,&BABE:call .check_orgget
+; Redefine y
+          ld hl,.y:ld bc,&4567:call orgset:call nc,nrtfail
+          ld hl,.y:ld de,&4567:call .check_orgget
+; x still ok
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; z still undef
+          ld hl,.z:call orgset:call c,nrtfail
+          cp err_undefined:call nz,nrtfail
+; Other tab: empty store
+          ld a,1:call nrt_select
+          ld hl,.x:call orgset:call c,nrtfail
+; back to tab0: ok
+          xor a:call nrt_select
+          ld hl,.x:ld de,&FACE:call .check_orgget
+; Tests with assemble in ass.o
+          ret
+
+.src
+      BYTE "x=5",0
+      BYTE "y=6",0
+      BYTE 0
+.x    BYTE "x",0
+.y    BYTE "y",0
+.z    BYTE "z",0
+
+.check_orgget
+          push de
+          push hl
+          ld hl,128     ; dummy nb of lables > 2 (label# from source)
+          call nrt_sy_reset_table
+          pop hl:call orgget:call nc,nrtfail
+          pop hl        ; was de=ref
+          call _check_hl_eq_de
+          ret
+
+nrt_sy_reset_table
+          CALL_ASS(sy_reset_table_except_imported)
+          ret nc
+          CALL_ASS(sy_reset_imported)
+          ret
+
+nrt_load
+          ld bc,0:call org_load:call nc,fail
+          ret
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+          ret
+
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          or a
+          ret z
+          inc hl
+          inc de
+          jr compare_ntstr
+
+
+compare_ref
+;Compare against c0:nrtplyref
+
+;In: HL= start
+   ; BC= len
+          push bc
+          ld bc,&7FC0:out (c),c
+          pop bc
+          ld de,nrtplyref
+          call compare
+          jp connect_bk_base_save_bc
+
+
+nrt_load_bin
+; Load binary @ C0:nrtplyref
+; In: HL: nt string
+; Out: BC: filesize
+
+          ld bc,&7FC0:out (c),c
+          call get_text_len:ld b,a
+          ld de,disc_buffer
+          call disc_in_open:call nc,&BE00
+          push bc
+          ld hl,nrtplyref
+          call disc_in_direct:call nc,&BE00
+          call disc_in_close
+          pop bc
+          jp connect_bk_base_save_bc
+
+seekovl
+;in hl :
+;return Z if ok, hl = adr debut
+;
+          ld de,signnrt
+solp
+          ld a,(de)
+          cp (hl)
+          ret nz
+          inc de
+          inc hl
+          or a
+          jr nz,solp
+          ret
+
+_check_rom
+          push af
+          call kl_curr_selection
+          cp rom:call nz,nrtfail
+          ld a,(vt_currom)
+          cp rom:call nz,nrtfail
+          pop af
+          ret
+
+signnrt BYTE "ORGAMS NRT3 vh",0
+
+      SKIP nrtply-$     ; if case of error, move plyref.o's ORG @ 2c00
+                                           ; or even 4000 ?
+      END
+
+
+;----------------------
+;!!No code below
+
+;:===========: var :==========:
+
+;__ decode __
+
+vd_cursor_pos = vd+14
+vd_first_from_cursor = vd+15
+vd_first_from_cursor_nodef = vd+17
+
+;__ ch __
+
+ve_firm_rommem = ve+14
+
+;__ main __
+
+      ORG vo0
+; TODO: move that with vo (in bank too)
+; Or vice-versa!
+; !!! Careful though: cache.o and connect_pinned_deps expect
+; !!! contiguity in first store chunk.
+source_begin WORD 
+up_to_date_since_ass BYTE  ; defined by cache
+          ASSERT(deps == $)
+          ASSERT(deps-vo0 == deps_offset) ; swap
+deps__
+      SKIP [max_sources+7]/8 + 1 ;only init + (re)store done here.
+      WORD              ;free (was pinned deps)
+; Actually it doesn't fit in to_be_RAZ section: no more room,
+; and we cannot rearrange since vo_savesp mustn't be raz or stored,
+; yet set at the same place!
+          ASSERT(depsrec == $)
+depsrec__
+      SKIP [max_sources+7]/8 + 1 ;like deps, but recursive
+; Note: store them, since inferring be too slow. 
+; Note': init in cache.clear_visited
+up_to_date_since_visu_pc BYTE  ; 0->modified "c"->clean
+up_to_date_since_save BYTE  ; idem.
+save_list SKIP 3        ; List of params for SAVE directive
+; Put here:
+     ; persistent and attached to each source
+     ; alloc for new source, released when closing
+     ; realloc done in org_assemble 
+
+; !!!! Was: Hack to ensure symbol_index in confined in second chunk
+     ; Now: symbol_index is in first chunk
+pad_store SKIP 0
+
+; !!! when adding fields, test might fail, because rom version not in
+; sync with dev version. Must burn and then run tests.
+      IF $-vo0 != meta_org_len1
+  !! review swapi.i and burn swap.o
+      END
+
+      SKIP vo_romAss-$  ;70bf
+
+      IF vo0 - &7080
+   !! shared with cache.o, swap
+      END
+      IF source_begin - &7080
+   !! shared with swap
+      END
+
+      IF depsrec - &708E
+  !! shared with cache.o and swap.o
+      END
+
+
+      IF deps - &7083
+  !! shared with import.o (set), impeva (get), asseva (shortcut)
+      END
+      IF depsrec - &708E
+  !! shared with import (merge), cache (set)
+      END
+
+      IF up_to_date_since_ass - &7082
+!!! handled by cache.o -- but init/read here & (re)stored by org_select.
+!!! also read by swap
+      END
+
+      IF up_to_date_since_visu_pc - &7097
+!!! handled by cache.o -- but init here & (re)stored by org_select.
+!!! also read by visu and swap
+      END
+
+
+      SKIP vg-$
+; Global vars (not tab dependent)
+current_source BYTE     ; Selected source.
+current_source' = &97F0 ; copy in ram for screen.o convenience
+checksumdone SKIP [max_sources+7]/8 + 1 ; checksum verification done
+      SKIP &7100 - $
+
+      IF current_source - &70F0
+!! shared with swap
+      END
+
+      IF current_source' - &97F0
+!! shared with screen
+      END
+      IF checksumdone - &70F1
+!! shared with ch
+      END
+
+      ORG vo
+; Reset by _source_init
+
+vo_flags BYTE           ;also used by ass. Note: Why stored!?!
+vf_isphase1ok = 0
+vf_isromok = 1          ; ???
+vf_codeinC000 = 2
+vf_imported_labels_cleared = 3
+
+      IF vf_imported_labels_cleared - 3
+ !! shared with ass
+      END
+
+vo_curline WORD 
+vo_curline_start BYTE :WORD  ;actually end of previous line
+vo_curline_end BYTE :WORD 
+
+orgset_store WORD 
+
+      IF orgset_store - vo_orgset_store
+   !! shared with symb ; see memmap.i
+      END
+
+      IF $-vo != meta_org_len2
+  !! review swapi.i and burn swap.o
+      END
+
+to_be_RAZ = $-vo
+
+      IF to_be_RAZ - 11
+  !! New RAZ var. Check if it is a pointer to allocated mem.
+        ; -> if so, free it in /release/
+; !!!NB!!! Only lazy pointers have to be raz. It can be allocated
+         ; instead for each new source like source_begin and save_list
+      END
+
+vo_savesp WORD 
+      IF $ != &7CF5
+  !!! word used by ???
+      END
+      WORD              ; 7cf5 free? no, Used by someone
+vo_free_chunks WORD     ; nrt, and... /org_move_bloc/ <- cleanup.
+;7cf9    vo_romEd
+
+      ORG &7CFC,$$
+;shared with ass
+
+vo_basebk BYTE 
+      BYTE              ; free was vo_curbk
+      BYTE              ; free was vo_this_bk
+
+va_phase = &980D
+
+vt_romed = &9D00        ; nrt
+vt_romext = &9D02       ; nrt
+vt_rombric = &9D06      ; nrt
+vt_romass = &9D08       ; nrt
+vt_currom = &9D0A       ; nrt
+
+      ORG vo',$$
+vt_checksum_pnt WORD 
+; dedicated place, since is accessed via connect_line_start_end.
+; (hence mustn't overwrite anything else). Hum...
+vo_crossed_chunks WORD 
+save_filename WORD      ;nb: could reuse one of previous address
+
+      SKIP vo'_end - $
+
+vo2   = &9E00
+      ORG vo2,$$
+
+tmp_save_hl             ; r
+; vt_far_call WORD :BYTE   ; free since use new far call
+vt_temp_word WORD       ;pour io 
+
+

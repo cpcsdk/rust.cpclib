@@ -1,0 +1,78 @@
+; ---- Rom ASS Map ----
+; 2025 Jul 21 Move import
+
+ass_start = &C000
+org_jp_end = &C09B
+org_jp2 = &C100
+org_jp_end2 = &C200
+ass_end = org_jp_end2
+
+ass_jp0 = &C0A4         ; !!!carreful, moved
+farcall_jp = &C0BC
+asseva_jp = &C0E0       ; 5 free
+find_jp0 = &C0F7
+;org2  = &C100           ;&c free
+pagefirm_jp = &C140     ; jp + code
+chunkcc_jp = &C200      ; jp + code
+find  = &C260
+;free     
+except = &C4E0
+impeva_module = &C5A0   ; 3 free
+import = &C6A0
+cocopy_module = &C940
+symb3 = &CCCB
+asseto = &CD08          ;0 free
+; free was except = &CDB0          ;17 free
+ass_module = &CE00      ;&b0 free 
+; free was import   
+ass_end_rom = &D7BC
+cocopy_module' = &D7BC
+symb  = &D970           ;0 free 
+evacmd = &DCA2          ;&b free
+cache = &DE10           ;&20 free
+ass2  = &DE50           ;3 free
+ass2_ = &EDC8
+count = &EDC8
+count_ = &EE00
+asseva = &EE00          ;&7d free
+asseva_ = &EFC0
+;filename_module = &EFC0 ; 0
+cache2 = &EFE0          ; 5 free
+cache2_ = &F0E0
+;orgui = &F0E0           ; 0 free
+asseva2 = &F100         ;
+visu_module = &F7BB     ; 0 
+scan  = &FA00           ; 13 free
+; &fb40 free was cocopy_module'  
+symb2 = &FCA0           ; 1 free (enchaine with jp cocopy)
+
+; --jp--    
+impeva_jp' = &FDEA      ; 0 free
+symb_jp'' = &FDED       ; 3 free
+cocopy_jp = &FDF3       ;0 free
+ass_jp = &FE20          ;0 free
+scan_jp = &FE50         ;1 free
+scan_jp_ = &FE5D
+find_jp = &FE5D         ;0 free
+cache_jp = &FE6F        ;0 free 
+ass_jp2 = &FE87         ;0 free
+;org5  = &FE9F  ; free
+ass_farcall = &FF12
+;orgui_jp = &FF33 ; free
+visu_jp = &FF60
+;filename_jp = &FF66
+import_jp3 = &FF6F
+import_jp3_ = &FF72
+except_jp = &FF7E       ;0 free
+count_jp = &FF90        ;0 free
+symb_jp = &FF93         ;0 free
+asseto_jp = &FFAE       ;0 free
+import_jp2 = &FFBA      ;0 free
+import_jp2_ = &FFBD
+impeva_jp = &FFBD
+evacmd_jp = &FFC0
+import_jp = &FFC6
+visu_jp' = &FFCC        ; 0 free
+symb_jp' = &FFD8        ; 0 free (&ffff reserved for checksum?)
+
+

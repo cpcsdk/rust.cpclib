@@ -1,0 +1,140 @@
+inRom = 1
+; <<< filename >>>  Mini helpers for opened source's filename.
+
+; Used by ed, import
+
+; TOBE:
+; Used by org (store / restore)
+
+; TODO:
+; store/restore for org
+; When org and co only uses this module:
+;   - move filename at 6b00
+;   - don't put size (only for store)
+
+      IMPORT "extmap.i"
+
+; 2025
+  ; Apr
+   ; 9: v2. Use extmap.i 
+          ; Use new farcall (orgcall.jp)
+; 2021                               
+  ; Nov
+   ; 20: v1. Just is_empty
+
+filename_sz = &7E00     ; todo: remove this one
+filename = &7E01        ; nt string.
+      ; Store size. Rationale:
+               ; - do like in assets
+               ; - allow faster comparaison
+               ; - that's the format expected for amsdos
+                 ; and compare_sstr_nocase, so no new routine needed.
+           ; !! Actually, copy_nt deals with both case (i.e copy
+              ; both size and \0) -> simpler code!
+     ; But! 
+       ; - costly comparaison is only done in meta chunk
+         ; for import (check that)
+         ; so we don't need it here.
+       ; - getting len on the fly is simpler.
+       ; - it doesn't follow storage in ED (NAME_LOAD, NAME_SAVE)
+         ; -> Max length cannot be exactly the same.
+
+; --- In this rom ------------------
+      IMPORT "orgcall.jp"
+
+; --- In bricbrac rom ------------------
+      IMPORT "string.jp"
+
+      IF inRom
+      ORG &2000
+      IMPORT "burnrsx.o"
+      ENT burn
+
+rom   = &1A
+codedest = filename_module
+limit = filename_module_
+codedest2 = filename_jp
+limit2 = import_jp3
+
+; ========================================
+burn
+          ld ix,param_burn
+          call burn_rsx
+          ld ix,param_burn2
+          call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+      ELSE
+; Safety: meant to be imported by string.nrt
+      ENT $
+      BRK
+      END
+
+; ========================================
+      MACRO CALL_BRIC ad
+          call far_call_bric:WORD ad
+      ENDM
+
+; ========================================
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+; ========================================
+
+set_filename
+;In: HL= nt string
+          CALL_BRIC(get_len)
+          ld de,filename_sz
+          ld (de),a
+          inc e
+_copy_nt
+          CALL_BRIC(copy_nt)
+          ret
+
+copy_filename
+;In: DE= dest (nt string
+          ld hl,filename
+          jr _copy_nt
+
+is_empty
+;In: N/A
+;Out: Z if filename not set.
+          ld a,(filename)
+          or a
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          3 ** BRK      ; jp store
+          3 ** BRK      ; jp restore
+          jp set_filename
+ ;         3 ** BRK      ;jp get_filename
+ ;         3 ** BRK      ;jp reset_filename
+ ;         jp is_empty   ; ed, import
+ ;         jp copy_filename
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+

@@ -1,0 +1,1302 @@
+; Semi-generic linked list. Each node is size-fixed.
+
+; Dependencies : chunk
+; Used by: symb, ass, save, cocopy
+
+inRom = 1
+rom   = &1C
+dev_checks = 1
+nrt_checks = 1 - inRom
+todo  = 1
+
+; No variables, no init to do!   Aka '**almost** pure routines'!
+; !! Except tmp variables.
+
+; - list4_new
+; - list4_append
+; - list4_insert
+
+      ORG &1000
+      IMPORT "bricmap.i"
+
+hist
+; //// 2025 ////////
+; --- HH Beta B ---
+ ; Oct 
+     ;  6 Af: Add list4_insert
+            ; Add list_iter_get'
+            ; Add list_iter_get_last
+; --- HH Beta 6 ---
+ ; Aug 
+     ; 14 Af: Add list4_pop_node
+     ; 13 Ae: Add list_iter_nth 
+; --- HH Beta 2 ---
+ ; Jul 25 Ad: Add list_iter_get_cur
+            ; Add list_iter_seek  
+            ; !!! Not burned -> not needed after all
+has_list_iter_seek = 0
+     ; 22 vB: [nochange] Check we still get last node
+                       ; after /list_iter_next/ returns Z
+     ; 21 vA: Add test_empty_list
+            ; Update list_iter_get API: return Z when empty
+
+; --- GG Release ---
+ ; Mar 23 v9: [no-change] Use bricmap.i
+
+; //// 202? ////////
+    ; sept 21  v8: Set limit3 @ fee5
+
+         ; 18  v7: More assert /CHECK_ID_CDE/CHECK_HL_IN_BANK/
+                 ; Fix memory full handling /test_list4_memfull/
+                 ; !! Was done for list4_new but not for list4_append
+             ; v6: list_free (tested via /test_free/ and symb!)
+         ; 17. v5: test_list4_crossbank
+         ; 16. v4: list_search_word_from_iter.
+                 ; s/list4/list when not dependent on size
+         ; 16. v3: list4_head
+         ; 15. v2: list4_iter_get
+                 ; list4_iter_next doesn't return current cell anymore.
+                   ; rationale: use get instead.
+; 2021 Jan 13. v1: list4_new, list4_append, list4_iter_reset & next
+
+; ---------------------------             
+
+codedest = liszt
+limit = conv
+codedest2 = liszt_jp
+limit2 = bitset_jp
+codedest3 = liszt_jp2
+limit3 = liszt_jp2_
+codedest4 = liszt_jp3
+limit4 = aap_jp3
+
+chunk = &FDFD
+new_node7 = chunk+48    ; Return CDE= pnt
+free_list7 = chunk
+
+chunk_init_custom = chunk+36 ; for nrt
+get_free_chunks = chunk+33 ; for nrt
+new_chunk_no_init = chunk+12 ; for nrt
+
+chunks_per_bk = &3C     ; nrt
+fail_memoryfull = 251   ; nrt 
+; ========================================
+
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+tests
+          call test_list4_new
+          call test_list_empty
+          call test_list4_append
+          call test_list4_insert
+          call test_list4_insert'
+          call test_list4_insert_crossbank
+          call test_list_iter_nth
+          call test_list4_free
+          call test_list4_pop_node
+          call test_list4_pop_node_crossbank
+          call test_list4_search_word_from_iter
+          call test_list4_crossbank
+          call test_list4_memfull
+      IF has_list_iter_seek
+          call test_list_iter_seek
+      END
+          ret
+
+;---------------------------
+      MACRO CHECK_HL_EQ n
+          push de
+          ld de,n
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ n
+          push hl
+          ld hl,n
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ n
+          push hl
+          ld hl,n
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+      MACRO CHECK_FREE n
+          push hl
+          call get_free_chunks
+          ld a,l
+          pop hl
+          cp n:call nz,&BE00
+      ENDM
+
+
+compare_sized
+          ld a,(de):cp (hl):call nz,&BE00
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+fail  = &BE00
+;------------------------------------
+
+nrt_init
+; We don't need the whole setup.
+; A terme, most of org_init should be transfered to chunk.o (really?)
+; -> doesn't matter, here we should only init dependencies anyway.
+bk_dev = &C7
+bk_dev' = &CF
+nb_chu = &30
+nb_chu' = &60
+          ld a,bk_dev
+          ld hl,nb_chu
+nrt_init_custom
+;in: a= bk
+   ; hl= nb chunks
+
+          push ix
+          push af:push hl
+          ld c,rom:call &B90F
+
+          pop hl:pop af
+          push hl
+          call chunk_init_custom
+
+; sanity check assumption
+          call get_free_chunks
+          pop de
+          CHECK_HL_EQ_DE()
+          pop ix
+          ret
+
+nrt_setup_crossbank
+; Fill all bank cc but 1 chunk
+
+          ld a,bk_dev'
+          ld hl,chunks_per_bk + 1
+          call nrt_init_custom
+
+          ld b,chunks_per_bk - 1
+tbs_lp
+          push bc
+          call new_chunk_no_init:call nc,&BE00
+          pop bc
+          djnz tbs_lp
+
+          CHECK_FREE(2) ; sanity check
+          ret
+
+;------------------------------
+
+test_list4_new
+          call nrt_init
+
+          call list4_new:call nc,fail
+          ld a,c:cp bk_dev-3:call nz,fail ; "bk source"
+          ld a,d:cp &40:call nz,fail ; first chunk (a bit brittle)
+; "raw chunk" must start at 1 (byte 0 is used as 'last' field)
+          ld a,e:cp 1:call nz,fail
+
+; nxt must be 0, cur must be 'self' (for generic append)
+          ld hl,tl4n_ref
+tl4_check_head
+          push de
+          ld b,6
+          call compare_sized
+          pop de
+          ret
+
+tl4n_ref BYTE 0,0,0,bk_dev-3,&40,&01
+
+test_list_empty
+;list_iter_get must return Z for empty list
+          call nrt_init
+
+          call list4_new:call nc,fail
+          call list_iter_reset
+          call list_iter_get
+          call nz,fail
+          ret
+
+test_list4_append
+          call nrt_init
+
+          call list4_new:call nc,fail
+          ld b,&AF
+          call list4_append:call nc,fail
+; B, CDE must be conserved
+          ld a,b:cp &AF:call nz,fail
+          ld a,c:cp bk_dev-3:call nz,fail ; "bk source"
+          ld a,d:cp &40:call nz,fail ; first chunk (a bit brittle)
+; "raw chunk" must start at 1 (byte 0 is used as 'last' field)
+          ld a,e:cp 1:call nz,fail
+; hl must point in body of new cell
+; &4001 = header cell.
+          CHECK_HL_EQ(&4008+3)
+          call tl4a_check0
+
+; Header must point to cell (nxt = cur = last)
+          ld hl,tl4a_ref0
+          call tl4_check_head
+
+          call list4_append:call nc,fail
+; hl must point in body of new cell
+          CHECK_HL_EQ(&400F+3)
+; Header.nxt unchanged, cur = last
+          ld hl,tl4a_ref1
+          ret
+
+test_list4_insert
+          call nrt_init
+
+          call list4_new:call nc,fail
+          call list4_append:call nc,fail
+          call list_iter_reset
+          ld b,c:ld h,d:ld l,e
+          3 ** inc l    ; post link
+          call list4_insert:call nc,fail
+; CDE must be conserved
+          ld a,c:cp bk_dev-3:call nz,fail ; "bk source"
+          ld a,d:cp &40:call nz,fail ; first chunk (a bit brittle)
+; "raw chunk" must start at 1 (byte 0 is used as 'last' field)
+          ld a,e:cp 1:call nz,fail
+; hl must point in body of new cell
+          CHECK_HL_EQ(&400F+3)
+          ret
+
+test_list4_insert'
+;Insert bunch on nodes (cross chunks)
+          call nrt_init
+
+nodes_per_chunk = 256/7
+
+          call list4_new:call nc,fail
+          push bc:push de
+          ld b,c:ex de,hl:3 ** inc l
+          ld c,0
+.lp
+          push hl
+          push bc
+          call list4_insert:call nc,fail
+;C preserved
+          ld a,c
+          pop bc
+          cp c:call nz,fail
+          ld (hl),c     ; numerote nodes
+          pop hl
+          inc c
+          ld a,c
+          cp nodes_per_chunk+2
+          jr nz,.lp
+
+          pop de:pop bc
+          call list_iter_reset
+          ld b,nodes_per_chunk+1
+.check
+          call list_iter_get:call z,fail
+          ld a,b:cp (hl):call nz,fail
+          call list_iter_next
+          djnz .check
+
+;bonus check
+          call list_iter_reset
+          call list_iter_get_last:call z,fail
+          ld a,(hl)
+          or a:call nz,fail
+          ret
+
+test_list4_insert_crossbank
+          call nrt_create_big_list_insert
+          ld ix,0
+          call list_iter_reset
+.lp
+          call list_iter_get:call z,fail
+          dec ix
+          ld a,(hl):cp ixl:call nz,fail
+          inc l
+          ld a,(hl):cp ixh:call nz,fail
+          call list_iter_next
+          ld a,ixl:cp -[nb_nodes AND &FF]
+          jr nz,.lp
+          ld a,"=":call &BB5A
+          ld a,ixh:cp -[nb_nodes / &0100]
+          jr nz,.lp
+          ret
+
+
+test_list4_free
+;--------------
+          call nrt_init
+
+          call list4_new:call nc,fail
+          ld (nrt_1bc),bc ; just for c
+          ld (nrt_1de),de
+
+; Check we get back the same pointer.
+          ld b,"!"
+          call list4_free
+          ld a,b:cp "!":call nz,&BE00
+          call list4_new:call nc,fail
+          ld a,(nrt_1bc):cp c:call nz,fail
+          ld hl,(nrt_1de):or a:sbc hl,de:add hl,de:call nz,fail
+; Try with 2nd list.
+          call list4_new:call nc,fail
+          ld (nrt_2bc),bc
+          ld (nrt_2de),de
+
+          call list4_free ; 2nd list freed
+          ld bc,(nrt_1bc)
+          ld de,(nrt_1de)
+          call list4_free ; 1st list freed
+; We use the fact the last freed list will be used first (chunk.o)
+; A bit brittle, nevermind.
+
+          call list4_new:call nc,fail
+          ld a,(nrt_1bc):cp c:call nz,fail
+          ld hl,(nrt_1de):or a:sbc hl,de:add hl,de:call nz,fail
+          call list4_append
+          3 ** dec l    ; from body to start
+          ld de,(nrt_2de):or a:sbc hl,de:add hl,de:call nz,fail
+          ret
+
+nrt_1bc WORD 
+nrt_1de WORD 
+nrt_2bc WORD 
+nrt_2de WORD 
+
+test_list4_crossbank
+          call nrt_create_big_list
+
+          call list_iter_reset
+          ld ix,-nb_nodes
+tlcc_lp2
+          call list_iter_get:call z,fail
+;check num
+          ld a,ixl:cp (hl):call nz,fail
+          inc l
+          ld a,ixh:cp (hl):call nz,fail
+          call list_iter_next
+          inc ixl
+          jr nz,tlcc_lp2
+          ld a,"=":call &BB5A
+          inc ixh
+          jr nz,tlcc_lp2
+;Much have reached end
+          call list_iter_next
+          call nz,fail
+;last node (-1) still reachable 
+          call list_iter_get
+          ld a,(hl):inc a:call nz,fail
+          inc l
+          ld a,(hl):inc a:call nz,fail
+          ret
+
+tl4a_ref0 BYTE bk_dev-3,&40,&08,bk_dev-3,&40,&08
+tl4a_ref1 BYTE bk_dev-3,&40,&08,bk_dev-3,&40,&0F
+
+tl4a_check0
+; nxt of last node must be null
+      3 ** [dec l:ld a,(hl):or a:call nz,fail]
+          ret
+
+
+test_list_iter_nth
+;-----------------                
+          ld ix,-3      ; 3 nodes (num -3,-2,-1)
+          call nrt_create_list
+
+;node 0
+          xor a:call list_iter_nth:call z,fail
+          ld a,(hl):cp -3:call nz,fail
+          inc hl
+          ld a,(hl):cp -1:call nz,fail
+;node 2
+          ld a,2:call list_iter_nth:call z,fail
+          ld a,(hl):cp -1:call nz,fail
+          inc hl
+          ld a,(hl):cp -1:call nz,fail
+;past end must return Z
+          ld a,3:call list_iter_nth:call nz,fail
+          ret
+
+test_list4_pop_node
+;------------------                
+          ld ix,-3      ; 3 nodes (num -3,-2,-1)
+          call nrt_create_list
+
+          call list4_pop_node:call z,fail
+;must point on node2
+          ld a,(hl):cp -1:call nz,fail
+;but mustn't exist is the list anymore
+          ld a,2:call list_iter_nth:call nz,fail
+;pnt on node 1
+          call list_iter_get
+          ld a,(hl):cp -2:call nz,fail
+          call list4_pop_node:call z,fail
+;must point on node1
+          ld a,(hl):cp -2:call nz,fail
+          call list4_pop_node:call z,fail
+;must point on node0
+          ld a,(hl):cp -3:call nz,fail
+;no more to pop
+          call list4_pop_node:call nz,fail
+          ret
+
+test_list4_pop_node_crossbank
+;----------------------------
+          call nrt_create_big_list
+          ld ixl,-1
+.lp
+          call list4_pop_node:call z,fail
+          ld a,(hl):cp ixl:call nz,fail
+          ld a,ixl:and &0F:jr nz,.ok
+          ld a,"/":call &BB5A
+.ok
+          dec ixl
+          jr nz,.lp
+          ret
+
+      IF has_list_iter_seek
+!! todo: add in jump table
+test_list_iter_seek
+;------------------
+; Like test_list4_crossbank, with additional checks
+          ld a,bk_dev'
+          ld hl,nb_chu'
+          call nrt_init_custom
+
+;Create big list accross banks
+          call list4_new:call nc,fail
+          ld ix,-nb_nodes
+.createlp
+          call list4_append:call nc,fail
+;numerote nodes
+          ld a,ixl:ld (hl),a:inc l
+          ld a,ixh:ld (hl),a
+; get_cur + seek should be no-op
+          call list_iter_get_cur:call z,fail
+          call list_iter_seek:call z,fail
+          ld a,(hl):cp ixl:call nz,fail
+          inc l
+          ld a,(hl):cp ixh:call nz,fail
+
+          inc ixl
+          jr nz,.createlp
+          ld a,".":call &BB5A
+          inc ixh
+          jr nz,.createlp
+
+;Now check a few nodes
+          call list_iter_reset
+          call list_iter_get_cur:call z,fail
+          push af:push hl
+          call .checknodes
+;check rewind
+          pop hl:pop af
+          call list_iter_seek
+          call .checknodes
+          ret
+
+.checknodes
+          ld ix,-nb_nodes
+.checklp
+          call list_iter_get:call z,fail
+;check num
+          ld a,ixl:cp (hl):call nz,fail
+          inc l
+          ld a,ixh:cp (hl):call nz,fail
+          call list_iter_next
+          inc ixl
+          jr nz,.checklp
+; no need to check all nodes
+          ret
+      END
+
+test_list4_memfull
+          call nrt_setup_crossbank
+
+;Create list accross banks
+          call list4_new:call nc,fail
+          ld a,e:cp 1:call nz,fail ; should be start of chunk
+          ld b,-1       ; count created
+
+tlmf_lp
+          call list4_append
+          inc b
+          jr c,tlmf_lp
+          cp fail_memoryfull:call nz,fail
+
+          ld a,e:cp 1:call nz,fail ; check CDE conserved.
+          CHECK_FREE(0)
+          call list4_free
+; Chunk themselve aren't freed
+          CHECK_FREE(0)
+
+; But we must be able to recreate a list of same length
+          call list4_new:call nc,fail
+          ld a,e:cp 1:call nz,fail ; should be start of chunk
+tlmf_lp2
+          call list4_append:call nc,fail
+          djnz tlmf_lp2
+
+; Cannot add one
+          call list4_append:call c,fail
+          cp fail_memoryfull:call nz,fail
+
+; Cannot create list either
+          call list4_new:call c,fail
+          cp fail_memoryfull:call nz,fail
+          ret
+
+test_list4_search_word_from_iter
+          call nrt_init
+
+          call list4_new:call nc,fail
+          call list4_append:call nc,fail:ld (hl),"x":inc l:ld (hl),0
+          call list4_append:call nc,fail:ld (hl),"y":inc l:ld (hl),0
+          call list4_append:call nc,fail:ld (hl),"z":inc l:ld (hl),0
+;add a value alongside z
+          inc l:ld (hl),"v"
+
+; We can find each one iteratively
+          call list_iter_reset
+          ld hl,"x":call list_search_word_from_iter:call nc,fail
+          ld hl,"y":call list_search_word_from_iter:call nc,fail
+          ld hl,"z":call list_search_word_from_iter:call nc,fail
+; We should point to the value
+          ld a,(hl):cp "v":call nz,fail
+
+; We can find the last one
+          call list_iter_reset
+          ld hl,"z":call list_search_word_from_iter:call nc,fail
+          ld a,(hl):cp "v":call nz,fail
+
+; Try not existing "key"
+          call list_iter_reset
+          ld hl,"v":call list_search_word_from_iter:call c,fail
+          ret
+
+;--------------------------------
+nrt_create_big_list
+; list that span accross 2 banks
+
+nb_nodes = [256/7] * &41 ; trigger cross bank
+          ld ix,-nb_nodes
+
+nrt_create_list
+;Create big list accross banks
+;return CDE = pnt list
+          ld a,bk_dev'
+          ld hl,nb_chu'
+          call nrt_init_custom
+
+          call list4_new:call nc,fail
+tlcc_lp
+          call list4_append:call nc,fail
+;numerote nodes
+          ld a,ixl:ld (hl),a:inc l
+          ld a,ixh:ld (hl),a
+          inc ixl
+          jr nz,tlcc_lp
+          ld a,".":call &BB5A
+          inc ixh
+          jr nz,tlcc_lp
+          ret
+
+nrt_create_big_list_insert
+; same, via list insert
+;return CDE = pnt list
+
+          ld ix,-nb_nodes
+          ld a,bk_dev'
+          ld hl,nb_chu'
+          call nrt_init_custom
+
+          call list4_new:call nc,fail
+          ld b,c:ld h,d:ld l,e:3 ** inc l
+.lp
+          push bc:push hl
+          call list4_insert:call nc,fail
+;numerote nodes
+          ld a,ixl:ld (hl),a:inc l
+          ld a,ixh:ld (hl),a
+          pop hl:pop bc
+          inc ixl
+          jr nz,.lp
+          ld a,"*":call &BB5A
+          inc ixh
+          jr nz,.lp
+          ret
+
+;--------------------------------
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          ld ix,param_burn4:call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          call nc,fail
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+param_burn4 WORD rom,codesize4,codedest4,code4
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+      MACRO CHECK_ID_CDE
+      IF dev_checks
+          call check_id_cde_
+      END
+      ENDM
+
+      MACRO CHECK_HL_IN_BANK
+      IF dev_checks
+          call check_hl_in_bank_
+      END
+      ENDM
+
+      MACRO CHECK_B_BANK
+      IF dev_checks
+          call check_b_bank_
+      END
+      ENDM
+
+
+;Put these checks first to quickly identify which module they come from.
+
+check_id_cde_
+          push af
+          ld a,c:and &C4:cp &C4:call nz,mess
+; node shouldn't be in base_bk  
+          ld a,i:cp c:call z,mess
+          ld a,d:and &C0:cp &40:call nz,mess
+; cannot point on start of chunk ('last' field)
+          ld a,e:or a:call z,mess
+          pop af
+          ret
+
+check_hl_in_bank_
+          push af
+          ld a,h:and &C0:cp &40:call nz,mess
+          pop af
+          ret
+
+check_b_bank_
+          push af
+          ld a,b:and &C4:cp &C4:call nz,mess
+          pop af
+          ret
+
+; ========================================
+
+list4_new
+;--------
+; linked list with the following twist:
+; First node is used to store link to the 'current' node:
+; - Ease append 
+; - Act as iterator when reading back.             
+
+; This routine create this pseudo-node. (hence empty list)
+
+; Each node is: next (3 bytes), body (4 bytes)            
+              ; confined in &100 chunk
+
+; In: Nothing
+    ; Bk base connected (for housekeeping)
+; Out: If ok, Carry CDE=node pnt (bk+address), ie list id!
+            ;  A trashed
+     ; Otherwise, NC,  A = error code.
+     ; All other registers preserved
+
+          push hl:push bc
+; Header node with 'cur' meta info.
+          call new_node7:jr nc,l4n_end
+          ld a,e
+          ex de,hl
+          3 ** inc l    ; (next=0 already taken care of)
+; Cur = self (for generic append)
+          ld (hl),c:inc l
+          ld (hl),h:inc l
+          ld (hl),a
+          ex de,hl
+          ld e,a
+          scf
+l4n_end
+          ld l,c:pop bc:ld c,l ; pop b
+          pop hl
+          ret
+
+list4_free
+;---------
+; In: CDE= id list (pnt to head) or id node
+;Out: All register conversed
+          push af:push hl
+          call free_list7
+          pop hl:pop af
+          ret
+
+list4_append
+;-----------
+; In: CDE= id list (pnt to head)
+; Out: B, CDE conserved
+     ; IF ok: Carry
+     ;    HL: pnt in body (connected)
+     ;     A trashed
+     ; Otherwise: NC
+     ;     A: error code (memory full)
+     ;    HL trashed
+
+; Pseudo code:
+; .. last = id.cur
+          call connect_c
+          push bc       ;save id bk
+          ex de,hl
+          3 ** inc l    ;skip next
+          ld c,(hl):inc l
+          ld d,(hl):inc l
+          ld e,(hl)
+          push hl       ;save id pnt
+; .. bhl = last
+          ld b,c:ld h,d:ld l,e
+; .. cde = new
+          call new_node7:jr nc,l4_end
+; .. last.next = new
+          call connect_b
+          ld (hl),c:inc l
+          ld (hl),d:inc l
+          ld (hl),e
+; .. id.cur = new 
+          pop hl
+          ld a,c
+          pop bc
+          call connect_c
+          ld (hl),e:dec l
+          ld (hl),d:dec l
+          ld (hl),a
+; .. cde = id,   hl = pnt connected
+          ex de,hl
+          3 ** dec e    ; to get back id
+          3 ** inc l    ; to point in body
+; enchaine
+connect_a
+          push bc
+          ld c,a:call connect_c
+          pop bc
+          ret
+l4_end
+          pop hl
+          5 ** dec l    ; start of node (!! cannot use A)
+          ex de,hl
+          pop bc
+          ret
+
+list4_insert
+;-----------
+; Insert node after pointed one.
+    ; If BHL= post link in header, insert at head
+    ; If BHL= last node body, like append
+; Don't update iter pnt (no use for that, would complicate code & API)
+; In: BHL= post "link nxt" (pnt to head)
+; Out: CDE conserved
+     ; IF ok: Carry
+     ;   BHL: pnt in body (connected)
+     ;     A trashed
+     ; Otherwise: NC
+     ;            A: error code (memory full)
+     ;            HL trashed
+     ; CDE preserved
+          push de
+          push bc
+          call connect_b
+; .. bhl = link
+          dec l:ld e,(hl)
+          dec l:ld d,(hl)
+          dec l:ld b,(hl)
+          push hl
+          ex de,hl
+          call new_node7:jr nc,.exitfail
+          push de
+; .. cur.next = bhl
+          ex de,hl
+          ld (hl),b:inc l
+          ld (hl),d:inc l
+          ld (hl),e
+; .. prev.link = cur   
+          pop de
+          ld a,c
+          pop hl:pop bc
+          call connect_b
+          ld (hl),a:inc l
+          ld (hl),d:inc l
+          ld (hl),e
+          call connect_a
+          ex de,hl
+          3 ** inc l
+          ld b,a
+          scf
+.exit
+          pop de
+          ret
+
+.exitfail
+          pop hl:pop bc
+          jr .exit
+
+_goto_cur
+; in: cde=id
+;out: If there is at least ond node, NZ bhl=cur (connected)
+    ; Otherwise, Z
+    ; A thrashed
+          call _get_cur
+          CHECK_HL_IN_BANK()
+          ld b,(hl):inc hl
+          dec b:inc b:ret z
+; b will be check in connect, but do it now to have more context
+; (we want to know hl) 
+          CHECK_B_BANK()
+          ld a,(hl):inc hl ; Keep NZ
+          ld l,(hl):ld h,a
+; enchaine
+connect_b
+;TODO: use routines in chunk.
+          push bc
+          ld c,b:call connect_c
+          pop bc
+          ret
+connect_c
+          push bc
+      IF dev_checks
+          push af
+mess  = &BE00
+          ld a,c:and &C4:cp &C4:call nz,mess
+      IF nrt_checks
+          ld a,c:cp bk_dev'+1:call nc,mess
+      END
+          pop af
+      END
+          ld b,&7F:out (c),c
+          pop bc
+          ret
+
+;------------------------------------
+list_search_word_from_iter
+; !! **Start from iter, not the whole list** !!
+; Rationale: that's exactly what symb.o needs.
+           ; To search whole list, just call list_iter_reset first.
+
+; !! Empty list not yet handled, 
+; !! since client only creates non-empty ones.
+
+; in: CDE List id 
+    ;  HL Word to search (at body start)
+;out: If found: Carry
+              ; HL point past word (inc l) !! Warning for list2
+    ; Otherwise: NC, HL conserved
+    ; CDE HL conserved.
+
+          push ix
+          push hl:pop ix
+_search
+          call list_iter_get
+          ld a,ixl:cp (hl):jr nz,_next
+          inc l
+          ld a,ixh:cp (hl):jr nz,_next
+;Found
+          inc l
+          scf
+          jr _search_ret
+_next
+          call list_iter_next
+          jr nz,_search
+;Not found
+          or a
+          push ix:pop hl
+_search_ret
+          pop ix
+          ret
+
+;------------------------------------
+list_head
+;--------
+; Return head (from the user point of view, not the housekeeping head) 
+ ;  in: cde= pnt head list.
+ ;out:  If not empty: NZ, hl= pnt head body
+     ;  Otherwise: Z.
+ ;  A, B, CDE preserved 
+
+          push bc:ld b,a
+          call connect_c
+          call _goto_next
+          ld a,b:pop bc
+          ret z
+          3 ** inc l    ; keep nz
+          ret
+
+_goto_next
+          ld a,(de):or a:ret z
+          push de
+          ex de,hl
+          inc l:ld d,(hl)
+          inc l:ld e,(hl)
+          ex de,hl
+          pop de
+          jp connect_a
+
+list_iter_reset
+;--------------
+ ;  in: cde= pnt head list.
+ ; out: side effect (cur set to first cell)
+ ;      all registers preserved but F
+
+          CHECK_ID_CDE()
+          push bc:push de:push hl
+          call _get_cur
+; Cur=Nxt (first real cell)
+          ex de,hl
+          ld bc,3:ldir
+          pop hl:pop de:pop bc
+          ret
+
+      IF has_list_iter_seek
+list_iter_seek
+;-------------
+ ; in: cde= pnt head list.
+     ; ahl= pnt node
+;out: cde preserved
+    ;  hl points on node (connected)
+          CHECK_ID_CDE()
+          push bc
+; head.cur = ahl      
+          push hl
+          call _get_cur
+          pop bc
+          ld (hl),a:inc l
+          ld (hl),b:inc l
+          ld (hl),c
+          pop bc
+;enchaine            
+      END
+list_iter_get
+;------------
+ ; in: cde= pnt head list.
+ ;out: If there is a node, hl= pnt 'current' cell body NZ
+     ; Otherwise, Z
+ ; A, B, CDE preserved 
+          push bc
+          call list_iter_get'
+          pop bc
+          ret
+
+list_iter_get'
+;------------
+ ; in: cde= pnt head list.
+ ;out: If there is a node, bhl= pnt 'current' cell body NZ
+     ; Otherwise, Z
+ ; A, CDE preserved 
+          CHECK_ID_CDE()
+          push af
+          call _goto_cur
+          3 ** inc hl   ; Preserve Z/NZ
+          ex (sp),hl:ld a,h:pop hl ; pop a
+          ret
+
+list_iter_get_last
+;-----------------
+; in: cde= id list
+; out: If non-empty: NZ, BHL: pnt body (connected)
+     ; Z otherwise (then BHL trashed)
+          push bc:push de
+          call gotoend
+          3 ** inc hl   ; Keep Z flag
+          pop de
+          ex (sp),hl:ld c,l:pop hl ; pop c
+          ret
+
+      IF has_list_iter_seek
+list_iter_get_cur
+;----------------
+; Get pnt of current node in iteration (to feed list_iter_seek)
+ ; in: cde= pnt head list.
+ ;out: If such node (not empty list), NZ
+                                    ; ahl= pnt current node (connected)
+     ; nz otherwise (wrapper connected)
+          CHECK_ID_CDE()
+          push bc
+          call _goto_cur
+          ld a,b
+          pop bc
+          ret
+      END
+list_iter_next
+;-------------        
+ ; in: cde= pnt head list.
+ ;out: Only effect: cur++  !! Client must call list_iter_get after
+ ;     Z if past end 
+         ; Then cur doesn't change -> list_iter_get still give last node
+         ; This property is used by save.o
+         ; Also required for gotoend to work
+ ;   All registers preserved but A
+
+          CHECK_ID_CDE()
+          push hl
+          push bc
+; bhl=cur (connected) 
+          call _goto_cur
+          CHECK_HL_IN_BANK()
+          ld a,(hl):or a:jr z,lin_end ; EOL
+; abl=cur++ 
+          inc l:ld b,(hl)
+          inc l:ld l,(hl)
+; head.cur = abl      
+          call _set_cur_abl
+lin_end
+          pop bc
+          pop hl
+          ret
+
+list_iter_nth
+;------------
+; Return Nth node (0-indexed)
+; Linear time.
+ ; in: cde= pnt head list.
+     ;   a= n
+ ;out: If such node:
+             ; NZ, node connected, cur updated
+     ; z otherwise
+
+; id checked here
+          ld b,a
+          call list_iter_reset
+          inc b:jr .entry
+.lp
+          call list_iter_next
+          ret z
+.entry
+          djnz .lp
+          jr list_iter_get
+
+list4_pop_node
+;-------------
+; Remove last node from list and connect it 
+; (to be read immediatly, since will dangle after list4_append)
+ ; in: cde= pnt head list.
+ ;out: If there is a node, NZ, hl = pnt last cell body
+                             ; cur = set to previous 
+     ; Otherwise, Z
+ ; A, B, CDE preserved 
+      IF todo
+; Check what happens to head.cur when removing last.node
+; (it should point to head list itself for append)
+      END
+          push bc
+          ld b,a:push bc ; PUSH A
+          push de:push bc
+          call gotoend
+          jr z,.exitempty
+;prev.nxt = 0
+          call connect_c
+          ex de,hl      ; hl:prev  de:cur
+          ld (hl),0
+          ld a,c        ; bk prev 
+;release cur
+          ld c,b
+          call list4_free
+          ex de,hl
+;head.cur = prev 
+          ex (sp),hl:ld c,l:pop hl ; POP C
+          ex (sp),hl    ; stack: pnt to last 
+          ex de,hl      ; de= id list, hl= pnt to prev
+          push bc
+          ld b,h
+          call _set_cur_abl
+          pop bc
+          call connect_b ; reconnect last node
+          pop hl
+          3 ** inc l    ; Set NZ
+.exit
+          pop bc:ld a,b
+          pop bc
+          ret
+
+.exitempty
+          pop bc
+          pop de
+          jr .exit
+
+_set_cur_abl
+; head.cur = abl      
+;in: CDE = id list
+   ; ABL = pointer
+;OUT: NZ, all regs preserved
+          push bc:push hl
+          call connect_c
+          ld c,l
+          ld l,e:ld h,d
+          3 ** inc l
+          ld (hl),a:inc l
+          ld (hl),b:inc l ; force nz
+          ld (hl),c
+          pop hl:pop bc
+          ret
+
+_get_cur
+; makes hl point on head.cur
+          call connect_c
+          ld l,e:ld h,d
+          3 ** inc l
+          ret
+
+gotoend
+;------
+;In: CDE: id list (= pnt to link next)
+;Out: NZ if non-empty ; cde: prev node header (or initial value)
+                      ; bhl: cur node  header (connected)
+    ;  Z if empty (cde, bhl preserved)
+    ; A trashed
+          CHECK_ID_CDE()
+          call connect_c
+          ld a,(de)
+          or a
+          ret z
+;When non-empty, starts from head.cur 
+;(avoid quadratic behavior for e.g. repeated list4_pop_node)
+;!!! no, bollocks
+   ; We need to start from beginning to get prev node before last one
+   ; list4_pop_node need to update head.nxt = 0 when removing last node
+;          3 ** inc e
+          ld l,e:ld h,d:ld b,c
+.gotoendlp
+;invariant (except first iter)
+; cde: prev node header (or head.cur)
+; bhl: cur node  header (connected) 
+; prev = cur
+          ld e,l:ld d,h:ld c,b
+; cur = next 
+          ld b,(hl):inc l
+          ld a,(hl):inc l
+          ld l,(hl):ld h,a
+          call connect_b
+          ld a,(hl):or a
+          jr nz,.gotoendlp
+
+          inc a         ; NZ
+          ret
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp list_head
+          jp list_iter_reset
+          jp list_iter_get
+          jp list_iter_next
+          jp list_search_word_from_iter
+
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+
+; ------------------
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+
+jps'
+          jp list4_new
+          jp list4_append
+          jp list4_free
+          jp list_iter_nth
+hi3
+      IF inRom
+      FILL limit3-$,&FF
+      END
+codesize3 = $$-code3
+
+; ------------------
+code4 = $$
+
+      IF inRom
+      ORG codedest4,$$
+      END
+
+jps''
+          jp list4_insert ; cocopy
+          jp list4_pop_node
+          jp list_iter_get' ; cocopy
+          jp list_iter_get_last ; cocopy
+
+
+hi4
+      IF inRom
+      FILL limit4-$,&FF
+      END
+codesize4 = $$-code4
+

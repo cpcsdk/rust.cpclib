@@ -1,0 +1,109 @@
+; Count TM in selected block 
+; !!! Not executable. Use countrom.o or countnrt.o
+
+; ---- HH Beta 1 ----
+; 2025 Jul 15 v4 Fix #1d3: Update vt_rom_firmflag
+         ; 10 v3 [Adapt rom ass] Use CALL_EXT / pagefirm
+
+; ---- GG Beta ? ----
+; 2024 Aug 1. v2: No need to set bc=0 (done in ass_get_pc_from_line)
+
+      IMPORT "assmap.i"
+
+; ---- In this rom (ORGASS) ---
+ass   = &FE20
+;ass_init_and_amorce = ass
+ass_amorce = ass+3      ;phase 0
+init_var = ass+12       ;setup macro/rep pointers. bc,de saved
+;lab_stat = ass+30
+;glfp_scan_ = ass+27
+;connect_bk_source = ass+42
+ass'  = &FE87
+ass_get_pc_from_line = ass'+15
+
+sy'   = &FF93
+sy_reset_scope = sy'+9
+
+connect_bk_base = pagefirm_jp ; All regs saved
+;connect_bk_source = pagefirm_jp + 2 ; From any bank. All regs saved
+;org_connect_source_chunk_from_id = pagefirm_jp + 4
+;connect_next_chunk = chunkcc_jp ;A corrupted
+
+; ---- In this rom (ass) --
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+;call_bric_from_ass = farcall + 12
+
+; ---- In ext rom -------------
+
+org   = &C008
+connect_line_start_end = org+&78
+
+; ---- Variables ---------
+
+va2   = &9800
+va_savesp = va2 + &19
+
+vt_rom_firmflag = &9D0C
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+      IF vt_rom_firmflag - &9D0C
+ !! shared with farcall, trui, asseto, count
+      END
+
+;-----------------------------------
+      MACRO CALL_EXT adr
+          call call_ext_from_ass:WORD adr
+      ENDM
+
+;-----------------------------------
+count_tm
+; in: de= start line
+    ; hl= end line (included)
+;Out: bc= tm
+
+; Adapted from visu.get_pc_from_line
+;-----------------------------------
+          ld (va_savesp),sp ; for ass_loop4 
+
+          di
+; We still need to restore BC', to use firmware calls afterwards
+          exx:push bc:exx
+          push hl
+          push de
+
+; Since exx used, cannot use firmware anymore.
+; (note: actually could by restoring BC' as it is done in screen.o)
+; Checked in e.g. asseto for LOAD directive: already loaded, or cancel.
+; If not (LOAD added after assembling), asseto.load_if_absent returns NC
+          ld a,vt_rom_firmforbid:ld (vt_rom_firmflag),a
+
+          call init_var
+          call sy_reset_scope ; see rationale in /glfp_from_chunk/
+          pop de
+          push de
+          CALL_EXT(connect_line_start_end)
+          exx
+          pop de        ; current line #
+          pop bc        ; target line # (mimic get_pc_from_line)
+          inc bc        ; end inclusive
+          exx
+          ld b,&80      ; mark unknown result
+          jr nc,_count_exit
+
+          ex de,hl
+          ld a,&FF      ; va_if: considered on!
+; Reuse ass_get_pc_from_line: 
+  ; this routine both update DE ($) and BC (TM counter)
+          call ass_get_pc_from_line
+          call connect_bk_base
+
+_count_exit
+          exx:pop bc:exx
+          ld a,vt_rom_firmenable:ld (vt_rom_firmflag),a
+          ei
+          ret
+
+

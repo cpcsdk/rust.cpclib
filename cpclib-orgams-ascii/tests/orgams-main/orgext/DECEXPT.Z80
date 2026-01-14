@@ -1,0 +1,257 @@
+; <<<<<< Automated tests for decexp.o >>>>>>
+
+      ORG &8000
+      ENT tests
+
+      IMPORT "decexp.o"
+
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+tst_source = &0E00
+nrt_buf = &0F00
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+org_init = org
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+org_delete_line = org+15
+connect_source_begin = org+&81 ; !! unsafe since sp not saved
+
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout
+          call ext_far_call:WORD rout ; Works like RST &18
+      ENDM
+
+      MACRO CALL_BRIC rout
+          call call_bric_from_main:WORD rout
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop de
+      ENDM
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+
+;====
+start
+;====
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom
+
+; -- Cold start
+          CALL_ORG(org_init)
+          jr tests
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;====
+tests
+;====
+          call test_decode
+          call test_labelpick
+          ret
+
+test_decode
+          ld hl,tstlines
+dtst_lp
+          ld a,">":call &BB5A
+
+;decoding doesn't add terminating '0', so we clear the buffer
+          xor a
+          ld de,nrt_buf
+dtst_clr  ld (de),a:inc e:jr nz,dtst_clr
+
+          ld de,nrt_buf
+          push hl:pop ix
+          call _deco_exp
+          push ix:pop hl
+
+          ld de,nrt_buf
+          call compare_string
+
+          inc hl
+          ld a,(hl)
+          or a
+          jr nz,dtst_lp
+          ret
+
+
+tstlines
+      BYTE 12           ; Decimal < 32: coded as is.
+      BYTE "12",0
+
+      BYTE &35:WORD &CAFE ; Encoding for hex 16 bits.
+      BYTE "&CAFE",0
+
+      BYTE "B",2,"+",4,"E" ; Encoding for compound expression.
+      BYTE "2+4",0
+
+      BYTE &38,&3F      ; Encoding for 8 bits binary
+      BYTE "%00111111",0
+
+      BYTE &39:WORD &0FFF ; Encoding for 16 bits binary
+      BYTE "%0000111111111111",0
+
+      BYTE 0
+
+test_labelpick
+;TODO: move in decexp instead
+
+          ld hl,nrtpick
+          call nrt_set_source
+
+; copy outside bank
+          CALL_ORG(connect_source_begin)
+          ld de,tst_source
+          ld bc,&0100
+          ldir
+
+          ld a,"="
+          call &BB5A
+
+          ld bc,&7F00+bk_dev
+          out (c),c
+
+          ld hl,nrtpickref
+lpt_lp
+          ld a,(hl):ld (vd_cursor_pos),a
+          inc hl:push hl
+          ld hl,vd_first_from_cursor
+          ld b,6
+lpt_clr   ld (hl),&FF:inc hl:djnz lpt_clr
+
+          ld hl,tst_source
+          ld de,nrt_buf
+          call decode
+          call nc,&BE00
+
+          pop hl
+          ld de,vd_first_from_cursor
+          ld bc,6
+          call compare
+          ld a,(hl)
+          or a
+          jr nz,lpt_lp
+          ret
+
+nrtpick
+           ;01234567890123456789012345678901
+      BYTE "lab0      ld   a,lab1+lab2 ;toto",0
+      BYTE "lab1",0
+      BYTE "lab2",0
+      BYTE 0
+
+nrtpickref
+; Input: cursor pos. Ref: picked, picked_nondef, last met
+      BYTE 1:WORD 0,1,2
+      BYTE 38:WORD -1,-1,2 ; in comment: pick last met
+      BYTE 0
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+
+          ret
+
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          ld a,(de)
+          or (hl)
+          ret z
+
+          inc hl
+          inc de
+          jr compare_ntstr
+

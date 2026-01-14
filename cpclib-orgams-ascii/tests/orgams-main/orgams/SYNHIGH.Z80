@@ -1,0 +1,134 @@
+
+; synhig. Helper routine for "syntax highlighting"
+
+; Sept 21. v2: limit @ &e533
+
+      ORG &0100
+
+inRom = 1
+rom   = &0A
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+          call test_comment_pos
+          ret
+
+test_comment_pos
+          ld hl,nrtcomments
+tcplp
+          ld a,(hl):or a:ret z
+          push hl
+          call comment_pos
+          ld e,l
+          pop hl
+skip      ld a,(hl):inc hl:or a:jr nz,skip
+          ld a,e
+          cp (hl)
+          call nz,&BE00
+          inc hl
+          jr tcplp
+
+nrtcomments
+      BYTE "nocom",0:BYTE $-1 AND &FF
+nc0   BYTE ";start",0,nc0 AND &FF
+nc1   BYTE "ei ;jude",0,nc1+3 AND &FF
+nc2   BYTE "b ",34,";",34," ;here",0,nc2+6 AND &FF
+      BYTE 0
+
+; ---------------------------             
+
+codedest = &E500        ; after upd-scr
+limit = &E52D           ; mirror
+codedest2 = &FEF7
+limit2 = &FEFA
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp comment_pos
+
+      IF inRom
+      FILL limit2-$,&FF
+      END
+
+codesize2 = $$-code2
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+
+comment_pos
+; Seek where comment starts.
+
+;In: hl=buffer
+;Out:hl=pos in buffer 
+       ;end of string (0) if not found.
+
+          ld c,0        ; 1 if inside quotes. 
+cp_lp
+          ld a,(hl):or a:ret z ; End?
+          inc hl
+quote = &22
+comment = ";"
+          cp quote:jr z,flip_quote ; Is quote?
+          inc c:dec c:jr nz,cp_lp ; If inside quotes: next char
+          cp comment:jr nz,cp_lp
+          dec hl
+          ret
+
+flip_quote
+          ld a,c:xor 1:ld c,a
+          jr cp_lp
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+

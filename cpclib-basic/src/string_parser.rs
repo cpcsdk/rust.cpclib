@@ -663,16 +663,18 @@ pub fn parse_call<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 }
 
 pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut fname) = (
+    let (_, mut space, fname) = (
         Caseless("RUN"),
         parse_space0,
-        cut_err(parse_quoted_string(false).context(StrContext::Label("Filename expected")))
+        opt(parse_quoted_string(false))
     )
         .parse_next(input)?;
 
     let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Run)];
     res.append(&mut space);
-    res.append(&mut fname);
+    if let Some(mut fname) = fname {
+        res.append(&mut fname);
+    }
     Ok(res)
 }
 

@@ -1,0 +1,739 @@
+inRom = 1
+; Line history for monogams display persistence
+;  Based on histrion, with the following differences: 
+       ; - Field editor not plugged
+            ; - No need to handle "current field"
+       ; - Allow more than &100 history buffer
+            ; !!! Actually must be > &100 for /cp_first/ computation
+       ; - Can embed arbitrary binary string (with 0 inside)
+           ; -> We encode sized strings,
+              ; since 0 cannot serve as separator anymore
+       ; - Don't check whether an entry is already present
+       ; - Only go backward in history
+
+dev_checks = 1
+fail  = &BE00
+
+      IMPORT "monomap.i"
+
+; \/\/\/\/\/\/\/ 2025 \/\/\/\/\/\/
+  ; Apr 9: Adapt from histrion
+
+rom   = &1B
+codedest = histriom
+limit = mon_farcall_new
+codedest2 = histriom_jp
+limit2 = monhelp_jp
+
+; ----- Fields in "history structure" -----------
+savepc = $
+saveobj = $$
+      ORG 0
+f_size BYTE             ; Nb chunks of (history) buffer
+f_buf_start BYTE        ; MSB First chunk of buffer
+f_first WORD            ; Start of oldest line in buffer
+f_last WORD             ; End of newest line in buffer
+f_cur_pnt WORD          ; State for iteration
+f_                      ; Struct size
+
+      ORG savepc,saveobj
+
+kl_rom_select = &B90F
+
+nrt_pad0 = &3000
+nrt_histbuf = &3100     ;  history buffer
+nrt_histsize = 2        ; * &100
+nrt_pad1 = &3300
+nrt_outbuf = &3400
+
+nrtfail = &BE00
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+          call nrtinit
+          call test_fuzz
+      2 ** [
+          call test_cpfirst
+          call test_history
+          call test_wrapping
+          call test_wrapping_corner
+          call test_fuzz
+          ]
+          ret
+
+nrtinit
+;Connect ROM to be able to call field editor
+          ld c,rom
+          call kl_rom_select
+          ret
+
+nrt_hist_init
+; Clear paddings for buffer overflow test
+; Return ix= pnt to struct
+          ld hl,nrt_pad0:call raz
+          ld hl,nrt_pad1:call raz
+
+          ld hl,nrt_hist_struct
+          ld a,nrt_histbuf/&0100
+          ld c,nrt_histsize
+          call hist_init
+
+          ld ix,nrt_hist_struct
+          ret
+
+raz       ld (hl),0:inc l:jr nz,raz
+          ret
+
+nrt_get_past_entry
+;IN: IX= struct
+   ;  b= entry# (0= most recent)
+          push bc
+          call nrt_hist_newest:call nc,nrtfail
+          pop bc
+          inc b
+          jr .enter
+.lp
+          push bc
+          call nrt_hist_prev:call nc,nrtfail
+          pop bc
+.enter
+          djnz .lp
+          ret
+
+check_overflow
+          ld hl,nrt_pad0
+          call .check
+          ld hl,nrt_pad1
+.check
+          ld a,(hl):or a:call nz,nrtfail
+          inc l
+          jr nz,.check
+          ret
+
+compare_sized
+          ld a,(de):cp (hl):call nz,nrtfail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+test_cpfirst
+;-----------
+          call nrt_hist_init
+          ld hl,nrt_histbuf
+          call .checkcp
+          ld hl,nrt_histbuf+&0100
+          call .checkcp
+          ld hl,nrt_histbuf+&01FF
+          call .checkcp
+          ret
+
+.checkcp
+;In: HL=first
+          ld (ix+f_first),l
+          ld (ix+f_first+1),h
+
+;Check Z for address itself
+          call cp_first
+          call nz,nrtfail
+          call c,nrtfail
+
+;Check NC for &ff address from first 
+          ld b,&FF
+.checkNC
+          push bc
+          inc l
+          call z,wrap_hl
+          call cp_first:call c,nrtfail
+;check API: B preserved
+          ld a,b
+          pop bc
+          cp b:call nz,nrtfail
+          djnz .checkNC
+
+;Check C for &100 next addresses
+          ld b,0
+.checkC
+          push bc
+          inc l
+          call z,wrap_hl
+          call cp_first:call nc,nrtfail
+;check API: B preserved
+          ld a,b
+          pop bc
+          cp b:call nz,nrtfail
+          djnz .checkC
+          ret
+
+test_history
+;-----------
+          call nrt_hist_init
+
+;1st entry
+          ld hl,nrtstr1
+          ld b,2
+          call nrt_hist_append
+          call check_overflow
+          ld a,(ix+f_first):or a:call nz,nrtfail
+
+;first check directly in buffer
+          ld hl,nrt_histbuf
+          ld de,nrtstr1_ref
+          ld b,nrtstr1_ref_
+          call compare_sized
+
+;now from proper api 
+          ld de,nrt_outbuf
+          call nrt_hist_newest
+          ld a,b:cp 2:call nz,nrtfail
+          ld hl,nrt_outbuf
+          ld de,nrtstr1
+          ld b,2
+          call compare_sized
+;no prev entry
+          call nrt_hist_prev:call c,nrtfail
+
+;2nd entry
+          ld hl,nrtstr1'
+          ld b,3
+          call nrt_hist_append
+          call check_overflow
+          ld a,(ix+f_first):or a:call nz,&BE00
+
+          ld de,nrt_outbuf
+          call nrt_hist_newest
+          ld a,b:cp 3:call nz,nrtfail
+          ld hl,nrt_outbuf
+          ld de,nrtstr1'
+          ld b,3
+          call compare_sized
+
+;1st entry still here
+          ld de,nrt_outbuf
+          call nrt_hist_prev
+          ld a,b:cp 2:call nz,nrtfail
+          ld hl,nrt_outbuf
+          ld de,nrtstr1
+          ld b,2
+          call compare_sized
+          ret
+
+test_fuzz
+;--------
+; Just add a bunch of entries, and check no assertion occurs
+          call nrt_hist_init
+
+          ld b,0
+.lp
+          push bc
+
+          ld hl,nrtstr1
+          ld b,2
+          call nrt_hist_append
+
+          call nrt_hist_newest:call nc,nrtfail
+          ld a,b:cp 2:call nz,nrtfail
+          call nrt_hist_newest:call nc,nrtfail
+
+          ld hl,nrt_outbuf
+          ld de,nrtstr1
+          ld b,2
+          call compare_sized
+;just call the routine, don't check output
+          call nrt_hist_prev
+          call nrt_hist_prev
+
+          ld hl,nrtstr1'
+          ld b,3
+          call nrt_hist_append
+
+          call nrt_hist_newest:call nc,nrtfail
+          call nrt_hist_newest
+          ld a,b:cp 3:call nz,nrtfail
+          ld hl,nrt_outbuf
+          ld de,nrtstr1'
+          ld b,3
+          call compare_sized
+;just call the routine, don't check output
+          call nrt_hist_prev
+          call nrt_hist_prev
+
+          pop bc
+          djnz .lp
+
+          call check_overflow
+          ret
+
+test_wrapping
+;------------
+; Wrapping / overlapping
+
+; Setup: put distinctive entries
+
+          call nrt_hist_init
+
+          ld hl,nrtstr1:ld b,2:call nrt_hist_append
+          ld hl,nrtstr2:ld b,2:call nrt_hist_append
+          ld hl,nrtstr4:ld b,2:call nrt_hist_append
+
+; each entries take 4. Fill buf
+          ld b,nrt_histsize*&0100 / 4 -3 ; -3 first entries
+.fill
+          push bc
+          ld hl,nrtstr3:ld b,2:call nrt_hist_append
+          pop bc
+          djnz .fill
+
+;1st entry must be here
+          ld b,nrt_histsize*&0100 / 4 -1 ; -1 since 0 indexed
+          call nrt_get_past_entry
+
+          ld hl,nrt_outbuf
+          ld de,nrtstr1
+          ld b,2
+          call compare_sized
+
+;no entry before
+          ld de,nrt_outbuf ; sanity
+          call nrt_hist_prev:call c,nrtfail
+
+;overwrite
+          ld hl,nrtstr3:ld b,3:call nrt_hist_append ; !! size 3 here
+
+;1st and second entry overriden, but 3rd must be here
+          ld b,nrt_histsize*&0100 / 4 -3 +1 ; +1: last entry added
+          call nrt_get_past_entry
+
+          ld hl,nrt_outbuf
+          ld de,nrtstr4
+          ld b,2
+          call compare_sized
+
+;no entry before
+          ld de,nrt_outbuf ; sanity
+          call nrt_hist_prev:call c,nrtfail
+          ret
+
+test_wrapping_corner
+; When last string exactly overwrite first byte,
+; f_first must be update
+
+          call nrt_hist_init
+
+; each entries take 4. Almost fill buf
+          ld b,nrt_histsize*&0100 / 4 -1 ; -3 first entries
+.fill
+          push bc
+          ld hl,nrtstr1:ld b,2:call nrt_hist_append
+          pop bc
+          djnz .fill
+
+; Add 3-sized string 
+          ld hl,nrtstr3:ld b,3:call nrt_hist_append
+          ld a,(ix+f_first):or a:call z,nrtfail
+          ret
+
+nrt_hist_append
+; Call hist_append and check state
+          call hist_append
+
+          ld a,(ix+f_first+1)
+          cp nrt_histbuf/&0100:call c,nrtfail
+          cp nrt_histbuf/&0100 + nrt_histsize:call nc,nrtfail
+          ld a,(ix+f_last+1)
+          cp nrt_histbuf/&0100:call c,nrtfail
+          cp nrt_histbuf/&0100 + nrt_histsize:call nc,nrtfail
+          ret
+
+nrt_hist_newest
+          ld de,nrt_outbuf
+          call hist_newest
+          jr _postcheck
+
+nrt_hist_prev
+          ld de,nrt_outbuf
+          call hist_prev
+_postcheck
+          push af
+;-de is preserved
+          ld a,e:or a:call nz,nrtfail
+          ld a,d:cp nrt_outbuf/&0100:call nz,nrtfail
+;-state is ok
+          ld a,(ix+f_cur_pnt+1)
+          cp nrt_histbuf/&0100:call c,nrtfail
+          cp nrt_histbuf/&0100 + nrt_histsize:call nc,nrtfail
+          pop af
+          ret
+
+      IF 0
+nrt_big_str
+          ld de,nrtlong
+          push de
+          ld b,nrtbigsize
+nha       ld (de),a:inc de:djnz nha
+          pop de
+          ret
+      END
+
+nrtstr1_ref BYTE 2      ; tag size
+nrtstr1 BYTE "a1"
+      BYTE 2
+nrtstr1_ref_ = $ - nrtstr1_ref
+nrtstr1' BYTE "a1X",0
+nrtstr1'_ = $ - nrtstr1
+nrtstr2 BYTE "b2",0
+nrtstr3 BYTE "tmp",0
+nrtstr3_ = $-nrtstr3
+nrtstr4 BYTE "dd"
+nrtdyn BYTE 0,0         ;create fresh commands dd1 dd2 dd3 ...
+nrtbigsize = 62
+nrtlong FILL nrtbigsize+1,0
+
+nrt_hist_struct
+      SKIP 4            ; see /f_msb/ and co
+
+dummy_char = "y"
+nrt_fill  ld (hl),dummy_char:inc l:jr nz,nrt_fill
+          ret
+
+;================================
+
+      IF inRom
+burn
+;
+;install in rom
+;                 
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          call &BB06
+          ret
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+code2
+      ORG codedest2,$$
+jps
+          jp hist_init
+          jp hist_append
+          jp hist_newest
+          jp hist_prev
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$ - code2
+
+      ORG codedest,$$
+
+      END
+
+code  = $$
+
+;------------------------------
+
+
+;-------------------------------------------
+
+hist_init
+;--------
+; IN: HL: struct history (see /f_size/)
+    ;  A: msb struct buffer &100
+    ;  C: size buffer (nb chunks &100)
+;Out: HL trashed
+
+      IF f_size
+  !! review
+      END
+          ld (hl),c:inc hl
+
+      IF f_buf_start - 1
+  !! review
+      END
+          ld (hl),a:inc hl
+
+      IF f_first - 2
+  !! review
+      END
+          ld (hl),0:inc hl
+          ld (hl),a:inc hl
+
+      IF f_last - 4
+  !! review
+      END
+          ld (hl),0:inc hl
+          ld (hl),a
+          ret
+
+hist_newest
+; Copy most recently added line
+; In: ix: hist struct
+    ; de: dest buffer (so that client doesn't have to handle wrapping)
+; Out: if there is a line, copied in DE, and:
+          ; Carry
+          ;  B = string size
+     ; NC otherwise
+     ; HL trashed
+
+          push de
+          call get_last
+;          ld bc,&3204:or a:sbc hl,bc:add hl,bc:call z,&BE00
+          call cp_first ; empty buffer?
+          jr z,_exit    ; NC in that case
+          jr _get_entry
+
+
+hist_prev
+; Give pnt to most previous line
+; In: !!! hist_newest has been called first
+    ; ix: hist struct
+    ; de: dest buffer (so that client doesn't have to handle wrapping)
+; Out: If there is a prev entry:
+       ; Carry is set
+       ; hl = string
+       ;  b = string size
+    ; NC otherwise
+          push de
+          ld l,(ix+f_cur_pnt)
+          ld h,(ix+f_cur_pnt+1)
+          call cp_first
+          jr z,_exit    ; NC in that case
+
+          ld a,l
+          dec l
+          or a
+          call z,wrap'  ; end prev entry 
+
+_get_entry
+          call goto_start_of_entry
+
+          ld (ix+f_cur_pnt),l
+          ld (ix+f_cur_pnt+1),h ; for next iteration 
+          pop de
+          push de
+          ld b,(hl)
+          push bc
+          ex de,hl      ; to reuse wrap
+          inc e:call z,wrap
+.copy_from_buffer
+          ld a,(de):ld (hl),a
+          inc e:call z,wrap
+          inc hl
+          djnz .copy_from_buffer
+          scf
+          pop bc
+_exit
+          pop de
+          ret
+
+
+hist_append
+;----------
+;in: ix:history structure
+   ; hl:(binary) string to append
+   ;  b:size string
+;out: af,bc,de,hl trashed
+
+; - We first check if overlapping (before overwriting! Other we won't
+  ; be able to find next valid pointer)
+; This happen when last < first and last+size(+2) > first
+          push bc
+          push hl
+          call get_last
+
+          call cp_first
+          jr z,.okoverlap ; empty buffer: start here
+          push af
+; Fresh pos in buffer
+          inc l:call z,wrap_hl
+          pop af
+          jr nc,.okoverlap
+          push hl
+;End of string 
+          ld a,b
+          inc a         ; tag size
+          add l
+          ld l,a
+          call c,wrap_hl
+.retry
+          call cp_first
+          jr c,.okoverlap'
+; Advance first and check again
+          ld a,(de)
+          add 2         ; tags size
+          add e
+          ld e,a
+          call c,wrap
+          ld (ix+f_first),e
+          ld (ix+f_first+1),d
+          jr .retry
+.okoverlap'
+          pop hl
+      IF dev_checks
+; last cannot be = first
+; only happens when buffer is empty, in which case we wouldn't have
+; entered this code path.
+          call cp_first
+          call z,fail
+      END
+.okoverlap
+          ex de,hl
+          pop hl
+          pop bc
+;- Copy in buffer 
+          ld a,b
+          push af
+          ld (de),a:inc e:call z,wrap ; tag size
+.copy
+          ld a,(hl):inc hl
+          ld (de),a:inc e:call z,wrap ; tag size
+          djnz .copy
+          pop af
+          ld (de),a     ; tag size
+          ld (ix+f_last),e
+          ld (ix+f_last+1),d
+      IF dev_checks
+;mustn't overlap
+          ex de,hl
+          call cp_first
+          call z,fail
+      END
+          ret
+
+cp_first
+;-------
+; Cp hl,f_first
+
+; In:  hl = pnt in buffer
+; Out: Flags like CP 
+     ; de = first
+     ; a,c trashed
+
+; We must work modulo f_size:
+  ; hl is considered < f_first if the distance mod f_size
+  ; is greater than f_size/2
+          push hl
+          ld e,(ix+f_first)
+          ld d,(ix+f_first+1)
+          ld c,(ix+f_size)
+          or a
+          sbc hl,de
+          jr z,.exit
+          ld a,h
+          jr nc,.okmod
+          add c
+      IF dev_checks
+          call nc,fail  ; must be positive
+      END
+.okmod
+          srl c
+      IF dev_checks
+          call z,fail   ; size must be > &100
+      END
+          cp c          ; yeah !
+          inc c         ; force nz
+          ccf
+.exit
+          pop hl
+          ret
+
+get_last
+;-------
+          ld l,(ix+f_last)
+          ld h,(ix+f_last+1)
+          ret
+
+goto_start_of_entry
+;------------------
+;In:  hl=  last byte of entry (2nd tag size)
+;OUt: hl= first byte of entry (1st tag size)
+          ld a,l
+          scf           ; -1 to skip tag itself
+          sbc (hl)
+          ld l,a
+          ret nc
+;enchaine
+wrap'
+;--- 
+; Handle buffer left wrapping
+; In: HL = pos + &100  (H must be corrected)
+;Out: HL = pos in buffer
+    ; A, C trashed    
+          ld a,(ix+f_buf_start)
+          cp h
+      IF dev_checks
+          jr z,.okcheck
+          call nc,fail  ; HL mustn't be already pre-buffer
+.okcheck
+      END
+          jr nz,.ok
+
+          add (ix+f_size)
+          ld h,a
+.ok
+          dec h
+          ret
+
+wrap_hl
+;------
+          ex de,hl
+          call wrap
+          ex de,hl
+          ret
+
+wrap
+;--- 
+; Handle buffer right wrapping
+; In: DE = pos - &100  (D must be corrected)
+;Out: DE = pos in buffer
+    ; A, C trashed    
+          inc d
+          ld c,(ix+f_buf_start)
+          ld a,c
+          add (ix+f_size)
+          cp d
+      IF dev_checks
+          call c,fail   ; d must not have gone +&100 past buffer
+      END
+          ret nz
+          ld d,c
+          ret
+
+; ----------------------------
+hi
+realsize = $$ - code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$ - code
+; ----------------------------
+
+

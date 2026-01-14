@@ -1,0 +1,432 @@
+; Almost all opcodes for tr tests
+exec  = 0               ; 0: version for trace (inir / outir ok)
+
+; 2024 May 3. v1 for tr-aa
+
+      ORG &3000         ; TR.o expect it here
+      ENT $
+
+          di
+
+; We don't emulate those properly for now
+  ;        inir
+  ;        outir
+  ;        indr
+  ;        outdr
+
+; --- init regs for reproducibility
+          ld a,&30:ld i,a
+          ld a,&31:ld r,a
+          ld bc,&4142:push bc:pop af
+          ex af,af
+          ld bc,&5152:push bc:pop af
+          ld bc,&0102
+          ld de,&0304
+          ld hl,&0506
+          exx
+          ld bc,&1112
+          ld de,&1314
+          ld hl,&1516
+          ld ix,&2122
+          ld iy,&2324
+
+          nop
+          di
+          ld a,1
+          ld bc,var_out
+          ld (bc),a
+          inc b
+          dec b
+          ld b,&07
+          ex af,af
+          add hl,bc
+          ld bc,var_in
+          ld a,(bc)
+          dec bc
+          inc c
+          dec c
+          ld c,&0F
+          djnz .adr0
+          ld a,2
+.adr0
+          exx
+          ld de,var_out+1
+          ld (de),a
+          inc de
+          inc d
+          dec d
+          ld d,&17
+          jr .adr1
+.adr1
+          ld de,var_in+1
+          ld a,(de)
+          dec de
+          inc e
+          dec e
+          ld e,&1F
+          ld hl,3
+          jr nz,.adr2
+          ld hl,4
+.adr2
+          ld (var_out+2),hl
+          dec h
+          ld h,&27
+          jr z,.adr3
+          ld a,5
+.adr3
+          ld hl,(var_in+2)
+          dec l
+          ld l,&2F
+          jr nc,.adr4
+          ld a,6
+.adr4
+          ld (var_out+3),a
+          ld hl,var_out+3
+          dec (hl)
+          inc hl
+          ld (hl),&37
+          jr c,.adr5
+          ld c,6
+.adr5
+          ld a,(var_in+3)
+          dec a
+          ld a,&3F
+          ld b,b
+          ld b,c
+          ld b,d
+          ld b,e
+          ld b,h
+          ld b,l
+          ld hl,var_in+4
+          ld b,(hl)
+          ld b,a
+          ld c,b
+          ld c,c
+          ld c,d
+          ld c,e
+          ld c,h
+          ld c,l
+          ld hl,var_in+5
+          ld c,(hl)
+          ld c,a
+          ld d,b
+          ld d,c
+          ld d,d
+          ld d,e
+          ld d,h
+          ld d,l
+          ld hl,var_in+5
+          ld d,(hl)
+          ld d,a
+          ld e,b
+          ld e,c
+          ld e,d
+          ld e,e
+          ld e,h
+          ld e,l
+          ld hl,var_in+6
+          ld e,(hl)
+          ld e,a
+          ld h,b
+          ld h,c
+          ld h,d
+          ld h,e
+          ld h,h
+          ld h,l
+          ld hl,var_in+7
+          ld h,(hl)
+          ld h,a
+          ld l,b
+          ld l,c
+          ld l,d
+          ld l,e
+          ld l,h
+          ld l,l
+          ld hl,var_in+8
+          ld l,(hl)
+          ld l,a
+          ld hl,var_out+5
+          ld (hl),b
+          inc hl
+          ld (hl),c
+          inc hl
+          ld (hl),d
+          inc hl
+          ld (hl),e
+          inc hl
+          ld (hl),h
+          inc hl
+          ld (hl),l
+      IF exec
+          nop
+      ELSE
+          halt
+      END
+          inc hl
+          ld (hl),a
+          ld a,b
+          ld a,c
+          ld a,d
+          ld a,e
+          ld a,h
+          ld a,l
+          ld hl,var_in+9
+          ld a,(hl)
+          ld a,a
+          add b
+          add c
+          add d
+          add e
+          add h
+          add l
+          add (hl)
+          add a
+          adc b
+          adc c
+          adc d
+          adc e
+          adc h
+          adc l
+          adc (hl)
+          adc a
+          sub b
+          sub c
+          sub d
+          sub e
+          sub h
+          sub l
+          sub (hl)
+          sub a
+          sbc b
+          sbc c
+          sbc d
+          sbc e
+          sbc h
+          sbc l
+          sbc (hl)
+          sbc a
+          and b
+          and c
+          and d
+          and e
+          and h
+          and l
+          and (hl)
+          and a
+          xor b
+          xor c
+          xor d
+          xor e
+          xor h
+          xor l
+          xor (hl)
+          xor a
+          or b
+          or c
+          or d
+          or e
+          or h
+          or l
+          or (hl)
+          or a
+          cp b
+          cp c
+          cp d
+          cp e
+          cp h
+          cp l
+          cp (hl)
+          cp a
+          ld (var_out+32),a
+          ret nz
+          ld sp,var_in+8
+          pop bc
+          jp nz,.adr6
+          ld sp,var_out+8
+.adr6
+          ld sp,var_out+8
+          push bc
+          add &C7
+          ret z
+     ;     ret
+          jp z,.adr7
+          ld a,9
+.adr7
+          call _ret
+          call _ret_nc
+          ld sp,var_in+10
+          pop de
+          jp nc,.adr9
+          ld a,6
+.adr9
+          ld sp,var_out+10
+          push de
+          sub &D7
+          or a
+          ret c
+          exx
+          jp c,.adr10
+          sbc &DF
+.adr10
+          call _ret_po
+          ld sp,var_in+12
+          pop hl
+          jp po,.adr11
+          inc e
+.adr11
+          ld sp,var_out+12
+          push hl
+          and &E7
+          ret pe
+          ld hl,.adr12
+          jp hl
+          inc l
+.adr12
+          jp pe,.adr13
+          inc l
+.adr13
+ ;          rst &28
+ ;       ret p
+          ld sp,var_in+14
+          pop af
+          jp p,.adr14
+.adr14
+          ld hl,var_out+14
+          ld sp,hl
+          push af
+          or &F7
+;          ret m
+          jp m,.adr15
+          inc l
+.adr15
+          cp &FF
+          ld b,&BC
+          in b,(c)
+          out (c),b
+          sbc hl,bc
+          ld (var_out+16),bc
+          call _retn
+dd
+          di
+   ; bug #187
+         ; im 0
+          ld a,&CC
+          ld i,a
+          ld b,&BC
+          in c,(c)
+          out (c),c
+          adc hl,bc
+          ld bc,(var_in+18)
+          call _reti
+          ld r,a
+          ld b,&BC
+          in d,(c)
+          out (c),d
+          sbc hl,de
+          ld (var_out+18),de
+
+   ; bug #187
+         ; im 1
+          ld a,i
+          ld b,&BC
+          in e,(c)
+          out (c),e
+          adc hl,de
+          ld de,(var_in+20)
+
+    ; bug #187
+         ; im 2
+          ld a,r
+          ld b,&BC
+          in h,(c)
+          out (c),h
+          sbc hl,hl
+          ld (var_out+20),hl
+          ld hl,var_out+20
+          rrd
+          ld b,&BC
+          in l,(c)
+          out (c),l
+          adc hl,hl
+          ld hl,var_out+20
+          rld
+          sbc hl,sp
+          ld (var_out+22),sp
+          ld b,&BC
+          in a,(c)
+          out (c),a
+          ld a,&DD      ; in a,(c): not stable value
+          adc hl,sp
+;          ld sp,(&7CED)
+          ld hl,var_in+22
+          ld de,var_out+22
+          ldi
+          cpi
+          ld b,&F6
+          ld hl,var_out+33
+          ini
+          ld b,&BD
+          outi
+
+          ldd
+          cpd
+          ld b,&F6
+          ld hl,var_out+34
+  ; bug #188
+;          ind
+          outd
+
+          ld hl,var_in+25
+          ld de,var_out+25
+          ld bc,2
+          ldir
+          ld de,var_in
+          ld bc,5
+          cpir
+
+          ld hl,var_in+27
+          ld de,var_out+27
+          ld bc,2
+          lddr
+          ld de,var_in
+          ld bc,5
+          cpdr
+
+          ld ix,4
+          inc ixl
+          dec ixh
+          ld (var_out+29),ix
+
+          ld hl,var_out
+          set 7,(hl)
+          res 6,(hl)
+
+          ld iy,var_out+2
+          set 6,(iy-1)
+          res 7,(iy+1)
+
+finito
+; ----- End -------------
+      BRK
+
+_reti     reti
+_retn     retn
+_ret_po   ret po
+_ret_nc   ret nc
+_ret      ret
+
+
+      SKIP -$ AND &FF
+hi
+
+      IF $-&3300
+ !! ref might change
+      END
+
+      IF exec
+var_in    256 ** BYTE #
+var_out FILL 35,0
+      ELSE
+var_in SKIP 256
+var_out SKIP 35
+      END

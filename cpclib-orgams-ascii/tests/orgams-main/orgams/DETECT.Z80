@@ -1,0 +1,435 @@
+
+; Memory detection and Orgams ROMs localisation
+
+; !!! TODO. |m crashes when "bricbrac" not detected!?!
+; !!! TODO. chVersion: still needed!?
+
+inRom = 1
+chVersion = 1           ; 0: monogams
+todo  = 1
+; /edver/     
+; /sign_ext/                
+
+; \/\/\/ In 2025 \/\/\/\/\/\/\/
+; --- HH Beta 1 ---
+; Jul 1 x: Add sign_ass detection
+         ; Clean-up code (we don't install detect code in monogams)
+      IF todo
+ ; burn orgass signature here (when need to dump version)
+      END
+; --- GG Beta M ---
+;May 30 w: Bump version GG Release
+
+; \/\/\/ In 2024 \/\/\/\/\/\/\/
+;Sep 22 v: Bump version GG Beta 10 (org)
+         ; Fix getlen: was infering len from ROM rather than source
+             ; When signature moved, it only burnt up to existing 0
+;Feb 21 u: Bump version GG Beta 1 (org & ext)
+         ; !!! BricBrac now at &19
+;Jan 28 t: Bump version FF Release'
+;Jan s: Bump version FF Release
+
+; \/\/\/ In 2023 \/\/\/\/\/\/\/
+;Dec 13 r: Bump version FF beta L (and signatures)
+;Dec 13 q: Bump version FF beta K
+
+; \/\/\/ In 2022 \/\/\/\/\/\/\/
+;Feb 06 p: Bump version FF beta A
+
+; \/\/\/ In 2021 \/\/\/\/\/\/\/
+;Nov 06 o: Bump version FF alpha 8b.
+
+;May 05 n: Bump version FF alpha 2.
+;May 05 m: Bump version FF alpha 1.
+
+; \/\/\/ In 2020 \/\/\/\/\/\/\/
+
+;May 05 l: Bump version RC1.
+;May 05 k: Bump version beta H.
+;May 03 j: Bump version beta G.
+;Apr 21 i: Bump version beta F.
+;Apr 11 h: Bump version beta E.
+;Feb 22 g: Bump version beta D.
+
+;Jan 1 vf: Additional check b8d6==curr_rom
+         ; !! Disabled for now (no room). See check_b8d6
+
+; \/\/\/ In 2019 \/\/\/\/\/\/\/
+
+;Dec 25 ve: Bump version beta C.
+;Dec 18 vd: Bump version.
+
+  ; 21 vc: fix chversion=0.
+
+;Sep 9 vb: ROMs and signature versionning.
+         ; Except for Orgams (since it's the main rom)
+
+; 8/8 va: move limit @ dfda (monogams)
+;13/7 v9: move limit @ f6b9 (ch)
+;25/6 v8: detect BricBrac as well
+        ; Remove set_rom# and detect_b# for monogams (unused since Oy).
+        ; Fix test
+;8/5 v7: switch rom mono to &1a
+
+; \/\/\/ In 2018 \/\/\/\/\/\/\/
+
+;27/7 v6 Remove.
+
+; \/\/\/ In 2016 \/\/\/\/\/\/\/
+
+;20/8 v4: separate 'install far_call' et 'set_rom#'
+
+;12/8/2016 v3: do not check ROM version, so that we easily update them
+
+    ; set_rom# for Ch : simply return rom# 
+;v2 ; include FCA for Monogams
+
+      ORG &9000
+code  = &9100
+
+      IMPORT "orgmap.i"
+
+romed = &1E
+romext = &1A
+rommon = &1B
+rombric = &1C
+
+rom   = romed
+codedest = detect
+limit = txt'            ; txt ed, mon,..
+
+      IF inRom
+      ENT burn
+
+      ELSE
+
+      ENT test
+      END
+
+tmp_get_rom = &4000
+far_call = &7D2C
+
+kl_curr_selection = &B912
+
+test
+          ld c,5        ;dummy
+          call &B90F    ; select upper rom
+          call set_rom#:call nc,&BE00
+          ret
+
+      IF inRom
+burn
+; prepare param for signatures
+          ld b,3
+          ld hl,signpara
+prepburn
+          push bc
+          ld c,(hl):inc hl:inc hl
+          call &B90F
+          push hl
+          4 ** inc hl
+          ld a,(hl):inc hl
+          ld h,(hl):ld l,a
+          ld e,l
+          ld d,h
+getlen    ld a,(hl):inc hl:or a:jr nz,getlen
+          or a:sbc hl,de
+          ld a,l
+          pop hl
+          ld (hl),a:inc hl:inc hl
+          ld de,(&C004)
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          inc hl:inc hl
+          pop bc
+          djnz prepburn
+
+          ld ix,burnpara
+parasize = 8
+          ld b,burnpara_-burnpara / parasize
+burn_lp
+          push bc
+          push ix
+          call burn_
+          pop ix
+          ld bc,parasize:add ix,bc
+          pop bc
+          djnz burn_lp
+          call &BB06
+          ret
+
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+
+burnpara
+;code
+      WORD rom,codesize,codedest,code
+;version
+      WORD romed,2,&C001,edver
+      WORD romext,2,&C001,extver
+      WORD rommon,2,&C001,monver
+      WORD rombric,2,&C001,bricver
+;signature                       
+signpara
+      WORD romext,0,0,extname
+      WORD rommon,0,0,monname
+      WORD rombric,0,0,bricname
+      END
+burnpara_
+
+; Just for info, not used to detect
+edver BYTE 7,2          ; GG release
+extver BYTE 7,2
+monver BYTE 7,2
+bricver BYTE 7,2
+
+      ORG codedest,code
+
+          jr detect_bk#
+          jr set_rom#
+
+;install far_call
+
+          ld hl,fca
+          ld de,far_call
+          ld bc,fca_
+          ldir
+          ret
+
+      IF chVersion
+
+set_rom#
+; auto rom detection with firmware for chVersion, without otherwise
+; In : work bk connected (for monogams Version)
+     ; calling rom must be set in work bk (e.g. vo_romed or vo_rommon)
+
+; Out for CH version : ixh=romExt ixl=romBric iyl=romAss A=romMon
+
+;Use stack to put routine (doesn't touch bank, for transparent init)
+
+          ld hl,-gr_
+          add hl,sp
+          ld sp,hl
+
+          ex de,hl
+          ld hl,get_rom
+          ld bc,gr_
+          push de
+          ldir
+          pop de
+
+          ld hl,sign_ext-tmp_get_rom
+          call call_get_rom:jr nc,rom_end
+          ld ixh,a
+
+          ld hl,sign_bric-tmp_get_rom
+          call call_get_rom:jr nc,rom_end
+          ld ixl,a
+
+          ld hl,sign_ass-tmp_get_rom
+          call call_get_rom:jr nc,rom_end
+          ld iyl,a
+
+          ld hl,sign_mon-tmp_get_rom
+          call call_get_rom
+rom_end
+          push af
+          ld hl,gr_+2
+          add hl,sp
+          pop af
+          ld sp,hl
+          ret
+
+call_get_rom
+          add hl,de
+          ex de,hl
+          push hl
+          call kl_curr_selection:ld c,a ; Return Rom
+          push bc       ; consummed by get_rom
+; Start scanning at 0.
+; NB: it might loop and wrap at &40.
+          ld c,0
+          call jp_hl
+          pop hl
+          ex de,hl
+
+          scf
+          ret z
+
+;FAIL (!! must return NC and A=0)
+          xor a
+          ret
+
+
+detect_bk#
+
+;out: B=#7F  A=work bk to use.
+    ; !! Bk connection changed. CHLIY changed
+
+;test each bank 3 (#cf, #d7 ...) and return last one
+
+          ld bc,&7FCF
+
+;first try non intrusive probabilistic detection
+dbklp_bk
+          ld h,&40
+dbklp
+          call dbgetinbasebk
+          out (c),c
+          cp (hl)
+          jr nz,dbknext
+          inc l:inc h
+          jp p,dbklp
+
+;now try harder (temp write)
+          dec h
+          call dbgetinbasebk
+          cpl:ld (hl),a
+          out (c),c
+          cp (hl)
+          push af
+          call dbgetinbasebk
+          cpl:ld (hl),a ;restore
+          pop af
+          jr nz,dbknext
+
+          ld a,c:jr dbok
+
+dbknext
+          ld a,c:add 8:ld c,a:jr nc,dbklp_bk
+dbok
+          sub 8
+          ret
+
+dbgetinbasebk
+          ld a,c:and &C7:out (c),a
+          ld a,(hl)
+          ret
+
+;--------------
+
+get_rom
+
+      ORG tmp_get_rom,$$
+
+; !! Must be relocatable !!
+
+;in (sp-2) = #xx?? with xx = caller rom
+  ; c=  #00  (b=&df for monogams)
+  ; de= signature
+;out Z if ok
+
+gr_scan
+          push bc:push de
+
+check_b8d6 = 0
+      IF check_b8d6
+
+          push bc
+          call &B90F
+          pop bc
+
+curr_rom = &B8D6
+          ld a,(curr_rom)
+          cp c:ret nz
+      ELSE
+          call &B90F
+      END
+
+;monogams can be back/foreground
+;org_ed is background
+;ext is extension
+;So we just check type is not 3
+
+          ld hl,&C000
+          ld b,3
+          ld a,(hl):and b:cp b:jr z,gr_next
+
+;skip version
+          ld l,4
+;check name
+          ld a,(hl):inc l
+          ld h,(hl):ld l,a
+gr_cpnt
+          ld a,(de):inc de:or a:jr z,gr_found ;Z
+          cp (hl):inc hl
+          jr z,gr_cpnt
+gr_next
+          pop de:pop bc
+          inc c
+          bit 7,c:jr z,gr_scan ;Cannot use JP P for relocation
+          jr gr_end     ;NZ
+
+gr_found
+;z
+          pop de:pop bc
+          ld a,c
+gr_end
+          pop hl:pop bc
+          push af
+          call &B90F
+          pop af
+jp_hl = $-tmp_get_rom + get_rom
+          jp hl
+
+
+extname = $$
+sign_ext BYTE "Orgams ext",50+&80,0 ;Last char=version.
+monname = $$
+sign_mon BYTE "Monogams",50+&80,0
+bricname = $$
+sign_bric BYTE "BricBrac",50+&80,0
+assname = $$
+sign_ass BYTE "Orgass",32+&80,0
+
+gr_   = $-tmp_get_rom
+
+      ORG get_rom+gr_,$$
+      END
+
+fca
+      ORG far_call,$$
+;in (sp-2):xx__ where xx=rom ret
+
+;called from trace to fetch disa
+                        ; & org_get_line_nofirm  
+      ; from org (org_get_line_nofirm) to fetch decode 
+
+          push bc
+fca_romin ld bc,&DF00
+          out (c),c
+          pop bc
+          call fca_jp_iy
+          pop iy
+          ex (sp),hl
+          push bc
+          ld b,&DF
+          out (c),h
+          pop bc
+          pop hl
+fca_jp_iy jp iy
+fca_  = $-far_call
+
+      ORG fca+fca_,$$
+
+hi
+      IF inRom
+      FILL limit-$,&FF
+      END
+
+codesize = $-codedest
+
+vo_romed = &7CF9
+vo_romext = &7CFA
+vo_rommon = &7CFB
+vo_rombric = &7CFF

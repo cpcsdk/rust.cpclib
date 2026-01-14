@@ -1,0 +1,255 @@
+; Tests for count.o
+
+; 2025
+     ; Jul 17: Fix call to org_assemble
+             ; Add test_load
+     ; May 14: Add test_delete (bug #1a5)   -> wasn't the issue
+
+      ORG &1000
+      ENT tests
+
+rom   = &1D
+bk_dev' = &D7
+
+      IMPORT "count.o"
+      IMPORT "testlib.o"
+
+tests
+          call test_load
+      BRK
+          call test_count_tm
+          call test_count_tm_assembled
+          call test_all_supported_opcodes
+          call test_full_source
+          call test_big_source
+          call test_delete
+          call test_load
+          ret
+
+; ----------------------
+      MACRO CALL_ORG rout
+; Copy/past from testlib.o
+; Call routines in ORGEXT.ROM
+; Note: we don't use orgams's own far_call, to ease overriding.
+          push hl
+          ld hl,rout:ld (_call_org_+1),hl
+          pop hl
+          call _call_org
+      ENDM
+; ----------------------
+
+
+test_count_tm
+; Set one source up, and check for different bloc selections 
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+
+          ld hl,.ref
+          call check_refs
+          ret
+
+.src
+      BYTE "nop",0
+      BYTE "inc a",0
+      BYTE "if 1",0     ; 3
+      BYTE "inc a",0
+      BYTE "else",0
+      BYTE "inc de",0   ; 6
+      BYTE "end",0
+      BYTE "rrd",0
+      BYTE "2 ** di"    ; 9
+      BYTE 0            ; end of source
+
+.ref
+      WORD 1,1,1
+      WORD 1,2,2
+      WORD 2,2,1
+      WORD 3,4,1        ; check if
+      WORD 3,5,1        ; check else  (directive doesn't mess up)
+      WORD 3,6,1        ; check else' (deactivated part not counted)
+      WORD 3,8,6        ; check end   (couting reactived)
+      WORD 9,9,2        ; n **
+      WORD 0            ; end of refs
+
+test_count_tm_assembled
+; Same, but needs to be assembled
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+
+          ld de,&C000
+          call nrt_org_assemble:call nc,fail
+
+          ld hl,.ref
+          call check_refs
+          ret
+
+.src
+      BYTE "macro n",0
+      BYTE "ei",0
+      BYTE "endm",0     ; 3
+      BYTE "n()",0
+      BYTE 0            ; end of source
+
+.ref
+      WORD 4,4,1
+      WORD 0
+
+test_delete
+;----------
+; Bug#1a5: wrong tm after updated line
+          call init_nrt
+          ld hl,.src
+          call nrt_set_source
+
+          ld de,&C000
+          call nrt_org_assemble:call nc,fail
+;Sanity check
+          ld hl,.ref
+          call check_refs
+
+; now real test
+          ld de,2
+          CALL_ORG(org_delete_line):call nc,&BE00
+          ld hl,.ref'
+          call check_refs
+          ret
+
+.src
+      BYTE "nop",0
+      BYTE "inc bc",0
+      BYTE "nop",0
+      BYTE 0
+
+.ref
+      WORD 1,3,4
+      WORD 0
+.ref'
+      WORD 1,2,2
+      WORD 0
+
+
+test_all_supported_opcodes
+;-------------------------
+; All opcodes, minus call, djnz, ldir and co (not supported yet)
+; Note: for conditional jumps, assume path not taken
+
+          call init_nrt
+
+          ld hl,.file
+          call nrt_org_load
+
+          ld hl,.ref
+          call check_refs
+          ret
+
+.file BYTE "counttst.o",0
+
+.ref
+      WORD 1,30,43
+      WORD 1,76,130
+      WORD 1,210,304
+      WORD 1,306,497
+      WORD 1,341,597
+      WORD 1,380,695
+      WORD 1,406,775
+      WORD 0
+
+test_full_source
+;---------------
+; Don't check result, only that it doesn't assert
+          call init_nrt
+
+          ld hl,.file
+          call nrt_org_load
+
+          call check_no_assert
+
+; Retry after assemble
+          ld bc,&CAFE
+          ld de,&C000   ; nevermind since doesn't install
+          CALL_ORG(org_assemble)
+          call check_no_assert
+          ret
+
+.file BYTE ":orgbug/gpc1.o",0
+
+test_big_source
+;--------------
+; Don't check result, only that it doesn't assert
+          ld a,bk_dev':call nrt_setup ; need more ram
+
+          ld hl,.file
+          call nrt_org_load
+
+          call check_no_assert
+
+;Scan was aborted, resume
+          ld c,rom:call kl_rom_select
+          ld de,867
+          ld hl,-2
+          call count_tm
+
+;Idem
+          ld c,rom:call kl_rom_select
+          ld de,2305
+          ld hl,-2
+          call count_tm
+
+          ld c,rom:call kl_rom_select
+          ld de,3552
+          ld hl,-2
+          call count_tm
+          ret
+
+.file BYTE ":orgnrt/ass-el.o",0 ; any big source would do
+
+test_load
+; Bug#1d3, was asserting
+          ld a,bk_dev':call nrt_setup ; need more ram
+
+          ld hl,.src
+          call nrt_set_source
+
+          call check_no_assert
+          ret
+
+.src  BYTE "load",34,":org/testdata/grid3.zx0",0,0
+
+;----------------------------
+; helper routines
+;----------------------------
+
+check_no_assert
+          ld c,rom:call kl_rom_select
+
+          ld de,1
+          ld hl,-2      ; cover all source
+          call count_tm
+          ret
+
+check_refs
+.lp
+          ld e,(hl):inc hl
+          ld d,(hl):inc hl
+          ld a,d:or e
+          ret z
+
+          ld a,(hl):inc hl
+          push hl
+          ld h,(hl):ld l,a
+
+          ld c,rom:call kl_rom_select
+          call count_tm
+          call nc,fail
+
+          pop hl
+          inc hl
+          ld a,c:cp (hl):call nz,fail
+          inc hl
+          ld a,b:cp (hl):call nz,fail
+          inc hl
+          jr .lp
+
+

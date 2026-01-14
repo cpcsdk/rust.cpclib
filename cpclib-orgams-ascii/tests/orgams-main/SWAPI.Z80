@@ -1,0 +1,77 @@
+; <<<< Lengths of stores >>>>
+
+; ////// 2025 //////
+  ; -- HH Beta 6 --
+     ; Sep
+          ; 4: +cocopy_len3
+  ; -- HH Beta 6 --
+     ; Aug    
+         ; 19: symb_store_len += 24
+             ; ass_store_len -= 47
+         ; 17: ed_store_len -= &14
+  ; -- HH Beta 2 --
+     ; Jul        
+         ; 28: ass_len3 +=1 for vo_destbk_last
+         ; 27: v1 extracted from const.i
+             ; meta_org_len+=3 (save_list)
+             ; Remove obsolete checks
+
+      IMPORT "const.i"  ; for header_size, max_ram_pages
+      IMPORT "memmap.i" ; deps, vo0
+
+; --- store/restore (org_select) ----
+meta_org_len1 = 28
+meta_org_len2 = 11
+ass_len1 = 39
+ass_len2 = 13
+cocopy_len1 = 2
+cocopy_len2 = 3
+cocopy_len3 = max_ram_pages*3
+
+org_store_len = meta_org_len1 + meta_org_len2
+meta_org_len = org_store_len + 1 ; +1 type (in store, not in var) 
+ass_store_len = ass_len1 + ass_len2
+aap_store_len = &1C
+symb_store_len = 2
+symb_store_len' = &30
+cocopy_store_len = cocopy_len1 + cocopy_len2 + cocopy_len3
+ed_store_len = &90
+
+; ------
+savepc = $
+saveobj = $$
+
+deps_offset = deps-vo0
+      ORG org_store_len
+ass_store_offset SKIP ass_store_len
+aap_store_offset SKIP aap_store_len
+symb_store_offset SKIP symb_store_len
+symb_index_store_offset SKIP symb_store_len'
+cocopy_store_offset SKIP cocopy_store_len
+ed_store_offset SKIP ed_store_len
+filename_store_offset   ; !! variable length
+      ORG savepc,saveobj
+
+; ------ Static checks ----------------
+      IF [heap_chunk_start + meta_org_len] AND &FF00
+   !! > &100: must review /.swap.connect_ass_store/ 
+      END
+
+      IF [header_size + symb_store_offset] AND &FF00
+   !!! must review /swap.store_all/ (split earlier)
+   ; !!! and also ass.connect_ass_var (rely on confiniment)
+   ; !!! and also impeva (to connect aap's var) 
+      END
+
+      IF [header_size + ass_store_offset] AND &FF00
+   !! > &100: must review /swap.connect_ass_store/ 
+      END
+
+filename_ = filename_store_offset+max_filename_len+ 2*heap_chunk_start
+      IF filename_/&0100 - filename_store_offset/&0100
+   !!! expected confined
+      END
+      IF filename_/&0100 - 1
+   !!! review org_connect_filename
+      END
+

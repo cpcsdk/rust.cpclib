@@ -1,0 +1,1883 @@
+; <<<<<< IO : load/save routines by bloc/line >>>>>>>
+
+inRom = 1
+dev_asserts = 1-inRom   ; For NRTs only.
+mock  = 0 AND [1 - inRom] ; 0: needs msbxlsb, nrt, 123, nrt-tab .nrt
+todo  = 1
+
+      IF todo
+; !?? bug in irl_read[clipped] if "put back" read chr at beggining
+    ; of buffer 
+      END
+
+      ; TODO: test file > 64k. 
+      ; todo: change interface (hl for read)
+      ; todo: test with $d alone at end of buffer
+      ; todo: bug 'orgams' for ascii files (cannot reproduce !)
+
+      IMPORT "bricmap.i"
+
+; 2025
+;Jul  1 vz: Add io_read_line_clipped
+          ; Add test_line_more_than_256_chars
+          ; Add test_line_clipped
+ !! on hold, no room left in rom anyway
+;Mar 18 vy: Revert vx
+            ; (useless, as az_infilesize = &7ffff for headerless file)
+   ; 17 vx: Expose /get_infilesize/
+      ; vw: Use bricmap.i
+
+; 2021   
+
+;Sep 2 vv: fix /io_read_line/ when no eof: /test_no_eof/ (bugs #111 11c)
+
+   ; 8 vu: Fix nrt _testloadbig itself.
+         ; We assumed disc_in_close wasn't changing bc 
+
+;May 2 vt: Doc++ io_write_bloc return Carry if ok.
+
+; 2020   
+      ; vs: NRT: Add /test_unlzsa2f/
+   ; 26 vr: NRT: Don't call setup_from_basic'
+               ; -> It replaces bk_base in BE00 to &c7.
+               ; Use setup_from_nrt instead.
+          ; NRT: Don't call org_init_custom (removed)
+               ; Now done by setup_from_nrt
+      ; vq: io_read_line must return &1a when EOF.
+              ; - mimic disc_in_char
+              ; - impexp.o expect it  
+    ; 5 vp: Export/import (yop!)
+    ; 3 vo: Refactor io_read_bloc.
+          ; Refactor and fix io_read_line.
+             ; Last line without CR/LF wrongly returned EOF flags.
+          ; Add mock mecanism
+; Apr 3 vn: Add testloadsmall, testload1000
+          ; Fix bugs covered by those tests!
+          ; Add testloadapi, testloadpasteof.
+          ; Remove obsolete debug routines (display_nt ...)
+
+   ; 21 vm: Export/import
+; Sep 2 vl: Cleanup (remove unused var, rename io_buf->io_buf_nrt)
+
+      ; vk: Expose get_len.
+      ; vj: Move to bricbrac (expect io_import).
+; 5 Aug vi: Fix nrt (proper rom# setup).
+          ; Remove iof2 version.
+
+; 19/5/2019 vh Fix nrt: set_rom# is now @ f5c6
+                      ; tabs are now expanded                    
+                      ; opcodes are now lowercase
+
+; vg 19/5/2019 Reverse eng: retrouve ROM version.  cf ddelight
+         ; io_write_header optimized and fixed (checksum 16 bits)
+         ; codedest @ &fbea
+
+;  vf2 7/7/2016 fix nrt DAMS '&' vs '#'
+
+            ; write_header
+;  vf 05/09 : use org_insert_line from ch
+
+            ; !!move to FC00 
+;  ve 28/28 : disp_* has moved
+;  vd 15/02 : Fix corruption : variables en #7CC0
+;  vc 07/02 : ORGAMS!   org en #C004+4  
+;  vb 18/11 : !!move to F500
+;  va : import dams : add "quotes", strip ;
+;  v9 : Fix disp_inline[_nl]_at
+
+      ; Fix io_read_line at 2K boundary !! TODO: why testlines didnt catch it ?
+;  v8 : !!Install in 10, org_* call in 11
+;  v7 : Fix def* for import DAMS
+;  v6 : !!Shift to $EA00
+      ; read_line support 0D alone as eol.
+;  v5 : import (DAMS or ASCII)    (reprend DAD.T)
+;  v4 : read_line : expand ascii 'tab' to 8 spaces
+
+; TODO : check if no 0D/0A in last line (io_read_line)
+
+      ORG &0100
+
+romBric = &1C           ; for burn
+romOrg = 10             ; for NRT
+
+io_buf_nrt = &8000
+
+codedest = io_disc      ; after aap
+limit = txtfirm2        ; disp logo
+codedest2 = io_disc_jp  ; between jp mirror (to be removed) and jp chunk
+limit2 = &FFFF+1
+
+; For NRT ---------------
+init  = &E830
+setup_from_nrt = init+9
+;far_call_ext = &C13C
+;----------------
+
+org   = &C008
+
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT test
+      END
+
+buf_test = &2000
+ref_test = &6000
+
+;jumptable
+
+      IF mock
+
+disc_in_open = mock_in_open
+disc_in_close = mock_in_close
+disc_in_abandon = mock_in_abandon
+disc_in_char = mock_in_char
+
+disc_out_open = &BE00
+disc_out_close = &BE00
+disc_out_char = &BE00
+
+      ELSE
+
+disc_in_open = &BC77
+disc_in_close = &BC7A
+disc_in_abandon = &BC7D
+disc_in_char = &BC80
+
+disc_out_open = &BC8C
+disc_out_close = &BC8F
+disc_out_char = &BC95
+
+      END
+
+amsdos_offset = &BE7D
+az_openout = &9A
+az_infilesize = &95-az_openout
+az_inbufsize = &68-az_openout
+az_inbufpos = &53-az_openout
+az_outfilesize = &DF-az_openout
+az_outbufsize = &B2-az_openout
+az_outbufpos = &9D-az_openout
+
+      IF inRom
+burn
+
+;
+;install in rom
+;
+          ld ix,param_burn
+          call _burn
+          ld ix,param_burn2
+_burn
+          ld hl,nburn
+          push ix
+          call &BCD4
+          pop ix
+          ret nc
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD romBric
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD romBric
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      END
+
+test
+          call nrtinit
+      IF 0
+          call testtest ; for manual expe
+      END
+
+          call test_line_more_than_256_chars
+
+; --- io_read_bloc -------------------
+
+          call testloadsmall
+          call testloadpasteof
+          call testloadapi
+
+; --- io_read_line -------------------
+          call testreadline
+   ;   call testreadline_frombin ; !! Fails. see io_read_line doc.
+          call testtab
+          call test_line_more_than_256_chars
+
+      IF mock
+; Those tests don't have realfile attached (too lazy).
+          call testnl0d
+          call testnl0a
+          call testnl1a
+          call test_fileinsize
+          call test_no_eof
+          call test_no_eof1
+          call test_no_eof2
+      ELSE
+; Those ones don't have mock version
+;TODO: detourne bc77 and co instead of compile time,
+     ; so we can run all tests at once?
+          call testload400
+          call testload800
+          call testload1000
+      ;    CALL loadtest
+
+     ;    call test_unlzsa2f  !!! no, the file itself is crap.
+      END
+
+; --- io_write_bloc ---
+      IF 1-mock
+          call saveloadtest
+          call test1a
+      END
+
+; --- io_write_lines ---
+      IF 1-mock
+          call testlines
+      END
+          ret
+
+nrtinit
+
+nrtbk = &C7
+          ld c,romOrg:call &B90F
+          ld a,nrtbk:call setup_from_nrt:call nc,&BE00
+          ret
+
+
+loadtest
+;for manual inspection
+          ld b,tstfilename_
+          ld hl,tstfilename
+          ld de,io_buf_nrt
+          call disc_in_open
+          ret nc
+
+          ld de,buf_test
+ltstlp    ld bc,16
+          call io_read_bloc
+          jr nc,ltstend
+          ld a,d
+          cp &40
+          jr c,ltstlp
+          rst 6
+
+ltstend
+          call disc_in_close
+          ret
+
+
+tstfilename BYTE "compare"
+tstfilename_ = $-tstfilename
+; TODO: mock!
+
+
+saveloadtest
+;create dummy data
+
+          ld hl,ref_test
+          ld b,&20
+          xor a
+sltstgen  add l
+          add b
+          ld (hl),a
+          inc l
+          jr nz,sltstgen
+          inc h
+          djnz sltstgen
+
+;save
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_out_open
+          ret nc
+
+          ld hl,ref_test
+          ld bc,&1000   ;puis $400, $800, $200 etc : $1FFF total
+sltstlp   push bc
+          call io_write_bloc
+          jr c,sltstok
+          rst 6
+sltstok
+          pop bc
+          srl b
+          rr c
+          ld a,c
+          or b
+          jr nz,sltstlp
+
+          call disc_out_close
+
+;read back
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_in_open
+          call nc,&30
+
+          ld de,buf_test
+          ld bc,&1FFF
+          call io_read_bloc
+          call nc,&30
+
+          call disc_in_close
+
+;compare
+          ld hl,buf_test
+          ld de,ref_test
+          ld bc,&1FFF
+          call compare
+
+          ret
+
+tst2filename BYTE "temp.nrt"
+tst2filename_ = $-tst2filename
+
+test1a
+;save 900*1a
+
+          ld hl,ref_test
+          ld de,ref_test+1
+          ld bc,&0900-1
+          ld (hl),&1A
+          ldir
+
+;save
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_out_open
+          ret nc
+
+          ld a,"0"
+          call &BB5A
+
+          ld hl,ref_test
+          ld b,&10
+tst1alp   push bc
+          ld bc,&90
+          call io_write_bloc
+          jr c,tst1aok
+          rst 6
+tst1aok
+          pop bc
+          ld a,"."
+          call &BB5A
+          djnz tst1alp
+
+          call disc_out_close
+
+          ld a,"1"
+          call &BB5A
+
+;read back
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_in_open
+          call nc,&30
+
+          ld de,buf_test
+          ld bc,&0900
+          call io_read_bloc
+          call nc,&30
+
+          ld a,"2"
+          call &BB5A
+
+          call disc_in_close
+
+;compare
+          ld hl,buf_test
+          ld de,ref_test
+          ld bc,&0900
+          call compare
+
+          ret
+
+testlines
+;save 900*1a
+
+nblinestst = 606
+
+          ld de,ref_test
+          ld hl,nblinestst
+tstlinegen
+          push hl
+          call put_deci_hl
+          xor a
+          ld (de),a
+          inc de
+          pop hl
+          dec hl
+          ld a,l
+          or h
+          jr nz,tstlinegen
+
+          ex de,hl
+          ld de,-ref_test
+          add hl,de
+          ld (tstline_size),hl
+
+;save
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_out_open
+          ret nc
+
+          ld a,"1"
+          call &BB5A
+
+          ld hl,ref_test
+          ld bc,nblinestst
+tstlinelp push bc
+          push hl
+          call io_write_line
+          jr c,tstlineok
+          rst 6
+tstlineok
+          pop hl
+tstlineskip
+          ld a,(hl)
+          inc hl
+          or a
+          jr nz,tstlineskip
+
+          pop bc
+          dec bc
+          ld a,c
+          or b
+          jr nz,tstlinelp
+
+          call disc_out_close
+
+          ld a,"2"
+          call &BB5A
+
+
+;read back
+          ld b,tst2filename_
+          ld hl,tst2filename
+          ld de,io_buf_nrt
+          call disc_in_open
+          call nc,&30
+
+          ld a,"3"
+          call &BB5A
+
+          ld hl,0
+          ld de,buf_test
+          ld bc,&0900
+tstlineread
+          push hl
+          call io_read_line
+          inc de
+          pop hl
+          inc hl
+          jr nc,tstlineread_end
+;bound
+          ld bc,nblinestst+1
+          or a
+          sbc hl,bc
+          call nc,&30
+          add hl,bc
+          jr tstlineread
+tstlineread_end
+
+          ld a,"4"
+          call &BB5A
+
+          call disc_in_close
+
+          ret
+;compare
+          ld hl,buf_test
+          ld de,ref_test
+          ld bc,(tstline_size)
+          call compare
+          ret
+
+      MACRO NRT_OPEN name
+          ld hl,name
+          call _nrt_open
+      ENDM
+
+_nrt_open
+          push hl
+          call disc_in_abandon
+          call clear_buf_test
+          pop hl
+
+          call get_len:ld b,c
+          ld de,io_buf_nrt
+          call disc_in_open
+          push af:call nc,&BB06
+          pop af:call nc,&BE00
+          ret
+
+testtest
+; manually check flags disc_in_char
+; Same result for bin.
+
+; NZ if sent for EOF or error (e.g. read after close).
+
+          NRT_OPEN(tstsymrom)
+
+          ld de,&4000
+          ld bc,&4000
+          call io_read_bloc
+      BRK
+
+          ld bc,&1234
+      4 ** [call disc_in_char:BRK]
+
+      BRK
+;!!! this is not an automated test.
+
+
+tstsymrom BYTE "SYM-ROMA.ROM",0
+
+testloadsmall
+; Just check a 3 bytes file is properly loaded!
+
+          NRT_OPEN(tstfile123)
+
+          ld de,buf_test
+          ld bc,3
+          call io_read_bloc:call nc,&BE00
+
+          ld hl,buf_test
+      3 ** [
+          ld a,(hl):cp #+1:call nz,&BE00
+          inc hl
+          ]
+
+          call disc_in_close
+          ret
+
+tstfile123 BYTE "123.nrt",0
+      WORD 3:BYTE 1,2,3,&1A,mock_end ; size and content for mock
+
+testloadpasteof
+; If we ask more than wanted, we must have EOF flags,
+; yet last bytes must be properly read.
+
+          NRT_OPEN(tstfile123)
+
+          ld de,buf_test
+          ld bc,&1001
+          call io_read_bloc
+          call c,&BE00
+          call z,&BE00
+          ld a,e:cp 3:call nz,&BE00
+
+          ld hl,buf_test
+      3 ** [
+          ld a,(hl):cp #+1:call nz,&BE00
+          inc hl
+          ]
+
+          call disc_in_close
+          ret
+
+
+testloadapi
+;----------
+; Test:
+      ; - Flags are returned as expected
+      ; - DE is incremented
+      ; - BC and HL are preserved.
+
+          NRT_OPEN(tstfile123)
+
+          ld de,buf_test
+          3 ** call tla_not_eof
+          1 ** call tla_eof
+          ret
+
+tla_not_eof
+          inc de:push de:dec de ; DE will be incremented
+          ld hl,&FADA
+          ld bc,1
+          call io_read_bloc
+          call nc,&BE00
+          call z,&BE00
+          jr tla_com
+
+tla_eof
+          push de
+          ld hl,&FADA
+          ld bc,1
+          call io_read_bloc
+          call c,&BE00
+          call z,&BE00
+tla_com
+          ld a,b:or a:call nz,&BE00
+          ld a,c:cp 1:call nz,&BE00
+          ld bc,&FADA:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          pop hl:or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+          ld hl,buf_test
+      3 ** [
+          ld a,(hl):cp #+1:call nz,&BE00
+          inc hl
+          ]
+
+          call disc_in_close
+          ret
+
+
+testload400
+;NB: keep the ret for callstack, so we know in which test we are
+          ld bc,&0400:call _testloadbig:ret
+testload800
+          ld bc,&0800:call _testloadbig:ret
+testloadFFF
+; Exact size-1
+          ld bc,&0FFF:call _testloadbig:ret
+testload1000
+          ld bc,&1000:call _testloadbig:ret
+; Case size+1 in handled @ tfb_1000
+
+      IF 0
+test_unlzsa2f
+;------------
+; Bug: size was ok but data was wrong.
+; !!!! argl, putain de cross-dev: the header was invalid.
+
+          NRT_OPEN(name_unlzsa2f)
+          ld de,buf_test
+          ld bc,&D8
+          call io_read_bloc
+          ld a,(buf_test):cp 6:call nz,&BE00
+          ret
+
+name_unlzsa2f
+      BYTE "unlzsa2f",0
+      END
+
+
+testreadline
+;-----------
+; Read a line from ascii.
+
+          NRT_OPEN(tstabc_asc)
+
+          call trl_com
+nrtinsize = &80         ;pseudo size: one record.
+
+; Internal: checks that cpts are ok
+      IF mock
+ ; doesn't work with amsdos: az_infilesize = &7fffff
+          call get_amsdos_pivot
+          ld a,(iy+az_infilesize)
+          cp nrtinsize-3:call nz,&BE00
+; and again
+          ld de,buf_test
+          call io_read_line
+          call get_amsdos_pivot
+          ld a,(iy+az_infilesize)
+; looser test this time, since we don't care much of the state
+; after EOF.
+          cp nrtinsize-3:call c,&BE00
+      END
+          ret
+
+tstabc_asc BYTE "abc.nrt",0
+      WORD nrtinsize
+      BYTE "abc",&1A,mock_end ;pseudo size and content for mock
+
+
+testreadline_frombin
+; Read a line from bin (without &1a) 
+
+nrtinsize_bin = 3
+          NRT_OPEN(tstabc_bin)
+          call trl_com
+; Internal: checks that cpts are ok
+          call get_amsdos_pivot
+          ld a,(iy+az_infilesize)
+          cp nrtinsize_bin-3:call nz,&BE00
+; and again
+          ld de,buf_test
+          call io_read_line
+          call get_amsdos_pivot
+          ld a,(iy+az_infilesize)
+; looser test this time, since we don't care much of the state
+; after EOF.
+          cp nrtinsize_bin-3:call c,&BE00
+          ret
+
+
+tstabc_bin BYTE "abc.bin",0
+      WORD nrtinsize_bin
+      BYTE "abc",mock_end ; file content for mock
+
+
+trl_com
+smallsize = 3
+; Check whole line read but no more!
+          ld de,buf_test
+          call io_read_line
+          call nc,&BE00
+          ld a,e:cp smallsize:call nz,&BE00
+
+          ld hl,trl_ref
+          ld de,buf_test
+          ld bc,smallsize
+          call compare
+
+; Check EOF flags
+          ld de,buf_test
+          call io_read_line
+          call c,&BE00
+          call z,&BE00
+          cp &1A:call nz,&BE00
+          ret
+
+trl_ref BYTE "abc"
+
+test_line_more_than_256_chars
+          NRT_OPEN(.name)
+          ld de,buf_test
+          call io_read_line
+          call nc,&BE00
+          ld hl,buf_test + &0116
+          ld de,.ref
+          call compare_ntstr
+          ret
+
+.name BYTE ":org/testdata/getstart.txt",0
+.ref  BYTE "compatibility.",0
+
+test_line_clipped
+          NRT_OPEN(.name)
+          ld de,buf_test
+          call io_read_line
+          call nc,&BE00
+          ld hl,buf_test + &0116
+          ld de,.ref
+          call compare_ntstr
+          ret
+
+.name BYTE ":org/testdata/getstart.txt",0
+.ref  BYTE "compatibility.",0
+
+_testloadbig
+; Test loading big chunk at once, as it was done in GAP.
+; IN: bc=size
+
+          push bc
+          call disc_in_abandon
+          call clear_buf_test
+
+          ld b,tstfilebig_
+          ld hl,tstfilebig
+          ld de,io_buf_nrt
+          call disc_in_open
+          call nc,&30
+
+          ld de,buf_test
+          pop bc
+          push bc
+          call io_read_bloc
+
+; The file was created as &1000 ** BYTE #/&100 xor [# and &ff] 
+
+          ld hl,buf_test
+          ld de,0
+          pop bc
+          push bc
+tfb_lp
+          ld a,d:xor e
+          cp (hl):call nz,&BE00
+          inc hl:inc de
+          dec bc
+          ld a,c:or b
+          jr nz,tfb_lp
+
+; Read one more byte
+          ld de,buf_test
+          ld bc,1
+          call io_read_bloc
+          pop bc
+          push af
+          push bc
+          call disc_in_close
+          pop bc
+
+          ld hl,buf_test
+          ld a,b:sub &10:or c:jr z,tfb_1000
+
+; Not eof
+          pop af
+          call nc,&BE00
+          call z,&BE00
+; Check byte read (MSB ^ LSB).
+          ld a,c:xor b:cp (hl):call nz,&BE00
+          ret
+
+tfb_1000
+; EOF
+          pop af
+          call c,&BE00
+          call z,&BE00
+          ret
+
+tstfilebig BYTE "msbxlsb.nrt"
+tstfilebig_ = $-tstfilebig
+
+
+testtab
+          NRT_OPEN(tstfiletab)
+
+testtab_com
+          ld de,buf_test
+          call io_read_line
+          ld a,e:cp refline1_:call nz,&BE00
+          ld hl,buf_test
+          ld de,refline1
+          ld bc,refline1_
+          call compare
+
+          ld de,buf_test
+          call io_read_line
+          ld a,e:cp refline2_:call nz,&BE00
+          ld hl,buf_test
+          ld de,refline2
+          ld bc,refline2_
+          call compare
+
+          call disc_in_close
+
+          ret
+
+tstfiletab BYTE "nrt-tab.txt",0
+      WORD -1           ; mimic 'size not known'
+      BYTE 9,";line 1",&0D,&0A
+      BYTE 9,";line 2",&0D,&0A
+      BYTE &1A
+
+
+refline1 FILL 8,32
+      BYTE ";line 1"
+refline1_ = $-refline1
+refline2 FILL 8,32
+      BYTE ";line 2"
+refline2_ = $-refline2
+
+tstline_size WORD 0
+
+testnl0d
+; reuse 'filetab' ref, but here check 0D alone as line separator
+          NRT_OPEN(tstfile0d)
+          jr testtab_com
+
+tstfile0d BYTE "todo: generate realfile",0
+      WORD -1           ; mimic 'size not known'
+      BYTE 9,";line 1",&0D
+      BYTE 9,";line 2",&0D
+      BYTE &1A
+
+
+testnl0a
+; reuse 'filetab' ref, but here check 0A alone as line separator
+          NRT_OPEN(tstfile0a)
+          jp testtab_com
+
+tstfile0a BYTE "todo: generate realfile",0
+      WORD -1           ; mimic 'size not known'
+      BYTE 9,";line 1",&0A
+      BYTE 9,";line 2",&0A
+      BYTE &1A
+
+testnl1a
+; reuse 'filetab' ref, but here check no separator before eOF.
+          NRT_OPEN(tstfilenl1a)
+          jp testtab_com
+
+tstfilenl1a BYTE "todo: generate realfile",0
+      WORD -1           ; mimic 'size not known'
+      BYTE 9,";line 1",&0D,&0A
+      BYTE 9,";line 2"
+      BYTE &1A
+      BRK
+
+test_no_eof
+; check we got proper flags when EOF.
+          NRT_OPEN(.filenoeof)
+          ld de,buf_test
+          call io_read_line:call c,&BE00 ; Expect NC.
+          ret
+
+.filenoeof BYTE "dummy",0
+      WORD -1           ; mimic 'size not known'
+      BYTE &FF          ; mimic hard eof for mock
+
+test_no_eof1
+; Check we get first line (EOF only at 2nd call).
+
+          NRT_OPEN(.filenoeof1)
+          ld de,buf_test
+          call io_read_line:call nc,&BE00 ; Expect C.
+          call io_read_line:call c,&BE00 ; Expect nC.
+
+          ld hl,buf_test
+          ld de,.ref
+          ld bc,4
+          call compare
+          ret
+
+.filenoeof1 BYTE "dummy1",0
+      WORD -1           ; mimic 'size not known'
+.ref  BYTE "tata",0     ; 0 read in-buffer, not via mock_in_read.
+
+test_no_eof2
+; Check we get 2 first lines (EOF only at 3nd call).
+          NRT_OPEN(.filenoeof2)
+          ld de,buf_test
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:cp 4:call nz,&BE00
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:cp 4:call nz,&BE00
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:cp 8:call nz,&BE00
+          call io_read_line:call c,&BE00 ; Expect nC.
+
+          ld hl,buf_test
+          ld de,.ref1
+          ld bc,4
+          call compare
+          ld hl,buf_test+4
+          ld de,.ref2
+          ld bc,4
+          call compare
+          ret
+
+.filenoeof2 BYTE "dummy2",0
+      WORD -1           ; mimic 'size not known'
+.ref1 BYTE "tutu",&0D,&0A
+      BYTE &0D,&0A      ; mustn't stop at empty line!
+.ref2 BYTE "titi",0
+
+
+test_fileinsize
+          NRT_OPEN(.file)
+
+          ld a,14:call check_infilesize
+          ld de,buf_test
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:or a:call nz,&BE00
+          ld a,12:call check_infilesize
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:or a:call nz,&BE00
+          ld a,10:call check_infilesize
+          call io_read_line:call nc,&BE00 ; Expect C.
+          ld a,e:cp 8:call nz,&BE00
+          ld a,0:call check_infilesize
+          call io_read_line:call c,&BE00 ; Expect nC.
+          ret
+
+.file BYTE "dummy2",0
+      WORD 14
+          2 ** BYTE &0D,&0A
+      BYTE "peperoni",&0D,&0A,0
+
+check_infilesize
+          call get_amsdos_pivot
+          cp (iy+az_infilesize)
+          call nz,&BE00
+          ret
+
+; --------------------
+
+clear_buf_test
+          ld hl,buf_test
+          ld de,buf_test+1
+          ld bc,&10FF
+          ld (hl),0
+          ldir
+          ret
+
+
+put_deci_hl
+;stocke hl en decimal
+;
+          push bc
+          ld bc,10000
+          call pwfigno0
+          ld bc,1000
+          jr nz,pwdec4
+          call pwfigno0
+          ld bc,100
+          jr nz,pwdec3
+          call pwfigno0
+          ld a,l
+          ld b,10
+          jr nz,ddec100
+          jr put_dec_
+pwdec4
+;>=10000 il faut afficher nombre des 1000
+;
+          call pwfig
+          ld bc,100
+pwdec3
+          call pwfig
+          ld a,l
+          ld b,10
+          jr ddec100
+;
+pwfig
+          xor a
+pwfigwf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfigwf
+;
+          add hl,bc
+          dec a
+          or &30
+          ld (de),a
+          inc de
+          ret
+;
+pwfigno0
+          xor a
+pwfn0wf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfn0wf
+          add hl,bc
+          dec a
+          ret z
+;
+          or &30
+          ld (de),a
+          inc de
+          or &30        ;force nz
+          ret
+
+put_dec_
+          call dpfigno0
+          jr ddecunit
+ddec100
+;>=100 il faut afficher nombre des dizaines
+;
+          call dpfig
+ddecunit
+          or &30
+          ld (de),a
+          inc de
+          pop bc
+          ret
+dpfig
+          ld c,-1
+dpfigwf
+          inc c
+          sub b
+          jr nc,dpfigwf
+          add b
+          ld b,a
+          ld a,c
+          or &30
+          ld (de),a
+          inc de
+          ld a,b
+          ret
+
+dpfigno0
+          ld c,-1
+dpfn0wf
+          inc c
+          sub b
+          jr nc,dpfn0wf
+          add b
+          ld b,a
+          ld a,c
+          and a
+          jr z,dpfn0ret
+;
+          or &30
+          ld (de),a
+          inc de
+          or &30        ;force nz
+          ld a,b
+          ret
+dpfn0ret
+          ld a,b
+          ret
+
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,&BE00
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+          ret
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,&30
+
+          ld a,(de)
+          or a
+          ret z
+          ld a,(hl)
+          or a
+          ret z
+          inc hl
+          inc de
+          jr compare_ntstr
+
+;===================================== 
+;            Mock routines
+;===================================== 
+
+mock_end = &FF
+
+      IF mock
+
+mock_in_open
+; Expect data to be put after filename+size
+          ld c,b:ld b,0:add hl,bc
+          ld a,(hl):or a:call nz,&BE00 ;sanity: NT string expected
+          inc hl
+          ld c,(hl):inc hl ; size from pseudo header.
+          ld b,(hl):inc hl
+          ld (mock_pnt+1),hl
+
+          call get_amsdos_pivot
+
+          ld (iy+az_inbufpos),l ; buffer
+          ld (iy+az_inbufpos+1),h
+; &800 buffer
+          ld (iy+az_inbufsize),0
+          ld (iy+az_inbufsize+1),0
+
+          ld (iy+az_infilesize),c
+          ld (iy+az_infilesize+1),b
+          ld (iy+az_infilesize+2),0
+
+          scf
+          ret
+
+
+mock_in_char
+; NB: since we call disc_in_char only at buffer start,
+    ; we cannot rely on C vs NC to inform the end is reached!
+    ; See read_in_line doc.
+
+          ld a,(iy+az_infilesize)
+          or (iy+az_infilesize+1)
+          or a:jr nz,mic_ok
+          inc a         ; NZ, NC
+          ret
+mic_ok
+          push hl
+mock_pnt  ld hl,0
+          ld a,(hl):inc hl
+          cp &1A:jr z,mock_eof
+          cp mock_end:jr z,mock_fail
+
+          push af
+          ld (mock_pnt+1),hl
+
+          ld (iy+az_inbufpos),l
+          ld (iy+az_inbufpos+1),h
+
+          ld l,(iy+az_inbufsize)
+          ld h,(iy+az_inbufsize+1)
+          ld a,l:or h:jr nz,mp_okbuf
+; Mimic buffer refill
+          ld hl,&0800
+mp_okbuf  dec hl
+          ld (iy+az_inbufsize),l
+          ld (iy+az_inbufsize+1),h
+
+          ld l,(iy+az_infilesize)
+          ld h,(iy+az_infilesize+1)
+; We know MSB <> 0
+          dec hl
+          ld (iy+az_infilesize),l
+          ld (iy+az_infilesize+1),h
+
+          scf:sbc a     ; Ok: c, nz
+          pop af
+          pop hl
+          ret
+
+mock_eof
+          xor a:inc a   ; nc, nz, a = &1a
+          ld (mock_pnt+1),hl
+          pop hl
+          ret
+
+mock_fail
+; mimic when bc80 meets end of (&80) record: nc, nz, a != &1a
+          xor a:inc a
+          pop hl
+          ret           ; Don't update pnt!
+
+mock_in_close
+mock_in_abandon
+          ld hl,mock_empty
+          ld (mock_pnt+1),hl
+;corrupt regs to detect wrong assumptions.
+          ld bc,&2345
+          ld de,&3456
+          ld hl,&ABCD
+          ret
+
+mock_empty BYTE mock_end
+      END
+
+;-----------------------------------------
+
+code
+      IF inRom
+      ORG codedest,$$
+      END
+
+err_opening = 255
+err_dos = 254
+err_unknown_filetype = 253
+err_unexpect_end = 252
+
+;----------------------------------
+io_read_line
+;--------------
+; Read line of text and expand tab! Until 0d/0a (replaced by 0)
+; TODO: replace tab by space instead or skip it altogheter.
+; Split at &d+&a or &d or &a if alone.
+;In: DE: Dest 
+    ;  C, NZ if OK.
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.                  
+;-----------
+
+          ld ix,irl_read
+          jr read_common
+
+io_read_line_clipped
+;--------------
+; Like io_read_line but clip
+;In: DE: Dest
+   ; B: Size (including final 0, added if clip). 0 = 256
+    ;  C, NZ if OK (not clipped)
+    ;  C,  Z if OK (clipped)
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.                  
+;-----------
+
+          ld ix,irl_read_clipped
+          jr read_common
+
+
+;----------------------------------
+io_read_bloc_hl
+;--------------
+;Same than io_read_bloc, but dest == hl
+          ex de,hl
+io_read_bloc
+;-----------
+;in : bc=size, de=dest
+;out:
+    ;  C, NZ if OK: (bc bytes read)
+    ; NC, NZ if past the end (EOF).
+    ; NC,  Z if error.
+; Hence, NZ means all bytes from de.in to de.out (excluded) are valid.
+    ; de: past last byte written.
+    ; bc, hl preserved. IX corrupt.
+
+    ; Calling this routine with bc=1 differs from disc_in_char:
+        ; - A is trashed! Byte is set in (de) instead.
+        ; - Only return EOF (NC, NZ) at the end of the file,
+          ; *not* when 1A is met (because it's perfectly valid in bin) 
+        ; - Continue to return NC, NZ past EOF.
+        ; - In case of error, az_inbufsize state is wrong. 
+
+          ld ix,irb_read
+
+read_common
+; Same template for bloc / line
+
+          push bc:push hl
+
+; Store infilesize, and update them at the end. Rationale:
+  ; - If pre-updated too soon to 0, &bc80 wouldn't load anything.
+  ; - We don't know if &bc80 will be called or not (changing infilesize)
+          call get_amsdos_pivot
+          ld l,(iy+az_infilesize)
+          ld h,(iy+az_infilesize+1)
+          ld a,(iy+az_infilesize+2)
+          push af:push hl
+
+; We pass AHL and BC=size to read.
+          call jp_ix
+
+; Here BC = size to read (bloc) or size read (line)
+          pop hl:pop ix
+          push af       ; Flags 
+
+          ld a,ixh
+          or a:sbc hl,bc:sbc 0
+; No overflow detection:
+   ; * For irb_read (bloc): clipping already done.
+   ; * For irl_read (line): cannot reach past &1a
+
+          ld (iy+az_infilesize),l
+          ld (iy+az_infilesize+1),h
+          ld (iy+az_infilesize+2),a
+
+          pop af
+          pop hl:pop bc
+          ret
+
+      IF 0
+          sbc a:dec a   ; NZ without changing Carry
+          ccf           ; NC if past EOF
+      BYTE 6            ; Hack to skip xor_a:  LD b,&af
+read_err
+          xor a         ; NC, Z: error
+          pop hl:pop bc
+          ret
+      END
+;----------------------------
+irb_read
+; in: ahl = infilze
+    ;  bc = size to read
+;out:  bc = size read
+    ;  Flags: like io_read_bloc
+    ;  C, NZ if OK: (bc bytes read)
+    ; NC, NZ if read past the end (DE points past last byte).
+    ; NC,  Z if error.
+    ; 
+
+; bc=min(bc, remaining size)
+          or a:sbc hl,bc:sbc 0
+          jr nc,irb_not_eof
+          add hl,bc
+          ld c,l:ld b,h
+irb_not_eof
+          push af
+          push bc
+          call irb_loop
+          pop bc
+          jr nc,irb_err
+          pop af
+          sbc a:dec a   ; NZ without touching Carry
+          ccf           ; NC if EOF
+          ret
+
+irb_err
+          pop af
+          xor a         ; NC, Z
+          ret
+
+irb_loop
+;in : bc=size
+;out : C if ok. NC if error (EOF not dealt here)
+
+          ld a,c
+          or b
+          jr z,irb_copydone
+
+          ld l,(iy+az_inbufsize)
+          ld h,(iy+az_inbufsize+1)
+          ld a,l
+          or h
+          jr nz,irb_okbuf
+
+irb_refill
+;Refill buffer
+          call disc_in_char
+          jr nc,irb_checkchar
+
+irb_okchar
+          ld (de),a
+          inc de
+          dec bc
+          jr irb_loop
+
+irb_checkchar
+; Discriminate EOF from real error
+          cp &1A        ;EOF ?
+          jr z,irb_okchar ;Do not ret, then.
+          or a          ;NC
+          ret
+
+irb_okbuf
+          or a
+          sbc hl,bc
+          jr c,irb_eobuf
+; Everying already in buffer
+
+irb_copybloc
+; A preserved
+          ld (iy+az_inbufsize),l
+          ld (iy+az_inbufsize+1),h
+
+          ld l,(iy+az_inbufpos)
+          ld h,(iy+az_inbufpos+1)
+          ldir
+          ld (iy+az_inbufpos),l
+          ld (iy+az_inbufpos+1),h
+irb_copydone
+          scf
+          ret
+
+irb_eobuf
+; We consume remaining of buffer.
+
+          push hl       ; - size out of buf
+          add hl,bc     ;buf left
+          ld c,l
+          ld b,h
+          xor a:ld l,a:ld h,a ; must reset inbufsize for bc80 to trigger
+          call irb_copybloc
+      IF dev_asserts
+          or a:call nz,&BE00 ; we rely on xor a above.
+      END
+          pop bc
+          sub c:ld c,a
+          sbc a:sub b:ld b,a ; bc = -bc
+      IF dev_asserts
+          ld a,c:or b:call z,&BE00 ; BC > 0
+      END
+          jr irb_refill
+
+; ---------------------------------
+
+irl_read
+; Copy/pasted to irl_read_clipped
+; in: N/A
+;out:  bc = size read 
+    ; Flags like io_read_line
+    ;  C, NZ if OK.
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.
+
+          ld ix,0       ; count read bytes
+          call irl_get_az
+          call irl_loop
+          push ix:pop bc
+          ret
+
+irl_next
+          inc de
+irl_loop
+    ; Flags like io_read_line
+    ;  C, NZ if OK.
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.
+
+          call irl_read_next:jr nc,irl_nc
+          ld (de),a
+; Unlike disc_in_char, irl_read_next can return Carry and A=&1a,
+; since we simply peek in the buffer. 
+          or a:jr z,irl_eof ; sanity when no eof
+          cp &1A:jr z,irl_eof
+          jr nc,irl_next ; shortcut [optim]
+          cp &0D:jr z,irl_0d
+          cp &09:jr z,irl_tab
+          cp &0A:jr nz,irl_next
+irl_eol
+          call irl_update_az
+          xor a
+          ld (de),a
+          scf:sbc a     ; C, NZ
+          ret
+
+irl_0d
+; flag end of string right now, in case irl_read_next short-circuit.
+; (e.g. 0d, 1a at end of file)
+          xor a:ld (de),a
+
+          call irl_read_next:jr nc,irl_nc
+; IF &0A: eat it, 
+          cp &0A
+          jr z,irl_eol
+
+;0D alone : 'put back' chr
+          dec hl
+          inc bc
+          jr irl_eol
+
+irl_tab
+          push bc
+          ld b,8
+          ld a," "
+itab_lp
+          ld (de),a
+          inc de
+          djnz itab_lp
+          pop bc
+          jr irl_loop
+
+irl_read_clipped
+; !! Copy/past from irl_read
+; in: N/A
+;out:  bc = size read 
+    ; Flags like io_read_line
+    ;  C, NZ if OK.
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.
+
+          ld ix,0       ; count read bytes
+          call irl_get_az
+          call irl_loop_clipped
+          push ix:pop bc
+          ret
+
+irl_next_clipped
+          inc de
+irl_loop_clipped
+    ; Flags like io_read_line
+    ;  C, NZ if OK.
+    ; NC, NZ if EOF met.
+    ; NC,  Z if error.
+
+          call irl_read_next:jr nc,irl_nc
+          ld (de),a
+; Unlike disc_in_char, irl_read_next can return Carry and A=&1a,
+; since we simply peek in the buffer. 
+          or a:jr z,irl_eof_clipped ; sanity when no eof
+          cp &1A:jr z,irl_eof
+          jr nc,irl_next_clipped ; shortcut [optim]
+          cp &0D:jr z,irl_0d_clipped
+          cp &09:jr z,irl_tab_clipped
+          cp &0A:jr nz,irl_next_clipped
+          jr irl_eol
+
+irl_0d_clipped
+; flag end of string now, in case irl_read_next_clipped short-circuit.
+; (e.g. 0d, 1a at end of file)
+          xor a:ld (de),a
+
+          call irl_read_next:jr nc,irl_nc
+; IF &0A: eat it, 
+          cp &0A
+          jr z,irl_eol
+
+;0D alone : 'put back' chr
+          dec hl
+          inc bc
+          jr irl_eol
+
+irl_tab_clipped
+          push bc
+          ld b,8
+          ld a," "
+.lp
+          ld (de),a
+          inc de
+          djnz .lp
+          pop bc
+          jr irl_loop_clipped
+
+
+irl_read_next
+; Consume buffer and handle refill.
+          ld a,c
+          or b
+          ld a,(hl)     ; presume it's ok
+          inc hl
+          dec bc
+          scf
+          ret nz
+; Refill
+          dec hl
+          inc bc
+          call irl_update_az
+          push ix
+          call disc_in_char
+          pop ix
+          jr nc,irl_get_az
+          inc ix        ; one more byte read (only if Carry)
+; enchaine
+irl_get_az
+          ld l,(iy+az_inbufpos)
+          ld h,(iy+az_inbufpos+1)
+          ld c,(iy+az_inbufsize)
+          ld b,(iy+az_inbufsize+1)
+          ret
+
+irl_update_az
+          ld (iy+az_inbufpos),l
+          ld (iy+az_inbufpos+1),h
+          ld l,(iy+az_inbufsize)
+          ld h,(iy+az_inbufsize+1)
+          ld (iy+az_inbufsize),c
+          ld (iy+az_inbufsize+1),b
+; Diff in size = bytes read
+          or a:sbc hl,bc:ld c,l:ld b,h
+          add ix,bc     ; total read
+          ret
+
+
+irl_nc
+; If Z: error
+          ret z
+; Otherwise, consider as EOF (we cannot use &1A since some binary 
+; files like dams one doesn't have this sentinel).
+          jr irl_eof_   ; no &1a to put back here.
+
+irl_eof
+; disc_in_return. Put back &1a, so that next iteration can met it.
+; See below.
+; NB: That works after refill (hl=buf+1, bc=&7ff) 
+    ; or at end of buf (hl=buf+&800, bc = 0)
+          dec hl:inc bc
+irl_eof_
+          call irl_eol  ; update state (pnt, bytes read etc)
+; Now, if EOF met after some byte read, acts as a separator,
+; buf don't flag EOF yet so the line will be processed by the client!
+          ld a,ixl:or ixh:scf:ret nz ; c, nz
+; Flag EOF   
+          ld a,&1A      ; like &bc80. impexp expect that.
+          or a          ; nc, nz
+          ret
+
+
+;----------------------------------
+
+io_write_line
+;------------
+          call get_len
+          call io_write_bloc
+          ret nc
+
+          ld hl,io_eol
+          ld bc,2
+;Enchaine        
+
+io_write_bloc
+;in : bc=size (0 is fine), hl=source
+;OUT: Carry if ok
+
+          call get_amsdos_pivot
+
+          ex de,hl
+          ld l,(iy+az_outfilesize)
+          ld h,(iy+az_outfilesize+1)
+          ld a,(iy+az_outfilesize+2)
+          or a
+          adc hl,bc
+          adc 0
+          ld (iy+az_outfilesize),l
+          ld (iy+az_outfilesize+1),h
+          ld (iy+az_outfilesize+2),a
+
+iwb_copy
+;in : bc=size  de=source
+;out : !! hl=source+size,    flags comme disc_out_char
+
+          ex de,hl
+          ld a,c
+          or b
+          jr z,iwb_copydone
+
+          ex de,hl
+          ld l,(iy+az_outbufsize)
+          ld h,(iy+az_outbufsize+1)
+          ld a,h
+          xor &08
+          or l
+          jr nz,iwb_okbuf
+
+          ld a,(de)
+          inc de
+          call disc_out_char
+          ret nc
+          dec bc
+          jr iwb_copy
+
+iwb_okbuf
+          add hl,bc
+          ld a,h
+          cp 8
+          jr nc,iwb_eobuf
+
+          ld (iy+az_outbufsize),l
+          ld (iy+az_outbufsize+1),h
+
+iwb_copychunk
+          ld l,(iy+az_outbufpos)
+          ld h,(iy+az_outbufpos+1)
+          ex de,hl
+          ldir
+          ld (iy+az_outbufpos),e
+          ld (iy+az_outbufpos+1),d
+iwb_copydone
+          scf
+          sbc a
+          ret
+
+iwb_eobuf
+          push bc
+          or a
+          sbc hl,bc     ;previous pos
+          ld c,l
+          ld b,h
+          ld hl,&0800
+          or a
+          sbc hl,bc
+          ld c,l
+          ld b,h        ;size left
+          push bc
+
+          ld (iy+az_outbufsize),0
+          ld (iy+az_outbufsize+1),8
+
+
+          call iwb_copychunk
+          ex de,hl
+          pop bc        ;copied
+          pop hl        ;total
+          or a
+          sbc hl,bc
+          ld c,l
+          ld b,h
+          jr iwb_copy
+
+get_len
+; Longueur nt string (/0 not counted)
+
+;in: hl = nt string
+;out: bc=len, other registers preserved.
+
+          push af
+          push hl
+          xor a
+          ld c,a
+          ld b,a
+strl_lp
+          cp (hl)
+          inc hl
+          inc bc
+          jr nz,strl_lp
+
+          dec bc
+          pop hl
+          pop af
+          ret
+
+io_eol BYTE &0D,&0A
+
+io_write_header
+;in : hl=header
+    ; de=start
+    ; bc=len
+    ; ix=exec                         
+    ; a=type
+;out : bc & de preserved
+
+;make up header                          
+          push de
+          push bc
+          ld de,&4000
+          ld bc,&40
+          ldir
+          ex de,hl
+          pop bc
+          pop de
+          ld (hl),c
+          inc hl
+          ld (hl),b
+          inc hl
+          ld (hl),0     ; todo: xor A here
+          ld l,&12
+
+          ld (hl),a:inc hl ;file type
+          xor a
+      2 ** [ld (hl),a:inc hl]
+          ld (hl),e:inc hl:ld (hl),d:inc hl ;load adr
+          ld (hl),a:inc hl
+          ld (hl),c:inc hl:ld (hl),b:inc hl ;length
+          ld a,ixl:ld (hl),a:inc hl
+          ld a,ixh:ld (hl),a
+;compute checksum         
+          push bc:push de
+          xor a
+          ld l,a
+          ld bc,&4300   ;B: cpt What?
+chk_lp
+          add (hl)
+          inc hl
+          jr nc,$+3:inc c
+          djnz chk_lp
+          ld (hl),a:inc hl:ld (hl),c
+          ld bc,&80
+          ld l,b
+          call io_write_bloc
+          pop de
+          pop bc
+          ret
+
+get_amsdos_pivot
+          ld iy,(amsdos_offset)
+          push bc
+          ld bc,az_openout ;adr @ mi-chemin
+          add iy,bc
+          pop bc
+          ret
+
+jp_ix     jp ix
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      ELSE
+      SKIP buf_test-$   ; poor man's LIMIT buf_test
+      END
+codesize = $$-code
+
+;-----------------------------------------
+      IF inRom
+      ORG codedest2,$$
+
+code2 = $$
+
+   ;      BYTE "JPiou"      ;Jumps IO utils
+jp
+jumptable
+          jp io_read_bloc ;de:dest, bc:size
+          jp io_read_line ;de:dest, read until 0d/0a (replaced by 0)
+          jp io_write_bloc ;hl:source, bc:size
+          jp io_write_line ;hl:nt string (emit 0d/0a)
+          jp io_write_header
+          jp get_len
+
+hi2
+realsize2 = $$-code2
+      FILL limit2-$,&F7
+codesize2 = $$-code2
+
+      END
+

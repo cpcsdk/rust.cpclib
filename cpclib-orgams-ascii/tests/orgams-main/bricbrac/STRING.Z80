@@ -1,0 +1,132 @@
+inRom = 1
+
+; <<< String. Low-levels helper for string manipulation. >>>
+            ; (well, just copying for now)
+
+; TOC: 
+     ; get_len
+     ; copy_nt
+
+; 2025
+  ; -- GG Beta I --
+  ; Nov 25 v3:  [nochange] use bricmap.i
+; 2021
+  ; Nov 
+    ; 20  v2; get_len_clip form ed (is called LEN_STR there).
+    ; 20. v1: copy_nt from ed.
+            ; get_len from ch.
+
+      IMPORT "bricmap.i"
+
+      IF inRom
+      ORG &2000
+      IMPORT "burnrsx.o"
+      ENT burn
+
+rom   = &1C
+codedest = string
+limit = string_
+codedest2 = string_jp
+limit2 = search_jp
+
+; ========================================
+burn
+          ld ix,param_burn
+          call burn_rsx
+          ld ix,param_burn2
+          call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+      ELSE
+; Safety: meant to be imported by string.nrt
+      ENT $
+      BRK
+      END
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+;------
+get_len
+;------
+;In: HL= nt string
+;Out: A= size (without the \0)
+    ; All other register preserved.
+          push bc
+          push hl
+          ld b,-1
+gl_lp     inc b:ld a,(hl):inc hl:or a:jr nz,gl_lp
+          ld a,b
+          pop hl
+          pop bc
+          ret
+
+;-----------
+get_len_clip
+;-----------
+; Like get_len, must stop at max len (B).
+;IN: HL= NT chaine
+   ;  B= max longueur
+;OUT: A= longueur
+
+          push hl
+          push bc
+.lp
+          ld a,(hl)
+          or a
+          jr z,.ok
+          inc hl
+          djnz .lp
+.ok
+          ld a,l
+          pop bc
+          pop hl
+          sub l
+          ret
+
+
+;------
+copy_nt
+;------
+;in: HL=source, DE=dest
+          ld a,(hl)
+          ld (de),a
+          or a
+          ret z
+          inc hl
+          inc de
+          jr copy_nt
+
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp get_len
+          jp copy_nt
+          jp get_len_clip
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+

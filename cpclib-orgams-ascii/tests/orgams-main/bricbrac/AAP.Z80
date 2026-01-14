@@ -1,0 +1,2301 @@
+; <<<<<< Arbre A PIOU ! Sans arbre ! >>>>>>
+; Mapping label <-> idx
+
+;  !! Depend on IO and chunk.
+; Used by parse, disa, cue, impeva, and ??
+
+inRom = 1
+rom   = &1C
+use_free = 0            ; NOP now
+new   = 1
+BK_PORT = &7F           ; for NRT. TODO: check if used elsewhere
+
+; Structure mem: see /di_getkey/
+
+; TODO before any change!!!  Sanity check test_cross_bank is really
+; cross bank.    
+
+      IMPORT "bricmap.i"
+      IMPORT "memmap.i"
+      IMPORT "swapi.i"
+      IMPORT "const.i"  ; chunks_per_bk
+
+; ///// 2025 //////////////// 
+; --- HH Beta I ---
+  ; Dec 11 ba: Use chunks_per_bk from const.i (now = &40)
+ ; Nov 
+   ;26 ba: test_curbk: use memmap.vo_curbk
+; --- HH Beta 6 ---
+ ; Aug 
+   ;17 az: di_getkey* : reconnect bk_base in case of failure
+   ;15 ay: Add di_getkey_custom_pool for impeva
+   ;11 ax: [nochange] repair source. Add some ASSERTs
+; ///// 2024 //////////////// 
+; ---- GG Beta C ----
+ ; Oct            
+   ;14 aw: di_get_custom: must reset BC as well
+   ; 8 av: Remove check in di_store (now checked staticaly)
+         ; Use const.i
+   ; 6 au: Expose di_get_custom (for fast impeva.o)
+         ; use bricmap.i
+
+; ///// 202x //////////////// 
+    ; 17 at: s/di_free/di_reset  (since we chain with di_init)
+; Nov 15 as: Remove debugging hook in di_save.
+           ; -> Fix bug #12e
+
+    ; 22 ar: Expose /aap_next_chunk/ for cue
+; Oct  2 aq: Limit at c950 (bitset)
+           ; Factorize and expose /connect_id/ 
+
+; Jun 27 ap: Add /check_valid/. Rationale:
+             ; - fail fast to help debugging (asserts are good for you)
+             ; - better memory corruption detection after other program
+           ; Split (again) since no more room
+           ; [clean-up] Remove testinrom
+
+; 19 ao: /store/restore/ for org_select
+   ; an: Export/Import
+; 11 am: [revision]
+       ; Fix /test_cross_bank/
+   ; al: Use chunk for /pool/ (needed for multifile)
+       ; Simplify di_getkey (since stack isn't in bank, even for trace)
+       ; Clean unreached code (copy/paste residue)
+       ; Clean push/pop iy
+       ; Use di_free rather than nrt_init to exerce relocation.
+     ; ak: Move /vaap/ before /meta_index/ so all state is grouped.
+     ; aj: Adapt NRTs (chunk_init_custom now takes HL)
+         ; Move Progress Bar.
+         ; Introduce /di_free/.
+     ; ai: Fix test_curbk by using generic insert_new_chunk_connect
+         ; !!Requires chunkj
+     ; ah: Add test_curbk
+         ; Progress bar for load/save (instead of '.....')
+           ; -> so we do have to reconnect base_bk to call disp.
+           ; -> hence no need to track 'thisbk'.  
+
+     ; ag: Remove di_set (requires parsebd)
+
+     ; af: Only test appending! (deprecate di_set)
+         ; Remove dev breakpoints.
+         ; Expose di_append_or_get and di_get_symbols#.
+         ; Oups!! No: parse cannot use that since in command mode,
+                    ; unknown labels mustn't be registered.
+dgoa  = 0
+
+     ; ae: Accept appending (see test_append for rationale).
+
+     ; ad: Export/import
+         ; Move from f480 to f460
+         ; Remove vo_savesp setup: cleaner and more generic.
+                          ; NB chunk doesn't use it as well.
+         ; Use dispatch for testinrom (WIP! No tested)
+         ; !! Requires chunkh for proper vo_thisbk setup.
+
+     ; ac: Get rid of org-related tests.
+         ; * Neater source.
+         ; * Covered by org tests.  
+
+     ; ab: Don't use sy_* anymore. We count # of labels ourselves.
+         ; That makes aap more generic.
+         ; By the way, isolate tests that need org (cf use_org).
+
+     ; aa: di_load returns label#. Needed for orgck (to pass to sy_init)
+
+      ; z: Do not call sy_init anymore: we want to loosen the 
+           ; dependency. org_init do it instead.
+
+;Mar 31 y: reprise. Remove label_index: use new_chunk for index chunks.
+         ; Adapt test_memoryfull etc.
+         ; move from f4ca to f480
+
+  ; TODO: simplify /aap_append_key/ since HL out of bank (check that).
+
+  ; TODO[p3]: remove display routines used by nrts. 
+  ; TODO: fix 'chead_last' in case of failure (cf test_memoryfull)
+  ; TODO: check state in case of failure (test_memoryfull_load)
+  ; TODO: Adapt interface to actual behavior (append = sy_new+di_set)
+  ; TODO: failure mecanism from monogoms (di_get)...
+  ; TODO: Who should free chunks reserved by sy_new/di_set
+        ; for now: org_init does
+  ; TODO: check bk connection when memory full is returned
+
+
+      ORG 0:BRK
+
+      ORG &3000
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+;--------------------------------------
+      MACRO ASSERT pred
+      IF pred:ELSE
+ !! f ail
+      END
+      ENDM
+;--------------------------------------
+
+io_buf = &8800          ;di_load / save (<> buf for amsdos)
+
+max_symbols = &0600
+index_per_chunk = &0100/2
+
+meta_index = aap_chunk_index
+meta_index# = max_symbols / index_per_chunk
+meta_index_ = meta_index + [meta_index#*2]
+          ASSERT(vaap == &6FE4) ; shared ? 
+          ASSERT(aap_chunk_index == &6FE8) ; shared ? 
+          ASSERT(meta_index_-1/&0100 == meta_index/&0100) ; confined
+          ASSERT($ <= sources_index)
+
+io_tmp_lab_buf = &7B00
+
+nrt_buf = &2000
+nrt_getkey = &2010
+v_savesp = &20FE        ;todo: remove, unused
+nrt_iobuf = &2100
+
+codedest = aap2
+limit = chunk2
+codedest4 = aap         ; &c900
+limit4 = txtfirm
+codedest3 = aap_jp
+limit3 = asset_jp
+codedest2 = aap_jp2
+limit2 = screen_jp2
+codedest1 = aap_jp1
+limit1 = chunk_jp
+codedest5 = aap_jp3
+limit5 = unknown_jp
+
+; ===== In this rom ======
+
+check = &FEE8
+check_linked_list = check
+check_id0_de = check+3
+
+chunk = &FE00
+new_chunk_no_init = chunk+9
+insert_new_chunck_connect = chunk+12
+ ; in: hl=id
+;new_chunk = chunk+15
+; next_aapchunk = chunk+18 ; Out: hl=chunk start (+4), a=bk
+free  = chunk+24
+freelist = chunk+27
+
+connect_chunk = chunk+36 ; In: hl=id
+connect_next = chunk+39
+; In:  h points in chunk (connected)
+; Out: hl=id next (Nz) or unchanged (Z)
+
+goto_end = chunk+42     ; In: hl=id. Out: Chunk connected, BC= length.
+connect_bk_base = chunk+21 ; All registers saved
+chunk_get_free# = chunk+30 ; for nrt
+chunk_init_custom = chunk+33 ; for nrt
+
+
+io    = &FFCE
+io_load_bloc = io
+io_save_bloc = io+6
+
+err_mess = 255          ;TODO: check that
+
+err_memory_full = 251
+
+err_too_many_labels = 239
+err_labels_full = 238
+;err_empty_key = 237
+;err_update_not_supported = 236
+
+      IF use_free
+org_free !! todo      ;in: HL: amorce in bk base (not freed itself)
+      END
+
+      IF inRom
+burn
+          ld ix,param_burn:call _burn
+          ld ix,param_burn1:call _burn
+          ld ix,param_burn2:call _burn
+          ld ix,param_burn3:call _burn
+          ld ix,param_burn4:call _burn
+          ld ix,param_burn5:call _burn
+          call &BB06
+          ret
+_burn
+
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn1
+      WORD rom
+      WORD codesize1
+      WORD codedest1
+      WORD code1
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+param_burn4 WORD rom,codesize4,codedest4,code4
+param_burn5 WORD rom,codesize5,codedest5,code5
+      END
+
+;;;;;;;; routines nrt ;;;;;;;;;;;;;;
+tests
+          call nrt_init
+      IF 1
+          call test_get
+          call test_append
+          call test_get_symbol#
+          call test_cross_bank
+      IF dgoa
+          call test_get_or_append
+      END
+          call test_unknown_key
+          call test_unknown_label
+
+          call test_free
+
+          call test_end_of_chunk
+          call test_curbk
+          call test_memoryfull
+          call test_memoryfull1
+          call test_free1
+          call test_free2
+
+          call test_overlap ; after test_memoryfull (sanity check)
+      END
+; this test exerce load
+          call test_memoryfull_load
+
+; these tests exerce save/load
+          call nrt_init ;  previous test restrained # of chunks
+          call test_full_buf
+          call test_full_buf2
+          call test_overlap_next ; after test_full_buf2 
+          call dict_test
+          call numb_test
+          ret
+
+;TODO: remove those aliases
+nrt_di_init = di_init
+nrt_di_get = di_get
+nrt_di_getkey = di_getkey
+nrt_di_load = di_load
+nrt_di_save = di_save
+      IF dgoa
+nrt_di_get_or_append = di_get_or_append
+      END
+nrt_di_get_symbols# = di_get_symbols#
+nrt_di_append = di_append
+
+nrt_init
+;Must be called first. Also used to reclaim chunks,
+; since di_init doesn't do that yet.
+
+bk_nrt = &C7
+nb_chunks = &30
+          ld a,bk_nrt
+          ld hl,nb_chunks
+nrt_init_custom
+;In:  a= bk
+   ; hl= nb chunks 
+          push af:push hl
+          ld c,rom:call &B90F
+          pop hl:pop af
+          push af
+          call chunk_init_custom
+          call di_init
+          call check_valid
+          call nc,&BE00
+          pop af
+          ld b,&7F:out (c),a
+          ret
+
+put_deci_hl
+;store "hl" en decimal
+;
+          push bc
+          ld bc,10000
+          call pwfigno0
+          ld bc,1000
+          jr nz,pwdec4
+          call pwfigno0
+          ld bc,100
+          jr nz,pwdec3
+          call pwfigno0
+          ld a,l
+          ld b,10
+          jr nz,ddec100
+          jr put_dec_
+pwdec4
+;>=10000 il faut afficher nombre des 1000
+          call pwfig
+          ld bc,100
+pwdec3
+          call pwfig
+          ld a,l
+          ld b,10
+          jr ddec100
+
+pwfig
+          xor a
+pwfigwf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfigwf
+
+          add hl,bc
+          dec a
+          or &30
+          ld (de),a
+          inc de
+          ret
+;
+pwfigno0
+          xor a
+pwfn0wf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfn0wf
+          add hl,bc
+          dec a
+          ret z
+;
+          or &30        ;force nz also
+          ld (de),a
+          inc de
+          ret
+;
+put_deci_a
+          push bc
+          ld b,100
+          call dpfigno0
+          ld b,10
+          jr nz,ddec100
+put_dec_
+          call dpfigno0
+          jr ddecunit
+ddec100
+;>=100 il faut afficher nombre des dizaines
+;
+          call dpfig
+ddecunit
+          or &30
+          ld (de),a
+          inc de
+          pop bc
+          ret
+dpfig
+          ld c,-1
+dpfigwf
+          inc c
+          sub b
+          jr nc,dpfigwf
+          add b
+          ld b,a
+          ld a,c
+          or &30
+          ld (de),a
+          inc de
+          ld a,b
+          ret
+;
+dpfigno0
+          ld c,-1
+dpfn0wf
+          inc c
+          sub b
+          jr nc,dpfn0wf
+          add b
+          ld b,a
+          ld a,c
+          and a
+          jr z,dpfn0ret
+;
+          or &30
+          ld (de),a
+          inc de
+          or &30        ;force nz
+          ld a,b
+          ret
+dpfn0ret
+          ld a,b
+          ret
+;
+
+
+display_nl
+          push af
+          ld a,10
+          call &BB5A
+          ld a,13
+          call &BB5A
+display_ret
+          pop af
+          ret
+
+display_text_nt
+          push af
+display_text_nt_lp
+          ld a,(hl)
+          inc hl
+          or a
+          jr z,display_ret
+          call &BB5A
+          jr display_text_nt_lp
+
+
+display_text
+;inline. HL conserve
+          ex (sp),hl
+          call display_text_nt
+          ex (sp),hl
+          ret
+
+
+display_hexa_hl
+          push af
+          ld a,h
+          call display_hexa_a
+          ld a,l
+          call display_hexa_a
+          pop af
+          ret
+
+display_hexa_a
+          push af
+          push af
+          rrca
+          rrca
+          rrca
+          rrca
+          call display_hexa_q
+          pop af
+          call display_hexa_q
+          pop af
+          ret
+
+display_hexa_q
+;
+          and &0F
+          or a
+          daa
+          add &F0
+          adc &40
+          jp &BB5A
+
+nt_skip
+          ld a,(hl)
+          inc hl
+          or a
+          jr nz,nt_skip
+          ret
+
+
+check_id_nrt
+          ld a,l:and &C4:cp &C4:call nz,&BE00
+          ld a,h:and &C0:cp &40:call nz,&BE00
+          ret
+
+compare_hl_de
+          push hl
+          or a
+          sbc hl,de
+          pop hl
+          ret
+
+
+compare_text
+;do not display error : caller will display whole string
+          ld a,(de)
+          cp (hl)
+          ret nz
+          or a
+          ret z
+          inc de
+          inc hl
+          jr compare_text
+
+
+;;;;;;;; nrt         ;;;;;;;;;;;;;;
+
+test_get
+; Simple set/get test.  
+          call nrt_init ; test depends on bk_nrt
+          call _test_get
+          call di_reset
+          call _test_get
+          ret
+
+_test_get
+;Internal check: meta_index is cleared.
+          ld hl,(meta_index):ld a,l:or h:call nz,&BE00
+
+          ld hl,dummy_key
+          call nrt_di_append:call nc,&BE00
+
+; Internal check: meta_index setup with new chunk. 
+          ld hl,(meta_index)
+          call check_id_nrt
+; 1st pool chunk: 1st index must be 0.
+          ld b,&7F:out (c),l
+          ld l,0
+          ld a,(hl):inc l:or (hl):call nz,&BE00
+          ld bc,&7F00+bk_nrt:out (c),c
+
+; Check the entry is there.
+          ld hl,dummy_key
+          call nrt_di_get:call nc,&BE00
+          ld a,e:or d:call nz,&BE00
+          ret
+
+dummy_key BYTE "laurette",0
+dummy_key_ = $-dummy_key - 1
+
+
+test_append
+          call di_reset
+
+          ld hl,dummy_key2
+          call nrt_di_append:call nc,&BE00
+
+; Check the entry is there.
+          ld hl,dummy_key2
+          call nrt_di_get:call nc,&BE00
+          ld a,e:or d:call nz,&BE00
+          ret
+
+dummy_key2 BYTE "jean",0
+
+      MACRO CHECK_FREE n
+          call chunk_get_free#
+          push de:ld de,n:or a:sbc hl,de:add hl,de:pop de:call nz,&BE00
+      ENDM
+
+test_free
+; Check all chunks are freed when calling di_free (hot reset).
+          call nrt_init
+          call _test_free
+          call di_reset
+          call _test_free
+          ret
+
+_test_free
+; Sanity check.
+          CHECK_FREE(nb_chunks-1) ; 1 already preallocated
+
+          ld bc,0
+          call nrt_fill_labels
+
+; Sanity check: nb free chunks must have changed!
+          call chunk_get_free#
+          ld de,nb_chunks:or a:sbc hl,de:add hl,de:call z,&BE00
+
+          call di_reset
+; proper check      
+          call chunk_get_free#
+          CHECK_FREE(nb_chunks-1) ; 1 still preallocated (reset)
+          ret
+
+
+test_get_symbol#
+
+          call di_reset
+
+          call nrt_di_get_symbols#
+          ld a,l:or h:call nz,&BE00
+
+          ld bc,0
+          call nrt_fill_labels
+          ret
+
+test_cross_bank
+; Labels not properly copied when crossing bank
+          ld a,&CF      ; we want to reach c7
+          ld hl,chunks_per_bk + 2
+          call nrt_init_custom
+          call occupy_bank
+labperchu = 32          ; last one incomplete
+          ld b,labperchu
+          ld c,0
+          ld hl,dummy_key
+          call tgs#_lp
+
+          ld de,labperchu-1 ; last one (cross bank)
+          ld hl,dummy_key
+          call nrt_check_label
+          ret
+
+nrt_fill_labels
+; Add labels and check we get consecutives fresh ids.
+
+;in: C=ref id (0 for empty dict) 
+   ; B=nb labels to add (0= 256)
+          ld hl,dummy_key2
+tgs#_lp
+          push hl
+          call nrt_di_get_symbols#
+          ld a,l:cp c:call nz,&BE00
+          ld a,h:or a:call nz,&BE00
+          pop hl
+
+          push bc:push hl
+; We add the same key. not an issue here
+          call nrt_di_append:call nc,&BE00
+          pop hl:pop bc
+; Tant qu'on y est, check we get the id
+          ld a,e:cp c:call nz,&BE00
+          ld a,d:or a:call nz,&BE00
+
+          inc c
+          djnz tgs#_lp
+          ret
+
+      MACRO CHECK_AOG key,id,found
+          ld hl,key
+          call nrt_di_get_or_append:call nc,&BE00
+      IF found
+          call nz,&BE00 ; Z expected when found
+      ELSE
+          call z,&BE00
+      END
+          ld hl,id:or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+;-----
+      IF dgoa
+test_get_or_append
+
+          call di_free
+
+          CHECK_AOG(dummy_key,0,0)
+          CHECK_AOG(dummy_key,0,1)
+
+          call nrt_di_get_symbols#
+          ld a,l:or h:cp 1:call nz,&BE00
+
+          CHECK_AOG(dummy_key2,1,0)
+          CHECK_AOG(dummy_key2,1,1)
+          CHECK_AOG(dummy_key,0,1)
+          CHECK_AOG(dummy_key2,1,1)
+
+          call nrt_di_get_symbols#
+          ld a,l:or h:cp 2:call nz,&BE00
+          ret
+      END
+
+;-------------------------------
+
+dict_test
+          call di_reset
+          ld hl,data_test
+test_loop
+          ld a,(hl)
+          or a
+          jp z,test_exit
+
+   ;reset dict !
+          push hl
+          call di_reset
+          pop hl
+
+          call display_text
+      BYTE "Test:"
+      BYTE 0
+          call display_hexa_hl
+          ld a,":"
+          call &BB5A
+
+;set key,values
+          push hl
+          ld de,0
+tst_set
+          ld a,(hl)
+          or a
+          jr z,tst_set_end
+
+          push hl
+          call display_text_nt
+          ld a,","
+          call &BB5A
+          pop hl
+
+          push de
+
+          push de
+          push hl
+
+;cpt       ld   a,2:dec  a:ld   (cpt+1),a:call z,&BE00
+
+          call nrt_di_append
+          call nc,&BE00
+          pop hl
+          pop de
+  ;check back right now
+
+          push hl
+          push de
+
+          push hl
+          push de
+
+          call nrt_di_get
+          call nc,&BE00
+          pop hl
+          call compare_hl_de:call nz,&BE00
+          pop hl
+
+  ;check again after save/load sequence
+
+          pop de
+          push de
+          call nrt_saveload
+          pop de
+          pop hl
+
+          push hl
+          push de
+          call nrt_di_get
+          call nc,&BE00
+          pop hl
+          call compare_hl_de:call nz,&BE00
+          pop hl
+
+          call nt_skip
+          pop de
+          inc de
+          jr tst_set
+
+tst_set_end
+          pop hl
+
+          call display_nl
+
+          ld c,e:ld b,d:dec bc ; nb labels - 1
+;now read back values for each key
+          ld de,0
+tst_get
+          ld a,(hl)
+          or a
+          jr z,tst_get_end
+
+          push bc
+
+          push hl
+          call display_text_nt
+          pop hl
+          ld a,"?"
+          call &BB5A
+
+          push hl
+          push de
+
+          ld e,c:ld d,b
+          call nrt_saveload
+          pop de
+          pop hl
+
+          push hl
+          push de
+          call nrt_di_get
+          call nc,&BE00
+
+          pop hl
+          call compare_hl_de:call nz,&BE00
+          ex de,hl
+
+          pop hl
+          call nt_skip
+          inc de
+          pop bc
+          jr tst_get
+tst_get_end
+          inc hl
+
+test_next
+          call display_nl
+          jp test_loop
+
+test_exit
+          ret
+
+nrt_saveload
+; in: de=nb labels -1
+          inc de
+          push de
+
+          ld hl,nrt_iobuf
+          ld (varnrt_buf),hl
+          call nrt_di_save
+          call nc,&BE00
+          ld de,(varnrt_buf)
+          ld a,(bc):or a:call nz,&BE00
+          ld h,b:ld l,0 ; copy rest
+          ld b,0
+          inc bc
+          ldir
+
+;count manually nb labels       
+          ld hl,nrt_iobuf
+          ld bc,0
+nrt_cpt   ld a,(hl):or a:jr z,nrt_cpt_
+nrt_skip  bit 7,(hl):inc hl:jr z,nrt_skip
+          inc bc
+          jr nrt_cpt
+nrt_cpt_
+          pop hl
+          push hl
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+; Needed to free chunks
+          call di_reset
+
+          ld hl,nrt_iobuf:ld (varnrt_buf),hl
+          ld hl,nrt_fillbuf:ld (nrt_hook+1),hl
+          call nrt_di_load
+          call nc,&BE00
+          ld a,b:cp io_buf/&0100:call nz,&BE00
+          ld a,c:or a:jr z,nrt_notest
+ ; can only check that if buf hasn't just be refilled
+          dec c:ld a,(bc):or a:call nz,&BE00
+nrt_notest
+
+          call nrt_di_get_symbols#
+          pop de
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+nrt_infinitebuf
+          ld l,e:ld h,d
+          ld (hl),"p":inc l
+          ld (hl),"q"+&80
+          inc e:inc e
+          dec l
+          ld bc,&FE:ldir
+          ret
+
+nrt_storebuf
+;in:hl=buf
+          ld de,(varnrt_buf)
+          ld a,d:cp &2F:call z,&BE00 ; overflow
+          ld bc,&0100
+          ldir
+          ld (varnrt_buf),de
+          scf
+          ret
+
+nrt_hook  jp nrt_fillbuf
+
+nrt_fillbuf
+;in:de=buf, bc=size
+          ld hl,(varnrt_buf)
+          ldir
+          ld (varnrt_buf),hl
+          ld a,33       ; modified for test purpose
+          ret
+
+varnrt_buf WORD 0
+
+test_unknown_label
+          call di_reset
+          ld hl,nrt8
+          call nrt_di_get
+          call c,&BE00
+          ret
+
+test_unknown_key
+          call di_reset
+          ld de,10
+          ld hl,nrt_buf ; safety, unused
+          call nrt_di_getkey
+          call c,&BE00
+          ret
+
+
+test_end_of_chunk
+;fin label coincide avec end of chunck
+          call di_reset
+          call nrt_full_chunk
+          ld de,nrt_max_per_chunk
+          call teoc_check
+
+;one more (next chunk)
+          ld a,"v":ld (nrt12+11),a
+          call teoc_set
+          ld de,nrt_max_per_chunk+1
+          call teoc_check
+;previous is still ok
+          ld a,"u":ld (nrt12+11),a
+          ld de,nrt_max_per_chunk
+          call teoc_check
+          ret
+
+test_curbk
+; Ensure curbk isn't modified when aap allocates new chunk.
+
+ ; We want to reach C7
+ ; 1 addition chunk for symb, another for aap.
+chunk_offset = &40
+          ld a,&CF
+          ld hl,chunks_per_bk + 2
+          call nrt_init_custom
+
+; Mimic seek_source_begin (use invalid marker on purpose). 
+          ld a,&AA:ld (va_curbk),a
+
+          call occupy_bank
+          ld b,48
+tcb_lp
+          push bc
+; Add same key, nevermind
+          ld hl,dummy_key
+          call di_append:call nc,&BE00
+          pop bc
+          djnz tcb_lp
+
+          ld a,(va_curbk):cp &AA:call nz,&BE00
+          ret
+
+occupy_bank
+; reserve all chunks from bank so that next allocate chunk will be
+; in new bank.
+oblp
+          call new_chunk_no_init:call nc,&BE00
+          ld a,h:cp chunk_offset+chunks_per_bk - 1
+          jr nz,oblp
+          ret
+
+
+
+nrt_full_chunk          ;rename : overrun_chunk
+nrt_max_per_chunk = 20
+          ld b,nrt_max_per_chunk + 1
+
+nrt_fill_chunk
+;in b:nb labels (size 12 each)
+;   21: rempli ras-bord + 1 (tag 00 in new chunk)
+
+          ld a,"a"
+teoc
+          push af
+          push bc
+          ld (nrt12+11),a
+          call teoc_set
+          pop bc
+          pop af
+          inc a
+          djnz teoc
+          ret
+
+nrt_fill_chunk8
+;in b:nb labels (size 8 each)
+
+          xor a
+teoc8
+          push af
+          push bc
+          call teoc_update8
+          call teoc_set8
+          pop bc
+          pop af
+          inc a
+          djnz teoc8
+          ret
+
+teoc_set
+          ld hl,nrt12
+          call nrt_di_append
+          call nc,&BE00
+          ret
+
+teoc_update8
+          push af
+          4 ** srl a
+          add "a":ld (nrt8+6),a
+          pop af
+          and &0F
+          add "a":ld (nrt8+7),a
+          ret
+
+teoc_set8
+;in: a="num"
+          ld hl,nrt8
+          call nrt_di_append
+          call nc,&BE00
+          ret
+
+teoc_check
+          push de
+          ld hl,nrt12
+          call nrt_di_get
+          call nc,&BE00
+          pop hl
+          or a:sbc hl,de:call nz,&BE00
+          ret
+
+nrt8  BYTE "label_aa",0
+nrt12 BYTE "label_labela",0
+nrt18 BYTE "__we__are_eighteen",0
+
+test_memoryfull
+; We reserve just enough memory to fill one chunk of labels.
+ ; Index chunck   
+ ; NB: since we don't init org,
+ ; there is no 'source amore' nor 'symb chunk'
+ ; To be incremented when first pool chunk have moved from bk base.
+just_enough = 1 + 1     ; (one preallocated)
+
+          ld a,bk_nrt
+          ld hl,just_enough
+          call nrt_init_custom
+
+          call nrt_overlap
+          call c,&BE00
+          cp err_labels_full:call nz,&BE00
+
+          call check_poopool
+          ret
+
+
+test_memoryfull1
+; Like test_memoryfull, but only 1 byte (00) overflows
+
+          ld a,bk_nrt
+          ld hl,just_enough
+          call nrt_init_custom
+
+          ld b,nrt_max_per_chunk
+          call nrt_fill_chunk
+
+; sanity check             
+          call nrt_di_get_symbols#
+          ld a,l:cp nrt_max_per_chunk:call nz,&BE00
+
+          call check_poopool
+
+          ld hl,nrt12
+          call nrt_di_append
+          call c,&BE00
+          cp err_labels_full:call nz,&BE00
+
+; must have been restored
+          call check_poopool
+   ;       call nz,&BE00   KTF
+
+; shouldn't have been incremented
+; KnowToFail
+     ;      call sy_get_symbols#
+     ;      ld   a,l:cp   20:call nz,&BE00
+
+          ld hl,nrt12
+          call nrt_di_append
+          call c,&BE00
+          cp err_labels_full:call nz,&BE00
+
+          call check_poopool
+      ;    call nz,&BE00  KTF
+          ret
+
+test_overlap
+          call di_reset
+          call nrt_overlap
+          call nc,&BE00
+
+          ld de,nrt_max_per_chunk
+          ld hl,nrt18
+          jp nrt_check_label
+
+check_poopool
+; sanity check. must adapt if header changes
+          ld hl,(pool)
+          call connect_chunk
+          ld l,chead_last
+          ld a,(hl)
+          cp &F4
+          call nz,&BE00
+          call connect_bk_base
+          ret
+
+nrt_overlap
+          ld b,nrt_max_per_chunk ; One preallocated
+          call nrt_fill_chunk ; This one must pass
+
+          call check_poopool
+
+; In new chunk
+          ld hl,nrt18
+          call nrt_di_append
+          ret
+
+
+test_overlap_next
+; actually like test_full_buf with more checks.
+          call di_reset
+
+          ld b,132
+          call nrt_fill_chunk8
+          call tfb_check3 ;sanity: before save/load
+
+          ld de,131
+          call nrt_saveload
+
+tfb_check3
+          ld de,127
+          ld hl,nrt8
+          call nrt_check_label
+          ld de,128
+          ld hl,nrt8
+          call nrt_check_label
+          ret
+
+
+
+test_full_buf
+; reproduce case when label ends at &ff in io buffer
+
+          call di_reset
+          CHECK_FREE(nb_chunks-1) ; sanity
+
+          ld b,33
+          call nrt_fill_chunk8
+          call tfb_check ;sanity: before save/load
+
+          ld de,32
+          call nrt_saveload
+
+tfb_check
+          ld de,1
+          ld hl,nrt8
+          call nrt_check_label
+          ld de,32
+          ld hl,nrt8
+nrt_check_label
+;in: de=num, hl=ref
+          ld a,e:call teoc_update8
+
+          push hl
+          ld hl,nrt_buf
+          call nrt_di_getkey
+          call nc,&BE00
+
+          pop hl
+          ld de,nrt_buf
+          call compare_text
+          call nz,&BE00
+          ret
+
+test_full_buf2
+; reproduce case when label ends at &ff in io buffer (twice)
+
+          call di_reset
+
+          ld b,66
+          call nrt_fill_chunk8
+          call tfb_check2 ;sanity: before save/load
+
+          ld de,65
+          call nrt_saveload
+
+tfb_check2
+          ld de,63
+          ld hl,nrt8
+          call nrt_check_label
+          ld de,64
+          ld hl,nrt8
+          call nrt_check_label
+          ret
+
+
+nrt_update_line
+          ld a,e:add &30
+          ld (nrt_label_slot),a
+          ld (nrt_label_slot2),a
+          ret
+
+
+nrt_source_line BYTE "somewhat_big_label_"
+nrt_label_slot BYTE "0    ; comment label_"
+nrt_label_slot2 BYTE "0",0
+
+test_memoryfull_load
+          ld a,bk_nrt
+          ld hl,just_enough
+          call nrt_init_custom
+
+          ld hl,nrt_infinitebuf:ld (nrt_hook+1),hl
+          call nrt_di_load
+          call c,&BE00
+          cp err_labels_full:call nz,&BE00
+          ret
+
+test_free1
+; re-init after using less than 1 chunck
+
+          ld a,bk_nrt
+          ld hl,just_enough
+          call nrt_init_custom
+
+          ld b,nrt_max_per_chunk
+          call nrt_fill_chunk
+
+; di_init isn't enough for now, since index chunk wouldn't be freed.
+         ; call nrt_di_init
+          ld a,bk_nrt
+          ld hl,just_enough
+          call nrt_init_custom
+
+          ld b,nrt_max_per_chunk
+          call nrt_fill_chunk
+          ret
+
+
+test_free2
+; re-init after using less than 2 chunck
+add_chunk = 2
+          ld a,bk_nrt
+          ld hl,just_enough + add_chunk
+          call nrt_init_custom
+
+          ld b,nrt_max_per_chunk * add_chunk
+          call nrt_fill_chunk
+
+          call di_reset
+
+          ld b,40
+          call nrt_fill_chunk
+          ret
+
+
+numb_test
+; On rempli {str(i):i for i in range(nrt_nb)}
+      IF 0
+nrt_nb = 65             ; For fast debugging. >64 requires new chunk.
+      ELSE
+nrt_nb = 650
+      END
+
+          call di_reset
+
+          ld bc,-nrt_nb
+ntst_set
+          push bc
+          call nrt_di_get_symbols#
+          call nrtput_deci
+          ld hl,nrt_buf
+          call nrt_di_append
+          call nc,&BE00
+          pop bc
+          inc c
+          jr nz,ntst_set
+          ld a,"="
+          call &BB5A
+          inc b
+          jr nz,ntst_set
+
+          call numbtst_get
+          ld de,nrt_nb-1
+          call nrt_saveload
+          call numbtst_get
+          ret
+
+
+numbtst_get
+; Check:
+ ; * aap[str(i)] == i  for all entries  (di_get)
+ ; * aap[i] == str(i)  for all entries  (di_getkey)
+          ld hl,0
+          ld bc,-nrt_nb
+ntst_get
+          push bc
+          push hl
+          call nrtput_deci
+
+          ld hl,nrt_buf
+     ;     PUSH HL
+      ;    CALL display_text_nt
+      ;    LD   A,","
+      ;    CALL $BB5A
+      ;    POP  HL
+          call nrt_di_get:call nc,&BE00
+
+          pop hl
+          call compare_hl_de:call nz,&BE00
+
+; -------------------
+
+          push hl
+          ld hl,nrt_getkey
+          call nrt_di_getkey:call nc,&BE00
+          ld a,(hl):or a:call nz,&BE00 ; Should point to eos marker.
+          ld hl,nrt_buf
+          ld de,nrt_getkey
+          call compare_text
+          call nz,&BE00
+
+          pop hl
+          inc hl
+
+          pop bc
+          inc c
+          jr nz,ntst_get
+          ld a,"?"
+          call &BB5A
+          inc b
+          jr nz,ntst_get
+
+          ret
+
+nrtput_deci
+          ld de,nrt_buf
+          push hl
+          call put_deci_hl
+          xor a
+          ld (de),a
+          pop hl
+          ret
+
+
+
+data_test
+      BYTE "bbb"
+      BYTE 0
+      BYTE "ccccc"
+      BYTE 0
+      BYTE "cccdd"
+      BYTE 0
+      BYTE "bbe"
+      BYTE 0,0
+
+      BYTE "a"
+      BYTE 0
+      BYTE "bcd"
+      BYTE 0
+      BYTE "bef"
+      BYTE 0
+      BYTE "bgh"
+      BYTE 0,0
+
+      BYTE "ab"
+      BYTE 0
+      BYTE "boc"
+      BYTE 0
+      BYTE "ban"
+      BYTE 0
+      BYTE "abe"
+      BYTE 0
+      BYTE "c"
+      BYTE 0,0
+
+      BYTE "ab"
+      BYTE 0
+      BYTE "ad"
+      BYTE 0
+      BYTE "af"
+      BYTE 0,0
+
+      BYTE "a"
+      BYTE 0
+      BYTE "ab"
+      BYTE 0
+      BYTE "abc"
+      BYTE 0,0
+
+      BYTE "ab"
+      BYTE 0
+      BYTE "ader"
+      BYTE 0
+      BYTE "abc"
+      BYTE 0,0
+
+      BYTE "a"
+      BYTE 0
+      BYTE "bc"
+      BYTE 0
+      BYTE "de"
+      BYTE 0,0
+
+      BYTE "do"
+      BYTE 0
+      BYTE "cafe"
+      BYTE 0,0
+
+      BYTE "cafe"
+      BYTE 0
+      BYTE "do"
+      BYTE 0,0
+
+      BYTE "cafe"
+      BYTE 0
+      BYTE "c"
+      BYTE 0,0
+
+      BYTE "cafe"
+      BYTE 0
+      BYTE "donc"
+      BYTE 0
+      BYTE "c"
+      BYTE 0,0
+
+      BYTE "do"
+      BYTE 0
+      BYTE "cafe"
+      BYTE 0
+      BYTE "c"
+      BYTE 0,0
+
+      BYTE "do"
+      BYTE 0
+      BYTE "cafe"
+      BYTE 0
+      BYTE "donc"
+      BYTE 0
+      BYTE "c"
+      BYTE 0,0
+
+      BYTE "do"
+      BYTE 0
+      BYTE "don"
+      BYTE 0
+      BYTE "cafe"
+      BYTE 0
+      BYTE "donc"
+      BYTE 0
+      BYTE "c"
+      BYTE 0
+      BYTE "cat"
+      BYTE 0,0
+
+      BYTE 0
+
+; =======================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+di_reset
+;------
+; Free all chunks use for labels or index. 
+; Needed when closing source.
+          ld hl,(pool):call freelist
+
+          ld hl,meta_index
+          ld b,meta_index#
+dflp      ld e,(hl):inc l
+          ld d,(hl):inc l
+          push hl
+          ex de,hl:call free ; No-op if DE=0
+          pop hl
+          djnz dflp
+; Enchaine! 
+di_init
+;------
+; Clean state. Memory was reset by chunk_init.
+;in: bk base
+;out: Carry if ok (no memory full)
+
+          ld hl,0:ld (vaap_symbols#),hl
+
+          ld hl,meta_index
+          ld b,meta_index#*2
+fill      ld (hl),0:inc l:djnz fill
+
+; Preallocate first pool chunk,
+; so we don't have to test and lazy initialize.
+
+          call new_chunk_no_init:ret nc
+          ld (pool),hl
+
+          call connect_chunk
+          call init_chunk
+          scf
+          jp connect_bk_base
+
+      MACRO RET_NC
+      IF inRom
+          ret nc
+      ELSE
+; For debugging when running tests.
+          call nc,&BE00
+          ret nc
+      END
+      ENDM
+
+check_valid
+;----------
+; Verify integrity (chunks, some var)
+;  In: Bk base connected
+; Out: Carry if ok
+     ; !!! bk base disconnected
+
+; Expect that symbols# <= max  (that is, symbols# < max+1)
+          ld hl,max_symbols+1
+          call get_symbols#
+          RET_NC()
+
+          ld hl,meta_index
+          ld b,meta_index#
+.lpmeta
+          ld e,(hl):inc l ; bank
+          ld d,(hl):inc l ; MSB 
+          call check_id0_de
+          RET_NC()
+          djnz .lpmeta
+
+          ld hl,(pool)
+;!! Use call+ret for stack trace
+          call check_linked_list
+          ret
+
+init_chunk
+;In: chunk connected
+   ; hl=adr in chunk 
+;Out: hl=chunk start xx04
+    ;  a=0
+
+          xor a
+          ld l,a
+          ld (hl),a:inc l:ld (hl),a:inc l ; next
+          ld (hl),chunk_header_size:inc l ; last
+          inc l         ; checksum: todo
+          ld (hl),a     ; TAG end of pool
+          ret
+
+di_get_symbols#
+          ld hl,(vaap_symbols#)
+          ret
+
+
+      IF 0
+chunk_header
+      WORD 0            ;next
+      BYTE chunk_header_size ;last
+      BYTE 0            ;checksum: todo
+chunk_header_size = $ - chunk_header
+      ELSE
+chunk_header_size = 4   ; hard coded
+      END
+chead_last = 2
+chunk_start = chunk_header_size
+chunk_size = &0100-chunk_header_size
+
+;------
+di_load
+;------
+
+;in : Nothing.
+;out: bc points in io_buf, ready to read char 
+    ; hl = # labels loaded
+    ; bk base reconnect
+
+;must prime io_buf ourself (since we know where is io_buf)
+          call io_empty
+
+; Normally already done by org_load via org_source_init.
+; Keep it nevertheless since it takes less space than assertion!
+          call di_reset
+
+          ld bc,io_buf
+dil_lp
+          ld a,(bc)
+          or a
+          jr z,dil_end
+
+; move str so it's contiguous 
+          ld hl,io_tmp_lab_buf
+dil_cplab
+          ld a,(bc):inc c:call z,io_empty
+          ld (hl),a:res 7,(hl):inc hl
+          add a:call z,&BE00:jr nc,dil_cplab
+          ld (hl),0
+
+          ld hl,io_tmp_lab_buf
+          push bc:call di_append:pop bc ;check memory and set index
+
+          jr c,dil_lp   ; error otherwise
+
+di_ret_ko
+          or a          ; nc
+; A = error code    
+          jp connect_bk_base
+
+
+dil_end
+          inc c:call z,io_empty
+          ld hl,(vaap_symbols#)
+
+di_ret_ok
+          scf
+          jp connect_bk_base
+
+;------
+di_save
+;------
+
+;in ; bk_base connected
+;out  BC = last written byte in buffer
+    ; bk_base reconnected 
+
+          ld hl,(pool)
+          call connect_chunk
+          ld l,chunk_start
+          ld bc,io_buf
+disav_lp
+          ld a,(hl):ld (bc),a:or a:jr z,di_ret_ok ; END
+          inc c
+          jr nz,disav_not_full
+
+          push bc
+          push hl
+
+          call progress_bar
+
+          ld hl,io_buf
+          ld bc,&0100
+          push ix       ;needed since dos trashes ix 
+          push iy       ;needed?
+      IF inRom
+          call io_save_bloc
+      ELSE
+          call nrt_storebuf
+      END
+          pop iy
+          pop ix
+          pop hl
+          pop bc
+          jr nc,di_ret_ko
+
+disav_not_full
+          inc l:jr nz,disav_lp ; [optim] shortcut
+          call next_aapchunk:jr z,di_ret_ko ;shouldn't happen
+          jr disav_lp
+
+
+io_empty
+          push af
+          push bc
+          push hl
+          push ix       ; needed since trashed by dos
+          push iy       ; Needed?
+          call progress_bar
+          ld bc,&0100
+          ld de,io_buf
+      IF inRom
+          call io_load_bloc
+      ELSE
+          call nrt_hook
+      END
+          pop iy
+          pop ix
+          pop hl
+          pop bc
+          pop af
+          ret
+
+progress_bar
+; NB: progress_adr set by org.
+          push hl
+          ld hl,(progress_adr)
+          ld a,h:or &E0:ld h,a ; +4 lines + sanity
+          ld a,(progress_pix)
+          scf:rra:jr nc,pbar_ok
+          inc hl:ld a,&80
+pbar_ok
+          ld (progress_adr),hl
+          ld (progress_pix),a
+          and &77:ld (hl),a
+          pop hl
+          ret
+
+
+; Fail fast: don't try to continue (can make things worse).
+; User can try to recover. 
+fatal = &BE00
+
+di_get
+;-----
+; in :  HL = nt string
+; out if found : Carry, DE = value
+;    otherwise : NC   
+; BC destroyed anyway
+
+          ex de,hl
+          ld hl,(pool)
+di_get_custom
+;------------
+; Used by impeva.o to peek in imported source
+          ld bc,0       ; value (key#) 
+          call connect_chunk
+          ld l,chunk_start
+          jr dlu_start
+
+; De: ref key. Hl: point in chunk.
+
+dlu_badkey
+; Reset ref, and hl goto next key.
+          pop de
+dlu_skip  ld a,(hl):add a:jr c,dlu_nextkey
+          inc l:jr nz,dlu_skip
+; We expect next chunk. Otherwise memory is corrupt.
+          call next_aapchunk:call z,fatal
+          jr dlu_skip
+dlu_nextkey
+          inc l:call z,next_aapchunk
+
+dlu_lp
+          inc bc
+dlu_start
+          ld a,(hl):or a:jp z,connect_bk_base ; !! not found
+
+dlu_okchunk
+          push de
+dlu_check_key
+          ld a,(de):inc de
+          xor (hl):add a:jr nz,dlu_badkey
+          jr c,dlu_endofkey
+          inc l:jr nz,dlu_check_key
+
+          call next_aapchunk:call z,fatal
+          jr dlu_check_key
+
+dlu_endofkey
+          inc l:call z,next_aapchunk
+
+          ld a,(de):pop de
+          or a
+          jr nz,dlu_lp  ;size doesn't match
+
+;found !                     
+          ld e,c
+          ld d,b
+          scf
+          jp connect_bk_base
+
+di_getkey_custom_pool
+;like di_getkey but for external tab
+;Used by impeva.o to peek in imported source
+;in : de = key index
+;     hl = dest for key in base_bk 
+    ; bc = pnt pool
+;out: like di_getkey
+          push hl
+          call _connect_label_com
+          jr _di_getkey_com
+
+di_getkey
+;in : de = key index
+;     hl = dest for key in base_bk                         
+;out : if ok, Carry. key copied in hl (hl points to last 0)
+     ; nc if not found
+     ; de, bc changed
+     ; bk base reconnected
+
+;  meta_index (6fe8): 12 * id of index chunks (NOT linked chunks here)
+;    index chunk: index_per_chunk (&80) * index  
+     ; where index = pos in string of all concatened labels
+                   ; aka 'pnt in pool'.
+; For NOW, each chunk index reuse label_index 
+; cf todo_meta
+
+;  To find actual position, we follow label chunks (linked):
+     ; chunk#, pos in chunk = divmod(index, chunk_size)
+
+          push hl
+          call connect_label
+_di_getkey_com
+          pop de        ; dest (was: hl)
+          jp nc,connect_bk_base ; reconnect bk base in case of error
+
+          push ix
+;copy to base
+;TODO? Use mirror instead?
+;NO!! Even better: copy to central RAM.
+          ld ixl,a      ; source bk
+          call get_bk_base:ld c,a
+          ld b,&7F
+          dec l
+ctbk_lp
+          ld a,ixl
+          out (c),a
+          inc l:call z,next_aapchunk
+          ld ixl,a      ;either nop or new bk source
+          ld a,(hl)
+          out (c),c
+          bit 7,a
+          res 7,a
+          ld (de),a:inc de
+          jr z,ctbk_lp
+
+          xor a
+          ld (de),a
+          ex de,hl
+          pop ix
+          scf
+          ret
+
+
+connect_label
+;in : de = key index
+;out: If ok, Carry, A = bank chunk (connected), HL points to chunk.
+    ; If index out of range: NC. A, HL trashed.
+    ; In both cases, bc trashed
+                   ; de preserved
+
+          ld bc,pool
+          call connect_bk_base ; handier for client (toms, symb)
+;cannot do it in _connect_label_com as bk base not connected
+;when comming from di_getkey_custom_pool
+          ld hl,(vaap_symbols#)
+          scf:sbc hl,de
+          ccf:ret nc    ; Index out of range
+;enchaine
+_connect_label_com
+;bc = pnt pool 
+          push de
+;read (pool) while right bank is connect
+          ld a,(bc):ld l,a:inc c
+          ld a,(bc):ld h,a:inc c
+;here bc = meta_index
+          push hl
+
+          ex de,hl      ;hl=id
+;find chunk contained index  
+          call meta_entry_
+          ld e,(hl)
+          inc hl        ; don't touch Z
+          ld d,(hl)
+          pop hl        ; (pool)
+          jr nc,_ret_de
+          ccf:jr z,_ret_de
+
+          call connect_chunk
+;index to pos chunk  
+.idx2chk
+; de = de-chunk_size
+          ld a,e:sub chunk_size:ld e,a
+          ld a,d:sbc 0:ld d,a
+          jr c,.idx2chk_end
+
+          call connect_next
+          jr nz,.idx2chk
+
+      BRK               ; shouldn't happen
+
+.idx2chk_end
+          ld a,l
+
+; e + chunk_size (compensate) + chunk_start = pos in chunk
+corr  = chunk_start + chunk_size
+      IF corr - &0100
+  !! code to be adapted. Don't trash a, though.
+      END
+          ld l,e
+          scf
+_ret_de
+          pop de
+          ret
+
+      IF dgoa
+di_get_or_append
+;in :
+;     hl = key (nt string)
+;out : C if ok, Z if found, de = key's id.
+     ;         NZ if new,   de = fresh id.
+     ; NC otherwise, A = error (memory full)
+
+; NB: the interface may seems clunky. It is not:
+    ; Input is always string, output is always corresponding id.
+    ; That's also exactly what is needed by parse.o.
+
+          push hl
+          call di_get
+          pop hl
+          jr nc,di_append
+          xor a:scf
+          ret           ; C, Z: found
+;---
+      END
+
+get_symbols#
+;  In: HL = max
+; Out: HL = symbols#
+     ; Carry iif HL < max
+          push bc
+          ld c,l:ld b,h
+          ld hl,(vaap_symbols#)
+          or a:sbc hl,bc:add hl,bc
+          pop bc
+          ld a,err_too_many_labels ; only used if NC
+          ret
+
+
+di_append
+;in ; hl = key (nt string)
+;out : Carry, NZ (for di_get_or_append) if ok, de = fresh id.
+     ; NC otherwise, A = error (memory full)
+
+          ex de,hl
+          ld hl,max_symbols
+          call get_symbols#
+          ex de,hl
+          ret nc
+
+; --- Append string itself in pool ---
+          call aap_append_key
+          ld a,err_labels_full:ret nc ; error
+
+; --- Now update index, and meta_index if required. ---
+          ld hl,(vaap_symbols#) ; new id 
+          push de
+          call meta_entry
+          pop bc
+          ld a,err_mess:ret nc ; error
+          jr nz,ok_meta
+
+          push bc
+          call new_chunk_no_init ; NB: bk base is reconnected
+          pop bc
+          ret nc
+
+          ex de,hl      ; Update meta_index while in bk_base 
+          ld (hl),d:dec l
+          ld (hl),e
+          ex de,hl
+
+          push bc
+          ld c,l
+          call connect_checked
+          pop bc
+          ret nc
+
+          ld l,0
+ok_meta
+          ld (hl),c:inc l:ld (hl),b
+          call connect_bk_base
+
+          ld de,(vaap_symbols#)
+          inc de
+          ld (vaap_symbols#),de
+          dec de
+          scf:sbc a     ; C, NZ
+          ret
+
+
+meta_entry
+;in: HL= key
+;out: Carry, NZ, HL=pos in chunk. bk chunk connected
+    ; Carry, Z if no chunk reserved yet. DE= meta_entry + 1
+    ; NC if error
+          ld bc,meta_index
+meta_entry_
+   ; BC= meta_index
+
+      IF index_per_chunk - &80
+  !! change code below
+      END
+          add hl,hl     ; Don't touch L now!
+          ld a,h:add a:add c
+          ld e,a
+          ld d,b
+          ld a,(de):inc e
+          ld c,a
+          ld a,(de)
+          ld h,a
+          or c
+          scf
+          ret z
+
+connect_checked
+; NB: here l = pos in chunk (don't change it)
+         ; c = bk
+          ld a,h:and &C0:xor &40:ret nz
+          ld a,c:and &C4:xor &C4:ret nz
+          ld b,&7F:out (c),c
+          inc a         ; NZ
+          scf
+          ret
+
+
+aap_append_key
+; in:  hl=key to append (NT string)
+; out: de=index in chunks
+
+          push hl
+
+; Goto to last pos of last chunk, and compute related index.
+          ld de,0       ; pos
+          ld hl,(pool)
+          call connect_chunk
+_goto_end
+          ld a,e:add chunk_size:ld e,a:jr nc,$+3:inc d
+          call connect_next
+          jr nz,_goto_end
+
+          ld a,l        ; cur bk = dest bk. See below
+
+          ld l,chead_last
+          ld c,(hl)
+          ld b,h        ; bc=dest    
+; Add [end-start] - size to get final pos
+; (size was counted one too many time).
+; But then substracting (start + size) amount to no-op.
+      IF corr - &0100
+  !! code to be adapted. Don't trash a, though.
+      END
+          ld l,c
+          ld h,-1
+          add hl,de     ; hl=index
+          ld e,c:ld d,b ; de=dest
+
+          ex (sp),hl    ; save index, get back source
+          ex de,hl      ; hl=dest de=source
+          ld c,a        ; dest bk                  
+
+ ;NB !!! Nb: rollback incomplete, since last isn't roll back as well
+          push hl       ; backup dest for rollback !!
+          dec l         ;ok since never at 0
+          call get_bk_base ; Only to check I is valid.
+ctbk2_lp
+          ld b,&7F
+          ld a,i:out (c),a
+          ld a,(de):inc de
+          out (c),c
+          or a:jr z,ctbk2_end
+          inc l:call z,insert_chunck ; discard ret if memory full
+          ld (hl),a
+          jr ctbk2_lp
+
+ctbk2_end
+          set 7,(hl):inc l
+          call z,insert_chunck ; discard ret if memory full
+          pop af        ; discard backup
+          ld (hl),0     ; END TAG    
+          ld a,l
+          ld l,chead_last
+          ld (hl),a
+          pop de
+          scf
+          jp connect_bk_base ; Success!
+
+
+get_bk_base
+          ld a,i:and &C5:cp &C5:call nz,&BE00
+          ld a,i
+          ret
+
+
+
+
+;-----------------------------------------
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+;-----------------------------------------
+
+      IF inRom
+      ORG codedest4,$$
+      END
+
+code4 = $$
+
+insert_chunck
+;in: hl: points in cur chunk (dest)
+   ;  c: bank of cur chunk (dest)
+
+          push af
+          ld l,chead_last
+          ld (hl),&FF
+
+          ld l,c        ; dest bk = cur bk for org_insert_new_chunck
+          call insert_new_chunck_connect
+          jr nc,.mem_full
+
+          ld c,l        ; new dest bk for caller.
+          call init_chunk
+          pop af
+          ret
+
+
+.mem_full
+; roll back          
+; IN: c = last dest chunk. 
+          pop af        ; discard AF
+          pop af        ; discard RET
+          pop hl        ;dest
+          ld b,&7F:out (c),c ;dest bk
+          ld (hl),0     ;restore end TAG
+          ld a,l
+          ld l,chead_last
+          ld (hl),a
+          pop de
+          jp di_ret_ko
+
+
+next_aapchunk
+;out: a= bk next chunk (needed by di_getkey)
+          call connect_next:ret z
+          ld a,l
+          ld l,chunk_start
+          ret
+
+
+di_store
+; For org_select
+; in: DE= dest
+          ld hl,vaap
+          ld a,e
+          jr _store_com
+di_restore
+; For org_select
+; in: HL= source
+          ld de,vaap
+          ld a,l
+_store_com
+; Sanity check: we have enough room / consistency
+          ld bc,aap_store_len
+          ldir
+          ret
+
+;-----------------------------------------
+realsize4 = $$-code4
+hi4
+      IF inRom
+      FILL limit4-$,&F7
+      END
+codesize4 = $$-code4
+;-----------------------------------------
+
+      ORG codedest2,$$
+
+code2 = $$
+
+jps
+          jp di_init
+          jp di_reset
+          jp di_get
+          jp di_getkey
+          jp di_load
+          jp di_save
+          jp di_append
+          jp di_get_symbols#
+          jp progress_bar ; who uses that?
+m         jp next_aapchunk ; used by cue
+      IF dgoa
+          jp di_get_or_append
+      END
+;!!full
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$-code2
+
+; =========================
+
+      ORG codedest3,$$
+
+code3 = $$
+jps'
+          jp di_store
+          jp di_restore
+          jp check_valid
+          jp connect_label
+;full
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+
+codesize3 = $$-code3
+
+; =========================
+
+      ORG codedest1,$$
+
+code1 = $$
+jps''
+          jp di_get_custom
+;full
+hi1
+      IF inRom
+      FILL limit1-$,&F7
+      END
+
+codesize1 = $$-code1
+
+; =========================
+
+
+      ORG codedest5,$$
+
+code5 = $$
+jps'''
+          jp di_getkey_custom_pool
+;full
+hi5
+      IF inRom
+      FILL limit5-$,&F7
+      END
+
+codesize5 = $$-code5
+
+
+;variables
+
+      ORG vaap,$$
+; ---- These vars + meta_index must be stored when switching source ----
+vaap_symbols# WORD 
+          ASSERT(aap_pool_pnt == $)
+pool  WORD              ; chained list of all labels concatened
+;meta_index here:
+      IF meta_index - $
+ !! must be contigous to ease store/restore without wasting room
+  ; more importantly, connect_label relies on that
+      END
+
+      IF aap_store_len - [meta_index_ - vaap]
+ !!! udpate const.i
+      END
+
+      IF pool-vaap - 2
+ !! update impeva.o
+      END
+
+progress = &8A00
+progress_adr = progress
+progress_pix = progress+2
+

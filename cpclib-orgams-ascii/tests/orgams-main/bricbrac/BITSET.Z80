@@ -1,0 +1,673 @@
+;  Set of integers 0..X   Max X = 255
+
+;  E.g  bs_set is alike "set a,(hl)"
+     ;  but left to right, and spanning on several bytes.
+
+; Used by: org, import, impeva, cache
+
+inRom = 1
+dev_checks = 1          ;todo: rename to "store_size"
+;!!! better: remove if altogher, as new routines expect size to be there
+dev_checks' = 1
+
+      IMPORT "bricmap.i"
+
+; Internal structure:     
+; if dev_checks
+          ; 1 byte: size (only for verification: BRK if out of range)
+; end
+;  ceil(X/8) bytes: bitmap (left to right).          
+
+; NB: we keep track of size for verification purpose.
+    ; we breakpoint if index out of range.
+
+; Used by: org_assemble (for import tracking)
+         ; cache 
+
+;2024
+   ; Oct 8 v5 Add /first_one/
+            ; Add /next_one/
+      IF inRom
+ !!! not burned: no more room
+      END
+;2022
+   ; Feb 6 v4 Add /bs_or/
+
+      ;  7 v3 Add /bs_copy/
+            ; Fix bugs around get_pnt/CHECK_SIZE
+  ; oct  3 v2 Save A (and F for set). Rationale:
+            ;  - More convenient for caller
+            ;  - Respect set/get opcodes behavior
+;21 sep 21 v1 init/set/get OK.
+
+; ---------------------------             
+
+rom   = &1C
+codedest = bitset
+limit = liszt
+codedest1 = bitset'
+limit1 = screen_jp
+codedest2 = bitset_jp
+limit2 = &FEDC          ;liszt
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+nrtbuf = &3000
+nrtflagmess = &3100
+
+      IF inRom
+mess  = &BE00
+      ELSE
+mess  BRK               ; can be deactived programmatically for test purpose 
+          ld a,1
+          ld (nrtflagmess),a
+          ret
+
+;---------------------------
+fail  = &BE00
+
+      MACRO CHECK_HL_EQ n
+          push de
+          ld de,n
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ n
+          push hl
+          ld hl,n
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ n
+          push hl
+          ld hl,n
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+compare_sized
+          ld a,(de):cp (hl):call nz,&BE00
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+tests
+          call test_init
+          call test_getpnt
+          call test_get
+          call test_set
+          call test_copy
+          call test_ovf
+          call test_first_one
+          call test_next_one
+          ret
+
+; ========================================
+test_init
+          ld hl,&FFFF:ld (nrtbuf+1),hl ; markers
+          ld hl,nrtbuf
+          ld a,1
+          call bs_init
+          CHECK_HL_EQ(nrtbuf) ; hl preserved
+          ld hl,(nrtbuf)
+          CHECK_HL_EQ(0) ; size = 0, bitmap = 0
+          ld a,(nrtbuf+2)
+          cp &FF:call nz,fail ; wasn't erased
+
+;test getpnt
+          ld a,0
+          ld hl,nrtbuf
+          call get_pnt
+          cp &80:call nz,fail
+      IF dev_checks
+          CHECK_HL_EQ(nrtbuf+1)
+      END
+          ret
+
+test_getpnt
+; Test with max length
+          ld hl,nrtbuf
+          xor a
+          call bs_init
+;sanity check
+          CHECK_HL_EQ(nrtbuf)
+;internal check          
+      IF dev_checks
+          ld a,(hl):cp 255:call nz,fail
+
+          ld a,0
+          call get_pnt
+          cp &80:call nz,fail
+          CHECK_HL_EQ(nrtbuf+1)
+
+          ld a,10
+          ld hl,nrtbuf
+          call get_pnt
+          cp &20:call nz,fail
+          CHECK_HL_EQ(nrtbuf+2)
+
+          ld a,255
+          ld hl,nrtbuf
+          call get_pnt
+          cp &01:call nz,fail
+          CHECK_HL_EQ(nrtbuf+32)
+
+      ELSE
+ !! todo
+      END
+          ret
+test_get
+_tsg_size = 24
+          ld a,0
+.lp
+          ld hl,nrtset
+          cp 0:jr z,.mustbeset
+          cp 4:jr z,.mustbeset
+          cp 7:jr z,.mustbeset
+          cp 8:jr z,.mustbeset
+          cp 14:jr z,.mustbeset
+          cp 17:jr z,.mustbeset
+          cp 23:jr z,.mustbeset
+
+;must be reset        
+          ld c,a        ; for check
+          call bs_get:call nz,fail
+          cp c:call nz,fail ; both a and c must be saved
+          jr .nxt
+
+.mustbeset
+          ld c,a        ; for check
+          call bs_get:call z,fail
+          cp c:call nz,fail ; both a and c must be saved
+.nxt
+          inc a
+          cp _tsg_size
+          jr nz,.lp
+          ret
+
+nrtset
+      IF dev_checks
+      BYTE _tsg_size
+      END
+      BYTE %10001001,%10000010,%01000001
+
+
+test_set
+;-------         
+
+; Copy to mutate without impacting other tests.
+          ld hl,nrtset:ld de,nrtbuf:ld bc,4:ldir
+
+          ld a,9
+          ld hl,nrtbuf
+          scf
+          call bs_set
+          call nc,fail  ; Check F saved
+          cp 9:call nz,fail ;   A saved
+
+      IF dev_checks
+_nrtbitmap = nrtbuf+1
+      ELSE
+_nrtbitmap = nrtbuf
+      END
+          ld a,(_nrtbitmap)
+          cp %10001001:call nz,&BE00 ; unchanged
+          ld a,(_nrtbitmap+1)
+          cp %11000010:call nz,&BE00 ; unchanged
+          ret
+
+test_copy
+;--------
+          ld hl,nrtbuf
+          ld a,0        ; 256
+          call bs_init
+
+          ld a,255
+          call bs_set
+;sanity check
+          call bs_get
+          call z,fail
+
+          ld de,nrtbuf+&80
+          call bs_copy
+          cp 255:call nz,fail ; A preserved
+
+          ld hl,nrtbuf+&80
+          call bs_get
+          call z,fail
+          ret
+
+test_ovf
+;-------
+; Test ovf is detected
+          call deadthtest_start
+
+          ld hl,nrtbuf
+          ld a,8
+          call bs_init
+
+          ld a,8
+          call get_pnt  ; should call mess
+
+          call deadthtest_end
+          ret
+
+deadthtest_start
+;Setup 'mess' hook.
+          xor a:ld (mess),a ; remove brk
+          ld (nrtflagmess),a
+          ret
+
+deadthtest_end
+;Check 'mess' was called, and restore brk.
+          ld a,(nrtflagmess)
+          cp 1:call nz,fail
+          ld a,&F7:ld (mess),a ; reinstall brk for other tests.
+          ret
+
+test_first_one
+;-------------
+          ld hl,nrtbuf
+          ld a,41
+          call bs_init
+; Empty: must return z
+          call first_one:call nz,fail
+; set bits 40 to 0 and check it is returned as first bit set
+          ld a,40
+.lp
+          ld c,a
+          call bs_set
+          ld a,-1       ; Trash A to ensure it is set by routine
+          call first_one:call z,fail
+          cp c:call nz,fail
+          dec a
+          jp p,.lp
+          ret
+
+test_next_one
+;------------
+          ld hl,nrtbuf
+          ld a,32
+          call bs_init
+; Empty: must return z 
+          ld a,31
+.lp0
+          ld c,a
+          call next_one:call nz,fail
+          ld a,c
+          dec a
+          jp p,.lp0
+
+;Fill bits 17 to 0, and check new bit set is next one (from 0 or prev)
+          ld a,17
+.lp
+          ld c,a
+          call .check_next_one
+          ld a,c
+          dec a
+          jr nz,.lp
+
+;After 17: nothing
+          ld c,42
+          ld a,17
+          call next_one:call nz,fail
+          ld a,c:cp 42:call nz,fail ; check c was conserved
+
+;now check for 0 to 31 when all bit sets
+          xor a
+.lp'
+          ld c,a
+          inc a:call bs_set:dec a
+          call next_one
+          inc c:cp c:call nz,fail
+          ld a,c
+          cp 31
+          jr c,.lp'
+          ret
+
+.check_next_one
+; IN: A= bit to set. 
+; Then check from 0 and just before bit
+          ld c,a
+          call bs_set
+
+          xor a
+          call next_one:call z,fail
+          cp c:call nz,fail
+
+          ld a,c:dec a
+          call next_one:call z,fail
+          cp c:call nz,fail
+          ret
+
+
+
+      END
+
+; ========================================
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn1
+      WORD rom
+      WORD codesize1
+      WORD codedest1
+      WORD code1
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+      MACRO CHECK_INDEX
+; Assert (No-op if ok. Breakpoint otherwise)
+;[codesize] If invoked twice, should use a routine instead.
+
+      IF dev_checks
+          cp (hl)       ; cp with size-1
+          jr c,.ok
+          jr z,.ok
+      IF inRom
+      BRK
+      ELSE
+          call mess     ; for deathtest
+      END
+.ok
+      END
+      ENDM
+
+; ========================================
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+; ========================================
+
+      MACRO SIZE_IN_BYTES
+ ; A= size-1 
+          add 8:rra:2 ** srl a
+      ENDM
+
+
+bs_init
+;------
+;in: HL= structure
+   ;  A= size (0 = 256 elements)
+;out: HL preserved. Structure zeroed on ceil(A/8) bytes.
+
+
+          push hl
+      IF dev_checks
+          dec a:ld (hl),a ;size - 1
+          SIZE_IN_BYTES()
+.lp       inc hl:ld (hl),0:dec a:jr nz,.lp
+      ELSE
+          SIZE_IN_BYTES()
+.lp       ld (hl),0:inc hl:dec a:jr nz,.lp
+      END
+          pop hl
+          ret
+
+bs_copy
+;------
+;  in: hl = source
+     ; de = dest
+; out: bc,de,hl trashed 
+     ; a preserved
+
+          push af
+      IF dev_checks
+          ld a,(hl)
+          SIZE_IN_BYTES()
+          ld c,a
+      ELSE
+ !! oups, cannot use copy if size is not known.
+      END
+          ld b,0
+          inc bc
+          ldir
+          pop af
+          ret
+
+bs_or
+;----
+; (de) = (hl) OR (de)
+;  in: hl = source
+     ; de = dest
+; out: bc,de,hl trashed 
+     ; a preserved
+
+          push af
+      IF dev_checks
+; Take the min of sizes.
+          ld a,(de)
+          cp (hl)
+          jr c,.okmin:ld a,(hl)
+.okmin
+          SIZE_IN_BYTES()
+          ld b,a
+      ELSE
+ !! oups, cannot use bulk operation if size is not known.
+      END
+          inc b
+.lp
+          inc de:inc hl
+          ld a,(de):or (hl):ld (de),a
+          djnz .lp
+          pop af
+          ret
+
+bs_get
+;-----
+;in: HL= structure
+   ;  A= index
+;out: All registers but F preserved. 
+    ; NZ if item is set
+    ;  Z otherwise.
+
+          push bc:push hl
+          ld c,a
+          call get_pnt
+          and (hl)
+          ld a,c
+          pop hl:pop bc
+          ret
+
+bs_set
+;-----
+;in: HL= structure
+   ;  A= index
+;out: All registers preserved.
+
+          push af:push hl
+          call get_pnt
+          or (hl):ld (hl),a
+          pop hl:pop af
+          ret
+
+first_one
+;--------
+; In: hl=structure
+;Out: if not empty, NZ, A=idx first bit set
+    ; if empty, Z, A trashed
+          push bc:push de:push hl
+          call get_end
+          ld b,0
+          jp find_bit
+
+get_pnt
+;------
+; In: hl=structure
+    ;  a=index
+;Out: hl=pnt in bitmap
+    ;  a=mask 
+    ; Assert index in range.
+
+          CHECK_INDEX()
+      IF dev_checks
+          inc hl        ; skip size
+      END
+          push bc
+          ld c,a
+          ld a,&80      ; Mask for very first item
+          srl c:jr nc,.no1:1 ** rrca
+.no1
+          srl c:jr nc,.no2:2 ** rrca
+.no2
+          srl c:jr nc,.no4:4 ** rrca
+.no4
+          ld b,0
+          add hl,bc
+          pop bc
+          ret
+
+; ========================================
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+; ========================================
+
+code1 = $$
+
+      IF inRom
+      ORG codedest1,$$
+      END
+
+; !!! jp and code directly
+          jp first_one
+next_one
+;-------
+; In: HL=structure
+    ;  A=index
+;Out: if bit set after A, NZ, A=idx of this bit
+    ; if empty, Z, A trashed
+      IF inRom
+      IF next_one - [codedest1+3]
+    !!! error align
+      END
+      END
+          push bc:push de:push hl
+          call get_end
+          ld b,a
+          call get_pnt
+          ld c,a:dec c  ; mask pos bit -> mask 'AND' other bits
+          ld a,(hl):and c
+          jr nz,nxt_found
+next_byte
+; next multiple of 8
+          ld a,b:or 7:inc a:ld b,a
+; Already last byte? Only need to test LSB, as structure is <= 33 bytes
+          ld a,l:cp e:jr z,nxt_exit ; not found
+find_bit
+          inc hl
+          ld a,(hl):or a
+          jr z,next_byte
+          dec b         ; compensate first inc b
+.seek     inc b:add a:jr nc,.seek
+          sbc a         ; NZ
+          jr nxt_exit_found
+
+nxt_found
+          inc c         ; back to bit
+.seek'    inc b:add a:ld d,a:and c:ld a,d:jr z,.seek'
+nxt_exit_found
+          ld a,b        ; NZ here
+nxt_exit
+          pop hl:pop de:pop bc
+          ret
+
+get_end
+;------
+; In: hl=structure
+;Out: de=pnt to end
+    ; af, hl preserved
+          push af:push hl
+      IF 1-dev_checks
+   !!! expect size stored
+      END
+          ld a,(hl)     ; size-1
+          call get_pnt
+          ex de,hl
+          pop hl:pop af
+          ret
+
+; ========================================
+hi1
+realsize1 = $$-code1
+      IF inRom
+      FILL limit1-$,&FF
+      END
+codesize1 = $$-code1
+; ========================================
+
+
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp bs_or      ; import
+          jp bs_init    ; org, cache
+          jp bs_copy    ; impeva
+          jp bs_get     ; impeva, cache
+          jp bs_set     ; import, cache
+
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+

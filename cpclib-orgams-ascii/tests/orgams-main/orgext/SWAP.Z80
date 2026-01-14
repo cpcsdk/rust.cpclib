@@ -1,0 +1,578 @@
+rom   = &1A
+opt_checks = 1          ; Optional checks (to make room)
+todo  = 1
+;  <<<<< store/restore routines to swap tabs >>>>>
+;  <<<<< also connect_var >>>>>
+
+; -> Allow single install when one of the modules' store changes size
+; Tested via org.o
+
+      ORG &1000
+      ENT burn
+
+; ----- HH Beta 2 -----
+; Jul 
+   ; 28 v2 Move ass_store/restore here for easier update
+   ; 27 v1 Extract from org.o and dependencies
+
+      IMPORT "extmap.i"
+      IMPORT "memmap.i"
+      IMPORT "const.i"  ; type_orgams
+      IMPORT "swapi.i"
+
+codedest = swap_module
+limit = swap_module_
+codedest2 = swap_jp
+limit2 = parse_jp
+
+; ------ in main rom ------
+ed    = &D200
+ed_store = ed+33
+ed_restore = ed+36
+copy_nt = ed+&42
+
+; ------ in this rom ------
+org   = &C008
+org_is_self_selected = org+&60
+connect_bk_base = &C106 ; save all regs
+
+farcall = &FF12
+call_ed_from_ext = farcall + 6
+;call_mon_from_ext = farcall + 12
+call_bric_from_ext = farcall + 18
+call_ass_from_ext = farcall
+
+; ------- in ASS ROM ------
+sy'   = &FF93
+sy_store = sy'+21
+sy_restore = sy'+24
+
+visu  = &FFCC
+; visu_store = visu+6   ; No-op
+visu_restore = visu+9   ; A corrupt
+
+cocopy_jp = &FE02
+cocopy_store = cocopy_jp+24
+cocopy_restore = cocopy_jp+27
+
+; ----- in bricbrac -------
+
+bitset = &FED0
+;bs_init = bitset
+;bs_get = bitset+6
+;bs_set = bitset+9
+
+string = &FD82
+;bric_get_len = string
+
+heap  = &FEAF
+new_heap_chunk = heap   ;out: id 
+connect_heap_chunk = heap+3 ;out: ahl=pos (connected) BC DE F preserved
+append_raw = heap+6     ;in: bd=id last chunk (append only)
+read_raw = heap+9       ;bhl=source de:dest c=size
+
+chunk = &FDFA
+;get_max_chunks = chunk+9
+;new_chunk_no_init = chunk+15 ; !! Reconnect bk base
+;new_chunk = chunk+21    ; connected. Use org_new_chunk for source chunk
+;free  = chunk+30        ; Free single chunk (link-agnostic)
+free_list = chunk+33
+;connect_chunk = chunk+42 ; !! don't change vo_curbk
+connect_next_chunk_raw = chunk+45 ; !! idem    Also preserve Carry
+      IF 0
+; Don't use it: we directly read it instead for now (for move/copy)
+; Switch only when strictly needed (e.g. address will move). 
+get_free# = chunk+36
+      END
+
+aap   = &FE30           ;jumps
+progress_bar = aap+24   ; BK agnostic! 
+aap'  = &FDDF
+aap_store = aap'
+aap_restore = aap'+3
+
+;------------------------------------
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+      MACRO CALL_ED adr
+          call call_ed_from_ext:WORD adr
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call call_bric_from_ext:WORD adr
+      ENDM
+
+      MACRO CALL_ASS adr
+          call call_ass_from_ext:WORD adr
+      ENDM
+; ========================================
+
+code  = $$
+
+      ORG codedest,$$
+
+connect_filename_size
+;--------------------
+; Connect size before filename (for import)
+; In: A = source id
+    ; bk agnostic
+;Out: If ok: Carry, HL = filename size (connected)
+    ; NC otherwise.
+    ; A, BC, DE preserved   
+
+          push bc:ld b,a
+          call org_is_self_selected
+          ld hl,filename
+          scf:jr z,.exit
+
+          call connect_store'
+          jr nc,.exit
+; Expect filename to be confined in second store chunk
+; (checked in const.i)
+fn    = filename_store_offset-&0100 + header_size + heap_chunk_start
+          ld l,fn
+; Carry here
+.exit
+          ld a,b:pop bc
+          ret
+
+
+connect_ass_store
+;----------------
+; Connect to start of ass's section of store.
+; Done here since org knowns its own size.
+; !!! Only makes sense if not self-selected !!!!!!
+
+; In: A = source id
+    ; bk agnostic
+;Out: If ok: Carry, HL = start of ass store (connected)
+    ; NC otherwise.
+    ; A, BC, DE preserved   
+
+          call connect_store
+          ret nc
+; skip org part                                       
+          push bc
+          ld bc,meta_org_len
+          add hl,bc
+          pop bc
+          scf
+          ret
+
+connect_aap_pool
+;---------------
+; -- Connect pool of import 
+; Rely on fact aap store if in first chunk (statically checked in org.o)
+; Using connect_ass_store would be slower.
+; !!! Also rely on fact dep<>self 
+aap_pool_offset = 2
+          ld l,aap_store_offset + aap_pool_offset
+          jr connect_var_in_store
+
+connect_symbol_index
+;-------------------
+          ld l,symb_index_store_offset
+          jr connect_var_in_store
+
+connect_depsrec
+;--------------
+          ld l,depsrec - vo0
+          jr connect_var_in_store
+
+connect_up_to_date_since_visu_pc
+;-------------------------------
+          ld l,up_to_date_since_visu_pc - vo0
+          jr connect_var_in_store
+
+connect_up_to_date_since_ass
+;---------------------------
+          ld l,up_to_date_since_ass - vo0
+;enchaine
+connect_var_in_store
+;-------------------
+; IN: A = source id (see comment in /read_byte_in_store)
+    ; L = offset var
+    ; bk agnostic   
+;Out: If source exists, Carry, HL= pnt (connected)
+    ; Otherwise, NC (needed by cache.set_modified)
+    ; All other regs preserved (but F)
+          push bc
+          ld c,l
+          ld b,a        ; save
+          call org_is_self_selected
+          ld hl,vo0
+          jr z,.ok
+
+          call connect_store
+;!!! mustn't assert if non-existant. See /read_byte_in_store/
+          jr nc,.exit
+          inc l         ; skip type
+.ok
+          ld a,l:add c:ld l,a
+      IF opt_checks
+          call c,mess
+      END
+          scf
+.exit
+          ld a,b
+          pop bc
+          ret
+
+connect_store'
+;-------------
+; In: A = source id
+;Out: If ok: Carry, HL = chunk (connected)
+    ; NC otherwise, HL trashed
+          call connect_store
+          ret nc
+          CALL_BRIC(connect_next_chunk_raw)
+          scf
+          ret nz        ; C if NZ
+          ccf
+          ret           ; NC if Z
+
+connect_store
+;------------
+; In: A = source id
+;Out: If ok: Carry, HL = chunk (connected)
+    ; NC otherwise, HL trashed
+          push de
+          call get_source_id
+          ex de,hl
+          pop de
+          scf:ccf:ret z ; NC if no source
+          CALL_BRIC(connect_heap_chunk) ; BRK if fail
+          scf
+          ret
+
+
+;--------
+store_all
+;--------
+;In: DE= pnt in source index
+;Out: Carry if ok
+    ; NC if ko (mem full)     
+; Preserve IY   
+
+          push de
+;-- generic part: type  (name done at the end, since variable size)
+          ld de,tmp_copy
+          ld a,type_orgams:ld (de),a:inc e
+;-- org part (a bit scattered)
+          ld hl,vo0:ld bc,meta_org_len1:ldir
+          ld hl,vo:ld c,meta_org_len2:ldir
+;-- Store each module's meta data. --------------
+;-ass
+; First part not needed for tab switch (or, maybe for visu?)
+; But needed for saving context (e.g. when IMPORT)
+;  -> we reuse org.select mecanism 
+             ; (needed anyway to be in right source in case of error)
+          ld hl,va2
+          call ass_store_com
+          ld hl,va2_store':ld c,ass_len2:ldir
+; Needed when cache is used instead of re-assembling.
+          call copy_assembled_info
+;------
+          CALL_BRIC(aap_store)
+          ld c,e        ; size so far (used below for append_raw)
+
+;-- Start writing to store -------------------------------------
+;   (so we can reuse the buffer after, since total metadata > &100)
+; Do it before call sy_store (otherwise) 
+;  NB: We re-allocate each time rather than reuse, it makes it easier
+     ; to avoid leak of the (potential) 2nd chunk.
+     ; Also, it 
+     ; Finally, it make it possible to free the store once copied 
+     ; into bk_base. (Save a bit of memory. Since we do free+alloc
+     ; anyway, autant faire le free le plus tot possible).
+          pop de
+
+          CALL_BRIC(new_heap_chunk)
+      IF opt_checks
+          push af:push hl
+          ld l,chead_last
+          ld a,(hl):cp heap_chunk_start-1:call c,mess
+          pop hl:pop af
+      END
+          call connect_bk_base:ret nc ; ret if memory full
+          ex de,hl
+          ld (hl),e:inc l
+          ld (hl),d
+;-------
+; c= size here
+          call _append_store
+          ret nc
+
+          push de
+          ld de,tmp_copy
+          CALL_ASS(sy_store)
+          CALL_ASS(cocopy_store)
+      ;    call visu_store   !! nothing to store anymore
+      IF [filename_store_offset - symb_store_offset] / &0100
+   !! doesn't fit in tmp_copy, must call _append_store
+      END
+          CALL_ED(ed_store)
+          ld c,e        ; size
+          pop de
+          call _append_store:ret nc
+          push de
+;Do filename last:
+   ; - filename must be confined for easy comparison
+   ; - ed store does not have this constraint
+          ld hl,filename
+          ld de,tmp_copy
+          ldi           ; must copy size (can be 0)
+          CALL_ED(copy_nt)
+          ld c,e        ; size
+          pop de
+;enchaine
+_append_store
+; in:  DE= id for append         
+;      C= size 
+;out:If ok: Carry
+    ;  DE= id last chunk (can be the same)
+    ; NC if error (memory full)
+          ld hl,tmp_copy
+          ld b,e        ;adapt api  BD=id
+          CALL_BRIC(append_raw)
+          ex de,hl
+          jp connect_bk_base
+
+restore_all
+; In: hl:slot in sources_index
+     ; de=associated meta id.
+     ; iyl= new source 
+;Out: Carry Z if ok, new source
+    ; Carry NZ if ok, existing source
+
+          push hl       ; save slot to free.
+          ex de,hl
+          CALL_BRIC(connect_heap_chunk)
+
+; Restore all meta data from chunk
+; Must be symetric to store above       
+
+          ld b,a        ;api adapt bhl rather than ahl
+;fill full buffer (legacy reason)
+          ld de,tmp_copy
+          call _read_restore0
+          push bc:push hl ; save pos cur
+
+          ld hl,tmp_copy
+      IF opt_checks
+          ld a,(hl):cp type_orgams:call nz,mess ; only 1 type for now
+      END
+          inc l
+
+; -- source begin + ...
+          ld de,vo0:ld bc,meta_org_len1:ldir
+; sanity check   
+          push hl
+          ld hl,(source_begin)
+          call check_id_or_null
+          pop hl
+      IF todo
+; TODO: error message
+      END
+          jr nc,ret_3
+
+          ld a,iyl
+          ld (current_source),a
+; --var
+          ld de,vo:ld bc,meta_org_len2:ldir
+; --ass
+          ld de,va2
+          call ass_store_com
+          ld de,va2_store':ld c,ass_len2:ldir
+          call set_assembled_info
+
+;-----
+          CALL_BRIC(aap_restore)
+          ex de,hl
+          pop hl:pop bc
+          call _read_restore
+          push bc:push hl
+          ld hl,tmp_copy
+          CALL_ASS(sy_restore)
+          CALL_ASS(cocopy_restore)
+;0 in store, just init since macro state not restored
+          CALL_ASS(visu_restore)
+          CALL_ED(ed_restore)
+          ex de,hl
+          pop hl:pop bc
+          call _read_restore
+          ld hl,tmp_copy
+          ld de,filename
+          ldi           ; must copy size (can be 0)
+          CALL_ED(copy_nt)
+
+;--- release store now it has been copied to RAM. 
+          pop hl        ;  slot  in source index
+          ld d,(hl):ld (hl),0:dec l
+          ld e,(hl):ld (hl),0
+          ex de,hl
+          CALL_BRIC(free_list)
+
+          scf:sbc a     ; C, NZ
+          ret
+
+ret_3
+; Used when stack must be corrected and we want to keep AF 
+   ; - error code
+   ; - C vs NC
+          pop bc
+          pop bc
+          pop bc
+          ret
+
+_read_restore
+; Fill buffer in sliding fashion.
+    ; Not symetrical to _append_store as:
+        ; - we don't know filename size 
+        ; - API-wise for read we need full 24 bits pointer
+; in/out:  BHL= pnt for read
+        ;   de= pos in buffer
+
+; -- first move remaining in buffer to make room
+          ld a,e:neg:call z,mess
+          push bc:push hl
+          ld h,d:ld l,e
+          ld e,0
+          ld c,a:ld b,e
+          ldir
+          pop hl:pop bc
+_read_restore0
+          xor a:sub e:ld c,a ; fill remaining of buffer.
+; We might have read more than needed. If it's the case, b=0
+          ld a,b:or a:ret z
+          CALL_BRIC(read_raw)
+          jp connect_bk_base
+
+ass_store_com
+; Sanity check: we have enough room / consistency
+; TODO: STATIC CHECK INSTEAD ! (needs import)
+          ld bc,ass_len1
+          ldir
+          ret
+
+set_assembled_info
+          ld de,va+1
+          jr _info_com
+
+copy_assembled_info
+; In: DE= dest
+          ld hl,va+1
+_info_com
+          ld bc,ass_len3
+          ldir
+          ret
+
+get_source_id
+;In: a= source #
+;Out: HL= pnt MSB in tab (!!expected by org_select)
+;   ; If no source, Z and DE=0
+    ; Otherwise,   NZ and DE=id
+    ; A preserved
+
+; NB: BRK if out of range, since it must be a programming error
+          cp max_sources:call nc,mess
+
+          call connect_bk_base ; Required from e.g. org_select
+      IF sources_index AND &FF
+!! to be corrected
+      END
+          ld l,a:sla l
+          ld h,sources_index/&0100
+          ld e,(hl):inc l
+          ld d,(hl)
+          inc d:dec d   ; Is D zero?
+          ret
+
+check_id_or_null
+; Return C if HL well formed (So 0 *is* considered valid).
+; Don't BRK here! (Depends on client).
+          ld a,l:or h:scf:ret z
+; Enchaine
+check_id
+; Return C if HL ok (valid for connection. So 0 isn't considered valid).
+; Don't BRK here! (Depends on client).
+          ld a,l:and &C4:xor &C4:ret nz
+          ld a,h:and &C0:cp &40:scf:ret z
+ret_nc
+          or a
+          ret
+
+hi
+realsize = $$-code
+      FILL limit-$,&FF
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      ORG codedest2,$$
+
+jps
+          jp set_assembled_info ; ass, import.nrt
+          jp copy_assembled_info ; import
+          jp connect_filename_size ; org, import
+          jp connect_ass_store ; ass
+          jp connect_aap_pool ; impeva
+          jp connect_symbol_index ; symb    
+          jp connect_depsrec ; cache
+          jp connect_up_to_date_since_visu_pc ; cache
+          jp connect_up_to_date_since_ass ; cache
+          jp connect_var_in_store
+          jp store_all  ; org
+          jp restore_all ; org
+          jp get_source_id ; org
+          jp check_id_or_null ; org
+          jp check_id   ; org
+hi2
+      FILL limit2-$,&F7
+codesize2 = $$-code2
+
+; --------------- Checks ---------------------
+      IF vo0 - &7080
+  !! shared with org, save
+      END
+
+tmp_copy = &8B00        ; reuse org checksum
+mess  = &BE00
+
+      IF filename - &7E00
+ !! Shared with ed, org, import (for no-self-import sanity check), mon
+      END
+

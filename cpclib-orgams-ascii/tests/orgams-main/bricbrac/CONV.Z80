@@ -1,0 +1,396 @@
+inRom = 1
+
+; <<< Conv. Conversions >>>
+            ; (well, just str->int for now)
+
+; !!TODO!!: remove put_* from disp.o
+
+; TOC:             
+   ; From string to integer:
+     ; deci_to_int
+
+   ; From integer to string:
+     ; put_deci_a  
+     ; put_deci_hl 
+     ; put_hexa_a  
+     ; put_hexa_hl
+
+; 2025 
+; -- HH Beta I --
+  ; Dec
+    ; 8. v2: #1f6: Add put_deci_long
+           ; Use "bricmap.i"
+; 2021
+  ; Nov 
+    ; 20. v1: str_to_int from ed (was called Str2Dec)
+            ; put_* from disp
+
+      IMPORT "memmap.i"
+      IMPORT "macro.i"
+
+      IF inRom
+      ORG &2000
+      IMPORT "burnrsx.o"
+      IMPORT "bricmap.i"
+      ENT burn
+
+rom   = &1C
+codedest = conv
+limit = check
+codedest2 = conv_jp
+limit2 = string_jp
+
+; ========================================
+burn
+          ld ix,param_burn
+          call burn_rsx
+          ld ix,param_burn2
+          call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+      END
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+deci_to_int
+; Converti une chaine en d{cimal
+;
+; IN  : HL = buffer de la chaine
+; OUT : If ok, Carry, DE = d{cimal 16 bit
+      ; HL = post str
+      ; BC conserved.
+
+          ld a,(hl):or a:ret z ; Buffer vide?
+          xor a
+          ld e,a:ld d,a
+; Check le signe
+          ld a,(hl)
+          cp "-":jr nz,$+3:inc hl ; skip and set FZ.
+          push af
+          cp "+":jr nz,$+3:inc hl ; just to skip it
+; Conversion
+ConvertLP
+          ld a,(hl)
+          sub "0":ccf:jr nc,.ko ; NC if invalid
+          cp 9+1:jr nc,.ko ; NC if invalid
+; Valeur = valeur fois 10
+          push hl
+          ex de,hl
+          add hl,hl
+          ld e,l
+          ld d,h
+          add hl,hl
+          add hl,hl
+          add hl,de
+; Ajoute le prochain nombre
+          ld e,a
+          ld d,0
+          add hl,de
+          ex de,hl
+          pop hl
+          inc hl
+          ld a,(hl):or a
+          jr nz,ConvertLP
+
+; Conversion compl}te
+          pop af
+          scf
+          ret nz
+
+;minus sign: de := -de
+          push hl
+          xor a         ; for nc
+          ld l,a:ld h,a
+          sbc hl,de
+          ex de,hl
+          pop hl
+          scf
+          ret
+
+.ko
+          pop de        ; discard flag sign
+          ret
+
+put_hexa_hl
+          push af
+          ld a,h:call put_hexa_a
+          ld a,l:call put_hexa_a
+          pop af
+          ret
+
+put_hexa_a
+          push af
+          call put_hexa_qh
+          pop af
+          push af
+          call put_hexa_ql
+          xor a
+          ld (de),a
+          pop af
+          ret
+
+
+put_hexa_qh
+          rrca
+          rrca
+          rrca
+          rrca
+put_hexa_ql
+          and &0F
+          or a
+          daa
+          add &F0
+          adc &40
+          or &20        ;lowercase
+          ld (de),a
+          inc de
+          ret
+
+;
+put_deci_hl
+;Affiche "hl" en decimal
+;No justification.
+
+;In: hl = value
+   ; de = buffer to write string.        
+          push hl
+          push bc
+          ld bc,10000
+          call pwfigno0
+          ld bc,1000
+          jr nz,pwdec4
+          call pwfigno0
+          ld bc,100
+          jr nz,pwdec3
+          call pwfigno0
+          ld a,l
+          ld b,10
+          jr nz,ddec100
+          jr put_dec_
+pwdec4
+;>=10000 il faut afficher nombre des 1000
+;
+          call pwfig
+          ld bc,100
+pwdec3
+          call pwfig
+          ld a,l
+          ld b,10
+          jr ddec100
+;
+pwfig
+          xor a
+pwfigwf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfigwf
+;
+          add hl,bc
+          dec a
+          or &30
+          ld (de),a
+          inc de
+          ret
+;
+pwfigno0
+          xor a
+pwfn0wf
+          inc a
+          or a
+          sbc hl,bc
+          jr nc,pwfn0wf
+          add hl,bc
+          dec a
+          ret z
+;
+          or &30
+          ld (de),a
+          inc de
+          or &30        ;force nz
+          ret
+;
+put_deci_a
+          push hl       ;not modified, but must mimic put_deci_hl
+          push bc
+          ld b,100
+          call dpfigno0
+          ld b,10
+          jr nz,ddec100
+put_dec_
+          call dpfigno0
+          jr ddecunit
+ddec100
+;>=100 il faut afficher nombre des dizaines
+;
+          call dpfig
+ddecunit
+          or &30
+          ld (de),a
+          inc de
+          xor a
+          ld (de),a
+          pop bc
+          pop hl
+          ret
+dpfig
+          ld c,-1
+dpfigwf
+          inc c
+          sub b
+          jr nc,dpfigwf
+          add b
+          ld b,a
+          ld a,c
+          or &30
+          ld (de),a
+          inc de
+          ld a,b
+          ret
+;
+dpfigno0
+          ld c,-1
+dpfn0wf
+          inc c
+          sub b
+          jr nc,dpfn0wf
+          add b
+          ld b,a
+          ld a,c
+          and a
+          jr z,dpfn0ret
+;
+          or &30
+          ld (de),a
+          inc de
+          or &30        ;force nz
+dpfn0ret
+          ld a,b
+          ret
+
+put_deci_long
+;------------
+; In: HL=pnt to value (unsigned)
+    ;  B=size value  0 < b <= about &30 (otherwise no room for output)
+    ; DE=dest buffer
+;Out: DE=post written ascii
+    ;  B preserved
+          push de
+          ld de,single_use + &FF ; buffer out
+.divlp
+          ld c,10
+          call divide_long
+          add "0":ld (de),a:dec e
+          push hl
+          ld c,b
+          xor a
+.iszero   or (hl):jr nz,.cont:inc hl:dec c:jr nz,.iszero
+;quotient is zero: finished
+          pop hl        ; discard
+          ex de,hl      ; hl= buffer out
+          pop de
+.copy
+          inc l:ret z
+          ld a,(hl)
+          ld (de),a:inc de
+          jr .copy
+
+.cont
+          pop hl
+          jr .divlp
+
+divide_long
+;----------
+; In: HL=pnt to dividend (unsigned)
+    ;  B=size dividend  0 < B <= &7e
+    ;  C=divisor (unsigned)
+;Out: Hl=pnt to quotient (b sized as well)
+    ; A = reminder
+    ; BC, DE preserved
+
+; -- buffers
+dividend = single_use
+quotient = single_use + &80
+
+          push de
+; Copy dividend in buffer so we can add MSB=0 and modify in-place 
+          ASSERT(dividend AND &FF == 0) ; we use LSB = index
+          ld de,dividend
+.cp       ld a,(hl):inc hl:ld (de),a:inc e:djnz .cp
+          ex de,hl:ld (hl),b ; 0: MSB
+; -- iterate l times (was b) * 8 
+          ld d,l
+.bytelp
+          ld e,8
+.bitlp
+; HL= pnt to MSB dividend (so L = nb bytes - 1)
+; -- Shift dividend (*2)
+          ld b,l
+          xor a:ld l,a  ; +NC
+.srl_long rl (hl):inc l:djnz .srl_long
+          rl (hl)
+          jr nc,.isge
+; Carry -> necessarily bigger
+          ld a,(hl):sub c:ld (hl),a
+          scf
+          jr .inject
+.isge
+; -- GE than divisor?
+          ld a,(hl)
+          sub c:jr c,$+3:ld (hl),a ; if yes, substract it
+          ccf           ; bit in quotient                
+.inject
+; -- inject bit (full size each time to clear with leading zeros)
+          ld b,l
+          ld a,l        ; save
+          ASSERT(dividend/&0100 == quotient/&0100) ; same MSB
+          ld l,quotient AND &FF
+.srl_long' rl (hl):inc l:djnz .srl_long'
+          rl (hl)
+          ld l,a
+          dec e
+          jr nz,.bitlp
+          dec d
+          jr nz,.bytelp
+          ld a,(hl)     ; reminder
+          ld b,l        ; restore b = size
+          ld l,quotient AND &FF
+          pop de
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp deci_to_int
+          jp put_deci_long
+          jp put_deci_a
+          jp put_deci_hl
+          jp put_hexa_a
+          jp put_hexa_hl
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+

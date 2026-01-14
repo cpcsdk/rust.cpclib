@@ -1,0 +1,1023 @@
+inRom = 1
+; Screen: Raster / Rupt under int for status bar.
+        ; Transitions.
+
+raster = 0              ; debug rasters in border
+todo  = 1
+need_room = 1
+dev_checks = 1
+
+      IF need_room
+ ;TODO? leave routines in ROM (requires to save kl_curr_sel)
+      ; Prerequise: new far_call enabled (proper ed_rom# in ram)
+      END
+
+; \/\/ 2025 \/\/\/\/\/ 
+; ------ GG Release -----
+; May 28 as Remove scanlines
+          ; Adjust tempo for CRTC3
+    ; 25 ar ink_logo_fore0: s/&47/&4f
+    ; 15 aq Fix introduced bug: must leave push/pop de in int 0
+          ;
+       ; ap Better palette, read via outi (for dynamic palette)
+                          ; -> well, "palette change" idea abandonned
+       ; ao New palette via /ink_back0/ and co.
+; ------ GG beta J -----
+; Apr 12 an Call /store_firm_bc/ at install time
+            ; Otherwise when mon.refresh calls status_off,
+            ; wrong BC' is picked. It used to be corrected by
+            ; firmware's farcall, but it isn't by new farcall.
+       ; am Assert if /firm_bc/ was not set
+          ; !!! on hold, as defaulting it to &7f00 to detect 
+          ; !!! uninitialised value leads to unexplained crash.
+          ; !!! Oh, the crash is explainable (see journal.o)
+          ; !!! the absence of assert triggered is not.
+; ------ GG beta F -----
+; Mar 16 al New colors
+; Jan 13 ak Add test_manual_trace
+          ; tr2shift/shift2tr: Proper R2 transition for OSCC
+; \/\/ 2024 \/\/\/\/\/ 
+; ------ GG beta 5 -----
+; Jun 30 aj status_off: must restore firmware's BC'
+          ; status_on: set firm_bc here (fix ai)
+; May 30 ai Save bc' and restore system's version
+; Jan  5 ah Expose install_editor_keep_offset
+; \/\/ 2023 \/\/\/\/\/
+; Dec       
+  ; 20 ag More room to account for PLUS raster shift (0.75nop)
+            ; -> Cannot print last 2 chars on left panel
+  ; 17 af Introduce install_editor_keep_offset
+  ; 15 ae Finetune /lpmode2/ to have white until very end of left creise
+                 ; (needed for EXT &xx)
+        ; Oups, remove col forced to &40
+     ; ad Fix out() sent with b=0
+        ; Fix limit_ram (we were overwritting current_source')
+        ; Use /nop17/ etc to fit in ram
+  ; 11 ac Reintegrate "bandorg.o"
+            ; - Not shared anymore
+            ; - Simpler to split-install in rom
+        ; Use "bricmap.i"
+
+  ;  5 ab Last line of bandeau must be r1=48, not 40
+        ; (otherwise wrong display of last line of chars such a "g")
+; Nov      
+  ; 25 aa Restore lost version from ROM:
+            ; - int_ram = &9600
+            ; - current_source' = &97f0
+        ; Export code in lib/bandrupt.o
+
+; Apr
+  ; 14  z Split squares.
+        ; Remove ced logo handling
+        ; Simplify ram installation 
+           ; -> No more need to save word at 96fe  
+
+; \/\/ 2021  \/\/\/\/\/
+;Dec 30 y Detourne degrade dans border.
+
+      ; x Use rom version of /set_ctrc/ for transitions:
+          ; - more robust (no weird crash if workzone corrupted). 
+        ; tr2shift: setup r1/r2.
+      ; w Set r3' in /status_on/ so we are good after |i
+      ; v Set ink 1 in rupt so we are good after a rsx!
+
+      ; u Set r14 last so it's not critical if we interrupt r12_13 
+          ; setting from system (see post /int1_dispatch/)
+        ; !!!! BOULET !!!! Move from &9b00 (trashed by ass) to &9600
+          ; Anyway TRUI won't use this ever, so there is no need to put
+          ; it in privileged zone.
+      ; t Set default /offset/ @ 3000
+        ; Try to set rupt after /call call_int_firm/
+   ; 12 s Partially rollback r: instead of replacing,
+                      ; append tr2shift/shift2tr for easier transition.
+        ; Remove logo2status (can be done by reinstall).
+      ; r Replace firm2logo by logo_on. Rationale:
+          ; More uniform and composable: we start and end shifted. 
+        ; In the same spirit: tr2shift rather than tr2status
+;Apr 11 q (revision!) /status_on/ and /status_off/
+        ; Set r4' only if int detourned: allow to status_off just by
+        ; restoring firm int!
+
+      IMPORT "bricmap.i"
+;In rom bricbrac since we have room.
+rom   = &1C
+codedest = screen
+limit = aap2
+codedest1 = screen2
+limit1 = io_disc
+codedest2 = screen_jp2
+limit2 = disp_jp
+codedest3 = screen_jp
+limit3 = scr_lo_jp
+
+      ORG &1000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+; ----- In this rom ------
+logo_uncpct = &C00F + &0694
+; ------------------------
+
+mc_set_mode = &BD1C
+kl_rom_select = &B90F
+kl_rom_deselect = &B918
+
+r1    = 40
+r1'   = 48
+r1t   = 32
+r1d   = r1'-r1 /2
+r2    = 46
+r2'   = r2 + r1d        ; aka 50.
+r2t   = 42
+r3    = &8E             ; Restablish firmware r3 for CONTROL-2
+r3'   = &FC
+r4    = 38
+r4'   = 33
+r4''  = 19              ; status (40 line total)
+r6    = 25
+r6''  = r4''+1
+r6t   = 32
+r7    = 30
+r7'   = 27
+r7t   = 34
+r9'   = 1
+
+
+current_source' = &97F0 ; copied out of bank by org
+      IF current_source' - &97F0
+   !! shared with org.o
+      END
+
+int_ram = &9600
+limit_ram = current_source' ; also stuff at 97f8
+
+
+tests
+          ld c,rom:call kl_rom_select
+
+          call install_monogams
+          call nrt_markers
+
+  ;        call test_assumptions
+  ;        call test_no_crash
+;          call test_manual_tr
+   ;       call test_manual_trace
+ ;         call test_manual_onoff ; no exit (loop on/off)
+          call test_manual ; no exit (loop firm/status)
+       ;   call lptr     ; no exit (loop status/tr)
+          ret
+
+nrt_markers
+          ld hl,&C000
+          ld b,21
+nmk       ld (hl),&AA:inc hl:ld (hl),&AA
+          ld de,&60-1:add hl,de
+          djnz nmk
+          ret
+
+test_assumptions
+;---------------
+          call nrt_init
+; set_int_dispatch test proper setup by expecting 'pop hl' @ set_crtc.
+; This test acts a static assert.
+          ld a,(set_crtc)
+          cp expected_opcode
+          call nz,&BE00
+          ret
+
+test_no_crash
+;------------ 
+          ld a,&F7:ld (set_crtc),a
+          call status_on
+; -- just check we return!
+          ret
+
+test_manual
+;----------
+          call nrt_init
+ ;         call set_crtc:BYTE 7,32,&FF
+      IF 0
+          call firm2status_editor
+      ELSE
+          call install_monogams ; routines 
+          call clearstatus_monogams
+          call f2s_com
+      END
+          call &BB06
+lp
+          call status2firm
+;          call &BB06
+          call firm2status_editor
+;          call &BB06
+;          jr lp
+;          call &BB06
+          ret
+
+      MACRO NRT_LINE adr
+          ld hl,adr
+          ld de,adr+1
+          ld bc,&4F
+          ld (hl),&A0
+          ldir
+      ENDM
+
+test_manual_tr
+          ld hl,&3000:ld (offset),hl
+          call nrt_init
+          call firm2shift
+          call set_int_dispatch
+
+          NRT_LINE(&8000)
+     ;     NRT_LINE(&8800 + &60*3) ; +7 lines 
+          NRT_LINE(&8000 + &60*4) ; +8 lines 
+          NRT_LINE(&8800 + &60*19) ; +39 last line
+
+          call clearstatus_monogams ; Decrunch logo
+;          ld hl,&8000:ld de,&8001:ld bc,&0FFF:ld (hl),&F0:ldir
+; Some markers               
+mark1 = &8000 + r1'*6
+mark2 = &8000 + r1'*4 + 75
+mark3 = &8000 + r1'*6 + 75
+          ld hl,mark1:ld de,mark1+1:ld bc,20:ld (hl),&AA:ldir
+          ld hl,mark2:ld de,mark2+1:ld bc,18:ld (hl),&AA:ldir
+          ld hl,mark3:ld de,mark3+1:ld bc,18:ld (hl),&AA:ldir
+
+          di:call install_monogams:ei ; switch from logo to status!
+          call &BB06
+          ret
+
+test_manual_trace
+;Test transition trace <-> moagams
+;(especially r2 transition as 
+
+          ld hl,&3000:ld (offset),hl
+          call nrt_init
+          call firm2shift
+          call &BB06
+          call shift2tr
+          call &BB06
+          call tr2shift
+          call &BB06
+          ret
+
+
+
+test_manual_onoff
+; Status on/off (but same position for main screen)
+
+          call firm2status_editor
+tmoolp
+          push bc
+          call status_off
+          call status_on
+          pop bc
+          jr tmoolp
+
+lptr
+          call status2tr
+          call &BB06
+          call tr2status_editor
+          call &BB06
+          jr lptr
+
+nrt_init
+; Must be done first (e.g. to use set_crtc)              
+          call install_editor
+          ret
+
+      IF inRom
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          call &BB06
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn1 WORD rom,codesize1,codedest1,code1
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+
+      END
+
+; ===========================
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+      MACRO ASSERT p
+      IF p:ELSE
+ !! error
+      END
+      ENDM
+
+      MACRO CHECK_MSB
+; For optim purpose, we assume all routines share same msb
+      IF $/&0100 - int0/&0100
+ !! error distinct msb
+; if it happens, assemble routine at another place
+      END
+      ENDM
+
+      MACRO CALL_ROM rout
+; Call routine in rom rather than its copy in ram.
+; Safer since we are calling from this rom anyway.
+          call rout-int_ram+int_rout
+      ENDM
+
+      MACRO CALL_RAM rout
+; Documentative.
+          call rout
+      ENDM
+
+      MACRO CHECK_BC'
+      IF dev_checks
+          call _check_bc'
+      END
+      ENDM
+
+install_editor
+; Install each time: simpler and more robust.
+; Also, we need to reset dispatch to int0 anyway.  (!?!)
+; About 31 raster lines.                                   
+
+; Good default! (called by init.setup_from_basic)
+          ld hl,&3000:ld (offset),hl
+install_editor_keep_offset
+          ld hl,int_rout
+          ld de,int_ram
+          ld bc,int_rout_
+          ldir
+          jr store_firm_bc
+
+install_monogams
+          call install_editor
+          ld de,raster_monogams
+          ld (raster_hook+1),de
+          ret
+
+      IF 0
+; No more room for jp, so let mon do the individual calls
+firm2status_monogams
+          call install_monogams ; routines 
+          call clearstatus_monogams
+          jr f2s_com
+      END
+
+firm2status_editor
+; If already installed: no-op.
+; !!! NOT TRUE regarding crtc transition. Todo? fix that? !!!
+
+      IF todo
+; Is anyone actually calling this particular routine?
+; ED setup is done in two phases: firm2shift (so we can load),
+                                ; and later (status_on)
+      END
+
+; We deviate &b941 so monogams can connect low rom. 
+; We expect ex af,af:jr c,&b978  in &b942:
+  ; - checked at init
+  ; - simpler code
+
+          call install_editor ; routines
+          call clearstatus_editor ; screen itself
+f2s_com
+          call firm2shift
+          jp status_on
+
+
+status2firm
+; Replace firm ints (for cat, ed, ...)
+          call status_off
+;enchaine
+shift2firm
+; Shift screen back.
+          call flyback
+          CALL_ROM(set_crtc):BYTE 3,r3,4,r7'+r4-r7,-1
+          3 ** halt
+          CALL_ROM(set_crtc):BYTE 4,r4,7,r7,-1
+          ret
+
+firm2shift
+; shift screen (r7 to r7')
+
+          call flyback
+; We have temp r4 (41) > r7' (27)
+          CALL_ROM(set_crtc):BYTE 3,r3',4,r7+r4-r7',-1
+          3 ** halt
+          CALL_ROM(set_crtc):BYTE 4,r4,7,r7',-1
+          ret
+
+int_firm = &B941
+int_firm_nc = &B945
+int_firm_carry = &B978
+
+set_int_dispatch
+; Set r3' as expected. Needed when coming after RSX like |i.
+; We do it here, so it's both activated for status_on and logo,
+; that is exactly where we need it.
+      IF todo
+;  not needed anymore!!?!
+      END
+
+; Sanity: do not crash if routines not set up.
+; For ayane: already in ram.
+          ld a,(set_crtc)
+expected_opcode = &E1
+          cp expected_opcode ;  Covered in sd:org/screen.o
+          ret nz
+
+          CALL_RAM(set_crtc):BYTE 3,r3',-1
+
+          di
+          ld a,&C3:ld (int_firm),a
+          ld hl,int_dispatch:ld (int_firm+1),hl
+          ld hl,int0:ld (int_dispatch+1),hl
+store_firm_bc
+          di
+          exx
+          ld (firm_bc+1),bc
+          exx
+          ei
+          ret
+
+; -------------------------------
+clearstatus_editor
+          ld hl,&8000
+          ld de,&8001
+          ld bc,&0FFF
+          ld (hl),l
+          ldir
+          ret
+
+clearstatus_monogams
+; Decrunch logo
+          ld de,&8000
+          jp logo_uncpct
+
+; -------------------------------
+tr2status_editor
+          call install_editor
+          call tr2shift
+          jr status_on
+
+tr2status_monogams
+          call install_editor
+          call tr2shift
+          jr status_on
+
+
+tr2shift
+; Copy-paste for now. Todo: factorize
+; NB: We set back r1/r2 for source display 
+    ; (it takes some times before status_on).
+          di
+          call flyback_hard
+dr2   = r2-r2t
+          CALL_ROM(set_crtc)
+      BYTE 0,63-dr2,4,r7t+r4-r7',6,r6 ; r2 transition needed for OSCC
+      BYTE 2,r2,0,63,1,r1,-1
+          ei
+          3 ** halt
+          CALL_ROM(set_crtc):BYTE 4,r4,7,r7',-1
+          ret
+
+; -------------------------------
+restore_int_firm
+; Must preserve BC DE IX IY
+      IF todo
+;!!! bug when we call status_off without status_on first
+;!!! as firm_bc isn't set to proper value (=&7f80)
+      END
+          di
+          ld a,&F3:ld (int_firm),a
+          ld hl,&3808:ld (int_firm+1),hl
+          exx
+          ld bc,(firm_bc+1)
+          CHECK_BC'()
+          exx
+          ei
+          ret
+
+      IF dev_checks
+_check_bc'
+          push af
+          ld a,c:and &F0:cp &80
+          call nz,&BE00
+          pop af
+          ret
+      END
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+code1 = $$
+      IF inRom
+      ORG codedest1,$$
+      END
+
+
+status2tr
+; Copy-paste for now. Todo: factorize   
+          call status_off
+shift2tr
+          di
+          call flyback_hard
+          CALL_ROM(set_crtc)
+      BYTE 0,63+dr2,3,r3,4,r7'+r4-r7t
+      BYTE 2,r2t,0,63,1,r1t,6,r6t,-1
+          ei
+          3 ** halt
+          CALL_ROM(set_crtc):BYTE 4,r4,7,r7t,-1
+          ret
+
+status_off = restore_int_firm
+; Disable status (but keep same shifted pos for main screen)
+
+
+status_on = set_int_dispatch
+; Enable status (from shifted pos screen)
+
+; --------------------------------
+flyback
+; Ensure start of flyback.
+          call &BD19
+          ld b,0:djnz $
+          jp &BD19
+
+flyback_hard
+; Ensure start of flyback.
+          call vsync
+          ld b,0:djnz $
+vsync
+          ld a,&F5:in a,(&FF)
+          rra
+          jr nc,vsync
+          ret
+
+
+; -------------------------------
+; Int vector installed in ram
+; -------------------------------
+
+      MACRO INT_RET col,nxt
+          CHECK_MSB()
+; !! call reused for dispatch (cf int4)
+; Must leave the call 
+      IF raster
+          call _int_ret:BYTE col
+      ELSE
+          call _int_ret
+      END
+; Hack: we cannot use 'if $-nxt' since nxt isn't known yet.
+      ; So we rely on multi-definition allowed if same value.
+zero  = $-nxt
+      ENDM
+
+int_rout
+      ORG int_ram,$$
+
+      IF $ AND &C000:ELSE
+!!! Cannot be in page 0000, since called while lower rom connected
+      END
+
+palvga
+    ; BYTE &54   ; we want tab 0 = bleu
+      BYTE &44,&55,&5C,&58,&5D,&4C,&45,&4D ; green = 0
+      BYTE &56,&46,&57,&5E,&40,&5D,&4E,&47 ;,&4F ; green = 1
+; limit to 16 col since we lack room
+;      BYTE &52,&42,&53,&5A,&59,&5B,&4A,&43,&4B ; green = 2
+
+
+int0
+          CHECK_MSB()
+          push hl:push bc:push af
+; Expect VSYNC. if not: don't change int#
+          ld b,&F5:in a,(c):rra
+          jr nc,_int_ret_
+
+          ld hl,int1
+          ld (int_dispatch+1),hl
+mode_top  ld a,2:call mc_set_mode
+
+; Int firm while vbl for keyboard handling
+          call call_int_firm
+
+; Just in time rupture. Sweet!
+          CALL_RAM(set_crtc)
+      BYTE 4,r4',12,&20,13,0,-1
+
+          ld hl,palette_logo
+          ld bc,&7F03
+          out (c),c:outi
+          dec c
+          out (c),c:outi
+          push de       ; Needed by int1, done here to easy syncrho
+
+          halt          ; /int1/ stabilized
+
+          pop de
+          pop af:pop bc:pop hl
+
+          INT_RET(&44,int2)
+int2
+          INT_RET(&55,int3)
+int3
+          INT_RET(&5C,int4)
+int4
+          INT_RET(&58,int5)
+int5
+          INT_RET(&5D,int0_)
+
+int0_     jr int0       ; Just to be able to reuse INT_RET for int5
+
+_int_ret
+          ex (sp),hl
+      IF raster
+          push bc
+          push af
+          ld a,(hl):inc hl
+          ld (int_dispatch+1),hl
+          ld bc,&7F10:out (c),c:out (c),a
+          dec c:jr nz,$-1
+          ld c,&54:out (c),c
+      ELSE
+          ld (int_dispatch+1),hl
+          jr __int_ret__
+      END
+_int_ret_
+          pop af
+          pop bc
+__int_ret__
+          pop hl
+
+call_int_firm
+          exx:push bc:push de:push hl
+firm_bc   ld bc,&7F80   ; replaced by proper value at set_int_dispatch
+ ; !!! crash instead of asserting !?!
+     ;     CHECK_BC'()
+          exx
+          call call_int_firm_
+          exx:ld (firm_bc+1),bc
+          pop hl:pop de:pop bc
+          exx
+
+call_int_firm_
+          ex af,af
+          jp c,int_firm_carry
+          jp int_firm_nc
+
+int1
+      IF palvga AND &FF
+ !!! review this
+      END
+          ld a,(current_source')
+          and 15        ; limited palette
+          nop
+
+;Setting ink 1 & border to accomodate rsx return (e.g. |i). 
+;Anyway soon we'll have multicolor is status board.
+          ld bc,&7F54
+          ld de,&0100+ink_text:out (c),d:out (c),e
+          ld de,&1054:out (c),d:out (c),e
+          out (c),0     ; to do last!
+          out (c),c
+
+          ld e,a        ; both save and tempo
+
+          CALL_RAM(set_crtc)
+; r1 to r1' (still in border) 
+      BYTE 0,63-r1d,1,r1',2,r2',0,63
+; rupture
+      BYTE 4,r4'',9,r9',6,r6''
+      BYTE -1
+
+int1_status
+          CHECK_MSB()
+
+;color based on tab
+          ld l,e
+          ld h,palvga/&0100
+          ld a,(hl)
+          and &1F:or &40 ; sanitize
+          ld d,a
+raster_hook jp raster_editor
+;------
+; For editor: code replaced by raster_editor 
+
+raster_monogams
+; end of line % 4 = 0. Squares
+          ld a,7
+          ld a,a
+.lpmode2
+; No time to put col square: not worth it, only appears last word.
+; Also, cannot use split for left/right text, as this loop only
+; starts at 2nd char line.
+          ld bc,&7F01:out (c),c
+          ld c,ink_text
+          out (c),c
+          dec a:jr z,.endmode2
+          call nop15
+          ld a,a
+          ld hl,palette_logo'
+          call _outi
+          call nop11
+          jr .lpmode2
+
+.endmode2
+          ld de,&8D00 + ink_back1
+          out (c),d
+          out (c),e
+          call nop15
+          call nop8
+
+          ld a,11+1
+;splits for ORGAMS
+.lporg
+; even line
+          ld hl,palette_logo''
+          call out0_outi
+          ld e,1
+          out (c),e
+          outi
+          call nop13
+          call out0_outi
+          call nop12
+; odd line      
+          outi
+; Col 5c 58   
+          push hl:pop hl ; tempo 7  
+          out (c),e
+          outi
+          dec a
+          jr z,.endorg
+
+          call nop15
+          out (c),0:outi
+;          nop
+          jr .lporg
+.endorg
+          ld de,&0354:out (c),d:out (c),e
+          ld hl,&0500 + ink_back1
+          out (c),0:out (c),l
+          out (c),h     ; Discard ink change that are meant for editor
+          ld b,&5B:djnz $
+
+raster_end
+          ld b,5:djnz $
+          ld hl,(offset)
+;15 bytes
+          ld bc,&BC0C:out (c),c
+          inc b:out (c),h
+          dec b:inc c:out (c),c
+          inc b:out (c),l
+
+          ld bc,&7F54
+;-2:51-57  (that is, it could occur anytime in this range)
+          out (c),c
+;r1'tor1 (en 2 temps pour remise couleur)
+          CALL_RAM(set_crtc):BYTE 0,63+r1d,6,r6,-1 ; 6 for tempo
+;-1:41-47
+          ld bc,&7F8E:out (c),c
+          ld c,&58
+;-1:50-56
+          out (c),c
+          ld hl,&014B
+;-1:57-63   (r0 = 67 here) 
+          out (c),h:out (c),l
+          CALL_RAM(set_crtc):BYTE 1,r1,2,r2,0,63
+; Setup standard r4:
+   ; - So rupture is turned off just by restoring firm int.
+   ; - Ease resynchro if something goes wrong.
+   ; It is changed "just in time" by int0.
+
+; Select r14 last so that if we interrupted firmware setting of r1213
+; (scr_hw_rool), it has no serious effect.
+      BYTE 9,7,4,r4,6,r6,7,r7',14,0,-1
+          ret
+
+out0_outi
+          out (c),0
+_outi
+          ld b,&80:outi
+          ret
+
+nop18
+          ld a,a
+nop17
+          cp (hl)
+nop15
+          cp (hl)
+nop13
+          ld a,a
+nop12
+          ld a,a
+nop11
+          cp (hl)
+nop9
+          ld a,a
+nop8
+          ret
+
+set_crtc
+;Stop at -1
+;out: b=&bd
+;With call: +10us
+          pop hl
+.crtclp
+;20us /iter
+          ld b,&BD:outi
+          ld b,&BE:outi
+          ld a,(hl)
+          inc a
+          jr nz,.crtclp
+          inc hl
+          jp hl
+
+int_dispatch jp int0
+
+;      ORG cont
+
+; ----------------------------------
+; Alternative code installed in RAM
+; ----------------------------------
+
+raster_editor
+;------------ 
+; Raster loop for editor.
+; !!! Shorter code than /raster_monogams/
+
+  ;    ORG rasters,$$
+
+          xor a         ; Cpt 
+          add hl,bc     ; tempo
+_raster_editor_lp
+; end of line % 4 = 0. Squares
+          ld bc,&7F54
+          cp 3:jr nc,square0'
+;square0
+; Black Col Black               
+          nop
+          out (c),c:out (c),d:out (c),c
+          jr _line1     ; same tempo 
+_line1
+; line % 4 = 1.  Alternate color 
+          ld c,&58
+          out (c),c     ;-- 
+          cp 9          ; A Incremented at end of loop
+          jr z,_raster_end
+          ld b,14:djnz $
+; line % 4 = 2. Black, Ssquares shifted down & right
+          ld bc,&7F54
+          out (c),c     ;-- +
+          ld b,8:djnz $:nop ; Shift +2 nop
+          ld b,&7F
+          cp 6:jr nc,square2'
+          nop
+          out (c),c:out (c),d:out (c),c
+          jr _line3
+_line3
+; line % 4 = 3.  Alternate color 
+          ld c,&5C
+          out (c),c     ;-- +65
+          ld b,15:djnz $
+; line % 4 = 0 start
+          ld bc,&7F54
+          out (c),c     ;-- +65
+          ld b,6:djnz $
+          inc a
+          jr _raster_editor_lp
+_raster_end
+          jp raster_end
+
+square0'
+; Col Black Col
+          out (c),d:out (c),c:out (c),d
+          jr _line1
+
+square2'
+; Col Black Col
+          out (c),d:out (c),c:out (c),d
+          jr _line3
+
+ink_text = &4B          ; both monogams/editor
+; For logo           
+      IF 0
+ink_kana_small0 = &45
+ink_kana_small1 = &5D
+ink_kana_big = &47
+ink_logo_back = &43
+ink_logo_fore0 = &4B
+ink_logo_fore1 = &4B
+      ELSE
+ink_back0 = &58
+ink_back1 = &58         ; Must be &58! (last selected)
+ink_kana_small0 = &5F
+ink_kana_small1 = &5F
+ink_kana_big = &5D
+ink_logo_back = &47
+ink_logo_fore0 = &4F
+ink_logo_fore1 = &4F
+      END
+
+palette_logo
+      BYTE ink_logo_back
+;enchaine (this value is read twice)
+palette_logo'
+      BYTE ink_kana_big
+palette_logo''
+      BYTE ink_kana_small0
+      BYTE ink_back0
+      BYTE ink_logo_fore0
+      BYTE ink_kana_small1
+   ;   BYTE &54
+palette_logo'''
+      BYTE ink_back1
+      BYTE ink_logo_fore1
+  ;    BYTE &54,&54
+int_rout_ = $ - int_ram
+
+cont  = $$
+
+ho
+      SKIP limit_ram-$
+
+      ORG int_rout + int_rout_,cont
+hi1
+realsize1 = $$-code1
+      IF inRom
+      FILL limit1-$,&F7
+      END
+codesize1 = $$-code1
+
+; ===========================
+      IF inRom
+      ORG codedest2,$$
+      END
+
+code2 = $$
+jp
+          jp firm2status_editor ; 0
+          jp status2firm
+          jp status2tr
+          jp tr2status_editor
+          jp clearstatus_monogams ; mon
+          jp install_monogams ; mon
+          jp clearstatus_editor ; ed
+          jp install_editor
+          jp firm2shift
+          jp shift2firm ; 9
+          jp status_on  ; ed
+          jp status_off ; ed
+          jp shift2tr
+          jp tr2shift
+        ; jp firm2status_monogams  !!! No more room here ; 14   mon   
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$-code2
+
+; ===========================
+      IF inRom
+      ORG codedest3,$$
+      END
+
+code3 = $$
+jp'
+          jp install_editor_keep_offset
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+
+codesize3 = $$-code3
+
+
+offset = &9CFE          ; Shared with txtfirm
+

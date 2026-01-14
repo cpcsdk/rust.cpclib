@@ -1,0 +1,662 @@
+; <<< Setup / Init >>> 
+   ; -> both for cold and hot init (doesn't reinitialize existing vars)
+
+;TODO: fix nrt
+
+   ; /setup_from_basic/ installs all routines and infractures
+       ; (doesn't reset anything: we do it inconditionally)
+   ; /check_init/ checks AND init if necessary (first invocation).
+
+; !!! Far_call mustn't be used before having stored &8000
+
+inRom = 1
+
+;We normally read it in vo_romEd, which is needed 
+;Still this is needed for nrt and burn
+rom   = &0A
+romext = &1A            ; For nrt
+
+; =========================================
+vr_romEd = &9D00
+vr_romExt = &9D02
+vr_romMon = &9D04
+vr_romBric = &9D06
+vr_curr_sel = &9D0A     ; nrt
+vr_flag_firm = &9D0C
+; =========================================
+
+
+; \/\/ 2025  \/\/\/\/\/
+;------- HH beta 1 -----------
+  ; Jul     
+    ; 17 vac: Unpage ASIC
+    ; 01 vab: vr_firm/vr_curr_sel moved (just impact nrt)
+;------- GG beta M -----------
+  ; Mar
+    ; 26 vaa: +disp_firm_de_nl             
+    ; 24 vz: Remove setting ve_firm_sp (done in init cn)
+    ; 23 vy: Expose /disp_firm_de/                       
+
+;------- GG beta F -----------
+    ;  8 vx: Rollback vw (done by ed instead)
+    ;  7 vw: Clear ve_view @ 79f2 (no dump in editor by default)
+
+; \/\/ 2024  \/\/\/\/\/
+;------- GG alpha A -----------
+  ; Jan           
+    ; 11 vv: Move basebk to &fd, to reserve &ff for c000 mirror. 
+           ; Use "Orgmap.i"
+vv    = 0               ; On hold! 
+
+; \/\/ 2023  \/\/\/\/\/
+  ; May
+    ; 16 vu: Call /reset_checksumdone/ in setup_com_
+
+  ; Apr
+    ; 16 vt: Copy current source when calling /screen_init/
+        ; (so that proper color is shown when coming from basic)
+
+; \/\/ 2021  \/\/\/\/\/
+         ; 15 vs: Cold init: Sane default value for af', bc'. (td#f4)
+                ; Deactivate vr: no more room, and useless for now.
+     ; May 10 vr: Clean 7900-7cef for analysis.
+vr    = 0
+         ; 23 vq: Call /install_mf2_jump/ at setup time.
+
+; 2021 Jan 22 vp: Reset zone 4000, 7e00. See /clear/ for rationale.
+
+    ; 7 vo: Use /inst_breakpoint/ from brk2.o
+
+       ;vn: Don't call screen_init in /setup_workzone/ 
+          ; (see rationale there)
+; May 1 vm: Expose /setup_workzone/ (needed by monui for bug#101).
+
+    ; l: NRT: Clean-up.
+       ; Argl /screen_init/ must be called in !setup! since Out Of Bank 
+    ; k: Call /screen_init/ as well.
+ ; 11 j: Move /cold/ init from chbe. 
+     ; - makes more sense here.
+     ; - simplify interface /check_init/ returns NC iif checksum fails.
+     ; - /setup_from_nrt/ uses it preventing copy/paste in each nrt.
+     ; !! must be burnt with chbf !!
+; Apr 7 i: fix test_setup (cannot call setup_from_basic)
+; jan 1 h: also install new farcall (more explicit, needed by nrts)
+
+          ; g: fix bug introduced in initf: wrong sp in ve_firm_sp
+          ; f: setup_from_nrt mustn't install breakpoint
+             ; (otherwise breakpoint in dev bk rather than host bk)
+       ; 24 e: expose setup_from_nrt              
+             ; proper bank check (i.e. &c4 not accepted anymore)
+          ; d: Use install_farcall from this rom instead of mon's
+  ; Sept 21 c: More cleanup. Export/import
+
+; 29 vb; Some cleanup (unused var)
+; 29 va; Call tests after burning.
+; 29 v9; Fix test_setup: must copy &100, not &10000.
+; 26 v8; Boulet: fix c=vr_romMon pour inst_breakpoint
+; 25 v7; Set rom# in Ram after store!
+       ; +test_setup
+; 23 v6; Check di:ex af,af:jr c  @ B941
+; 21 v5; Uses mirror in this rom
+       ; Call restore BEFORE far_call (which install stuff @ 9D00)
+; 21 v4; Move @ c7f0  !! Requires chal'
+; 21 v3; JP table @ e830
+; 18 v2; vr_rom* in &9d00 
+       ; + reg I := bk base
+       ; + ensure currsel = &b8d6 
+
+; 17 Jul 2019 v1: extracted for chaj.
+
+      MACRO sane_default
+;Default mmr and rmr, af' bc' for trace + sp
+
+nrt_buf = &3000
+
+reg_rmr = &7D86
+reg_mmr = &7D87
+reg_bc' = &7DA8
+reg_af' = &7DAA
+reg_sp = &7DB4
+          xor a:ld (reg_rmr),a ;will be replaced by 8e by BRK (and MON?)
+          ld l,a:ld h,a:ld (reg_mmr),hl ;replaced by 7fc0         
+; Done#f4. Needed for first time trace. E.g. |orgams t&bb5a
+          ld h,&86:ld (reg_af'),hl ; a'=86,  carry'=0
+          ld hl,&7F8E:ld (reg_bc'),hl
+; TODO: FIXME: could explain crash at first orgams
+          ld (reg_sp),sp ; bug #b3, sp should be set to sane value
+      ENDM
+
+edsign_pos = &7800
+
+;-- In this rom --------------
+ch    = &C100
+ext_far_call = ch+&3C
+mon_far_call = ch+&3F
+bric_far_call = ch+&12
+bric_far_call_no_firm = &E81E
+DISP_init = ch+&42
+
+ed_init = &D206
+
+detect_bk# = &F5C4      ; routine preserve IX
+get_rom# = &F5C6        ; routine use IX. Out: a=romMon
+install_farcall = &F5C8
+install_new_farcall = &E825
+inst_breakpoint = &FEF4
+
+mulf  = &FEE8
+install_mf2_jump = mulf+3
+
+mirror = &E7F2
+set_firm_rommem = mirror ; use bc & hl 
+store_8000 = mirror+3   ; af bc de hl preserved
+; swap_8000 = mirror+12
+copy_here_mirror = mirror+24 ; nrt
+
+reset_checksumdone = &C121
+
+;-- In Ext rom ---------------
+org   = &C004+4
+org_init = org
+org_check_internal = org+75
+org_copy_current = org+108
+
+;-- In Monogams rom ----------
+mon_cold_init = &E00C
+
+;-- In Bric rom --------------
+chunk = &FE00
+chunk_init = chunk
+chunk_init_custom = chunk + 33 ; for nrt
+
+screen = &FE4E
+screen_init = screen + 21
+
+; =================================
+
+      IMPORT "orgmap.i"
+      IMPORT "memmap.i"
+
+      ORG &0100
+      IF inRom:ENT burn
+codedest = init_module  ; After ch'
+limit = farcall         ; FarCall
+codedest2 = init_jp
+limit2 = brk_module
+      ELSE:ENT tests
+      END
+
+;logo8 = &F539   ; Free now!!
+;logo8_ = &8B
+;logo9_ = &84
+;logo9 = &FBEA-logo9_    ;  > &fb1b (txt)
+
+vo_romEd = &7CF9
+vo_romExt = &7CFA
+vo_romMon = &7CFB
+vo_romBric = &7CFF
+vo_basebk = &7CFC
+
+;kl_far_pchl = &1B
+kl_curr_selection = &B912
+km_reset = &BB03
+km_test_key = &BB1E
+txt_set_cursor = &BB75  ;h: logical column. l: logical line.
+txt_cur_off = &BB84
+scr_char_position = &BC1A
+scr_fill_box = &BC44
+disc_out_open = &BC8C
+disc_out_direct = &BC98
+disc_out_close = &BC8F
+kl_time_please = &BD0D
+kl_time_set = &BD10
+
+filename_maxsize = 20
+
+; =============================
+
+      MACRO CALL_EXT adr
+          call ext_far_call:WORD adr
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call bric_far_call:WORD adr
+      ENDM
+
+; =============================
+tests
+          ld c,rom:call &B90F
+          ld a,nrtbk:call clear_bk
+          ld a,nrtbk AND &FE:call clear_bk ; mirror
+          call test_setup
+          ret
+
+clear_bk
+; for debugging
+; in: a=&c7
+          ld b,&7F:out (c),a
+          ld hl,&4000
+          ld de,&4001
+          ld bc,&3FFF
+          ld (hl),&A0:ldir
+          ret
+
+test_setup
+; check: -nothing is put in user memory
+       ; -bc' have a good default value.
+
+          ld hl,&8000:ld de,&8001:ld bc,&1FFF:ld (hl),l:ldir
+          ld a,nrtbk
+          call setup_from_nrt
+          ld hl,&8000
+          ld b,&20
+          ld a,&C0:ld (reg_mmr),a
+ts_lp
+          push bc:push hl
+          ld de,nrt_buf
+          ld bc,&0100
+          call copy_here_mirror
+          ld hl,nrt_buf
+ts_check  ld a,(hl):or a:call nz,&BE00
+          inc l:jr nz,ts_check
+          pop hl:pop bc
+          inc h
+          djnz ts_lp
+
+          ld a,(vr_curr_sel):cp rom:call nz,&BE00
+          ld a,(vr_curr_sel+1):cp "0":call nz,&BE00
+
+          ld bc,(reg_bc')
+          ld hl,&7F8E:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ret
+
+
+      IF inRom
+burn
+          ld ix,burnpara
+          call _burn
+          ld ix,burnpara2
+          call _burn
+          call &BB06
+          ret
+
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+
+          ret
+
+nburn BYTE "BURN"+&80
+
+burnpara
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+burnpara2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      END
+
+
+; =====================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+check_init
+; Check **AND** init if necessary.
+; It detects if orgams was already invoked,
+;   and check internals in this case.
+; Called after setup.
+
+;In:  N/A
+;Out: Carry=Ok  Previous or fresh install (cold init).
+    ; NC        Installed but checksum error
+
+          ld hl,edsign_pos
+          ld de,edsign
+          ld b,7
+checksign
+          ld a,(de)
+          inc de
+          cp (hl)
+          inc hl
+          jr nz,ci_nothing_installed
+          djnz checksign
+
+          CALL_EXT(org_check_internal)
+          ret           ; Carry or NC depending on check
+
+ci_nothing_installed
+      IF 0              ; tmp for bank analysis
+; Deactivated: use |ORGAMS for more thorough cleanup!
+
+; Don't clean everything though. Otherwise bk work, roms and routines
+; would be erased. We cannot call setup_from_basic, since we may have
+; used setup_from_basic' with custom bk and rom.  
+; Also the sp saving would be off.
+          ld hl,&4000:ld de,&4001:ld bc,&2FFF:ld (hl),l:ldir
+      END
+
+cold
+.clear
+;Reset some var zone. NB: this is not the same thing than ch.clear,
+;which is for analysis (and done only for |orgams).
+; Goals:
+;  - fatorize init (rather than each module having to zero its var).
+;  - well, that's it     
+
+; !! Warning !! Don't reset 7cf0-7cff we just set up (set_bkrom#).
+; NB: we cannot clear in setup_*, which must preserve persistent vars.
+
+          xor a
+; actually this ones are also for analysis:
+; |orgams clear whole banks (cf ch.o), for clean re-init,
+; but I usually use |m or |o, so when I want to check used areas,
+; je me retrouve gros jean comme devant.
+; The RAZ here is fast and usefull enough. 
+          ld hl,&4000:call fill100
+      IF vr
+          ld hl,&7900
+          ld de,&7901
+          ld bc,&03EF   ;(see comment above)
+          ld (hl),l
+          ldir
+      END
+;analysis + status and cocopy init at 0.   !! KEEP ME !!
+;!! Here a=0
+          ld h,&7E:call fill100
+
+display_logo = &76E0
+          inc a:ld (display_logo),a
+
+; Todo first since other modules depends on it!
+          CALL_BRIC(chunk_init)
+
+; We need to save IY since in ROM init (and rst &18 change it)
+          push iy
+          ld a,40:call DISP_init
+          pop iy
+
+          CALL_EXT(org_init)
+; NB: aap, ass, asseto & symb inits handled by ORG:
+    ; it makes more sense since they are ORG's dependencies.
+    ; Also, cheaper to call from same ROM.
+          call ed_init
+
+          sane_default()
+          call mon_far_call:WORD mon_cold_init
+
+          scf
+          ret
+
+mm
+nrtbk = &C7
+nrtbk_mirror = nrtbk - 1
+
+setup_from_nrt
+; Like setup_from_basic', but:
+   ; Don't install breapoint (so host garde la main)
+   ; Do cold init inconditionaly.
+; NB: if tests called setup_from_basic, 
+    ; it would dispatch BRK to half-installed orgams
+
+;in: a = bk
+          ld c,1        ; 1 parameter
+          call _setup
+          jr cold
+
+setup_from_basic'
+; Like setup_from_basic but with custom bk
+; !!! Doesn't unpage ASIC
+; Must handle bk first 
+          call _setup_from_basic'
+          ret nc
+          jr setup_non_dev
+
+_setup_from_basic'
+          ld c,a:dec c:sla c:ld b,0:add ix,bc
+
+          ld c,a
+          ld a,(ix+1):or a:ret nz ; Invalid
+          ld a,(ix+0)
+_setup
+          ld b,a:and &C7:xor &C7:ret nz
+          2 ** dec ix
+
+          push af:push de:push ix
+          ld a,b
+          push bc       ; Preserve c = nb params left
+          call set_bk_and_rom#
+          pop bc
+          jr nc,rom_fail
+
+          pop ix:push ix
+; Rom parameters
+          dec c:jr z,setup_com_ ; No more, keep the detected roms.
+          ld a,(ix+1):or a:jr nz,rom_fail
+          ld a,(ix+0):ld (vo_romExt),a
+          dec c:jr z,setup_com_
+          2 ** dec ix
+          ld a,(ix+1):or a:jr nz,rom_fail
+          ld a,(ix+0):ld (vo_romMon),a
+          dec c:jr z,setup_com_
+;Fail since too much parameters.
+;TODO: more accurate message
+
+rom_fail
+;FAIL (!! must return NC)
+          ld bc,&7FC0:out (c),c
+
+; Cannot display which ROMs was searched : was temporarly put in stack
+;   CALL disp_firm_de
+
+          ld de,msg_missing
+          call disp_firm_de_nl
+          pop ix:pop de:pop af
+          or a
+          ret
+
+setup_from_basic
+; - Set ROMMEM and ROMs #
+; - Install breakpoint
+; - backup firmware
+; - store SP
+; - unpage ASIC
+; NB: idempotent, do not change possibly existing persistent variables.
+
+;Out: C if Ok (ROMs found)
+    ;NC otherwise
+
+          call _setup_from_basic
+          ret nc
+
+setup_non_dev
+          push af:push de:push ix ; Preserve RSX parameters
+;!! vo_romMon and vo_basebk must have been set.
+          call inst_breakpoint
+          pop ix:pop de:pop af
+          ret
+
+_setup_from_basic
+          push af:push de:push ix
+          ld bc,&7FA0:out (c),c ; unpage ASIC. OLD: LROM/UROM
+      IF inRom
+          call detect_bk#
+      ELSE
+          ld a,nrtbk
+      END
+
+          call set_bk_and_rom#
+          jr nc,rom_fail
+
+setup_com_
+          call set_firm_rommem
+ ; Store must be done before far_call, which install stuff @ 9d00
+          call store_8000
+
+ ; Done after store so user ram isn't polluted
+          call setup_workzone
+
+; Install routine for logo, status bar.
+; !! This must be done in setup, since in out of bank area.
+   ; It doesn't reset anything, we can do it inconditionally.
+          CALL_BRIC(screen_init)
+; Current source is copied out of bank, for screen's convenience
+; (and to break cyclic dependency)
+          CALL_EXT(org_copy_current)
+
+; Install Direct Jump if mf2 is detected
+          call install_mf2_jump
+
+          call reset_checksumdone
+
+          pop ix:pop de:pop af
+          scf
+          ret
+
+
+setup_workzone
+; Also called by trui (for BRK coming from basic).
+; We DON'T call screen_init here:
+  ; - not needed by trui
+  ; - cannot use rst &18, and new farcall brings other issues:
+      ; - changing kl curr sel if FE is set, hence corruption user mem.
+
+          ld hl,vo_romEd
+          ld de,vr_romEd
+          push de
+          ld a,"0"
+.lp
+          ldi:ld (de),a:inc de:inc a
+          cp "3"
+          jr c,.lp
+          ld hl,vo_romBric
+          ldi:ld (de),a:inc de
+          inc a
+          ld hl,vo_romAss
+          ldi:ld (de),a:inc de
+
+      IF vr_curr_sel - &9D0A
+ !! must adapt
+      END
+          pop hl
+          2 ** ldi
+
+      IF vr_flag_firm - &9D0C
+ !! must adapt
+      END
+          ld a,&FE:ld (de),a ; Flag Firmware Enabled. 
+
+          call install_farcall
+          jp install_new_farcall
+
+
+set_bk_and_rom#
+;In a: Bk# (c7, cf, d7..  ff)
+;Out : Carry if ok. C = rom Mon 
+     ; At least HL trashed.
+
+      IF vv
+          and &FD       ; Reserve "bank 7" for screen
+      END
+          ld b,&7F
+          out (c),a
+          ld (vo_basebk),a
+          ld i,a
+
+; -- rom --                      
+;Todo: Merge with get_rom#, since it does kl_curr_selection to 
+     ; know how to return.
+kl_curr_selection = &B912
+          call kl_curr_selection
+          ld (vo_romEd),a
+          ld hl,&B8D6
+          cp (hl)
+          jr nz,unexpected_firmware
+
+; Check expectation for int.
+
+int_firm = &B941
+          ld hl,(&39)
+          ld bc,int_firm:or a:sbc hl,bc:jr nz,unexpected_firmware
+          ld a,(bc):cp &F3:jr nz,unexpected_firmware
+          inc bc
+          ld a,(bc):cp &08:jr nz,unexpected_firmware
+          inc bc
+          ld a,(bc):cp &38:jr nz,unexpected_firmware
+
+          call get_rom# ;Out: C if ok, NC otherwise
+          ld (vo_romMon),a
+          ld a,ixl
+          ld (vo_romBric),a
+      IF inRom
+          ld a,ixh
+      ELSE
+          ld a,romext
+      END
+          ld (vo_romExt),a
+          ld a,iyl
+          ld (vo_romAss),a
+          ret
+
+unexpected_firmware
+          ld de,msg_unexpected
+disp_firm_de_nl
+          call disp_firm_de
+          ld de,nl
+disp_firm_de
+          ld a,(de):and &7F:ret z ; Return NC
+          call &BB5A
+          inc de
+          jr disp_firm_de
+
+fill100   ld (hl),a:inc l:jr nz,fill100:ret
+
+edsign BYTE "OrgEdit"
+msg_missing BYTE "Missing ROMs",0
+msg_unexpected BYTE "Bad firmware",0
+nl    BYTE 13,10,0
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+codesize = $$-code
+      END
+
+; =========================================
+code2 = $$
+      IF inRom
+      ORG codedest2,$$
+      END
+jptable
+          jp disp_firm_de_nl
+          jp disp_firm_de
+          jp check_init ; Done after setup actually.
+          jp setup_from_basic
+          jp setup_from_basic'
+          jp setup_from_nrt
+          jp setup_workzone
+
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$-code2
+; =========================================
+
+

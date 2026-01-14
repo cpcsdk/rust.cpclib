@@ -1,0 +1,61 @@
+; 2025  
+   ; Jul 18  Adopt disa+decexp
+       ; 14: Adopt parse
+   ; May 26: Move symb_jp'
+; 2024  
+   ; Mar 10: Move visu
+   ; Feb 25: Move asseva2
+
+detect = &C000
+org   = &C004           ; Signature in detect
+free
+org_end = &C0A7         ; jps
+;ass_jp0 = org_end
+farcall_jp = &C0BC
+;asseva_jp = &C0E0       ; 5 free
+;find_jp0 = &C0F7
+org2  = &C100           ;&c free
+disa_module = &CB40     ;!! must be &40 aligned &11 free
+org3  = &D831           ;0 free
+; Free : was ass and co
+parse = &DC9E
+filename_module = &EFC0 ; 0
+filename_module_ = &EFE0
+;cache2 = &EFE0          ; 5 free
+except_ext = &F000
+orgui = &F0E0           ; 0 free
+org4  = &F177
+;f200 = ????
+; Free : was ass and co
+token = &FC00           ; &12 free
+swap_module = &FC17
+swap_module_ = &FE00
+
+; --jp--    
+
+;cocopy_jp = &FE02       ;0 free
+;free ...
+token_jp = &FE5A        ; 3 free
+swap_jp = &FE60         ; 3 free
+parse_jp = &FE93
+org5  = &FE9F
+farcallx = &FF12
+
+;---free----   
+orgui_jp = &FF33
+visu_jp = &FF60         ; 6 free in filename_jp start
+filename_jp = &FF66
+filename_jp_ = &FF6F
+import_jp3 = &FF6F      ; moved in ass
+import_jp3_ = &FF72
+
+except_jp = &FF7E       ;3 free
+disa_jp = &FF93
+;symb_jp = &FF93         ;0 free
+;asseto_jp = &FFAE       ;0 free
+;impeva_jp = &FFBA       ;0 free
+;evacmd_jp = &FFC0
+;import_jp = &FFC6
+;visu_jp' = &FFCC        ; 6 free
+;symb_jp' = &FFDE        ; 0 free (&ffff reserved for checksum?)
+

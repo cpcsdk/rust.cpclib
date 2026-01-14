@@ -1,0 +1,83 @@
+ ; ----- Helper routine for WRITE directive -----
+ ; Use writetst.o for testing
+!!! obsolete. Replaced by SAVE.O module
+
+      IMPORT "cocopy.o"
+
+; Available routines:
+
+;connect_bk
+;---------
+; IN: BC = bk to connect (B can be 7f, 7e, 7d, 7c for 2M ext)
+; Out: All registers preserved.
+
+
+; ----- in this rom ------
+error_phase2 = &C0B9
+
+fail  = &BE00
+
+save_chunks
+;----------
+; In:  A = Bank
+    ; HL = Start 
+;     BC = Size
+;     IX = Output routine, which itself takes:
+           ; HL = Start (uses currently connected bank) 
+           ; BC = Size  
+; Out: Carry if ok. 
+     ; NC otherwise and A = error code
+
+; Note: DISC_OUT_OPEN & co are handled by the caller.
+      ; This is a generic IO agnostic routine.
+
+.loop
+          push af
+          push hl
+          push bc
+          push ix
+          call get_intercepting_slice
+          pop ix
+          pop bc
+          jr nc,.err_not_found
+          inc b:dec b:jr nz,.notlast
+          cp c:jr c,.notlast
+; C (size to write) <= A (size slice)
+          pop af        ; discard pnt (was hl)
+          pop af        ; discard bank
+          ld b,0
+.jp_ix    jp ix         ; Exit (Returns Carry if ok)
+
+.notlast
+          push bc
+          ld c,a
+          ld b,0
+          push bc
+          call jp_ix
+          pop bc        ; slice's size
+          pop hl        ; remaining slice (was bc)
+          pop de        ; dest (was hl)
+          jr nc,.exit_err ; Exit with errors
+          or a:sbc hl,bc
+      IF dev_checks
+          call z,fail
+          call c,fail
+      END
+          ex de,hl
+          add hl,bc
+          ld c,e
+          ld b,d
+          pop af
+          jr .loop
+
+.err_not_found
+err_not_assembled_area = 43
+          ld a,err_not_assembled_area
+          call error_phase2
+          pop hl
+.exit_err
+          pop hl        ; discard without changing A = error code
+          or a
+          ret
+
+

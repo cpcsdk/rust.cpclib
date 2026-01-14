@@ -1,0 +1,435 @@
+inRom = 0
+handle_esc = 1
+display_progress = 1    ; 1: when in monogams context, display cur addr
+use_ldir_context = 1    ; 0: mock (enough for tests)
+
+ ;  ---------------------
+ ; .Search hexa in memory.
+ ;  ---------------------    
+
+; Used by: monogames
+; Uses: monui, firmware (km_read_key)
+
+      IMPORT "memmap.i"
+
+; ////// 2025 //////
+; ---- GG beta I ----
+; Apr
+  ; 7 v3 Proper buffers via memmap.i
+       ; Use copyHereMirror_ei for proper memory context
+ !! on hold:
+   ; Must: Add a test for pattern across &100 boundary
+         ; return the real address, not the pointer in the buffer!
+; ////// 2021 //////
+      ; v2 Add ESC handling, display current progress.
+         ; Add boilerplate (tests, burn, etc, ...)
+      ; v1 Fix rasmisms. Add some test.
+; Jul 18. v0 As-is import from rasm.
+
+nrt_buf = &2000
+
+      ORG &1000
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+rom   = &1B             ; Monogams rom
+romOrg_dev = &0A
+
+codedest = &D000        ; to see
+limit = &D001
+codedest2 = &E000
+limit2 = &E001
+
+; ----- In *this* rom (monogams) ----- 
+
+monui = &F900
+is_exit = monui+18
+;comCrNl not used here: should be called by mon in command handling.
+;comCrNl = monui+62      ; Next line. out:de = new pos. hl preserved
+;convScrX = monui+&E0
+print_hexa_hl_left = monui+&0100
+set_gris = monui+&7A
+
+monhelp = &FFC0
+;ext_far_call_firm = monhelp+45
+
+mon   = &E000
+copyHereMirror_ei = mon+18
+
+;-------------------------------------------------------------
+      MACRO align n
+      SKIP -$ MOD n
+      IF $ AND &FF
+ !! bug in orgams
+      END
+      ENDM
+
+;      MACRO CALL_ORG ad
+;          call ext_far_call_firm:WORD ad
+;      ENDM
+
+;-------------------------------------------------------------
+
+km_read_key = &BB1B
+kl_rom_select = &B90F
+code_esc = &FC
+
+tests
+;*********** quelques tests de la routine ********************
+
+          call dev_init ; Needed for display and orgams routines.
+
+          xor a
+          ld (numtest),a
+
+;2 chars: xy, must match
+          ld hl,numtest:inc (hl)
+          ld hl,test_pattern
+          ld a,2
+          ld bc,test_mismatch
+          ld de,test_mismatch+2
+          call HexaSearch:call nc,isko
+
+;3 chars: mismatch
+          ld hl,numtest:inc (hl)
+          ld hl,test_pattern
+          ld a,3
+          ld bc,test_mismatch
+          ld de,test_mismatch+3
+          call HexaSearch:call c,isko
+
+          ld hl,&2000
+          ld de,&2001
+          ld bc,&1FFF
+          ld (hl),l
+          ldir
+
+          ld hl,&2000+&CA
+          ld de,&2000+&CB
+          ld bc,&FF
+          ld (hl),&AA
+          ldir
+
+          ld hl,numtest:inc (hl):ld hl,search256
+          ld a,8:ld bc,&2000:ld de,&2100:call HexaSearch:call nc,isko
+          ld hl,numtest:inc (hl):ld hl,search256
+          ld a,0:ld bc,&2000:ld de,&2100:call HexaSearch:call c,isko
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,0:ld bc,&2000:ld de,&2100:call HexaSearch:call c,isko
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,0:ld bc,&2000:ld de,&2200:call HexaSearch:call nc,isko ; on doit le trouver
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,200:ld bc,&2000:ld de,&2200:call HexaSearch:call nc,isko ; on doit le trouver
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,0:ld bc,&20CA:ld de,&20CA+&FF:call HexaSearch:call c,isko ; clef trop grande
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,255:ld bc,&20CA:ld de,&20CA+&FE:call HexaSearch:call c,isko ; clef trop grande
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,&FF:ld bc,&20CA:ld de,&20CA+&FF:call HexaSearch:call nc,isko ; clef pile poil
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,0:ld bc,&20CA:ld de,&20CA+&0100:call HexaSearch:call nc,isko ; pile poil
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,8:ld bc,&3000:ld de,&3000:call HexaSearch:call nc,isko ; full memory scan ; => LOOOOOOOOOONNNNGGGGGG
+          ld hl,numtest:inc (hl):ld hl,search256:ld a,0:ld bc,&5000:ld de,&2200:call HexaSearch:call nc,isko ; memoire qui reboucle
+          ret
+
+numtest BYTE 0
+
+isko      ld hl,str_ko:call print_string
+          ld a,(numtest):call print_digit
+          ld hl,str_cr:jp print_string
+
+str_ko BYTE "unit test ",0
+str_cr BYTE " out of 10 KO",13,10,0
+
+print_string ld a,(hl):or a:ret z:call &BB5A:inc hl:jr print_string
+print_digit push af:rrca:rrca:rrca:rrca:call .printC:pop af
+.printC
+          and 15:cp 10:jr nc,.hexa
+          add "0":jp &BB5A
+.hexa
+          add "A"-10:jp &BB5A
+
+          align(256)
+search256 FILL 256,&AA
+
+test_pattern
+      IF $ AND &FF
+ !! must be aligned !!
+      END
+      BYTE "xyz"
+test_mismatch BYTE "xy!"
+
+; --------------------------
+
+dev_init
+          ld c,rom
+          call &B90F
+
+bk_dev = &C7            ; <>#ff pour eviter conflit
+          ld a,bk_dev
+          ld b,&7F:out (c),a
+          push af
+
+          ld a,rom:ld (vo_romMon),a
+;must be called before nrt_setup 
+install_farcall = &DF24
+          call install_farcall
+
+          pop af
+          call nrt_setup
+
+      IF 0
+; If need to override
+          ld a,romExt_dev:ld (vo_romExt),a
+          ld a,romOrg_dev:ld (vo_romEd),a
+          ld a,romBric_dev:ld (vo_romBric),a
+      END
+
+          ld hl,valRMR
+          set 2,(hl)    ; RAM at page 0000, since dev code is here
+;          call cold_init   ; in mon.o
+
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+fail  = &BE00
+
+; -------------------------------------------------------------------
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+          ld c,romOrg_dev:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+
+; -- Cold start
+; Why would we need that ???
+; NB: was copy pasted from mon.o
+    ;  CALL_ORG(org_init)
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+
+; ========================================
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+HexaSearch
+;*********************************************************************
+; HL=pattern aligned #XX00
+; A=longueur pattern
+; BC=start
+; DE=end (exclusive)
+; if DE==BC => chercher toute la memoire + recouvrement #FFFF/#0000
+;
+; found => Carry + BC=pos
+; not found => NC
+; fast-exit => si longueur pattern > intervale ko direct
+
+; parametres pour le all-in-one??? @@TODO
+          ld ixl,a
+          ld (pattern),hl
+
+          ld a,d:cp b:jr nz,.fullcheck
+          ld a,e:cp c:jr nz,.fullcheck
+; full memory scan + overlapping
+
+          ld iy,0       ; counters => 65536
+          ld (realscan),iy ; memory from #0000
+          jr .calcule_increment
+
+.fullcheck
+          xor a:ld h,d:ld l,e:sbc hl,bc ; longueur de scan
+          ld (realscan),bc
+; check smaller than keysearch
+          or h:jr nz,.oksize
+          ld a,ixl:or a:jr z,.keyko ; 0=>clef 256
+          ld a,l
+          cp ixl
+          jr nc,.oksize
+; la clef est plus grande que la zone de recherche
+.keyko
+          xor a:ret
+
+.oksize
+          ld b,0:ld c,ixl:dec c:inc bc:dec bc ; longueur de pattern dans BC avec conversion du zero en 256, le tout -1
+          sbc hl,bc     ; HL donne le nombre de passages a faire
+          dec hl:inc h:inc l ; H+L = counters
+.enregistrecas
+          ex de,hl:ld iyh,d:ld iyl,e
+
+.calcule_increment
+; increment pour le multi-bloc 
+; a 257-longueur clef => clef 256 == increment 1 / 255:2 / ... / 1:256
+          ld hl,257:ld e,ixl:ld d,0:sbc hl,de
+          ld a,l:ld (incscan),a
+
+; copy block
+          ld hl,(realscan)
+.recopy
+      IF display_progress
+; Only at each &100 slice
+          push hl:push iy
+          call set_gris
+          call print_hexa_hl_left
+          pop iy:pop hl
+      END
+      IF handle_esc
+          call km_read_key:jr nc,.nokey
+          call is_exit:ret nc
+.nokey
+      END
+
+          ld de,HEXASEARCH_BUF
+; aucune pertinence a optimiser la copie de longueur
+          ld b,256/16   ; /16 as copy is done by chunks
+          call copyHereMirror_ei
+          call ldir_context
+
+; scan block
+          ld a,(incscan):ld ixh,a ; si c'est 256 alors ça vaut zero
+          ld bc,HEXASEARCH_BUF
+.reloop
+          push bc       ; iteration
+          ld hl,(pattern)
+          ld d,ixl      ; lng pattern
+
+.scan     ld a,(bc):cp (hl):jr nz,.next:inc c:inc l:dec d:jr nz,.scan
+
+          pop bc        ; position resultat
+          scf
+          ret
+
+.termine
+          pop hl:xor a:ret
+
+.next
+; on controle en premier la longueur totale ça nous simplifie la vie
+          dec iyl:jr nz,.nextitere
+
+      IF handle_esc
+          call km_read_key:jr nc,.nokey
+          call is_exit:jr nc,.termine
+.nokey
+      END
+
+          dec iyh:jr z,.termine
+
+.nextitere
+; iteration
+          pop bc
+          inc bc        ; position de scan suivante
+          dec ixh
+          jr nz,.reloop
+
+; iteration terminee, 
+; on passe a la suivante avec recopie de bloc a la clef
+          ld hl,(realscan):ld de,(incscan):add hl,de:ld (realscan),hl
+          jp .recopy
+
+
+;--------------------------
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp HexaSearch
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      ELSE
+      SKIP nrt_buf - $
+      END
+codesize2 = $$-code2
+
+;--------------------------
+; Variables
+;--------------------------
+savepc = $
+saveobj = $$
+
+      ORG HEXASEARCH_TMP
+incscan WORD 
+;lngscan WORD
+curscan WORD 
+pattern WORD 
+iterate WORD 
+realscan WORD 
+
+      ORG savepc,saveobj
+
+vo_romMon = &7CFB
+
+val   = &7D80
+valRMR = val+6
+

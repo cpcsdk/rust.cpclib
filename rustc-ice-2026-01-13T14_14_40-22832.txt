@@ -1,0 +1,10 @@
+delayed bug: no resolution for an import
+disabled backtrace
+delayed bug: no resolution for an import
+disabled backtrace
+delayed bug: no resolution for an import
+disabled backtrace
+
+
+rustc version: 1.94.0-nightly (2ca7bcd03 2025-12-23)
+platform: x86_64-pc-windows-msvc

@@ -1,0 +1,654 @@
+inRom = 1
+; <<<<<< Breakpoint Routine >>>>>>
+
+; ///// 2025 ////////////
+; --- HH Beta 1 ---
+ ; Jul
+   ; 16 C: Use orgmap.i 
+         ; Add out &7fa0 to deactivate asic PAGE
+
+; ///// 2021 ////////////
+     ; Nov  6;  vb: Fix #12B "Bank not detected at first BRK invocation"
+                    ; /set_mmr/: Putting 7f in reg_mmr+1 was missing
+             ;  va: Export /detect_mf2/ in mulf2
+             ;  v9: Expose /Jump_com/ for mulf.o
+; 2021 Jan 23   v8: Re-read BK BASE from BE00 routine, 
+                  ; so that BC is free for /detect_mf2/
+             ;  v7: Mustn't just sanitize RMR: must reset.
+             ;  v6: Remove brk_return (handled by tr)
+          ; 17  v5: Reconnect lower RAM/ROM (for opcode history).
+                  ; Jump directly to &e000
+          ; 14  v4: Use MF2 for MMR detection
+                  ; Use BC' for RMR detection
+                  ; Split code (ffa0)
+          ;  8  v3: Fix I/R corruption (see test_regs)
+          ;  7  v2: Adjustments, install farcall.
+; 2020 May 1st  v1: Extracted from tru.
+
+      IMPORT "orgmap.i"
+
+rom   = 10
+
+codedest = brk_module
+limit = mulf
+codedest2 = brk_jp
+limit2 = synhigh_jp
+codedest3 = brk'        ; after jps + free zone
+limit3 = &FFFE          ; checksum
+
+; ---- In this Rom ----
+install_farcall = &F5C8 ; Just an ldir installing routine
+detect_mf2 = &FEE8
+; ---- In Monogasm ----
+trace_from_brk = &E000
+; ---------------------
+
+memmap
+nrt_buf = &2000
+far_call = &7D2C
+fc_in = far_call+2
+;log   = &7C8E           ; for temporary test!
+tr_var = &7D80          ; Shared with tr, mon...
+stack_work = &8000      ; In bank.
+;-- break
+;be00..be28: routine break 
+;be29..be39: routine return (used to jump back)
+;be3a..be3f: end of samples for bank detection.
+
+      ORG &8000         ; exec in &8000 for tests mf2
+
+      IF inRom
+;NB: cannot be in page $0000 since we connect mfii
+   ; cannot be in page $C000 since we connect rom
+brk   = &BE00
+      ELSE
+brknrt = &9E00
+brk   = brknrt
+      END
+
+ov_savesp WORD 0        ;pour tests et ERROR
+
+kl_l_rom_enable = &B906
+kl_l_rom_disable = &B909
+kl_rom_select = &B90F
+kl_curr_selection = &B912
+
+mf2_connect = &FEE8
+mf2_disconnect = &FEEA
+mf2_mmr = &3FFF
+
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+          call test_rom
+          call test_regs
+          call test_mmr
+          di
+          call detect_mf2
+          ld bc,mf2_disconnect:out (c),c
+          ld bc,&7F86:out (c),c ; re-enable lower RAM (allows BRK)
+          ret z
+; -- tests needing mf2 --
+          call test_mmr_mf2
+      IF 0
+; -- manual test
+          call test_mf2
+      END
+          ret
+
+bk_nrt = &C7
+
+      MACRO CHECK_WORD_AT_HL val
+          ld a,(hl):cp val AND 255:call nz,&BE00
+          inc hl
+          ld a,(hl):cp val/&0100:call nz,&BE00
+          inc hl
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ val
+          push hl
+          ld hl,val
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+fail  = &BE00
+
+
+nrt_init
+; "restore system"
+          di
+          ld bc,&7F86:exx
+          or a:ex af,af
+
+; Needed since install_far_call is called.
+          ld c,rom:call kl_rom_select
+; Since we 'call' brk_rout, save SP inside call as well.
+          ld (back_to_nrt+1),sp
+
+          ld a,bk_nrt
+          ld b,&7F:out (c),c
+          ld (vo_basebk),a
+          ld a,rom
+          ld (vo_romEd),a
+
+          call inst_brk_rout
+          ret
+
+back_to_nrt ld hl,0
+;-- sanity: must have been saved
+          ld a,h:cp &BF:call nz,&BE00
+          ld sp,hl
+          ret
+
+test_mf2
+          di
+          ld bc,&7FC0:out (c),c
+          ld bc,mf2_connect:out (c),c
+          ld bc,&7F82:out (c),c
+          ld hl,0
+          ld de,&4000
+          ld bc,&4000
+          ldir
+          ld bc,mf2_disconnect:out (c),c
+          ret
+
+test_regs
+; Check I and R are preserved.
+          call nrt_init
+          ld a,&BA:ld i,a
+          ld bc,&2345
+          ld de,&5678
+          ld hl,&879A
+          call nrt_brk
+          ld a,(reg_i):cp &BA:call nz,&BE00
+; We don't get &80, since correction account for RST &30 as well.
+; Notice bit 7 is left unchanged.
+          ld a,(reg_r):cp &FF:call nz,&BE00
+          ld bc,(reg_bc):CHECK_BC_EQ(&2345)
+          ld de,(reg_de):CHECK_DE_EQ(&5678)
+          ld hl,(reg_hl):CHECK_HL_EQ(&879A)
+          ld hl,(reg_sp):CHECK_HL_EQ(nrt_buf+6) ; routine expect ret
+          ret
+
+nrt_brk
+;Allow to modify sp,
+;while ensuring return address is put in right stack.
+          ld sp,nrt_buf+4
+          ld a,&80:ld r,a ; R: done last
+          jp brk
+
+test_rom
+;-------                          
+          call nrt_init
+          call kl_l_rom_enable
+          ld c,17:call kl_rom_select
+          call brk
+          ld a,(reg_rmr):cp &82:call nz,&BE00
+          ld a,(reg_rom):cp 17:call nz,&BE00
+;Reconnect lower ram (for BRK to work)
+;System is off now!
+          ld bc,&7F86:out (c),c
+          ret
+
+test_mmr
+;-------                          
+; A bit brittle right now. Might need to fill banks.
+          ld bc,&7FC4:out (c),c
+          call brk
+          ld a,(reg_mmr):cp &C4:call nz,&BE00
+          ld a,(reg_mmr+1):cp BASEBK_MSB:call nz,&BE00
+
+          ld bc,&7FC5:out (c),c
+          call brk
+          ld a,(reg_mmr):cp &C5:call nz,&BE00
+          ld a,(reg_mmr+1):cp BASEBK_MSB:call nz,&BE00
+          ret
+
+test_mmr_mf2
+;-----------                          
+          ld bc,&7FC1:out (c),c
+          call brk
+          ld a,(reg_mmr):cp &C1:call nz,&BE00
+          ld a,(reg_mmr+1):cp BASEBK_MSB:call nz,&BE00
+
+          ld bc,&7FC3:out (c),c
+          call brk
+          ld a,(reg_mmr):cp &C3:call nz,&BE00
+          ld a,(reg_mmr+1):cp BASEBK_MSB:call nz,&BE00
+          ret
+
+
+;-------------------------------------
+burn
+          ld ix,param_burn:call _burn
+          ld ix,param_burn2:call _burn
+          ld ix,param_burn3:call _burn
+          call &BB06
+          ret
+
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BUR"
+      BYTE "N"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+
+
+;--------------------
+
+code
+      IF inRom
+      ORG codedest,$$
+      END
+
+brk_jump
+; Entry point, post &be00
+; Here: BC = *Base bk* (must be preserved)
+      ; AF = IF
+      ; HL = PC
+      ; Other registers: user program's. 
+
+; !! Don't (ab)use SP / call here: still pointing to saved regs @ BE0x
+
+; Tmp save regs so we can use them.
+; Will be stored in /set_regs/.
+          push af       ; that's IF
+          push hl       ; that's PC
+          push ix
+          ld a,r
+          add a:rl l    ; save bit 7
+          sub 29 * 2
+          rr l:rra
+          ld ixl,a
+
+;Temporary use DE slot for call.
+          call detect_mf2
+          push de
+;Deactivate ASIC
+;Almost no-op on CPC old (LROM UROM and mode 0)
+          ld bc,&7FA0:out (c),c
+          ld bc,(brk_wk_bk+1) ; Only for C, without touching A
+          jr nz,detect_ok_found_
+
+;-------------------
+;sample bytes in ram
+;-------------------
+
+          ld hl,brkusedsize
+          add hl,sp
+
+;quite arbitrary: some out of bank for future C2 detection
+start_samples = &3F88
+nbsamples_prebank = 1
+shift_inbank = nbsamples_prebank*&0101
+brkusedsize = 16        ; see /brk_rout/
+nbsamples = &40-brkusedsize ;fill until $be3f
+nbsamples_inbank = nbsamples-nbsamples_prebank
+
+          ld de,start_samples
+          ld b,nbsamples
+sampleloop
+          ld a,(de)
+          ld (hl),a
+          inc hl
+          inc d
+          inc e
+          djnz sampleloop
+
+          ld de,-nbsamples_inbank
+          add hl,de
+
+          ld a,&C0
+detect_bklp
+          ld b,&7F
+          out (c),a
+          ld ixh,a      ;save
+          ld de,start_samples+shift_inbank
+          ld b,nbsamples_inbank
+detect_lp
+          ld a,(de)
+          cp (hl)
+          jr nz,trynextbk
+          inc d
+          inc e
+          inc hl
+          djnz detect_lp
+
+          ld de,-nbsamples_inbank
+          add hl,de
+
+          jr detect_ok_found
+
+trynextbk
+          ld a,b
+          sub nbsamples_inbank+1 ;ensure < 0
+          add l
+          ld l,a
+          jr c,$+3
+          dec h
+          inc hl
+
+          ld a,ixh
+          cp &C0
+          jr nz,trynextbk_
+
+          ld a,&C4
+          jr detect_bklp
+
+trynextbk_
+          inc a
+          or 4
+          jp m,detect_bklp
+;fail
+          ld b,&7F
+          out (c),c
+
+;last mmr set
+;sanity check
+
+          ld a,(reg_mmr)
+          ld b,&C0
+          and b
+          cp b
+          jr z,set_regs ; OK, leave as is.
+          ld a,b        ; Otherwise, sane default.
+          jr set_mmr
+
+detect_ok_found
+          ld a,ixh
+detect_ok_found_
+BASEBK_MSB = &7F
+          ld b,a
+          ld a,c:or &C5:ld c,a ; paranoid safety for base_bk
+          ld a,b
+          ld b,BASEBK_MSB ; TODO: use passed one instead (e.g. 7exx)
+          out (c),c
+set_mmr
+          ld (reg_mmr),a
+          ld a,b        ; Not basebk, but MF2 doesn't store 7f vs 7e..
+          ld (reg_mmr+1),a
+set_regs
+
+; Set registers here rather than in TR.o, 
+; so we can reinstall BRK and far_call.
+; More symetrical anyway.
+
+          ld a,ixl
+          ld (reg_r),a
+
+          pop hl:ld (reg_de),hl
+          pop ix        ; saved below
+          pop hl:ld (reg_pc),hl
+          pop af
+          ld (reg_i),a
+          ld a,0
+          jp po,$+4
+          dec a
+          ld (reg_iff),a
+          pop hl:ld (reg_bc),hl
+          pop hl:ld (reg_hl),hl
+          pop hl:ld (reg_af),hl
+          pop hl:ld (reg_sp),hl
+
+          ld sp,reg_af'+2
+
+          ex af,af
+          exx
+          push af
+          push bc
+          push de
+          push hl
+          push ix
+          push iy
+
+Jump_com
+; Also coming from mulf.mf2_jump  (Multiface direct jump to trace)
+; Used here:
+;  BC=BC' at brkpoint
+          ld sp,stack_work
+;------
+; -- If firmware setup in BC' detected, use it for rom selection
+          ld de,reg_rmr
+          ld a,b:cp &7F:jr nz,_nofirm
+          ld a,c:and &E0:cp &80:jr nz,_nofirm
+          ld a,c:ld (de),a
+; -- Assume the following code in RAM:
+  ;  b912: jp toto
+   ; toto: ld a,(xxx)
+          ld hl,(kl_curr_selection+1)
+          inc hl:ld c,(hl)
+          inc hl:ld b,(hl)
+          ld a,(bc)
+          ld (reg_rom),a
+_nofirm
+; -- If rmr not valid: Reset to 8E (needed for Orgams First invocation
+          ld a,(de):and &F0:cp &80
+          jr z,_okrmr
+          ld a,&8E
+          ld (de),a
+; -- Sync lower connection (needed since we forced rom for mf2)
+_okrmr
+          ld a,(de)
+          ld b,&7F:res 3,a:out (c),a
+;------
+          call inst_brk_rout
+
+; Reinstall farcall (sanity). This is unnecessary: since BRK was 
+; installed, that means Orgams way invoked at least one.
+; It paves the way for a boot-time 
+; !! Then we have to detect rom# as well !!
+
+;NB: don't install other stuff:
+   ; - preserve user memory.
+   ; - not needed anyway
+          call install_farcall
+
+      IF inRom
+          ld a,(vo_romMon):ld (fc_in),a
+          ld iy,trace_from_brk
+          jp far_call   ; NO RETURN!
+      ELSE
+          jp back_to_nrt
+      END
+
+;-------------------------------------
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+;-------------------------------------
+
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+
+inst_brk_rout
+;In: vo_basebk & vo_romMon must be setup.
+
+          ld hl,brk_rout
+          ld de,brk
+          ld bc,brk_size
+          ldir
+
+          ld a,(vo_basebk):ld (brk_wk_bk+1),a
+          ld a,(vo_romEd):ld (brk_rom+1),a
+
+      IF inRom          ; For nrts, don't patch real BRK
+          ld a,&C3:ld (&30),a
+          ld hl,brk:ld (&31),hl
+      END
+          ret
+
+
+brk_rout
+      ORG brk,$$
+; 
+; Put register saved at /brk_jump/ first,
+; so SP end up at "ready to use" place (see /set_regs/).
+;if = $ 
+;ix = $+2  
+;pc = $+4
+;de = $+6 
+;bc = $+8
+brk_save_ = $+10
+brk_save_hl = $+10
+brk_save_af = $+12
+brk_save_sp = $+14
+
+      IF brkusedsize - 16
+  !! out of sync
+      END
+
+          push af
+          ld a,i
+          di
+;Pad so code isn't overwritten by brk_save_hl
+pad       jr pad_
+      BYTE "OvL"
+pad_
+;pop before switching ram
+;since we don't know where SP is
+          ld (brk_save_hl),hl
+t         pop hl:ld (brk_save_af),hl
+          pop hl
+          ld (brk_save_sp),sp
+          ld sp,brk_save_
+          push bc
+;We cannot peek mf2's RMR value, since we must connect lower ROM
+;to connect mf2...
+brk_rom   ld bc,&DF00:out (c),c ;!!replaced
+          ld bc,&7F86:out (c),c
+brk_wk_bk ld c,bk_nrt   ;!!replaced
+          jp brk_jump
+brk_size = $-brk
+      IF inRom
+      FILL &BE29-$,&F7  ; mustn't overlap, used by tr. 
+      END
+
+      ORG brk_rout+brk_size,$$
+
+realsize3 = $$-code3
+hi3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+
+;--------------------------------
+
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+          jp Jump_com
+          jp inst_brk_rout
+
+realsize2 = $$-code2
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+;--------------------------------
+
+      IF inRom:ELSE
+      SKIP brk-$
+      END
+
+;--------------------------------
+
+rvga  = tr_var+3
+reg_rmr = rvga+3
+reg_mmr = rvga+4        ;Word (eg $7ec7)
+;vga_inks = rvga+6
+;vga_border = rvga+22
+;vga_pen = rvga+23       ;last selected ink
+
+reg_rom = rvga+24
+
+rz80  = rvga+25
+
+reg_pc = rz80
+reg_r = rz80+2
+reg_i = rz80+3
+;reg_iy = rz80+4
+;reg_ix = rz80+6
+;reg_hl' = rz80+8
+;reg_de' = rz80+10
+;reg_bc' = rz80+12
+reg_af' = rz80+14
+reg_hl = rz80+16
+reg_de = rz80+18
+reg_bc = rz80+20
+reg_af = rz80+22
+reg_sp = rz80+24
+
+reg_im = rz80+26
+reg_iff = rz80+27
+
+vo_romEd = &7CF9
+vo_romMon = &7CFB
+vo_basebk = &7CFC

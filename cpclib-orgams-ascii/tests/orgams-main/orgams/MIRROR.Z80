@@ -1,0 +1,1599 @@
+inRom = 1
+dev_checks = 1
+todo  = 1
+
+; Gestion mirroir &00-&3f + page &8000
+
+; FIXME: copy_trans_bk_mirror a cheval sur FFFF-0000
+; TODO? Factor ch_bk2bk & copy_trans_bk  (only 16 octets a gagner)
+; TODO? [To gain a few byte]: reunite code to use jr.
+
+; ???? get_firm_stack not used
+
+; TODO: view: in hl=address
+            ; hl= backup buffer if copy needed
+            ; out= hl=address or buffer
+                     ;c=bk to connect for view 
+              ; rationale: don't connect it ourself since c2
+              ; would 
+              ; bk_base to be reconnected by client with I.
+
+; \/ In 2025 \/\/\/\/\/\/\/\/\/\/
+; --- HH Beta I ---
+; Nov
+  ; 25  w: s/vo_basebk/I/  Remove vo_thisbk tests
+         ; Fix flaky tests (was reconnecting base bk in tests themselve)
+; Jul
+  ; 01  v: [No-change] Use orgmap.i. Moved
+
+; \/ In 2024 \/\/\/\/\/\/\/\/\/\/
+; ---- For GG beta B -----
+
+; Sep
+   ; 30 u: Rollback vt
+         ; Add test_copy_here_700 (does not reproduce bug #1a4)
+
+; ---- For GG beta 1 -----
+; Jan
+   ; 11 vt: !!!! Cancelled -> test fails. ums:orgold/mirror/mirror-t.o
+          ; Adapt /get_backup_bk/ to select FE whatever bkbase
+          ; (FF or FD). Needed for transition to bkbase = FD
+          ; Use i instead of vo_basebk
+          ; tests: use setup_custom for consistency.
+
+
+; \/ In 2022 \/\/\/\/\/\/\/\/\/\/             
+; Jun    
+   ; 18 vs: Add /test_copy_trans_bk_mirror_c000'/ (bug #154) 
+          ; Fix it (cf /ctbk_uncor/).
+
+; May
+    ; 8 vr: /ctbk_cor/ Remove useless bank connection.
+          ; Refactor to gain some room. 
+    ; 7 vq: Add /test_copy_trans_bk_mirror_8000/ to ensure source bk
+           ; is reconnected by copy_trans_bk_mirror (it wasn't
+           ; when dest finished in 8000, causing bug #14c).
+           ; Reproduced with /test_copy_trans_bk_mirror_8000''/.
+
+           ; Fix it: /ctbk_4000/ wasn't reconnecting bk source,
+                   ; when 2nd slice in 8000 (bug #14c).
+
+           ; /nrt_init/: set vo_thisbk and vo_basebk,
+                       ; so that any test can check reconnection.
+
+; Feb 16 vp: Add /test_swap/ to ensure IY is preserved.
+
+; \/ In 2021 \/\/\/\/\/\/\/\/\/\/
+; Jan 26 vo: Add /test_copy_trans_bk_mirror_ret_bk/
+           ; Fix it! Reconnect bk source after /setflag_codeinC000/
+
+; Jan 21 vn: More comments.  
+   ; TODO: [optim] copy_to_bank_mirror (since source always out of bank)
+
+; \/ In 2020 \/\/\/\/\/\/\/\/\/\/
+
+; Apr 12 vm: [revision] Fix /test_copy_here_mirror_bank_c6/
+           ; NB: was only impacting external NRTs (e.g. in initl.o).
+
+; \/ In 2019 \/\/\/\/\/\/\/\/\/\/
+
+       ; vl: export/import
+    ; 21 vk: fix copy_trans_bk_mirror: de and hl return value like ldir
+           ; see test_copy_trans_bk_mirror_40'
+           ; !! Move @ e533
+;Sept 15 vJ: Clean-up testRom flag (tests called systematically)
+;Aug 8 vI: Use &a000 for set_firm_rommem (doesn't change much).
+;Aug 5 vH: Expose swap_com instead of swap_8c00. !! Requires truib
+; 21   vG: Move in rom Ed.  
+           ; - So we can call store and swap without far call.
+               ; (catch22/conflict otherwise, since far_call in &9d00)
+           ; - Anyway that's mostly related to orgams.
+           ; !! Imply to reconnect with vo_romed
+
+; 20/7 vF: Boulet!! Cannot hardcode static rom#.
+
+; 23/6 vE: Change interface for copy_trans_bk*: ix instead of iy.
+           ; Rationale: RST &18 doesn't pass iy.
+         ; Move @ Rom 9: e444               
+         ; Add test_copy_trans_bk_mirror
+
+; 28/5 vD: Fix #D7: Copy 0:100 from ram.
+; 27/5 vC: Fix #C5: Reconnect low-rom in copy_here_mirror
+; 27/5 vB: export/import
+
+; \/ In 2018 \/\/\/\/\/\/\/\/\/\/
+
+; 11/3 vA: nrt copy_trans_bk_mirror C3 (4000->C000)  NB: WAS ALREADY OK
+
+; \/ In 2017 \/\/\/\/\/\/\/\/\/\/
+
+; 17/8 v9: swap &8c00-&90ff routine. refactor swap.
+
+         ; !!! ARGLLL jptable was overlapping 7e70
+         ;            and burn was overiding all end of rom
+         ; Version 'testRom'
+         ; fix copy_trans_bk_mirror in c2 (for monagams)
+         ; NB: cannot test it from RAM !
+; 21/7 v8: fix nrt itself: upper ram must be connected for C000 check
+                         ; AGAIN! 
+         ; fix2: ok but must reconnect ROM afterward for subsequent tst 
+
+         ; fix nrt itself: upper ram must be connected for C000 check
+                         ; nb: was deconnected by routine_copy
+; 10/6   : fix chwb_do_copy (00-3F)
+         ; nrt chwb_do_copy in 00-XX
+; 09/6 v7: nrt copy_here_mirror with bc=&100
+
+;20/1/2017  store_8000: full page
+         ; put_firmware: only copy firmware (not full page)  (bug #99)
+; 5/12 v6: optimize restore_8000 (return to basic)
+
+; 05/9 v5: full page &8000-&bfff mirrored
+
+; 04/9 v4: gestion 00-3F en bank main + fix assemblage dans cette zone
+
+         ; Fix DI pour copy_here_mirror
+         ; NRT copy_here_mirror
+; 30/8 v3: code en RAM basse pour NRT
+
+               ; fix vo_romMon -> vo_romExt
+               ; fix wk_copy_routine
+; 17/8/2016  v2: Use plain LDIR for restore_8000
+
+      IMPORT "orgmap.i"
+      IMPORT "macro.i"
+
+rom   = &0A
+
+codedest = mirror
+limit = ed_farcall'
+codedest2 = mirror'
+limit2 = detect
+
+backup00_3f = &7F00     ; en main bank
+dest_firm = &4000
+firm_backup = &8000
+corr_mirror = dest_firm-firm_backup /&0100
+
+      IF dest_firm-firm_backup AND &FF
+ !! must adapt code
+      END
+
+bk_nrt = &CF            ; bk base
+bk_mirror = bk_nrt-1
+bk_source = bk_nrt AND &FC ; bk source
+bk_nrt_c7 = &C7
+bk_temp = &C4
+nrt_buf = &3000
+nrt_buf_in_bk = &4100
+
+; We use &8000-&9fff as work zone, and backup &a000-&bfff as firware
+firmware_threshold = &A000
+
+      ORG &1000
+
+      ENT $
+      IF inRom
+          call burn
+      END
+          jp tests
+
+      IF inRom
+burn
+          ld ix,burnpara
+          call burn_
+          ld ix,burnpara2
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+;
+          ld a,4
+          call &1B
+;
+          ret
+;
+nburn BYTE "BUR"
+      BYTE "N"+&80
+;
+burnpara
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+
+burnpara2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      END
+
+tests
+
+nrt_prgpile = &8000
+
+          call nrt_init
+          ld sp,nrt_prgpile
+          call test_chwb_do_copy_00_xx
+
+          call test_copy_here_700
+          call test_copy_here_mirror
+          call test_copy_here_mirror_100
+          call test_copy_here_mirror_lowram
+          call test_copy_here_mirror_0_100
+          call test_copy_here_mirror_20_120
+
+          ld sp,&C000
+
+          call test_copy_here_mirror_bank_c6 ; custom init. SP <> &8000
+          call test_copy_trans_bk_mirror
+          call test_copy_trans_bk_mirror_c3
+          call test_copy_trans_bk_mirror_ret_bk
+          call test_copy_trans_bk_mirror_40
+          call test_copy_trans_bk_mirror_40'
+          call test_copy_trans_bk_mirror_8000
+          call test_copy_trans_bk_mirror_8000'
+          call test_copy_trans_bk_mirror_8000''
+          call test_copy_trans_bk_mirror_8000_256
+          ld bc,&7F00+bk_nrt:out (c),c
+          ld sp,&C000
+          call test_copy_trans_bk_mirror_c000
+          call test_copy_trans_bk_mirror_c000'
+          ld bc,&7F00+bk_nrt:out (c),c
+          call nrt_init
+          call test_copy_trans_bk_mirror_from_basebk
+          ld bc,&7F00+bk_nrt:out (c),c
+          call test_copy_trans_bk_mirror_c2
+
+          call test_swap
+
+      BRK
+; OK!! (Dummy BRK to ensure all test were runs)
+
+      RESTORE
+
+test_chwb_do_copy_00_xx
+; for now, only check proper amount is copied
+
+          ld hl,&00
+          ld de,nrt_buf_in_bk
+          ld c,&01
+          call chwb_do_copy
+          ld bc,1:call nrt_cp
+          ex de,hl
+          ld bc,nrt_buf_in_bk+1:call nrt_cp
+
+          ld hl,&01
+          ld de,nrt_buf_in_bk
+          ld c,&3F
+          call chwb_do_copy
+          ld bc,&40:call nrt_cp
+          ex de,hl
+          ld bc,nrt_buf_in_bk+&3F:call nrt_cp
+
+          ld hl,&01
+          ld de,nrt_buf_in_bk
+          ld c,&50
+          call chwb_do_copy
+          ld bc,&51:call nrt_cp
+          ex de,hl
+          ld bc,nrt_buf_in_bk+&50:call nrt_cp
+
+          ret
+
+nrt_cp
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ret
+
+test_copy_here_700
+; For bug#1a4. Doesn't reproduce though
+          ld hl,&0700
+.mark     ld (hl),l:inc l:jr nz,.mark
+          ld hl,&0730
+          ld de,nrt_buf
+          ld c,8
+          call copy_here
+          ld hl,&0700
+.check    ld a,(hl):cp l:call nz,fail
+          inc l
+          jr nz,.check
+          ret
+
+test_copy_here_mirror
+; preparation: on remplit &7f00-&7fff 
+
+          ld bc,&7FC0:out (c),c
+          ld hl,&7F00
+          call nrt_fill
+          ld bc,&7F00+bk_nrt:out (c),c
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+
+; on repete n fois le meme test,
+; car le probleme n'est pas deterministe
+; (intervient quant int au mauvais moment)
+
+          ld b,10
+tchm_lp
+          push bc
+          ld hl,&7F00
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          ei
+          call copy_here_mirror
+;check
+          ld hl,nrt_buf_in_bk
+          ld b,0
+          call nrt_check
+          pop bc
+          djnz tchm_lp
+
+          ret
+
+test_copy_here_mirror_lowram
+
+; preparation: on remplit &3030-&312f 
+
+          ld hl,&3030
+          call nrt_fill
+          ld bc,&7F00+bk_nrt:out (c),c
+
+          ld hl,&3030
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          call copy_here_mirror
+;check
+          ld hl,nrt_buf_in_bk
+          ld b,0
+          call nrt_check
+
+          ret
+
+      MACRO CHECK_DE_POST_100
+          ld a,d:sub nrt_buf_in_bk/&0100 +1:or e:call nz,&BE00
+      ENDM
+
+test_copy_here_mirror_100
+;check hl:=hl+bc  and  de:=de+bc
+
+          ld bc,&7F00+bk_nrt:out (c),c
+
+          ld hl,&FE01
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          call copy_here_mirror
+          ld bc,&FF01:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          CHECK_DE_POST_100()
+
+          ld hl,&FF01
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          call copy_here_mirror
+          ld bc,1:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          CHECK_DE_POST_100()
+          ret
+
+test_copy_here_mirror_0_100
+;Bug d7: copy 0:100
+
+          ld bc,&7F00+bk_nrt:out (c),c
+
+          ld hl,backup00_3f:xor a:ld b,&40:call nrt_fill_ ; No more!
+          ld hl,&40:call nrt_fill
+
+          ld hl,0
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          call copy_here_mirror
+          ld a,h:dec a:or l:call nz,&BE00 ; hl<>&100
+          CHECK_DE_POST_100()
+;check
+          ld hl,nrt_buf_in_bk
+          ld b,&40
+          call nrt_check
+          xor a
+          ld b,&C0
+          jp nrt_check_from_a
+
+test_copy_here_mirror_20_120
+
+          ld bc,&7F00+bk_nrt:out (c),c
+
+          ld hl,backup00_3f:xor a:ld b,&40:call nrt_fill_ ; No more!
+          ld hl,&40:call nrt_fill
+
+          ld hl,&20
+          ld de,nrt_buf_in_bk
+          ld bc,&0100
+          call copy_here_mirror
+          ld a,l:cp &20:call nz,&BE00
+          ld a,h:cp &01:call nz,&BE00
+          CHECK_DE_POST_100()
+;check
+          ld hl,nrt_buf_in_bk
+          ld b,&20
+          ld a,&20
+          call nrt_check_from_a
+          xor a
+          ld b,&C0      ; Don't check last &20. Nevermind
+          jp nrt_check_from_a
+
+
+test_copy_here_mirror_bank_c6
+; When bk_base = c7 (NRT), 
+;   mirror &8000 is copied from reg_mmr+1 (e.g. &7cc6) rather than &7f  
+
+          ld a,bk_nrt_c7
+          call nrt_init_custom
+
+ ; base cpc bank <> 7fc6 with x-mem
+          ld bc,&7CC6:out (c),c:ld hl,&BAD1:ld (&4000),hl
+          ld bc,&7FC6:out (c),c:ld hl,&CAFE:ld (&4000),hl ; Mirror
+          ld bc,&7FC7:out (c),c
+          ld a,&7C:ld (reg_mmr+1),a
+
+          ld hl,&8000
+          ld de,nrt_buf
+          ld bc,2
+          call copy_here_mirror
+          ld hl,(nrt_buf)
+          ld de,&CAFE:or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+
+test_copy_trans_bk_mirror
+; test source bk is reconnected.
+
+          ld bc,&7F00+bk_source:out (c),c
+          ld hl,nrt_buf_in_bk
+          call nrt_fill
+
+; connect dummy bank to show source is properly connected by routine.
+          ld bc,&7F00+bk_temp:out (c),c
+
+          ld hl,nrt_buf_in_bk
+          ld de,&3010
+          ld ixl,0
+          ld ixh,bk_source
+          ld a,&C0
+          call copy_trans_bk_mirror
+
+;check hl and de          
+          ld bc,nrt_buf_in_bk+&0100
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&3110:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,&3010
+          xor a:ld b,a
+          call nrt_check_from_a
+
+          ld bc,&7F00+bk_nrt:out (c),c ; for subsequent tests
+          ret
+
+
+test_copy_trans_bk_mirror_c3
+; check page 4000 properly mapped to c000
+
+          ld hl,&3F00
+          call nrt_fill
+
+          ld hl,vo_flags:ld (hl),0
+
+          ld hl,&3F00
+          ld de,&4000
+          ld ixl,0
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C3
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,&4000:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&4100:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          call &B903    ; High RAM
+          push af
+
+          ld hl,&C000
+          ld b,0
+          call nrt_check
+
+          pop af
+          call &B90C
+
+; bk source (bk_nrt) must have been reconnected by copy_trans_bk_mirror
+; TODO: put marker to check that
+
+          call connect_bk_base
+          ld hl,vo_flags:bit vf_codeinC000,(hl)
+          call z,&BE00
+          ret
+
+test_copy_trans_bk_mirror_ret_bk
+; Check source bk is reconnected, as API promise
+          ld hl,.source
+          ld de,&5000
+          ld ixl,1
+          ld ixh,bk_source ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C3
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,.source+1:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&5001:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+markx = "x"
+          ld hl,&D000:rst &20:cp markx:call nz,&BE00
+          ret
+
+.source BYTE markx
+
+
+test_copy_trans_bk_mirror_40
+
+          ld hl,&3F00
+          call nrt_fill
+
+          ld hl,&3F00
+          ld de,0
+          ld ixl,0
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C3      ; nevermind (not &c2)
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,&4000:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&0100:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,backup00_3f
+          ld b,&40
+          call nrt_check
+          ld hl,&40
+          ld b,&C0
+          call nrt_check
+          ret
+
+
+test_copy_trans_bk_mirror_40'
+;Check we partial copy in 00-1F
+
+          ld hl,&3F00
+          ld a,42:ld b,32
+          call nrt_fill_
+
+          ld hl,&3F00
+          ld de,0
+          ld ixl,&20
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C3      ; nevermind (not &c2)
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,&3F20:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&20:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          call connect_bk_base
+          ld hl,backup00_3f
+          ld a,42:ld b,32
+          call nrt_check_from_a
+          ret
+
+
+test_copy_trans_bk_mirror_8000
+; Check bank is reconnected in that case
+          call nrt_init
+
+          ld hl,nrt_buf
+          call nrt_fill
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf+&AA
+          ld de,&8000
+          ld ixl,&10
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C0
+          call copy_trans_bk_mirror
+
+; sanity check: was properly installed in mirror back
+          ld bc,&7F00+bk_mirror:out (c),c
+          ld hl,&4000
+          ld b,&10
+          ld a,&AA
+          call nrt_check_from_a
+          ret
+
+test_copy_trans_bk_mirror_8000'
+; Same, but with overlap
+
+          ld hl,nrt_buf
+          call nrt_fill
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf
+          ld de,&7FFB
+          ld ixl,&20
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C0
+          call copy_trans_bk_mirror
+
+; sanity check: was properly installed in mirror back
+          ld bc,&7F00+bk_mirror:out (c),c
+          ld hl,&4000
+          ld b,&20-5
+          ld a,5
+          call nrt_check_from_a
+
+          ld bc,&7F00+bk_nrt:out (c),c
+          ret
+
+test_copy_trans_bk_mirror_8000''
+; Check bank is reconnected in that case
+
+          ld hl,nrt_buf
+          call nrt_fill
+
+;Connect 'bk source' to check it doesn't both copy_trans_bk_mirror.
+          ld bc,&7F00+bk_source:out (c),c
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf+&15
+          ld de,&7FF8
+          ld ixl,&EA
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C0
+          call copy_trans_bk_mirror
+
+; sanity check: hl and de advanced as planned.
+          ld bc,nrt_buf+&15+&EA:or a:sbc hl,bc:add hl,bc:call nz,fail
+          ld hl,&7FF8+&EA:or a:sbc hl,de:add hl,de:call nz,fail
+
+; sanity check: second slice properly installed in mirror back
+          ld bc,&7F00+bk_mirror:out (c),c
+          ld hl,&4000
+          ld b,&EA-8
+          ld a,&15+8
+          call nrt_check_from_a
+          ret
+
+test_copy_trans_bk_mirror_8000_256
+; Check de=&8100 at return
+
+          call nrt_init
+          ld hl,nrt_buf
+          call nrt_fill
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf
+          ld de,&8000
+          ld ixl,0      ;256
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C5      ; Must not impact anything
+          call copy_trans_bk_mirror
+
+; sanity check: hl and de advanced as planned.
+          ld bc,nrt_buf+&0100:or a:sbc hl,bc:add hl,bc:call nz,fail
+          ld hl,&8100:or a:sbc hl,de:add hl,de:call nz,fail
+
+; sanity check: properly setup.
+          ld bc,&7F00+bk_mirror:out (c),c
+          ld hl,&4000
+          ld b,0
+          call nrt_check
+          ret
+
+
+
+test_copy_trans_bk_mirror_c000
+
+          ld hl,nrt_buf_in_bk
+          call nrt_fill
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf_in_bk
+          ld de,&C000
+          ld ixl,0
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C0
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,nrt_buf_in_bk+&0100
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&C100:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          call &B903    ;kl u rom disable
+
+          ld hl,&C000
+          ld de,nrt_buf
+          ld bc,&0100
+          ldir          ; for easier debug
+
+          ld hl,nrt_buf
+          ld b,0
+          call nrt_check
+
+          ld hl,vo_flags:bit vf_codeinC000,(hl)
+          call z,&BE00
+          ret
+
+
+test_copy_trans_bk_mirror_c000'
+; Try when overlapping (bfxx-c0xx)
+; Reproduce bug #154
+
+          call nrt_init
+
+          ld hl,nrt_buf_in_bk
+          call nrt_fill
+
+          ld hl,&7FC0:ld (reg_mmr),hl
+          ld hl,nrt_buf_in_bk
+          ld de,&BFFC
+          ld ixl,0
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C0
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,nrt_buf_in_bk+&0100
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&C0FC:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          call &B903    ;kl u rom disable
+
+          ld bc,&7F00+bk_mirror:out (c),c
+          ld hl,&BFFC - &4000
+          ld de,nrt_buf
+          ld bc,4
+          ldir
+          ld hl,&C000
+          ld bc,&FC
+          ldir
+
+          ld hl,nrt_buf
+          ld b,0
+          call nrt_check
+
+          ld bc,&7F00+bk_nrt:out (c),c
+          ld hl,vo_flags:bit vf_codeinC000,(hl)
+          call z,&BE00
+          ret
+
+
+test_copy_trans_bk_mirror_from_basebk
+
+          ld hl,nrt_buf_in_bk
+          call nrt_fill
+
+          ld hl,nrt_buf_in_bk
+          ld de,&3010
+          ld ixl,0
+          ld ixh,bk_nrt
+          ld a,&C0
+          call copy_trans_bk_mirror
+
+;check hl and de          
+          ld bc,nrt_buf_in_bk+&0100
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          ld hl,&3110:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+          ld hl,&3010
+          xor a:ld b,a
+          call nrt_check_from_a
+          ret
+
+test_copy_trans_bk_mirror_c2
+
+;CANNOT TEST C2 from RAM !!!! 
+
+      IF inRom
+          ld hl,&3F00
+          call nrt_fill
+
+          ld hl,&3F00
+nrtdest_c2 = &0153
+          ld de,nrtdest_c2
+          ld ixl,0
+          ld ixh,bk_nrt ; must be a valid orgams bank (with vo_basebk)
+          ld a,&C2
+          call copy_trans_bk_mirror
+;check hl and de          
+          ld bc,&4000
+          or a:sbc hl,bc:add hl,bc:call nz,fail
+          ld hl,nrtdest_c2+&0100
+          or a:sbc hl,de:add hl,de:call nz,fail
+
+          ld bc,&7FC4:out (c),c
+          ld hl,&4000+nrtdest_c2
+          xor a
+          ld b,a
+          call nrt_check_from_a
+      END
+          ret
+
+test_swap
+; For now, only test IY was preserved!
+
+          ld bc,&7F00+bk_nrt:out (c),c
+          call put_firmware ; needed for stack consistency
+          ld iy,&FADA
+          call swap
+          ld a,iyl:cp &DA:call nz,fail
+          ld a,iyh:cp &FA:call nz,fail
+          ret
+
+fail  = &BE00
+
+nrt_fill
+          xor a:ld b,a
+nrt_fill_
+          pop iy        ; avoid conflit stack / filled zone
+nflp      ld (hl),a:inc a:inc hl:djnz nflp
+          jp iy
+
+nrt_check
+          ld a,l
+nrt_check_from_a
+nclp      cp (hl):call nz,&BE00:inc hl:inc a
+          djnz nclp
+          ret
+
+
+nrt_init
+          ld a,bk_nrt
+nrt_init_custom
+          ld i,a        ; invariant
+          ld b,&7F:out (c),a
+ ; lowerRAM, since dev code is here
+          ld a,&8E:ld (reg_rmr),a
+
+ ; needed for reconnection
+          ld a,rom:ld (vo_romed),a
+
+      IF inRom
+; For test in ROM.
+; Otherwise: no dependencies.
+          ld c,rom
+          call &B90F
+      END
+          ret
+
+code2
+      IF inRom
+      ORG codedest2,$$
+      END
+
+; ------------------------------------
+set_firm_rommem
+          ld hl,(&AE60) ;Last 'GDU'
+          ld bc,firmware_threshold ; min=&a000 
+          or a:sbc hl,bc
+          add hl,bc:inc hl
+          jr nc,$+4:ld l,c:ld h,b
+          ld (firm_rommem),hl
+          ret
+
+; ------------------------------------
+store_8000
+; Put 8000-BFFF in mirror bank.
+; Also store 00-3f
+
+          push af:push hl
+          ld hl,&8000
+
+          jr _put_firmware_com
+
+; ------------------------------------
+put_firmware
+; Put 00-3f and himen-bfff in mirror bank
+
+          push af:push hl
+          call get_rommem ; e.g. hl=&a6fb
+
+_put_firmware_com
+
+          di            ;ecarte incoherence
+          push bc:push de
+
+          call get_backup_bk:out (c),a
+
+;size (&c000-hl)
+          ex de,hl:ld hl,&C000:or a:sbc hl,de
+          ld c,l
+          ld b,h
+
+          add hl,de     ; hl = &c000
+          add hl,de     ; position in mirror (-&4000)
+          ex de,hl
+          ldir
+
+          CONNECT_BK_BASE() ; !!! Don't use call (not sure about sp)
+          ld l,c:ld h,c
+          ld de,backup00_3f
+          ld bc,&40
+          ldir
+          pop de:pop bc:pop hl:pop af
+          ret
+
+; ------------------------------------
+copy_trans_bk
+    ; cf ctbk_ except
+    ; in:  a=bk_dest
+    ; out: reconnect bk dest.
+          ld c,a
+          call ctbk_
+          out (c),c
+          ret
+
+; ------------------------------------
+
+ctbk_c2
+          di
+;enchaine
+ctbk_
+;in : HL=source DE=dest ixl=size 
+    ; ixh=bk source (classical: c4 c5 c6 c7 ...)
+    ; c=bk dest (any connection c0 c1 c2 c3 c4 ...)
+; out: reconnect source bk  
+     ; HL and DE += size
+      IF dev_checks
+          ld a,c:and &C0:cp &C0:call nz,fail
+      END
+
+          ld b,MSB_BASE_BK ; TODO: review that
+ctbk_lp
+          ld a,ixh:out (c),a
+          ld a,(hl):inc hl
+          out (c),c
+          ld (de),a:inc de
+          dec ixl
+          jr nz,ctbk_lp
+
+          jp _ret_out_ixh
+
+; ------------------------------------
+restore_8000
+;called when going back to BASIC
+;copy mirror from &8000 to Himem
+; (NB: Himem to SP is already there, since we use firmware)
+
+          call get_rommem
+          call get_backup_bk:out (c),a
+
+;len to copy  (hl-&8000)
+          ld b,h:res 7,b
+          ld c,l
+
+          ld hl,dest_firm
+          ld de,&8000
+          ldir
+
+connect_bk_base
+          CONNECT_BK_BASE()
+          ret
+
+;----------------------------------------
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+; ------------------------------------
+swap
+;Swap 8000-BFFF  and 00-3f
+; Called from CH (jump) and MON (trace in/out)
+; here DI, and SP in work bk (8000) 
+;  IY preserved
+;  IXh, BC, DE, HL, AF destroyed
+
+;partie 00-3f
+
+      IF backup00_3f AND &FF
+ !! error, expected 00
+      END
+
+          ld hl,backup00_3f
+          ld e,l:ld d,l
+          ld b,&40
+swaplp2
+          ld c,(hl):ld a,(de)
+          ex de,hl
+          ld (hl),c:ld (de),a
+          inc e:inc l
+          djnz swaplp2
+
+          ld d,e:ld e,b ; de = &4000
+          ld c,d
+;Enchaine
+swap_com
+;-------
+; Also called from trui (mad_trace in/out)
+; IN: I= bk base, DI, and SP in work bk (8000) 
+;de= start in 4000:7FFF (allow ld b,d above)
+;c = nb chunks &100
+
+          ld a,d:add &40:ld h,a
+          ld l,e
+
+          ld a,i:ld ixh,a
+          call get_backup_bk:out (c),a
+          ld b,c
+swaplp1
+      8 ** [
+          ld c,(hl):ld a,(de)
+          ex de,hl
+          ld (hl),c:ld (de),a
+          inc e:inc l
+          ]
+          jr nz,swaplp1
+          inc d:inc h
+          djnz swaplp1
+
+_ret_out_ixh
+;!! Cannot use call: SP in bank (todo: still true??)
+;!! Also: use ixh (can be bk base or bk source)
+          ld b,MSB_BASE_BK ; TODO: review that
+          ld a,ixh:out (c),a
+          scf
+          ret
+
+; ------------------------------------
+
+ctbk_fast
+          ld b,MSB_BASE_BK ; TODO: review that
+          ld a,ixh:out (c),a
+          ld c,ixl:ld b,0:dec c:inc bc
+          ldir
+          ret
+
+; ------------------------------------
+copy_trans_bk_mirror
+
+; Copy part of chunk (all data must be confined in one chunk,
+; we *don't* check for end of chunk and follow next link).
+
+; TODO? refactor comme/avec copy_here_mirror:
+      ; d'abord split, puis dispatch sur chaque part.
+      ; But Warning, see assumption below!!
+; TODO: return flag 'inC000' as... flag / return code.
+
+; This routine doesn't expect bk base to be connected,
+; (it might use it though to set vo_flags.inC000)
+; and doesn't deal with ROM connections.
+
+;in : HL=source DE=dest ixl=size 
+    ; ixh=bk source (orgasm work bank: ff fe ... cc c7 c6 c5 c4)
+    ; a=bk dest (any connection c0 c1 c2 c3 c4 ...)
+;test si dest in firmware ou #C000
+;NB:doesn't work if SP in bank : nevermind now
+;IY corrupted                   
+;OUT: Reconnect bk source. IXH.
+    ; (since dest bk may not be an orgams work bank with vo_curbk)
+    ; HL and DE advanced like ldir. BC trashed
+
+          ld c,a
+          and 7:cp 2:jp z,ctbk_c2 ; c1/c3 check later in ctbk_cut
+
+          push hl:pop iy
+
+          ld hl,&40:scf:sbc hl,de:jr nc,ctbk_below_40
+
+          push iy:pop hl
+          ld a,d:cp &3F:jr c,ctbk_fast
+
+          ld hl,firm_backup
+          scf:sbc hl,de:jr nc,ctbk_4000
+;DE >=&8000
+          ld hl,&C000
+          scf:sbc hl,de:jr nc,ctbk_8000
+;DE >=&c000  
+          push iy:pop hl
+          jr ctbk_c000
+
+ctbk_below_40
+
+      IF backup00_3f AND &FF
+          ex de,hl
+          ld bc,backup00_3f:add hl,bc
+          ex de,hl
+      ELSE
+          ld a,d:add backup00_3f/&0100:ld d,a
+      END
+
+          ld a,i
+          call ctbk_cut
+          push af
+; Correct DE
+      IF backup00_3f AND &FF
+!!! todo?
+      ELSE
+          ld a,d:sub backup00_3f/&0100:ld d,a
+      END
+          pop af
+          ret c
+
+;here de=&40  
+      IF dev_checks
+          ld a,e:cp &40:call nz,&BE00
+          ld a,d:or a:call nz,&BE00
+      END
+          ld c,ixh      ;TODO: needed ?
+          jp ctbk_
+
+ctbk_4000
+; Mord sur 4000. DE in 3f00..7fff 
+          ld a,c
+          call ctbk_cut
+          ret c
+
+; Mord sur 8000. DE in 4000..7fff
+;NB: reusing ctbk_8000 isn't worth it, since it requires more code
+   ; to adapt api.
+          call ctbk_cor
+          ld c,a        ; C = mirror bank
+          call ctbk_
+ctbk_uncor
+;in:  DE = &4001-&8000
+;out: DE = &8001-&c000
+          push af       ; must preserve carry 
+;Cannot use set/res, as we can have DE = &8000
+          ld a,d:add -corr_mirror:ld d,a
+          pop af
+          ret
+
+ctbk_8000
+          push bc       ; For c
+          call ctbk_cor
+          call ctbk_cut
+          call ctbk_uncor
+          pop bc
+          ret c
+ctbk_c000
+          ld a,c
+          and 5:dec a   ;c1 or c3 :no screen
+          call nz,setflag_codeinC000
+          jp ctbk_
+
+ctbk_cut
+;Copy first part
+;     return NC if another part
+
+;Here hl= (nb byte strictly below limit) - 1
+;     iy= source
+;A=dest bk 1st slice
+;OUT: A = ixh (bk source)
+      IF todo
+; Check that, even for &c3 mode 
+      END
+
+;overlap = ixl-(hl+1) 
+      ; if ixl > hl+1
+
+          inc hl
+          ld b,ixl
+          ld c,l:ld l,b
+          ld b,h:ld h,0
+          dec l:inc hl  ;0=256
+          scf:sbc hl,bc
+          push iy
+          jr nc,ctbk_2slices
+
+; -- no overlap ----
+
+          pop hl
+ctbk_maybe_c3
+          ld c,a
+;Must set flag if C=C3 and dest in #4000-#7FFF
+          and 7:cp 3:jp nz,ctbk_
+
+; --- bank C3 ----
+          ld a,d        ; start in &4000 ???
+          call _check4000
+          call ctbk_
+          dec de:ld a,d:inc de ; finish in &4000 ???
+_check4000
+          and &C0:cp &40:scf:ret nz
+setflag_codeinC000
+; comming from      
+       ;   call connect_bk_base  ; Not, no sure about SP
+          CONNECT_BK_BASE()
+          push hl
+          ld hl,vo_flags:set vf_codeinC000,(hl)
+          pop hl
+          ld a,ixh:out (c),a
+          ret
+
+ctbk_2slices
+          ld ixl,c      ;len of slice1
+          inc hl:ex (sp),hl ;save len of slice2, pop source
+          call ctbk_maybe_c3
+          pop bc
+          ld ixl,c
+          or a
+          ret
+
+ctbk_cor
+; In: DE in 8000-bfff
+;Out: DE in 4000-7fff (mirror bank)
+    ; A= mirror bk
+
+      IF [dest_firm-firm_backup AND &FF] OR [corr_mirror + &40]
+ !! must adapt code
+      END
+          res 7,d:set 6,d ; from 8xxx to 4xxx
+get_backup_bk
+          GET_BK_MIRROR_8000()
+          ret
+
+get_mmr_check_c2
+; Get connect bk. Return z if c2, ca, ...
+          ld a,(reg_mmr)
+          ld b,a
+          and 7
+          xor 2
+          ld a,b
+          ret
+
+; ------------------------------------
+
+get_rommem
+;OUT: HL= sanitised firm_rommem
+    ; A trashed
+
+          ld hl,(firm_rommem)
+
+ ;sanity clip: min(hl,&ac00)      
+          push de
+          ld de,&AC00
+          or a:sbc hl,de:add hl,de:jr c,$+3:ex de,hl
+          pop de
+
+ ;sanity clip: max(&8000,hl)
+          ld a,h:or a
+          ret m
+          ld hl,&8000
+          ret
+
+get_firm_stack
+          ld hl,(firm_save_sp)
+          ld a,h:cp &BF:ret z
+          ld hl,&C000
+          ret
+; ------------------------------------
+
+split_copy
+
+; Mord sur 2 bank ?
+
+;out:    C=size part 1
+   ;NZ & A=size part 2
+   ; Z & A=0 si no part 2
+
+          ld b,0
+          dec c
+          inc bc
+          push hl
+          add hl,bc
+          ld b,l
+          dec hl        ;last adr
+          ld a,h
+          pop hl
+          xor h
+          and &C0
+          ret z
+
+          ld a,c
+          sub b
+          ld c,a
+          ld a,b        ;ce qui deborde
+          ret
+
+
+copy_here_mirror
+; comme copy_here, mais avec zones 00-3F & 8000-BFFF back-uped
+;in: HL=source anywhere in memory (according to current connexion)
+   ; DE=dest in work bank (or in page &8000)
+   ; BC=length                              
+;out: HL and DE updated as LDIR. All other registers destroyed
+;in/out: work bk connected
+
+; coupe interruptions: necessaire pour mode C1, C2, C3
+; mais aussi pour toute autre connexion quand pile en &8000
+
+          di
+
+          inc b
+          jr chwb_
+chwb_big
+          push bc
+          ld bc,&0100
+          call chwb
+          pop bc
+chwb_
+          djnz chwb_big
+
+          ld a,c:or a:ret z
+chwb
+          call split_copy
+          push af
+          call chwb_do_copy
+          pop af
+          ld c,a
+          ret z
+
+
+chwb_do_copy
+;quelle bank ?
+          ld a,h
+          cp &C0
+          jp nc,ch_c000
+          cp &80
+          jr nc,chwb_8000
+          cp &40
+          jp nc,ch_4000
+
+;0000 : ok si ROM
+      ; like ch_8000 si Bk
+      ; Must fetch 00-3f otherwise
+
+          ld a,(reg_rmr)
+          bit 2,a
+          jp z,ch_ldir_lrom
+
+          call get_mmr_check_c2
+          jp z,ch_bk2base ; c2 ca ...
+
+          ld a,h
+          or a
+          jp nz,ch_ldir
+          ld a,l
+          sub &40
+          jp nc,ch_ldir
+          neg           ;NB bytes in 00-#3F zone
+          dec c:inc c:jr z,full_to_40 ; c=0 -> 256
+          cp c:jr c,full_to_40
+          ld a,c
+full_to_40
+          ld b,a
+          push bc
+          ld bc,backup00_3f
+          add hl,bc
+          ld c,a
+          call ch_ldir  ; ok since basebk connected
+          ld a,h:add -backup00_3f/&0100:ld h,a
+          pop bc
+          ld a,c
+          sub b
+          ret z
+          ld c,a
+          jp ch_ldir
+
+chwb_8000
+          call get_mmr_check_c2
+          jr z,ch_bk2base
+
+          ld a,h:add corr_mirror:ld h,a
+          call get_backup_bk
+          call ch_bk2base_
+          ld a,h:add -corr_mirror:ld h,a
+          ret
+
+; ------------------------------------
+
+copy_here
+
+;in: HL=source anywhere in memory (according to current connexion)
+   ; DE=dest in work bank
+   ; C=length (0 = 256)
+;out: HL and DE updated as LDIR. All other registers destroyed
+;in/out: work bk connected
+
+          call split_copy
+          push af
+          call ch_do_copy
+          pop af
+          ld c,a
+          ret z
+
+ch_do_copy
+;quelle bank ?
+          ld a,h
+          cp &C0
+          jr nc,ch_c000
+          cp &80
+          jr nc,ch_8000
+          cp &40
+          jr nc,ch_4000
+
+;0000 : ok si ROM ou base RAM
+
+          ld a,(reg_rmr)
+          bit 2,a
+          jr z,ch_ldir
+ch_8000
+          call get_mmr_check_c2
+          jr nz,ch_ldir
+
+ch_bk2base
+;in : a = MMR source (C2, CA, ...)
+    ; c = length (0=256)
+          ld ixh,a
+          ld a,(reg_mmr+1):or &7C
+          ld b,a
+          jr ch_bk2base__
+
+ch_bk2base_
+;in : ba = MMR source (&7cc2, &7ff6 ...)  
+    ;  c = length (0=256)
+          ld ixh,a
+ch_bk2base__
+          ld iyh,b
+          ld ixl,c
+          ld a,i:ld c,a
+chb2b_lp
+          ld b,iyh
+          ld a,ixh
+          out (c),a
+          ld a,(hl)
+          inc hl
+          ld b,MSB_BASE_BK
+          out (c),c
+          ld (de),a
+          inc de
+          dec ixl
+          jr nz,chb2b_lp
+          ret
+
+ch_ldir_lrom
+; Enable LOW ROM with has been deconnected by RST &18 FAR_CALL
+; to connect this Ext ROM. 
+
+kl_l_rom_enable = &B906
+
+      IF inRom          ; Dev is in page 0000
+          call kl_l_rom_enable
+      END
+ch_ldir
+          ld b,0
+          dec c
+          inc bc
+          ldir
+          ret
+
+
+ch_c000
+;ROM or base RAM : deconnecte ROM courante.
+
+          ld a,(reg_rmr)
+          bit 3,a
+          jr z,ch_from_c000
+          ld a,(reg_mmr)
+          ld b,a
+          bit 2,a       ;eg : c4-c7
+          jr nz,ch_from_c000
+          and 7
+          jr z,ch_from_c000
+
+;C1, C2, C3 : switch to c7:4000
+          ld a,b
+          or &07
+          res 7,h
+          call ch_bk2base
+          ld a,h
+          xor &80
+          ld h,a
+          ret
+
+ch_4000
+          ld a,(reg_mmr)
+          jr ch_bk2base
+
+
+ch_from_c000
+;must copy routine to be able to disconnect this ROM
+;fait a chaque fois : pas trop genant, et permet de ne pas
+;   planter si zone de travail corrompue
+
+          push hl
+          push de
+          ld a,c
+          push af
+
+          ld hl,routine_copy
+          ld de,wk_routine_copy
+          ld bc,rc_size
+          ldir
+          ld a,(reg_rom)
+          ld (rc_rom+1),a
+          ld a,(vo_romed)
+          ld (rc_wk_rom+1),a
+          ld a,(reg_rmr)
+          and &8C
+          or mode
+          ld c,a
+          ld b,MSB_BASE_BK
+          pop af
+          pop de
+          pop hl
+          push bc
+          call wk_routine_copy
+          pop bc
+;UR forced & lower ROM as defined by rmr
+          res 3,c       ;
+          out (c),c
+          ret
+
+
+wk_routine_copy = &7D0C
+
+routine_copy
+      ORG wk_routine_copy,$$
+          out (c),c
+rc_rom    ld bc,&DF00
+          out (c),c
+          ld b,0
+          ld c,a
+          dec c
+          inc bc
+          ldir
+          ld bc,&7F84+mode ;UR connected
+          out (c),c
+rc_wk_rom ld bc,&DF00
+          out (c),c
+          ret
+rc_size = $-wk_routine_copy
+
+      ORG routine_copy+rc_size,$$
+
+;----------------------------------------
+
+jp
+      IF inRom
+      IF $-&E7F2
+  !! error align
+      END
+      END
+          jp set_firm_rommem ; called by ch/common_init
+          jp store_8000 ; called by ch/common_init
+          jp put_firmware ; called by org before each ass
+          jp restore_8000 ; called by mon/basic
+          jp swap       ; called by ch (jump) and mon (trace init/exit)
+          jp copy_trans_bk ; called by org (source handling)
+
+          jp copy_trans_bk_mirror ; called by ass (via org), cocopy  
+                                  ; by monogams.clear
+
+          jp copy_here  ; called by trui
+          jp copy_here_mirror ; called by mon (m,x), ch (save bin)
+          jp swap_com   ; called by trui and mon (for rsx)
+hi
+      IF inRom
+realsize = $$-code
+      FILL limit-$,&FF
+codesize = $$-code
+      ELSE
+      IF $/&0100 - &30:ELSE
+Error     TOO():MUCH():CODE():nrt(conflit)
+      END
+      END
+
+
+mode  = 2
+
+firm_save_sp = &79FC
+firm_rommem = &79FE
+
+vo_flags = &7CE8
+vf_codeinC000 = 2
+vo_romed = &7CF9
+
+reg_rmr = &7D86
+reg_mmr = &7D87
+reg_rom = &7D9B
+
+

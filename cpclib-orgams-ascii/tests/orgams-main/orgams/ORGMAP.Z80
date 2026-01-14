@@ -1,0 +1,52 @@
+; Where each module is installed in ORGAMS.ROM
+
+; 2025 Jul  1: Move mirror, decexp, detect
+; 2024 Feb 20: Add ch'', ed''
+             ; Move mulf!      
+
+ch    = &C000
+decexp = &C0C1
+ch'   = &C100           ; 3 bytes free
+;free was init.o
+farcall_module = &C950  ; ??? Cannot move ???
+ed_farcall = farcall_module
+txt   = &CA00
+txt_  = &D000           ; HH beta2 free at &cf4x (after edhelp)
+;free
+ed    = &D02D           ; !! JPs @ D200  &60 free
+ch''  = &E345
+ed''  = &E410           ; &45 was mulf
+synhigh = &E500         ; 19 free
+mirror = &E52D          ; 0 free
+ed_farcall' = &E810     ; 2 free
+init_jp = &E82A         ; 0
+brk_module = &E850
+mulf  = &E960
+save_module = &EA60
+; &9e free (was disa)
+upd_scr = &EEE3
+ch''' = &EFD9
+init_module = &F130     ; 0
+occupbar = &F3C0
+mirror' = &F4F2         ; 0 free
+detect = &F578          ; !!! cannot move this one. PADDING ?
+txt'  = &F693           ; ?? free HH beta 6
+;free was ch''' = &FAA6
+inks  = &FBFD           ; Set by #palette.bas Read by ed.
+impexp = &FC00          ; &38 free before JPS
+;free?
+
+; -- jps --       
+save_jp = &FED2         ; 0 free
+ed_farcall'' = &FEDE    ; 3 free
+mulf_jp = &FEE8
+brk_jp = &FEF1
+synhigh_jp = &FEF7      ; 0 free 
+occupbar_jp = &FEFA     ; 0 free
+upd_scr_jp = &FF00      ; 3 free
+upd_scr_jp_ = &FF33
+; &FF33     ; 3 free was occupbar
+ed4   = &FF36           ;??moved?? !!! ed code (no more room elsewhere)
+brk'  = &FFA0           ; 1 free
+;end--------
+

@@ -1,0 +1,941 @@
+inRom = 1
+dev_checks = 1
+rom   = &1C
+todo  = 1
+
+; Append/Read raw in chunks.
+; !! Not malloc-like. HU?
+
+; Dependencies : chunk
+; Used by: org (store/restore), import(connect_heap_chunk)
+         ; cache (read_raw_connected)
+ ;TODO: Factorize with cocopy?  !!NO!!! See cocopy for rationale.
+ ;      quid of chunk.new_node7 used by liszt.list_append?
+
+; No state, no init to do!  
+; Aka '**almost** pure routines'! Almost: We allocate and mutate chunks!
+
+      IMPORT "bricmap.i"
+      IMPORT "const.i"  ; chunks_per_bk 
+
+hist
+; /////// 2025 /////////
+; ------- HH beta I ---------
+  ; Dec 11 v9: Use chunks_per_bk from const.i (now = &40)
+
+; /////// 2024 /////////
+; ------- GG beta A ---------
+  ; Mar 28 v8: [no change] Use bricmap.i
+  ; Sep 23 v7: Add read_raw_connected (for cache)
+
+; /////// 2021 /////////
+     ;    12 v6: Add /test_append_raw_memory_full/
+               ; Add /test_append_raw_api/
+               ; Add /test_append_raw_3_chunks/
+               ; Add /test_append_raw_custom_chunk/
+               ; Add /test_append_raw_256/
+             ; Fix them all by importing cocopy.store_code core routine.
+               ; FF alpha 6
+
+     ;    10 v5: Fix sanity checks!!! /check_next/ was buggy.
+
+     ; Jun 5 v4: Add sanity checks (fail fast).
+
+        ; 29  v3: More checks.
+         ; 28  v2: Read past EOF not considered an error anymore.
+                 ; See rational in /read_raw/.
+                 ; Add CHECK_ID
+     ; Jan 27. v1: Import /append_raw/ from chung.
+                 ; !! Slight API changes
+                 ; Introduce /read_raw/.
+
+; ---------------------------             
+
+codedest = heap
+limit = chunk_module
+codedest2 = heap_jp
+limit2 = liszt_jp
+
+chunk = &FDFA
+new_chunk = chunk+21
+insert_new_chunk_from_id = chunk+18 ; out hl=id new chunk (connected)
+connect_chunk_from_id = chunk+42 ; all regs preserved
+connect_next_chunk = chunk+45 ; all regs preserved but hl & F
+;new_node7 = chunk+51    ; Return CDE= pnt
+;free_list7 = chunk+3
+
+chunk_init_custom = chunk+39 ; for nrt
+get_free_chunks = chunk+36 ; for nrt
+new_chunk_no_init = chunk+15 ; for nrt
+
+fail_memoryfull = 251   ; nrt 
+
+; ========================================
+; Positions dans chunk header
+;!! Use the header from ay.chung, since shared implementation.
+chead_next = 0
+chead_last = 2
+chead_checksum = 3
+chead_rows# = 4         ;0 if empty, -1 if unknown
+; chead_flags = 5
+chunk_header_size = 5
+chunk_start = chunk_header_size
+; ========================================
+
+nrt_buf = &3E00
+
+      IF inRom:ENT burn
+      ELSE:ENT tests
+      END
+
+tests
+          call test_append_raw_api
+          call test_append_raw_just_fit
+          call test_append_raw_in_chunk
+          call test_append_raw_in_chunk_transbk
+          call test_append_raw_3_chunks
+          call test_append_raw_custom_chunk
+          call test_append_raw_256
+          call test_append_raw_memory_full
+
+          call test_read_raw
+          call test_read_raw_transbk
+          ret
+
+;---------------------------
+      MACRO CHECK_HL_EQ n
+          push de
+          ld de,n
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ n
+          push hl
+          ld hl,n
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ n
+          push hl
+          ld hl,n
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+      MACRO CHECK_FREE n
+          push hl
+          call get_free_chunks
+          ld a,l
+          pop hl
+          cp n:call nz,&BE00
+      ENDM
+
+
+compare_sized
+          ld a,(de):cp (hl):call nz,&BE00
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+fail  = &BE00
+;------------------------------------
+
+nrt_init
+; We don't need the whole setup.
+; A terme, most of org_init should be transfered to chunk.o (really?)
+; -> doesn't matter, here we should only init dependencies anyway.
+bk_dev = &C7
+bk_dev' = &CF
+nb_chu = &30
+nb_chu' = &60
+          ld a,bk_dev
+          ld hl,nb_chu
+nrt_init_custom
+;in: a= bk
+   ; hl= nb chunks
+
+          push af:push hl
+          ld c,rom:call &B90F
+
+          pop hl:pop af
+          push hl
+          call chunk_init_custom
+
+; sanity check assumption
+          call get_free_chunks
+          pop de
+          CHECK_HL_EQ_DE()
+          ret
+
+nrt_setup_crossbank
+; Fill all bank cc but 1 chunk
+
+          ld a,bk_dev'
+          ld hl,chunks_per_bk + 1
+          call nrt_init_custom
+
+          ld b,chunks_per_bk - 1
+tbs_lp
+          push bc
+          call new_chunk_no_init:call nc,&BE00
+          pop bc
+          djnz tbs_lp
+
+          CHECK_FREE(2) ; sanity check
+          ret
+
+;------------------------------
+test_append_raw_api
+; Check HL return last chunk.
+          call nrt_init
+          call new_heap_chunk
+          push hl
+          ld b,l:ld d,h
+          ld hl,rampe
+          ld c,nrt_size1
+          call append_raw_in_chunk:call nc,&BE00
+          pop de
+          or a:sbc hl,de:add hl,de:call nz,&BE00 ; Same chunk
+
+          push hl
+          ld hl,rampe
+          ld c,nrt_size1
+          call append_raw_in_chunk:call nc,&BE00
+          pop de:inc d
+          or a:sbc hl,de:add hl,de:call nz,&BE00 ; Next chunk
+          ret
+
+test_append_raw_in_chunk
+;----------------------- 
+          call nrt_init
+          call _test_append_raw_in_chunk
+          ret
+
+test_append_raw_in_chunk_transbk
+;------------------------------- 
+          call nrt_setup_crossbank
+          call _test_append_raw_in_chunk
+          ret
+
+test_append_raw_memory_full
+;--------------------------
+          call nrt_init
+          call new_heap_chunk
+
+.lp
+;invariant: hl=id of last chunk
+          ld b,l:ld d,h
+          ld hl,rampe
+          ld c,nrt_size1
+          call append_raw_in_chunk:jr nc,.error
+          jr .lp
+
+.error
+          cp fail_memoryfull:call nz,&BE00
+          ret
+
+
+_test_append_raw_in_chunk
+; Append 'rampe' and check back API + chunk's internals.
+
+nrt_size1 = &CC
+nrt_size2 = &40
+nrt_size21 = &0100-nrt_size1-chunk_header_size
+
+          call new_heap_chunk
+          ld (nrt_id0),hl
+
+          push hl
+          ld b,l:ld d,h
+          push bc
+          ld hl,rampe
+          ld c,nrt_size1
+          call append_raw_in_chunk:call nc,&BE00
+
+          ld a,h:cp d:call nz,&BE00 ; -- same chunk
+          pop af        ; was b = bank
+          cp l:call nz,&BE00 ; -- same bank
+          cp b:call nz,&BE00 ; -- start bank
+          ld a,chunk_start
+          cp e:call nz,&BE00 ; -- start pos
+          pop hl
+          ld a,d
+          cp h:call nz,&BE00 ; -- start chunk
+          ld e,chead_last
+          ld a,(de):cp nrt_size1+chunk_start-1:call nz,&BE00
+
+; Add data cross chunk
+          ld hl,rampe
+          ld c,nrt_size2
+          call append_raw_in_chunk:call nc,&BE00
+
+; -- check part1 in first chunk.
+          ld hl,(nrt_id0)
+          call connect_chunk_from_id
+          ld l,chunk_start
+          ld de,rampe
+          ld b,nrt_size1
+          call compare_sized
+
+; -- check part2.1 in first chunk.
+          ld de,rampe
+          ld b,nrt_size21
+          call compare_sized
+
+; -- check part2.2 in second chunk.
+          ld hl,(nrt_id0)
+          call connect_next_chunk
+
+          ld l,chunk_start
+          ld b,nrt_size2-nrt_size21
+          call compare_sized
+
+; -- fill the chunk
+;TODO? ; For now covered in chung
+; -- append after full chunk
+; idem
+; -- last check: previous data is still there
+; idem
+          ret
+
+nrt_id0 WORD 
+
+test_append_raw_just_fit
+;-----------------------
+; When filling the chunk, musn't allocate another one.
+; NB: doesn't use read_raw for check, so this test should be one
+    ; of the first to be ran.
+
+          call nrt_init
+          call new_heap_chunk
+
+          ld b,l:ld d,h
+          ld c,nrt_full
+          ld hl,rampe+3 ; arbitrary, but distinct from other chunk
+          call append_raw_in_chunk:call nc,&BE00
+          ld a,d:cp h:call nz,&BE00 ; check first == last
+
+; Check next = null.
+          ld l,chead_next:ld a,(hl):or a:call nz,&BE00
+          inc l:ld a,(hl):or a:call nz,&BE00
+
+          ex de,hl      ;now bhl=start
+          ld de,rampe+3
+          ld c,nrt_full
+          call compare_sized
+          ret
+
+
+test_append_raw_custom_chunk
+;---------------------------
+; Returned (and used) start must respect custom chunk. 
+          call nrt_init
+          call new_heap_chunk
+; Set chead_last to custom start
+          push hl
+          call .nrt_init_heap_chunk
+          pop hl
+
+nrt_start = &80         ; &80, so that &100 for test takes 2 chunks
+nrt_size_custom = &0100-nrt_start
+
+          ld b,l:ld d,h
+          ld c,0
+      IF nrt_size_custom*2 - &0100
+   !! error unexpected value for test
+   ; We assume it will take exactly 2 chunks.
+      END
+
+          ld hl,rampe
+          ld ix,.nrt_init_heap_chunk
+          call impl:call nc,&BE00
+          ld a,d:inc a:cp h:call nz,&BE00 ; d=first chunk, h=last
+          ld a,e:cp nrt_start:call nz,&BE00
+          ld a,l:cp b:call nz,&BE00 ; --sanity check: same bank (&c4)
+
+; check slice 1
+          push de
+          ld hl,rampe
+          ld b,nrt_size_custom
+          call compare_sized
+
+          pop de
+          inc d
+          ld hl,rampe+nrt_size_custom
+          ld b,nrt_size_custom
+          call compare_sized
+          ret
+
+.nrt_init_heap_chunk
+;Mimic another kind of chunk, with different header size.
+          ld l,chead_last:ld (hl),nrt_start-1
+          ld l,nrt_start
+          ret
+
+
+test_append_raw_256
+;------------------
+; Check size= 0 is interpreted as 256. (needed by cocopy)
+          call nrt_init
+          call new_heap_chunk
+
+          ld b,l:ld d,h
+          ld c,0
+          ld hl,rampe+&42 ; arbitrary, but distinct from other chunk
+          call append_raw_in_chunk:call nc,&BE00
+          ld a,d:inc a:cp h:call nz,&BE00 ; d=first chunk, h=last
+
+          ex de,hl      ;now bhl=start
+          ld c,0
+          ld ix,rampe+&42
+          call nrt_check_read_raw
+          ret
+
+
+test_append_raw_3_chunks
+;-----------------------
+; When new data must be splitted on 3 chunks 
+          call nrt_init
+          call new_heap_chunk
+          ld (nrt_id0),hl
+
+          ld b,l:ld d,h
+nrt_full = 256 - chunk_header_size
+nrt_almost_full = nrt_full - 1 ; leave 1 byte
+          ld c,nrt_almost_full
+          ld hl,xorish
+          call append_raw_in_chunk:call nc,&BE00
+          ld a,d:cp h:call nz,&BE00 ;--sanity check: still first chunk
+
+          ld c,255
+          ld hl,rampe
+          call append_raw_in_chunk:call nc,&BE00
+
+; -- check part1 in first chunk.
+          ld hl,(nrt_id0)
+          ld b,l:ld l,chunk_start
+          ld c,nrt_almost_full
+          ld ix,xorish
+          call nrt_check_read_raw
+; Sanity: HL must point past thing read.
+          ld a,l:cp 255:call nz,&BE00
+
+; -- check part2.1 in first chunk manually
+          ld a,(hl)
+; we know first byte of rampe is 0
+          or a:call nz,&BE00
+
+; -- check part2 via read_raw 
+          ld c,255
+          ld ix,rampe
+          call nrt_check_read_raw
+          ret
+
+test_read_raw
+;------------ 
+          call nrt_init
+          call _test_read_raw
+          ret
+
+test_read_raw_transbk
+;-------------------- 
+          call nrt_setup_crossbank
+          call _test_read_raw
+          ret
+
+_test_read_raw
+; Append 'rampe' and check we can read back.
+
+          call new_heap_chunk
+          ld (nrt_id0),hl
+
+          ld b,l:ld d,h:ld e,chunk_start
+          ld hl,rampe
+          ld c,nrt_size1
+          call append_raw_in_chunk:call nc,&BE00
+
+; Add data cross chunk
+          ld hl,rampe+&80
+          ld c,nrt_size2
+          call append_raw_in_chunk:call nc,&BE00
+
+; -- check part1 in first chunk.
+          ld hl,(nrt_id0)
+          ld b,l:ld l,chunk_start
+          ld c,nrt_size1
+          ld ix,rampe
+          call nrt_check_read_raw
+
+; -- check part2.1 in first chunk.
+; bhl is properly set
+          ld c,nrt_size21
+          ld ix,rampe+&80
+          call nrt_check_read_raw
+
+; -- check part2.2 in second chunk.
+; bhl is properly set in 2nd chunk
+          ld c,nrt_size2 - nrt_size21
+          ld ix,rampe+&80+nrt_size21
+          call nrt_check_read_raw
+          ret
+
+nrt_check_read_raw
+; In: BHL=start
+    ;   C=size (0=256)
+    ;  Ix=ref 
+          ld iyl,c
+          ld de,nrt_buf
+          call read_raw
+; DE must be DE+size
+          ld a,e:cp iyl:call nz,fail
+
+          push hl:push bc ; save new source
+          ld b,iyl
+          push ix
+          pop hl
+          ld de,nrt_buf
+          call compare_sized
+          pop bc:pop hl
+          ret
+
+rampe     256 ** BYTE #
+xorish    256 ** BYTE # XOR [#+1 AND &FF]
+      IF xorish-&0100 - rampe
+ !! Must be chained
+      END
+
+
+;---------------------------------
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+      IF todo
+; Move in check.o 
+      END
+
+      MACRO CHECK_ID_BD
+      IF dev_checks
+          call check_id_bd_
+      END
+      ENDM
+
+      MACRO CHECK_ID_BHL
+      IF dev_checks
+          call check_id_bhl_
+      END
+      ENDM
+
+      MACRO CHECK_ID_CDE
+      IF dev_checks
+          call check_id_cde_
+      END
+      ENDM
+
+      MACRO CHECK_HL_IN_BANK
+      IF dev_checks
+          call check_hl_in_bank_
+      END
+      ENDM
+
+      MACRO CHECK_B_BANK
+      IF dev_checks
+          call check_b_bank_
+      END
+      ENDM
+
+
+check_id_bd_
+          push af
+          ld a,b:call check_b_bank_
+          ld a,d:call check_msb_
+          pop af
+          ret
+
+check_id_bhl_
+          push af
+          ld a,b:call check_b_bank_
+          ld a,h:call check_msb_
+; cannot point on header ('last' field)
+          ld a,l:cp chunk_start:call c,mess
+          pop af
+          ret
+
+
+check_b_bank_
+          push af
+          ld a,b:call check_a_bank_
+; node shouldn't be in base_bk  
+          ld a,i:cp b:call z,mess
+          pop af
+          ret
+
+check_a_bank_
+          and &C4:cp &C4:ret z
+      BRK
+
+      IF dev_checks
+check_next_is_0
+; !! Modify e
+; When we append, we must pass last chunk.
+; -> So next field is supposed to be 0
+          push af
+          ld e,chead_next
+          ld a,(de):or a:call nz,mess
+          inc e
+          ld a,(de):or a:call nz,mess
+          pop af
+          ret
+
+      IF 0
+; Unused right now
+check_next
+; !! Modify e
+          push af
+          ld e,chead_next
+          ld a,(de):inc e
+          or a:jr z,.ok0
+          call check_a_bank_
+          ld a,(de)
+          call check_msb_
+          jr .ok
+
+.ok0
+          ld a,(de):or a:jr z,.ok ; must be 0 as well
+      BRK
+.ok
+          pop af
+          ret
+      END
+
+check_msb_
+          cp &40:call c,mess
+          cp &40+chunks_per_bk:ret c
+      BRK
+
+      END
+
+
+; ========================================
+
+append_raw_in_chunk
+;------------------
+; 'raw' because:
+    ; - we don't deal with sentinel (in most cases we don't need it)
+    ; - we don't need contiguity. 
+      ; Just copy what fits and continue in new chunk.
+    ; - [optim] we expect last chunk as a entry,
+              ; so we don't have to follow the linked list.
+
+; In: hl= source !! out of bank
+    ;  b= bk dest
+    ;  d= MSB dest (ie BD = ID of *last* chunk). Coherent with output
+    ;  c= size. 0 = 256, for consistency with other routines and
+                       ; future use. Also, if client never use that,
+                       ; it should be asserted > 0 at call site.
+    ;  ix= routine new_chunk (returning HL:id, A:start)
+    ; Bank agnostic    
+
+; Out:  HL = id of new last chunk (can be the same). Needed by new_table
+     ; BDE = dest start (i.e. insertion point). Rationale:
+             ; - simpler client code (new_table)
+             ; - avoid corner case when copy reaches end of chunk:
+                 ; it would quirky to return "past the end" pnt then. 
+           ; NB: that means:
+                           ; - BD is unchanged unless chunk was full.
+                           ; - BD can serve as input to append again.
+     ; Last chunk inserted connected 
+       ; Not a hard constraint for now -> might be revisited upon needs
+
+          CHECK_ID_BD()
+
+          push ix
+          ld ix,init_heap_chunk
+          call impl
+          pop ix
+          ret
+
+impl                    ; will be needed for chung (with ix=constructor)
+
+mess  = &BE00
+
+; more or less copy/paste from cocopy.store_code
+
+          push hl
+          ld h,d:ld l,b
+          call connect_chunk_from_id
+          ld d,h
+      IF dev_checks
+          call check_next_is_0 ; See rationale in check itself
+      END
+          pop hl
+
+; Must do it once at start (out of loop),
+; to update BDE if chunk entirely full.
+          call .check_full
+          push bc:push de
+.retry
+; --- One slice   
+; Loop: hl=source bde=dest (connected) c=size to copy
+
+          ld a,e:dec a
+          inc c:dec c:scf:jr z,.ovf ; 0=256 -> ovf (carry).
+          add c         ; Carry if ovf.    
+.ovf
+          push af
+          jr nc,.fit
+
+          xor a:sub e:ld c,a ; size 1 = &ff-last, that is &ff-(E-1)
+          call z,mess
+.fit
+; --- append
+          push bc
+          inc c:dec c:call z,mess
+          ld b,0
+          ldir
+          dec de:ld a,e ; correct D if past chunk
+; E not used anymore: restored if done, reloaded otherwise in check_full
+          ld e,chead_last:ld (de),a
+          pop bc
+
+      IF dev_checks
+          call check_next_is_0
+      END
+          pop af        ; NC means fit -> Ok
+          ccf
+          jr c,.done    ; Exit if no split
+
+; Here: a=needed bytes -1
+          inc a:ld c,a
+          call .check_full
+          jr c,.retry   ; might have to split second part again
+.done
+          ld l,b:ld h,d
+          pop de:pop bc
+          ret
+
+.check_full
+; In: bd= current chunk (connected)
+; If ok: Carry, E= LSB dest. Plus:  
+;     NZ if not full. (E=last+1)
+;      Z if was full  (BDE = new dest successfully connected)
+
+; Otherwise NC, A = error code otherwise.
+
+          ld e,chead_last:ld a,(de)
+      IF dev_checks
+          cp chunk_start-1:call c,mess ;!!! remove !!!
+      END
+          ld e,a        ; point to last
+          inc e
+          scf:ret nz    ; C, NZ    
+          push hl
+          ld l,b:ld h,d
+          call insert_init_chunk_from_id
+          ld e,l:ld d,h:ld b,a
+          pop hl
+          ret nc        ; Nc: .ko (mem  full)
+          xor a:scf     ; C, Z
+          ret
+
+read_raw
+;-------
+; NB: Readind past EOF doesn't raise any error.
+    ; That's for convenience for orgds:select, since we don't know the
+    ; size to copy: we ask the max to make sure everything is copied.
+
+; In bhl= source
+    ; de= dest !! out of bank
+    ;  c= size (0=256)
+    ; Bank agnostic    
+
+; Out: bhl= past source (can be new chunk or 0 if end reached) 
+     ;  de: past dest
+     ; - BH is unchanged unless all chunk consumed.
+     ; - BHL can serve as input to read following data.
+     ; Last chunk seen connected.
+       ; Not a hard constraint for now -> might be revisited upon needs
+
+          CHECK_ID_BHL()
+
+          ld a,l:ld l,b
+          call connect_chunk_from_id
+          ld l,a
+;enchaine
+read_raw_connected
+;Like read_raw, except:
+;In: HL = source (already connected)
+; naive copy. enough for now
+.loop
+          ld a,(hl):inc l:call z,connect_next_heap
+          ld (de),a:inc de
+          dec c
+          jr nz,.loop
+          ret
+
+connect_next_heap
+          call connect_next_chunk
+          ld b,l
+          ld l,chunk_start
+          ret
+
+      IF 0
+_goto_cur
+; in: cde=id
+;out: bhl=cur (connected)
+          call _get_cur
+          CHECK_HL_IN_BANK()
+          ld b,(hl):inc hl
+; b will be check in connect, but do it now to have more context
+; (we want to know hl) 
+          CHECK_B_BANK()
+          ld a,(hl):inc hl
+          ld l,(hl):ld h,a
+; enchaine
+connect_b
+;TODO: use routines in chunk.
+          push bc
+          ld c,b:call connect_c
+          pop bc
+          ret
+connect_c
+          push bc
+      IF dev_checks
+          push af
+          ld a,c:and &C4:cp &C4:call nz,mess
+          pop af
+      END
+          ld b,&7F:out (c),c
+          pop bc
+          ret
+      END
+
+mess  = &BE00
+
+insert_init_chunk_from_id
+; in: hl = id
+; out: Carry if ok
+;    : a = bk new chunk
+;    ; hl = start new chunk
+; Insert chunk and init it according to hook.
+; Inserted chunk is connected.
+          call insert_new_chunk_from_id:ret nc ;memory full
+          ld a,l
+          ld l,chead_last
+jp_ix     jp ix
+
+connect_heap_chunk
+; We do it here since we know the start
+
+; In: hl = id
+; Out: hl = start chunk
+     ;  a = bk (connected)
+     ;  F preserved
+          call connect_chunk_from_id
+          ld a,l
+          ld l,chunk_start
+          ret
+
+new_heap_chunk
+; OUT: HL: id of new chunk (connected)
+          call new_chunk
+          push hl
+          ld a,l        ; bk
+          ld l,chead_last
+          call init_heap_chunk
+          pop hl
+          ret
+
+init_heap_chunk
+; In:  AHL: chead_last field in connected chunk (connected)
+; OUT: AHL: start of this chunk (i.e L is adjusted to start)
+          ld (hl),chunk_start-1:inc l ; empty (no sentinelle)
+          inc l         ; Checksum: N/A
+          ld (hl),0     ; row#. For chung.
+          ld l,chunk_start
+          ret
+
+      IF chunk_header_size - 5
+  !! init must be completed
+      END
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp new_heap_chunk
+          jp connect_heap_chunk ;out: ahl=pos start (connected)
+          jp append_raw_in_chunk ;in: bd=id last chunk (for append)
+          jp read_raw   ;bhl=source
+          jp read_raw_connected ; cache
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+

@@ -1,0 +1,2482 @@
+; <<<<< IMPORT >>>>> Manage... imports
+
+inRom = 0
+rom   = &1D
+main_rom = &0A
+ext_rom = &1A
+dev_checks = 1
+dev_checks' = 1 - inRom
+todo  = 1
+
+; TODO:                    
+   ; Check test flakiness.
+   ; bug#13e: 
+   ; - meta: instead of returning NC, break (but only if test expect 
+           ; success: need a hook).
+
+; Dependencies: asseto (compare_sstr_nocase), ed (ed_load)
+; Used by: ass (directive)
+
+      IMPORT "assmap.i"
+      IMPORT "memmap.i"
+      IMPORT "swapi.i"  ;ass_len1/2
+      IMPORT "macro.i"
+; 2025
+; ------- HH Beta j ---------
+
+; Dec 19 BG: [time optim] don't switch sources when skipped/cached
+           ; Do not "merge" anymore when skipped (simpler code)
+              ; - since no code emitted, didn't make sense 
+    ; 18 BF: test_get_import_tab: try with 32 tabs
+; ------- HH Beta i ---------
+ ; Nov 26 BE: Use set_cur_source to remove dep on vo_cur_bk
+            ; Remove vo_this_bk
+; ------- HH Beta H ---------
+      ;17 BD: [no change] Add test_get_import_tab
+; ------- HH Beta 6 ---------
+ ; Aug
+  ;27 BC: s/init_phase1/init_phase1_all 
+        ; Fix nrt themselves: call init_var_main
+; ------- HH Beta 6 ---------
+  ;15 BB: Remove call to sy_store_cur_index 
+  ;12 BA: Store/restore live index
+; ------- HH Beta 2 ---------
+
+ ; Jul   
+  ;29 AZ: Use copy_assembled_info/set_assembled_info from swap.o
+  ;27 AY: Use connect_filename_size from swap.o 
+
+; ------- HH Beta 1 ---------
+  ;21 AX: [nochange] Moved to make room for ass. Use assmap.i
+  ;10 AW: [Adapt rom ass] Use CALL_EXT / pagefirm
+  ; 9 AV: vt_rom_firmflag: move at 9d0c
+
+; ------- GG Beta N ---------
+ ; Jun
+  ;27 vAU: Add test_ambigous_import
+         ; Fix it!
+  ;25 vAT: switch_back_pin: add check not self-selected
+
+; ------- GG Beta m ---------
+  ;17 vAS: Fix infinite loop with cycle.
+         ; Remove redundant check
+
+ ; May
+  ;28 vAR: Import: Return Z for skipped/cached (phase1)
+
+; ------- GG Beta J ---------
+ ; Apr
+  ;10 vAQ: Use new farcall
+; 2024     
+; ------- GG Beta E ---------
+ ; Oct    
+  ;21 vAP: Fix #1aa (must set dependencies also in phase 2)
+  ;20 vAO: Remove pinned_deps handling
+         ; (became write-only after cache vl)
+
+; ------- GG Beta C ---------
+ ; Oct
+  ; 8 vAN: Use connect_filename_size (instead of assuming pos in store)
+
+; ------- GG Beta 8 ---------
+ ; Sep
+  ; 15 vAM: add CHECK_BK_BASE()
+
+; ------- GG Beta 7 ---------
+ ; Aug          
+  ; 15 vAL: Remove check from /switch_back_check/
+              ; -> was internal check (assert if failing)
+              ; -> room is getting rare
+              ; --> we have enough tests now.
+          ; Actually flag setting was needed
+             ; -> rename to switch_back_pin
+  ; 10 vAK: Move /tmpbuf/ at 9c80 (fix memory/status bar garbage)
+  ;  9 vAJ: Add get_import_tab (for ass.cpt_import -bug#199)
+          ; CALL_BRIC: use new farcall (so get_import_tab can be
+                                       ;called from cpt_import) 
+          ; Import_setup: return buffer (")
+; ------- GG Beta 4 ---------
+ ; Mar vAI: Remove check around va_if: it was put back in bank,
+          ; so not worth it.
+; ------- GG Beta 1 ---------
+ ; Feb
+  ; 18 vAH: store_ref simpler API (cocopy-u).
+  ; 18 vAG: Temp adapt for cocopy-t.
+; ------- Release FF ---------
+; 2023
+ ; Apr                       
+  ; 13 vAF: first_empty_tab: check if current is empty  
+     ; vAE: Use org_is_empty (so source one 1 empty line is considered
+                             ;empty tab)
+  ; 12 vAD: Add /test_#144_imported_not_modified/ 
+
+  ; 11 vAC; Add /first_empty_tab/ for ed.
+          ; Refactor around that. 
+          ;  Tests: move org/testdata dir for nrt files
+                  ; add test_load_if_absent
+
+; 2022 
+ ; Apr   
+  ; 29 vAB: Check pinned deps consistency between phase1 and 2.
+          ; Big refactoring around switch back !!!require cache-9!!!
+vab   = 1
+  ; 21 vAA: Fix bug #139 (due to inconsistency uptodate phase1/phase2).
+          ; See /vaa/ scoped block for explanation.
+vaa   = 1
+         ; Wat! Already "done" in vw.
+  ;  7 vz: Fix it (Don't save import id in non-recursive variable). 
+  ;  7 vy: Add /test_transitive/ (bug #140).  
+ ; Mar       
+  ; 31 vx: Add /test_compare_sstr_nocase/
+  ; 23 vw: Fix regression vv. In case of diamond, we must set_pinned_dep
+         ; as well: See /met/.
+vw    = 1
+  ; 22 vv: Introduce pinned_deps (to solve bug#139).
+         ; Tested in orgnrt/assnrt.o
+ ; Feb
+  ; 06 vu: When cache: flag deps as visited  (fix bug#13a).
+  ; 04 vt: Check va_phase_backup in test.
+         ; NB: doesn't catch bug#137 since more complex setup is needed
+             ; -> covered by assnrt.
+             ; Not done here by laziness.
+         ; Fix by setting it.
+         ; Add assert about va_if.
+         ; due to bug#139 (ed insert 1 ligne). 
+
+; Nov    
+    ;29  vs: Check if visited or not. Should fix bug#134. 
+           ; If already visited: must skip. Tested in: 
+      ;  vr: Add print_nl before importing.              
+    ;22  vq: Add /test_empty_source/2/3/.
+           ; Fix it by saving va_phase around /org_get_nb_lines/
+           ; !!BOULET!! Fix call org_load (must pass de and bc).
+                      ; -> use ed_load
+           ; Must reselect host tab before calling tab_select.
+      ;  vp: Factorise message in /print_import_status/.
+    ;21  vo: Fix tests themselves (using set_all_hooks in test wasn't
+             ; future proof regarding adding new hooks).
+           ; Add messages.
+    ;20  vn: Add /test_use_cached/. Passing (cannot reproduce ed.nrt).
+    ;12  vm: Add /test_filenotfound_freetab/
+    ;20    ; Fix it by checking for empty existing sources
+           ; (i.e. slot was allocated, but source is empty).
+
+    ;11  vl: Fix merge (again!): org_select doesn't change va_*,
+           ; so import info is still here. It was merged with itself!
+           ; (detected by ass.test_import_stats_no_emit, but not here)
+      ;  vk: Separate /Import_setup (bksource)/Import (bkbase)
+           ; for ass-ed.
+      ;  vj: Rely on ass-ec to store host's assembled info.
+             ; -> Needed for proper merge.
+             ; -> we don't need anymore to save va_emitted ourselves.
+    ;10  vi; WIP!! DO NOT WORK.
+           ; When /use_cache1/: restore va_emitted, va_low_pc etc.
+             ; Rationale: we want the exact same state.
+           ; /merge/ is just called to merge host.
+           ; See call site for rationale.
+           ; Requires ass-eb: - we simplified ass.merge
+                            ; - most of the logic is done here.
+
+    ; 5  vh: /test_noemit/:
+             ; Reproduce assnrt.check_first_last("nrtnoemi.o")
+ ;Nov 1  vg: Add /test_noemit/. Fixed in org-fa (store vo_emitted)
+  ; 31   vf: Fix /_check_stat/ itself. Wasn't comparing all the values.
+           ; Fix tests by passing host's emitted flag to merge.
+           ; Requires ass-dx.
+
+       ; ve: Fix test_basic, but calling ass.merge (requires ass-dw.o)
+       ; vd: /test_basic/: check hi/lo $ & $$.  Check after modified.
+                         ; check va_emitted.
+       ; vc: /test_basic/: check last $ & $$ are returned even when
+                         ; import is cached.
+
+; =======================
+; == HISTORY OF ERRORS ==
+; =======================
+
+; 21 Oct: Relied on global update of:
+               ; va_emitted
+               ; va_low_pc
+               ; va_high_pc
+        ; That is, do not bind those with each source
+          ; (compared with e.g. vo_low_pc and vo_pre_pc)
+          ; but let them updated both by host and imports
+          ; through the course of assembly.
+        ; Well, doesn't work anymore with cache.
+  ; Morale: ALL side-effect of assembling of import must be stored
+          ; with the import itself, not only generated code.
+; 15 Oct: Regression test_basic, Return Carry, yet no code generated.
+        ; Chunk from install code is empty.
+  ; Oups, refactoring trop brutal.
+  ; s/load_if_absent/nrt_load_if_absent/ even in code itself,
+  ; so that va_phase was forced to 1.
+  ; Couldn't have happened with nrt/code separation.
+
+; 15 Oct: Regression test_basic, Return Carry, yet no code generated.
+        ; Chunk from install code is empty.
+  ; Oups, refactoring trop brutal.
+  ; s/load_if_absent/nrt_load_if_absent/ even in code itself,
+  ; so that va_phase was forced to 1.
+  ; Couldn't have happened with nrt/code separation.
+
+; =======================
+
+       ; vb: Add /test_phase_preserved2/  
+           ;  Fix it:
+               ; Restore phase1 after org_load.
+               ; Fix stack issue. phase2: call /ass_error2/.
+               ; Include 0 when copying filename.
+    ; 16 va: Use /check_deps/ !!Requires org-ew!!
+    ; 14 v9; Add /test_phase_preserved/      
+           ; -> Fixed by org-ev (set filename)
+              ; It wasn't a phase issue, but the fact the imported
+              ; source wasn't found in phase2, due to missing name.
+           ; Add /test_pick_free/
+           ; -> Fixed by /skipself/ in /load_if_absent/
+           ; Add /test_self_import/
+           ; -> Fixed by sanity check in /load_if_absent/
+           ; Add check: org_load musn't be called in phase2.
+
+     ; 9 v8; Set dep.
+     ; 3 v7; Factorize with org-ep: use /init_phase_1/2/
+           ; Use cache.o
+;  Oct 2 v6: Fix tests themselves: must call except_enter/ret
+           ; to mimick what is done by ass_amorce.
+
+    ; 26 v5: Return NZ for error in directive (e.g. file not found)
+                  ;  Z for error in imported file (assembler error)
+             ; Rationale: makes it simpler for ass.o to recover.
+           ; Factorise ass_error and ass_failure.
+
+    ; 21 v4: s/copy_code/store_ref. Cf cocopy vk: faster and cheaper!
+           ; -> nothing to do since the api is the same.
+           ; Fix nrt_import_com itself. was half-refactored!
+
+
+      ORG &1000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+nrtbuf = &3E00
+nrt_pc = &FACE
+
+
+max_sources = 64        ; Max source opened at once.
+sources_index = &7000
+filename = &7E00
+iobuf = &8000
+tmpbuf = va_string
+      IF [tmpbuf AND &9800] - &9800
+ !! must be in trace workzone, since used via cpt_import
+ ; otherwise, would trash memory in trace, and status bar in editor
+      END
+
+vt_rom_firmflag = &9D0C
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+      IF max_sources - 64
+  !! set by org
+      END
+
+      IF sources_index - &7000
+ !! set by org
+      END
+
+codedest = import
+limit = cocopy_module
+codedest2 = import_jp
+limit2 = visu_jp'
+codedest3 = import_jp2
+limit3 = import_jp2_
+codedest4 = import_jp3
+limit4 = import_jp3_
+
+; ------ In main Rom ------               
+
+ed_load = &D227
+
+; ------ In This Rom ------
+ass   = &C0A7
+ass_from_import = ass   ;bc=$, de=$$, hl=source
+
+ass1  = &FE20
+init_var_main = ass1 + 12
+
+ass2  = &FE87
+update_low = ass2       ;in: bk base connected
+update_hi = ass2+3      ;in: bk base connected
+check_premerge = ass2+6
+set_cur_source = ass2+18
+connect_ass_var = ass2+21 ;A preserved
+connect_pre_pc = ass2+9
+
+asseto = &FFAE
+compare_sstr_nocase = asseto+9 ;Z iif same. HL and DE preserved
+
+cache = &FE6F
+is_import_uptodate = cache+3
+set_modified = cache+6  ; force assembling when new context 
+set_uptodate = cache+9
+;is_uptodate = cache+12
+clear_visited = cache+15 ; change hl!
+set_visited = cache+18  ; in: id tab
+is_visited = cache+21   ; in: id tab
+
+except = &FF7E
+except_enter = except+6 ; for nrt
+except_ret = except+9   ; for nrt
+
+;--- new calls
+farcall = &FF12
+call_ed_from_ass = farcall
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+cocopy = &FE02
+;reset_code = cocopy+12  ; aka cocopy_amorce. NRT. Done via init_phase1
+store_ref = cocopy+9    ;hl= store_start of import. de=host store dest  
+install_code = cocopy+18
+get_store_start_import = cocopy
+;get_store_cur = cocopy+3
+
+sy    = &FFD8
+sy'   = &FF93
+;sy_init = sy
+;sy_free = sy+6
+sy_reset_scope_phase2 = sy'+9
+
+pagefirm_jp = &C140
+connect_bk_base = pagefirm_jp ; All regs saved
+org_connect_source_chunk_from_id = pagefirm_jp + 4
+
+; ---- In ext rom ----
+org   = &C008
+;org_init = org
+org_is_empty = org+&18
+org_get_current_selection = org+&30
+org_select = org+63
+is_modified = org+&54   ; nrt
+org_seek_source_begin = org+66
+org_source_init = org+&84 ;nrt
+org_insert_line = org+12 ;nrt
+;org_load = org+18  !! no. use ed_load instead
+init_phase1_main = org+&72 ; nrt
+init_phase2_main = org+&75 ; nrt
+init_phase1_all = org+30
+init_phase2_all = &C112
+org_is_self_selected = org+&60
+
+swap  = &FE60
+connect_filename_size = swap+9
+; copy_assembled_info = swap+6 ;in: de=dest, bk base connected    
+connect_depsrec = swap+21
+;for nrt
+set_assembled_info = swap+3 ;in: hl=source, bk base connected  
+
+print = &FF33           ; in orgui
+print_file_op = print+3
+print_import_status = print+15 ; Z="ok" NZ="Using cache"
+;print_msg = print+18
+print_msg_nl = print+21
+print_chr = print+36
+print_space = print+39
+print_nl = print+42
+
+
+; ------ In BRIC Rom ------
+bitset = &FECD
+bs_init = bitset+3      ; NRT
+;bs_copy = bitset+6
+bs_get = bitset+9       ; NRT
+bs_set = bitset+12
+bs_or = bitset          ; (de) := (hl) or (de)
+
+chunk = &FE00
+;free = chunk+24 ; reconnect bk_base
+free_list = chunk+27    ; reconnect bk_base
+chunk_init = chunk      ; for nrt
+get_free_chunks = chunk+30 ; for nrt
+
+heap  = &FEAF           ; after jp disp + free
+connect_heap_chunk = heap+3
+
+io    = &FFCE
+
+; ---- common header ----
+ch_next = 0
+ch_last = 2
+
+; ---- meta data fields ----
+; for asset and source
+ch_meta_filesize = &08
+heap_meta_filename = &06
+
+; ---- data fields ----
+; for asset
+ch_data_start = 8
+ch_data_size = &0100 - ch_data_start
+
+
+macros
+      MACRO SET_Z
+; Set Z without touching C/NC or A
+; !!! B trashed
+          ld b,1:dec b
+      ENDM
+
+      MACRO CALL_BRIC ad
+          call call_bric_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_ED ad
+          call call_ed_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_ORG ad ; CALL_EXT in some sources
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+      MACRO NRT_HOOK hook
+; Use indirection, since global label (e.g. nrt_hook1)
+; would prevent further local labels to be seen
+      IF 1-inRom
+          call hook
+      END
+      ENDM
+
+      IF $/&0100 - &10
+ !! check ORG directive was set
+      END
+
+;One indirection for each hook site.
+nrt_hook1 jp nrt_no_hook
+nrt_hook2 jp nrt_no_hook
+nrt_hook3 jp nrt_no_hook
+nrt_hook5 jp nrt_no_hook
+;... Add as needed, but don't forget add it too in /set_all_hooks/.
+
+nrt_no_hook ret
+
+      MACRO NRT_CHECK_HOST
+      IF 1-inRom
+; In test, we just use the pair 0=host, 1=import
+; If it were to change, we could set hook here.
+          or a:call nz,fail
+      END
+      ENDM
+
+      MACRO CHECK_BK_BASE
+      IF dev_checks
+          call check_bk_base_
+      END
+      ENDM
+
+      MACRO CHECK_HL_EQ n
+          push de
+          ld de,n
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ n
+          push hl
+          ld hl,n
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_BC_EQ n
+          push hl
+          ld hl,n
+          call _check_bc_eq
+          pop hl
+      ENDM
+
+_check_bc_eq
+          or a:sbc hl,bc:add hl,bc:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+      ENDM
+
+      MACRO CHECK_FREE n
+          push hl
+          call get_free#
+          ld a,l
+          pop hl
+          cp n:call nz,&BE00
+      ENDM
+
+fail  = &BE00           ; for nrt
+break = &BE00           ; for assert
+;------------------------------------
+
+      IF 1-inRom
+; ---
+tests
+bk_dev = &CF
+bk_src = bk_dev-3
+      2 ** [
+      IF 1
+          call test_first_empty_tab
+          call test_compare_sstr_nocase
+          call test_phases
+          call test_use_cached
+          call test_empty_source
+          call test_empty_source2
+          call test_empty_source3
+          call test_basic
+          call test_use_cached
+          call test_filenotfound
+          call test_filenotfound_freetab
+          call test_noemit
+          call test_merge
+          call test_phases
+          call test_basic
+          call test_pick_free
+          call test_self_import
+          call test_load_if_absent
+          call test_phase_preserved
+          call test_phase_preserved2
+          call test_phase_preserved_not_found
+          call test_errinimport
+      END
+          call test_dont_load_if_present
+          call test_filenotfound
+          call test_failopening
+          call test_ambigous_import
+          call test_transitive
+          call test_#144_imported_not_modified ; va_phase not init!
+          call test_get_import_tab
+          ]
+          ret
+;TODO?
+;Covered by assnrt
+          call test_cached ; already tested in test_basic
+          call test_change_pc
+          call test_ambiguous
+          call test_diamond
+
+ ;         call test_no_leak
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+; -------------------------------------------------------------------
+
+nrt_setup
+          ld a,bk_dev
+nrt_setup_custom
+; Needed to install ROM# (for far_call) and firmware_enable flag.
+; IN: A = bk_dev                                                 
+
+          ld b,&7F:out (c),a
+;fill to spot mistakes
+          ld hl,&4000:ld de,&4001:ld bc,&3FFF:ld (hl),&F7:ldir
+
+          push af
+
+kl_rom_select = &B90F
+
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+vt_currom = &9D0A
+vt_extrom = &9D02
+vo_extrom = &7CFA
+vt_assrom = &9D08
+
+          ld a,rom
+          ld (vt_currom),a
+          ld (vt_assrom),a
+;          ld (vo_assrom),a   ; not used
+          ld a,ext_rom
+          ld (vo_extrom),a
+          ld (vt_extrom),a
+
+; normally done in org_assemble (via init_phase1 and clear_visited)
+          ld hl,deps:ld a,max_sources:CALL_BRIC(bs_init)
+          ld hl,depsrec:ld a,max_sources:CALL_BRIC(bs_init)
+
+.set_all_hooks
+          ld hl,nrt_no_hook
+          ld (nrt_hook1+1),hl
+          ld (nrt_hook2+1),hl
+          ld (nrt_hook3+1),hl
+          ld (nrt_hook5+1),hl
+;enchaine
+insert_dummy_line
+; mimic real-life, where host source cannot be empty
+          ld de,1
+          ld hl,.dummy
+          CALL_ORG(org_insert_line):call nc,fail
+          ret
+.dummy BYTE ";host source",0
+
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+nrt_import_com
+; Simulate ass import directive and compare against ref.
+; In: hl = ref.
+          CHECK_BK_BASE()
+          push hl
+
+; Cannot use marker for test, since ass.merge uses OR.
+          xor a:ld (va_emitted),a
+
+;-- simulate phase1
+          call nrt_import_com1
+          call nc,fail
+          ld a,(va_phase):cp 1:call nz,fail
+          ld a,(va_phase_backup):cp 1:call nz,fail
+
+;-- check flag is set, even when cache is used. 
+;          ld a,(va_emitted):cp 1:call nz,fail
+
+;-- idem phase2
+          call nrt_import_com2
+          call nc,fail
+          ld a,(va_phase):cp 2:call nz,fail
+          ld a,(va_phase_backup):cp 2:call nz,fail
+
+          pop hl
+          push bc:push de ; for comparison
+;--        
+          push hl
+          call install_code
+          pop hl
+
+;--check assembled import
+          ld de,nrtbuf
+          inc hl
+          ld b,(hl):inc hl
+          call compare_sized
+
+;--check maj var
+          ld a,(va_source):cp bk_src:call nz,&BE00
+;-hack: marker nrt after filename. 
+          ld hl,(va_source+1)
+          ld a,l:ld l,h:ld h,a
+          ld de,lib_name_:or a:sbc hl,de:jr z,.ok
+          cp &40:call c,&BE00
+          cp &80:call nc,&BE00
+          ld a,(hl):or a:call nz,&BE00
+.ok
+;right now: source0 is not emitting code, source1 is emitting code
+          ; so 0:va_first_pc is null
+;          ld hl,(va_first_pc):CHECK_HL_EQ(nrt_pc)
+;          ld hl,(va_first_objc):CHECK_HL_EQ(nrtbuf)
+
+;Post: depends on test. 
+          pop de:pop bc
+          ret
+
+nrt_import_com1
+; Simulate phase 1 + import"lib" directive
+; Out: like /Import/
+          ld hl,lib_name
+;enchaine
+nrt_import_com1_
+          ld bc,nrt_pc:ld de,nrtbuf
+;enchaine
+nrt_import_com1__
+; Simulate phase 1 + import<filename> directive  
+; in: bc=$
+    ; de=$$
+    ; hl=lib name
+          call except_enter
+          push bc:push de:push hl
+;fill with dummy for test
+          ld hl,va_source
+          ld b,15
+.fill     ld (hl),l:inc l:djnz .fill
+
+          xor a:call nrt_select ; switch to "host" source
+
+;-- simulate org_assemble + ass_init_and_amorce 
+;(only minimum required)
+ ; Why?!? it's better to be as close as org_assemble.
+ ; case in point: at some point we had to add call clear_visited.
+                ; I added it before call init_phase1 at the wrong place,
+                ; because init_phase1 wasn't called here.
+;-> A bit brittle. Maybe should assemble empty source via org_assemble?
+          call connect_bk_base
+          call init_var_main ; va_if, va_error_pnt ..
+          ld a,1:ld (va_phase),a
+          ld (va_phase_backup),a
+          ld a,&C0:ld (va_destbk),a
+          xor a:ld (va_emitted),a
+          call clear_visited
+          CALL_ORG(init_phase1_main)
+;-- simulate IMPORT directive
+          ld bc,&7F00+bk_src:out (c),c
+          pop hl:pop de:pop bc
+          call nrt_Import
+          push af:push bc:push de:push hl ; for tests by caller
+
+;-- simulate post import
+          ld (va_pc0),bc
+          ld (va_objc0),de
+
+;-- simulate post phase1 (finition)
+          call connect_bk_base
+          ld c,0
+          jr c,.ok
+          jr nz,.ok
+; Err in import: we stayed in import tab.
+          ld c,1
+.ok
+          CALL_ORG(org_get_current_selection)
+          cp c:call nz,fail
+          ld hl,va_emitted
+          ld de,vo_emitted
+          ld bc,11
+          ldir
+          pop hl:pop de:pop bc:pop af
+          jp except_ret
+
+nrt_import_com2
+;like nrt_import_com1, for phase2
+          ld hl,lib_name
+nrt_import_com2_
+          ld bc,nrt_pc:ld de,nrtbuf
+nrt_import_com2__
+          call except_enter
+          push bc:push de:push hl
+          call connect_bk_base
+          xor a:call nrt_select
+          ld a,-1:ld (va_if),a
+          ld a,2:ld (va_phase),a
+          ld (va_phase_backup),a
+          call clear_visited
+          CALL_ORG(init_phase2_main)
+          pop hl:pop de:pop bc
+          call nrt_Import
+          push bc:push de:push hl ; for redundant tests by caller
+
+;-- simulate post import
+          ld (va_pc0),bc
+          ld (va_objc0),de
+
+;-- simulate post phase2 (finition)
+          call connect_bk_base
+; 'ENT toto' can be set at phase2 (and often is *only set in phase2*)
+          ld hl,(va_exec)
+          ld (vo_exec),hl
+
+          pop hl:pop de:pop bc
+          jp except_ret
+
+nrt_ass_com
+;in: hl=lib, host, ref
+;!! not used now
+          call nrt_set_imported
+          call nrt_set_host
+      BRK
+      IF 0
+          call org_assemble:call nc,fail
+                           ;todo !!
+; 
+          push hl
+          ld bc,nrtbuf:ld de,nrtbuf
+          call org_assemble_nrt:pop hl:jr c,atc_ok
+          push hl
+          xor a:call get_error
+          pop hl
+;!! here DE=line, A=error code
+atc_ok
+          inc hl:ld c,(hl)
+          inc hl:ld b,0
+          ld de,destnrt
+          call compare
+      END
+          ld a,10:call &BB5A
+          ld a,13:call &BB5A
+
+          ld a,(hl):or a
+          ret
+
+nrt_Import
+; Reproduce ass.ass_import setup
+; in: bc=$
+    ; de=$$
+    ; hl=lib name
+;out: As /Import/
+          push bc:push de
+          call Import_setup
+          call connect_bk_base
+          ld hl,va_emitted
+          CALL_ORG(set_assembled_info)
+          pop de:pop bc
+          call Import   ; for stack trace
+          ret
+
+nrt_set_host
+          push hl
+          xor a:call nrt_select
+          pop hl
+          call nrt_set_source
+          push hl
+          call connect_bk_base
+          ld hl,.name
+          ld de,filename
+          ld bc,10      ;whatever
+          ldir
+          pop hl
+          ret
+
+.name BYTE 4,"host",0
+
+
+nrt_set_imported
+; Installe source "lib" (so no load is required)
+; In: hl=source
+; Out: hl=post source
+          push hl
+          ld a,1:call nrt_select
+          pop hl
+;enchaine
+nrt_set_lib
+;idem in current tab.
+          ld de,lib_name
+nrt_set_com
+          push de
+          call nrt_set_source
+          ex (sp),hl
+          ld de,filename
+          ld bc,10      ;whatever
+          ldir
+          pop hl
+          ret
+
+nrt_set_imported2
+;Like nrt_set_import in tab2 with "lib2" name.
+          push hl
+          ld a,2:call nrt_select
+          pop hl
+          ld de,lib2_name
+          jr nrt_set_com
+
+lib_name BYTE 3,"lib"   ; sized by convention
+lib_name_ BYTE 0
+lib2_name BYTE 4,"lib2",0
+
+
+nrt_set_source
+          push hl
+          CALL_ORG(org_source_init):call nc,&BE00
+          ld de,1
+          pop hl
+nrt_append_source
+.lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+test_compare_sstr_nocase
+;-----------------------
+; Prerequisite for test_case_insensitive
+; Also test in asseto-a.o
+          call nrt_setup
+          ld hl,.lo
+          ld de,.up
+          call compare_sstr_nocase
+          call nz,fail
+          ret
+.lo   BYTE 3,"abc"
+.up   BYTE 3,"ABC"
+
+
+test_dont_load_if_present
+;------------------------
+; Prerequisite for test_phase1
+          call nrt_setup
+          ld hl,basic_lib
+          call nrt_set_imported ; set lib_name as name
+;switch back to dummy "host source"
+          xor a:call nrt_select
+
+          ld hl,lib_name ;ok since out of bank
+          call nrt_load_if_absent:call nc,fail
+          call nz,fail
+          cp 1:call nz,fail
+          ret
+
+nrt_load_if_absent
+          ld a,1:ld (va_phase),a ; needed to quiet sanity checks
+          jp load_if_absent
+
+
+
+test_empty_source
+;----------------
+; Reproduce: empty source in tab 2 (nb line = 0)
+; Then, file not found
+          call nrt_setup
+          ld a,1:call nrt_select
+          ld a,0:call nrt_select
+; Musn't assert and must return NC.
+          ld hl,absent_name ;ok since out of bank
+          call nrt_load_if_absent:call c,fail
+          ret
+
+test_empty_source2
+;----------------- 
+; Idem with first tab not empty
+          call nrt_setup
+          ld a,1:call nrt_select
+          ld a,0:call nrt_select
+; Musn't assert and must return NC.
+          ld hl,absent_name ;ok since out of bank
+          call nrt_load_if_absent:call c,fail
+          ret
+
+test_empty_source3
+;----------------- 
+; Idem with both tabs not empty
+          call nrt_setup
+          ld a,1:call nrt_select
+          call insert_dummy_line
+          ld a,0:call nrt_select
+; Musn't assert and must return NC.
+          ld hl,absent_name ;ok since out of bank
+          call nrt_load_if_absent:call c,fail
+          ret
+
+
+test_#144_imported_not_modified
+;------------------------------
+; As it is freshly loaded, 
+; an imported file shouldn't be seen as modified.
+          call nrt_setup
+
+          ld hl,present_name ; bc/de: nevermind
+          call nrt_load_if_absent:call nc,fail
+
+          ld a,1:call nrt_select
+          CALL_ORG(is_modified)
+          call nz,fail
+
+; --- Now try via nrt_import
+          xor a:call nrt_select
+          ld hl,present_name
+          call nrt_import_com1_:call nc,fail
+
+          ld a,1:call nrt_select
+          CALL_ORG(is_modified)
+          call nz,fail
+          ret
+
+
+test_phases
+;----------
+; Prerequisite for test_basic
+; !! Actually same passes as /nrt_import_com/, with additional tests.
+ ; !!flaky? !! Dependent on bk c7 garbage!
+
+          call nrt_setup
+          ld hl,basic_lib
+          call nrt_set_imported ; in tab 1
+          CHECK_BK_BASE()
+
+          call nrt_import_com1:call nc,fail
+          call z,fail   ; Expect NZ: assembled
+          call _check_stat
+
+;Now simulate diamond import: seeing same import a second time.
+          ld hl,lib_name
+          ld bc,nrt_pc+10:ld de,nrtbuf+11
+          call nrt_Import:call nc,fail
+          call nz,fail  ; Expect Z: skipped
+      IF 0
+; Merged with imported as first instance
+          CHECK_BC_EQ(nrt_pc+2)
+          CHECK_DE_EQ(nrtbuf+2)
+      ELSE
+;  Must be skipped enterily
+          CHECK_BC_EQ(nrt_pc+10)
+          CHECK_DE_EQ(nrtbuf+11)
+      END
+          call nrt_import_com2:call nc,fail
+          call _check_stat
+          ret
+
+_clear_stat
+          ld hl,va_low_pc
+          ld de,va_low_pc+1
+          ld bc,7
+          ld (hl),"C"
+          ldir
+_clear_stat_va
+          ld hl,va_pre_pc
+          ld de,va_pre_pc+1
+          ld bc,7
+          ld (hl),"B"
+          ldir
+          ret
+
+_check_stat
+;check values and statep passed back to ass_import
+tb_size = 2
+          CHECK_BC_EQ(nrt_pc+tb_size)
+          CHECK_DE_EQ(nrtbuf+tb_size)
+
+;check values stored with imported file 
+          ld a,1:call nrt_select
+          ld de,va_pre_pc
+          ld hl,.ref1
+          ld b,8
+          call compare_sized
+;check values stored in host file
+          ld a,0:call nrt_select
+          ld de,vo_emitted
+          ld hl,.ref0
+          ld b,8
+          call compare_sized
+          ret
+
+.ref1
+      WORD nrt_pc       ; Pre $  
+      WORD nrtbuf       ; Pre $$
+      WORD nrt_pc+tb_size ; Post $ 
+      WORD nrtbuf+tb_size ; Post $$
+.ref0
+      BYTE 1            ; host globally emitting since import emitting
+      WORD nrt_pc       ; Low $
+      WORD nrtbuf       ; Low $
+      WORD nrt_pc+tb_size-1 ; Hi $ 
+      WORD nrtbuf+tb_size-1 ; Hi $$
+
+test_noemit
+;----------
+; Reproduce assnrt.check_emitted("nrtnoemi.o"):
+; If imported source is not emitting, its vo_emitted shouldn't be set.
+
+; for comparison at the end
+          ld hl,nrt_pc-2:ld (va_pre_pc),hl
+
+          call nrt_setup
+          ld hl,_check_no_emit
+          ld (nrt_hook1+1),hl
+          ld (nrt_hook2+1),hl
+          ld hl,_check_import_no_emit_from_host:ld (nrt_hook3+1),hl
+          ld hl,nonemitting_lib
+          call nrt_set_imported ; in tab 1
+          ld a,1:ld (va_emitted),a ; pretend host emitting
+          call nrt_import_com1:call nc,fail
+          call z,fail   ; Expect NZ: assembled
+;real check       
+          call connect_bk_base
+          call _check_import_no_emit_from_host
+; Reproduce assnrt.check_first_last("nrtnoemi.o"):
+          ld a,1:call nrt_select
+          ld hl,.ref
+          ld de,va_pre_pc
+          ld b,8
+          call compare_sized
+          ret
+
+.ref
+      WORD nrt_pc,nrtbuf
+      WORD nrt_pc+2,nrtbuf+2
+
+_check_emit
+;Check flag is 1
+          push af
+          ld a,(vo_emitted):or a:call z,fail
+          pop af
+          ret
+
+_check_va_emit
+;Idem for work variable
+          push af
+          ld a,(va_emitted):or a:call z,fail
+          pop af
+          ret
+
+_check_no_emit
+;Check flag is 0
+          push af
+          ld a,(vo_emitted):or a:call nz,fail
+          pop af
+          ret
+
+_check_import_no_emit_from_host
+;idem, but we have to switch
+          push af
+;check we are in tab0, since we reconnect this one at the end.
+          CALL_ORG(org_get_current_selection):or a:call nz,fail
+
+          ld a,1:call nrt_select
+          ld a,(vo_emitted):or a:call nz,fail
+          ld a,0:call nrt_select
+          pop af
+          ret
+
+_check_host_emit_from_import
+;otherway around 
+          push af
+;check we are in tab1, since we reconnect this one at the end.
+          CALL_ORG(org_get_current_selection):or a:call z,fail
+
+          ld a,0:call nrt_select
+          ld a,(vo_emitted):or a:call z,fail
+          ld a,1:call nrt_select
+          pop af
+          ret
+
+_check_host_no_emit_from_import
+;otherway around 
+          push af
+;check we are in tab1, since we reconnect this one at the end.
+          CALL_ORG(org_get_current_selection):or a:call z,fail
+
+          ld a,0:call nrt_select
+          ld a,(vo_emitted):or a:call nz,fail
+          ld a,1:call nrt_select
+          pop af
+          ret
+
+
+nrt_select
+; Like org_select + save register and additional checks
+          push bc:push de:push hl:push iy
+          push af
+          call import_select:call nc,fail
+          CALL_ORG(org_get_current_selection)
+          ld c,a
+          pop af
+          cp c:call nz,fail
+          pop iy:pop hl:pop de:pop bc
+          ret
+
+
+test_merge
+;---------
+;Test case when host is not emitting:
+; Then values from host must replace va_low & co,
+; otherwise we try to merge with dummy va_low values
+; (kind of unitialised).
+
+;This test relies on _clear_stat filling stats with &4343,
+;which was picked as wrong value to update e.g. va_hi_obj.
+
+          call nrt_setup
+          ld hl,_check_emit
+          ld (nrt_hook1+1),hl
+          ld (nrt_hook2+1),hl
+; host's vo_emit isn't set yet, so here we check va_emit
+          ld hl,_check_va_emit:ld (nrt_hook3+1),hl
+          call _clear_stat
+          ld hl,basic_lib
+          call nrt_set_imported ; in tab 1
+
+          xor a:call nrt_select
+          xor a         ; pretend host is not emitting
+          ld (va_emitted),a
+          ld (vo_emitted),a
+          call nrt_import_com1:call nc,fail
+          call z,fail   ; Expect NZ: assembled
+          call _check_stat
+; Complete assembly to reproduce real code.
+          call nrt_import_com2:call nc,fail
+
+; Now with cached import     
+          call _clear_stat
+          xor a
+          ld (va_emitted),a ; pretend host is not emitting
+          call nrt_import_com1:call nc,fail
+          call nz,fail  ; Expect Z: cached
+          call _check_stat
+          ret
+
+test_basic
+;---------
+          call nrt_setup
+          call _clear_stat
+          ld hl,basic_lib
+          call nrt_set_imported
+          push hl
+          call nrt_import_com
+          call _check_stat
+; Now with cached import     
+
+          call _clear_stat_va
+          pop hl        ; ref  
+          call nrt_import_com
+          call _check_stat
+          ret
+basic_lib BYTE ";basic",0
+      BYTE "b 12,13",0,0
+;ref
+      BYTE tb_size
+      BYTE 12,13
+
+nonemitting_lib BYTE ";not emitting",0
+      BYTE "word",0,0
+
+test_use_cached
+;--------------
+; Like test_basic, but set modified on host,
+; and check cached import is used.
+          call nrt_setup
+
+          ld hl,basic_lib:call nrt_set_imported
+          push hl
+          call nrt_import_com1
+; Expect NZ: cache not used.
+          call z,fail
+
+; Now with cached import     
+          call connect_bk_base
+          xor a:call nrt_select
+          pop hl        ; ref  
+          call nrt_import_com ; to flag import as uptodate
+          call set_modified
+          call nrt_import_com1
+; Expect Z: cache used.
+          call nz,fail
+          ret
+
+test_transitive
+;--------------
+; bug#140. We import host -> lib -> lib2, yet host's dep are wrong:
+; Expected: host -> lib
+;      Got: host -> lib2
+          call nrt_setup
+          ld hl,.checks_com:ld (nrt_hook5+1),hl
+          ld hl,.trans
+          call nrt_set_imported
+          call nrt_set_imported2
+          push hl
+          call nrt_import_com1
+          call z,fail   ; Expect NZ: assembled
+          call .checks
+          pop hl
+          call nrt_import_com
+          call .checks
+          ret
+
+.checks
+; Sanity: host source was reconnect.
+; We need to verify that to properly perform the deps checks.
+; Otherwise we would just quielty return in .checks_com.
+          call connect_bk_base
+          CALL_ORG(org_get_current_selection)
+          or a
+          call nz,fail
+
+.checks_com
+          push af
+          call connect_bk_base
+
+; when called from nrt_hook5, 
+; we just want to check host->lib,  not lib->lib2.
+          CALL_ORG(org_get_current_selection)
+          or a
+          jr nz,.ok
+
+          ld hl,deps
+          ld a,1:CALL_BRIC(bs_get):call z,fail
+          ld a,2:CALL_BRIC(bs_get):call nz,fail
+          ld hl,depsrec
+          ld a,1:CALL_BRIC(bs_get):call z,fail
+.ok
+          pop af
+          ret
+
+.trans
+      BYTE "import",34,"lib2",34,0,0
+;lib2
+      BYTE ";lib2",0
+      BYTE "word $",0,0
+;ref 
+      BYTE 2:WORD nrt_pc
+
+test_first_empty_tab
+;-------------------
+
+          call nrt_setup
+
+          call first_empty_tab
+          cp 1:call nz,fail
+
+          ld a,1:call nrt_select
+          call insert_dummy_line
+          call first_empty_tab
+          cp 2:call nz,fail
+          ret
+
+
+test_filenotfound
+;----------------
+;Prerequisite for test_failopening and test_filenotfound_freetab
+
+          call nrt_setup
+
+          ld hl,absent_name ;ok since out of bank
+          call nrt_load_if_absent:call c,fail
+          cp fail_opening:call nz,fail
+; Tab 1 must still be free
+          xor a:call nrt_select
+          call first_empty_tab
+          cp 1:call nz,fail
+          ret
+
+absent_name BYTE 4,"niet",0
+
+test_filenotfound_freetab
+;------------------------
+; Check opened tab (to load) is reusable. 
+
+; re-act 'not found' so tab 1 is visited, but not used.
+          call test_filenotfound
+
+          xor a:call nrt_select
+          ld hl,present_name ;ok since out of bank
+          call nrt_load_if_absent:call nc,fail
+
+; Tab 1 was used, so next free is now 2
+          xor a:call nrt_select
+          call first_empty_tab
+          cp 2:call nz,fail
+          ret
+
+; Real files: sized nt filename (bretelle ceinture).
+; Size doesn't include final 0
+; Size is important as it is used to compare filename and
+; hence find back imported source.
+present_name BYTE .fin-$-2,":org/testdata/nrtda.o",0
+.fin
+emptynrt BYTE .fin-$-2,":org/testdata/emptynrt.o",0
+.fin
+nrtimp1 BYTE .fin-$-2,":org/testdata/nrtimp1.o",0
+.fin
+
+test_failopening
+;---------------
+;like test_filenotfound, from import directive
+
+          call nrt_setup
+;Will search from "lib", but doesn't exist on tabs or disc.
+          call nrt_import_com1:call c,fail
+          call z,fail   ; api v5: expect nz
+          cp fail_opening:call nz,fail
+
+;source host must have been reconnected.
+          call connect_bk_base
+          CALL_ORG(org_get_current_selection)
+          or a:call nz,fail
+          ret
+
+test_pick_free
+;-------------      
+; Check import isn't loaded in non-free tab
+          call nrt_setup
+
+          ld hl,emptynrt ;ok since out of bank
+          call nrt_load_if_absent:call nc,fail
+
+; check tab1 was selected.
+          CALL_ORG(org_get_current_selection):cp 1:call nz,fail
+          ret
+
+
+
+test_phase_preserved
+;------------------- 
+          ld hl,emptynrt
+          call test_phase_preserved_:call nc,fail
+          CALL_ORG(org_get_current_selection):or a:call nz,fail
+          ret
+
+test_load_if_absent
+;------------------
+; Actually: check that once loaded, file is seen as present.
+          call nrt_setup
+
+          ld a,1:ld (va_phase),a
+          ld hl,nrtimp1
+          call load_if_absent
+          call nc,fail
+; was loaded in first free tab: that is tab 1 
+          call z,fail
+          CALL_ORG(org_get_current_selection)
+; (tab 0 is init in nrt_setup, hence not seen as free)
+          cp 1:call nz,fail
+
+; Now we want to check loaded file is used.
+; - we must switch back to tab 0 to simulate host
+; - setting phase2 will trigger the "no loading" check
+          xor a:call nrt_select
+          ld a,2:ld (va_phase),a
+          ld hl,nrtimp1
+          call load_if_absent ; main test: doesn't assert
+          call nc,fail
+          call nz,fail  ; z:use existing
+          cp 1:call nz,fail
+          ret
+
+test_phase_preserved2
+;--------------------
+; Idem with bigger and *erroneous* file.
+; Reproduce assnrt.test_files
+; Prerequisite: test_load_if_absent passes
+          ld hl,nrtimp1
+          call test_phase_preserved_:call c,fail
+; Must remain on imported file to fix erros
+          CALL_ORG(org_get_current_selection):cp 1:call nz,fail
+          ret
+
+test_phase_preserved_
+; After load, phase musn't be reset.
+; The check itself is performed in the code (see /phase2/)
+
+          push hl
+          call nrt_setup
+          pop hl
+
+          push hl
+          call nrt_import_com1_:call nc,fail
+;sanity checks
+          ld a,(va_phase):cp 1:call nz,fail
+          call connect_bk_base
+          CALL_ORG(org_get_current_selection):or a:call nz,fail
+
+          pop hl
+          call nrt_import_com2_
+          push af
+;sanity checks
+;no!!! va_phase swithed back to 0 for fix_errors.
+;          ld a,(va_phase):cp 2:call nz,fail
+          call connect_bk_base
+          pop af
+          ret
+
+
+test_phase_preserved_not_found
+;-----------------------------   
+; After failing load, phase musn't be reset.
+          call nrt_setup
+
+          ld hl,.missing
+          call nrt_import_com1_:call c,fail
+;sanity check
+          ld a,(va_phase):cp 1:call nz,fail
+          ret
+
+.missing BYTE 8,"nonexist",0
+
+test_self_import
+;---------------
+; When a source is trying to importing itself, warn the user.
+
+          call nrt_setup
+          ld hl,.src
+          call nrt_set_lib ; set /lib_name/ as name
+          call nrt_import_com1:call c,fail
+          cp err_selfimport:call nz,fail
+          ret
+
+.src  BYTE "import",34,"lib",34,0,0
+
+test_errinimport
+;---------------
+; When error happens in imported file,
+; we must remain in tab 1 (for error reporting).
+
+          call nrt_setup
+          ld hl,error_lib
+          call nrt_set_imported ; in tab 1
+
+          call nrt_import_com1
+          call c,fail
+          call nz,fail  ; api v5: except Z
+
+          call connect_bk_base
+          CALL_ORG(org_get_current_selection)
+          cp 1:call nz,fail
+          ret
+
+error_lib BYTE "!! error",0,0
+
+test_ambigous_import
+          call nrt_setup
+
+          ld hl,basic_lib
+          call nrt_set_imported ; in tab2
+; Same in tab3
+          ld a,2:call nrt_select
+          ld hl,basic_lib
+          call nrt_set_lib
+          ld a,0:call nrt_select
+          ld hl,lib_name
+          call load_if_absent
+          call c,fail
+          cp err_ambiguousimport:call nz,fail
+; host must be selected
+          CALL_ORG(org_get_current_selection)
+          or a:call nz,nrt_select
+          ret
+
+test_get_import_tab
+; Just check it doesn't assert
+; takes 54 ms (3 frames)
+          call nrt_setup
+; Create 32 tabs
+          ld b,2
+.setlp
+          ld a,b:dec a:call nrt_select
+          djnz .setlp
+          xor a
+          ld de,.dummy
+ ; For measure
+;      BRK
+          call get_import_tab:call c,fail
+          ret
+
+.dummy BYTE "x",0
+
+test_cached
+          call nrt_setup
+      BRK
+test_change_pc
+          call nrt_setup
+      BRK
+test_ambiguous
+          call nrt_setup
+      BRK
+test_diamond
+; If a import B and C,
+; and B and C import lib,
+; the second instance of lib musn't be reassembled.
+; Might use a flag "met in this assemblage".
+      BRK
+
+      END
+;------------
+
+; ============================================
+err_ambiguousimport = 31
+err_selfimport = 32
+
+fail_opening = 255
+;fail_doserror = 254
+;fail_unknownfiletype = 253
+;fail_unexpectedeof = 252
+fail_memoryfull = 251
+;fail_unexpectedmess = 247
+;fail_bufferoverflow = 246
+;fail_invalidlinenumber = 244
+
+; reuse for now
+fail_toomanyfilesopen = fail_memoryfull
+;fail_nametoolong = fail_bufferoverflow
+
+; ============================================
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+
+Import_setup
+; This is all that must be set while bk source is connected.
+; Could/Should be handled by ass. But we keep it here:
+;  - To ease nrts.
+;  - Since ass.o is already too big.
+
+; In: bk source connected: 
+    ; HL points to sized string (in bank typically). Rationale:
+     ; 1a/ That how they are encoded in source, and AMSDOS expect size.
+     ; 1b/ Faster comparison.
+     ; 2 / We rather copy out of bank than let each client do it.
+; OUT: DE= buffer filename out of bank
+
+; --- Copy name out of bank for easier comparison ---
+          ld de,tmpbuf
+          push de
+          ld c,(hl)
+          xor a:ld b,a
+          inc bc        ; include size itself
+          ldir
+          ld (de),a     ; include 0, but hl must still points to it
+
+; --- save current pos (post directive) ---
+          ex de,hl
+          ld hl,va_source
+          call set_cur_source ; !! a, d, e
+          ex de,hl
+          pop de
+          ret
+
+msg_import = 2
+msg_skipped = 10
+mess  = &BE00
+
+Import
+;-----
+;  In: bkbase connected
+     ; Import setup called beforehand.
+     ; bc = $ 
+     ; de = $$     
+; Out: If ok: Carry
+            ;  Z: cached or skipped (phase1 only)
+            ; NZ: reassembled       (phase1 only)
+            ; bc= new $          
+            ; de= new $$ 
+            ; host reconnected.
+     ; If loading error: NC, NZ: host reconnected.
+     ; If assembly error: NC, Z: import still connected.
+             ; !! Z/NZ might not be always set as indicated. nevermind
+
+          push de:push bc
+
+; --- Flag host as visited ---
+; Needed to detect cycle starting with main host itself
+; Otherwise, cycle is broken *after* host re-imported
+             ; -> infinite ref in stored slices 
+               ; -> crash (at cocopy.install_code)
+          CALL_ORG(org_get_current_selection)
+          call set_visited ; flag now to avoid infinite loop
+; Use a = cur source here
+; --- save parent (host) source # ---
+          cp max_sources:call nc,fail
+          NRT_CHECK_HOST()
+          push af
+
+; --- load (or use cache) and switch ---
+          ld hl,tmpbuf
+          push hl
+          call load_if_absent
+          pop hl        ; for print below
+          jp nc,.err_load ; filenot found, mem full,...          
+          push af
+; --- print "Importing toto.o: " (for info and sense of progress)
+          CALL_ORG(print_nl)
+          ld a,msg_import
+          inc hl        ; skip size
+          CALL_ORG(print_file_op)
+          ld a,":":CALL_ORG(print_chr)
+          CALL_ORG(print_space)
+; -- check skip/cache
+          pop af
+;if source was loaded, 
+          jr z,.exist
+;Source was loaded, so:
+  ; - tab selected
+  ; - we know no skip/cache 
+          pop af
+          pop bc:pop de
+          push af
+          CALL_ORG(org_get_current_selection)
+          push af
+          jr .modified'
+.exist
+; Here: A = id import
+; --- If already visited:
+    ; Diamond or cycle configuration.
+    ; In both case, we skip (whatever the phase).
+; !! Must be done before checking context:
+; !! For diamond, context is not the same,
+; !! and we want to keep first instance.
+          call is_visited:jp nz,.met
+          call set_visited ; flag now to avoid infinite loop
+
+          ld h,a
+          pop af
+          pop bc:pop de
+          push af       ; parent id on top of stack
+
+; --- reassemble if needed ---
+          ld a,h
+          push hl
+          call is_same_context ;in: bc, de  (preserved)
+          pop hl
+          jr nz,.modified
+
+; --- Import_assemble   
+; copy/past from org_assemble, with slight differences:
+;  - process current phase (rather than triggering the two)
+;  - s/ass_init_and_amore/ass_from_import
+;  - s/install_code/copy_code
+;  - don't reset codeinc000 flag -> must move as a global flag.
+;  - don't /clear_visited/
+
+          ld a,(va_phase):dec a:jp nz,_phase2
+
+;_phase1
+          ld a,h
+          call is_import_uptodate
+          jr nz,.use_cache1
+
+.modified
+          call connect_bk_base
+          ld a,h        ; id import
+          push af
+          call import_select
+          jr nc,ass_error1
+.modified'
+      IF vaa
+; --- Must flag explicitly as modified, to inform phase2.
+  ; Otherwise, bug#149: A imports B, C. C also imports B (half-diamond).
+  ; When assembling C phase 1, not uptodate (since B isn't).
+       ; -> ok. Reset code store.
+  ; When assembling C phase 2, seen as uptodate (since B done by now).
+       ; -> inconsistent and wrong. No code generated. 
+  ; Covered in assnrt.o
+          call set_modified
+      END
+
+          push bc:push de
+          CALL_ORG(init_phase1_all)
+          pop de:pop bc
+      IF inRom
+ ; Must communicate mem full
+          jr nc,ass_error1
+      ELSE
+          jp nc,ass_error1
+      END
+
+          call assemble_import:jr nc,ass_error1
+          CHECK_BK_BASE()
+          NRT_HOOK(nrt_hook1)
+          call check_premerge ; vo_emitted
+
+          pop hl        ; H = import id 
+          pop af        ; parent
+          call import_select
+          jp nc,_ret_host
+
+          xor a         ; For print_import_status and return Z flag
+          jr .finalize1
+
+.use_cache1
+          pop bc        ; discard parent
+; here h = id import
+          push af       ; Z/NZ
+          push hl
+; Put assembled_info (vo_*) into va.
+;    -> act like it was just assembled!
+          ld a,h
+          ld l,ass_len1 ; vo_emitted (checked in ass.o)
+          call connect_ass_var
+          ld de,va_emitted
+; copy-paste of swap.copy_assembled_info
+          ld bc,ass_len2
+          ldir
+          ld b,a
+          pop hl
+          pop af
+;enchaine
+.finalize1
+;Here Z="ok" NZ="Using cache"       
+          push af       ; For Z flags
+          call finalize_com
+          NRT_HOOK(nrt_hook5)
+; merge
+          push af
+; Update current low/hi $/$$ (host's one) with the ones from import
+          ld l,ass_len1 ; vo_emitted (checked in ass.o)
+          call connect_ass_var
+          ld a,(hl)
+      IF dev_checks
+          cp 2:call nc,fail
+      END
+          or a
+          call nz,set_or_merge ; nothing to do if import did not emit
+          NRT_HOOK(nrt_hook3)
+
+          pop hl        ; get H = id
+          scf
+          pop bc
+;If was Z, bit c.6 is set -> NZ. And vice-verse
+          bit 6,c
+          jr _ret_host_post_import
+
+.err_load
+; the import directive itself failed:
+;  - file not found
+;  - memory full
+; In both case we must reconnnect
+          ld h,a        ; error code
+          pop af        ; parent source
+          call import_select
+          xor a:inc a   ;NC, NZ
+          ld a,h
+          jr _ret_host_same
+
+.met
+; Whatever phase: we must do *almost* as if import wasn't here.
+; In particular:
+  ; In phase1/2: me must *not* rewind $/$$ to previous seen instance.
+  ; In phase2: we don't copy import's objcode again.
+
+; But!!! Must be flagged as dependency for label search.
+; Then, since it's a dep,
+; we must pin to previously used address for is_uptodate. 
+
+          call connect_bk_base
+          ld h,a
+          ld a,msg_skipped
+          CALL_ORG(print_msg_nl)
+
+      IF vw
+          call pin_deps
+      END
+          pop af        ; a=parent (discarded)
+          SET_Z()
+          scf
+      IF vab
+_ret_host_same
+          pop bc:pop de
+      END
+          jr _ret_host
+
+ass_error2
+;enchaine
+; If assembly of imported file fails, we want to abort
+; and stay in its tab (no switch back to host), so user
+; can scan the errors. 
+; !! Actually, ass_error1 would only happen for mem full,
+; !! so it would make sense to reconnect host. 
+; !! Nevermind for now: rare case.
+;TODO: replace by except.abort?
+ass_error1
+          pop bc        ; was af: import id
+          pop bc        ; was af: parent. Discard it.
+          cp a          ; NC, Z for ass to stay in imported source
+          ret           ; back to ass.import
+
+
+_phase2
+      IF dev_checks
+          dec a:call nz,break ; phase<>1 => must be phase 2
+      END
+          ld a,h
+          call is_import_uptodate:jr nz,.use_cache2
+
+      IF dev_checks'
+          cp h:call nz,mess ; is A = H = import?
+      END
+          push af
+          call import_select
+          jr nc,ass_error2
+
+          push bc:push de
+          CALL_ORG(init_phase2_all)
+          pop de:pop bc
+          jr nc,ass_error2
+
+          call assemble_import
+          jr nc,ass_error2 ; abort if error
+
+          call set_uptodate
+
+          pop hl        ; H = import id 
+          pop af        ; parent
+      IF 1-inRom
+; In test, we doesn't use more than 4 sources
+          cp 4:call nc,fail
+      END
+          call import_select
+          jr nc,_ret_host
+
+          xor a         ; For print_import_status
+          jr .finalize2
+.use_cache2
+          pop bc        ; discard parent
+.finalize2
+          call finalize_com
+; --- All ok: put ref in host source. ---
+          push af
+          call get_store_start_import
+          call store_ref ; Return C/NC+error code
+          pop hl        ; get h = id  
+;enchaine
+_ret_host_post_import
+      IF vab
+          push af
+          ld a,h
+          ld l,va_post_pc - va2_store'
+          call connect_ass_var
+          call read_pc_objc ; va_post_pc/objc
+          pop af
+      END
+_ret_host
+; Reconnect bk_source in anycase (success or error).
+; bc/de: cur $/$$ (same in case of diamond, post import otherwise)
+          push af       ; Save flags + error code
+          ld hl,(va_source+1)
+          ld a,l:ld l,h:ld h,a
+          ld a,(va_source)
+          push hl       ; bc de must be preserved.
+      IF 1-inRom
+          ld h,&66      ; hack: our nrt source is not in bank
+      END
+          ld l,a
+          call org_connect_source_chunk_from_id ; needed to set vo_curbk
+          pop hl
+          pop af
+          ret
+
+assemble_import
+;--------------                
+; In: bc=$
+    ; de=$$
+;Out: C/NC like ass_from_import 
+
+; Like normal assembly, but don't reset destbk.
+          push bc
+          CHECK_BK_BASE()
+
+      IF todo
+; !! factorize with org_assemble and/or move into ass_from_import
+      END
+;First time met: we must init (in both phase2)
+;NB: /deps/ are only init in init_phase1, since we need them in phase2
+   ; for label resolution.
+          ld a,max_sources:ld hl,depsrec:CALL_BRIC(bs_init)
+      IF todo
+; !! move that in ass_from_import, and call it directly
+      END
+          CALL_ORG(org_seek_source_begin)
+          pop bc
+;Note: store back live index in done in ass._finitions
+     ; (it must be done there anyway for regular ass)
+          jp ass_from_import
+
+finalize_com
+          call connect_bk_base
+          CALL_ORG(print_import_status)
+;enchaine
+pin_deps
+;-------
+; Flag import & its deps as visited
+; Propagate deps
+;In  H= import ID 
+;Out A= import ID
+          ld a,h
+          push af
+      IF dev_checks
+; Happened once as a result of another bug (double import not detected)
+          CALL_ORG(org_is_self_selected):call z,break
+      END
+          ld hl,deps:CALL_BRIC(bs_set)
+          ld hl,depsrec:CALL_BRIC(bs_set)
+
+          CALL_ORG(connect_depsrec)
+          ld de,tmp_deps
+          push de
+          ld bc,depsrec_
+          ldir
+          call connect_bk_base
+          pop hl:ld de,depsrec:push de:CALL_BRIC(bs_or)
+; When cache was used, we don't explicit visit deps,
+; so we have to update (merge) visited in that case.
+          pop hl:ld de,visited:CALL_BRIC(bs_or)
+          pop af
+          ret
+
+;---
+      MACRO PNT_TO_IDX
+      IF sources_index AND &FF
+ !! assumes sources_index is &100 aligned
+      END
+          ld a,l:srl a
+      ENDM
+
+      MACRO IDX_TO_PNT
+      IF sources_index AND &FF
+ !! assumes sources_index is &100 aligned
+      END
+          add a:ld l,a
+      ENDM
+
+
+load_if_absent
+;-------------
+; Check if source already opened in one tab.
+; If yes    -> return id
+; Otherwise -> load if free tab (selected)
+; NB: Called both in phase 1 and 2,
+    ; but in phase 2 -> necessarily found.
+
+; in: hl = sized filename out of bank.
+    ; bk base connected
+;out: if Ok. Carry
+        ; Z = source exist, A = id
+        ;NZ = source loaded and selected
+    ; NC otherwise, A = error code (file not found or ambiguous)
+
+; --- Sanity check: is name == current?
+          ld de,filename
+          call compare_sstr_nocase
+          jr nz,.notself
+          ld a,err_selfimport
+          or a
+          ret
+.notself
+      IF dev_checks
+; Should never be reached from trace!
+          ld a,(vt_rom_firmflag):cp vt_rom_firmenable:call nz,fail
+      END
+          ex de,hl
+          xor a
+          call get_import_tab
+          jr nc,_load
+
+; Check other sources (in case of doublon -> ambiguity)
+          ld c,a        ; save
+          inc a
+          call get_import_tab
+          ld a,err_ambiguousimport
+          ccf           ; NC if doublon
+          ret nc
+
+          ld a,c
+          cp a:scf      ; C, Z
+          ret
+
+import_select
+;Note: org_select does sync to live from selected tab (via sy_restore).
+;Symmetry note: sy_sync_cur_index_to_live has been done:
+     ; at /Import/ (before switching to imported tab)           
+   ; (it could be done here instead, but for no befinit)
+     ; and in ass._finitions (before switching back to host tab)
+          push bc:push de:push hl
+          CALL_ORG(org_select)
+          pop hl:pop de:pop bc
+          ret
+
+_load
+; -------------------------------------------------
+; ---- Not found: must load in available slot. ----
+; -------------------------------------------------
+
+      IF dev_checks
+; Should only be reached from phase 1
+          ld a,(va_phase):cp 1:call nz,fail
+      END
+
+          call first_empty_tab
+          cp &FF:jr z,.full
+
+          push de       ; sized name to import
+          call import_select
+          pop hl
+          ret nc        ; memory full?
+
+      IF 1-inRom
+; Check we are pointing on filename
+          ld a,h:cp &10:call c,fail
+          ld a,(hl):cp 26+1:call nc,fail ; max length used in tests
+      END
+          inc hl        ; start of filename
+
+ ; use ed version to load meta-info as well.
+          CALL_ED(ed_load)
+;phase was reset by org_load (probably for merge -> org_insert_line)
+          push af       ; save error code if any
+          ld a,1:ld (va_phase),a
+          ld (va_phase_backup),a
+          ld c,a
+          pop af
+          inc c         ; NZ without touching N/NC
+          ret
+
+.full
+          ld a,fail_toomanyfilesopen
+          ret
+
+get_import_tab
+;-------------
+; --- Get first tab (starting from A) matching name ---
+; Don't check for self-tab or ambiguous here: 
+   ; - Done by load_if_absent
+   ; - Not needed by ass.cpt_import, as we already know assembly is ok
+
+; In: A = starting tab
+    ; DE= name to compare
+; Out: If found, Carry, A = tab number
+     ; Otherwise, NC 
+     ; BC, DE preserved
+
+          push bc
+          ld h,sources_index/&0100
+.find_lp
+; Must test first (in case import was found in last tab:
+; load_if_absent try from tab+1)
+      IF sources_index AND &FF
+ !! assumes sources_index is &100 aligned
+      END
+          cp max_sources:jr nc,.exit
+          push af
+          CALL_ORG(connect_filename_size)
+          jr nc,.trynext ; Empty source
+
+; Check if filename matches
+          call compare_sstr_nocase
+          call connect_bk_base
+          jr z,.found
+.trynext
+      IF sources_index AND &FF
+ !! assumes sources_index is &100 aligned
+      END
+          pop af
+          inc a
+          jr .find_lp
+
+.found
+          pop af
+          scf
+.exit
+          pop bc
+          ret
+
+is_same_context
+;--------------
+; Check if we can reuse cache.
+; For now, means $ and $$ are the same.
+; In the future: parameters must match. 
+; NB: caller expect bc and de preserved.
+; in: A = id import
+
+; !! Note: source_pc0 and _obcj0 
+; !! should be updated if ORG in imported file before any emited code OR
+; !! any set variable   YAGNI YET (optimisation)
+
+          call connect_pre_pc
+; $ at start
+          ld a,c:cp (hl):inc hl:ret nz
+          ld a,b:cp (hl):inc hl:ret nz
+          ASSERT(va_pre_objc == va_pre_pc+2)
+ ; $$ at start
+          ld a,e:cp (hl):inc hl:ret nz
+          ld a,d:cp (hl)
+          ret
+
+set_or_merge
+;-----------
+;in: hl = vo_emitted (in import store)
+   ; Import has emitted.
+;out: Host's va_emitted, va_low_pc and co updated.
+
+          ld de,va_emitted
+          ld a,(de)
+      IF dev_checks
+          cp 2:call nc,fail
+      END
+          or a
+          jr nz,.merge  ; NZ: both emitted 
+
+;Here only import emitted.
+;We cannot merge since va_low_pc & co are dummy values.
+;We replace instead (also flags vo_emitted)
+      IF todo
+ ;move that in ass
+      END
+          ld bc,1+8
+          ldir
+          ret
+
+.merge
+          inc hl
+          call read_pc_objc
+          push hl
+          ld l,c:ld h,b
+          call update_low
+          pop hl
+          call read_pc_objc
+          ld l,c:ld h,b
+          jp update_hi
+
+read_pc_objc
+          ld c,(hl):inc hl ; vo_low_pc / vo_hi_pc / vo_post_pc
+          ld b,(hl):inc hl
+          ld e,(hl):inc hl ; vo_low_objc / vo_hi_objc / vo_post_objc
+          ld d,(hl):inc hl
+          ret
+
+; ---------------------------             
+      MACRO CHECK_IS_EMPTY
+      ;-------------------
+; Check if the source is empty
+; Note: Alternative would be to have org_close.
+      ; That would it turns require aap/sy/asseto/cocopy to expose
+      ; a 'free' routine (and nullify the variable).
+      ; -> YAGNI / Don't fix what isn't broken.
+; !!! Doesn't work for visited tabs since ed adds one line (bug #138)
+; !!! But works when import triggers "not found".
+
+; !!! Connect source to check lines # 
+; IN: hl: pnt in sources_index
+; Return Z iif empty.
+          push hl:push ix ;ix needed? check org_select
+          PNT_TO_IDX()
+          call import_select
+          CALL_ORG(org_is_empty)
+          pop ix:pop hl
+      ENDM
+
+;---------------------------             
+first_empty_tab
+;--------------
+; Return id of first empty tab
+;  or -1 if none empty.
+; Used by ed when opening file from BASIC.
+
+; --- First check if current is empty.
+; Never the case in import context (since there is at least the
+; import statement), but useful when called by ed for |o,"file"
+; Without this check, |o,"f" would open file in tab 2 even when tab 1
+; is selected and empty.
+          CALL_ORG(org_get_current_selection)
+          ld ixl,a      ; save, and ixl used in loop below
+          CALL_ORG(org_is_empty)
+          ld a,ixl
+          ret z
+
+          ld hl,sources_index
+          ld bc,max_sources*&0100 + 255 ; C will contain found one.
+.fet_lp
+          PNT_TO_IDX()
+ ; current source -> not empty
+ ; we need to make this additional check,
+ ; since entry in sources_index for current source is zeroed. 
+ ; don't remember why, though.
+          cp ixl
+          ld a,(hl)
+          inc hl        ; Save Z flag
+          jr z,.next
+          or a
+          jr z,.ok_empty ; No index -> found one! 
+
+          CHECK_IS_EMPTY()
+          jr z,.ok_empty
+.next
+          inc l
+          djnz .fet_lp
+
+          ld a,-1
+          ret
+
+.ok_empty
+          PNT_TO_IDX()
+          ret
+
+
+; ---------------------------             
+check_bk_base_
+; Check if bk base is connected.
+; That's longer than to actually connect bk base,
+; but allows to detect programming errors.
+          push af:push hl
+          ld hl,vo_basebk ; only base bk defines it!
+          ld a,i:cp (hl):call nz,fail
+          pop hl:pop af
+          ret
+; ---------------------------             
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ---------------------------             
+      IF inRom
+      ORG code+codesize
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          ld ix,param_burn4:call burn_
+          call &BB06
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+param_burn4
+      WORD rom
+      WORD codesize4
+      WORD codedest4
+      WORD code4
+      END
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+jps
+          jp Import_setup
+          jp Import
+
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+; ------------------
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+jps'
+          jp first_empty_tab
+
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+; ------------------
+code4 = $$
+
+      IF inRom
+      ORG codedest4,$$
+jps''
+          jp get_import_tab
+
+      FILL limit4-$,&F7
+      END
+codesize4 = $$-code4
+
+; ========================================
+
+;      ORG tmpbuf+&80,$$ ; name must be < &60 long anyway
+;v_metadata_id WORD 
+
+deps  = &7083
+depsrec = &708E
+depsrec_ = [max_sources+7]/8 + 1
+visited = &8A12
+
+      IF deps - &7083
+  !! shared with org, cache and impeva
+      END
+      IF depsrec - &708E
+  !! shared with org, cache
+      END
+
+      IF visited - &8A12
+  !! defined by cache.o (see there for sharing rationale)
+      END
+
+vo_emitted = &7C01      ; Reset at phase1 in ass.ass_common
+vo_low_pc = &7C02
+vo_low_objc = &7C04
+vo_hi_pc = &7C06
+vo_hi_objc = &7C08
+vo_exec = &7C0A
+
+      IF [vo_emitted - &7C01] OR [vo_low_pc - &7C02]
+  !! shared with org and ass
+      END
+
+;vo_flags = &7CE8
+
+va_if = &9804           ; nrt
+
+      ORG &980B
+va_destbk BYTE          ; nrt
+      BYTE 
+va_phase BYTE 
+va_phase_backup BYTE 
+;!! All those except va_exec only updated in phase 1.
+va_emitted BYTE 
+va_low_pc WORD          ;lowest pc. 
+;!! for nrt
+va_low_objc WORD        ;lowest written adr
+va_hi_pc WORD 
+va_hi_objc WORD 
+va_exec WORD 
+
+      ORG &982A
+;!!! nrt       
+va_pc0 WORD             ;pc at chunck begin
+va_objc0 WORD           ;obj dest at "
+
+      ORG &9897
+va_source SKIP 3        ; bk and position source
+;va_pre_pc WORD          ; $  at start of source.
+;va_pre_objc WORD        ; $$ at start of source
+;va_post_pc WORD         ; $  at end of source
+;va_post_objc WORD       ; $$ at end of source
+
+      ORG &98DE         ; after ass
+tmp_post_pc WORD        ; copy of va_post_pc
+tmp_post_objc WORD 
+tmp_deps SKIP depsrec_
+      IF tmp_deps-2-tmp_post_objc
+   !! must be contiguous
+      END
+      SKIP &98F0-$
+

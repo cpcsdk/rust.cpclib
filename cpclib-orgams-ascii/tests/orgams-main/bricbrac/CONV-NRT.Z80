@@ -1,0 +1,163 @@
+; Unit tests for conv.o
+
+      ORG &2000
+      ENT tests
+
+      IMPORT "conv.o"
+
+tests
+          call test_str2int_positive
+          call test_str2int_negative
+          call test_str2int_bigger
+          call test_str2int_minus0
+          call test_divide_long
+          call test_divide_long'
+          call test_put_deci_long
+          ret
+
+fail  = &BE00
+
+      MACRO CHECK_HL_EQ_DE
+          or a:sbc hl,de:add hl,de:call nz,fail
+      ENDM
+
+
+test_str2int_positive
+;--------------------
+          ld hl,0
+.lp
+          call _test_common
+          inc l
+          jr nz,.lp
+          ret
+
+test_str2int_negative
+;--------------------
+          ld hl,0
+.lp
+          call _test_common
+          dec hl
+          ld a,h:cp &FF
+          jr z,.lp
+          ret
+
+test_str2int_bigger
+;------------------
+          ld hl,&0100
+.lp
+          call _test_common
+          ld de,&0103
+          add hl,de
+          jr nc,.lp
+          ret
+
+test_str2int_minus0
+;------------------
+          ld hl,.str
+          call deci_to_int
+          ld a,e:or d:call nz,fail
+          ret
+.str  BYTE "-0",0
+
+_test_common
+; Test val -> str -> val
+; Assume put_deci_hl (val -> str) is working.
+
+;in: HL = signed number
+          push hl
+          bit 7,h
+          ld a,"0":jr z,.oksign
+; hl = -hl
+          ex de,hl
+          ld hl,0:or a:sbc hl,de
+          ld a,"-"
+.oksign
+          ld (prefix),a
+          ld de,value
+          call put_deci_hl
+
+          ld hl,prefix
+          call deci_to_int:call nc,fail
+          pop hl
+          CHECK_HL_EQ_DE()
+          ret
+
+test_divide_long
+;--------------- 
+; Test specific value
+          ld hl,&DDDD:ld (value),hl
+          ld hl,value
+          ld b,2:ld c,&86
+          call divide_long
+          cp &DDDD MOD &86:call nz,fail
+          ld hl,(quotient)
+          ld de,&DDDD/&86
+          or a:sbc hl,de:add hl,de:call nz,fail
+          ret
+
+test_divide_long'
+;----------------
+; Check for multiple divisors and dividends
+
+          ld c,1
+.divisorlp
+          ld hl,0
+.dividendlp
+          ld (value),hl
+          ld hl,value
+          ld b,2
+          call divide_long
+
+; Check we get back value = divisor*quotient + remainder
+          ld h,0:ld l,a ; remainder
+          ld de,(quotient)
+          ld b,c
+.mul      add hl,de:djnz .mul
+          ld de,(value)
+          or a:sbc hl,de:add hl,de:call nz,fail
+
+          ld de,65535/15
+          add hl,de
+          jr nc,.dividendlp
+
+          ld a,c:add 7:ld c,a
+          jr nc,.divisorlp
+          ret
+
+test_put_deci_long
+; Prerequisite: test_divide_long[']
+          ld hl,.cases
+.lp       call .check_put_deci_long
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.cases
+      BYTE 1,0,"0"
+      BYTE 1,&FF,"255"
+      BYTE 2,&FE,&CA,"51966"
+      BYTE 4,&FF,&FF,0,0,"65535" ; extra 0s are removed
+      BYTE 4,&FF,&FF,&FF,&FF,"4294967295"
+      BYTE 0            ; end of test
+
+.check_put_deci_long
+          ld b,(hl):inc hl ; size
+          ld de,value
+          push hl
+          call put_deci_long
+          pop hl
+          ld c,b:ld b,0:add hl,bc ; skip value itself
+          ld a,e:sub value AND &FF:ld b,a
+          ld de,value
+          call compare_sized
+          ret
+
+compare_sized
+          ld a,(de):cp (hl):call nz,&BE00
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+prefix BYTE 
+value SKIP 6

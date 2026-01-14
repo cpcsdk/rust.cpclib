@@ -1,0 +1,2950 @@
+; Monogams entry point and commands.
+
+inRom = 1
+doNrt = [1-inRom] AND 0
+rom   = &1B
+romOrg_dev = &0A
+romExt_dev = &1A
+romBric_dev = &1C
+
+devChecks = 1
+nrt_checks = 1-inRom    ; only to catch programming errors
+todo  = 1
+need_room = 1
+
+      IMPORT "monomap.i"
+      IMPORT "memmap.i"
+      IMPORT "const.i"
+      IMPORT "macro.i"
+
+; ////// 2025 ////////////////////
+; ----- HH Beta J -----
+  ;Dec 24 cu: Add CHECK_BK_BASE everytime tmp_buf is used
+; ----- HH Beta I -----
+  ;Dec 10 cr: trace_from_brk: call reset_tm
+; ----- HH Beta G -----
+  ;Nov
+     ; 17 Cq: _rsx_com: call key_setup 
+cq    = 0               ; on hold, no room
+; ----- HH Beta E -----
+  ;Oct
+     ; 27 Cp: Deactivate meta-info when calling copy_message_error
+     ; 26 Co: Doublon restore_and_goto_ed in jump table
+            ; (needed for new restore, fix #1ec)
+; ----- HH Beta 6 ----- 
+  ;Aug
+     ; 18 Cn: Fix #1d6 X wrong result in corner case
+            ; (was when asset header in last bk of the bank)
+; ----- HH Beta 1 ----- 
+  ;Jul    
+     ; 26 Cm: Huh? 
+     ; 18 Cl: cold_init: call clear_asic
+     ; 16 Ck: trace_from_brk: Call /clear_asic/
+     ; 12 Cj: CALL_ASS for new rom
+; ----- GG Release -----
+  ;May 28 Ci: Fix #1c7: x1,"tt" not seen as file
+     ; 21 Ch: Fix #1c5: Reset cursor position
+
+; ----- GG Beta K -----
+  ;Apr 22 Cg: dump_one_line_ Rollback dump_hex / dump_ascii
+                ; Otherwise DI for two long
+     ; 21 Cf: revision! Restore IY in bring_status
+                      ; Fix store_dump (again?)
+                      ; Use history from &4100
+
+; ----- GG Beta J -----
+     ; 13 Ce: Reactivate logo after refresh (so it's faster)
+            ; Use replace_0_by_space from monui-bo
+            ; Dont use tmp_buf for refresh (now used by dump_one_line_)
+            ; Little heart hack
+        ; Cd: Persistent display: must save cursY (in mon_cursY)
+                                ; as trui modify it 
+     ; 11 Cc: Persistent display
+            ; Use new farcall
+            ; Fix #1c0 "print in reverse"
+; ----- GG Beta I -----
+     ;  7 Cb: Expose copyHereMirror_ei (for seahex)
+     ;  1 Ca: Fix error message not displayed at last line
+; ----- GG Beta H -----
+  ;Mar 27 Bz: X command: accept file!
+     ; 23 By: Save two bytes from old Hicks code!
+
+; ----- GG Beta F -----
+  ; 9 Bx refresh: use /scr_set_mode/ (bug #1ab)
+  ; 7 Bw CTRL-f1 to CTRL-f9 jumps directly to ed 
+
+; ////// 2024 ////////////////////
+; ----- GG Beta A ----- 
+   ; 24 Bv Replace is_selected_uptodate (was in cache.o)
+               ; by is_selected_modified_since_ass
+            ; (refactoring)
+
+; ----- GG Beta 1 ----- 
+  ; Feb 1 Bu Move gr_bk @76ff to leave room for visu.
+; ----- Release FF ----- 
+  ; Jan 5 Bt Fix Scroll with tabs: must call scrollUp_if_needed
+
+; ////// 2023 ////////////////////
+
+; ----- Release FF ----- 
+  ; Dec
+    ; 29 Bs No-change. Use monomap.i     
+    ; 23 Br tabs: list non-empty tabs
+    ; 21 Bq ed_from_mon: STATUS_OFF before org_select
+    ; 15 Bp Must reinstall monogams variant after /cat/
+    ; 15 Bo Use monogams variant for status (with logo)
+
+  ; Jun
+    ;  5 Bn dump_one_line: 
+  ; - call cmdCrNl at the end, to avoid spurious blank line for dump
+  ; - call scrollUp_if_needed 
+          ; Requires monui-ay
+  ; May
+    ;  3 Bm Use locate_firmware/locate_monogams in txtfirm.o
+  ; Apr                 
+    ; 26 Bl Proper association 'BRK' command to 22.
+    ; 24 Bk Move gr_bk (conflicting with visu/ass va3)
+; ----- Beta I --------- 
+    ; 20 Bj Call _return_from_rsx in /command_rsx/
+          ; Remove hidden command 'r' (buggy display of rom headers)
+          ; Remove command 'help' (was shadowing rsx without usefulness)
+    ; 19 Bi Add /test_load/
+    ; 18 Bh Rewrite RSX routines for /command_rsx_from_ed/
+          ; Fix bug empty buffer -> syntax error
+          ; Load -> RSX rather than BRK because not implemented
+          ; Export/Import
+       ; bg Extract history handling to histrion.         
+    ; 15 bf Support 'ed n' to access tab n. 
+    ; 13 be Fix bug#159 unsafe return from rsx.
+    ; 12 bd Fix bug#157 garbage line after #157
+          ; Remove flickering as well
+
+; ////// 2022 ////////////////////
+
+  ; Jan
+    ; 23 bc Expose detect_0 (for profui)
+
+; ////// 2021 ////////////////////
+
+; Oct 16 bb; Expose /return_from_rsx/bring_status/unknownCom/check_i
+           ; Export rsx in rsx.o.
+
+; Jul 18 ba: Code clean-up: Freeze vax=1
+
+    ; 25 az: command y: BRK orgams itself. For internal debugging!
+
+    ; 14 ay: type command
+           ; RSX: use /locate_firmware/ for amsdos errors.
+
+; Jan 13 ax: do not refresh /welcome/ in /bring_status/ :
+           ; No need anymore after rsx, since welcome message
+                                      ; no more in status bar.
+           ; Refresh_status should deal with all status related anyway.
+                 ; (actually called /status_disp/)
+
+; ////// 2020 ////////////////////
+
+; May 11 aw: nrt: add /test_cat/
+
+    ; 27 av: /check_i/ & CHECK_EI: change border if I is not set.
+           ; /monogams/ don't call firm2shift. Since we are not coming
+                      ; from firm most of the time.
+
+    ; 13 au: Call firm_init after rsx. Prevent for instance border
+           ; flickering (firmware vs rasters) after RSX |I returns.
+    ; 12 at: CTRL LFT/RGT for gr. See /gr_ctrl_lft/
+           ; Accept 16 bits bk.   See /bank_command/
+; Apr 11 as: [revision]
+           ; NRT: s/org_init_custom/org_init.
+           ; NRT: Use setup_nrt
+           ; Ass, cat, rsx, help, gotoEd: use /status_off/on
+
+; Mar 2 ar: Use monui @ f900. !!require monuiaf!!
+
+   ; 15 aq: Disp in status bar
+          ; limit @ &e888 
+
+; Jan 7 ap: Move tmp_buf from 4000 to 7400
+
+; Dec 18 ao: limit @ e980  
+
+        ; an: Clear bufCom in endCom (useful after clp).
+     ;21  am: Put tests before jp table.
+            ; Fix rsx_call. Wrong BK was saved. +NRT 
+     ;16  al: Fix rsx_call. NB params wasn't saved.
+     ;15  ak: RSX handling. WIP: doesn't work when multiple params.
+       ; vaj: STATUS_TO_FIRM for CTRL-1/2 (ass, assjp)
+       ; vai: Fix vah: eval_command_line may return hl=error message. 
+                     ; A (bk) must be saved.
+       ; vah: Use evacom to eval command line.
+            ; Ei while clear (clp)
+       ; vag: Ei while diff (x).
+       ; vaf: Ei while skiping 00 (m).
+       ; vae: Switch rupt for help, gr, cat, era, ed, tr.
+; Sept 7 vad: Cleanup unused var.
+            ; Move buf and var @ 9000 (to free video ram for status bar)
+; Aug  6 vac; status bar (rupture). !! WIP (not burned)
+     ;27 vab; Fix nrts (compare_str use, and call set_full)
+            ; yet new rom#
+     ;20 vaa: use new rom#
+
+     ;13 vz: Set disp_r1 in gr for proper status positionning.
+           ; Pass keycode to mon_command after logo (again?).
+     ;12 vy: reset curs_x (not done anymore by monui_refresh)
+           ; put pc_nav = &7681 (again?)
+;  11    vx: trace_from_brk must call common_init. Was lost in refactor.
+;  10    vw: Simplify dump_one_line !! Requires mounic !!
+           ; Ok trace JP.
+           ; Limit @ ea00
+;  08    vv: Cleanup.
+       ; vu: Move goto_ed and basic to monui8 (see rationale there).
+           ; Plug trace.
+           ; Factorize trace_from_*
+           ; monui jp table changed. !! Requires mouni8 !!
+       ; vt: monui jp table changed. !! Requires mouni7 !!
+       ; vs: Clear bufCom (moved by from monui)
+           ; Use disp in ROM Bric
+           ; Remove codedest2
+           ; disp_init here (r1=40)
+           ; Crtc adapt (i.e. mon2firm removed)
+           ; Fix inRom version.
+       ; vr: Export/Import.
+       ; vq: Use monui.
+           ; Export copyHere and co to monhelp.
+; 07 Jul vp: RAW Extracted from monoai.
+
+codedest = mon_rom      ; 6 for palette
+limit = rsx_rom         ; rsx
+codedest2 = mon_rom'
+limit2 = bt
+
+      ORG 0:BRK
+      ORG &0100
+      IF inRom:ENT burn
+      ELSE
+      IF doNrt:ENT tests
+      ELSE:ENT dev_start
+      END
+      END
+
+
+; ----- In *this* ROM ----------
+rsx   = &FF9D           ;IN: c:nb param+1. ix=params. de=types.
+
+trui  = &FFA0
+trace = trui+3
+trace_no_swap = trui+6
+trace_setup_history = trui+12
+
+trace_module = &C100
+reset_tm = trace_module + 18
+
+monhelp = &FFC0
+
+copyHereMirror = monhelp+6
+copyThereMirror = monhelp+9
+
+far_call_ed = &FF00
+far_call_ext = &FF06
+far_call_bric = &FF0C
+far_call_ass = &FF12
+
+monui = &F900
+
+common_init = monui     ; mtrinit, muteay, install farcall
+monui_init = monui+3    ; firminit (key), screen at c000, mode 2
+monui_refresh = monui+6 ; set_full, reset cursXY
+firm_init = monui+9     ; Keys + colors
+
+mon_field_editor = monui+12
+
+wait_key_exit = monui+15
+is_exit = monui+18
+keyCheck = monui+33
+
+wrong_param' = monui+49
+print_inline' = monui+54 ; use /print_inline/
+      IF todo
+; Rename to CrNl. It's not only for cmd, e.g used by dump_one_line
+      END
+cmdCrNl = monui+62      ; Next line. out:de = new pos. hl preserved
+;!!! A combiner avec scrollUp_if_needed !!!
+cmdCrNl_if_needed = monui+57
+clear_asic = monui+&59
+scrollUp_if_needed = monui+&5C
+dump_one_line_ = monui+&5F
+dump_one_line_custom = monui+&68 ; hl:adr de=bytes b=bytes#
+help_mon_ui = monui+&65
+
+clsScr = monui+&6E
+set_full = monui+&74
+set_gris = monui+&7A
+set_cursX = monui+&80
+;set_cursY = monui+&84
+;spaces = monui+&8B
+affAsc = monui+&98
+affText = monui+&A1
+affNewLine = monui+&B0
+; afflng8_ = monui+&62
+
+affBufCom = monui+&AA   ; Promt > plus passed buffer.
+
+;hexw2asc = monui+&B3
+hex2asc = monui+&B8
+
+welcome = monui+&C8
+gr_status_disp = monui+&CB
+refresh_line = monui+&CE
+status_disp = monui+&D1
+disp_ellipsis = monui+&D4
+
+;crtc_trace2firm = monui+&D7
+;crtc_firm2trace = monui+&DA
+crtc_unknown2trace = monui+&DD
+
+convScrX = monui+&E0
+bc26_de = monui+&E3     ; for gr. r1=32
+
+restore_and_goto_ed = monui+&F1
+;ed_from_exec = monui+&F4
+goto_ed = monui+&F7
+goto_ed_routine = monui+&1D ; in hl=routine to jump to 
+goto_basic = monui+&FA
+;mon_from_trace = monui+&FD
+
+put_hexa_a = monui+&0113
+put_hexa_hl = monui+&0116
+replace_0_by_space = monui+&0119
+copy_nt = monui+&011C
+
+histriom = histriom_jp
+histriom_init = histriom
+histriom_append = histriom + 3
+histriom_newest = histriom + 6
+histriom_prev = histriom + 7
+
+
+;-- In Ed ROM ----------
+
+ch    = &C100
+copy_message_error = ch+36
+
+edCat = &D209
+edSetLine# = &D20F
+;edGetLine# = &D212
+edInsertLine = &D218
+edAss = &D21B
+edAssJp = &D21E
+gere_key_from_mon = &D233
+key_setup = &D20C
+restore_translate = &D245
+
+mirror = &E7F2
+swap_custom = mirror+27
+
+;-- In Ext ROM ---------
+org_init = &C008
+org_ins_line = &C014
+org_select = &C047
+org_select_if_exist = &C03E
+org_get_current_selection = &C038
+org_is_modified = &C05C ; NZ if yes 
+org_connect_bk_base = &C106
+      IF todo
+; Use these one for faster tabs command
+; + dispatch from swap
+; So we don't have to switch source
+is_modified_since_save = &C103
+is_modified_since_ass = &C10C
+      END
+
+is_selected_modified_since_ass = &C10F
+
+; ---- In ASS ROM ------
+   ;-- evacmd --
+eval_command_line = &FFC0 ;C if ok. NC if not with hl points to message
+;relocate_params = &FFC3
+
+;-- In Bric ROM ---------
+
+install_farcall = &DF24
+
+screen = &FE4E
+status_init_monogams = screen+15 ; Install int/rupture routine.
+firm2status_monogams = screen+45
+firm2shift = screen+24
+status2firm = screen+3
+status2tr = screen+6
+; tr2status = screen+9
+clearstatus_monogams = screen+12 ; erase 8000-8fff by placing logo
+statuson = screen+30
+statusoff = screen+33   ; only af/hl corrupt
+tr2shift = screen+39
+; TODO: remove this one?
+; Each time we want to switch to tr we want to switch off status anyway.
+;shift2tr = screen+36
+
+disp  = &FF14
+disp_init = disp
+put_deci_a = disp+&6C
+put_deci_hl = disp+&6F
+;put_hexa_a = disp+&72    use monui version
+;put_hexa_hl = disp+&75   use monui version
+disp_deci_a = disp+&48
+disp_chr = disp+&0F
+disp_text = disp+&1B    ; bc=nt str
+
+firm_txt = &FCEE
+locate_orgams = firm_txt + 9
+locate_firmware = firm_txt + 12
+
+locate_left = monui+36  ; !!! Impact disp* but doesn't touch cursX
+locate_x = monui+38     ; E=x (0 based)
+locate_inc = monui+&010D
+print_range = monui+&88
+
+io    = &FFCE
+io_read_line = io+3
+;get_len = io+15  ; out: bc= len (without \0) use one in string instead
+
+string = &FD82
+get_len = string
+;copy_nt = string+3   ; use monui version
+;get_len_clip = string+6
+
+histrion = &FDA9
+history_init = histrion
+history_append = histrion+6
+
+asset = &FDEB
+load_and_cache = asset+6
+get_asset_chunk = asset+9
+
+chunk = &FDFA
+connect_chunk_from_id = chunk+42 ; all regs preserved
+connect_next_chunk = chunk+45 ; all regs preserved but hl & F
+free_list = chunk+33    ; hl can be 0 -> no-op
+new_chunk_no_init = chunk+15 ; NRT !! Reconnect bk base
+
+
+;----------------------
+;err_opening = 255
+err_dos = 254
+;err_unknown_filetype = 253
+;err_unexpect_end = 252
+fail_rsxnotfound = 236
+err_emptyfile = 35
+
+
+;----------------------
+kl_l_rom_enable = &B906
+kl_l_rom_disable = &B909
+kl_rom_select = &B90F
+km_wait_key = &BB18
+km_read_key = &BB1B
+txt_set_cursor = &BB75
+txt_cur_off = &BB84
+scr_set_offset = &BC05
+scr_set_mode = &BC0E    ; For first invocation (bug #1ab)
+disc_in_open = &BC77
+disc_in_close = &BC7A
+
+      IF inRom
+burn
+          ld ix,burnpara:call .burn
+          ld ix,burnpara2:call .burn
+          call &BB06
+          ret
+
+.burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+
+burnpara
+      WORD rom
+
+      WORD codesize
+      WORD codedest
+      WORD code
+
+burnpara2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      END
+
+
+inRam = 1-inRom
+brk   = 1 AND inRam     ; init brk (1) ou non (0)
+
+hexFnt = 97             ; Hexa en minuscule
+
+r1    = 40
+width = 64
+
+; for gr
+r1'   = 32
+
+      MACRO CALL_ED ad
+          call far_call_ed:WORD ad
+      ENDM
+
+      MACRO CALL_ORG ad
+          call far_call_ext:WORD ad
+      ENDM
+
+      MACRO CALL_ASS ad
+          call far_call_ass:WORD ad
+      ENDM
+
+
+      MACRO DCALL adr
+          call far_call_bric:WORD adr
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call far_call_bric:WORD adr
+      ENDM
+
+      MACRO FIRM_TO_STATUS
+          CALL_BRIC(firm2status_monogams)
+      ENDM
+
+      MACRO STATUS_TO_FIRM
+          CALL_BRIC(status2firm)
+      ENDM
+
+      MACRO STATUS_ON
+          CALL_BRIC(statuson)
+      ENDM
+
+      MACRO STATUS_OFF
+          CALL_BRIC(statusoff)
+      ENDM
+
+      MACRO CHECK_SP
+          push af:push hl
+          ld hl,0:add hl,sp
+          ld a,h:and &FE:cp &BE:call nz,&BE00
+          pop hl:pop af
+      ENDM
+
+      MACRO CHECK_EI
+      IF devChecks
+          call _check_ei
+      END
+      ENDM
+
+      MACRO CHECK_BK_BASE
+      IF devChecks
+          call check_bk_base
+      END
+      ENDM
+
+      IF doNrt
+tests
+          ld (tests),a
+          call dev_init
+          call test_xread_mem
+          call test_xread_file
+          call test_load
+;
+          call test_rsx
+          call test_dump
+      IF 0
+;--- No return !!!
+; Cannot reproduce anyway
+          call test_cat
+      END
+          ret
+
+
+test_dump
+;No check yet. Returning without crashing is a success.
+          call common_init
+          call monui_init
+          call set_full
+          ld hl,&C000
+          call dump_one_line
+          ret
+
+test_rsx
+; bug #159 unsafe return from 
+
+ ; Necessary to install stuff for STATUS_ON 
+          CALL_BRIC(status_init_monogams)
+
+;Sanity: far_call installed
+          ld a,(&9D01):cp "0":call nz,nrtfail
+
+          ld b,3        ; type
+          ld c,1        ; # nb params
+          ld hl,nrtrsx_name
+;nb: ix and de not used in this case
+          call rsx
+
+          ld a,(&9D01):cp "0":call nz,nrtfail
+          ret
+
+nrtrsx_name
+      BYTE 3,"cat"      ; It should use 9d00 area
+;      BYTE 3,"BRK"
+;      BYTE 4,"path"
+
+test_load
+; On version bh, load"toto" entered as a command (no rsx) crashed.
+; This test didn't manage to reproduce though,
+; and error was in evacmd.
+          call set_full ; needed since we display command here
+
+          ld hl,.loadcmd
+          call nrt_enter
+; Just check it returns!
+          ret
+.loadcmd BYTE "load",34,"oups",34,0
+
+nrt_enter
+          call nrt_copy_nt
+          call enter    ; 'call' for stack trace
+          ret
+
+nrt_copy_nt
+;copy str including final &00
+          ld a,(hl):inc hl
+          ld (de),a:inc de
+          or a
+          jr nz,nrt_copy_nt
+          ret
+
+test_cat
+; reproduce status handling for cat (but not cat itself)
+          call clsScr
+
+          ld a,r1:DCALL(disp_init) ; Needed here when coming from gr
+          call monui_refresh
+
+          call select_lower_rom_firm ;why here?
+
+          xor a:ld (bufCom),a
+          call set_cursX
+
+          call bring_status
+
+      IF 0
+          STATUS_OFF()
+;Mimic what is done by ED. without cat itself
+          STATUS_ON()
+      ELSE
+;cat routine without jump to refresh
+          STATUS_OFF()
+          call txt_cur_off
+          ld a,2:call &BC0E ;#bug 82 mc_set_mode isn't enough 
+
+          CALL_ED(edCat)
+      END
+
+;show we are working
+          ld a,r:and &3F:or &40
+          ld bc,&7F10:out (c),c:out (c),a
+          jr test_cat
+
+test_xread_mem
+;-------------
+;--Check start from 0
+          ld hl,xread_struct0
+          ld de,0
+          call xinit_ram
+          call _check_xread:cp &80:call nz,nrtfail
+          call _check_xread:cp &80:call nz,nrtfail
+;--Check reaching end of ram 
+          ld hl,xread_struct0
+          ld de,&FF7E
+          call xinit_ram
+          call _check_xread:cp &80:call nz,nrtfail
+;2 bytes left
+          call _check_xread:cp &02:call nz,nrtfail
+;no more bytes
+          call _check_xread:cp &00:call nz,nrtfail
+;--Check reaching end of ram (exactly 0)
+          ld hl,xread_struct0
+          ld de,&FF80
+          call xinit_ram
+          call _check_xread:cp &80:call nz,nrtfail
+;no more bytes
+          call _check_xread:cp &00:call nz,nrtfail
+          ret
+
+test_xread_file
+;--------------
+;--Check start from 0
+          ld hl,xread_struct0
+          ld de,.filename
+          call xinit_file:call nc,nrtfail
+          call _check_xread:cp &80:call nz,nrtfail
+          call _check_xread:cp &80:call nz,nrtfail
+          call _check_xread:cp &26:call nz,nrtfail
+;no more bytes
+          call _check_xread:cp &00:call nz,nrtfail
+          ret
+
+.filename
+; evacom returns sized string
+      BYTE _fn-$-1
+      BYTE ":orgnrt/testdata/nrtimp5.o" ; &126 bytes
+_fn
+
+_check_xread
+          ld hl,xread_struct0
+          ld de,tmp_buf
+          ld a,&80
+          call call_structure
+          ret
+
+      ELSE              ; donrt
+
+;         Start here! (only in dev mode)
+
+dev_start
+          call dev_init
+
+; for test bug diff: consume chunks
+          ld b,&16
+.lp       CALL_BRIC(new_chunk_no_init):call nc,nrtfail:djnz .lp
+
+          ld de,.tstcmd
+          ld ix,history_struct
+          CALL_BRIC(history_append)
+          jp monogams
+.tstcmd BYTE "x",34,"tt",34,",",34,"tt",0
+      END
+
+monrom = &1B
+dev_init
+          ld c,monrom
+          call &B90F
+
+bk_dev = &CF            ; <>#ff pour eviter conflit
+          ld a,bk_dev
+          ld b,&7F:out (c),a
+          push af
+
+          ld a,monrom:ld (vo_romMon),a
+;must be called before nrt_setup 
+          call install_farcall
+
+          pop af
+          call nrt_setup
+
+      IF 0
+; If need to override
+          ld a,romExt_dev:ld (vo_romExt),a
+          ld a,romOrg_dev:ld (vo_romEd),a
+          ld a,romBric_dev:ld (vo_romBric),a
+      END
+
+          ld hl,valRMR
+          set 2,(hl)    ; RAM at page 0000, since dev code is here
+          call cold_init
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+fail  = &BE00
+nrtfail = &BE00         ; more explicit
+
+; -------------------------------------------------------------------
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+          ld c,romOrg_dev:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+
+; -- Cold start
+          CALL_ORG(org_init)
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+;--------------------------------------
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+mon_command
+; Field editor and command dispatch.
+; In: A= key code.
+; Returns nothing.
+
+          CHECK_EI()
+
+          ld hl,bufCom
+          ld ix,history_struct
+          call mon_field_editor
+          ret c         ; Handled by field editor, must simply refresh
+
+key_esc = &FC           ; Use wait_key_exit/is_exit if you can
+          cp key_esc:jp z,ed_from_mon ; esc
+          cp &0D:jp z,enter ; enter
+          cp &8B:jp z,enter ; return
+
+          cp &02:jp z,basic ; ctrl + b (retour Basic)
+          cp &03:jp z,cat ; ctrl + c (Display catalog)
+          cp &04:jp z,era_bak ; ctrl + d (delete "*.bak")
+
+          cp &1B:jr z,ass ; ctrl + 1
+          cp &7E:jr z,assjp ; ctrl + 2
+
+keyc_e = "E" - &40
+keyc_r = "R" - &40
+          cp &08:jp z,help_mon ; ctrl + h
+          cp keyc_r:jr z,ctrl_r ; ctrl + r
+          cp keyc_e:jr z,ctrl_e ; ctrl + e
+; Handle CTRL-f1 to CTRL-f9 to jump directly to editor
+kcf1  = 151
+kcf9  = 159
+          cp kcf1:ret c
+          cp kcf9+1:ret nc
+
+          ld hl,gere_key_from_mon
+          jp goto_ed_routine
+
+ass
+          STATUS_OFF()
+          CALL_ED(edAss)
+assjp
+          STATUS_OFF()
+          CALL_ED(edAssJp)
+;NB: in both cases ed resets SP and takes control
+
+ctrl_e
+; Must preserve DE
+          ld a,(valRMR)
+          xor 8
+          ld (valRMR),a
+          jp status_disp
+
+
+ctrl_r
+      IF inRom          ; in RAM : we use page 0000 for dev
+          ld a,(valRMR)
+          xor 4
+          ld (valRMR),a
+          call select_lower_rom_firm
+      END
+          jp status_disp
+
+miniheart
+      BYTE " /!) ('\",0
+      BYTE " \\ ' //",0
+      BYTE "  \  //",0
+      BYTE "   \/",0
+      BYTE 0
+
+      IF inRom
+pad   SKIP &E000-6-$
+          ASSERT($ == &E000-6)
+palette
+      BYTE 3,24,0
+      BYTE &5C,&4A,&54
+palettesize = 6
+          ASSERT($ == &E000)
+jp
+          jp trace_from_brk ;BRK
+          jp monogams   ; |m, <ESC> from ed, or coming from trace.
+          jp restore_and_goto_ed ;RESTORE
+          jp trace_from_tr_rsx ;|tr,nn
+          jp cold_init  ; Orgams 1st invocation (any RSX)
+          jp command_rsx_from_ed
+          jp copyHereMirror_ei ; seahex
+          jp restore_and_goto_ed ;RESTORE backup address
+          jp check_i    ; rsx
+          jp check_bk_base
+      END
+
+
+monogams
+;coming from basic, editor, trace, or start in dev mode.
+
+      IF brk
+          call iniBrk
+      END
+          call common_init
+          call monui_init
+refresh_monogams
+;Needed at least coming back from ed's cat!
+          CALL_BRIC(status_init_monogams)
+refresh
+          STATUS_OFF()
+          ld a,2:call scr_set_mode ; needed for bug #1ab
+          ld a,r1:DCALL(disp_init) ; Needed here when coming from gr
+          call select_lower_rom_firm ;why here?
+          call set_full
+
+          ld hl,has_been_entered
+          ld a,(hl)
+          or a:jr nz,.restore_display
+;First time: display welcome message and heart
+          inc (hl)      ; flag entered
+          call monui_refresh
+          call welcome
+;Hack: since help + coeur weren't store, display miniheart
+     ; (otherwise seems buggy)
+          ld hl,miniheart
+          ld b,5
+.mh
+          call mon_histriom_append_nt_asis
+.skip     ld a,(hl):inc hl:or a:jr nz,.skip
+          djnz .mh
+          jr .okrefresh
+
+.restore_display
+          xor a:call set_cursX
+          ld ix,histdisp_struct
+;!!cannot use tmp_buf as it is used by monui.dump_one_line_
+          ld de,txtbuffer
+          call histriom_newest
+        ; jr nc,.okrefresh   No need, as miniheart is here
+;Save, as trui uses cursY
+          ld a,(mon_cursY)
+          push af
+          ld hl,cursY
+          ld (hl),a
+.lp
+          dec (hl):jp m,.done
+          push hl
+          push de
+          call display_hist_line
+          pop de
+          call histriom_prev
+          pop hl
+          jr c,.lp
+.done
+          pop af
+          ld (hl),a
+
+.okrefresh
+          call bring_status
+          xor a:ld (bufCom),a
+          call set_cursX
+; Here a=0 (no key)
+mainloop
+;in: a= key
+;Save cursor (needed at first invocation and when looping commands)
+          push af
+          ld a,(cursY):ld (mon_cursY),a
+          pop af
+          call mon_command
+          ld hl,bufCom
+          call refresh_line
+          call check_i
+          call km_wait_key
+          jr mainloop
+
+
+_check_ei
+          push af
+          call is_ei
+          jp pe,ei_ok
+          ei
+          push bc
+          ld bc,&7F10:out (c),c
+          ld c,&40:out (c),c
+          pop bc
+ei_ok
+          pop af
+          ret
+
+is_ei
+; Out: PE = ei
+     ; PO = di
+          ld a,i
+          ret pe
+          ld a,i
+          ret
+
+
+
+
+enter
+          CHECK_EI()
+
+;Refresh line without cursor.
+          ld hl,bufCom
+          push hl
+          call affBufCom
+;Next line
+          call cmdCrNl
+;Save cursor (needed before we jump to trace)
+          ld a,(cursY):ld (mon_cursY),a
+
+;Store in display history    
+          pop hl
+tag_cmd = ">"
+tag_asis = "!"
+tag_mdump_full = "M"
+tag_mdump_gris = "m"
+tag_ellipsis = "."
+          ld a,tag_cmd
+          call mon_histriom_append_nt
+
+;No-op if empty (otherwise parser returns 'syntax error')
+          ld a,(hl):or a
+          ret z
+
+;Store in command history
+          ex de,hl
+          push de
+          ld ix,history_struct
+          CALL_BRIC(history_append)
+
+          CHECK_EI()
+
+          pop hl
+
+          CALL_ASS(eval_command_line)
+          call set_full ; cheap to reset than to save
+
+          CHECK_EI()
+
+          push af
+          xor a:ld (bufCom),a ; Empty buffer for next time
+          pop af
+          jr c,cmd_ok
+print_inline
+          call mon_histriom_append_nt_asis
+          call scrollUp_if_needed
+          jp print_inline' ; Eval_command_line set hl=message
+
+
+cmd_ok
+; No error
+          ld b,(hl)     ;last type
+          ex de,hl
+          ld l,(ix+0)
+          ld h,(ix+1)   ;last param
+
+          or a:jp z,print_exp ; --0--
+          dec a:jp z,dump_command ; mnn
+          dec a:jr z,disa ; dnn
+          dec a:jp z,basic
+          dec a:jp z,ed_from_mon
+          dec a         ; was 'no_command', now try RSX
+          dec a:jp z,e_command
+          dec a:jp z,bank_command
+          dec a:jp z,cls_command ; --8--
+          dec a:jp z,diff
+          dec a:jp z,tabs
+          dec a:jp z,dump_hex_in_source
+          dec a:jp z,clear
+          dec a:jp z,clearpage
+          dec a:jp z,reset_command
+          dec a:jr z,dollar ;$nn
+          dec a:jr z,t_command ;tnn  --16-- 
+          dec a:jp z,graph_mem ;gr
+          dec a:jp z,command_rsx ; --18--  LOAD not implemented
+          dec a:jp z,command_rsx ; explicit |rsx
+          dec a:jp z,type
+          dec a         ; sb: not plugged
+          dec a:call z,&BE00 ; --22-- BRK for debug
+          jp command_rsx ; Unknown without |, try as rsk (like protext)
+
+
+;        -- TRACE --
+
+; [IN]  C  = nb param
+;       HL = adress to trace (if C=1)
+
+dollar                  ; ---- $nn
+;-----
+          ld a,c:or a:jr z,_gotopc
+
+          ld (pc_),hl   ; change $ but not >
+          jr _trace
+
+trace_from_tr_rsx
+; Done here since:
+  ; - JP entry is here
+  ; - Factorize with mon commands
+
+;!!work is connected (done by |TR)
+          call trace_setup_history
+;Firm to status
+; (install so STATUS_TO_FIRM works). TODO:
+          CALL_BRIC(status_init_monogams)
+;Hack, so that "status2tr" in _nav works better
+          CALL_BRIC(firm2shift)
+
+_gotopc                 ; Equivalent d + clr
+          ld hl,(pc_)
+          jr _nav
+
+t_command               ; ---- tnn
+;--------
+          ld a,c:or a:jp z,_trace
+
+          ld (pc_),hl   ; change $ and >
+;enchaine:
+
+disa                    ; ---- dnn
+;---
+       ; ndmd: *DON'T* reset setting
+       ;   LD   A,1
+       ;   LD   (flag_visu_source),A
+
+          ld a,c:or a:jr z,_trace
+_nav
+          ld (pc_nav),hl
+_trace
+
+; Do common_init here (mtrInit, install far_call, vga, ay).
+; Only needed for brk and |tr. Doesn't hurt though.
+; The important point is to do that before swap.
+; We must move that anyway in main ROM.
+          CALL_BRIC(status2tr)
+          call common_init
+          jp trace
+
+
+trace_from_brk
+; Done here since JP entry is here.
+
+;!! work bank is connected (done by BRK routine)
+;!! sp = &8000 (done by BRK routine since it manupilates SP anyway)
+
+;NB: We *need* SP in bank to prevent
+   ; trashing user RAM before it's mirrored.
+
+; TODO : install far_call (for CALL #30 before any Orgams RSC)
+
+          call clear_asic
+          call crtc_unknown2trace
+          call common_init
+          ld hl,(pc_):ld (pc_nav),hl
+          call trace_setup_history
+          call reset_tm ; avoid garbage
+          jp trace_no_swap
+
+; ------------------------------
+
+;        -- DUMP --
+
+; [IN]  HL = adress to dump
+
+
+dump_command
+          ld a,c        ; nb param
+          or a
+          jr nz,dump_
+          ld hl,(adr_dump)
+dump_
+          ld (adr_dump),hl
+
+dump_lp
+          call dump_one_line
+          call cmdCrNl
+
+          ld de,bufCtxr
+          call store_dump_full
+
+          call wait_key_exit
+          jp nc,endCom
+
+;Runs of 00 detection
+;1/ Only activate if current line is already 0.
+          ex de,hl
+          ld a,(hl)
+          ld b,lng_dump_mon - 1
+d0_is0    inc hl:or (hl):djnz d0_is0
+          ex de,hl
+          or a
+          jr nz,d0_no
+
+          push hl       ;original
+d0_chunk_lp
+          CHECK_BK_BASE()
+          ld de,bufdump
+          ld b,&10
+          call copyHereMirror_ei
+
+          dec d
+          ex de,hl
+          xor a
+d0_check
+      8 ** [or (hl):inc l]
+          jr nz,d0_check
+          or a
+          jr nz,d0_inchunk
+          ex de,hl
+          ld a,h
+          or a          ; prevent inf loop with empty ram
+          jr nz,d0_chunk_lp
+          ld c,a        ;0
+          jr d0_full
+
+d0_skip
+;TODO: print how much skipped (in BC)
+          push bc
+          ex de,hl
+          ld hl,tmp_buf
+          push hl
+          ld (hl),tag_ellipsis:inc l
+;For the future: retain address for detection of 00 to non-00 bytes
+          ld (hl),e:inc l
+          ld (hl),d
+          pop hl
+          ld b,3
+          call mon_histriom_append
+          ex de,hl
+          pop bc
+          add hl,bc
+          call disp_ellipsis
+          jr dump_lp
+
+
+d0_inchunk
+;fine localization of first non-zero
+d0_inlp
+          ld a,(hl):inc l:or a:jr z,d0_inlp
+          dec l
+          ld a,l:and &F8:ld c,a
+          scf
+          ld a,d
+d0_full
+          pop hl
+          sbc h
+          ld b,a
+
+          jr nz,d0_skip
+          ld a,c
+          cp 24
+          jr nc,d0_skip
+
+d0_no
+lng_dump_mon = 8
+          ld bc,lng_dump_mon
+          add hl,bc
+          jp dump_lp
+
+
+      IF 0
+;---- to be continued
+; pattern detection
+; first try size=1, then 2...
+          ld de,bufdump+&81
+pd_size_lp
+          push de
+          push hl       ;origine
+          push hl       ;current chunck source
+          ld hl,bufdump+&80
+pd_comp_lp
+          ld a,(de):cp (hl):jr nz,pd_diff
+          inc l:inc e:jr nz,pd_comp_lp
+
+;next chunk. Shift by &80:
+  ;- keep source pnt in range
+  ;- keep length computation easy
+          ld a,l
+          pop hl
+          ld bc,&80:add hl,bc
+          jr c,pd_sanity ; prevent infinite loop in empty ram
+          push hl
+
+pd_maxsize = 8
+          ld bc,-pd_maxsize:add hl,bc ;reprend un peu de context
+          ld de,bufdump+&80-pd_maxsize
+
+      END
+
+      MACRO DIFF_RET_AT_END
+;compute how much we must compare. if <= 0, RET
+          ld a,(dif_end) ; if &ff: full half (sliding) area
+          sub e
+; e can be > end (since +8 added even when we clip line at less)
+          ret c
+          ret z
+      ENDM
+
+diff_fail
+          push af
+          call diff_release
+          pop af
+          jp print_error
+
+diff
+;Affiche differences entre deux zones
+          2 ** dec c
+          jp nz,wrong_param
+
+          ex de,hl
+          inc hl:ld c,(hl) ; type 1st param
+          push bc
+          ld a,b
+          push af
+
+;Reset structs, so we can safely release struct1 if struct0 fails
+          ld hl,xread_struct0
+          ld b,xread_struct_size*2
+          xor a
+          call fill
+
+          pop af
+          ld hl,xread_struct1
+          call diff_init
+          pop bc
+          jr nc,diff_fail
+
+          push bc
+          push de
+
+          ld a,c
+          ld e,(ix+2)
+          ld d,(ix+3)
+          ld hl,xread_struct0
+          call diff_init
+          pop hl
+          pop bc
+          jr nc,diff_fail
+
+          ld (dif_start0),de
+
+;calcul ecart (de sorte qu'on ne MAJ que le compteur 1)
+          or a
+          sbc hl,de
+          jr nz,.okaddr
+
+;user convenience: if same address, do nothing
+;!! only if both param=RAM, though.
+          ld a,type_string
+          cp c:jr z,.okaddr
+          cp b
+          jp nz,endCom
+
+.okaddr
+          ld (dif_ecart),hl
+;trigger display even if start1=0  (bug #A5)
+          ld a,d:xor &80
+          ld (dif_last_line+1),a
+
+          ld hl,xread_struct0
+          ld de,tmp_diff_buf
+          call diff_amorce
+          push af
+          ld hl,xread_struct1
+;Must set de in case less than &80 were read
+          ld de,tmp_diff_buf+dif_buf_size
+          call diff_amorce
+          pop bc
+          cp b:jr c,$+3:ld a,b ; min of sizes
+;Compute         
+   ;  B = size in 1st buffer  
+   ;  A = size in 2nd buffer
+          ld b,dif_half_size
+          sub b
+          jr nc,.ok
+;less than half
+          add b
+          ld b,a
+          xor a
+.ok
+          ld (dif_last_size),a
+          ld a,&FF:ld (dif_end),a
+          ld de,tmp_diff_buf
+          call _diff_entry
+          call diff_release
+          jp endCom
+
+diff_lp
+; E= idx 7 bits in buffer
+; Invariant: dif_start0 = addr at start of buffer
+; "rolling buffer". Otherwise, if mismatch in end of buffer,
+; we wouldn't have enough bytes fed for display
+          ld d,tmp_diff_buf/&0100 ; memmap.i
+          bit 6,e
+          jr z,_ok_roll
+
+;roll 1st buffer
+          ld hl,xread_struct0
+          call diff_roll_buf
+; for "supernumerous bytes" message
+; TODO!
+;          ld (dif_last_size0),a
+
+;roll 2nd buffer
+          push af
+          set 7,e
+          ld hl,xread_struct1
+          call diff_roll_buf
+;          ld (dif_last_size1),a
+
+;Invariant
+          ld hl,(dif_start0)
+          ld bc,dif_half_size
+          add hl,bc
+          ld (dif_start0),hl
+          res 7,e       ; First buf
+          res 6,e       ; First half  
+          pop bc
+          cp b:jr c,$+3:ld a,b ; min of sizes
+          ld hl,dif_last_size ; must roll that as well
+          ld b,(hl)     ; size in (previously) second half, now first
+          ld (hl),a
+_diff_entry
+;here: b=size in first half
+;if less byte than buffer, poke end
+          ld a,dif_half_size-1:cp b:jr c,.ok
+          ld a,b
+          ld (dif_end),a
+.ok
+_ok_roll
+          DIFF_RET_AT_END()
+          cp dif_half_size:jr c,$+4:ld a,dif_half_size
+;compare
+          ld b,a
+          push bc
+          ld h,d
+          ld l,e
+          set 7,l       ; hl = 2nd buf
+.checklp
+          ld a,(de):cp (hl):jr nz,diff_mismatch
+          inc l:inc e
+          djnz .checklp
+
+          pop bc
+          jr diff_lp
+
+diff_mismatch
+          ld a,e        ; idx
+
+;recupere adr concernee
+          ld d,0
+          ld hl,(dif_start0)
+          add hl,de
+
+;distance par rapport a precedente ligne affichee
+          push hl
+          ld de,(dif_last_line)
+          or a:sbc hl,de
+
+;si trop grande distance, repart de nouvelle adresse,
+          ld de,2*lng_dump_mon
+          or a:sbc hl,de
+          pop hl
+          jr nc,.diff_disp
+
+;sinon affiche contigument
+          ld hl,(dif_last_line)
+          ld de,lng_dump_mon:add hl,de
+          ld a,(dif_last_idx)
+          add e
+          res 6,a
+
+.diff_disp
+          pop bc
+          ld (dif_last_idx),a
+          add lng_dump_mon ; for next iter
+          push af
+          ld (dif_last_line),hl
+          ld a,8:cp b:jr c,$+3:ld a,b
+          ld b,a
+          push bc
+          push hl
+;use invariant hl (address) = dif_start0 + idx, to get idx in buffer
+          ld a,(dif_start0)
+          neg
+          add l
+          ld e,a
+          ld d,tmp_diff_buf/&0100
+          push de
+          call set_full ; only does it for address
+          call store_dump_full
+          call diff_dump_one_line
+          call cmdCrNl
+          pop de
+          pop bc        ; was hl = address
+          ld hl,(dif_ecart)
+          add hl,bc
+          set 7,e
+          pop bc
+          call set_gris
+          ld a,tag_mdump_gris
+          call store_dump
+          call diff_dump_one_line
+          call cmdCrNl
+
+          pop af
+          ld e,a
+;Don't wait for key after last line
+          DIFF_RET_AT_END()
+          call wait_key_exit
+          jp c,diff_lp
+          ret
+
+dif_buf_size = &80
+dif_half_size = dif_buf_size/2
+      IF dif_buf_size - &80
+   !! review code
+      END
+
+
+diff_roll_buf
+;Move second half of buf to first and feed second half
+;in de= dest pnt in buf0 or 1 (bit 6 set)
+  ; hl= read structure 
+;out:a= size read 
+  ; bc, hl, trashed
+          push de
+          push hl
+          ld a,e:and &C0
+          ld l,a
+          ld h,d
+          res 6,a       ; -&40: first half
+          ld e,a
+          ld bc,dif_half_size
+          ld a,c        ; for next step
+          ldir
+          pop hl
+          call call_structure
+          pop de
+          ret
+
+diff_init
+;In: a= type
+  ; de= param
+  ; hl= pnt structure 
+;Out; de= address / offset for file
+          cp type_string:jr z,diff_init_file
+xinit_ram
+; In: hl = pnt structure   
+    ; de = pnt ram to read
+;Out: Carry if ok (always ok for ram)
+          ld (hl),xread_ram AND &FF:inc hl
+          ld (hl),xread_ram / &0100:inc hl
+          scf
+          sbc a
+          ld (hl),a:inc hl
+          ld (hl),e:inc hl
+          ld (hl),d
+          ret
+
+diff_init_file
+          call pre_io
+          push ix       ; save param list
+          call xinit_file
+          pop ix
+          call post_io
+          ld de,0       ; offset file
+          ret
+
+
+diff_amorce
+;In de= dest pnt in buf0 or 1 (bit 6 set)
+  ; hl= read structure 
+;Out de=+dif_buf_size
+          ld a,dif_buf_size
+;enchaine
+call_structure
+; Call hook in (hl) with hl+2 and a
+; In: hl = pnt structure   
+    ;  a = size 
+          ld c,(hl):inc hl
+          ld b,(hl):inc hl ; pass hl+2 to structure
+jp_bc
+          push bc
+          ret
+
+
+
+xread_ram
+; In: hl = pnt structure
+    ; de = dest
+    ;  a = size to read (multiple of &10)
+;Out:  a = size really read (byte accurate)
+    ; af, bc, de, hl trashed
+
+; Need a flag, as we cannot discriminate hl = 0 from:
+  ; - start 0
+  ; - has wrapped at 0
+          ld b,a
+          ld a,(hl)
+          or a
+          ret z
+
+          push bc
+;xread_pnt
+          inc hl
+          ld a,(hl):inc hl
+          push hl
+          ld h,(hl):ld l,a
+          ld a,b:4 ** rrca:ld b,a
+          call copyHereMirror_ei
+          ex de,hl
+          pop hl
+;update pnt
+          ld (hl),d:dec hl
+          ld (hl),e:dec hl
+;Compute size / check if we have wrapped.
+;really read = clip(A - new address)
+; E.g A = &40, DE:
+;&0000 -> size &40          
+;&0010 -> size &30
+;&003f -> size &01
+;But!
+;&0040 -> size &40 as old address was 0 
+          pop af        ; was in B=size
+          inc d:dec d
+          ret nz        ; return with given size
+          cp e
+          ret c         ; idem
+          ret z         ; special case starting from 0
+;Flag no more data after that
+          ld (hl),0
+          sub e
+          ret
+
+xinit_file
+;We must load file, since amsdos doesn't support opening two files
+; In: hl = pnt structure   
+    ; de = pnt filename
+;Out: Carry if ok    
+          push hl
+          ex de,hl
+      IF 0
+;display filename: skip for now.
+ ;  - We need a affTextSize routine (evacmd encode string w/o 0)
+ ;  - Only useful if we also display size. La flemme.
+          push hl
+          inc hl        ; skip size
+          call affNewLine
+          call locate_inc
+          pop hl
+      END
+          CALL_BRIC(load_and_cache) ; return de= id of asset header
+          pop hl
+          call connect_bk_base
+          ret nc
+          ld a,c:or b
+          ld a,err_emptyfile
+          ret z
+
+          ld (hl),xread_file AND &FF:inc hl
+          ld (hl),xread_file / &0100:inc hl
+          push de
+          push hl
+          CALL_BRIC(get_asset_chunk) ; return bde= id of 1st data chunk
+          call connect_bk_base
+      IF 1-inRom
+          call nc,fail
+      END
+          pop hl
+          ld (hl),e:inc hl ; bank
+          ld (hl),d:inc hl ; MSB first
+;bloody api!
+          ld (hl),ch_data_start:inc hl
+          pop de        ; id of asset head
+          ld (hl),e:inc hl
+          ld (hl),d:inc hl
+          ld (hl),xrelease_file AND &FF:inc hl
+          ld (hl),xrelease_file / &0100
+          ret
+
+xread_file
+; In: hl = pnt structure
+    ; de = dest
+    ;  a = size to read (multiple of &10)
+          ld c,a
+          ld a,(hl)
+          or a
+          ret z
+
+          ld b,a        ; bk
+          inc hl:ld a,(hl) ; MSB first!
+          inc hl:push hl
+          ld l,(hl):ld h,a
+          call read_raw
+          call connect_bk_base
+          ex de,hl
+          pop hl
+          ld (hl),e:dec hl
+          ld (hl),d:dec hl
+          ld (hl),b
+          ret
+
+xrelease_file
+; In: hl = LSB pointer
+          ld a,(hl):dec hl ; MSB
+          ld l,(hl)     ; BK
+          ld h,a
+          CALL_BRIC(free_list)
+          ret
+
+diff_release
+          ld hl,xread_struct0 + xread_release + 1
+          call .one
+          ld hl,xread_struct1 + xread_release + 1
+.one
+          ld b,(hl):dec hl
+          ld c,(hl):dec hl
+          ld a,b:or c
+          ret z
+          jp jp_bc
+
+read_raw
+;-------
+; Adapted from heap.o, except
+    ; - chunk start at 8
+    ; - detect EOF, and return C = size really read
+
+; In bhl= source
+    ; de= dest !! out of bank
+    ;  c= size (0=256)
+    ; Bank agnostic    
+
+; Out: bhl= past source (can be new chunk or 0 if end reached) 
+     ;  de= past dest
+     ;   a= size really read
+     ; - BH is unchanged unless all chunk consumed.
+     ; - BHL can serve as input to read following data.
+     ; Last chunk seen connected.
+       ; Not a hard constraint for now -> might be revisited upon needs
+
+          ld a,l:ld l,b
+          CALL_BRIC(connect_chunk_from_id)
+          ld l,a
+;enchaine
+read_raw_connected
+          ld ixl,0      ; bytes read
+.cont
+          push hl
+          ld l,chead_last
+          ld a,(hl):ld ixh,a
+          pop hl
+.loop
+          inc ixl
+          ld a,(hl):ld (de),a:inc de
+          ld a,l:inc l
+          dec c:jr z,.alldone
+          cp ixh
+          jr nz,.loop
+
+          ld a,ixl
+          call connect_next_asset_chunk
+          jr nz,.cont
+          ret
+
+.alldone
+; Must connect next chunk if needed, for next time
+          cp ixh
+          ld a,ixl
+          ret nz
+;enchaine
+connect_next_asset_chunk
+;return b=0 when no new chunk to flag "no more data"
+          CALL_BRIC(connect_next_chunk)
+          ld b,l
+          ld l,ch_data_start
+          ret nz
+          ld b,0
+          ret
+
+
+connect_bk_base
+; !!! oroboros !!! this old CALL_ORG needs bk_base to be connected
+          call far_call_ext:WORD org_connect_bk_base
+          ret
+
+copyHereMirror_ei
+; Must do by packets of &10 to reenable int.
+.lp
+          push bc
+          ld bc,&10
+          call copyHereMirror:ei
+          pop bc
+          djnz .lp
+          ret
+
+
+copyThereMirror_ei
+; Must do by packets of &10 to reenable int.
+          push bc
+          push af       ; connection bk
+          ld c,&10
+          call copyThereMirror:ei
+          pop af
+          pop bc
+          djnz copyThereMirror_ei
+          ret
+
+
+
+dump_hex_in_source
+;-----------------
+
+; inject BYTE &11,&12,&13,...
+
+          2 ** dec c
+          jp nz,wrong_param
+
+          CHECK_BK_BASE()
+          ld de,"b" + " "*256 ; pour "BYTE"
+          ld (tmp_buf),de
+
+          ld e,(ix+2)   ;1st param
+          ld d,(ix+3)
+          ex de,hl      ; get hl=start, de=length
+
+          ld bc,8
+hh_lp
+          ld a,d:or a:jr nz,hf_ok
+          ld a,e:cp c:jr nc,hf_ok
+          ld c,a
+hf_ok
+          push bc
+          push de
+
+          ld de,bufCtxr
+          push de
+          push bc
+          call copyHereMirror
+          pop bc
+          ex (sp),hl    ;hl:bufCtxt
+          ld de,tmp_buf+2
+
+; gen text e.g. "&aa,&00,&13"
+hf_line
+          ld a,"&":ld (de),a:inc e
+          ld a,(hl):inc hl
+          call put_hexa_a
+          ld a,",":ld (de),a:inc e
+          dec c:jr nz,hf_line
+          dec e
+          xor a:ld (de),a
+
+; insert in source
+          ld hl,tmp_buf
+          CALL_ED(edInsertLine)
+
+          pop hl
+          pop de
+          pop bc
+          ex de,hl:or a:sbc hl,bc:ex de,hl
+          jr nz,hh_lp
+          jp endCom
+
+
+clear
+;----
+; fill 128 first kb
+          call clear_common
+          ld a,&C0:ld b,&C0
+          call clear64
+          ld a,&C2
+          call clear64
+          jp endCom
+
+clear_common
+          call get_byte_param
+          ld hl,buf_work
+fill100
+          ld b,0
+fill      ld (hl),a:inc hl:djnz fill
+          ret
+
+
+clearpage
+;----
+; fill 64 kb with current connection   
+          call clear_common
+          ld a,(valMMR)
+          ld b,&00
+          call clear64
+endCom
+          xor a:ld (bufCom),a ; needed since buf_work used
+          ret
+
+clear64
+;in: a=bl connection
+   ; b=nb lines to reset (hack since page &c000 isn't mirrored yet)
+          ld de,0
+c64lp
+          push af
+          push bc
+          ld hl,buf_work
+          ld b,&10
+          call copyThereMirror_ei
+          pop bc
+          pop af
+          djnz c64lp
+          ret
+
+
+reset_command
+;------------
+;!?!?
+;Not reachable. Since 'reset' is parsed as r eset
+;Don't remember what was planed anyway.
+      BRK
+ ;todo: reinstall firm
+
+
+
+
+type
+;in: like /rsx/
+; Parameters are inversed. 
+; Only support 0-param for now. 
+          ld a,c:dec a:jp nz,wrong_param ; user mistake
+          ld a,b:cp 3:call nz,&BE00 ; sanity: must be string (mdr error)
+
+          push hl
+          call cmdCrNl  ;!! trash de 
+          call pre_io
+          pop hl
+
+          ld b,(hl):inc hl ; b=size, hl=name
+          ld de,disc_buf
+          call disc_in_open
+          jr nc,type_end
+
+          ld c,0        ;cnt lines
+type_lp
+          push bc
+          ld de,tmp_buf
+          push de
+          CALL_BRIC(io_read_line)
+          call set_full
+          pop hl
+          pop bc
+          jr nc,type_done
+
+          push hl
+          call affNewLine
+          pop hl
+          call mon_histriom_append_nt_asis
+          ld a,c
+          inc a
+          cp 24         ; Leave 1 line 
+          jr c,type_ok
+;pause after each page
+          call wait_key_exit
+          jr nc,type_exit
+          xor a
+type_ok
+          ld c,a
+          push bc       ;todo: remove that (use de if necessary)
+          call cmdCrNl
+          CALL_BRIC(locate_firmware) ; keep in sync 
+          pop bc
+          jr type_lp
+
+type_exit
+          call cmdCrNl
+          CALL_BRIC(locate_firmware) ; keep in sync 
+          jr type_end
+
+type_done
+          cp &1A
+          jr z,type_end
+          ld a,err_dos  ; not used yet
+type_end
+          call disc_in_close
+          call postfirmware_refresh
+;enchaine
+bring_status
+          CALL_BRIC(clearstatus_monogams)
+          STATUS_ON()
+          call status_disp
+          jp set_full
+
+pre_io
+          CALL_BRIC(locate_firmware)
+status_off
+      IF need_room
+ ;use this routine
+      END
+          push hl
+          STATUS_OFF()
+          pop hl
+          ret
+
+post_io
+          push af
+          call set_full ; set IY.
+          CALL_BRIC(locate_orgams)
+;need to refresh bandeau as BUF_IO has been used
+          call bring_status
+          pop af
+          ret
+
+tabs
+;---
+; Show list of non-empty   
+          STATUS_OFF()
+          CALL_ORG(org_get_current_selection)
+          push af
+          xor a
+.lp
+          push af
+          CALL_ORG(org_select_if_exist)
+          jr z,.next
+
+          call prep_tmp_buf
+          pop af
+          push af
+          inc a
+          CALL_BRIC(put_deci_a)
+;"*" for modified
+          CALL_ORG(org_is_modified)
+          ld a," ":jr z,$+4:ld a,"*"
+          ld (de),a:inc e
+
+; first-last
+; Do it first since constant width and easier to match with name
+          CALL_ORG(is_selected_modified_since_ass)
+          jr nz,.noass
+
+      IF todo
+;Right justify tab number instead
+      END
+          inc e:inc e
+
+va    = &7C00
+va_first_pc = va+2      ;lowest adr reached
+va_last_pc = va+6       ;highest adr reached
+          ld hl,(va_first_pc)
+          call put_hexa_hl
+          ld a,"-":ld (de),a:inc e
+          ld hl,(va_last_pc)
+          call put_hexa_hl
+.noass
+          ld e,15
+filename = &7E01        ; !! defined by ed (skip size)
+          ld hl,filename
+          call copy_nt
+          call print_and_store_line
+
+.next
+          pop af
+          inc a
+          cp max_sources
+          jr c,.lp
+
+          pop af
+          call select_tab
+          jp bring_status
+
+
+
+graph_mem
+;--------
+
+; Needed for status right-align, and later if we want to annotate.
+          ld a,r1':DCALL(disp_init)
+          call clsScr
+          CALL_BRIC(status2tr)
+
+; We must change temporarily valMMR to use copyHereMirror
+          ld a,(valMMR):push af
+
+gr_refresh
+          ld a,(gr_bk)
+;0->c0
+;1->c2
+;2->ca
+;...
+;8->fa
+          or a:jr z,gr_bkok
+          dec a
+          add a:add a:inc a:add a ;((a-1)*4+1)*2 : xxx010
+gr_bkok
+          ld de,&C000   ; Screen
+          or d:ld (valMMR),a
+          push de
+          call gr_status_disp
+          pop de
+
+ ; -- display
+          ld b,e
+          ld l,e
+          ld h,e
+_gr_refresh
+mg_ylp
+          push bc
+          push de
+          push hl
+
+; Markers: xx000000 -> 16 bits
+         ; xx100000 -> 12 
+         ; xx110000 -> 10
+         ; xx111000 ->  8
+         ; xx111100 ->  6
+         ; xx111110 ->  4
+         ; xx111111 ->  2 
+
+          ld c,h
+          set 6,c       ; sentinelle
+          xor a:ld b,a
+mg_mrk
+          ccf:rl b:rla
+          rl b:rla      ; trame
+          rr c:jr nc,mg_mrk
+          bit 5,a
+          jr z,mg_mrkok
+          ld a,&AA
+mg_mrkok
+          ld (de),a:inc e
+          ld a,b
+          ld (de),a
+
+          push de
+          ld de,buf_work
+          push de
+          ld bc,&0100
+          call copyHereMirror
+          ei            ; for keyboard
+          pop hl
+          pop de
+
+          ld bc,&FF00
+mg_xlp
+          inc e
+      IF 1
+          ld a,(hl):inc l
+      7 ** [or (hl):inc l]
+          ld (de),a
+      END
+
+      IF 0
+; -- A la hacker: 1 bit/octet -> Too slow.
+      8 ** [ld a,(hl):add b:rl c:inc l]
+          ld a,c
+      END
+
+          ld (de),a
+          jr nz,mg_xlp
+
+          pop hl
+          inc h
+          pop de
+          call bc26_de
+          pop bc
+
+gr_keylp
+; Hack for keyboard to be scanned (otherwise INT never meets VBL)
+; TODO: PPI instead or none DI copyhere mirror?
+;     -> Must optimize anyway how we peek in bank!
+
+          ld a,h:and &0F:call z,&BD19
+
+          call km_read_key:jr nc,gr_cont
+;!! must preserve registers here
+          call is_exit:jr nc,gr_exit
+key_lft = &F2
+key_rgt = &F3
+keyc_lft = &FA
+keyc_rgt = &FB
+          cp key_lft:jr z,gr_lft
+          cp key_rgt:jr z,gr_rgt
+          cp keyc_lft:jr z,gr_ctrl_lft
+          cp keyc_rgt:jr z,gr_ctrl_rgt
+          cp keyc_e:jp z,gr_ctrl_e
+          cp keyc_r:jr z,gr_ctrl_r
+gr_cont
+          djnz mg_ylp
+
+          inc b:jr gr_keylp ; Gere key without display part
+
+gr_exit
+          pop af:ld (valMMR),a
+; We don't want to display status yet, since we must clsscr.
+          CALL_BRIC(tr2shift)
+          pop af        ; discard ret since jump to start
+          jp refresh
+
+gr_ctrl_lft xor a:jr _gr_bk_com
+gr_ctrl_rgt ld a,8:jr _gr_bk_com
+
+gr_lft
+          ld a,(gr_bk):or a:jr z,gr_cont
+          dec a:jr _gr_bk_com
+gr_rgt
+          ld a,(gr_bk):cp 8:jr nc,gr_cont ; 8 is already FA
+          inc a
+_gr_bk_com ld (gr_bk),a:jp gr_refresh
+
+gr_ctrl_r
+          call ctrl_r
+          jp gr_refresh
+
+gr_ctrl_e
+          push bc:push de:push hl
+          call ctrl_e
+          call gr_status_disp
+          pop hl:pop de:pop bc
+;optim: only refresh what's needed
+          ld a,h:dec a  ; 0= refresh as well
+          cp &C0-1:jp c,gr_cont
+
+          ld hl,&C000
+          ld b,&40
+          ld de,&C000 + 24*2*r1'
+          jp _gr_refresh
+
+check_bk_base
+          push af
+          ld a,(edsign_pos):cp "O":call nz,&BE00
+          ld a,(edsign_pos+1):cp "r":call nz,&BE00
+          pop af
+          ret
+
+;-----------------------
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+;-----------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+;-----------------------
+select_tab
+          CALL_ORG(org_select)
+          ret
+
+prep_tmp_buf
+;...........
+;Prefill with 0 as put_hexa_hl and co put 0 anyway.
+;Will be replaced by " " at /print_and_store_line/
+;out: de=tmp_buf
+          CHECK_BK_BASE()
+          ld de,tmp_buf
+          xor a
+.raz      ld (de),a:inc e:jr nz,.raz ; /fill/ wouldn't give back hl
+          ret
+
+print_and_store_line
+;...................
+;In: de=end of string to print > xx00 (empty string not handled)
+          call replace_0_by_space
+          ex de,hl
+          push hl
+          call mon_histriom_append_nt_asis
+          call scrollUp_if_needed
+          call locate_left
+          pop bc
+          DCALL(disp_text)
+          jp cmdCrNl
+
+
+command_rsx
+;----------
+          CALL_BRIC(locate_firmware)
+          call _rsx_com
+          push af:push hl
+; Needed for e.g. |Help,n that doesn't do a final NL
+; TODO: move that before display new message/ new command line instead?
+          call cmdCrNl_if_needed
+          call bring_status
+          pop hl:pop af
+          jp nc,print_inline ; Eval_command_line set hl=message
+          ret
+
+command_rsx_from_ed
+;------------------
+;In: HL = Buffer starting with | (so no parse ambiguity)
+;Out: Carry if RSX called
+    ; NC if error. HL = message   (unknown rsx or syntax error)
+ ; (so, same api than eval_command_line itself)
+          CALL_ASS(eval_command_line)
+          ret nc        ; e.g. syntax error or label not found
+          ex de,hl      ; rsx expect de=types for relocate_params
+; enchaine
+_rsx_com
+; We'll let client put back status,
+; since it differs from mon to ed. 
+          STATUS_OFF()
+; Needed since we'll call key_setup which backup current keymap.
+      IF cq
+          push bc
+          CALL_ED(restore_translate)
+          pop bc
+      END
+          call rsx
+      IF cq
+; RSX may have changed keymap. Ensure Orgams's one.
+          push af
+          CALL_ED(key_setup)
+          pop af
+      END
+          jr c,postfirmware_refresh ; OK
+
+; --- RSX NOT FOUND ----
+          ld a,fail_rsxnotfound
+          call get_error ; Will be printed at return (harmonization?)
+          or a
+; no need to reinstall, since nothing was called
+          ret
+
+print_error
+          call get_error
+          call cmdCrNl_if_needed
+          call print_inline ; Eval_command_line set hl=message
+          jp endCom
+
+
+postfirmware_refresh
+; After RSX (e.g. |I), it's better to reinstall stuff
+; Factorize or set inconditionnaly!
+          call set_full ; set IY.
+
+; Reset keys and color (to avoid flickering for instance after |i).
+          call firm_init
+          CALL_BRIC(locate_orgams) ; must be done before bring_status
+          scf           ; for RSX status
+          ret
+
+
+check_i
+;Actually also check base bk is connected
+          push af:push hl
+          ld a,i:ld hl,vo_basebk:cp (hl):jr z,.ok_i
+
+          ld a,(hl):ld i,a
+          ld hl,4:add hl,sp
+          ld a,(hl):and &1F:or &40
+          push bc
+          ld bc,&7F10:out (c),c:out (c),a
+          pop bc
+.ok_i
+          pop hl:pop af
+          ret
+
+
+
+store_dump_full
+          ld a,tag_mdump_full
+store_dump
+; In: hl=address
+    ; de=bytes     
+    ;  a=tag
+; Store for persistent display
+;Out: af, ix trashed  
+          CHECK_BK_BASE()
+          push hl
+          push de
+          push bc
+          push de
+          ex de,hl      ; now de = address
+          ld hl,tmp_buf
+          ld (hl),a:inc l
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+;Copy bytes as they were!
+          ex de,hl
+          pop hl        ;was de=bytes
+          ld bc,lng_dump_mon
+          ldir
+          ld hl,tmp_buf
+          ld b,lng_dump_mon + 3 ; + tag and address
+          call mon_histriom_append
+          pop bc
+          pop de
+          pop hl
+          ret
+
+print_exp
+;        -- PRINT --
+          CHECK_BK_BASE()
+          ld a,c
+          ld b,0
+          add ix,bc
+          dec c
+          add ix,bc     ; *2 - 1: last param
+          ex de,hl
+          add hl,bc     ; last type
+pexp_lp
+          or a
+          ret z         ;fin
+
+          push af
+          ld a,(hl):dec hl
+          push hl
+
+          push af
+          call prep_tmp_buf
+          ld a,"&":ld (de),a:inc e
+
+          ld h,(ix+0):dec ix
+          ld l,(ix+0):dec ix
+          pop af
+          cp 2
+          jr z,print_big
+
+          call put_hexa_hl
+          2 ** inc e
+
+; Decimal
+;TODO: preserve sign
+
+          DCALL(put_deci_hl)
+
+; Bin
+          ld e,14
+
+          ld a,"%":ld (de),a:inc e
+          ld c,h:call print_bin
+          ld c,l:call print_bin
+          jr print_iter
+
+print_bin
+          ld b,8
+.binlp
+          rl c
+          ld a,"0":adc 0
+          ld (de),a:inc e
+          djnz .binlp
+          inc e
+          ret
+
+print_big
+          ld b,(hl)     ; size of value
+          ld a,l        ; go to end (MSB)
+          add b
+          ld l,a
+          push hl
+          push bc
+.hexbiglp
+          ld a,(hl):dec hl
+          call put_hexa_a
+          djnz .hexbiglp
+
+          inc e
+          ld a,"%":ld (de),a:inc e
+          pop bc
+          pop hl
+
+.binbiglp
+          push bc
+          ld c,(hl):dec hl:call print_bin
+          pop bc
+          djnz .binbiglp
+;enchaine
+print_iter
+          call print_and_store_line
+          pop de
+          pop af
+          dec a
+          jp pexp_lp
+
+
+wrong_param
+          call wrong_param'
+          ld l,0        ; start of buf
+;enchaine
+mon_histriom_append_nt_asis
+          ld a,tag_asis
+;enchaine
+mon_histriom_append_nt
+;In: a=tag
+   ;hl=nt string
+          CHECK_BK_BASE()
+          push bc
+          push hl
+          ld de,tmp_buf+&80 ; hl might be already = tmp_buf
+          push de
+          ld (de),a:inc e
+          call copy_nt
+          pop hl
+          CALL_BRIC(get_len)
+          ld b,a:inc b  ; store \0 as well
+          call mon_histriom_append
+          pop hl
+          pop bc
+          ret
+
+mon_histriom_append
+          push ix       ; needed for print_exp
+          push de
+          ld ix,histdisp_struct
+          call histriom_append
+          pop de
+          pop ix
+          ret
+
+display_hist_line
+;In: DE= string from history
+  ;   b= its size (not needed as we stored nt strings)
+          ex de,hl
+          ld de,(cursXY)
+          ld a,(hl)
+          cp tag_cmd:jr z,.as_is
+          inc l
+          cp tag_asis:jr z,.as_is
+          cp tag_mdump_full:jr z,.mdump_full
+          cp tag_mdump_gris:jr z,.mdump_gris
+          cp tag_ellipsis:jr z,.ellipsis
+;fallback
+          ld a,"?"
+          jp affAsc
+
+.as_is
+          jp affText
+
+.mdump_gris
+          call set_gris
+          jr .mdump
+.mdump_full
+          call set_full
+.mdump
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ex de,hl
+          ld b,8
+;diff version for graphical as well
+          jp diff_dump_one_line
+.ellipsis
+; For now just display "..."
+; In future, check if bytes has changed from 00 to non-zero
+; Cannot use disp_ellipsis as it call cmdCrNl
+          ld de,(cursXY)
+          ld hl,.txt_ellipsis ; todo: reuse for mon
+          jp affText
+
+.txt_ellipsis BYTE "...",0
+
+get_error
+          CHECK_BK_BASE()
+          ld de,command_result
+          push de
+          ld hl,-1      ; deactivate meta data (N/A in most cases)
+          CALL_ED(copy_message_error)
+          pop hl
+          ret
+
+help_mon
+; Remove status bar (solution de facilite)
+; NB: if we want to keep it, we have to move help decrunch from 8000
+    ; cf monui
+          STATUS_OFF()
+          call help_mon_ui
+          pop af
+          jp refresh
+
+      ; -- CLS --
+cls_command
+          pop af        ;!! eat RET from bclMon, since we jump to start
+; we must clear history, otherwise when coming back to monogams
+; (after help, gr, editor...) it would redisplay history
+          call mon_histriom_init
+          xor a:ld (has_been_entered),a
+          jp refresh
+
+      ; -- E --
+e_command
+          ld a,c
+          dec a         ;1 byte param
+          or h
+          jr z,e_ok
+
+          jp wrong_param
+
+
+e_ok
+          ld a,l
+          ld (valROM),a
+;force upper rom
+          ld a,(valRMR)
+          res 3,a
+          ld (valRMR),a
+          call status_disp
+          jp endCom
+
+bank_command
+          dec c         ; Expect 1 param
+          jp nz,wrong_param
+
+          ld a,(valMMR+1):ld d,a ; Default MSB
+
+          ld a,h:or h:jr z,bk_lsb
+;Must be 7cxx to 7fxx
+          and &FC:cp &7C:jp nz,wrong_param
+          ld d,h        ; ok, change default
+bk_lsb
+          ld a,l
+          and &C0:cp &C0:jp nz,wrong_param
+
+          ld h,d
+          ld (valMMR),hl
+          call status_disp
+          jp endCom
+
+
+
+ed_from_mon
+      IF 1-inRom
+      RESTORE
+      END
+          push hl
+; Must be done before org_select, otherwise residues in logo.
+          STATUS_OFF()  ; Do before select, otherwise
+          pop hl
+
+          dec c         ; 0 param 
+          jr nz,.ok_param
+; 1 param: tab #. Don't bother checking H
+          ld a,l
+          dec a
+max_sources = 64        ; Defined by org
+          cp max_sources
+          call c,select_tab ; -> if invalid, don't do anything
+.ok_param
+          jp goto_ed
+
+
+cold_init
+; !! Here : work bank must be connected
+; Called at Orgams first invocation
+
+; Overkill, nevermind (cannot IF zeros_ == 1, since forward reference)
+          ld hl,zeros
+          ld b,zeros_
+          xor a
+          call fill
+
+          di            ; so that test ppi not pertubed by firmware
+          call clear_asic
+          ei
+
+          ld hl,history_struct
+          ld a,command_history/&0100
+          CALL_BRIC(history_init)
+;enchaine
+mon_histriom_init
+          ld hl,histdisp_struct
+          ld a,hist_display/&0100
+          ld c,hist_display_size
+          jp histriom_init
+
+
+diff_dump_one_line
+;Cannot use dump_one_line,
+;for file or persistent display: bytes are in a buffer <> hl
+          call scrollUp_if_needed
+          push de
+          push bc
+          call dump_one_line_custom
+          pop bc
+          pop hl
+          push hl
+          jr _dump_graphic_com
+
+dump_one_line
+;Dump from HL
+          call scrollUp_if_needed
+          ld ix,copyHereMirror
+          ld de,bufCtxr
+          call dump_one_line_
+
+; 4. Dump graphic
+          push hl
+          ld hl,bufCtxr
+          ld b,8
+_dump_graphic_com
+          call _dump_graphic
+          pop hl
+          ret
+
+_dump_graphic
+          ld e,48:call convScrX
+dol_plot
+          push hl
+          ld l,(hl)
+          ld a,&80
+          srl l
+          srl l:jr nc,$+3:1 ** rrca
+          srl l:jr nc,$+4:2 ** rrca
+          srl l:jr nc,$+6:4 ** rrca
+          ld h,0
+          add hl,de
+          ld (hl),a
+          ld a,d:add 8:ld d,a
+          pop hl
+          inc l
+          djnz dol_plot
+          ret
+
+
+basic
+          STATUS_TO_FIRM()
+          jp goto_basic
+
+;------- Routines AST
+
+ast
+
+era_param
+nera  BYTE "ERA"+&80
+
+      WORD tmp_buf+5    ;pos string in RAM
+
+      BYTE 5            ; longueur du nom
+      WORD tmp_buf+8    ; adresse du nom
+      BYTE "*.bak"
+era_param_ = $-era_param
+
+era_msg BYTE "Files *.Bak erased",0
+
+
+era_bak
+;
+; Routine |era,"*.bak"
+; via recherche Rsx
+;               
+          CHECK_BK_BASE()
+          ld hl,era_param ;param must be in central RAM
+          ld de,tmp_buf ;since we connect PARA/AMSDOS ROM
+          ld bc,era_param_
+          ldir
+
+;NB : don't disable texte output,
+    ; since we won't see "Retry Ignore Cancel" message.
+
+          call txt_cur_off
+          STATUS_OFF()  ; before cls which is takes too long in DI
+          call clsScr
+          ld hl,0:call scr_set_offset
+
+          ld hl,tmp_buf
+          call &BCD4
+          jp nc,refresh
+
+          ld a,1
+          ld ix,tmp_buf+3
+          call &1B
+
+;TODO : check error status.
+
+          call clsScr
+
+;TODO : reset internal offset
+          ld de,&0115
+          ld hl,era_msg
+          call affText
+
+          jr cat_
+
+cat
+          STATUS_OFF()
+          call txt_cur_off
+          ld a,2:call scr_set_mode ;#bug 82 mc_set_mode isn't enough 
+cat_
+;Reuse ed's routine (which switches to its own bandeau. Nevermind)
+          CALL_ED(edCat)
+          jp refresh_monogams
+
+select_lower_rom_firm
+; Note: non-firm version in trui.o
+          ld a,(valRMR)
+          and 4
+          jp z,kl_l_rom_enable
+          jp kl_l_rom_disable
+
+get_byte_param
+; return A = 8bit parameter (0 if absent)
+          xor a
+          cp c          ; nb param
+          ret z
+;todo: test h==0
+          ld a,l
+          ret
+
+;        Initialise les buffers
+
+      IF brk
+
+bufRegs WORD &BB5A,&0801,&5456,&52F2 ; PC  IR  IY  IX
+      WORD &1000,&7E25,&7F8E,&050F ; HL' DE' BC' AF'
+      WORD &5000,&8500,&8100,&8E44 ; HL  DE  BC  AF
+      WORD &C000        ; SP
+tst_rmr = &8E
+tst_rom = &27
+tst_bnk = &7FC0
+
+iniBrk
+          ld a,tst_rmr:ld (valRMR),a
+          ld a,tst_rom:ld (valROM),a
+          ld hl,tst_bnk:ld (valMMR),hl
+
+          ld hl,bufRegs
+          ld de,valZ80
+          ld bc,13*2
+          ldir
+          ret
+      END
+
+;-----------------------
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+;-----------------------
+
+saveorg = $
+saveorg' = $$
+
+; ****** ** Buffers ** ******
+tmp_tag = &73FF         ; used in mon_histriom_append_nt
+tmp_buf = &7400
+bufdump = &7400
+command_result = &7400  ; reuse buffer
+
+command_history = &7500
+disc_buf = &8000
+
+; ****** **  monogams persistent var  ** ******
+; in bank, to be reset-proof
+      ORG mon_var
+zeros
+;var to be 0 initialized
+gr_bk BYTE 
+has_been_entered BYTE 
+zeros_ = $-zeros
+
+histdisp_struct SKIP 8
+mon_cursY BYTE 
+
+      SKIP monui_var' - $
+
+      ORG mon_var'      ; After cursY in monui
+
+adr_dump WORD           ;memoize last m address
+
+; keep this order ! Required by histrion.o
+history_struct
+hist_msb BYTE 
+hist_first BYTE 
+hist_pnt BYTE 
+hist_end BYTE 
+
+      SKIP free_ - $
+
+      ORG &76FF         ; After visu
+; Free byte
+
+      SKIP &7700 - $    ; ed
+
+; ****** **  external var/routines  ** ******
+
+vo_romEd = &7CF9
+vo_romExt = &7CFA
+vo_romMon = &7CFB
+vo_romBric = &7CFF
+
+vo_basebk = &7CFC
+
+val   = &7D80
+valRMR = val+6
+valMMR = val+7
+valROM = val+&1B
+valZ80 = val+&1C
+
+pc_   = valZ80
+f_    = valZ80+22
+sp_   = valZ80+24
+
+pc_nav = &7681
+
+; **** ** tmp variables/buffer (can be dropped at reset) ** ****
+
+      ORG &9000
+
+buf_work                ;!! reuse buf command (bufCom)
+      IF buf_work AND &FF
+ !! align error
+      END
+
+lngCom = width-1        ; for '>' 
+bufCom    lngCom+1 ** BYTE 
+bufCom_
+      IF bufCom AND &FF
+!! error align
+      END
+
+lngCtxt = 32            ; lng_max du buffer "copyHere"
+bufCtxr   lngCtxt ** BYTE 
+
+dif_start0 WORD 
+dif_ecart WORD 
+dif_end BYTE            ; &ff = no end in sight
+dif_last_line WORD 
+dif_last_idx BYTE       ; no need to init since "restart triggered"
+dif_last_size BYTE 
+;dif_last_size0 BYTE 
+;dif_last_size1 BYTE 
+xread_struct_size = 9
+xread_struct0 SKIP xread_struct_size
+xread_struct1 SKIP xread_struct_size
+
+      IF xread_struct1 - xread_struct0 - xread_struct_size
+  !! must be contiguous
+      END
+
+      SKIP &9090 - $    ; histrion
+
+      ORG 0
+;Structure for diff input feed
+xread_jp WORD           ; routine
+xread_has_data BYTE     ; for xread_file, it's chunk's bk
+xread_pnt WORD          ; ram pnt or asset pnt chunk
+xread_asset WORD        ; id of asset header
+xread_release WORD 
+      IF xread_struct_size - $
+ !! update
+      END
+; ****** ** ********* ** ******
+
+    ;; NO MORE CODE HERE ;;
+
+; ****** ** ********* ** ******
+
+

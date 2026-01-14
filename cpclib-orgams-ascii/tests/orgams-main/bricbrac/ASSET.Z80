@@ -1,0 +1,843 @@
+; <<<<< Asset >>>>> Access to (multi)sources and data (load).
+
+; Dependencies: chunk, io
+; Dependent: asseto
+
+inRom = 1
+mock  = 0               ;0 needs 123.nrt and unlzsa2f in /ORGNRT
+
+      IMPORT "bricmap.i"
+      IMPORT "const.i"
+
+; ////// 2025 ///////
+; ---- GG Beta I -----
+; Nov 26 h: [nochange] remove deadcode
+; ---- GG Beta H -----
+; Mar 22 g: Add test_real_empty. Fix #1b2
+
+; ---- GG Beta G -----
+    ; 17 f: Fix #143: load headerless files on unidos via /cmd_examine/
+          ; Add test_headerless
+          ; Use bricmap.i 
+; ///// 2024 ////////
+
+ ; Jan 28 E: Empty file: returns error and don't cache file (todo#113)
+
+; ///// 2021 ////////
+
+ ; Oct 31 D: Move from e600 to e5f0.
+
+ ; Jan 13 C: Update /limit/.
+           ; Deactivate 
+
+; ///// 2020 ////////
+
+;   23  B: Add /test_unlzsa2f/
+      ; A: Test and fix asset_index update.
+      ; 9: Add and fix test_load_error: no half baked file in cache.
+      ; 8: Close file (fix reload).
+; Apr 8 7: chunk_init_custom now takes HL. (requires chunkm)
+
+; v6: Use new insert_new_chunk API (requires chunki)
+; v5: Add and fix test_get_asset_chunk
+; v4: First part (check if cached) has been extracted to asseto.
+    ; See this source for rationale.
+; v3: Add test_empty_file.
+    ; Fix bugs: 
+        ; Crash: ret nc with hl or bc still in stack
+        ; Wrong: bk base wasn't reconnected avec failed comparison.
+; v2: Call chunk_init (for proper free chunk decount). Requires chunke.o
+    ; Fix test_load_if_absent
+; v0: compare_str_nocase from compare.o
+    ; load_if_absent for ass/org. WIP. STill buggued
+
+used  = 0
+rom   = &1C
+
+asset_index = &6E00
+iobuf = &8000
+vv    = &8900           ; room for name, then at &80: var
+
+codedest = asset
+limit = cue             ; CUE
+codedest2 = asset2
+limit2 = screen2
+codedest3 = asset_jp    ; After aap
+limit3 = aap_jp1
+
+; ------ In THIS Rom ------
+
+chunk = &FE00
+get_free_chunks = chunk+30 ; for nrt
+chunk_init_custom = chunk+33 ; for nrt
+;new_chunk_no_init = chunk+9
+;out: hl=id
+    ; de preserved
+    ; bk base connect                    
+;!!TODO: check if basebk is setup in new bank.
+new_chunk = chunk+15
+insert_new_chunk = chunk+12
+;in: a=cur_bk, H=msb
+;out: new chunk connected, hl points in it (L random tough).
+;!! A side effect is that curbk and thisbk are changed.
+;!! We'll accomodate that at client site.
+free_list = chunk+27
+
+io    = &FFCE
+;get_filesize = io + 18    ; Does not work for headerless files
+
+;--------------
+nrt_fail = &BE00
+
+      ORG &3000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+; ---- common header ----
+ch_next = 0
+ch_last = 2
+
+; ---- meta data fields ----
+; for asset and source
+ch_meta_filesize = &08
+ch_meta_filename = &90
+
+; ---- data fields ----
+; for asset
+ch_data_size = &0100 - ch_data_start ; in const.i
+
+tests
+          call test_headerless
+          call test_real_empty
+          call test_get_asset_chunk
+          call test_headerless
+          call test_real_empty
+      IF mock
+          call test_load_and_cache
+       ;   call test_empty_file
+          2 ** call test_load_error
+      ELSE
+     ;;     call test_unlzsa2f  !! no, file itself invalid
+          2 ** call test_real_file
+      END
+          ret
+
+test_get_asset_chunk
+; check api. b.out = e.in
+          ld de,&40CC   ; nevermind, just valid ID
+          call get_asset_chunk
+          call nc,&BE00
+          ld a,b:cp &CC:call nz,&BE00
+          ret
+
+test_headerless
+          call nrt_init
+          ld hl,.name
+          call load_and_cache:call nc,&BE00
+          ld hl,&0BE6   ; size
+          or a:sbc hl,bc:add hl,bc:call nz,&BE00
+          call get_asset_chunk:call nc,&BE00 ;skip metadata
+          call get_asset_chunk:call nc,&BE00
+          ld de,.ref
+          ld b,8        ; just check the few first bytes
+          call compare_sized
+          ret
+
+.ref  BYTE "CHIPNSFX"
+.name BYTE _name - $ - 1
+    ;  BYTE ":orgnrt/#143/vampire1.chp"   ; no, bug |copy
+      BYTE "ums:chp/vampire1.chp"
+_name
+
+test_real_empty
+;bug #1b2
+          call nrt_init
+          ld hl,.empty
+          call load_and_cache:call c,&BE00
+          cp err_emptyfile:call nz,&BE00
+          ret
+
+.empty BYTE _empty - $ - 1
+    ;  BYTE ":orgnrt/#143/vampire1.chp"   ; no, bug |copy
+      BYTE ":org/testdata/size0.bin"
+_empty
+
+
+test_load_and_cache
+;------------------
+; We test both loading and caching.
+          call nrt_init
+
+          ld hl,dummy_size:ld (nrt_size+1),hl
+
+          ld hl,0:ld (mock_cpt),hl
+          ld hl,dummy_name
+          call load_and_cache:call nc,&BE00
+          call connect_bk_base
+; ID properly set in idx?     
+; Index is cleared in nrt_init, so it must be first entry.
+          ld hl,(asset_index)
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+
+;Has load_bloc been called as needed?
+          push de
+          ld de,dummy_size
+          ld hl,(mock_cpt):or a:sbc hl,de:add hl,de:call nz,&BE00
+          pop de
+          push de:push bc
+          call tli_check
+
+; Now check we can reuse the cache
+          pop bc:pop de
+          call tli_check
+          ret
+
+
+
+tli_check
+;IN: de= 1st chunk (metadata)
+
+;Is size properly reported?   
+          ld hl,dummy_size:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+;Now simulate trans_bk_copy (ass).
+
+          ld hl,0:ld (mock_cpt),hl ; For check and size
+          ld iy,0
+
+ ; skip the metadata.
+          call get_asset_chunk:call nc,&BE00
+tli_lp
+          call get_asset_chunk:call nc,&BE00
+          push af:push de
+
+;hl=start, c = size > 0 
+          ld de,(mock_cpt)
+tli_checklp
+          ld a,e:or d
+          cp (hl):call nz,&BE00
+          inc de
+          inc hl
+          dec c
+          jr nz,tli_checklp
+          ld (mock_cpt),de
+
+          pop de:pop af
+          jr nz,tli_lp
+
+          ld bc,dummy_size
+          ld hl,(mock_cpt):or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+          call connect_bk_base
+          ret
+
+
+test_load_error
+;--------------
+; If loading fail (e.g. memory full), we mustn't leak memory.
+
+          ld a,bk_dev
+tle#  = 2               ; 2 chunks
+          ld hl,tle#
+          call nrt_init_custom
+
+          call get_free_chunks ; sanity check
+          ld de,2:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+; File too big
+          ld hl,&1000:ld (nrt_size+1),hl
+          ld hl,0:ld (mock_cpt),hl
+
+          ld hl,dummy_name
+          call load_and_cache:call c,&BE00
+          cp fail_memoryfull:call nz,&BE00
+
+; Memory must have been released.
+          call get_free_chunks ; sanity check
+        ;  ld de,2:or a:sbc hl,de:add hl,de:call nz,&BE00
+
+; No half baked in memory  
+          ld hl,(asset_index)
+          ld a,l:or h:call nz,&BE00
+          ret
+
+
+      IF 1-mock
+test_real_file
+;-------------
+; We test both loading and caching.
+trf_size = 3
+          call nrt_init
+
+          ld hl,nrt_name
+          call load_and_cache:call nc,&BE00
+          push bc
+          call connect_bk_base
+          pop bc
+          push de:push bc
+          call trf_check
+
+; Now check we can reuse the cache
+          pop bc:pop de
+          call trf_check
+          ret
+
+trf_check
+;IN: de= 1st chunk (metadata)
+
+;Is size properly reported?   
+          ld hl,trf_size:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+ ; skip the metadata.
+          call get_asset_chunk:call nc,&BE00
+          call get_asset_chunk:call nc,&BE00
+          call nz,&BE00 ; Z: last
+      3 ** [
+          ld a,(hl):cp #+1:call nz,&BE00
+          inc hl
+          ]
+          call connect_bk_base
+          ret
+
+
+nrt_name BYTE 7,"123.nrt"
+
+      END
+
+      IF 0
+test_unlzsa2f
+;------------
+; Bug: size was ok but data was wrong.
+; !!!! argl, putain de cross-dev: the header was invalid.
+          call nrt_init
+
+          ld hl,name_unlzsa2f
+          call load_and_cache:call nc,&BE00
+ ; skip the metadata.
+          call get_asset_chunk:call nc,&BE00
+          call get_asset_chunk:call nc,&BE00
+          ld a,(hl):cp 6:call nz,&BE00
+
+          call connect_bk_base
+          ret
+
+name_unlzsa2f BYTE 8,"unlzsa2f"
+
+      END
+
+;------------
+
+mock_open
+nrt_size  ld bc,0
+          scf
+no_op
+          ret
+
+mock_load_bloc
+; We fill as such: i_th byte = msb(i) or lsb(i)
+
+          ld hl,(mock_cpt)
+mlb_lp
+          ld a,b:or c:jr z,mlb_end
+          ld a,l:or h
+          ld (de),a:inc de
+          inc hl
+          dec bc
+          jr mlb_lp
+mlb_end
+          ld (mock_cpt),hl
+          ret
+
+mock_cpt WORD 
+
+test_empty_file
+;Deactivated. We would need to mock Amsdos's setting of internal
+;variable (in_filesize)
+      IF 0
+          ld hl,0:ld (nrt_size+1),hl
+          ld hl,dummy_name2 ; don't use cached!
+          call load_and_cache:call c,&BE00
+          cp err_emptyfile:call nz,&BE00
+      END
+          ret
+
+dummy_name BYTE 8,"dir/file" ; sized string. Doesn't matter since mock!
+dummy_size = &0345
+dummy_name2 BYTE 7,"dir/fol"
+
+nrt_init
+; We don't need the whole setup.
+; A terme, most of org_init should be transfered to chunk.o
+bk_dev = &C7
+nb_chu = &30
+          ld a,bk_dev
+          ld hl,nb_chu
+nrt_init_custom
+;in: a= bk
+   ; hl= nb chunks
+
+          push af:push hl
+          ld c,rom:call &B90F
+
+          pop hl:pop af
+          call chunk_init_custom
+
+          call init
+
+; reset cache
+          ld hl,asset_index
+          call fill0
+          ret
+
+skip_nt
+          ld a,(hl):inc hl:or a:jr nz,skip_nt
+          ret
+
+skip_size
+          ld a,(hl):add l:jr nc,$+3:inc h
+          ld l,a:inc hl
+          ret
+
+compare_sized
+          ld a,(de):cp (hl):call nz,nrt_fail
+          djnz compare_sized
+          ret
+; ============================================
+
+      IF inRom OR [1-mock]
+disc_in_open = &BC77
+disc_in_char = &BC80
+disc_in_close = &BC7A
+disc_in_abandon = &BC7D
+disc_test_eof = &BC89   ; NC if eof
+io_load_bloc = io       ;in: de=dest, bc=size
+      ELSE
+disc_in_open = mock_open
+disc_in_char
+    ; todo
+      BRK
+          ret
+disc_in_close = no_op
+disc_in_abandon = no_op
+io_load_bloc = mock_load_bloc
+      END
+
+err_emptyfile = 35
+err_toobig = 42
+
+fail_opening = 255
+fail_doserror = 254
+fail_unknownfiletype = 253
+fail_unexpectedeof = 252
+fail_memoryfull = 251
+fail_unexpectedmess = 247
+fail_bufferoverflow = 246
+fail_invalidlinenumber = 244
+
+; reuse for now
+fail_toomanyfilesopen = fail_memoryfull
+fail_nametoolong = fail_bufferoverflow
+
+; ============================================
+      IF inRom
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          ld ix,param_burn3:call burn_
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+param_burn3
+      WORD rom
+      WORD codesize3
+      WORD codedest3
+      WORD code3
+      END
+
+; ============================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+init
+; nothing to do: asset_index is handled by asseto.
+          ret
+
+get_free_slot
+;In: N/A
+;OUT: If ok:      Z, NC, hl points to free slot !!!MSB!!!!
+    ; Otherwise: NZ, NC, A=error
+
+; NB: this routine would naturally belong to asseto (index management),
+    ; but i'm trying to make room in orgext.Rom.
+
+          ld hl,asset_index
+fs_lp     ld a,(hl):inc l:or (hl):ret z
+          inc l
+          jr nz,fs_lp
+          ld a,fail_toomanyfilesopen
+          or a
+          ret
+
+      IF 0
+filename_to_idx
+; Give the index for a given path/filename.
+; In:  HL points to nt string.
+; Out: Carry, NZ: Name found, A = idx.
+     ; Carry, Z:  Name not found, A = idx of 
+; Idx is then passed to connect_idx
+          ret
+      END
+
+connect_bk_base
+; All registers but F preserved.
+          push bc
+          ld c,a
+;TODO when bk_base moved: and &c7:cp &c5
+          ld a,i:and &C5:cp &C5:call nz,&BE00
+          ld a,i
+          ld b,&7F:out (c),a
+          ld a,c
+          pop bc
+          ret
+
+
+
+load_and_cache
+;-------------
+; Load raw bytes in chunks for latter consumption.
+
+; In: bk base connected
+    ; Sized filename in hl !!out of bank!!
+; Out: Carry if ok, 
+            ; de = id of first chunk (metadata)
+                 ; (more convenient for caller to pass in de)
+            ; bc = size
+     ; NC: error. A = error code.
+     ; !! BK CACHE connected: ass must reconnect bk source anyway.
+
+          ld (v_filename),hl
+
+          call get_free_slot
+          ret nz        ; in that case, also NC
+
+          ld (v_free_slot),hl ;!! adr+1 (MSB)
+          ex de,hl
+          call new_chunk:ret nc
+          ld (v_metadata_id),hl
+          push hl
+
+          call _load
+
+          push af
+          call disc_in_close
+          call connect_bk_base
+          pop af
+          jr nc,revert
+
+; Set slot only if everything ok
+          ld hl,(v_free_slot)
+          pop de
+          ld (hl),d:dec l
+          ld (hl),e
+          ld bc,(v_filesize)
+          scf
+          ret
+
+revert
+          pop hl
+          push af       ; NC and error code
+          call free_list
+          pop af
+          ret
+
+_load
+; gross init. Actually flag as unitiliazed (if next step fails)
+; TODO: rollback in case of failure? Maybe not worth it.
+          ld l,0:call fill0
+
+; --- copy filename ---
+
+          ld de,(v_filename)
+          ld l,ch_meta_filename
+          ld a,(de):ld c,a
+          scf:adc l:ccf:ld a,fail_nametoolong:ret nc
+
+          ex de,hl
+          push hl
+          ld b,0
+          inc bc
+          ldir
+
+; --- Open file ---
+          call disc_in_abandon ; sanity
+          pop hl
+          ld b,(hl):inc hl
+          ld de,iobuf
+          push bc:push hl
+          call disc_in_open
+          pop hl:pop de ; D = size (was B)
+          ld e,a
+          ld a,fail_opening
+          ret nc
+
+; We check size here, not to cache empty files (todo #113)
+          ld a,c:or b
+          jr nz,.oksize
+
+;If size is 0, that likely means it is an headerless file.
+;Backup plan: get size from unidos's CTRL-h
+   ; (For headerless file the size amsdos workzone is &7fffff)
+;!!! Only for ascii file, otherwise we get the size with header
+          bit 4,e       ; was A = file type
+          jr z,.empty   ; !!! Rely on NC here
+
+kl_find_command = &BCD4
+
+          push de:push hl
+          ld hl,rsx_ctrl_j:ld (hl),&8A ; !must be in RAM
+          call kl_find_command
+          ld (farcall),hl
+          ld a,c
+          ld (farcall+2),a
+          pop hl:pop bc ; recover B = size filename
+.empty
+          ld a,err_emptyfile
+          ret nc
+
+cmd_examine = 12
+          ld c,cmd_examine
+          ld ix,date_time
+          rst 3:WORD farcall
+; Don't bother converting error code.
+          ld a,err_emptyfile
+          ret nz
+
+          ld a,c:or b
+          ld a,err_toobig
+          ret nz        ; >64k not handled
+
+          ld c,e
+          ld b,d
+          ld a,c:or b
+          ld a,err_emptyfile
+          ret z
+
+.oksize
+          ld (v_filesize),bc
+          ld hl,(v_metadata_id)
+          ld a,l
+          ld l,ch_meta_filesize
+          ld (hl),c:inc l
+          ld (hl),b
+          ld l,a
+
+; --- Amorce a new list to load in chunks ---
+; The first chunk is dedicated to metadata.
+; Now we don't have has much metadata as for source,
+; we could use space to fill in some bytes. KISS for now.
+
+          call insert_new_chunk
+          ret nc
+
+; --- Main load loop -----------------
+          ex de,hl      ; de=id
+          ld l,c:ld h,b ; hl=size
+lia_load_lp
+; We remove ch_data_size in advance (+1 to detect hl=size)
+          ld bc,ch_data_size
+          scf:sbc hl,bc:jr c,lia_last
+
+          inc hl        ; correct scf
+          push hl
+          push de
+          ld e,ch_last
+          ld a,&FF      ; complete chunk
+          ld (de),a
+          ld e,ch_data_start
+          call io_load_bloc
+          pop hl        ; was de= id
+          call insert_new_chunk
+          ex de,hl
+          pop hl
+          jr c,lia_load_lp
+          ret           ; failure
+
+lia_last
+          scf:adc hl,bc
+          ld c,l:ld b,h
+          ld e,ch_last
+          ld a,ch_data_start-1
+          add c
+          ld (de),a
+          ld e,ch_data_start
+          call io_load_bloc
+          scf
+          ret           ; success
+
+connect_asset_chunk
+;in : h=MSB, l=bk
+;out: Carry. bk connected
+;!! All registers preserved but F.
+    ; NC if error. Rationale: give opportunity to save source if mess.
+
+; TODO: Factorize.
+      ; The version in chunk modifies:
+        ; * curbk: not good.
+
+          push bc
+          ld c,a
+          ld a,l:or h:jr z,cac_mess
+          ld a,l:and &C4:cp &C4:jr nz,cac_mess
+          ld a,h:and &C0:cp &40:jr nz,cac_mess
+          ld b,&7F:out (c),l
+          ld a,c
+          pop bc
+          scf
+          ret
+
+cac_mess
+          pop bc
+          ld a,fail_unexpectedmess
+          or a
+          ret
+
+
+      IF used
+compare_str_nocase
+;-----------------
+; Case InSensItive comparison
+; In: DE & HL point to nt strings.
+; Out: Z if strings are the same (case insensitive).
+     ; NZ otherwise.
+     ; A corrupted. HL & DE conserved.
+          push de:push hl
+          call cci_lp
+          pop hl:pop de
+          ret
+
+cci_lp
+          ld a,(de):xor (hl):jr z,cci_ok
+; Other difference than bit 5: not a match.
+          cp &20:ret nz
+; Check if it is a letter.
+          ld a,(de):and &DF ; Uppercase
+          cp "A":ret c
+          sub "Z"+1:inc a:ret nc ; 'INC A' forces NZ
+cci_ok
+          ld a,(de)
+          inc de:inc hl
+          or a
+          jr nz,cci_lp
+          ret
+      END
+
+
+; ---------------------------             
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ---------------------------  
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+get_asset_chunk
+; In:  DE = chunk id.
+    ;  Bank agnostic.
+; Out: Carry, NZ: ok, there are more chunks.
+     ; Carry, Z:  ok, last chunk.
+     ; In both case: hl = start in chunk (connected)
+                   ;  b = bank of this chunk (e.in, for convenience)
+                   ;  c = nb byte in this chunk > 0
+                   ; de = id next chunk
+     ; NC: error. A = error code.
+
+          ld b,e        ; backup for client's convenience
+          ex de,hl
+          call connect_asset_chunk:ret nc
+          ld l,ch_next
+          ld e,(hl):inc l
+          ld d,(hl):inc l
+          ld a,(hl)
+          sub ch_data_start-1
+          ld l,ch_data_start
+          ld c,a
+          ld a,e:or d   ; Flag Z if last
+          scf
+          ret
+
+fill0     ld (hl),0:inc l:jr nz,fill0
+          ret
+
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+
+; ------------------
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+jps
+          jp init       ; cold init
+          jp connect_bk_base ; new version (use I)
+          jp load_and_cache ; asseto (LOAD directive)
+          jp get_asset_chunk ; ass "
+
+         ; jp filename_to_idx
+
+      FILL limit3-$,&FF
+      END
+codesize3 = $$-code3
+
+; ========================================
+
+      ORG vv+&80,$$     ; name must be < &60 long anyway
+
+v_free_slot WORD 
+v_metadata_id WORD 
+v_filename WORD 
+v_filesize WORD 
+rsx_ctrl_j BYTE         ; must be in RAM!
+farcall SKIP 3
+date_time SKIP 7        ; not used, but unidos write into it anyway

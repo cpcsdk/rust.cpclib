@@ -1,0 +1,185 @@
+; 2025 Aug 9   
+  ; v4: Factorize and simplify
+  ; v3: Cleanup + move tests in occuptxt.o
+      ; Just 4 separators to fit in 64 bytes 
+      ; Use RST to read RAM
+  ; v2: mdr: Add tests, make some optims
+  ; v1: NickyOne: Yeah!
+
+draw_occupation_bar_and_separators
+;---------------------------------
+; See /occupation_bar/ for input
+          push hl
+          call occupation_bar
+          pop hl
+; draw separators last so they XOR over the bar (yes... i know...)
+;enchaine
+; ============================================
+; draw 5 separators every 16 bytes on X
+; XOR 80h so the pixel toggles over the bar
+; ============================================
+draw_separator
+;-------------
+          ld c,0
+sep_loop
+          ld a,c
+          cp 4
+          ret z
+          add a:add a:add a:add a ; A = C * 16
+          ld e,a
+          ld d,0
+          push hl
+          add hl,de
+          ld de,&0800   ; next line
+          ld b,d
+sep_draw
+ram_lam = &20
+          rst ram_lam
+          xor &80       ; toggle single pixel
+          ld (hl),a
+          add hl,de
+          djnz sep_draw
+          pop hl
+          inc c
+          jr sep_loop
+
+occupation_bar
+; ============================================
+; occupation_bar
+; in  HL = screen base of the 8 line block
+;     DE = start address included
+;     BC = end address excluded
+; draw a solid bar with partial masks at ends (fuck it!)
+; ============================================
+          ld (base_scr),hl
+
+    ; xS and maskS          
+          ex de,hl
+          call addr_to_x_and_mask
+; Fill bits to right
+          add a:dec a:ld d,a
+          push hl       ; save l = xS
+
+    ; xE and maskE
+          ld l,c
+          ld h,b
+          call addr_to_x_and_mask
+; Fill bits to left
+          dec a:cpl:ld e,a
+
+    ; special case same byte
+          pop bc        ; c=xS (needed in both cases)
+          ld a,l
+          cp c
+          ld b,a        ; save xE
+          ld a,d        ; mask Start (needed in both cases)
+          jr nz,range_multi
+
+; Must combine mask
+          and e
+          jr draw_masked_at_x
+
+
+; general case xS != xE
+range_multi
+          call draw_masked_at_x
+;Here C = xS
+
+    ; body full from xS+1 to xE-1 included
+          inc c
+          dec b
+full_loop
+; Invariant: C = cur
+           ; B = end
+           ; E = mask end
+    ; cur <= end
+          ld a,b
+          cp c          ; Love it!
+          jr c,full_done
+
+;draw_full_at_x
+;Reuse masked routine: slower, but fast enough
+          ld a,&FF
+          call draw_masked_at_x
+
+    ; cur++     
+          inc c
+          jr full_loop
+
+full_done
+          ld a,e        ; (maskE)
+;enchaine
+draw_masked_at_x
+; ============================================
+; low level drawer
+; draw_masked_at_x  OR mask at column C
+; BC, E preserved
+; 5 raster lines
+; ============================================
+          push bc
+          ld hl,(base_scr)
+          ld b,0
+          add hl,bc
+          ld d,a        ; D = mask
+dm_loop
+          rst ram_lam
+          or d
+          ld (hl),a
+          ld a,h:add 8:ld h,a
+          jr nc,dm_loop ; works since page C000
+          pop bc
+          ret
+
+addr_to_x_and_mask
+; ============================================
+; addr_to_x_and_mask
+; In HL = address 0..ffff
+; returns A = mask at bit (HL/&80 mod 8) 
+;       ; L = HL/&80 / 8 (pos X)
+; BC DE preserved
+; ============================================
+          push bc
+; divide HL by 80h into pos 0..511
+; That is * 2 / &100
+          xor a
+          sla l         ; CF = bit7(E)
+          rl h          ; D = shift in low
+          ld l,h        ; copy low to E for next step
+          adc a         ; A = bit8(pos) from CF
+          ld h,a
+
+; Pos mod 8 to mask
+          ld a,l:and 7  ; pos bit (0 = leftmost,7 = rightmost)
+          ld b,a
+          inc b         ; for case b=0 
+          ld a,&01
+.lp       rrca:djnz .lp
+
+; div_hl_8
+;IN: hl <= &1ff
+;OUT: hl := hl/8
+          srl h:rr l
+          2 ** srl l
+          pop bc
+          ret
+
+; ============================================
+; temps
+; ============================================
+save_pc = $
+save_obj = $$
+
+      ORG &9E00         ; tmp workzone orgams
+;posS  WORD 
+;posE  WORD 
+;xS    BYTE 
+;xE    BYTE 
+;rS    BYTE 
+;rE    BYTE 
+;maskS BYTE 
+;maskE BYTE 
+;full_cur BYTE 
+;full_end BYTE 
+base_scr WORD 
+
+      ORG save_pc,save_obj

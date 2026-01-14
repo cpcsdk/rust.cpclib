@@ -1,0 +1,587 @@
+inRom = 1
+todo  = 1
+; <<<<< AssetO >>>>> Access to (multi)sources and data (load).
+
+; Dependencies: asset, org (far_call), chunk (NRT)
+; Used by: org (multi-source)
+         ; ass (load binaries)
+         ; import (compare_sstr_nocase)
+
+; First part of asset: search file and early return if cached.
+     ; This part must be in ass rom to be callable from trace visu.
+     ; NB: Trace visu would only reach this routine if source already
+         ; assembled (hence file already cached).
+
+      IMPORT "assmap.i"
+
+; //// 2025 ////
+; ---- HH Beta 1
+  ; Jul     
+    ; 17 Rollback to vh
+       ; i: [wip canceled] Added get_file_size for bug #1d3, but the
+                    ; cause wasn't there.
+    ; 10 h: [Adapt rom ass] Use CALL_EXT / pagefirm
+    ;  9 g: vt_rom_firmflag moved at 9d0c
+; ---- GG Beta H -----
+; Mar 25 f: [nochange] Use extmap.i
+                     ; Moved at @cd08
+; //// 2024 ////
+; ---- GG Beta 5 -----
+; May 19 e: [nochange] cleanup tmpbuf (not used anymore)
+                     ; cleanup unused vars.
+    ; 15 d: Don't assert if vt_rom_firmflag <> vt_rom_firmenable
+            ; -> happens when called via get_pc_from_line on newly
+               ; added LOAD"toto" directive
+       ; c: load_if_absent: don't copy filename. 
+                ; Ass already does it out of bank
+                ; tmpbuf is not in trace-safe zone
+          ; -> Fix bug#18a  Visu LOAD corrupts &8900
+
+; //// 2023 ////
+; May 11 b: Use new farcall.  !!! Must save IY
+       ; - Needed if reset_cache called via org_select from trace.
+           ; (well, this shouldn't happen, right?)
+       ; - Step toward uniformisation.
+
+; 2022 
+; Mar 30 a: Add test "abc" vs "ABC" for /compare_sstr_nocase/
+          ; Fix it (bug #13e).
+; 2021
+
+; Feb 4  9: Move at &cd00 (make room for cocopy7)
+      ;  8: Expose /compare_sstr_nocase/ for import.o
+          ; Cleanup: remove empty routine filename_to_idx
+      ;  7: Move after cocopy to make room for ORG
+      ;  6: Slight size optimisation (enchaine reset and init)
+      ;  5: Proper reset (fix leak).
+; Apr 8  4: Return error code is unexpected mess.
+      ; v3: NRT: Since orgcr, must call chunk_init ourselves.
+      ; v2: Fix bug: must connect bk base!!
+          ; Assert firmware is enable to load.
+      ; v1: Taken from asset3.o
+
+rom   = &1D
+
+main_rom = &0A
+
+asset_index = &6E00
+iobuf = &8000
+vas   = &8980
+
+vt_rom_firmflag = &9D0C
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+codedest = asseto
+limit = except
+codedest2 = asseto_jp
+limit2 = impeva_jp
+
+; ------ In this rom (ORGASS) ------
+connect_bk_base = pagefirm_jp ; All regs saved
+
+; ---- In this rom (ass) --
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+call_bric_from_ass = farcall + 12
+
+; ------ In ext rom ------
+org   = &C008
+org_init = org
+
+; ------ In BRIC Rom ------
+
+asset = &FDEB
+load_and_cache = asset+6
+get_asset_chunk = asset+9 ; nrt
+
+chunk = &FE00
+;free = chunk+24 ; reconnect bk_base
+free_list = chunk+27    ; reconnect bk_base
+chunk_init = chunk      ; for nrt
+get_free_chunks = chunk+30 ; for nrt
+
+
+io    = &FFCE
+
+
+      ORG &3000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+; ---- common header ----
+ch_next = 0
+ch_last = 2
+
+; ---- meta data fields ----
+; for asset and source
+ch_meta_filesize = &08
+ch_meta_filename = &90
+
+; ---- data fields ----
+; for asset
+ch_data_start = 8
+ch_data_size = &0100 - ch_data_start
+
+
+macros
+      MACRO CALL_BRIC ad
+          call call_bric_from_ass:WORD ad
+      ENDM
+
+      MACRO CALL_EXT ad
+; We already are in rom org.
+          call call_ext_from_ass:WORD ad
+      ENDM
+
+; ---
+
+tests
+bk_dev = &C7
+bk_src = bk_dev-3
+
+          call nrt_setup
+          call test_no_leak
+
+          call test_equal_sized
+          call test_unequal_sized
+
+          call test_load_if_absent
+          call test_no_leak
+
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+fail  = &BE00
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+; -------------------------------------------------------------------
+
+
+nrt_setup
+          ld a,bk_dev
+nrt_setup_custom
+; Needed to install ROM# (for far_call) and firmware_enable flag.
+; IN: A = bk_dev                                                 
+
+          push af
+
+kl_rom_select = &B90F
+
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+
+; -- Cold start    
+      IF todo
+;Remove: they should be init already
+      END
+          CALL_BRIC(chunk_init)
+          CALL_EXT(org_init)
+          call init
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+
+test_equal_sized
+          ld hl,test_equal_str_sz
+tesz_lp
+          push hl
+          call skip_size
+          pop de
+
+          push hl
+          call compare_sstr_nocase:call nz,&BE00
+          pop hl
+
+          call skip_size
+          ld a,(hl)
+          or a
+          jr nz,tesz_lp
+          ret
+
+test_equal_str_sz
+      BYTE 3,"aAA",3,"AaA"
+      BYTE 3,"abc",3,"ABC"
+      BYTE 3,"abC",3,"ABc"
+      BYTE 3,"zyz",3,"ZYZ"
+      BYTE 3,"zyZ",3,"ZYz"
+      BYTE 3,"zyZ",3,"ZYZ"
+      BYTE 5,"ab az",5,"AB AZ"
+      BYTE 3,"Z[]",3,"z[]"
+      BYTE 0
+
+test_unequal_sized
+          ld hl,test_unequal_str_sz
+tnesz_lp
+          push hl
+          call skip_size
+          pop de
+
+          push hl
+          call compare_sstr_nocase:call z,&BE00
+          pop hl
+
+          call skip_size
+          ld a,(hl)
+          or a
+          jr nz,tnesz_lp
+          ret
+
+
+test_unequal_str_sz
+      BYTE 3,"aaa",2,"aa"
+      BYTE 5,"ab az",5,"AB@AZ"
+      BYTE 2,"zz",3,"zzz"
+      BYTE 1,"[",1,"["-&20
+      BYTE 1,"[",1,"["+&20
+      BYTE 1,"0",1,"0"+&20
+      BYTE 0
+
+test_load_if_absent
+; Actually we test both loading and caching.
+
+          call init     ; clear cache! 
+
+          ld bc,&7F00+bk_src:out (c),c ; Check it works from source
+          ld hl,nrt_name
+          call load_if_absent:call nc,&BE00
+          push bc
+          call connect_bk_base
+          pop bc
+;Has load_bloc been called as needed?
+          call tli_check
+
+          ld bc,&7F00+bk_src:out (c),c ; Check it works from source
+          ld hl,nrt_name
+          call load_if_absent:call nc,&BE00
+          push bc
+          call connect_bk_base
+          pop bc
+          call tli_check
+          ret
+
+tli_check
+;IN: de= 1st chunk (metadata)
+
+;Is size properly reported?   
+          ld hl,dummy_size:or a:sbc hl,bc:add hl,bc:call nz,&BE00
+
+ ; skip the metadata.
+          CALL_BRIC(get_asset_chunk):call nc,&BE00
+          CALL_BRIC(get_asset_chunk):call nc,&BE00
+          call nz,&BE00 ; Z: last
+      3 ** [
+          ld a,(hl):cp #+1:call nz,&BE00
+          inc hl
+          ]
+          call connect_bk_base
+          ret
+
+
+test_no_leak
+; Actually we test both loading and caching.
+
+          call nrt_setup ; clean state
+
+          CALL_BRIC(get_free_chunks) ; reference
+          push hl
+
+          ld hl,nrt_name
+          call load_if_absent:call nc,&BE00
+          call connect_bk_base
+; sanity: chunks must have be consumed.
+          CALL_BRIC(get_free_chunks)
+          pop de
+          push de
+          or a:sbc hl,de:add hl,de:call z,&BE00
+
+          call reset_cache
+          CALL_BRIC(get_free_chunks)
+          pop de
+          or a:sbc hl,de:add hl,de:call nz,&BE00
+          ret
+
+;------------
+
+
+nrt_name BYTE 7,"123.nrt"
+dummy_size = 3
+
+
+skip_nt
+          ld a,(hl):inc hl:or a:jr nz,skip_nt
+          ret
+
+skip_size
+          ld a,(hl):add l:jr nc,$+3:inc h
+          ld l,a:inc hl
+          ret
+
+; ============================================
+
+      IF 0
+fail_opening = 255
+fail_doserror = 254
+fail_unknownfiletype = 253
+fail_unexpectedeof = 252
+fail_memoryfull = 251
+      END
+fail_unexpectedmess = 247
+      IF 0
+fail_bufferoverflow = 246
+fail_invalidlinenumber = 244
+
+; reuse for now
+fail_toomanyfilesopen = fail_memoryfull
+fail_nametoolong = fail_bufferoverflow
+      END
+
+; ============================================
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+reset_cache
+; Free memory and reset entries.
+          ld hl,asset_index
+rc_lp
+          call connect_bk_base
+          ld a,(hl):inc l
+          or a:jr z,rc_next_idx
+          push hl
+          ld h,(hl)
+          ld l,a
+          CALL_BRIC(free_list)
+          pop hl
+rc_next_idx
+          inc l
+          jr nz,rc_lp
+; Enchaine
+init
+;---    
+; Global init: simply clean state.
+; (memory has been reclaiming by chunk_init)
+          ld hl,asset_index
+fill0     ld (hl),0:inc l:jr nz,fill0
+          ret
+
+
+lia_found
+          ld e,c
+          ld d,h        ;id 
+          pop bc        ; Discard push hl from lia_find
+          ld l,ch_meta_filesize
+          ld c,(hl):inc l
+          ld b,(hl)
+          scf
+          ret
+
+load_if_absent
+;-------------
+; Load & cache the binary file. Return pointer to cached version.
+; Todo: check if ass expect ix to be preserved.
+
+; In:  HL points to sized string out of bank. Rationale:
+     ; 1a/ That how they are encoded in source, and AMSDOS expect size.
+     ; 1b/ Faster comparison.
+     ; 2 / Ass already copy it out of bank.
+         ; Doesn't matter much who doest it
+; Out: Carry if ok, then:
+            ; de = id chunk (more convenient for caller to pass in de)
+            ; bc = size
+     ; NC: error. A = error code.
+     ; !! BK CACHE connected: ass must reconnect bk source anyway.
+     ; TODO: is it really required? 
+
+; --- Search if known name ---
+          call connect_bk_base
+          ex de,hl
+
+          ld hl,asset_index
+.lia_find
+          ld a,(hl):inc l
+          or a:jr z,.lia_next_idx
+          push hl
+          ld h,(hl)
+          ld l,a
+          call connect_asset_chunk:jp nc,fail_pophl
+          ld c,l        ; for lia_found
+          ld l,ch_meta_filename
+          call compare_sstr_nocase
+          jp z,lia_found
+          call connect_bk_base
+          pop hl
+.lia_next_idx
+          inc l
+          jr nz,.lia_find
+
+; ---- Not found: must load in available slot. ----
+
+; Mustn't be called from trace / get_pc_from_line
+; Abort with NC in that case.
+; We mustn't assert as it a very possible scenario 
+   ; load"toto" added after assembly:
+     ;  get_pc_from_line will call load_if_absent via ass.get_file
+          ld a,(vt_rom_firmflag)
+          cp vt_rom_firmenable
+          scf:ccf
+          ret nz
+
+          ex de,hl      ; hl: name
+          push iy
+          CALL_BRIC(load_and_cache)
+          pop iy
+          ret
+
+fail_pophl
+          ld a,fail_unexpectedmess
+          pop hl
+          ret
+
+
+compare_sstr_nocase
+;-----------------
+; Case InSensItive comparison
+; In: DE & HL point to sized strings.
+; Out: Z if strings are the same (case insensitive).
+     ; NZ otherwise.
+     ; A corrupted. HL & DE conserved.
+
+; First, compare size
+          ld a,(de):cp (hl):ret nz
+
+          push de:push hl
+          ld b,a
+          call scci_lp
+          pop hl:pop de
+          ret
+
+scci_lp
+          inc de:inc hl
+          ld a,(de):xor (hl):jr z,scci_ok
+; Other difference than bit 5: not a match.
+          cp &20:ret nz
+; Check if it is a letter.
+          ld a,(de):and &DF ; Uppercase
+          cp "A":ret c
+          sub "Z"+1:inc a:ret nc ; 'INC A' forces NZ
+scci_ok
+          djnz scci_lp
+          xor a         ; Set Z (djnz doesn't do it)
+          ret
+
+connect_asset_chunk
+;in : h=MSB, l=bk
+;out: Carry. bk connected
+;!! All registers preserved but F.
+    ; NC if error. Rationale: give opportunity to save source if mess.
+
+; TODO: Factorize.
+      ; The version in org modifies:
+        ; * curbk: not good.
+
+          push bc
+          ld c,a
+          ld a,l:or h:jr z,cac_mess
+          ld a,l:and &C4:cp &C4:jr nz,cac_mess
+          ld a,h:and &C0:cp &40:jr nz,cac_mess
+          ld b,&7F:out (c),l
+          ld a,c
+          pop bc
+          scf
+          ret
+
+cac_mess
+          pop bc
+          or a
+          ret
+
+
+; ---------------------------             
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ---------------------------             
+      IF inRom
+      ORG code+codesize
+
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          call &BB06
+          ret
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+      END
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+jps
+          jp init       ; cold init
+          jp reset_cache
+          jp load_if_absent ; ass (LOAD directive)
+          jp compare_sstr_nocase
+
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+
+; ========================================

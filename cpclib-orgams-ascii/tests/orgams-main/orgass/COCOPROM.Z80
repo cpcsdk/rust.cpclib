@@ -1,0 +1,73 @@
+; Install cocopy in rom
+      ORG &1000
+      ENT burn
+
+rom   = &1D
+
+      IMPORT "assmap.i"
+
+codedest = cocopy_module
+limit = symb3
+codedest1 = cocopy_module'
+limit1 = symb
+codedest2 = cocopy_jp
+limit2 = ass_jp
+
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn1:call burn_
+          ld ix,param_burn2:call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn WORD rom,codesize,codedest,code
+param_burn1 WORD rom,codesize1,codedest1,code1
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+; ========================================
+
+      IMPORT "cocopy.o"
+      IF inRom == 0
+ !! change in cocopy.rom
+      END
+
+; ------------------
+code2 = $$
+
+      ORG codedest2,$$
+
+jps
+          jp get_page_list
+          jp install_asic
+          jp get_first_last_per_bank
+          jp normalize_bank
+          jp get_intercepting_slice
+          jp get_store_start_import ; used by import.o
+          jp get_store_cur ; WAS used by import.o, not anymore
+          jp reset      ; org
+          jp store_ref  ; used by import.o 
+          jp amorce
+          jp store_code
+          jp install_code ; ch
+          jp init
+          jp cocopy_store
+          jp cocopy_restore
+hi2
+      IF limit2-$
+  !! error align
+      END
+codesize2 = $$-code2
+

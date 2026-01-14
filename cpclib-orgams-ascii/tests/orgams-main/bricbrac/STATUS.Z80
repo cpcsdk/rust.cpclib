@@ -1,0 +1,704 @@
+inRom = 1
+rom   = &1C
+rast  = 0
+dev_checks = 1
+workaround_cue = 1
+dev_checks = 1
+hack_cnt = 0
+ED_DEBUG = 1
+
+; <<<<< StatusBoard related helpers >>>>>>
+
+      IMPORT "bricmap.i"
+
+; Depends on disp.
+
+; -- 2025 ---
+ ; Aug
+    ;1 vj: Reactivate debug line when mini-dump (ED_DEBUG=1)
+
+; -- 2023 ---
+ ; Dec
+   ;22 vi: disp_infos_com: save HL to respect same API than disp_infos
+         ; Remove disp_info
+   ;22 Reintregrate here (since orgams/ayane quite different)
+     ; Use bricmap.i
+
+;---- FF Release ----
+  ;  5 vh Move auto-complete suggestion to last line
+     ; (so it can be used for CONTROL-L)
+ ; Nov   
+  ; 26 Extract code in ums:lib/ayane (for use by ayane)
+
+ ; April           
+  ; 25 vg No more cursor with video inverse 
+;---- Beta I -----
+  ; 19 vf Now that inverse video is plugged in disp.status_char,
+       ; /field_refresh/ must leave 0 as is (not &80)
+       ; otherwise a full blank line is display instead of just
+       ; clearing the field
+  ; 15 ve Affiche A, B... for tab >= 10
+  ; 12 vd Change disp_modified API: Z/NZ
+     ;vc ClearQuestion: Efface whole line (filename can be bigger now).
+
+  ; 10 (post revision) vB:
+   ; - Reenable path (use unidos version. cubemdos api is too ugly).
+   ; - Display filename left (no more "Orgams"
+   ; - Remove debug info (ED_DEBUG = 0)
+
+; -- 2021 ---
+
+           ; 27  vA: Add /workaround_cue/ to offset buffer overflow.
+       ; Oct 19  v9: Add /clear_suggestions/
+                   ;     /disp_suggestions/
+                   ;     /disp_selection/
+
+           ; 10  v8: Import /disp_tot_lines/ from ed:
+                      ; Make more sense to be here
+                      ; Make room for ed-braa.
+
+     ; May    9  v7: Add test stub, so inRom=0 doesn't crash.
+                   ; Add /hack_cnt/ for todo #f3 
+
+           ; 24  v6: Display CWD (cubemdos)
+
+           ; 21  v5: Display tab# before filename
+
+; 2021 Jan   17  v4: Display Free Chunks.
+
+              ;  v3: Fix bug #107b (wrong line # after del block):
+                     ; POS_LINE must be passed to INFO_CUR_LINE
+              ;  v2: Remove isModified (must be passed). Burn.
+; 2020 April 26  v1: Extracted for ed-brj.
+
+      ORG &2000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT test
+      END
+
+codedest = status
+limit = liszt
+codedest2 = status_jp   ;&FDB8
+limit2 = aap_jp         ;&FDDF
+
+; ------------------------------------------------
+
+test
+;TODO: activate bandeau so we can see?
+          call setup_nrt
+          call test_disp_filename ; !?! crash if put last
+          call test_clear_suggestions
+          call test_disp_suggestions
+          ret
+
+setup_nrt
+; No orgams init: that's a very low-level module.
+; Just connect ROM since we depend on parse.
+
+kl_rom_select = &B90F
+          ld c,rom:call kl_rom_select
+          ret
+
+fail  = &BE00
+
+test_clear_suggestions
+          ld iy,clear_suggestions
+          call _test_call
+          ret
+
+test_disp_suggestions
+          ld iy,disp_suggestions
+          ld hl,.txt    ; not important, expect there is a 0
+          call _test_call
+          ret
+.txt  BYTE "abc",0
+
+test_disp_filename
+;TODO: init disp_status? how do the other tests do?
+          ld a,1
+          ld hl,.filename
+          ld iy,disp_filename_and_path
+          call _test_call
+;can manually check result in BUF_INFO
+          ret
+.filename BYTE "toto",0
+
+      IF 0
+test_disp_path
+          ld a,1
+          ld hl,.filename
+          ld iy,disp_path
+          call _test_call
+;can manually check result in BUF_INFO
+          ret
+      END
+
+
+; ------------------------
+_test_call
+; IN: IY routine to call.
+; For now, just check the call returns!
+          xor a:ld (.mark),a
+          call .test
+          ld a,(.mark):cp "x":call nz,fail
+          ret
+
+.test
+          call jp_iy
+          ld a,"x":ld (.mark),a
+          ret
+
+.mark BYTE 
+
+jp_iy     jp iy
+
+; ========================================
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+; 2023
+  ; Nov 
+    ; 28: Extracted from ums:org/status.o
+
+BUF_TMP = &9100         ; Buffer de r{serve (reuse ass' compute params)
+                        ; !!Shared with ed!!
+single_use = &9E00
+BUF_INFO = single_use + &20 ; why +&20
+
+fail  = &BE00
+; -------------------------------
+
+      MACRO CALL_BRIC rout
+          call rout
+      ENDM
+
+      MACRO RASTER col
+      IF rast
+          push bc
+          ld bc,&7F10:out (c),c
+          ld c,col:out (c),c
+          pop bc
+      END
+      ENDM
+
+; ------------------------------------------------
+; ---------- In this rom -------------
+
+ds    = &FE78           ; disp_status
+; For all _at routines, D, E= x, y (0 based)
+status_set_cursor = ds  ; All registers saved (including AF)
+status_char = ds+24     ; AF trashed, all other registers saved
+status_char_at = ds+3
+status_str_at = ds+6
+status_pad_at = ds+9
+status_inv_cursor_at = ds+45 ; AF trashed, all other registers saved
+status_clear_line_at = ds+48
+status_str_shaded_at = ds+51
+
+disp  = &FF14
+putDeciA = disp+&6C
+putDeciHL = disp+&6F
+putHexaA = disp+&72
+putHexaHL = disp+&75
+
+chunk = &FE00
+get_free# = chunk+30
+
+; ------------------------------------------------
+disp_filename_and_path
+; Affiche "tab" (f1..f9) et filname
+;   Also, CWD ! We do it here since
+   ;  - it is not refreshed often.
+   ;  - it is somewhat linked (unidos use load to change directory)
+; In:  A: numero tab
+    ; HL: Pnt Filename
+
+
+; --- f1: (source #) ----
+
+          push af
+          ld de,X_TAB#*&0100 + status_line_main
+          ld a,"f":CALL_BRIC(status_char_at)
+          pop af
+
+          add &31
+;10 -> switch to "A" ...
+          cp &3A:jr c,$+4:add 7
+          CALL_BRIC(status_char)
+          ld a,":":CALL_BRIC(status_char)
+          ld d,X_FILENAME
+          call disp_infos_com
+
+; --- A: drive ----
+          ld de,(&BE7D)
+          ld a,(de)
+          add "A"
+          ld de,X_DRIVE*&0100 + status_line_path
+          CALL_BRIC(status_char_at)
+          ld a,":":CALL_BRIC(status_char)
+
+      IF hack_cnt
+; For debugging purpose (todo #f3):
+; cnt must be incremented when we switched to editor,
+;  but not in other case
+          ld hl,(cnt)
+          inc hl
+          ld (cnt),hl
+          ld de,BUF_INFO
+          push de
+          call DEC2STR
+          pop hl
+          ld de,X_CWD*&0100 + 2
+          jr disp_infos_com
+
+      ELSE
+
+;must copy name in ram for bcd4!
+          ld hl,nget_path
+          ld de,BUF_INFO
+          push de
+          call copy_nt
+          pop hl
+          call &BCD4
+          ret nc
+          ex de,hl
+          call clear_buf_info ; for str$ variable (without eos) 
+          push hl
+; Push address to str variable
+          ld (hl),BUF_INFO+2 AND &FF:inc hl
+          ld (hl),h:inc hl
+; Str$ variable itself: length, pnt
+          ld (hl),70:inc hl
+          ld (hl),BUF_INFO+5 AND &FF:inc hl
+          ld (hl),h
+          ex de,hl
+
+          ld a,1
+          pop ix
+          call &1B
+          ld hl,BUF_INFO + 5
+          ld de,X_CWD*&0100 + status_line_path
+      END
+; enchaine!
+          jp disp_infos_com
+; Affiche une string dans la ligne d'infos
+; IN  : HL = chaine @ afficher
+; IN  : D, E = positions X, Y du curseur
+; OUT : D = new position X (last char)
+      ; E inchanged
+          call disp_infos_com
+          pop hl:pop af
+          ret
+
+disp_tot_lines
+; In: DE= total nb lines.
+          ld hl,BUF_INFO
+          push hl
+          ld (hl),"/":inc hl
+          ex de,hl
+          call DEC2STR
+          pop hl
+          ld de,X_TOT_LINES*&0100 + status_line_main
+;enchaine
+disp_infos_com
+; Affiche une string dans la ligne d'infos
+; IN  : HL = chaine @ afficher   !!! In RAM or BRICBRAC.com
+; IN  : D, E = positions X, Y du curseur
+; OUT : D = new position X (last char)
+      ; E, HL inchanged
+          push af:push hl
+          push de
+          push hl
+          CALL_BRIC(status_str_at)
+          pop bc
+          scf:sbc hl,bc ;longueur chaine
+          pop de
+          ld a,d:add l:ld d,a
+          pop hl:pop af
+          ret
+
+clear_suggestions
+          ld de,status_line_completion
+          jp status_clear_line_at
+
+disp_suggestions
+; Display suggestions for 
+
+;In: hl=buffer xx00
+      IF workaround_cue
+          xor a:ld l,WIDTH:ld (hl),a:ld l,a
+      END
+          call clear_suggestions
+          ld de,status_line_completion
+          jp status_str_shaded_at
+
+
+disp_selection
+;In: hl=buffer xx00
+   ; d=start in buffer
+   ; e=end in buffer           
+
+; Redisplay all (simpler than shading previously selected)
+; Needed for scrolling anyway.
+          push de:push hl
+          call disp_suggestions
+          pop hl:pop de
+
+; Compute length since no 0 sentinel.
+          ld a,e
+      IF workaround_cue
+          cp WIDTH:ret nc
+      END
+          sub d
+      IF dev_checks
+          call c,fail   ; We must have d <= e
+      END
+          ld b,a
+          ld l,d
+          ld e,status_line_completion
+          jp status_pad_at
+
+INFO_CUR_LINE
+; Juste refresh info about current line!
+; In: HL = Current line, passed by ed.
+         ; Note: vd_curline might be out of sync.
+               ; Cf bug #107 after copy/del block.
+; OUT: Save AF !      
+
+;--- Current line. (Total line is refreshed only when needed)
+          push af
+          ld de,BUF_INFO
+          push de
+          call DEC2STR
+          pop hl
+          ld de,X_CUR_LINE*&0100 + status_line_main
+          call disp_infos_com
+
+;--- Free chunks
+          ld d,X_FREE
+          ld hl,txt_free
+          call disp_infos_com
+          push de
+          ld de,BUF_INFO
+          push de
+          call get_free#
+          call putHexaHL
+          push hl
+          ld hl,txt_free'
+          ld bc,4
+          ldir
+          pop hl
+      2 ** [srl h:rr l] ; 4 chunks &100 = 1k
+          call putDeciHL
+          ld a,"k":ld (de),a:inc e
+          ld a,")":ld (de),a:inc e
+          xor a:ld (de),a
+          pop hl
+          pop de
+          inc d
+          call disp_infos_com
+
+      IF ED_DEBUG
+;Madram: internal variables
+;vd_curline = &7CE9
+vd_curlinebk = &7CEB
+vd_curlinestart = &7CEC
+ve_view = &79F2         ; defined in ch.o
+
+          ld a,(ve_view)
+          dec a:jr nz,.skip
+
+          ld de,BUF_INFO
+          push de
+          ld a,(vd_curlinebk)
+          call putHexaA
+          ld a,":":ld (de),a:inc e
+          ld hl,(vd_curlinestart)
+          call putHexaHL
+          xor a:ld (de),a
+          pop hl
+          ld de,86 * &0100 + status_line_debug
+          pop af
+          jp disp_infos_com
+.skip
+      END
+          pop af
+          ret
+
+clear_buf_info
+; Clear buffer
+; OUT: hl buffer
+          ld hl,BUF_INFO
+.lp       ld (hl),0:inc l:jr nz,.lp
+      IF BUF_INFO AND &FF
+          ld l,BUF_INFO AND &FF
+      END
+          ret
+
+txt_free BYTE "Free: &",0
+txt_free' BYTE "00 ("
+
+
+; ----------------------
+
+ClearQuestion
+; Efface ligne question.             
+; Out: de trashed, all other registers saved
+          push af       ; Save answer and flags
+          push bc       ; Needed for C_EXP
+          push de       ; Needed for C_LABEL / C_FIND_TEXT
+          ld de,0 + status_line_question
+          CALL_BRIC(status_set_cursor)
+
+          ld b,LEN_QUESTION
+cqlp
+          ld a," "
+          push bc
+          CALL_BRIC(status_char)
+          pop bc
+          djnz cqlp
+          pop de
+          pop bc
+          pop af
+          ret
+
+
+disp_modified
+; Affiche le status du source modifi{ ou non
+; In:  Z Non modifie.
+    ; NZ Modifie.
+
+          push de       ; Preserve line# when coming from quitLine context
+          ld a,ASTERIX  ; C'est plus drole comme \a
+          jr nz,$+4:ld a," " ; Clear if not modified
+          ld de,X_MODIFIED*&0100 + status_line_main
+          CALL_BRIC(status_char_at)
+          pop de
+          ret
+
+
+field_refresh
+; Affichage complet de tout le champ (overkill but nevermind)
+; dans bar status, avec cursor.
+; A utiliser conjointement avec field editor.
+; NB: utilise pour saisie question.
+
+; In:
+; HL : adr du champ (NT string)
+; DE : x, y in status bar (start champ)
+; B  : longueur max du champ           
+; C  : cursor pos dans champ (0: first)
+; A  : Si Bit 7 est mÿs, inverse video  (or &80 sur chaque char)
+; Out: A trashed, all other saved
+          RASTER(&40)
+
+          push hl
+          CALL_BRIC(status_set_cursor)
+
+          push bc
+          and &80:ld c,a
+print_lp
+          ld a,(hl):or a
+          jr z,.stay_0  ; Stay at same position, and no inverse!
+          inc hl
+          or c          ; Inverse video?
+.stay_0
+          CALL_BRIC(status_char)
+          djnz print_lp
+
+
+; Don't display cursor when inverse video.
+; (expect if empty field)
+          ld a,c
+          pop bc
+          inc c:dec c:jr z,.cursor ; empty field: cursor
+          add a:jr c,.nocursor
+.cursor
+          push de
+;display cursor at Offset + C
+          ld a,d:add c:ld d,a
+          CALL_BRIC(status_inv_cursor_at)
+          pop de
+.nocursor
+          pop hl
+
+          RASTER(&54)
+          ret
+
+;----------------------
+copy_nt
+;in: HL=source, DE=dest
+
+          ld a,(hl)
+          ld (de),a
+          or a
+          ret z
+          inc hl
+          inc de
+          jr copy_nt
+
+; Conversion d'un entier 16bit en string justifie a droite.
+; Entr{e : HL=Nombre @ convertir
+;          DE=Adresse d'un buffer pour stocker la chaine
+; Sortie : Buffer remplit
+DEC2STR
+          ld a,h:or l
+          jr nz,ContDec2Str
+
+; NB: Justification a droite manquante pour 0.
+    ; Nevermind since line# always > 0.
+          ld a,"0":ld (de),a
+          inc de:xor a:ld (de),a
+          ret
+
+ContDec2Str
+          push de
+          ld bc,-10000
+          call DEC2STR1
+          ld bc,-1000
+          call DEC2STR1
+          ld bc,-100
+          call DEC2STR1
+          ld c,-10
+          call DEC2STR1
+          ld c,b
+          call DEC2STR1
+          pop hl
+          ld a,"0"
+BCL       cp (hl)
+          ret nz
+          ld (hl)," "
+          inc hl
+          jr BCL
+DEC2STR1  ld a,"0"-1
+DEC2STR2  inc a
+          add hl,bc
+          jr c,DEC2STR2
+          sbc hl,bc
+          ld (de),a
+          inc de
+          xor a
+          ld (de),a     ; Put 0 to mark end of string
+          ret
+
+; GETPATH was cubemdos's RSX.
+;nget_path BYTE "GETPATH"+&80,0 ; &80 for rsx search, 0 for copy_nt
+; PATH is unidos's version.
+nget_path BYTE "PATH"+&80,0 ; &80 for rsx search, 0 for copy_nt
+
+; ----- Constantes -----
+
+status_line_main = 0
+status_line_path = 2
+status_line_question = 3
+status_line_completion = 4
+status_line_debug = 3
+
+ASTERIX = "*"
+
+; Positions dans status
+; line 0
+X_TAB# = 2              ; "f1:"
+X_MODIFIED = X_TAB#+3
+X_FILENAME = X_MODIFIED+1
+X_CUR_LINE = 37
+X_TOT_LINES = X_CUR_LINE+5
+X_FREE = 73
+; line 2          
+X_DRIVE = 2
+X_CWD = X_DRIVE + 3
+
+WIDTH = 96              ; largeur totale bandeau
+
+LEN_QUESTION = WIDTH-2  ; Max len question (for clean)
+; Actually max would be 2 + len("import:") + LEN_SRC  
+; But for now we erase whole line (which start at 2)
+
+cnt   = &7EFC           ; before cocopy
+
+
+; ---------------------------             
+
+realsize = $$-code
+hi
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ========================================
+
+      ORG $$
+burn
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          jp &BB06
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp clear_suggestions
+          jp disp_suggestions
+          jp disp_selection
+
+      IF inRom
+      IF $-&FDC1
+   !! error with codedest2
+      END
+      END
+
+          jp disp_tot_lines
+          jp disp_filename_and_path
+          3 ** BRK      ; was jp disp_infos ; no more used!
+          jp disp_infos_com
+          jp INFO_CUR_LINE
+          jp ClearQuestion
+          jp disp_modified
+          jp field_refresh
+          jp copy_nt
+          jp DEC2STR
+
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+codesize2 = $$-code2
+

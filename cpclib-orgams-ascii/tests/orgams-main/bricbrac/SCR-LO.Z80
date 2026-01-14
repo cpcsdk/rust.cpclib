@@ -1,0 +1,662 @@
+inRom = 1
+USE_NUM = 1             ; Place to change for address instead of num line
+todo  = 1
+; <<<< Low-level routines abouts screen update >>>>
+; Goals:
+   ; - Facilitate orgams port on other systems/os
+   ; - Make room in orgams.rom   
+   ; - Some might be reusable for gedeihen.
+; !!! Some of the routines are still tied to ED specifically.
+    ; E.g. sharing of CURSOR_X CURSOR_Y variables, ED constants.
+
+; Uses: disp, status.DEC2STR 
+; Used by: upd-scr, ed (wip).
+
+; 2023  
+  ; Dec  v3 Moved to make room for logams.cpt
+          ; Use bricmap.i
+  ; May  v2 Moved @ C500
+
+; 2022
+  ; Jan
+     ; 26 v1 Extracted from upd-scr7 to make room in orgams.rom 
+
+      IMPORT "bricmap.i"
+
+rom   = &1C
+codedest = scr_lo
+limit = bitset
+codedest2 = scr_lo2
+limit2 = field
+codedest3 = scr_lo3
+limit3 = fonte_rom
+codedest4 = scr_lo_jp
+limit4 = unknown_jp0
+
+      ORG &2000
+
+      IF 1-inRom
+      BRK
+; No tests here See XXXX.Nrt
+          ret
+      END
+
+      IMPORT ":lib/burnrsx.o"
+
+      IF inRom
+      ENT burn
+      END
+
+; ----- In this rom (BRIC) ------
+disp  = &FF14
+dispChrAt = disp+&12
+dispChrAtGrey = disp+&18
+;strPadEi = disp+&33 
+;strPadAtEi = disp+&87
+;strPadShadedEi = disp+&45
+
+status = &FDC7
+DEC2STR = status+21
+
+; ========================================
+      IF todo
+; move those in libscr.i  / libkl.i
+      END
+
+kl_frame_wait = &BD19
+
+scr_get_position = &BC0B
+scr_char_position = &BC1A
+scr_fill_box = &BC44    ; H<->D   L top E bottom   A = fill
+scr_hw_roll = &BC4D     ; in: B=dir A=fill Out: af bc de hl are corrupt.
+scr_sw_roll = &BC50     ; like hw, plus hlde= Lft Top Rgt Bot
+
+; ========================================
+
+vars  = &79E0           ; After ed
+
+; ========================================
+burn
+          ld ix,param_burn:call burn_rsx
+          ld ix,param_burn2:call burn_rsx
+          ld ix,param_burn3:call burn_rsx
+          ld ix,param_burn4:call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+param_burn3 WORD rom,codesize3,codedest3,code3
+param_burn4 WORD rom,codesize4,codedest4,code4
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+; ========================================
+init
+          xor a
+          ld (FLAG_CURSOR),a
+          ret
+
+
+INC_COL
+; Incr{mente le curseur d'une colonne
+          ld a,(CURSOR_X)
+          inc a
+; Enchaine
+; G}re la position du curseur X
+;  IN : A la position du curseur
+; OUT : Rien ; NC si d{bordement, C sinon
+SetCursorX
+          cp MAX_CUR_X+2 ; D{passement ? plus grand que 80 d'ou +2
+          ret nc        ; Si oui alors on sort
+          ; Sinon on update
+          ld (CURSOR_X),a
+          ret           ; Carry set
+
+display_line_header
+; Affiche: numero ligne, marker block, 
+; IN HL = line # (for NUM_LINE and setMarkerLine)
+          call NUM_LINE
+          ex de,hl
+;enchaine
+setMarkerLine
+; affiche/efface marker ligne en cours
+; IN: DE = ligne
+
+          push de
+          call IsSelectedLine
+          push af
+; Dessine le bloque 
+          ld hl,(CURSOR):dec l ; 0 based
+          ld h,X_MARKER
+          ld d,h
+          ld e,l
+          pop af
+          sbc a
+          and %00101000
+          call scr_fill_box
+          pop de
+          ret
+
+IsSelectedLine
+; IN: DE = ligne
+; OUT : Carry si la ligne est s{lectionn{e (START <= DE <= END)
+      ; or DE is exactly one bound (so when just one is set we see it)
+
+
+          ld hl,(BL_START)
+          or a:sbc hl,de:jr z,ret_c
+          ret nc        ; NC if DE < BL_START
+
+          ld hl,(BL_END)
+          or a:sbc hl,de
+ret_c
+          ccf
+          ret z         ; C if  DE == bound
+          ret nc        ; NC if DE > BL_END
+
+; Here DE < BL_END, now we must check BL_START if not 0
+          ld hl,(BL_START)
+          ld a,l:or h
+          ret z
+ret_carry
+          scf
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+update_screen_prelude
+;  IN : HL = SCR_LINE  (previously focused line)
+;     : DE = POS_LINE  (new line to jump to)
+; Out: Z: if no scroll todo.
+     ; NZ, NC: scroll one line was made (DE = new line to print).
+     ; NZ, C: caller must refresh all (DE = new line).
+
+; If already sync: ret immediatly.
+; Though, cur_on is need in the following case:
+;  * up from first line
+;  * down past last line
+; Because we quitline (cur_off), try to go to the invalid line,
+; and rollback buffer.
+          or a:sbc hl,de:add hl,de
+          jr z,cur_on   ; Exit with Z
+
+          call cur_off
+
+          push hl
+          call in_page
+          pop hl
+          ld c,0
+          jr z,_okinpage
+
+          inc a:jp nz,ret_carry ; more than 1 line, returns carry
+
+; Just 1 line: SCROLL
+          inc c         ; c = 1
+          jr c,.okdir   ; If carry, line is upward.
+          ld c,-1       ; line is downward.
+.okdir
+          call upd_cury
+          push de
+; In: B=direction scroll:  0 for down (free top line)
+                        ; >0 for up   (free bottom line)
+          ld b,c:dec b
+          push af
+          xor a         ; Fill with 0
+          call scr_hw_roll
+
+          call offset_firm_to_rupt
+          pop af
+; Wait for scroll to avoid bug display at bottom of page
+          call z,kl_frame_wait
+          pop hl
+          xor a:inc a   ; NZ, NZ
+          ret
+
+_okinpage
+; Exit no scroll (expect c=0 here)
+          call upd_cury
+          xor a         ; For Z flag.
+;Enchaine
+cur_on
+;Preserve AF
+          push af
+          ld a,1
+          jr cur_switch
+cur_off
+          push af
+          xor a
+cur_switch
+;in: A= new state
+          push hl
+          ld hl,FLAG_CURSOR
+          cp (hl)       ; If Z: nothing to do (new state = old)
+          ld (hl),a
+          call nz,inv_cursor
+          pop hl
+          pop af
+          ret
+
+
+inv_cursor
+          push af:push bc:push de:push hl
+          ld bc,(CURSOR)
+          call cur2pos
+          ex de,hl
+
+          ld a,h:and &F8:cp &C0:call nz,&BE00 ; Sanity check
+          ld b,8
+ioc_lp
+          rst &20:cpl:ld (hl),a
+          ld a,h:add 8:ld h,a
+          djnz ioc_lp
+          pop hl:pop de:pop bc:pop af
+          ret
+
+set_cursor
+;mimic bb75
+          ld a,(FLAG_CURSOR)
+          or a
+          call nz,inv_cursor
+          ld (CURSOR),hl
+          call nz,inv_cursor
+          ret
+;------
+do_scr_ins
+;In: hl= current line
+   ; de= total lines
+          push af
+          push hl:push de
+          call in_page
+          pop de:pop hl
+;reuse RENUM : overkill, nevermind.
+          call z,RENUM_TO
+          pop af
+
+          ld b,0
+          jr scr_com
+
+scr_del
+; Scroll from cursor
+          ld a,(CURSOR_Y)
+          ld b,a        ; Non zero for scroll up
+          dec a
+;Enchainel
+scr_com
+;[ED specific]
+;Scroll goutieres (col 0 et h=7) et lignes,
+;mais pas numero de lignes
+
+;In;l : CURSOR Y
+   ;h : Start X 
+   ;b : zero = scroll down.  Scroll up otherwise.
+          ld l,a
+          push hl
+          push bc
+          xor a
+          ld h,a
+          ld d,a
+          call scr_com2 ; Col 0
+          pop bc
+          pop hl
+          ld h,DEB_LINE-1
+          ld d,MAX_CUR_X
+scr_com2
+          ld e,NB_LINES-1
+          xor a
+          jp scr_sw_roll ; Cols 7 et +
+
+get_bot
+;OUT: HL Line at bottom (may overflow !)
+          call get_top
+          ld bc,NB_LINES-1
+          add hl,bc
+          ret
+
+
+hi2
+realsize2 = $$-code2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+; ------------------
+code3 = $$
+
+      IF inRom
+      ORG codedest3,$$
+      END
+
+; -----------------------------
+RENUM_TO
+;in: hl=current line
+   ; de=nb lines
+          call seek_top
+          ld a,(CURSOR_Y)
+          push af
+          ld bc,NB_LINES*&0100 + 1 ; c=cursor
+RDW_LP
+          ld a,c:ld (CURSOR_Y),a
+          call NUM_LINE
+          or a:sbc hl,de:add hl,de ; Z if HL=DE
+          jr z,ExitRdw
+          inc hl
+          inc c
+          djnz RDW_LP
+ExitRdw
+          pop af
+          ld (CURSOR_Y),a
+          ret
+
+
+upd_cury
+; Set cursor Y at new pos (in same page).
+;  IN : HL = SCR_LINE  (previously focused line)
+;     : DE = POS_LINE  (new line to jump to)
+      ;  C = corr. 1 after scroll up.
+
+          ld a,(CURSOR_Y)
+          add e:sub l   ; + [DE-HL] (knowing it fits in 8 bits)
+          add c
+          ld (CURSOR_Y),a
+          ret
+
+; -----------------------------
+
+;    Affiche num{ro ligne
+
+NUM_LINE
+; In: HL: num to display. 
+          push af
+          push hl
+          push bc
+          push de
+      IF USE_NUM:ELSE
+ !! TODO: print address instead
+      END
+          ld de,BUF_NUM
+          push de
+          call DEC2STR
+          pop de
+          ld bc,(CURSOR)
+          push bc
+          ld b,2
+          ld (CURSOR),bc
+NUM_LP
+          ld a,(de)
+          or a
+          jr z,END_NUM
+          call PUT_CHAR_GREY
+          call INC_COL
+          inc de
+          jr NUM_LP
+END_NUM
+          pop hl
+          ld (CURSOR),hl
+RET_NUM
+          pop de
+          pop bc
+          pop hl
+          pop af
+          ret
+
+;------------
+DrawBloc
+;
+; Dessine les marqueurs de bloque si n{cessaire
+; Very ED specific, but so is scroll_del...
+
+; In: HL= Current line
+
+          push bc
+          push de
+          push hl
+          ld a,(CURSOR_Y):push af
+
+          call seek_top
+          ex de,hl
+          ld b,NB_LINES
+          ld a,1
+db_lp
+          push bc:push af
+          ld (CURSOR_Y),a
+          call setMarkerLine
+          inc de
+          pop af:inc a
+          pop bc
+          djnz db_lp
+          pop af:ld (CURSOR_Y),a
+          pop hl
+          pop de
+          pop bc
+          ret
+
+
+
+;------------
+
+in_page
+;Test si ligne (DE) dans page
+; In: HL= current line
+    ; DE= new line
+;Out: Z, NC si oui. 
+    ;Sinon NZ et a:-1 iif only one line above/below
+         ; C si au dessus
+         ;NC si en dessous
+    ;BC, HL trashed
+
+          call get_top
+
+; DE >= TOP ?
+
+          ex de,hl
+          or a:sbc hl,de
+          ld a,l:and h
+          adc hl,de     ; restore hl & flags (adc needed for NZ)
+          ex de,hl
+          ret c         ;no: Above (NZ, C)
+
+          ld bc,NB_LINES
+          add hl,bc     ;Past bottom
+
+; DE > PAST ?
+          scf
+          sbc hl,de
+          jr c,below
+          xor a
+          ret           ; Z, NC
+
+below
+          ld a,l:and h
+          dec h         ; For nz (assume less than 65400 lines!)
+          ret           ; (NZ, NC)
+
+
+get_top
+;In:  HL=Line at cursor Y 
+;OUT: HL=Line at top  
+; This version without check (see seek_top below) is needed for inpage.
+; Is it, though?
+          ld bc,(CURSOR)
+          xor a
+          ld b,a
+          dec c
+          sbc hl,bc
+          ret
+
+seek_top
+;comme get_top, mais corrige si curseur trop bas
+          call get_top
+          jr c,cur_corr
+          ret nz
+;hl<=0
+;y:=y+hl-1
+cur_corr
+; hl=0 can happen for instance when Y = 1 and POS_LINE hase been
+; mutated after bloc deletion.
+; hl<0 ??? 
+; A revoir de toute facon, la routine est buggue! 
+
+          ld a,(CURSOR_Y)
+          add l
+          dec a
+          ld (CURSOR_Y),a
+          ld hl,1
+          ret
+
+
+;    Affiche un caract}re a l'{cran
+
+;    IN  : A = Caract}re a afficher
+;        : B = 0 pein texte, 1 gris{
+;    OUT : Rien
+PUT_CHAR_GREY
+          ld b,1
+          jr PUT_CHAR_GR
+PUT_CHAR
+          ld b,0
+PUT_CHAR_GR
+; Sauve tous les registres
+          push af
+          push hl
+          push bc
+          push de
+          push ix
+          push iy
+
+          push af
+          ld a,b
+          call chr_pos
+
+          or a:jr z,cont_put_char
+          pop af
+
+          call dispChrAtGrey
+          jp ret_put_char
+cont_put_char
+          pop af
+          call dispChrAt
+ret_put_char
+          pop iy
+          pop ix
+          pop de
+          pop bc
+          pop hl
+          pop af
+          ret
+
+
+chr_pos
+;TODO: remove?
+;Out: DE = pos affichage
+          push hl
+          ld hl,(CURSOR)
+          jr cur2pos_
+
+cur2pos
+;In: BC = pos curseur
+;Out: DE = pos affichage
+    ; BC trashed (actually B=1 width in mode 2, but we don't use that).
+          push hl
+          ld l,c:ld h,b
+cur2pos_
+          dec l
+          dec h
+          push af
+          call scr_char_position ; Renvoie l'adr depuis LINE/COL
+          ex de,hl
+          pop af
+          pop hl
+          ret
+
+offset_firm_to_rupt
+; Sync firm offset to rupture.
+          call scr_get_position
+          ld a,h:srl a:rr l
+          or &30:ld h,a
+          ld (crtc_offset),hl
+          ret
+
+; ======================================
+hi3
+realsize3 = $$-code3
+      IF inRom
+      FILL limit3-$,&F7
+      END
+codesize3 = $$-code3
+
+; ------------------
+code4 = $$
+
+      IF inRom
+      ORG codedest4,$$
+      END
+
+jps
+          jp init
+          jp do_scr_ins
+          jp scr_del
+          jp RENUM_TO
+          jp NUM_LINE
+          jp seek_top
+          jp get_bot
+          jp set_cursor
+          jp inv_cursor
+          jp cur_on
+          jp cur_off
+          jp cur2pos
+          jp DrawBloc
+          jp offset_firm_to_rupt
+          jp update_screen_prelude
+          jp display_line_header
+
+hi4
+      IF inRom
+      FILL limit4-$,&F7
+      END
+codesize4 = $$-code4
+
+NB_LINES = 25           ; Nombre lignes affich{es
+X_MARKER = 6
+DEB_LINE = 8            ; D{but de l'{criture des mn{moniques
+;LEN_LINE = 73
+MAX_CUR_X = 79
+
+; ========= VARIABLES ===============================================
+; ----- Shared with ED ------
+CURSOR = &7811          ; Position du curseur Y,X 
+CURSOR_Y = CURSOR
+CURSOR_X = CURSOR+1
+BL_START = &781A        ; D{but de la s{lection
+BL_END = &781C          ; Fin de la s{lection
+
+crtc_offset = &9CFE     ; -- Shared with disp
+
+; ----- Local ------
+      ORG vars,$$
+
+FLAG_CURSOR BYTE        ; 1 si curseur affiche
+
+; ========= BUFFER ==================================================
+BUF_NUM SKIP 6          ; Buffer de conversion DEC->STR
+
+      SKIP &79F0-$      ; Vars for CH
+

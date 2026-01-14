@@ -1,0 +1,4580 @@
+inRom = 1
+main_rom = &0A          ; ORGAMS.ROM 
+ext_rom = &1A           ; ORGEXT.ROM
+rom   = ext_rom
+dev_checks = 1
+
+; <<<<< Parser / encoder (pre-assemble) >>>>>
+
+; Depencencies: aap
+; Dependent: org, evacom, find (is_sep)
+
+; - /Nomenclature/
+; - /tests/    
+; - /start/   (micro routines)
+
+; - nrt_preass_lines
+
+; \/ In 2025 \/\/\/\/\/\/\/\/\/
+; ----- HH Beta 2 -----
+; Jul 
+    ; 21: CI Accept "out (c), a"
+           ; Fix .savetoto parsed as SAVE
+        ;    Re-add SAVEA (From X idea)
+    ; 19: CH Remove SAVEA (choice done after CTRL-A)
+    ; 18: CG Add < > <= >= = !=
+           ; Reactivate SAVE/SAVEA 
+           ; Accept space after ","  (e.g.  add a, a)
+
+; ----- HH Beta 1 -----
+; Jun
+    ; 21: CF. Add "0x" for hexa
+            ; Add "0b" for bin
+            ; Move in ORGEXT.ROM
+            ; deactivate SAVE/SAVEA for now as not supported in disa/ass
+
+; ----- GG Beta M -----
+; Jun
+    ; 20: CE. Add SAVE/SAVEA directive (not burned in GG)
+        ; CD. Remove "sb" again! 
+                 ; - not plugged
+                 ; - more room for SAVE directive
+sb    = 0
+; ----- GG Beta I -----
+; Apr
+    ;  7: CC. Add "sb" command
+; Mar
+    ; 27: CB. Remove "load" command:
+                ; - not yet a monogams command
+                ; - prevent to be seen as RSX
+; \/ In 2023 \/\/\/\/\/\/\/\/\/ 
+; Dec
+    ; 23: CA. Command tabs for monogams
+            ; Fix last_ position
+    ; 10: BZ' (no change): use bricmap.i
+; Apr 19: Make closing " optional for strings.
+        ;  -> Otherwise |load,"toto:  is incorrectly parsed
+        ; s/y/BRK as debug command, to avoid unexpected behavior
+        ; Remove sb and pr, as they are not plugged.
+        ; Remove r, as it is bugged and less handy than |help
+        ; Remove help, as it shadows |help for no good reason.
+pr    = 0
+
+; Jan 14: BZ. Export codes as "monique.i"
+            ; Add STR directive (ec2_str)
+
+; \/ In 2021 \/\/\/\/\/\/\/\/\/ 
+
+; !! On hold !! ; * Support mamacro 12 (no need for parenthesis)
+ ; Rationale: ease rasm import (e.g. align &100). 
+    ; !! Cannot just set vbc=0 !!
+    ; -> mini-regression: ld bd,2 seen as macro. Not cool for Candy.
+    ;    bug #aa still ok though, since () displayed.
+ ; To properly solve that: allow absence of parenthesis only if name:
+          ; - not an opcode (e.g ld)
+          ; - and/or known as macro 
+vbc   = 1
+
+; Dec
+   ; 19 by Add 'sb' and 'pr' commands.
+
+
+; Oct 22 bx Expose /is_labelchar/ (for ed.completion)
+; Oct 16 bw * Add test /_#ca/ rsx with string parameter. Already ok
+; Sep 13 bv * Add test for binary with custom display.
+          ; * Not supported yet!!!
+          ; Instead: change default display in disa.o
+
+; Jul 10 bu * Support xl, lx etc (for rasm import)
+              ; -> Actually just set vbc=0 !!
+              ; !! so mini-regression: ld bd,2 seen as macro
+              ; !! bug #aa still ok, since () displayed.
+          ; * Add commande se (search text or byte)
+
+    ; 27 bt Extend limit at dc00.
+
+    ; 18 bs Fix regression ex  de,hl (two or more space)
+          ; was t_exde: ps_consumelitt was fine with 0 chars!!
+                      ; -> encode as ex de,hl + syntax error.
+          ; Add p_brk for debugging.
+    ; 13 br Support DEFM.
+     ; 7 bq Export/Import
+          ; Fix regression ex (sp),hl  Come on!
+     ; 6 bp Fix regression ex(sp),hl
+          ; Accept exde, exaf,
+       ; bo Fix spurious expension of exa, exd, exh.
+ ; Jun 3 bn Accept ex hl,de:ex d:ex de: ...
+
+    ; 25 bm Reactive monogams command 'y' (for internal brk).
+
+    ; 20 bl Import directive
+
+    ; 15 bk Local labels: ec_label_local
+          ; Local ref (ie jr c,.ok): e_local
+
+    ; 14 bj Update comment: limit before listz 
+          ; Introduce type command.
+
+       ; bi s/org_init/org_source_init/ to avoid leaks (aap)
+          ; remove org_init alltogether since call by setup_custom
+          ; Fix bug introduced in bh: bolrr api was changed!
+
+; Jan 13 bh Move to bricbrac rom to make room! Rationale:
+            ; - this is the module with the less dependencies on ass
+            ; - it as dependency on aap, already in bricbrac
+            ; - parser may be reused for other projects!
+          ; Use pretest7 (minus test source+assemble)
+          ; Cleanup
+          ; Fix NRT! parse_buffer cannot be in bank anymore
+          ; reimplement is_pseudo_instr (to cut ass dependency)
+
+; \/ In 2020 \/\/\/\/\/\/\/\/\/
+
+   ; 5  bg LOAD directive. See t_load   
+         ; !!!! NRT Failing, see bh.
+       ;bf limit @ dc29
+       ;be Don't use sy_new anymore.
+       ;bd Use aap_get_or_append !!ABANDONNED!!
+         ; Cannot do that, since in command mode we don't want 
+         ; to register  unknown labels.
+         ; Use aap_append instead, to prepare for sy_new removal.
+
+       ;bc Opening parenthesis mandatory for macro use.
+;Apr  1 bb New nrt_setup (for proper init)
+
+      IMPORT "extmap.i"
+      IMPORT "monique.i"
+
+      ORG &0300
+code  = &109E-4-3       ; same alignement than rom, with pad1 pad2
+
+      IF inRom:ENT burn
+codedest = parse
+limit = filename_module
+      ELSE:ENT tests
+codedest = code
+      END
+codedest2 = parse_jp
+limit2 = org5
+
+; TODO: why psl_separ after dispatch in t_instr doesn't work
+
+; TODO to gain space and speed
+; - factorize emit esc_  (12 bytes to save)
+; - factorize terms using f_buildopcode_reg16_ ? (bof, complique)
+; - arrays of 4 size word for bisect search
+; - ps_or_litt (combi or_terms and ps_litt)
+re
+; Pour quelques octets de plus:
+  ; - rearrange routs before start (to use jr instead of jp)
+  ; - or: align all routs to 4 (no need to jump at all)
+
+; TODO? be more consistent: allow jpp,0
+;       AS LONG AS it's not slower
+
+
+Nomenclature
+;p_ : operateurs parsing
+;ps_ : idem, respecte sequence. hl = next parser when success (needed for p_seq)
+;psl_ : idem, lookahead
+;f_ : functions : transform emitted result. always return "ok"
+;t_ : terms (grammar)
+;
+;ec_: escape code (la ou on attend opcode)
+;e_ : code pour composantes expressions (la ou on attend argument numerique)
+;
+
+; ---- In ORGAMS.ROM aka main_rom (use regular call) ---------------
+
+setup_custom = &E839    ; Trust me on this
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+; --- For nrt ---
+;org_init = org     ; called by nrt_setup via setup_custom
+org_source_init = org+&84
+org_get_lines# = org+3
+org_get_line = org+6
+;org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+;org_delete_line = org+15
+;org_load = org+18
+;org_save = org+21
+;org_assemble = org+27
+;connect_line = org+57
+;far_call_bricbrac = org+&57
+
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+nrt_buf = &3000
+
+; --- Handy aliases -------------------------------------------------
+
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout
+      IF rom - ext_rom
+          push hl
+          ld hl,rout:ld (_call_+1),hl
+          pop hl
+          call _call_org
+      ELSE
+; Ext rom already connected.
+          call rout
+      END
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          call _check_hl_eq
+          pop de
+      ENDM
+
+_check_hl_eq
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_DE_EQ val
+          push hl
+          ld hl,val
+          call _check_de_eq
+          pop hl
+      ENDM
+
+_check_de_eq
+; NB: same routine than _check_hl_eq, but right name for stack trace.
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          ret
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+nrt_set_source
+; IN: hl: lines (NT strings) + 0 at the end.
+          ld de,1
+nsc_lp
+          push de
+          CALL_ORG(org_insert_line):call nc,&BE00
+          pop de
+          inc de
+          ld a,(hl)
+          or a
+          jr nz,nsc_lp
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+
+_call_org
+; Swith to ext rom, call ORG_* routine, switch back.
+; (only for nrt)
+          push af:push bc
+          ld c,ext_rom:call kl_rom_select
+          pop bc:pop af
+
+_call_    call 0
+
+          push af:push bc
+          ld c,rom:call kl_rom_select
+          pop bc:pop af
+          ret
+
+;====
+tests
+;====
+;>>>>>        
+bk_dev = &C7
+          ld a,bk_dev
+          call nrt_setup
+          call test_is_pseudo_instr
+          call test_preass
+          call test_command
+          ret
+
+; --- in this rom (ORGEXT) ---
+farcall = &FF12
+call_bric_from_ext = farcall + 18
+
+; --- in ass rom ---
+      IF 0
+ass   = &FE20
+is_pseudo_instr = ass+6 ; reimplemented here
+      END
+
+; --- in bric rom ---
+
+aap   = &FE30
+;aap_init = aap   
+; aap_set = aap+3 !! deprecated
+aap_get = aap+6
+;aap_getkey = aap+9
+aap_append = aap+18     ; In: hl=nt string. Out: Carry & de=fresh id if ok
+
+; ---------------------
+
+nrtbuf = &3F00
+parse_buffer = &9400    ; nrt, like evacom and ed todo: check the latter
+
+;7C00:
+;vaap = $7c85
+vp    = &7CA0
+;vd   = $7CD0 (limite)
+;$7D00 : monogams + connection AAP hors systeme
+
+bit_escape = 0          ;cf escape to exp : eg BIT isDense,(HL)
+
+short_decimal_max = 31  ;code 0 a 31 inclus
+short_label = &60       ;de &60 a &df : 128 first labels
+long_label = &E0        ;from &E000 to &ffff : 8192 other labels
+e_zero = 0
+
+e__start = &20
+
+e_space = " "
+e_string = &22
+;reuse dams tokens. Quite arbitrary. Advantage = in #21-#40
+e_xor = "!"
+e_and = "&"
+e_or  = "@"
+
+e_plus = "+"
+e_minus = "-"
+e_minus_unary = "#"
+e_times = "*"
+e_divide = "/"
+e_mod = "%"
+
+e_paren_open = "("      ;"[" & "]" in text
+e_paren_close = ")"
+
+e_local = "."
+
+e_decimal_8 = &30
+e_decimal_16 = &31
+e_decimal_long = &32
+e_decimal_custom = &33  ;custom format. not used yet
+e_hexa_8 = &34
+e_hexa_16 = &35
+e_hexa_long = &36
+e_hexa_custom = &37
+e_binary_8 = &38
+e_binary_16 = &39       ; encoded as e_binary_8 + 1
+e_binary_long = &3A     ;':'                    + 2
+e_binary_custom = &3B   ;';'   
+;'<=>'
+;e_unused    = "?"       &3f
+e_pc  = "$"
+e_objc = "D"            ;dest ($$)
+e_endofdata = "A"       ;repasse en mode 'opcode' (pour .byte .word ...)
+
+e_begin = "B"           ;multi-terms
+e_end = "E"             ;end multi-terms
+e_forward = "F"
+e_backward = "G"
+
+e_iter1 = "I"
+e_iter2 = "J"
+e_iter3 = "K"
+
+e_cos = "C"
+e_sin = "S"
+e_abs = "V"
+
+fail_unexpectedmess = 247
+fail_bufferoverflow = 246
+;fail_labelstoomany = 239
+fail_labelsfull = 238
+
+flag_ix = &40
+flag_iy = &80
+
+; --- for nrt ---
+kl_time_please = &BD0D  ;dehl
+kl_time_set = &BD10     ;dehl
+
+
+      IF inRom
+burn
+;
+;install in rom
+;    
+          ld ix,param_burn:call _burn
+          ld ix,param_burn2:call _burn
+          call &BB06
+          ret
+
+_burn
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD jpTable
+      END
+
+;>>>>>        
+bk_dev = &C7
+          ld a,bk_dev
+          call nrt_setup
+
+          call test_preass
+          call test_command
+          ret
+
+; -------------------------------------------------------------------
+
+
+nrt_setup
+; IN: A = bk_dev
+          push af
+
+kl_rom_select = &B90F
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+
+; !!! fuzzing: check if var is well cleaned
+          ld hl,&1234:ld (vp_output0),hl
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+test_command
+;Check command is encoded as expected
+
+          ld hl,nrt_command_lines
+tco_lp
+          ld a,"."
+          call &BB5A
+          push hl
+
+          CALL_ORG(org_source_init)
+
+          ld hl,parse_buffer
+cln       ld (hl),&FF:inc l:jr nz,cln
+
+          pop hl
+
+          push hl
+          ld ix,parse_buffer
+          call parse_command
+          ex de,hl
+          pop hl
+          call nc,&BE00
+tco_skip  ld a,(hl):inc hl
+          or a:jr nz,tco_skip
+
+          ld b,(hl):inc hl
+          call compare_sized
+
+          ld a,(hl)
+          or a
+          jr nz,tco_lp
+
+          ret
+
+nrt_command_lines
+;rsx with unclosed string parameter
+      BYTE "|born,",34,"yeh",0
+      BYTE 13
+      BYTE command_rsx,e_string,4,"born",e_string,3,"yeh",e_endofdata
+
+;rsx with string parameter
+_#ca
+      BYTE "|burn,",34,"hi",34,0
+      BYTE 12
+      BYTE command_rsx,e_string,4,"burn",e_string,2,"hi",e_endofdata
+
+      BYTE "b#c5",0
+      BYTE 3
+      BYTE 7,e_hexa_8,&C5
+
+      BYTE "b,#c5",0    ; comma is fine.
+      BYTE 3
+      BYTE 7,e_hexa_8,&C5
+
+      IF 0
+      BYTE "load",34,"fiel",34,",&100",0
+      BYTE 10
+      BYTE 18,e_string,4,"fiel",e_hexa_16:WORD &0100
+      END
+
+      BYTE "zzz,2",0    ; Unrecognized command interpreted as rsx
+      BYTE 7
+      BYTE command_rsx,e_string,3,"zzz",2 ; operande = 2
+
+      BYTE "|zzz,2",0   ; Must be the same 
+      BYTE 7
+      BYTE command_rsx,e_string,3,"zzz",2
+
+; For now quotes necessary.
+      BYTE "type",34,"a.txt",34,0 ; Must be the same 
+      BYTE 8
+      BYTE command_type,e_string,5,"a.txt"
+
+      BYTE 0
+
+;nrt_source_line BYTE "somewhat_big_label_"
+;nrt_label_slot BYTE "0 ; comment label_"
+;nrt_label_slot2 BYTE "0",0
+
+test_is_pseudo_instr
+          ld a,&40
+tipsi_loop
+          call brute_is_pseudo
+          jr z,tipsi_is
+;not pseudo: expect NZ
+          call is_pseudo_instr:call z,&BE00
+          jr tipsi_next
+tipsi_is
+          call is_pseudo_instr:call nz,&BE00
+tipsi_next
+          inc a
+          jp p,tipsi_loop
+          ret
+
+brute_is_pseudo
+; Brute test (big and long)
+; Return Z if true 
+          cp ec_label_adr:ret z ; &40
+          cp ec_comment:ret z ; &43        ;'C'
+          cp ec_tab:ret z ; &49
+          cp ec_nl:ret z ; &4A
+          cp &51:ret z  ; reserved
+          cp &52:ret z  ; reserved
+          cp &58:ret z  ; reserved
+          cp ec_factor:ret z ; &5B       
+          cp ec_label_equ:ret z ; &64
+          cp ec_macro_def:ret z ; &6D
+          cp ec_esc     ; &7f
+          ret
+
+
+test_preass
+;Check source is encoded as expected (no superfluous token)
+;Direct call to 'preassemble'
+          ld hl,nrt_preass_lines
+tpa_lp
+          ld a,"."
+          call &BB5A
+
+          push hl
+          CALL_ORG(org_source_init)
+          pop hl
+
+          ld ix,parse_buffer
+          call preassemble
+          call nc,&BE00
+
+          ld de,parse_buffer
+          ld b,(hl):inc hl
+          call compare_sized
+
+          ld a,(hl)
+          or a
+          jr nz,tpa_lp
+
+          ret
+
+dummy FILL 12,0
+
+nrt_preass_lines
+
+skiptest = 0            ; 1: Jump to newnrt
+
+; !! dont put space sensitive test (comment, as-is)
+      IF 1-skiptest
+      BYTE "ld (iy+1),b",0
+      BYTE 5
+      BYTE ec_iy_ind,&70
+      BYTE 1,1
+      BYTE ec_nl
+
+      BYTE "ld (ix+fu),b",0
+      BYTE 5
+      BYTE ec_ix_ind,&70
+      BYTE 1,short_label
+      BYTE ec_nl
+
+      BYTE "rlcb",0
+      BYTE 3,ec_label_adr,short_label,ec_nl
+
+
+      BYTE "ld a,a",0
+      BYTE 3,ec_esc,&7F,ec_nl
+
+      BYTE "jrz,0:ret m:jp p,0:call po,1",0
+      BYTE 11
+      BYTE &28,1,0
+      BYTE &F8
+      BYTE &F2,1,0
+      BYTE &E4,1,1
+      BYTE ec_nl
+
+
+      BYTE "z equ 6",0
+      BYTE 5
+      BYTE ec_label_equ,short_label,1,6
+      BYTE ec_nl
+
+
+      BYTE "4 ** [ei]",0
+      BYTE 8
+      BYTE ec_esc,ec2_factor_bloc,1,4
+          ei
+      BYTE ec_esc,ec2_factor_bloc_end,ec_nl
+
+; Check for ']]' pattern
+      BYTE "5 ** [2**[di]]",0
+      BYTE 14
+      BYTE ec_esc,ec2_factor_bloc,1,5
+      BYTE ec_esc,ec2_factor_bloc,1,2
+          di
+      BYTE ec_esc,ec2_factor_bloc_end
+      BYTE ec_esc,ec2_factor_bloc_end,ec_nl
+
+      BYTE "2 ** [nop:3**[di]]",0
+      BYTE 15
+      BYTE ec_esc,ec2_factor_bloc,1,2
+          nop
+      BYTE ec_esc,ec2_factor_bloc,1,3
+          di
+      BYTE ec_esc,ec2_factor_bloc_end
+      BYTE ec_esc,ec2_factor_bloc_end,ec_nl
+
+; rasm compatibility
+      BYTE "repeat 2",0
+      BYTE 5
+      BYTE ec_esc,ec2_factor_bloc,1,2,ec_nl
+
+; not supported: mustn't be encoded. Actually macro is fine enough.
+      BYTE "repeat 7,cpt",0
+      BYTE 2
+      IF vbc
+      BYTE ec_esc,ec2_asis
+      ELSE
+      BYTE ec_esc,ec2_macro_use
+      END
+
+      BYTE "rend",0
+      BYTE 3
+      BYTE ec_esc,ec2_factor_bloc_end,ec_nl
+
+; !! Typo shouldn't be replaced by macro:  we don't want ld (bd,2)
+      IF vbc
+      BYTE "ld bd,2",0
+      BYTE 2
+      BYTE ec_esc,ec2_asis
+      END
+
+
+      BYTE "ld b,xx",0
+      BYTE 3
+      BYTE &06,1,short_label
+
+      BYTE "aa jr aa:ld b,bb:jr aa",0
+      BYTE 11
+      BYTE ec_label_adr,short_label
+      BYTE &18,1,short_label
+      BYTE &06,1,short_label+1
+      BYTE &18,1,short_label
+
+; Reference: binary
+      BYTE "by %111",0
+      BYTE 6
+      BYTE ec_byte,4    ; 4 bytecodes
+      BYTE 1,e_binary_8,7,e_endofdata
+
+      BYTE "ld bc,%11111111111",0
+      BYTE 5
+      BYTE &01
+      BYTE 3,e_binary_16:WORD &07FF
+
+      BYTE "big17 = %11111111111111111",0
+      BYTE 8
+      BYTE ec_label_equ,short_label
+      BYTE 5,e_binary_long,3,&FF,&FF,&01
+
+      IF 0
+      BYTE "ld a,%010101",0
+      BYTE 12
+      BYTE &3E
+      BYTE 10,e_binary_custom,6,"011111",1,&15
+
+      BYTE "byte %1'00'00",0
+      BYTE 13
+      BYTE ec_byte,4    ; 4 bytecodes
+      BYTE e_binary_custom,7,"1'00'00",1,&10
+
+      BYTE "ld hl,%1000'0000'0000'0000",0
+      BYTE 21
+      BYTE &21
+      BYTE e_binary_custom,19,"1000'0000'0000'0000",2:WORD &8000
+
+      BYTE "big24 = %10'0000'0000'0000'0001",0
+      BYTE 24
+      BYTE ec_label_equ,short_label
+      BYTE e_binary_custom,22,"10'0000'0000'0000'0001",3,1,0,2
+      END
+
+      BYTE "load",34,"yeah",34,0
+      BYTE 10
+      BYTE ec_esc,ec2_load
+      BYTE 7
+      BYTE 34,4,"yeah"
+      BYTE e_endofdata
+
+      BYTE "loade",0
+      BYTE 2
+      BYTE ec_label_adr,short_label
+
+      BYTE ".loco ei",0
+      BYTE 3
+      BYTE ec_label_local,short_label,&FB
+
+      BYTE "jr .ok",0
+      BYTE 4
+      BYTE &18,2,e_local,short_label
+
+      BYTE "ex hl,de",0
+      BYTE 1
+          ex de,hl
+
+      BYTE "ex d",0
+      BYTE 1
+          ex de,hl
+
+      BYTE "exd",0      ; musn't be expended to ex de,hl
+      BYTE 2
+      BYTE ec_label_adr,short_label
+
+      BYTE "exa",0      ; musn't be expended to ex af,af'
+      BYTE 2:BYTE ec_label_adr,short_label
+
+      BYTE "exaf,",0    ; this one is ok
+      BYTE 1:ex af,af
+
+      BYTE "exa(",0
+      BYTE 5,ec_esc,ec2_macro_use,2,short_label,e_endofdata
+
+      BYTE "ex(sp),hl",0
+      BYTE 1:ex (sp),hl
+
+      BYTE "ex (sp),hl",0
+      BYTE 1:ex (sp),hl
+
+      BYTE "exde,",0    ; no need for space when explicit
+      BYTE 1:ex de,hl
+
+      BYTE "defm 1,2",0
+      BYTE 6
+      BYTE ec_byte,4    ;bytecodes
+      BYTE 2            ;size of data
+      BYTE 1,2
+      BYTE e_endofdata
+
+; was another regression!
+
+      BYTE "ex  d",0
+      BYTE 1
+          ex de,hl
+
+      BYTE "ex  a",0
+      BYTE 1
+          ex af,af
+
+      BYTE "ex  (sp),hl",0
+      BYTE 1:ex (sp),hl
+
+      BYTE "ex  (sp),ix",0
+      BYTE 2:ex (sp),ix
+
+      BYTE "exx",0
+      BYTE 1:exx
+
+vbu
+      BYTE "ld a,hx",0:BYTE 2:ld a,ixh
+      BYTE "ld a,lx",0:BYTE 2:ld a,ixl
+      BYTE "ld a,hy",0:BYTE 2:ld a,iyh
+      BYTE "ld a,ly",0:BYTE 2:ld a,iyl
+
+      IF 1-vbc
+; on hold. See comment above /vbc/
+      BYTE "dii 12",0   ;macro invocation
+      BYTE 6,ec_esc,ec2_macro_use,3,short_label+0,12,e_endofdata
+      END
+
+      BYTE "doo daa",0  ; mustn't be interpreted as a macro
+      BYTE 3:BYTE ec_label_adr,short_label+0:daa
+
+;bug #aa                
+      BYTE "dyy duu",0
+      IF vbc
+; Not recognized. Nevermind.
+      BYTE 2:BYTE ec_esc,ec2_asis
+      ELSE
+; !! pick one of those.
+;label + 0 based invocation.
+    ; Bug #aa cannot happen since parenthesis added.
+      BYTE 7:BYTE ec_label_adr,short_label+0
+      BYTE ec_esc,ec2_macro_use,2,short_label+0,e_endofdata
+;Desirable ??? macro invocation
+      BYTE 6,ec_esc,ec2_macro_use,3
+      BYTE short_label+0
+      BYTE short_label+1,e_endofdata
+      END
+
+      BYTE "ld a,xl",0
+      BYTE 2:ld a,ixl
+
+      BYTE "inc hy",0
+      BYTE 2:inc iyh
+
+      BYTE "stroke",0
+      BYTE 2,ec_label_adr,short_label+0
+
+      BYTE "str",34,"oi",34,0
+      BYTE 5+3:BYTE ec_esc,ec2_str
+      BYTE 5,34,2,"oi",e_endofdata
+
+      BYTE "b 0x42",0
+      BYTE 6
+      BYTE ec_byte,4,1
+      BYTE e_hexa_8,&42,e_endofdata
+
+      BYTE "b 0b11",0
+      BYTE 6
+      BYTE ec_byte,4,1
+      BYTE e_binary_8,%00000011,e_endofdata
+
+      BYTE "save",34,"X",34,",7,8",0
+      BYTE 6+3:BYTE ec_esc,ec2_save
+      BYTE 6,34,1,"X",7,8,e_endofdata
+
+      BYTE "b 0<1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_lt,1,e_end,e_endofdata
+
+      BYTE "b 0<=1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_le,1,e_end,e_endofdata
+
+      BYTE "b 0>1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_gt,1,e_end,e_endofdata
+
+      BYTE "b 0>=1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_ge,1,e_end,e_endofdata
+
+      BYTE "b 0=1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_eq,1,e_end,e_endofdata
+
+      BYTE "b 0==2",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_eq,2,e_end,e_endofdata
+
+      BYTE "b 0!=1",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,0,e_neq,1,e_end,e_endofdata
+
+      BYTE "b 3<>2",0
+      BYTE 9
+      BYTE ec_byte,7,1
+      BYTE e_begin,3,e_neq,2,e_end,e_endofdata
+
+      BYTE "ld a, d",0
+      BYTE 1
+          ld a,d
+
+      BYTE "add a,  a",0
+      BYTE 1
+          add a
+
+      BYTE "add hl,  hl",0
+      BYTE 1
+          add hl,hl
+
+      BYTE "out (c), a",0
+      BYTE 2
+          out (c),a
+
+      END               ; skiptest
+
+      BYTE ".savetoto",0
+      BYTE 2
+      BYTE ec_label_local,short_label
+
+newtestcase
+      BYTE 0
+
+; ----------------------------------
+
+      MACRO CALL_AAP adr
+          call call_bric_from_ext:WORD adr
+      ENDM
+
+
+vp_output0 = vp         ;reseted in f_init_instr
+
+; ----------------------------------
+
+jpTable
+      IF inRom
+      ORG codedest2,$$
+      END
+          jp preassemble
+          jp parse_command
+          jp is_sep
+          jp is_labelchar
+realsize2 = $ - codedest2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $ - codedest2
+
+
+      ORG codedest,code
+
+      BYTE "ParseJ"
+      WORD 0            ; Free?
+
+;---------------------------------------------------------------------
+parse_command
+;in : hl = NT text
+    ; ix = buffer for tokens
+;out : hl = tokens. Carry if ok
+     ; NC Z : unknown command.
+     ; NC NZ : unknown label.
+
+
+
+          push ix
+          ld de,t_command_line
+          xor a
+          call parse_com
+          pop hl
+
+;Hack, since parser return C even if unknown label met.
+;Bug due to conjugaison of : 
+;- data are optional
+;- input pointer not rewinded in case of failure
+
+          ld a,(vp_flags_gen)
+          rr b          ;save Carry
+          and pflag_unknown_met
+          ret nz
+          rl b
+          ret
+
+      MACRO CHECK_BUFFER
+      IF dev_checks
+          call _check_buf
+      END
+      ENDM
+
+      IF dev_checks
+_check_buf
+; Buffer cannot be in bank anymore,
+; For aap_append and co.
+          ld a,ixh:and &C0:cp &40:call z,fail
+          ret
+      END
+
+preassemble
+;in : hl = input   ix = parse_buffer XX00   (for ps_emitted_)
+;out : hl = input end  ix = pos end in parse_buffer
+
+          CHECK_BUFFER()
+
+          ld a,ixl:or a
+      IF dev_checks
+          call nz,fail
+      ELSE
+          ret nz        ; still useful?
+      END
+          ld de,t_line
+          ld a,pflag_create_labels
+parse_com
+; A = gen flags
+;de = term grammaire  (de and hl are swaped for _parse)
+;hl = input        
+;ix = output
+          ld (vp_flags_gen),a
+      IF 1-inRom
+; Reset marker flag for proper check.
+          xor a
+          ld (vp_flags),a
+      END
+          ld (vp_savesp),sp
+
+          ex de,hl
+          call _parse
+          ex de,hl
+          ret
+
+jp_rout
+          ld b,start/&0100
+          push bc
+          scf
+          ret
+
+;----------------------------
+helpers
+;----------------------------
+
+;20
+is_alphanum
+          cp "A"
+          jr nc,is_alpha_
+is_num
+          cp "9"+1
+          ret nc
+          cp "0"
+          ccf
+          ret
+is_alpha
+; Preserve A
+          cp "A":ccf:ret nc
+is_alpha_
+          cp "Z"+1:ret c
+          cp "z"+1:ret nc
+          cp "a":ccf
+          ret
+
+;7
+get_ixy_prefix
+;in a : code with ix/iy flags
+;out Z if no ix/iy
+;   NZ otherwise a = $dd/$fd
+          and pflag_ix OR pflag_iy
+          ret z
+          rra
+          add &DD-&20
+          ret
+
+
+;--------------------
+; parsing directives
+;--------------------
+
+psl_endofexp_
+;true if exp is terminated (no more *+/% ...)
+          push de
+          call ps_eat_space_
+          inc de
+          ld a,(de)
+          ld c,a
+          dec de
+          ld a,(de)
+          pop de
+          or a
+          ccf
+          ret z
+          cp ":"
+          ccf
+          ret z
+          cp ";"
+          ccf
+          ret z
+          cp ","
+          ccf
+          ret z
+          cp ")"
+          ccf
+          ret z
+          cp "]"        ;end of bloc mark (closing bracked already consumed)
+          ccf
+          ret z
+          cp "*"
+          jr z,psleoe_rep
+          or a
+          ret
+psleoe_rep
+;"**" = end of exp
+          ld a,c
+          cp "*"
+          ccf
+          ret z
+          or a
+          ret
+
+      IF 0
+ps_partial_littenum_emit = $ AND &FF
+          call ps_partial_littenum_nosep_emit_
+          ret nc
+          jr psl_separ_
+      END
+
+psl_separ_
+;separator (between token) lookahead
+; !" $& ()*+,-./:;<=>[]  eol
+; nb : #'_ are not separator
+
+          ld a,(de)
+is_sep
+;out:  c if separator
+    ; nc otherwise
+          cp "#":ret c:ret z
+          cp "'":ret c:ret z
+          cp "0":ret c
+          cp "[":jr c,psls_lt91
+          cp "_":ret c:ret z
+          cp "a":ret c
+
+psls_lt91
+          cp "?":ret nc
+
+          cp ":"
+          ccf
+          ret
+
+psle_skip_com
+          inc hl
+psle_skip
+          ld a,(hl)
+          inc hl
+          or a
+          scf
+          ret z
+          ld c,a
+          ld b,0
+          add hl,bc
+          inc hl
+          jr psle_skip
+
+ple_next
+          ld c,b
+          ld b,0
+          add hl,bc
+          pop de
+
+p_littenum_nosep_emit_
+;
+;hl=(size, string, byte to emit)
+;  =(0) pour end
+;out:
+;  Carry and (ix+0) <- code  if found
+
+          ld a,(hl)
+          inc hl
+          or a
+          ret z
+
+          ld b,a
+          push de
+ple_chk   ld a,(de)
+          inc de
+          call to_lower
+          cp (hl)
+          inc hl
+          jr nz,ple_next
+          djnz ple_chk
+;ok found
+          pop af        ;discard
+;todo : factorize with f_emit (if we can inc hl)
+          ld a,(hl)
+          ld (ix+0),a
+          scf
+          ret
+
+      IF 0
+ps_partial_littenum_nosep_emit
+          call p_partial_littenum_nosep_emit
+          ret nc
+          jr psle_skip_com
+
+pple_check
+          ld a,c
+          ld c,b
+          ld b,0
+          add hl,bc
+          or a
+          jp m,pple_ok
+
+          pop de
+          inc hl
+
+p_partial_littenum_nosep_emit
+;
+;hl=(size, min size, string, byte to emit)
+;  =(0) pour end
+;out:
+;  Carry and (ix+0) <- code  if found
+
+          ld a,(hl)
+          inc hl
+          or a
+          ret z
+
+          ld b,a
+          ld c,(hl)
+          inc hl
+          push de
+pple_cmp
+          dec c
+          ld a,(de)
+          call to_lower
+          cp (hl)
+          jr nz,pple_check
+          inc de
+          inc hl
+          djnz pple_cmp
+pple_ok
+          pop af        ;discard
+          ld a,(hl)
+          ld (ix+0),a
+          scf
+          ret
+
+      END
+
+exit_mess
+          ld a,fail_unexpectedmess
+          jr exit_err
+exit_bufovf
+          ld a,fail_bufferoverflow
+exit_err
+          ld sp,(vp_savesp)
+          or a
+          ret
+
+
+ps_or_terms_
+          ld c,(hl)
+          inc hl
+          ld b,(hl)
+          inc hl
+          ld a,b
+          or c
+          ret z
+
+          push ix
+          push de
+          push hl
+          ld l,c
+          ld h,b
+          call _parse
+          pop hl
+          jr c,psot_found
+          pop de
+          pop ix
+          jr ps_or_terms_
+psot_found
+          pop af
+          pop af        ;discard
+psot_skip
+          ld a,(hl)
+          inc hl
+          or (hl)
+          inc hl
+          jr nz,psot_skip
+          scf
+          ret
+
+f_data_inc_
+;NB : makes no sense when called in non data context
+    ; (e.g. command_line/org versus byte/word)
+    ; Nevermind !
+
+          push hl
+          ld hl,vp_data#
+          ld a,(vp_string_data_size) ;byte "str"
+          or a
+          jr nz,$+3
+          inc a         ;byte toto
+          add (hl)
+          ld (hl),a
+          ld a,0
+          ld (vp_string_data_size),a
+          pop hl
+          scf
+          ret
+
+f_id_encode_
+          ld (ix+0),0
+          push de
+          push hl
+          ld hl,(vp_label_start)
+          push hl
+
+          CALL_AAP(aap_get)
+          jr c,fie_exists
+
+;can create new label ?
+          ld hl,vp_flags_gen
+          ld a,(hl)
+          and pflag_create_labels
+          jr nz,fie_new
+
+          or pflag_unknown_met
+          ld (hl),a
+          pop hl:pop hl:pop de
+          ret
+
+fie_new
+          ld hl,(vp_label_start)
+          CALL_AAP(aap_append)
+          jr nc,fie_fail
+fie_exists
+          pop hl
+          ex de,hl
+          ld bc,long_label-short_label ;$80
+          or a
+          sbc hl,bc
+          jr nc,fie_big
+
+          ld a,l
+          add long_label
+          jr fie_com
+
+fie_big
+          ld a,h
+          add long_label
+          ld (de),a
+          inc de
+          ld a,l
+fie_com
+          ld (de),a
+          inc de
+
+          push de
+          pop ix
+          pop hl
+          pop de
+          scf
+          ret
+
+fie_fail
+          ld a,fail_labelsfull
+          jp exit_err
+
+ps_copy_star_until_eol_
+;do not copy EOL, but DE points after
+          ld a,(de)
+          inc de
+          or a
+          scf
+          ret z
+          ld (ix+0),a
+          inc ix
+          jr ps_copy_star_until_eol_
+
+ps_store_star_until_quote_
+;Actually until quote or eol, so we handle not-closed strings.
+          push hl
+          push ix
+.lp
+          inc ix
+;DE points after
+          ld a,(de)
+          inc de
+          ld (ix+0),a
+          cp &22
+          jr z,.close
+          or a          ; handle missing last "
+          jr nz,.lp
+          dec de        ; pretend there was a " before last 0
+.close
+;--compute size
+          push ix:pop hl ; hl=past string, whatever delimitator
+          pop bc
+          sbc hl,bc
+          ld a,h
+          or a
+          call nz,exit_bufovf
+          ld a,l
+          dec a
+          ld (bc),a
+          ld (vp_string_data_size),a
+          pop hl
+          scf
+          ret
+
+
+ps_star_term_
+          push ix
+          push de
+          push hl
+          call ps_term_
+          jr nc,pss_end
+psplus_ok
+;same parser, suite input
+          pop hl
+          pop af
+          pop af
+          jr ps_star_term_
+pss_end
+;next parser, rewind input+output
+          pop hl
+          pop de
+          pop ix
+          inc hl
+          inc hl
+          scf
+          ret
+
+f_finalize_instr_
+    ;  BRK
+          ld a,(vp_flags)
+      IF 1-inRom
+          call check_ffi ; deporte for alignement purpose
+      END
+          ld c,a:xor a:ld (vp_flags),a:ld a,c
+          bit pbit_implicit_factor,a
+          jr z,ffi_nofact
+
+          ld (ix+0),ec_esc
+          inc ix
+          ld (ix+0),ec2_factor_end
+          inc ix
+
+ffi_nofact
+
+          and pflag_instr_pc
+          scf
+          ret z
+
+          push hl
+          push de
+          ld bc,(vp_output0)
+          push bc
+          call movebcix
+          pop bc
+          ld a,ec_esc
+          ld (bc),a
+          inc bc
+          push bc
+          call movebcix
+          pop hl
+          ld (hl),ec2_store_pc_instr
+          pop de
+          pop hl
+          scf
+          ret
+
+f_asis_
+ ;     BRK
+          push hl
+          ld hl,vp_flags
+          set 4,(hl)    ;"asis"
+          pop hl
+          ld bc,(vp_output0)
+
+_put_len
+          push hl
+          push ix
+          pop hl
+          or a
+          sbc hl,bc
+          ld a,h
+          or a
+          call nz,exit_bufovf
+          ld a,l
+          or a
+          call z,exit_mess
+          dec a
+          ld (bc),a
+          pop hl
+          scf
+          ret
+
+f_build_bit_
+;set res bit : encode bit
+          ld a,(ix+0)
+          ld c,a
+          cp 8
+          ret nc
+          add a
+          add a
+          add a
+          or (ix-1)
+          ld (ix-1),a
+          ld a,c
+          cp bit_escape
+          scf
+          dec ix
+          ret nz
+          inc ix        ;("exp" = 0), prefixed by exp size
+          ld (ix+0),1
+          inc ix
+          ld (ix+0),0
+          ret
+
+f_decimal_next_
+;in: (ix)=new digit
+   ; (ix-1)=nb bytes
+
+          push de
+          push hl
+          ld b,(ix-1)
+;de:=lsb
+          scf
+          ld a,ixl:sbc b:ld e,a
+          ld a,ixh:sbc 0:ld d,a
+
+          ld c,(ix+0)
+fdn_lp
+          ld a,(de)
+;*10
+          ld l,a
+          ld h,0
+          add hl,hl
+          add hl,hl
+          add l
+          jr nc,$+3
+          inc h
+          ld l,a
+          add hl,hl
+          ld a,c
+          add l
+          jr nc,$+3
+          inc h
+          ld c,h        ;carry for next iteration
+          ld (de),a
+          inc de
+          djnz fdn_lp
+
+          ld a,c
+          or a
+          jr z,fde_nc
+fde_c
+          ld b,(ix-1)
+          ld (de),a     ;it's same address !
+          inc b
+          ld (ix+0),b
+          inc ix
+fde_nc
+          pop hl
+          pop de
+          scf
+          ret
+
+
+f_hexa_next_
+
+;in: (ix)=new digit
+   ; (ix-1)=nb bytes
+
+          push de
+          push hl
+          ld b,(ix-1)
+;de:=lsb
+          scf
+          ld a,ixl:sbc b:ld e,a
+          ld a,ixh:sbc 0:ld d,a
+
+          ld c,(ix+0)
+fhn_lp
+          ld a,(de)
+;*16
+          ld l,a
+          ld h,0
+          add hl,hl
+          add hl,hl
+          add hl,hl
+          add hl,hl
+          ld a,c
+          add l
+          jr nc,$+3
+          inc h
+          ld c,h        ;carry for next iteration
+          ld (de),a
+          inc de
+          djnz fhn_lp
+
+          ld a,c
+          or a
+          jr z,fde_nc
+          jr fde_c
+
+f_bin_next_
+;in: (ix)=new digit
+   ; (ix-1)=nb bytes
+
+          push de
+          push hl
+          ld b,(ix-1)
+;de:=lsb
+          scf
+          ld a,ixl:sbc b:ld e,a
+          ld a,ixh:sbc 0:ld d,a
+
+          ld c,(ix+0)
+fbn_lp
+          ld a,(de)
+;*2
+          ld l,a
+          ld h,0
+          add hl,hl
+          ld a,c
+          add l
+          jr nc,$+3
+          inc h
+          ld c,h        ;carry for next iteration
+          ld (de),a
+          inc de
+          djnz fbn_lp
+
+          ld a,c
+          or a
+          jr z,fde_nc
+          jr fde_c
+
+
+f_store_tab_
+          ld c,-1
+fst_lp
+          inc c
+          ld a,(de)
+          inc de
+          cp " "
+          jr z,fst_lp
+          dec de
+          ld a,c
+          or a
+          scf
+          ret z
+          ld (ix+0),ec_tab
+          inc ix
+          ld (ix+0),a
+          inc ix
+          ret
+
+;12
+ps_option_term_
+
+;cf ps_star, without looping
+          push ix
+          push de
+          call ps_term_
+          jr nc,pso_end
+          pop af
+          pop af
+          scf
+          ret
+
+pso_end
+          pop de
+          pop ix
+          scf
+          ret
+
+;14
+f_byte_encode_
+          call f_exp_encode_
+          inc bc
+          ld a,(vp_data#)
+          or a
+          jr nz,$+3
+          inc a         ;0 parametre = must skip 1
+          ld (bc),a
+          scf
+          ret
+
+;9
+to_lower
+          cp "Z"+1
+          ret nc
+          cp "A"
+          ret c
+          set 5,a
+          ret
+
+is_labelchar
+;Return Carry for any char that can be used in label.
+;TODO: do a version for first char (where # and ' aren't permitted)
+; B trashed.
+          call is_alphanum:ret c
+          cp "#":scf:ret z
+          cp "'":scf:ret z
+          cp "_":scf:ret z
+          or a
+          ret
+
+;---------------------------------------------
+padding
+;          nop
+;---------------------------------------------
+;--- reachable by jr ---------------------------------------
+;---------------------------------------------
+
+psl_char_
+;case insensitive
+          ld a,(de)
+          call to_lower
+          cp (hl)
+          inc hl
+          ccf
+          ret z
+          or a
+          ret
+
+ps_consume_litt_
+;always return true
+          ld b,(hl)
+          inc hl
+
+pcln_chk
+          call ps_char_
+          jr nc,pcln_no
+          djnz pcln_chk
+;ok found
+          scf
+          ret
+pcln_skip
+          inc hl
+pcln_no
+          djnz pcln_skip
+          dec de
+          scf
+          ret
+
+psl_after_label_
+
+;optim principalement
+;On veut eviter de tester t_func avant t_label
+;mais SIN ... ne doit pas etre consomme comme label.
+;on verifie donc "("
+
+          push de
+          call ps_eat_space_
+          ld a,(de)
+          cp "("
+          pop de
+          ret z
+          scf
+          ret
+
+;15
+ps_idstart_emit_inc_
+          ld a,(de)
+          call is_alpha
+          jr c,com_emit_inc
+          cp "_"
+          jr z,com_emit_inc
+          or a
+          ret
+
+ps_alphanumext_emit_inc_
+          ld a,(de)
+          call is_labelchar
+          ret nc
+;Enchaine
+com_emit_inc
+          ld (ix+0),a
+          inc ix
+          inc de
+          scf
+          ret
+
+
+;13
+f_append_space_if_needed_
+
+;is space already encoded ?
+          ld a,(ix-1)
+          cp e_space
+          scf
+          ret z
+          ld (ix+0),e_space
+          inc ix
+          ret
+
+;13
+f_prepend_space_if_needed_
+
+;is space comming up ?
+          ld a,(de)
+          cp " "
+          scf
+          ret z
+          inc ix        ;skip emitted opcode
+          ld (ix+0),e_space
+          ret
+
+start
+      IF $ AND &FF:ELSE
+ error, no routine should be in 0.  cf padding
+      END
+
+p_brk = $ AND &FF
+      BRK
+          scf
+          ret
+
+psl_char = $ AND &FF
+          jr psl_char_
+
+psl_after_label = $ AND &FF
+          jr psl_after_label_
+
+ps_idstart_emit_inc = $ AND &FF
+          jr ps_idstart_emit_inc_
+
+ps_alphanumext_emit_inc = $ AND &FF
+          jr ps_alphanumext_emit_inc_
+
+
+psl_endofexp = $ AND &FF
+          jp psl_endofexp_
+
+ps_littenum_emit = $ AND &FF
+ps_littenum_emit_
+          call ps_littenum_nosep_emit_
+          ret nc
+psl_separ = $ AND &FF
+          jp psl_separ_
+ps_separ = $ AND &FF
+;eat space until separator
+;Fail if no separator (e.g. "a" without space)
+          call psl_separ_
+          ret nc
+          jp ps_eat_space_
+
+ps_littenum_nosep_emit = $ AND &FF
+ps_littenum_nosep_emit_
+          call p_littenum_nosep_emit_
+          ret nc
+          jp psle_skip_com
+
+      IF 0
+p_littenum_emit_inc = $ AND &FF
+          call p_littenum_nosep_emit_
+          inc ix
+          ret nc
+          jp psl_separ_
+      END
+
+
+ps_eol = $ AND &FF
+          ld a,(hl)
+          or a
+          ret nz
+          scf
+          ret
+
+      IF 0
+p_littenum_nosep_emit = $ AND &FF
+          jp p_littenum_nosep_emit_
+      END
+
+ps_littenum_emit_inc = $ AND &FF
+          call ps_littenum_emit_
+          inc ix
+          ret
+
+ps_char = $ AND &FF
+ps_char_
+          call psl_char_
+          inc de
+          ret
+
+
+f_append_space_if_needed = $ AND &FF
+          jr f_append_space_if_needed_
+
+f_prepend_space_if_needed = $ AND &FF
+          jr f_prepend_space_if_needed_
+
+
+ps_consume_litt = $ AND &FF
+          jp ps_consume_litt_
+
+ps_or_terms = $ AND &FF
+          jp ps_or_terms_
+
+f_data_inc = $ AND &FF
+          jp f_data_inc_
+
+
+f_exp_encode = $ AND &FF
+f_exp_encode_
+; !! Also used for rsx
+          ld bc,(vp_exp_start)
+          jp _put_len
+
+f_id_init = $ AND &FF
+          ld (vp_label_start),ix
+          scf
+          ret
+
+f_id_encode = $ AND &FF
+          jp f_id_encode_
+
+ps_hexa_emit = $ AND &FF
+          jp ps_hexa_emit_
+
+ps_bin_emit = $ AND &FF
+          jp ps_bin_emit_
+
+ps_plus_term = $ AND &FF
+          jp ps_plus_term_
+
+ps_star_term = $ AND &FF
+          jp ps_star_term_
+
+f_store_tab = $ AND &FF
+          jp f_store_tab_
+
+ps_copy_star_until_eol = $ AND &FF
+          jp ps_copy_star_until_eol_
+
+ps_store_star_until_quote = $ AND &FF
+          jp ps_store_star_until_quote_
+
+
+ps_option_term = $ AND &FF
+          jp ps_option_term_
+
+ps_term = $ AND &FF
+          jp ps_term_
+
+psl_isfact = $ AND &FF
+          jp psl_isfact_
+
+ps_flag_factor = $ AND &FF
+          jp ps_flag_factor_
+
+f_brk = $ AND &FF
+      BRK
+          ret
+
+f_init_instr = $ AND &FF
+     ; BRK
+      IF 1-inRom
+  ; Might already have been set in previous (failed) parse branch,
+  ; so this check would fire even in ok cases.
+;          ld   a,(vp_flags)
+;          bit  pbit_debug_marker,a:call nz,&BE00 ; already init
+          ld a,pflag_debug_marker
+      ELSE
+          xor a
+      END
+          ld (vp_flags),a
+          scf
+          ret
+
+f_emit_inc = $ AND &FF
+          call f_emit_
+          inc ix
+          ret
+
+f_asis = $ AND &FF
+          jp f_asis_
+
+
+f_finalize_instr = $ AND &FF
+          jp f_finalize_instr_
+
+
+
+f_build_bit = $ AND &FF
+          jp f_build_bit_
+
+f_buildopcode_reg8_007f = $ AND &FF
+          jp f_buildopcode_reg8_007f_
+f_buildopcode_reg8_80bf = $ AND &FF
+          jp f_buildopcode_reg8_80bf_
+
+f_buildopcode_reg8_xy_cb = $ AND &FF
+          jp f_buildopcode_reg8_xy_cb_
+
+f_buildopcode_reg16 = $ AND &FF
+          jp f_buildopcode_reg16_
+
+f_buildopcode_ld8_2 = $ AND &FF
+          jp f_buildopcode_ld8_2_
+
+f_buildopcode_index = $ AND &FF
+          jp f_buildopcode_index_
+
+f_buildopcode_post = $ AND &FF
+          jp f_buildopcode_post_
+
+f_store_pc = $ AND &FF
+;must flag before instr
+          ld c,pflag_instr_pc
+          jp set_flag_and_carry
+
+f_decimal_init = $ AND &FF
+f_hexa_init = $ AND &FF
+f_bin_init = $ AND &FF
+;in: (ix)=new digit
+          inc ix        ;leave as is
+          ld (ix+0),1   ;1 byte
+f_incoutput = $ AND &FF
+          inc ix
+          scf
+          ret
+
+f_decimal_next = $ AND &FF
+          jp f_decimal_next_
+
+f_hexa_next = $ AND &FF
+          jp f_hexa_next_
+
+f_bin_next = $ AND &FF
+          jp f_bin_next_
+
+pses_nxt
+          inc de
+ps_eat_space = $ AND &FF
+ps_eat_space_
+          ld a,(de)
+          cp 32
+          jr z,pses_nxt
+          scf
+          ret
+
+      IF 0
+ps_not = $ AND &FF
+          call _parse
+          ccf
+          ret
+      END
+
+
+ps_litt = $ AND &FF
+          jp ps_litt_
+
+ps_comma = $ AND &FF
+          jr ps_comma_
+;6
+f_store_output = $ AND &FF
+          jr f_store_output_
+
+f_buildopcode_ed = $ AND &FF
+          ld (ix-1),&ED
+f_buildopcode = $ AND &FF
+          jr f_buildopcode_
+
+f_buildopcodeix = $ AND &FF
+          ld c,&DD
+          jr fbocixy
+
+f_buildopcodeiy = $ AND &FF
+          ld c,&FD
+          jr fbocixy
+
+f_build_cond = $ AND &FF
+          jp f_build_cond_
+
+f_foldopcode = $ AND &FF
+          jr f_foldopcode_
+
+f_flag_org2 = $ AND &FF
+          jr f_flag_org2_
+
+ps_digit_emit = $ AND &FF
+          jr ps_digit_emit_
+
+f_data_init = $ AND &FF
+          jr f_data_init_
+
+f_buildopcode_post_ed = $ AND &FF
+f_foldopcode_cb = $ AND &FF ; same routine !
+          jr f_buildopcode_post_ed_
+
+f_bin_encode = $ AND &FF
+          ld c,e_binary_8
+          jp _encode_com
+
+f_hexa_encode = $ AND &FF
+          jp f_hexa_encode_
+
+f_decimal_encode = $ AND &FF
+          jp f_decimal_encode_
+
+f_byte_encode = $ AND &FF
+          jp f_byte_encode_
+
+f_word_encode = $ AND &FF
+          jr f_word_encode_
+
+ps_seq = $ AND &FF
+          jr ps_seq_
+
+ps_emitted = $ AND &FF
+          jr ps_emitted_
+
+f_exp_init = $ AND &FF
+          jr f_exp_init_
+
+;7
+f_emit = $ AND &FF
+last_
+f_emit_
+          ld a,(hl)
+femitcom
+          inc hl
+          ld (ix+0),a
+          ret
+
+      IF start/&0100 - last_/&0100
+!! error     should be same  MSB
+ ; make sure start is at MSB beginning.
+ ; See /padding/
+      END
+
+
+;6
+f_store_output_
+    ;  BRK
+          ld (vp_output0),ix ;Nb : also reset by comment & asis
+          ret
+
+;8
+f_foldopcode_
+          ld a,(ix-1)
+          or (ix+0)
+          jr _putback
+
+;7
+ps_comma_
+          ld a,(de)
+          cp ","
+          jr z,pses_nxt
+          or a
+          ret
+;7
+f_word_encode_
+          call f_byte_encode_
+          add a
+_fset
+          ld (bc),a
+          scf
+          ret
+
+;12
+f_buildopcode_
+          ld a,(ix+0)
+fbo_com
+          or (hl)
+          inc hl
+          ld (ix+0),a
+          inc ix
+          scf
+          ret
+
+;10
+fbocixy
+          ld a,(ix+0)
+          ld (ix+0),c
+          inc ix
+          jr fbo_com
+
+
+;9
+f_flag_org2_
+          ld bc,(vp_output0)
+          inc bc
+          ld a,ec2_org2
+          jr _fset
+
+;10
+ps_digit_emit_
+          ld a,(de)
+          sub &30
+          ccf
+          ret nc
+          cp 10
+          ret nc
+          jp com_emit
+
+;10
+f_data_init_
+          xor a
+          ld (vp_data#),a
+          call f_exp_init_
+          inc ix
+          ret
+
+
+;12
+f_buildopcode_post_ed_
+;ld bc,(nn)...
+
+; OR:_
+;injecte reg8 apres CB.
+;(ix-1) ne convient pas (qd exp)
+          ld bc,(vp_output0)
+          inc bc
+fpostcom
+          ld a,(bc)
+          or (ix+0)
+          jr _fset
+
+_parse
+ps_seq_
+;in:
+;(hl)= parser
+;(hl)=0 pour end
+
+          ld c,(hl)
+          inc hl
+          inc c:dec c
+          ret z
+
+          call jp_rout
+          jr c,ps_seq_
+          ret
+
+ps_emitted_
+;Ok (carry) if tokens already emitted
+          ld a,ixl:add &FF
+          ret
+
+
+;12
+f_exp_init_
+          xor a
+          ld (vp_string_data_size),a
+          ld (vp_exp_start),ix
+          inc ix
+          scf
+          ret
+
+;---not reachabler by jr anymore---
+;17
+f_build_cond_
+          ld a,(ix-1)   ;code sans cond (jr, call ...)
+; &c3 -> &cb: base for JP+cond
+; &cd, &c9, &18 untouched
+          or 8
+          add (ix+0)    ;shift cond
+_putback
+          ld (ix-1),a
+          scf
+          ret
+
+f_buildopcode_index_
+          ld c,(hl)
+          inc hl
+          ld a,(ix+0)
+          ld b,(ix-1)
+          call get_ixy_prefix
+          call z,exit_mess
+          add ec_ix_ind-&DD
+          ld (ix-1),a
+          inc ix
+          ld a,b
+          add c
+          jr _putback
+
+
+f_buildopcode_reg8_80bf_
+;gestion add r  xor r ..
+
+          ld c,(ix+0)
+          ld b,(ix-1)
+          ld a,c
+          call get_ixy_prefix
+          jr z,f_bol8r
+          ld (ix-1),a
+          inc ix
+f_bol8r
+          ld a,b
+          add &80-&C6 AND &FF ;correction add n -> add r
+          ld b,a
+          ld a,c
+          and 7
+          or b
+          jp _putback
+
+
+
+
+
+;14
+ps_flag_factor_
+;check there is no '[' and set flag for implicit closing
+          push de
+          call ps_eat_space_
+          ld a,(de)
+          cp "["
+          pop de
+          ret z
+
+          ld c,pflag_implicit_factor
+          jp set_flag_and_carry
+
+
+;15
+ps_litt_
+;case insensitive
+
+          ld a,(hl)
+          inc hl
+          ld b,a
+          or a
+          call z,exit_mess
+
+pln_chk
+          call ps_char_
+          ret nc
+          djnz pln_chk
+;ok found
+          scf
+          ret
+
+
+
+;20
+f_decimal_encode_
+          ld c,e_decimal_8
+          ld a,(ix-1)   ;len
+          cp 2
+          jr nc,fde_16
+          ld a,(ix-2)
+          cp short_decimal_max+1
+          jr nc,fde_8
+;leave as is : 0 a 16
+          dec ix
+          scf
+          ret
+
+f_hexa_encode_
+          ld c,e_hexa_8
+_encode_com
+          ld a,(ix-1)   ;len
+          cp 2
+          jr nc,fde_16
+fde_8
+          ld a,(ix-2)
+          ld (ix-2),c
+          ld (ix-1),a
+          scf
+          ret
+fde_16
+          inc c         ;e_..._16
+          push de
+          push hl
+          ld e,ixl
+          ld d,ixh
+          ld l,e
+          ld h,d
+          dec hl
+          dec hl
+          cp 3
+          jr nc,fde_long
+          ld a,c
+          dec de
+          ldd
+          ldd
+          ex de,hl
+          ld (hl),a
+       ;   INC  IX
+          pop hl
+          pop de
+          scf
+          ret
+
+fde_long
+          inc c         ;e_..._long
+          push bc
+          ld c,a
+          ld b,0
+          lddr
+          ld (de),a
+          dec de
+          pop bc
+          ex de,hl
+          ld (hl),c
+          inc ix
+          pop hl
+          pop de
+          scf
+          ret
+
+
+;13
+set_flag_and_carry
+          scf
+          push af
+          ld a,(vp_flags)
+          or c
+          ld (vp_flags),a
+          pop af
+          ret
+
+
+f_buildopcode_reg16_
+;ld bc,nn  inc de...
+
+          ld bc,(vp_output0)
+          ld a,(bc)
+          call get_ixy_prefix
+          jp z,f_buildopcode_
+
+          ld c,(ix+0)
+          ld (ix+0),a
+          inc ix
+          ld a,c
+          and &3F
+          jp fbo_com
+
+
+;18
+f_buildopcode_reg8_xy_cb_
+;cb op [bit#] d_exp xy -> xy cb op [bit#] d_exp
+
+          call f_buildopcode_post_
+          push hl
+          ld hl,(vp_output0)
+          inc (hl)
+          inc (hl)
+          inc hl
+          inc hl
+          ld a,(hl)
+          add 6
+          ld (hl),a
+          pop hl
+          scf
+          ret
+
+
+f_buildopcode_reg8_007f_
+;gestion inc/dec r   ld r
+
+          ld c,(ix+0)
+          ld b,(ix-1)
+          ld a,c
+          call get_ixy_prefix
+          jr z,f_bol88r
+          ld (ix-1),a
+          inc ix
+f_bol88r
+          ld a,c
+          and 7
+          add a
+          add a
+          add a
+          or b
+          jp _putback
+
+f_buildopcode_post_
+;gere cas ld (nn),ix : il faut decaler l'expression
+;!!used for $dd$cb as well
+          ld bc,(vp_output0)
+          ld a,(ix+0)
+          call get_ixy_prefix
+          jp z,fpostcom
+
+          push hl
+          push de
+          call movebcix
+          ld (de),a
+          pop de
+          pop hl
+          scf
+          ret
+
+
+f_buildopcode_ld8_2_
+          ld bc,(vp_output0)
+          ld a,(bc)
+          ld c,a
+          ld a,(ix+0)
+          cp flag_exp   ;ld r,n
+          scf
+          ret z
+
+          ld b,a
+          cp 6
+          jr z,bol2indhl
+          and &07
+          cp 6:jp z,bol2indxy
+          bit 7,b:jr nz,fbol2y
+          bit 6,b:jr nz,fbol2x
+          ld a,c
+          cp &DD:jr c,bolrr
+
+;ld (ix+n),r  ou ld ixh,r
+;
+; NB:  &70-&36  ;correction ld (hl),n -> ld (ix+d),n
+    ; is same than &40-&06
+
+          push ix
+          ld ix,(vp_output0)
+          inc ix:inc ix
+          call bolrr
+          pop ix
+          ret nz
+          inc ix
+          ret
+
+;ld r,r'
+bolrr
+;!! return NZ if true opcode
+          ld a,(ix-1)
+          add &40-&06   ;correction ld r,n -> ld r,r
+          or b
+bolrr_
+;reserved opcode ?
+          call is_pseudo_instr
+          jp nz,_putback ;no: true opcode
+
+          ld (ix-1),ec_esc ;escape opcode
+          inc ix
+          jp _putback
+
+
+fbol2y
+          ld a,c
+          cp &FD
+          jr z,bol2xymatch
+bol2xycom
+          cp &40
+          ret nc
+          cp &36
+          ret z
+;ld r,ixh : must insert prefix
+          ld a,b
+          call get_ixy_prefix
+          ld c,(ix-1)
+          ld (ix-1),a
+          inc ix
+bol2com
+          ld a,b
+          and &0F
+          add c
+          add &40-6
+          jr bolrr_
+
+fbol2x
+          ld a,c
+          cp &DD
+          jr nz,bol2xycom
+
+bol2xymatch
+;prefix already there
+          ld a,b
+          and &0F
+          ld b,a
+          jr bolrr
+
+bol2indhl
+          ld a,c
+          cp &40
+          ret nc
+          cp &36
+          ret z
+;ld r,(hl)
+          jr bol2com
+
+bol2indxy
+          ld a,c
+          cp &40
+          ret nc
+          cp &36
+          ret z
+;ld r,(ix+n) must insert prefix
+          push hl
+          push de
+          push bc
+          ld bc,(vp_output0)
+          call movebcix
+          pop af
+          sub flag_ix+6
+          rra
+          add ec_ix_ind
+          ld (de),a
+          inc de
+          ld a,(de)
+          add &46-6
+          ld (de),a
+          pop de
+          pop hl
+          scf
+          ret
+
+movebcix
+;move [bc;ix-1] to bc+1
+
+          push ix
+          pop hl
+          ld e,l
+          ld d,h
+          or a
+          sbc hl,bc
+          call z,exit_mess
+      IF 1-inRom        ; no room for Demomaker's delight
+          call c,exit_mess
+      END
+          ld c,l
+          ld b,h
+          ld l,e
+          ld h,d
+          dec hl
+          lddr
+          inc ix
+          ret
+
+ps_term_
+          ld a,(hl)
+          inc hl
+          push hl
+          ld h,(hl)
+          ld l,a
+          call _parse
+          pop hl
+          inc hl
+          ret
+
+
+;16
+ps_plus_term_
+;1 ou plus
+          push ix
+          push de
+          push hl
+          call ps_term_
+          jp c,psplus_ok
+;next parser, don't rewind (nevermind since failure)
+          pop hl
+          pop af
+          pop af
+          inc hl
+          inc hl
+          or a
+          ret
+
+;21
+ps_hexa_emit_
+          call ps_digit_emit_
+          ret c
+          res 5,a
+          cp "A"-&30
+          ccf
+          ret nc
+          cp "G"-&30
+          ret nc
+          sub "A"-&30-10
+com_emit
+          ld (ix+0),a
+          inc de
+          scf
+          ret
+
+;12
+ps_bin_emit_
+          ld a,(de)
+          sub "0"
+          jr z,com_emit
+          dec a
+          or a
+          ret nz
+          inc a
+          jr com_emit
+
+psl_isfact_
+;Hack!! Look for "**", to avoid t_exp parsing (generate false labels)
+          push de
+pif_lp
+          ld a,(de)
+          inc de
+          or a
+          jr z,pif_no
+          cp ":"
+          jr z,pif_no
+          cp "*"
+          jr nz,pif_lp
+          ld a,(de)
+          cp "*"
+          jr nz,pif_lp
+          scf
+pif_no
+          pop de
+          ret
+
+is_pseudo_instr
+; Reimplement the code in ass.o:
+; considered simpler than far_calling orgext.rom
+; CON: more error prone.
+; NZ: true opcode.
+      IF 1
+          ld c,a
+      IF dev_checks
+; We assume we are in the range 40-7f
+          and &C0:cp &40:call nz,fail
+          ld a,c
+      END
+          cp ec_label_adr:ret z ; &40
+          cp ec_comment:ret z ; &43        ;'C'
+          cp ec_tab:ret z ; &49
+          cp ec_nl:ret z ; &4A
+          cp ec_label_local:ret z
+          cp &52:ret z  ; reserved
+          cp &58:ret z  ; reserved
+          cp ec_factor:ret z ; &5B       
+          cp ec_label_equ:ret z ; &64
+          cp ec_macro_def:ret z ; &6D
+          cp ec_esc     ; &7f
+          ret
+      ELSE
+; Temp tentative to pack flags:
+; Actually longer than brute !
+; !!!! Z: true opcode.
+          push hl
+          ld l,a
+      IF dev_checks
+; We assume we are in the range 40-7f
+          and &C0:cp &40:call nz,fail
+      END
+; hack! Pre-add table start (*8 to compensate srl)
+          add [pseudo_bitmap AND &FF] * 8 - &40
+          ld l,a
+          ld h,pseudo_bitmap/&0100
+          ld a,&80      ;mask
+          srl l:jr nc,$+3:1 ** rrca
+          srl l:jr nc,$+4:2 ** rrca
+          srl l:jr nc,$+6:4 ** rrca
+          and (hl)
+          pop hl
+          ret
+
+;pseudo_bitmap
+; Pseudo_instr: &40,&43,&49,&4a,&51,&52,&58,&5b,&64,&6d,&7f
+; (cf ec_*, plus reserved ones). Source of truth: ass.o (dispasst)
+; Encoded in bitmap (left to right)
+      BYTE %01001000,%01100000
+      BYTE %00110000,%10010000
+      BYTE %00001000,%00000100
+      BYTE 0,%00000001
+      IF $-1/&0100 - pseudo_bitmap/&0100
+!! must confine
+      END
+      END
+
+
+;----------------------------
+;Grammar !!
+;----------------------------
+
+t_line
+      BYTE ps_or_terms
+      WORD t_comment_single
+      WORD t_instr_line ;no_label. 1st to prevent mnemonic seen as label
+      WORD t_label_equ  ;before t_label_instr: prevent equ seen as macro
+      WORD t_label_instr_line
+; after label
+; so that 'lab ei' isn't seen as macro use 
+      WORD t_macro_instr_line
+      WORD t_empty
+      WORD t_asis_line
+      WORD 0
+      BYTE 0
+
+t_label_instr_line
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_local      ; must test first, since t_label alway succeeds
+      WORD t_label_adr
+      WORD 0
+      BYTE ps_term:WORD t_identifiant
+      BYTE ps_consume_litt,1,":" ; eat after lab
+      BYTE ps_or_terms
+      WORD t_instr_line,t_comment,t_empty,0
+      BYTE 0
+
+t_local
+      BYTE ps_char,"."
+      BYTE f_emit_inc,ec_label_local
+      BYTE 0
+
+t_label_adr
+;always succeed
+      BYTE f_emit_inc,ec_label_adr
+      BYTE 0
+
+t_macro_instr_line
+      BYTE ps_eat_space
+      BYTE ps_consume_litt,1,":" ; eat before id
+      BYTE f_init_instr ;for '$' management
+      BYTE f_store_output
+      BYTE ps_term:WORD t_macro_use
+      BYTE f_finalize_instr
+      BYTE ps_or_terms
+      WORD t_instr_line,t_comment,t_empty,0
+      BYTE 0
+
+t_label_equ
+      BYTE f_init_instr ;for '$' management
+      BYTE f_store_output
+      BYTE f_emit_inc
+      BYTE ec_label_equ
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_identifiant
+      BYTE ps_eat_space
+      BYTE ps_littenum_nosep_emit
+      BYTE 1,"=",ec_label_equ
+      BYTE 3,"equ",ec_label_equ
+      BYTE 0
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_exp
+      BYTE f_finalize_instr
+      BYTE ps_or_terms
+      WORD t_comment,t_empty,0
+      BYTE 0
+
+t_empty
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE 0
+      BYTE f_emit_inc
+      BYTE ec_nl
+      BYTE 0
+
+t_instr_line
+      BYTE ps_eat_space
+      BYTE ps_consume_litt,1,":" ; eat heading 
+      BYTE ps_seq
+t_instr
+      BYTE f_init_instr ;reset flag... useful for ":" separated instr
+;must be done first, since vp_output0 must point debut of instr
+;and not factor ex
+      BYTE ps_option_term:WORD t_factor
+      BYTE f_store_output
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_ld
+      WORD t_inc,t_dec
+      WORD t_misc       ;!!Before t_pack80bf, to prevent cpl -> cp l
+      WORD t_bloc       ;!!Idem, prevent cpd -> cp d
+      WORD t_add16      ;!!Idem, prevent add hl[,b] seen as add a,hl
+      WORD t_sbc16,t_adc16 ;!!Idem
+
+      WORD t_pseudo     ;!!Idem: prevent org &40 -> or g and 40
+
+      WORD t_pack80bf
+      WORD t_jphl       ;!!Before t_jump, prevent to see jp ix as C3 ix label
+      WORD t_jump
+      WORD t_pop,t_push
+      WORD t_out,t_in
+
+      WORD t_ex
+      WORD t_ex'
+      WORD t_jr,t_djnz,t_ret
+      WORD t_cb003f,t_cb40ff
+
+   ;   WORD t_factor_bloc   ; already called in t_pseudo
+
+      WORD t_misc_ed
+      WORD t_rst
+      WORD t_im
+
+; needed in multiple instr e.g. nop:EXIT(4)
+; first one parsed in t_macro_instr_line: after label
+; so that 'lab ei' isn't seen as macro use 
+      WORD t_macro_use_not_first
+
+      WORD 0
+
+      BYTE f_finalize_instr
+; Not needed anymore?
+ ;     BYTE ps_star_term
+ ;     WORD t_factor_bloc_end ;allow [...:[inc e]]
+      BYTE 0
+;reprise line
+
+      BYTE ps_star_term:WORD t_other_instr
+
+      BYTE ps_eat_space
+ ; Still needed even with optional ':' between t_instr.
+      BYTE ps_consume_litt,1,":" ; eat trailing
+      BYTE ps_or_terms
+      WORD t_empty,t_comment,0
+      BYTE 0
+
+t_other_instr
+      BYTE ps_eat_space ;todo: store space
+; ':' optional to allow '[' followed by instr (cf t_factor_bloc)
+; It also allow to join lines without inserting ':'.
+      BYTE ps_consume_litt,1,":"
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_instr
+      BYTE 0
+
+t_comment_single        ;nothing but comment
+;store space
+      BYTE f_store_tab
+t_comment
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE ";"
+      BYTE f_emit_inc
+      BYTE ec_comment
+      BYTE f_store_output
+      BYTE f_incoutput  ;leave space for len
+      BYTE ps_copy_star_until_eol
+      BYTE f_asis
+      BYTE 0
+
+t_asis_line
+;not recognized
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_asis
+      BYTE f_store_output
+      BYTE f_incoutput  ;leave space for len
+      BYTE ps_copy_star_until_eol
+      BYTE f_asis
+      BYTE f_emit_inc
+      BYTE ec_nl
+      BYTE 0
+
+t_factor
+      BYTE psl_isfact
+      BYTE ps_eat_space
+      BYTE f_emit_inc
+      BYTE ec_factor
+      BYTE ps_term:WORD t_exp
+      BYTE ps_eat_space
+      BYTE ps_litt
+      BYTE 2,"**"
+      BYTE ps_flag_factor
+      BYTE 0
+
+t_factor_bloc
+      BYTE psl_isfact
+  ;      BYTE ps_eat_space     not need since space already eaten
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_factor_bloc
+      BYTE ps_term:WORD t_exp
+      BYTE ps_eat_space
+      BYTE ps_litt
+      BYTE 2,"**"
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE "["
+; Using t_instr here creates a cycle,
+; which complicates f_<init|finalize>_instr.
+;      BYTE ps_option_term:WORD t_instr ;enchaine sans ":"
+      BYTE 0
+
+      IF 0
+;moved if 
+t_factor_bloc_rasm
+      BYTE ps_litt
+      BYTE 6,"repeat"
+      BYTE ps_separ
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_factor_bloc
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_factor_bloc_end
+  ;     BYTE ps_eat_space    already eaten
+      BYTE ps_char
+      BYTE "]"
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_factor_bloc_end
+      BYTE 0
+      END
+
+t_ld  BYTE ps_litt
+      BYTE 2,"ld"
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_ldair      ;!!before t_ldreg8. Prevent i/r to be seen as label
+      WORD t_ldreg8
+      WORD t_ldsp_hl    ;!! before t_ldreg16. Prevent ix seen as label
+      WORD t_ldreg16
+      WORD t_ldind_bcde_a,t_ldind_a_bcde
+      WORD t_ldind_nn_hla,t_ldind_hla_nn
+      WORD t_ldind_nn_bcdehlsp,t_ldind_bcdehlsp_nn
+      WORD 0
+      BYTE 0
+
+
+t_inc BYTE ps_litt
+      BYTE 3,"inc"
+      BYTE ps_separ
+      BYTE ps_or_terms
+      WORD t_inc8,t_inc16,0 ;8 avant 16 (ixh vs ix)
+      BYTE 0
+
+t_dec BYTE ps_litt
+      BYTE 3,"dec"
+      BYTE ps_separ
+      BYTE ps_or_terms
+      WORD t_dec8,t_dec16,0
+      BYTE 0
+
+t_djnz BYTE ps_litt
+      BYTE 4,"djnz"
+      BYTE ps_separ
+      BYTE f_emit_inc
+      BYTE &10
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_jr  BYTE ps_litt
+      BYTE 2,"jr"
+      BYTE f_emit_inc
+      BYTE &18
+      BYTE ps_eat_space
+      BYTE ps_option_term:WORD t_jrcond
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_ldreg8
+
+;prebuild : it simpler to put $dd or $fd prefix now
+;           than to shift eventual exp afterward.
+;assume it's ld r,n
+;eventually corrected by f_buildopcode_ld8_2 if it's ld r,r
+      BYTE f_emit_inc
+      BYTE &06
+      BYTE ps_term:WORD t_reg_op8_ld
+      BYTE ps_comma
+      BYTE ps_term:WORD t_reg_op8_2
+      BYTE f_buildopcode_ld8_2
+      BYTE 0
+
+t_inc8
+      BYTE f_emit_inc
+      BYTE &04
+      BYTE ps_term:WORD t_reg_op8_incdec
+      BYTE 0
+
+t_dec8
+      BYTE f_emit_inc
+      BYTE 5
+      BYTE ps_term:WORD t_reg_op8_incdec
+      BYTE 0
+
+t_ldreg16
+      BYTE ps_term:WORD t_bcdehlxysp
+      BYTE f_buildopcode_reg16
+      BYTE 1
+      BYTE ps_comma
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_inc16
+      BYTE ps_term:WORD t_bcdehlxysp
+      BYTE f_buildopcode_reg16
+      BYTE 3
+      BYTE 0
+
+t_dec16
+      BYTE ps_term:WORD t_bcdehlxysp
+      BYTE f_buildopcode_reg16
+      BYTE &0B
+      BYTE 0
+
+t_ldind_bcde_a
+      BYTE ps_term:WORD t_ind_bcde
+      BYTE ps_comma
+      BYTE ps_litt      ;todo : check if equivalent to ps_char
+      BYTE 1,"a"
+      BYTE f_buildopcode
+      BYTE 2
+      BYTE 0
+
+t_ldind_a_bcde
+      BYTE ps_litt
+      BYTE 1,"a"
+      BYTE ps_comma
+      BYTE ps_term:WORD t_ind_bcde
+      BYTE f_buildopcode
+      BYTE &0A
+      BYTE 0
+
+t_ldind_nn_hla
+      BYTE f_emit_inc
+      BYTE &22
+      BYTE ps_term:WORD t_ind_nn
+      BYTE ps_comma
+      BYTE ps_term:WORD t_hlixiya
+      BYTE f_buildopcode_post
+      BYTE 0
+
+t_ldind_hla_nn
+      BYTE ps_term:WORD t_hlixiya
+      BYTE f_buildopcode_reg16 ;for $dd or $fd
+      BYTE &2A
+      BYTE ps_comma
+      BYTE ps_term:WORD t_ind_nn
+      BYTE 0
+
+t_ldind_nn_bcdehlsp
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE f_emit_inc
+      BYTE &43
+      BYTE ps_term:WORD t_ind_nn
+      BYTE ps_comma
+      BYTE ps_term:WORD t_bcdehlsp
+      BYTE f_buildopcode_post_ed
+      BYTE 0
+
+t_ldind_bcdehlsp_nn
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_term:WORD t_bcdehlsp
+      BYTE f_buildopcode
+      BYTE &4B
+      BYTE ps_comma
+      BYTE ps_term:WORD t_ind_nn
+      BYTE 0
+
+t_ldair
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_littenum_emit
+      BYTE 3,"i,a",&47
+      BYTE 3,"a,i",&57
+      BYTE 3,"r,a",&4F
+      BYTE 3,"a,r",&5F
+      BYTE 0
+      BYTE f_incoutput
+      BYTE 0
+
+t_ind_bcde
+      BYTE ps_char
+      BYTE "("
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 0
+      BYTE ps_char
+      BYTE ")"
+      BYTE 0
+
+t_ind_nn
+      BYTE ps_char
+      BYTE "("
+      BYTE ps_term:WORD t_exp
+      BYTE ps_char
+      BYTE ")"
+      BYTE 0
+
+t_add16
+      BYTE ps_litt
+      BYTE 3,"add"
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_addhl,t_addix,t_addiy,0
+      BYTE 0
+
+t_addhl
+      BYTE ps_litt
+      BYTE 3,"hl,"
+      BYTE ps_term:WORD t_bcdehlsp
+      BYTE ps_separ,f_buildopcode
+      BYTE &09
+      BYTE 0
+
+t_addix
+      BYTE ps_litt
+      BYTE 3,"ix,"
+      BYTE ps_term:WORD t_bcdeixsp
+      BYTE ps_separ,f_buildopcodeix
+      BYTE &09
+      BYTE 0
+
+t_addiy
+      BYTE ps_litt
+      BYTE 3,"iy,"
+      BYTE ps_term:WORD t_bcdeiysp
+      BYTE ps_separ,f_buildopcodeiy
+      BYTE &09
+      BYTE 0
+
+t_sbc16
+      BYTE ps_litt
+      BYTE 3,"sbc"
+      BYTE ps_eat_space,ps_litt
+      BYTE 3,"hl,"
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_term:WORD t_bcdehlsp
+      BYTE f_buildopcode
+      BYTE &42
+      BYTE 0
+
+t_adc16
+      BYTE ps_litt
+      BYTE 3,"adc"
+      BYTE ps_eat_space,ps_litt
+      BYTE 3,"hl,"
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_term:WORD t_bcdehlsp
+      BYTE f_buildopcode
+      BYTE &4A
+      BYTE 0
+
+
+t_pack80bf
+      BYTE ps_term:WORD t_arithlogic ;version op n par defaut
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_option_term:WORD t_a
+      BYTE ps_term:WORD t_reg_op8_80bf
+    ;   .BYTE psl_separ    ;sinon mange sbc h[l,bc]
+      BYTE 0
+
+t_arithlogic
+      BYTE ps_littenum_emit
+      BYTE 3,"add",&C6
+      BYTE 3,"adc",&CE
+      BYTE 3,"sub",&D6
+      BYTE 3,"sbc",&DE
+      BYTE 3,"and",&E6
+      BYTE 3,"xor",&EE
+      BYTE 2,"or",&F6
+      BYTE 2,"cp",&FE
+      BYTE 0
+      BYTE 0
+
+t_rotshift
+      BYTE ps_littenum_emit
+      BYTE 3,"rlc",&00
+      BYTE 3,"rrc",&08
+      BYTE 2,"rl",&10
+      BYTE 2,"rr",&18
+      BYTE 3,"sla",&20
+      BYTE 3,"sra",&28
+      BYTE 3,"srl",&38
+      BYTE 3,"sl1",&30
+      BYTE 3,"sll",&30
+      BYTE 0
+      BYTE 0
+
+t_bitresset
+      BYTE ps_littenum_emit
+      BYTE 3,"bit",&40
+      BYTE 3,"res",&80
+      BYTE 3,"set",&C0
+      BYTE 0
+      BYTE 0
+
+t_a
+      BYTE ps_litt
+      BYTE 2,"a,"
+      BYTE ps_eat_space
+      BYTE 0
+
+
+t_ret
+      BYTE ps_litt,3,"ret"
+      BYTE ps_separ     ;retz:label, reti: opcode
+      BYTE f_emit_inc
+      BYTE &C9
+      BYTE ps_option_term:WORD t_retcond
+      BYTE 0
+
+t_retcond
+      BYTE ps_term:WORD t_cond
+      BYTE f_build_cond
+      BYTE 0
+
+t_rst
+      BYTE ps_litt
+      BYTE 3,"rst"
+; byte 
+      BYTE ps_separ
+      BYTE f_emit_inc
+      BYTE &C7
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_bloc
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_littenum_nosep_emit
+      BYTE 2,"ld",&A0
+      BYTE 2,"cp",&A1
+      BYTE 2,"in",&A2
+      BYTE 3,"out",&A3
+      BYTE 0
+      BYTE f_incoutput,ps_littenum_nosep_emit
+      BYTE 1,"i",0
+      BYTE 1,"d",8
+      BYTE 0
+      BYTE f_foldopcode
+      BYTE ps_option_term:WORD t_blocrepeat
+      BYTE psl_separ
+      BYTE 0
+
+t_blocrepeat
+      BYTE ps_char
+      BYTE "r"
+      BYTE f_emit
+      BYTE &10
+      BYTE f_foldopcode
+      BYTE 0
+
+t_im
+      BYTE ps_litt
+      BYTE 2,"im"
+      BYTE ps_separ
+      BYTE f_emit_inc,&ED
+      BYTE f_emit_inc,&46
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_misc
+      BYTE ps_littenum_emit_inc
+      BYTE 3,"nop",0
+
+      BYTE 4,"rlca",&07
+      BYTE 4,"rrca",&0F
+      BYTE 3,"rla",&17
+      BYTE 3,"rra",&1F
+      BYTE 3,"daa",&27
+      BYTE 3,"cpl",&2F
+      BYTE 3,"scf",&37
+      BYTE 3,"ccf",&3F
+
+      BYTE 4,"halt",&76
+
+      BYTE 2,"di",&F3
+      BYTE 4,"exx'",&D9
+      BYTE 3,"exx",&D9
+      BYTE 2,"ei",&FB
+
+      BYTE 0
+      BYTE 0
+
+t_misc_ed
+      BYTE f_emit_inc
+      BYTE &ED
+      BYTE ps_littenum_emit_inc
+      BYTE 3,"neg",&44
+      BYTE 4,"retn",&45
+      BYTE 3,"rrd",&67
+      BYTE 4,"reti",&4D
+      BYTE 3,"rld",&6F
+      BYTE 4,"otdr",&BB
+      BYTE 0
+      BYTE 0
+
+t_jrcond
+      BYTE ps_littenum_emit
+      BYTE 2,"nz",&08
+      BYTE 1,"z",&10
+      BYTE 2,"nc",&18
+      BYTE 1,"c",&20
+      BYTE 0
+      BYTE ps_comma
+      BYTE f_build_cond
+      BYTE 0
+
+t_jump
+      BYTE ps_littenum_emit
+      BYTE 2,"jp",&C3
+      BYTE 4,"call",&CD
+      BYTE 0
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_option_term:WORD t_jumpcond
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_jumpcond
+      BYTE ps_term:WORD t_cond
+      BYTE ps_comma
+      BYTE f_build_cond
+      BYTE 0
+
+t_cond
+      BYTE ps_littenum_emit
+      BYTE 2,"nz",&F7
+      BYTE 1,"z",&FF
+      BYTE 2,"nc",&07
+      BYTE 1,"c",&0F
+      BYTE 2,"po",&17
+      BYTE 2,"pe",&1F
+      BYTE 1,"p",&27
+      BYTE 1,"m",&2F
+      BYTE 0
+      BYTE 0
+
+t_pop
+      BYTE ps_litt
+      BYTE 3,"pop"
+      BYTE ps_separ
+      BYTE ps_term:WORD t_bcdehlxyaf
+      BYTE f_buildopcode_reg16
+      BYTE &C1
+      BYTE 0
+t_push
+      BYTE ps_litt
+      BYTE 4,"push"
+      BYTE ps_separ
+      BYTE ps_term:WORD t_bcdehlxyaf
+      BYTE f_buildopcode_reg16
+      BYTE &C5
+      BYTE 0
+
+t_out
+      BYTE ps_litt
+      BYTE 3,"out"
+      BYTE f_emit_inc
+      BYTE &D3          ;until proven wrong
+      BYTE ps_eat_space
+      BYTE ps_char,"("
+      BYTE ps_or_terms:WORD t_out_c,t_out_n,0 ;!!c before n
+      BYTE 0
+
+t_out_n
+      BYTE ps_term:WORD t_exp
+      BYTE ps_litt
+      BYTE 2,"),"
+      BYTE ps_eat_space
+      BYTE ps_char,"a"
+      BYTE 0
+
+t_out_c
+      BYTE ps_litt
+      BYTE 3,"c),"
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_reg_io
+      BYTE f_buildopcode_ed
+      BYTE &41
+      BYTE 0
+
+
+t_in
+      BYTE ps_litt
+      BYTE 2,"in"
+      BYTE f_emit_inc
+      BYTE &DB
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_in_c       ;!!before t_in_n to prevent C to be seen as label
+      WORD t_in_n
+      WORD 0
+      BYTE ps_char
+      BYTE ")"
+      BYTE 0
+
+t_in_n
+      BYTE ps_litt
+      BYTE 3,"a,("
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_in_c
+      BYTE f_emit
+      BYTE &30          ;in (c)
+      BYTE ps_option_term:WORD t_reg_io_comma
+      BYTE ps_litt
+      BYTE 2,"(c"
+      BYTE f_buildopcode_ed
+      BYTE &40
+      BYTE 0
+
+t_reg_io_comma
+      BYTE ps_term:WORD t_reg_io
+      BYTE ps_comma
+      BYTE 0
+
+t_pseudo
+      BYTE ps_consume_litt,1,"."
+      BYTE ps_or_terms
+      WORD t_byte,t_word,t_fill,t_org,t_entifskipbank
+      WORD t_pseudo0
+      WORD t_factor_bloc ; end done in t_pseudo0
+      WORD t_macro_def
+      WORD t_load
+      WORD t_import
+      WORD t_save
+      WORD t_savea
+      WORD t_str
+      WORD 0
+      BYTE 0
+
+t_byte
+;TODO: ps_littenum?
+      BYTE ps_littenum_emit
+      BYTE 4,"byte",ec_byte
+      BYTE 2,"by",ec_byte
+      BYTE 1,"b",ec_byte
+      BYTE 4,"defb",ec_byte
+      BYTE 2,"db",ec_byte
+      BYTE 4,"defm",ec_byte
+      BYTE 0
+      BYTE f_incoutput
+      BYTE f_data_init
+      BYTE ps_term:WORD t_data_opt
+      BYTE f_byte_encode
+      BYTE 0
+
+t_str
+      BYTE ps_litt,3,"str"
+      BYTE ps_eat_space
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_str
+;For now, like t_load: explicit string must follow
+;We could do like byte, 
+;then we must define semantic of str "toto1",34,"toto2"
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_string
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+t_word
+      BYTE ps_littenum_emit
+      BYTE 4,"word",ec_word
+      BYTE 2,"wo",ec_word
+      BYTE 1,"w",ec_word
+      BYTE 4,"defw",ec_word
+      BYTE 2,"dw",ec_word
+      BYTE 0
+      BYTE f_incoutput
+      BYTE f_data_init
+      BYTE ps_term:WORD t_data_opt
+      BYTE f_word_encode
+      BYTE 0
+
+t_data_opt              ;0 or more csv
+      BYTE ps_option_term:WORD t_data
+      BYTE f_emit_inc,e_endofdata ; Emitted even if no data
+      BYTE 0
+
+t_data                  ;1 or more csv
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_exp_nosize
+      BYTE f_data_inc
+      BYTE ps_star_term:WORD t_moredata
+      BYTE 0
+
+              ;0 or more space separated identifiant
+  ;    BYTE ps_seq
+  ;    BYTE ps_option_term:WORD t_param
+   ;   BYTE f_emit_inc
+   ;   BYTE e_endofdata
+   ;   BYTE 0
+
+;t_args
+;      BYTE ps_seq,ps_eat_space
+;      BYTE ps_term:WORD t_exp_nosize
+;      BYTE f_data_inc
+;     BYTE ps_star_term:WORD t_moredata
+ ;     BYTE 0
+
+
+t_fill
+      BYTE ps_littenum_emit
+      BYTE 4,"fill",ec_esc
+      BYTE 1,"f",ec_esc
+      BYTE 4,"defs",ec_esc
+      BYTE 2,"ds",ec_esc
+      BYTE 0
+      BYTE f_incoutput
+      BYTE f_emit_inc,ec2_fill
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_exp
+      BYTE f_exp_init
+;!! enchaine with moredata
+      BYTE ps_seq
+t_moredata
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE ","
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_exp_nosize
+      BYTE f_data_inc
+      BYTE 0
+;Fin t_fill
+      BYTE f_exp_encode
+      BYTE 0
+
+t_org
+      BYTE ps_litt
+      BYTE 3,"org"
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_org
+      BYTE ps_separ
+      BYTE ps_term:WORD t_exp
+      BYTE ps_option_term:WORD _t_org2
+      BYTE 0
+
+_t_org2
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_moredata
+      BYTE f_exp_encode
+      BYTE f_flag_org2
+      BYTE 0
+
+t_macro_def
+      BYTE ps_litt
+      BYTE 5,"macro"
+      BYTE ps_separ
+      BYTE f_emit_inc,ec_macro_def
+      BYTE f_exp_init   ; several ids. nevermind, it's just for length
+      BYTE ps_term:WORD t_macro_id ; name
+      BYTE ps_eat_space,ps_consume_litt,1,"(" ; optional
+      BYTE ps_option_term:WORD t_macro_id ; 1st param
+      BYTE ps_star_term:WORD t_moreparam
+      BYTE ps_eat_space,ps_consume_litt,1,")" ; optional
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+t_macro_use_not_first
+; only if tokens already emitted
+; prevent to see ' label ei' as macro invokation
+      BYTE ps_emitted
+
+t_macro_use
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_macro_use
+      BYTE f_exp_init   ; id+exps. nevermind, it's just for length
+      BYTE ps_term:WORD t_macro_id
+      BYTE ps_eat_space
+      IF vbc
+      BYTE ps_char,"("  ; Opening parenthesis mandatory
+      ELSE
+; discard for now. Or maybe we should discard
+;  aa bb cc dd -> aa bb() cc() dd()
+;optional "(": allow to discriminate and accept foreign source
+      BYTE ps_consume_litt,1,"("
+      END
+      BYTE ps_term:WORD t_data_opt
+      BYTE ps_eat_space,ps_consume_litt,1,")"
+      BYTE f_exp_encode
+      BYTE 0
+
+t_pseudo0
+; directive without param
+      BYTE f_emit_inc,ec_esc
+      BYTE ps_littenum_emit
+      BYTE 1,"]",ec2_factor_bloc_end
+      BYTE 4,"else",ec2_else
+      BYTE 8,"endmacro",ec2_endmacro
+      BYTE 4,"endm",ec2_endmacro
+      BYTE 3,"end",ec2_end
+      BYTE 3,"brk",ec2_brk
+      BYTE 7,"restore",ec2_restore
+      BYTE 4,"rend",ec2_factor_bloc_end ; for rasm
+      BYTE 0
+      BYTE f_incoutput
+      BYTE 0
+
+t_entifskipbank
+; factorized: ec_esc, ec2_*, t_exp
+      BYTE f_emit_inc,ec_esc
+      BYTE ps_littenum_emit
+      BYTE 2,"if",ec2_if
+      BYTE 3,"ent",ec2_ent
+      BYTE 4,"skip",ec2_skip
+      BYTE 4,"defs",ec2_skip
+      BYTE 2,"ds",ec2_skip
+      BYTE 4,"bank",ec2_bank
+      BYTE 6,"repeat",ec2_factor_bloc
+      BYTE 0
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_load
+      BYTE ps_litt,4,"load"
+      BYTE ps_eat_space
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_load
+; Follow t_macro_def construction.
+; Leave room for optional parameters.
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_string ; filename
+;      BYTE ps_star_term:WORD t_moreparam
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+t_save
+      BYTE ps_litt,4,"save"
+      BYTE ps_separ
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_save
+; 1 or more param: we don't check here 1st param is a string
+                 ; (future proof: will allow string label)
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_data
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+t_savea
+      BYTE ps_litt,5,"savea"
+      BYTE ps_separ
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_savea
+; 1 or more param: we don't check here 1st param is a string
+                 ; (future proof: will allow string label)
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_data
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+
+t_import
+;copy-paste of t_load (no need to factorize: they will have different
+;options)
+      BYTE ps_litt,6,"import"
+      BYTE ps_eat_space
+      BYTE f_emit_inc,ec_esc
+      BYTE f_emit_inc,ec2_import
+      BYTE f_exp_init
+      BYTE ps_term:WORD t_string
+      BYTE f_emit_inc,e_endofdata
+      BYTE f_exp_encode
+      BYTE 0
+
+t_ex
+; One or more space
+      BYTE ps_litt,3,"ex "
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_exde,t_exsp,t_exaf,t_exhl,0
+      BYTE 0
+
+t_ex'
+; Zero or more space 
+      BYTE ps_litt,2,"ex"
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_exde',t_exsp,t_exaf',0
+      BYTE 0
+
+t_exsp
+      BYTE ps_litt,5,"(sp),"
+      BYTE ps_term:WORD t_hlixiy
+      BYTE f_buildopcode_reg16
+      BYTE &E3
+      BYTE 0
+
+t_exde
+      BYTE ps_char,"d"  ; at least one: since consume_litt work with 0
+      BYTE ps_consume_litt,4,"e,hl"
+      BYTE psl_separ
+      BYTE f_emit_inc
+      BYTE &EB
+      BYTE 0
+
+t_exde'
+; allow exde,
+      BYTE ps_litt,3,"de," ; No space: must be explicit
+      BYTE ps_consume_litt,2,"hl"
+      BYTE psl_separ
+      BYTE f_emit_inc
+      BYTE &EB
+      BYTE 0
+
+t_exhl                  ; for dislexic
+      BYTE ps_char,"h"  ; at least one: since consume_litt work with 0
+      BYTE ps_consume_litt,4,"l,de"
+      BYTE psl_separ
+      BYTE f_emit_inc
+      BYTE &EB
+      BYTE 0
+
+t_exaf
+      BYTE ps_char,"a"  ; at least one: since consume_litt work with 0
+      BYTE ps_consume_litt,5,"f,af'"
+      BYTE psl_separ
+      BYTE f_emit_inc
+      BYTE &08
+      BYTE 0
+
+t_exaf'
+      BYTE ps_litt,3,"af,"
+      BYTE ps_consume_litt,3,"af'"
+      BYTE psl_separ
+      BYTE f_emit_inc
+      BYTE &08
+      BYTE 0
+
+
+t_jphl
+      BYTE ps_litt
+      BYTE 2,"jp"
+      BYTE ps_eat_space
+      BYTE ps_option_term:WORD t_pareno
+      BYTE ps_term:WORD t_hlixiy
+      BYTE ps_option_term:WORD t_parenc
+      BYTE f_buildopcode_reg16
+      BYTE &E9
+      BYTE 0
+
+t_ldsp_hl
+      BYTE ps_litt
+      BYTE 2,"sp"
+      BYTE ps_comma
+      BYTE ps_term:WORD t_hlixiy
+      BYTE f_buildopcode_reg16
+      BYTE &F9
+      BYTE 0
+
+t_pareno
+      BYTE ps_char
+      BYTE "("
+      BYTE 0
+t_parenc
+      BYTE ps_char
+      BYTE ")"
+      BYTE 0
+
+t_ldsp
+      BYTE ps_litt
+      BYTE 2,"ld"
+      BYTE ps_eat_space
+      BYTE ps_litt
+      BYTE 2,"sp"
+      BYTE ps_term:WORD t_hlixiy
+      BYTE f_buildopcode_reg16
+      BYTE &F9
+      BYTE 0
+
+t_cb003f
+      BYTE f_emit_inc
+      BYTE &CB
+      BYTE ps_term:WORD t_rotshift
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_reg8_cb,t_index_cb,0
+      BYTE 0
+
+t_cb40ff
+      BYTE f_emit_inc
+      BYTE &CB
+      BYTE ps_term:WORD t_bitresset
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_bit_comma,t_exp_comma,0
+      BYTE ps_or_terms
+      WORD t_reg8_cb,t_index_cb,0
+      BYTE 0
+
+t_reg8_cb
+      BYTE ps_term:WORD t_reg_op8_noxy
+      BYTE f_foldopcode_cb
+      BYTE 0
+
+t_bit_comma
+      BYTE ps_digit_emit,ps_comma
+      BYTE f_build_bit
+      BYTE f_incoutput
+      BYTE 0
+
+t_exp_comma
+      BYTE ps_term:WORD t_exp
+      BYTE ps_comma
+      BYTE 0
+
+t_bcdehlxysp
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 2,"hl",&20
+      BYTE 2,"ix",&20+flag_ix
+      BYTE 2,"iy",&20+flag_iy
+      BYTE 2,"sp",&30
+      BYTE 0
+      BYTE 0
+
+t_bcdehlxyaf
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 2,"hl",&20
+      BYTE 2,"ix",&20+flag_ix
+      BYTE 2,"iy",&20+flag_iy
+      BYTE 2,"af",&30
+      BYTE 0
+      BYTE 0
+
+t_hlixiy
+      BYTE ps_littenum_emit
+      BYTE 2,"hl",&00
+      BYTE 2,"ix",&00+flag_ix
+      BYTE 2,"iy",&00+flag_iy
+      BYTE 0
+      BYTE 0
+
+t_hlixiya
+      BYTE ps_eat_space
+      BYTE ps_littenum_emit
+      BYTE 1,"a",&10
+      BYTE 2,"hl",&00
+      BYTE 2,"ix",&00+flag_ix
+      BYTE 2,"iy",&00+flag_iy
+      BYTE 0
+      BYTE 0
+
+t_bcdehlsp
+      BYTE ps_eat_space
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 2,"hl",&20
+      BYTE 2,"sp",&30
+      BYTE 0
+      BYTE 0
+
+t_bcdeixsp
+      BYTE ps_eat_space
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 2,"ix",&20
+      BYTE 2,"sp",&30
+      BYTE 0
+      BYTE 0
+
+t_bcdeiysp
+      BYTE ps_eat_space
+      BYTE ps_littenum_emit
+      BYTE 2,"bc",0
+      BYTE 2,"de",&10
+      BYTE 2,"iy",&20
+      BYTE 2,"sp",&30
+      BYTE 0
+      BYTE 0
+
+t_reg_op8
+      BYTE ps_littenum_emit
+      BYTE 1,"a",7
+      BYTE 1,"b",0
+      BYTE 1,"c",1
+      BYTE 1,"d",2
+      BYTE 1,"e",3
+      BYTE 4,"(hl)",6   ;cf t_index pour ix, iy
+;Rasm and sjasmplus compatibility
+      BYTE 2,"hx",4+flag_ix ; must come before "h", otherwise h is 
+      BYTE 2,"hy",4+flag_iy ; taken, then syntax error
+      BYTE 1,"h",4
+      BYTE 2,"lx",5+flag_ix
+      BYTE 2,"ly",5+flag_iy
+      BYTE 1,"l",5
+      BYTE 3,"ixh",4+flag_ix
+      BYTE 3,"ixl",5+flag_ix
+      BYTE 3,"iyh",4+flag_iy
+      BYTE 3,"iyl",5+flag_iy
+      BYTE 2,"xh",4+flag_ix
+      BYTE 2,"yh",4+flag_iy
+      BYTE 2,"xl",5+flag_ix
+      BYTE 2,"yl",5+flag_iy
+      BYTE 0,0
+
+
+t_reg_op8_noxy
+;operandes pour RL, BIT ...
+      BYTE ps_littenum_emit
+      BYTE 1,"a",7
+      BYTE 1,"b",0
+      BYTE 1,"c",1
+      BYTE 1,"d",2
+      BYTE 1,"e",3
+      BYTE 1,"h",4
+      BYTE 1,"l",5
+      BYTE 4,"(hl)",6   ;cf t_index_cb pour ix, iy
+      BYTE 0,0
+
+t_reg_io
+      BYTE ps_littenum_emit
+      BYTE 1,"c",8
+      BYTE 1,"0",&30
+      BYTE 1,"a",&38
+      BYTE 1,"d",&10
+      BYTE 1,"h",&20
+      BYTE 1,"e",&18
+      BYTE 1,"l",&28
+      BYTE 1,"b",0
+      BYTE 0,0
+
+t_reg_op8_wrap_007f
+;pas de correction pour inc/dec :
+;ni pour ld (sera faite apres operande 2)
+      BYTE ps_term:WORD t_reg_op8
+      BYTE f_buildopcode_reg8_007f
+      BYTE 0
+
+t_reg_op8_wrap_80bf
+      BYTE ps_term:WORD t_reg_op8
+      BYTE f_buildopcode_reg8_80bf
+      BYTE 0
+
+t_reg_op8_incdec
+;operande pour inc/dec
+      BYTE ps_or_terms
+      WORD t_reg_op8_wrap_007f
+      WORD t_index_incdec
+      WORD 0
+      BYTE 0
+
+t_reg_op8_ld
+;operande 1 pour  LD
+      BYTE ps_or_terms
+      WORD t_reg_op8_wrap_007f
+      WORD t_index_ld
+      WORD 0
+      BYTE 0
+
+t_reg_op8_80bf
+;operandes pour AND, OR, ADD, SUB, CP...
+      BYTE ps_or_terms
+      WORD t_reg_op8_wrap_80bf
+      WORD t_index_80bf
+      WORD t_exp
+      WORD 0
+      BYTE 0
+
+t_reg_op8_2
+      BYTE ps_or_terms
+      WORD t_reg_op8
+      WORD t_index_2
+      WORD t_reg_exp_wrap
+      WORD 0
+      BYTE 0
+
+t_reg_exp_wrap
+;emit a discriminating flag for build_opcode
+flag_exp = &20
+      BYTE ps_term:WORD t_exp
+      BYTE f_emit
+      BYTE flag_exp
+      BYTE 0
+
+t_index_80bf
+      BYTE ps_term:WORD t_index_com
+      BYTE f_buildopcode_index
+      BYTE &86-&C6 AND &FF
+      BYTE ps_term:WORD t_index_shift
+      BYTE 0
+
+t_index_incdec
+      BYTE ps_term:WORD t_index_com
+      BYTE f_buildopcode_index
+      BYTE &30
+      BYTE ps_term:WORD t_index_shift
+      BYTE 0
+
+t_index_ld
+;operande 1 pour ld
+      BYTE ps_term:WORD t_index_com
+      BYTE f_buildopcode_index
+      BYTE &30
+      BYTE ps_term:WORD t_index_shift
+      BYTE 0
+
+t_index_com
+      BYTE ps_litt
+      BYTE 2,"(i"
+      BYTE ps_littenum_emit
+      BYTE 1,"x",6+flag_ix
+      BYTE 1,"y",6+flag_iy
+      BYTE 0
+      BYTE 0
+
+t_index_2
+;(ix+n) (iy-toto)
+      BYTE ps_litt
+      BYTE 2,"(i"
+      BYTE ps_or_terms
+      WORD t_index_2_x
+      WORD t_index_2_y
+      WORD 0
+      BYTE 0
+
+t_index_2_x
+      BYTE ps_char
+      BYTE "x"
+      BYTE ps_term:WORD t_index_shift
+      BYTE f_emit
+      BYTE 6+flag_ix
+      BYTE 0
+
+t_index_2_y
+      BYTE ps_char
+      BYTE "y"
+      BYTE ps_term:WORD t_index_shift
+      BYTE f_emit
+      BYTE 6+flag_iy
+      BYTE 0
+
+t_index_cb
+;pour rrc (ix+d), set 3,(iy-4)
+      BYTE ps_term:WORD t_index_2
+      BYTE f_buildopcode_reg8_xy_cb
+      BYTE 0
+
+t_index_shift
+      BYTE ps_eat_space
+      BYTE ps_or_terms
+      WORD t_idx_plus
+      WORD t_idx_minus
+      WORD t_idx_nothing ;allow ld a,(ix)
+      WORD 0
+      BYTE ps_char,")"
+      BYTE 0
+
+t_idx_plus
+      BYTE ps_char
+      BYTE "+"
+;"+" is defaut : no special code
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_idx_minus
+;just lookahead "-". Will be encoded in t_exp
+      BYTE psl_char
+      BYTE "-"
+      BYTE ps_term:WORD t_exp
+      BYTE 0
+
+t_idx_nothing
+      BYTE f_emit_inc
+      BYTE e_zero
+      BYTE 0
+
+t_exp
+      BYTE f_exp_init
+      BYTE ps_seq
+t_exp_nosize
+      BYTE ps_or_terms
+      WORD t_exp_compound_wrap
+;NB: 'alone' really needed ? Plutot mettre t_exp_compound_wrap avant
+      WORD t_alone
+      WORD 0
+      BYTE 0
+;fin t_exp
+      BYTE f_exp_encode
+      BYTE 0
+
+t_exp_term
+      BYTE ps_or_terms
+      WORD t_exp_compound,t_exp_term_single
+      WORD 0
+      BYTE 0
+
+t_exp_term_single
+      BYTE ps_option_term:WORD t_space
+      BYTE ps_option_term:WORD t_minus
+      BYTE ps_or_terms
+; t_bin before t_decimal so "0" in "0b" isn't consumed
+      WORD t_hexa,t_bin,t_decimal,t_paren,t_string,t_label,t_func
+      WORD 0
+      BYTE 0
+
+t_space
+      BYTE ps_char
+      BYTE " "
+      BYTE f_emit_inc
+      BYTE e_space
+      BYTE 0
+
+t_minus
+      BYTE ps_char
+      BYTE "-"
+      BYTE f_emit_inc
+      BYTE e_minus_unary
+      BYTE 0
+
+t_paren
+      BYTE ps_char
+      BYTE "["
+      BYTE f_emit_inc
+      BYTE e_paren_open
+      BYTE ps_term:WORD t_exp_term
+      BYTE ps_char
+      BYTE "]"
+      BYTE f_emit_inc
+      BYTE e_paren_close
+      BYTE 0
+
+t_exp_compound_wrap
+;at least one binary operator
+;(since infix, on doit marker bloc)
+      BYTE f_emit_inc
+      BYTE e_begin
+      BYTE ps_seq
+t_exp_compound
+      BYTE ps_term:WORD t_exp_term_single
+      BYTE ps_plus_term:WORD t_exp_binary
+      BYTE 0
+;
+      BYTE f_emit_inc
+      BYTE e_end
+      BYTE 0
+
+t_exp_binary
+      BYTE ps_option_term:WORD t_space
+      BYTE ps_term:WORD t_binary_op
+      BYTE f_incoutput
+      BYTE ps_term:WORD t_exp_term_single
+      BYTE 0
+
+t_binary_op
+      BYTE ps_or_terms
+      WORD t_binary_op_symb
+      WORD t_binary_op_word
+      WORD t_binary_op_wrap_space
+      WORD 0
+      BYTE 0
+
+t_binary_op_symb
+      BYTE ps_littenum_nosep_emit
+      BYTE 1,"+",e_plus
+      BYTE 1,"-",e_minus
+      BYTE 1,"*",e_times
+      BYTE 1,"/",e_divide
+      BYTE 2,"==",e_eq
+      BYTE 1,"=",e_eq
+      BYTE 2,"<>",e_neq
+      BYTE 2,"!=",e_neq
+      BYTE 2,"<=",e_le
+      BYTE 1,"<",e_lt
+      BYTE 2,">=",e_ge
+      BYTE 1,">",e_gt
+      BYTE 0,0
+
+t_binary_op_word
+      BYTE ps_littenum_emit
+      BYTE 3,"xor",e_xor
+      BYTE 2,"or",e_or
+      BYTE 3,"and",e_and
+      BYTE 3,"mod",e_mod
+      BYTE 0,0
+
+t_binary_op_wrap_space
+;allow dams and C syntax
+;But! Since they will replaced by plain word,
+;we must wrap space around
+      BYTE f_append_space_if_needed
+      BYTE ps_littenum_nosep_emit
+      BYTE 1,"!",e_xor
+      BYTE 1,"@",e_or
+      BYTE 1,"&",e_and
+      BYTE 1,"?",e_mod
+      BYTE 1,"%",e_mod
+      BYTE 0
+      BYTE f_prepend_space_if_needed
+      BYTE 0
+
+t_label
+      BYTE ps_or_terms
+;pseudo labels
+      WORD t_pseudolabels
+      WORD t_objpc
+      WORD t_identifiant
+      WORD t_identifiant_local
+      WORD 0
+      BYTE 0
+
+t_moreparam
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE ","
+      BYTE ps_term:WORD t_macro_id
+      BYTE 0
+
+t_macro_id
+      BYTE ps_eat_space
+      BYTE f_id_init,ps_idstart_emit_inc
+      BYTE ps_star_term:WORD t_alphanumext
+      BYTE f_id_encode
+      BYTE 0
+
+t_identifiant_local
+      BYTE ps_char,"."
+      BYTE f_emit_inc,e_local
+;enchaine
+t_identifiant
+;!! not followed by '(',  to avoid seeing SIN, COS as labels
+      BYTE f_id_init,ps_idstart_emit_inc
+      BYTE ps_star_term:WORD t_alphanumext
+      BYTE psl_after_label
+      BYTE f_id_encode
+      BYTE 0
+
+t_alphanumext BYTE ps_alphanumext_emit_inc:BYTE 0
+
+t_pseudolabels
+      BYTE ps_littenum_emit_inc
+      BYTE 2,"<<",e_backward
+      BYTE 1,"_",e_forward
+      BYTE 3,"###",e_iter3
+      BYTE 2,"##",e_iter2
+      BYTE 1,"#",e_iter1
+      BYTE 0,0
+
+t_objpc
+;must check for sep, to allow '$nn' as well
+      BYTE ps_littenum_emit_inc
+      BYTE 2,"$$",e_objc
+      BYTE 1,"$",e_pc
+      BYTE 0
+      BYTE f_store_pc
+      BYTE 0
+
+
+t_alone
+;unary prefix is fine
+      BYTE ps_option_term:WORD t_minus
+      BYTE ps_or_terms
+;!!hexa before label, to catch $nn before $
+;NB: not needed since '$' must be followed by separator ?
+;!!bin before decimal so "0" isn't consumed
+      WORD t_hexa,t_bin,t_decimal,t_string
+      WORD t_paren
+      WORD t_label
+      WORD t_func
+      WORD 0
+      BYTE psl_endofexp
+      BYTE 0
+
+t_func
+      BYTE ps_littenum_emit
+      BYTE 3,"abs",e_abs
+      BYTE 3,"cos",e_cos
+      BYTE 3,"sin",e_sin
+      BYTE 0
+      BYTE f_incoutput
+      BYTE ps_eat_space
+      BYTE ps_char
+      BYTE "("
+      BYTE ps_term:WORD t_exp_nosize ;must wrap compound exp
+      BYTE ps_char
+      BYTE ")"
+      BYTE 0
+
+t_string
+      BYTE ps_char
+      BYTE &22
+      BYTE f_emit_inc
+      BYTE e_string
+      BYTE ps_store_star_until_quote
+      BYTE 0
+
+t_decimal
+      BYTE ps_digit_emit,f_decimal_init
+      BYTE ps_star_term:WORD t_decimal_s
+      BYTE f_decimal_encode
+      BYTE 0
+
+t_decimal_s
+      BYTE ps_digit_emit,f_decimal_next,0
+
+t_hexa
+      BYTE ps_littenum_nosep_emit
+      BYTE 1,"&",0
+      BYTE 1,"#",0
+      BYTE 1,"$",0
+      BYTE 2,"0x",0
+      BYTE 0
+      BYTE ps_hexa_emit,f_hexa_init
+      BYTE ps_star_term:WORD t_hexa_s
+      BYTE f_hexa_encode
+      BYTE 0
+
+t_hexa_s
+      BYTE ps_hexa_emit,f_hexa_next,0
+
+t_bin
+      BYTE ps_littenum_nosep_emit
+      BYTE 1,"%",0
+      BYTE 2,"0b",0
+      BYTE 0
+      BYTE ps_bin_emit,f_bin_init
+      BYTE ps_star_term:WORD t_bin_s
+      BYTE f_bin_encode
+      BYTE 0
+
+t_bin_s
+      BYTE ps_bin_emit,f_bin_next,0
+
+t_command_line
+      BYTE ps_or_terms:WORD t_command,t_rsx,0
+      BYTE ps_eat_space
+      BYTE ps_consume_litt,1,"," ; optional
+      BYTE ps_term:WORD t_data_opt
+      BYTE ps_eol
+      BYTE 0
+
+t_command
+      BYTE ps_littenum_nosep_emit
+
+      BYTE 1,"?",0
+      BYTE 1,"m",1      ;mdump
+      BYTE 1,"d",2      ;debug/dump
+      BYTE 5,"basic",3
+      BYTE 2,"ed",4     ;editor. Needed ?
+  ;    BYTE 4,"help",5  !! not useful. Would shadow |Help
+      BYTE 1,"e",6      ;ext (selection rom)
+      BYTE 3,"brk",command_brk ; for break. Before b!
+      BYTE 1,"b",7      ;bank
+      BYTE 4,"bank",7
+      BYTE 3,"cls",8
+      BYTE 1,"x",9      ;compare
+  ;   BYTE 1,"r",10    ; No... was bugged
+      BYTE 2,"hh",11    ; dump hexs byte in source
+      BYTE 3,"clp",13
+      BYTE 9,"clearpage",13 ; !! must be before clear
+      BYTE 3,"clr",12
+      BYTE 5,"clear",12
+      BYTE 5,"reset",14
+      BYTE 1,"$",15     ; set $ aka pc
+command_rsx = 19        ; see t_rsx
+command_type = 20
+command_tabs = 10       ; was "r" disp roms
+command_brk = 22
+      BYTE 4,"type",command_type ; before t
+      BYTE 4,"tabs",command_tabs ; before t
+      BYTE 1,"t",16
+      BYTE 2,"gr",17    ; dump graph              
+      IF sb
+      BYTE 2,"sb",18    ; search bytes (or words!)
+      END
+;      BYTE 4,"load",19
+      IF pr
+      BYTE 2,"pr",command_pr ; profile
+      END
+      BYTE 0
+      BYTE f_incoutput
+      BYTE 0
+
+      IF 1-inRom
+check_ffi
+          bit pbit_debug_marker,a:call z,&BE00 ; wasn't init
+          ret
+      END
+
+t_rsx
+      BYTE ps_consume_litt,1,"|" ; optional
+      BYTE f_emit_inc,command_rsx
+;Stringify name, for harmonization (eval_params in evacom)
+      BYTE f_emit_inc,e_string
+      BYTE f_exp_init   ; for size
+      BYTE ps_idstart_emit_inc
+      BYTE ps_star_term:WORD t_alphanumext
+      BYTE f_exp_encode
+      BYTE 0
+
+;--------------------
+realsize = $$-code
+
+hi
+      IF inRom
+remain = limit-$
+      FILL remain,&F7
+      END
+
+codesize = $$-code
+;--------------------
+
+
+;:===========: var :==========:
+
+;__ parse __
+
+vp_output0 = vp         ;reseted in f_init_instr
+vp_label_start = vp+2
+vp_exp_start = vp+4
+vp_data# = vp+6
+vp_string_data_size = vp+7
+vp_flags = vp+8         ;RAZ at instr level
+pflag_iy = &80
+pflag_ix = &40
+pflag_idx = &20         ;(ix+n) (iy+n)
+pflag_asis = &10        ;when asis was met. TODO: still needed ?
+pflag_instr_pc = &08
+pflag_implicit_factor = &04
+pbit_implicit_factor = 2
+pflag_debug_marker = &02
+pbit_debug_marker = 1
+
+vp_flags_gen = vp+9
+pbit_create_labels = 7
+pflag_create_labels = &80
+pflag_unknown_met = &40
+
+vp_savesp = vp+10
+
+
+

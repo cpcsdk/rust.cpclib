@@ -1,0 +1,166 @@
+; Field editor test & orgams installation.
+inRom = 1
+
+; 2023   
+  ; Jun 03 va: Extract main code to ums:lib/field.o for reuse by ayane
+             ; Move @ e4f0 (merged)
+  ; Apr 17:    limit2 @ ffa3 
+
+; 2020
+       ; v9: Add limit2. Fill with f7 (was 00)
+       ; v8: Fix bug#102. See /test_shift_del/ 
+       ; v7: Nettoyage!
+           ; Split in ROM.
+; May  1 v6: Import /S_DEL/S_CLR/ from ed-brq
+; Apr 13 v5: Move limit @ f460
+
+; 2019
+
+; 29 Jun v4: Move limit @ f4ca
+; 23 Jun v3: Simplify interface again: no dispatch at all.
+           ; Instead of passing print and cursor routines, let the
+           ; client handle that.
+    ; Rationale: 
+       ; + Better separation of concerns.
+            ; E.g. the client knows if it has to refresh
+            ; for just changing the cursor position.
+       ; + More convenient (the number of registers to pass was
+            ; an issue, since RST &18 modify IY)
+       ; + Simpler.
+
+; 23 Jun v2: io_routine must be provided 
+           ; change interface: no more test key.
+; 22 Jun Extracted from ed-bpaf
+
+rom   = &1C
+codedest = &E4F0        ; After Chunk
+limit = &E5F0           ; asset
+codedest2 = &FFA0       ; after disp
+limit2 = &FFA3          ; disp
+
+buf_nrt = &3000
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+tests
+          call test_shift_del
+          ret
+
+test_shift_del
+;-------------
+; Bug#102. Right arrow + shift_del display garbage
+          ld hl,buf_nrt
+          call nrt_fill
+
+          ld iy,keys_shift_del
+          call nrt_com
+
+          ld a,(buf_nrt):cp " ":call nz,&BE00
+          ld a,(buf_nrt+1):cp dummy_char:call nz,&BE00
+
+;-- Now test when a EoL was present
+          xor a:ld (buf_nrt),a
+          ld iy,keys_shift_del
+          call nrt_com
+
+          ld a,(buf_nrt):or a:call nz,&BE00
+          ret
+
+
+keys_shift_del
+      BYTE kright,ksdel,0
+
+nrt_com
+;In: Iy: nrt sequence
+          ld b,70       ; max length
+          ld c,0        ; initial pos
+          ld e,0        ; flag not selected
+nrt_com_lp
+          ld a,(iy):inc iy:or a:ret z
+          push iy:push ix ; only for cheque
+          ld hl,buf_nrt
+          call field_editor
+
+;-- all keys should be handled
+          call nc,&BE00
+
+;-- check ix & iy weren't modified 
+          pop hl
+          ld a,l:cp ixl:call nz,&BE00
+          ld a,h:cp ixh:call nz,&BE00
+          pop hl
+          ld a,l:cp iyl:call nz,&BE00
+          ld a,h:cp iyh:call nz,&BE00
+          jr nrt_com_lp
+
+dummy_char = "y"
+nrt_fill  ld (hl),dummy_char:inc l:jr nz,nrt_fill
+          ret
+
+;================================
+
+      IF inRom
+burn
+;
+;install in rom
+;                 
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          call &BB06
+          ret
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+code2
+      ORG codedest2,$$
+
+          jp field_editor
+
+      IF inRom
+      FILL limit2-$,&F7
+      END
+
+codesize2 = $$ - code2
+
+      ORG codedest,$$
+
+      END
+
+code  = $$
+
+      IMPORT "ums:lib/field.o"
+
+hi
+realsize = $$ - code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$ - code
+

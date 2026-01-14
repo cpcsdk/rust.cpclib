@@ -1,0 +1,2053 @@
+ ; <<<<< Trace UI >>>>>>
+
+inRom = 1
+dev_checks = 1
+need_room = 1
+
+; TODO: check: visu_dump called twice?
+; TODO: swap_user for all (not only visu)  (recheck timing)
+      ; -> Needed for custom INTs, far_call ng.
+   ; !!!!! Problem: then copyHere won't know about the change. !!!!!
+
+; !! DO NOT USE IY, set by monui to full/gris for display.
+
+; longest instructions 
+   ; ld b,set 7,(ix+&7f) <--- unused syntax
+   ; set 7,(ix+&7f),b
+   ; call po,&be00
+   ; ld hl,(&beee)        
+
+      IMPORT "monomap.i"
+
+; \/\/\/\/\/\ 2025 \/\/\/\/\/\
+;---- HH beta J ----
+   ; Dec 24 AX Add CHECK_BK_BASE
+;---- HH beta I ----
+   ; Dec  9 AW Fix #197: Don't wrap tm > 65535
+   ; Nov
+       ; 27 AV [no-change] Remove dead code
+       ; 26 AU sanity_checks: remove check around vo_basebk
+;---- HH beta G ----
+       ; 13 AT help_loop: use keyWaitDown not to return too fast
+;---- HH beta 1 ----
+   ; Jul 13 AS Fix vt_rom_firmflag = &9d0c
+   ; Jul 12 AR Use CALL_ASS
+
+;---- GG beta I ----
+   ; Apr 5 AQ CTRL-H: must press key
+
+; \/\/\/\/\/\ 2024 \/\/\/\/\/\
+;---- GG beta B --------
+      ; 30 AP Add test_dump_mem (fails to reproduce bug#1a4)
+            ; Add test_getPCbck (reproduce bug#1a4). Fix in monhelp-c
+
+;---- GG beta 5 --------
+  ; May 28 AO: Display nops
+
+;---- GG beta 4 --------
+  ; Apr 12 AN: shift-up/down for faster navigation
+
+;---- Release FF --------
+  ; Jan  5 AM: Fix Control-f4 inactive
+
+; \/\/\/\/\/\ 2023 \/\/\/\/\/\
+
+  ; Dec 26 AL: No change (use monomap.i)
+
+  ; Jun  9 AK: Review visu_dump (new post-newline logic).
+
+  ; May  7 AJ: Use new farcall (call_ext_from_mon etc)
+                 ; - Needed to pass A to org_select
+                 ; - One step towards uniformisation
+             ; Add CONTROL-f1..f9 to switch source 
+               ; - Shorter than going to editor for that
+               ; - POC: ensure switch works, so we can do it
+                      ; automatically (advanced 'line to source').
+             ; Tests: move them in truinrt.o
+
+         ; AI: Remove CONTROL-B: BRK from BRK (was crashing)
+do_break_debug = 0
+      IF do_break_debug
+!! bug #142
+; routine /break_debug/ crashes.
+      END
+      ;    AH: Reverse-engine from rom version (don't re-enter visu
+             ; if BRK in visu). See /markerInDbg/
+
+  ; Feb  5 AG: Set limit var @ 7efc (cocopy)
+        ;  AF: ???
+
+; \/\/\/\/\/\ 2023 \/\/\/\/\/\
+
+  ; May 1  AE: NRT: add test_visu_from_basic.
+             ; Fix it by calling init_workzone in swap_workzone
+             ; NRT: Fix test_assemble itself.
+
+     ; 27  AD: Bug #fd: Don't BRK if /sanity_checks/ fails.
+                      ; Change border and try to restore instead.
+
+     ; 20  AC: Add /test_mess/.   
+             ; NRT: don't use org_init_custom (removed)
+             ; NRT: use aap_get# (address agnostic)
+
+     ; 17  AB: CTRL_ESC from dump mode as well.
+
+  ; Apr 3  AA: Set flag vt_rom_firmforbid even if we don't use new
+             ; farcall yet. It will ultimately be used, or will serve
+             ; for asserts (e.g. ass from trace cannot call firmware).
+vaa   = 1
+
+          ; Z: Use monui @ F900 to make room.
+             ; !!!REQUIRES monuiaf.
+             ; Pass vaap_symbols# to sy_reset (for org_assemble_nrt)
+             ; --needed since redesign.
+
+          ; Y: ???
+
+          ; X: Reintroduce clean_bk for setup, so tests are less brittle
+             ; [Discarded] Use new farcall (was crashing with farcall9)
+
+   ; Mar 30 W: Move @ 9888 (make ro(o)m for monui) 
+             ; Use common setup_custom
+             ; Fix nrt itself: test_no_overwrite was erasing 9d00...
+
+;2020 Jan 8 V: Move tmp_buf @ 7400
+        ; Fix control-b/v mixup.
+     ; 21 U: Debug shortcut: control-b activate debug
+     ; 21 T: Fix residual -- in trace (trCode_one_line)
+     ; 14 S: Clean up a couple of unused labels.
+        ; R: Oups. Fix 'CTRL-DOWN' test key.
+ ; Dec  2 Q: Oups. Fix 's' test key.
+        ; P: U/D to navigate call stack. Highlight current frame.
+        ; O: Move bufBT to keep it persistent.
+           ; Augment it with ret address for upcoming navigation.
+     ; 16 N: Don't display unneeded space (trCode_one_line)
+
+ ; Nov 10 M: Make rooM for call stack.
+
+ ; Nov 5 L: Reprise. Label fetch ok but overwritten in ui.
+
+ ; Oct 5  K: WIP +disp_call_stack
+
+ ; Oct 2  J: Refactot: swap_workzone saves sp.
+             ; More symetric.
+             ; Avoid duplication (for incoming stack trace).
+    ; 29  I: WIP call_stack. 
+           ; Fix NRT: no more spacing.
+    ; 21  H: Use clsScr_from_tr to prevent 9c7e (off7) overwriten.
+ ; Sep 7  G: Swap 9800(va2)-9fff to speed up things (swap_workzone).
+                ; zone 8c00-97ff mustn't be used from trace.
+     ; 8 vF: Move tmp_stack from &9100 to &A000
+       ; vE: Export/Import.
+       ; vD: + test_blank_line
+ ; Aug 7 vC: Fix #Eb: Swap whole 8c00-9fff. Use mirror in ed
+           ; + test_no_overwrite
+ ; Aug 5 vB: Pass param for swap_user
+  ; 27   vA: New rom#
+  ; 12   v9: Move limit @ f140
+  ; 12   v8: Ensure proper setup (di, sp, mrtInit).
+  ; 11   v7: Add dev check.
+           ; Clean banks for stronger tests.
+           ; !! vo_baseBk must be set in init!
+       ; v6: Use dump_one_line from !! monuic !!
+           ; ++ set_full in maj_dump
+           ; We must now pass buffer to getSrc. (api change not repercut
+           ; Fix afflng (another api change not repercuted).
+           ; Must call set_full after aff_paragraph. Meh.
+       ; v5: Some renaming.
+           ; Replace loop 'jp wa' by ret (sorter and easier to test)
+           ; Show flags 3 & 5.
+       ; v4: Fix variables' addresses.
+       ; v3: Clean up.
+           ; Use new monui9 JP table and monhelp3's bricbrac far call.
+           ; Passe line_num_scr to ed_from_exec.
+       ; v2: Export/Import.
+; 08 Jul v1: RAW. Extracted from monoai + some refactoring.
+
+codedest = trui_rom
+limit = monui_rom
+codedest2 = trui_jp
+limit2 = monhelp_jp
+
+      IF inRom
+      ORG &1000
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+rom   = &1B
+romExt_dev = &1A
+romOrg_dev = &0A
+romBric_dev = &1C       ; !! TODO: set in vt_**
+
+; ----- In *this* ROM ----------
+
+mtr   = &C100
+mtrInit = mtr
+mtrStep = mtr+3
+mtrNext = mtr+6
+mtrRet = mtr+9
+mtrGoto = mtr+12
+mtrBack = mtr+15
+
+mon   = &E000
+mon_cold_init = mon+12  ;nrt
+check_bk_base = mon+27
+
+bt    = &FFF9
+is_call_ret = bt        ; In: hl=candidate ret. Out: Z,hl=callee. NZ
+                            ; bc, de preserved
+is_orgams_ret = bt+3    ; In: hl=candidate ret. Out: Z: yes, NZ: no
+
+monhelp = &FFC0
+copyHere = monhelp+12
+getPCbck = monhelp+18   ; DE = buffer for context
+getDisa = monhelp+21
+getDisa_from_opcodes = monhelp+24
+getSrc = monhelp+30
+
+bricbrac_far_call = monhelp+48 ; call :word
+; ext_far_call = monhelp+51  !! USE CALL_EXT()
+ed_far_call = monhelp+54 ; !! in : iy
+
+farcall = &FF00         ; New version!
+call_ext_from_mon = farcall + 6
+call_bric_from_mon = farcall + 12
+call_ass_from_mon = farcall + 18
+
+;-------------
+monui = &F900
+
+keyCheck = monui+33
+;keyWait = monui+&6B
+keyWaitDown = monui+&0125
+
+dump_one_line = monui+&5F
+afflng_ = monui+&62
+
+locate_scr = monui+&29
+clsScr = monui+&71
+set_full = monui+&74
+set_gris = monui+&7A
+set_cursX = monui+&80
+set_cursY = monui+&84
+spaces = monui+&8B
+affAsc = monui+&98
+affText = monui+&A1
+newline = monui+62      ; Next line. out:de = new pos. hl preserved
+
+aff_paragraph = monui+&AD
+
+hexw2asc = monui+&B3
+hex2asc = monui+&B8
+
+crtc_trace2firm = monui+&D7
+
+;convScrX = monui+&E0
+
+ed_from_trace = monui+&F4 ; In: NC, DE = ligne
+mon_from_trace = monui+&FD
+
+;---In ED rom----------    
+mirror = &E7F2
+store_8000 = mirror+3   ;nrt
+ext_swap_8000 = mirror+12 ;+ zone 00..30
+ext_swap = mirror+27
+
+init  = &E830
+init_workzone = init+12
+
+;---In ext rom----------    
+org   = &C008
+org_select = org + &3F
+;org_get_current_selection = org + &30  ; for tests
+
+;---In ass rom----------    
+;symb.o
+adr_to_id = &FFE7       ;In:  DE=adr
+                        ;Out: Carry and HL=id, NC otherwise
+
+visu  = &FFCC
+get_line_from_pc = visu+3
+
+;---In bric rom----------    
+
+disp  = &FF14
+disp_init = disp
+;disp_deci_hl = disp+&51
+
+conv  = &FD67
+put_deci_long = conv + 3
+
+aap   = &FE30
+aap_getkey = aap+9
+aap_get# = aap+21       ; out: HL=nb labels
+
+; -------------
+
+vo_romBric = &7CFF
+
+r1    = 32
+width = r1*2
+
+; ****** **  external var/routines  ** ******
+
+val   = &7D80
+valRMR = val+6
+valMMR = val+7
+valROM = val+&1B
+valZ80 = val+&1C
+
+adr_met_in_operand = &7CDB
+was_adr_met = &7CDD
+
+pc_   = valZ80
+f_    = valZ80+22
+sp_   = valZ80+24
+
+vo_romEd = &7CF9
+vo_romExt = &7CFA
+vo_romMon = &7CFB
+
+tmp_buf = &7400         ; same than mon
+
+vt_roms = &9D00         ; nrt
+vt_rom_firmflag = &9D0C
+vt_rom_firmforbid = &FF
+vt_rom_firmenable = &FE
+
+; ------------------------------
+
+      MACRO CALL_ED adr
+; We cannot use new farcall until workzone has been swaped.
+; !! A not passed with this routine
+          push iy
+          ld iy,adr:call ed_far_call
+          pop iy
+      ENDM
+
+      MACRO CALL_DISP adr
+; We cannot use new farcall until workzone has been swaped.
+; As a remainder, we cannot call swap_workzone from the start,
+; since mirror_* routines expect all the page 8000 to be there.
+          call bricbrac_far_call:WORD adr
+      ENDM
+
+      MACRO CALL_EXT adr
+          call call_ext_from_mon:WORD adr
+      ENDM
+
+      MACRO CALL_ASS adr
+          call call_ass_from_mon:WORD adr
+      ENDM
+
+      MACRO CALL_BRIC adr
+          call call_bric_from_mon:WORD adr
+      ENDM
+
+      MACRO CONV_SCR x,y
+          ld de,&C000 + [y-1]*r1*2 + x
+      ENDM
+
+      MACRO CHECK_BK_BASE
+      IF dev_checks
+          call check_bk_base
+      END
+      ENDM
+
+prgpile = &8000
+
+rast  = 1
+
+      MACRO RASTER_DEV col
+      IF rast
+          ld bc,&7F10:out (c),c:ld c,col:out (c),c
+      END
+      ENDM
+
+      IF inRom
+burn
+          ld hl,nburn
+          call &BCD4
+          ret nc
+
+          ld a,4
+          ld ix,burnpara
+          call &1B
+
+          ld hl,nburn
+          call &BCD4
+          call nc,&BE00
+
+          ld a,4
+          ld ix,burnpara2
+          call &1B
+
+          call &BB06
+          ret
+
+nburn BYTE "BURN"+&80
+
+burnpara
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+
+burnpara2
+; JPs
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      ELSE
+
+tests
+          call dev_init
+
+          call test_dump_mem
+          call test_getPCbck
+          ret
+
+test_dump_mem
+          ld hl,&0700
+.mark     ld (hl),l:inc l:jr nz,.mark
+
+          ld hl,&7020:ld (adr_dump),hl
+          call visu_dump
+
+          ld hl,&0700
+.check    ld a,(hl):cp l:call nz,&BE00
+          inc l
+          jr nz,.check
+          ret
+
+test_getPCbck
+          ld hl,&0700
+.mark     ld (hl),l:inc l:jr nz,.mark
+
+          ld hl,&070F
+          ld b,h_disa
+          call getPCbck
+
+          ld hl,&0700
+.check    ld a,(hl):cp l:call nz,&BE00
+          inc l
+          jr nz,.check
+          ret
+
+
+dev_init
+; Clean to make sure we don't rely on pre-installed stuff.
+          ld a,&FF:ld c,bk_dev:call clean_bk
+          ld a,&F7:ld c,bk_dev-1:call clean_bk
+
+          ld c,rom:call kl_rom_select
+
+bk_dev = &C7            ; <>#ff pour eviter conflit
+          ld b,&7F
+          ld a,bk_dev:out (c),a
+          ld i,a
+
+          ld hl,valRMR
+          set 2,(hl)    ; RAM at page 0000, since dev code is here
+
+          ld a,rom:ld (vo_romMon),a
+;must be called before org_init 
+install_farcall = &DF24
+          call install_farcall
+          ld a,romExt_dev:ld (vo_romExt),a
+          ld a,romOrg_dev:ld (vo_romEd),a
+          ld a,romBric_dev:ld (vo_romBric),a
+
+mtr   = &C100
+mtrInit = mtr
+; TODO: call setup instead?
+
+          call mtrInit  ; For i=bk base
+;          call mon_cold_init
+
+;          ld   a,bk_dev
+;          ld   c,&30    ;nb chunk for source
+;          call ext_far_call_firm:WORD org_init_custom
+
+;          call trace_cold_init
+          ret
+
+clean_bk
+          ld b,&7F:out (c),c
+          ld hl,&4000
+          ld de,&4001
+          ld bc,&3FFF
+          ld (hl),a
+          ldir
+          ret
+
+
+      END
+
+code2
+          jp trace_cold_init
+          jp trace
+          jp trace_no_swap
+          3 ** BRK
+          jp setup_history ; todo via cold init instead?
+          3 ** BRK
+codesize2 = $$-code2
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+y0    = 26              ; dump
+y0tr  = 8               ; code
+y0b   = 8               ; pile
+x1    = 7               ; opcode
+x2    = 25              ; opcode hexa dump
+x3    = 36              ; Stack trace
+y3    = 10
+x4    = 58              ; pile
+xlast = 34              ; "Last:"
+xnops = 45              ; tm
+x5    = 52              ; Start "nnnn us"
+x5_   = 59              ; End "nnnn us"
+
+idxReg
+      BYTE 20,21,18,19,16,17 ; BC  DE  HL
+      BYTE 6,7,4,5,24,25 ; IX  IY  SP
+
+idxReg2
+      BYTE 22,23,15,14,12,13 ; AF  AF' BC'
+      BYTE 10,11,8,9,2,3 ; DE' HL' IR
+      BYTE 0            ; end of table
+
+posXy0
+      BYTE 15,2,24,26,35,33
+      BYTE 44,42,53,51,62,60
+flgAsc
+      BYTE "SZ5H3VNC"
+
+
+txtURAM
+      BYTE y0b,59,"URAM"+&80,&FF
+txtUROM
+      BYTE y0b,59,"&   "+&80,&FF
+
+reg
+lastline
+      BYTE y0tr-1,0
+      FILL xlast-1,"-"
+      BYTE " Last:   "
+      FILL 55-xlast,"-"
+      BYTE "-"+&80
+      BYTE y0b+1,54,".    ."+&80
+      BYTE y0b,52,"LR M /"+&80
+      BYTE y0b+8,x4-4,"-SP:    -"+&80
+      BYTE y0,0,"A:"+&80
+      BYTE y0,14,"[  ]"+&80
+      BYTE y0,20,"AF':"+&80
+      BYTE y0,29,"BC':"+&80
+      BYTE y0,38,"DE':"+&80
+      BYTE y0,47,"HL':"+&80
+      BYTE y0,57,"IR:"+&80
+      BYTE y0+1,20,"BC:"+&80
+      BYTE y0+2,20,"DE:"+&80
+      BYTE y0+3,20,"HL:"+&80
+      BYTE y0+4,20,"IX:"+&80
+      BYTE y0+5,20,"IY:"+&80
+      BYTE y0-2,51,"PC:"+&80
+      BYTE &FF
+
+kl_l_rom_enable = &B906
+kl_l_rom_disable = &B909
+kl_rom_select = &B90F
+mc_set_mode = &BD1C
+
+
+move_check
+; In  A: command letter "N", "S", ...
+
+; Pour toute commande d'execution
+;  - si pc different pc_nav alors recale: display "!"
+                                       ; no return: goto wa
+;  - sinon 
+;    ; display command (and "------" to erase previous nops)
+     ; shift opcode history and store current opcode (oldDisa)
+
+          ld hl,(pc_)
+          ld de,(pc_nav)
+          or a
+          sbc hl,de
+          add hl,de
+          push af       ; flag
+
+          jr z,$+4:ld a,"!"
+          call disp_last_com
+
+          pop af
+          jr nz,abort_command
+
+;For Next, Step and Return. For jump: nevermind
+      IF need_room
+; display /lastline/ instead?
+      END
+          ld e,x5
+.sep      ld a,"-":call affAsc:ld a,e:cp x5_:jr nz,.sep
+
+          call shift_history ; make room
+
+          push hl
+          ld de,bufDisa ; discarded
+          ld bc,oh_last+3
+          call getDisa
+          ld (check_sep),hl
+          ld hl,oh_last
+          ld (hl),0:inc hl ; nosep
+          pop de
+          ld (hl),e:inc hl ; pc   
+          ld (hl),d
+          ret
+
+abort_command
+          pop af        ; discard return address for 'call move'
+          ret
+
+      IF dev_checks
+sanity_checks
+; In: DE= colors for warning
+    ; Out= A, BC, HL Trashed!
+          ld bc,&7F10:out (c),c
+          ld a,i:call pe,fail_di
+          and &C5:cp &C5:call nz,fail_i
+          ret
+
+fail_di
+          ld a,d:and &1F:or &40 ; Sanity
+          out (c),a
+          di
+          ret
+
+fail_i
+          ld a,e:and &1F:or &40 ; sanity
+          out (c),a
+          ld a,l:ld i,a
+          ret
+      END
+
+trace
+;Here: firmware still present
+          di
+          ld sp,prgpile
+
+;backup firmware & bring back "user" data
+          CALL_ED(ext_swap_8000)
+
+trace_no_swap
+          di
+          ld sp,prgpile ;repeated. nevermind from now
+          call mtrInit
+
+          ld a,(flagInDbg)
+markerInDbg = "B"
+          cp markerInDbg
+          jr nz,.ok
+          xor a
+          ld (flag_visu_source),a
+.ok
+          call select_lower_rom_hard
+          ld a," "
+          ld (last_com),a
+
+trace_scr               ; setup affichage
+
+; Check: di, bk is connected and I is set.
+      IF dev_checks
+          ld de,&4E4C
+          call sanity_checks
+      END
+
+          ld a,r1
+          CALL_DISP(disp_init)
+
+          call clsScr
+          call iniTr
+
+nrt_hook                ; for truinrt to force exit here
+mainloop
+;Here: user memory
+          call commands
+          jr mainloop
+
+commands
+;-------
+;TODO? Return flag 'refresh needed',
+     ; instead of discard ret and jumping to trace_scr ?
+
+          call keyCheck
+
+          ld c,(ix+2)   ; reused at esc_key and below
+          bit 2,(ix+8):jp nz,noEsc ; esc
+          bit 7,c:jp nz,esc_key ; ctrl
+          bit 5,c:jp nz,esc_key ; shift
+;reset
+          call crtc_trace2firm
+          ld bc,&7F82
+          out (c),c
+          rst 0
+
+noEsc
+          bit 1,(ix+0):jp z,enter ; right
+          bit 0,(ix+1):jp z,return ; left
+
+          bit 0,c:jp z,goto_pc_ ; CLR
+
+          ld a,(ix+%00000101)
+          add a:jp nc,goto_pcnav ; space
+          add a:jp nc,next ; n
+          add a:jp nc,jump ; j
+          2 ** add a
+          add a:jp nc,frameUp ; u
+
+          bit 3,(ix+%00000110):jp z,goto_pcnav ; t
+
+          ld a,(ix+%00000111)
+          2 ** add a
+          add a:jp nc,frameDown ; d
+          add a:jp nc,step ; s
+; nb: bit 4 used below
+
+          bit 7,c:jr nz,noCtrl
+
+; Ctrl ON
+          bit 2,c:jp z,return ; + RETURN     
+          2 ** add a:jp nc,ctrlE ; + E
+
+          ld a,(ix)
+          rrca:jp nc,ctrl_up_trace ; + up
+          rrca          ; right: no-op
+          rrca:jp nc,ctrl_down_trace ; + down
+          rrca:ld b,8:jr nc,tab_select ; f9
+          rrca:ld b,5:jr nc,tab_select ; f6
+          rrca:ld b,2:jr nc,tab_select ; f3
+          rrca:jp z,enter ; + ENTER
+
+          ld a,(ix+1)
+          rrca          ; left
+          rrca          ; copy
+          rrca:ld b,6:jr nc,tab_select ; f7
+          rrca:ld b,7:jr nc,tab_select ; f8
+          rrca:ld b,4:jr nc,tab_select ; f5
+          rrca:ld b,0:jr nc,tab_select ; f1
+          rrca:ld b,1:jr nc,tab_select ; f2  
+          bit 4,c:ld b,3:jr z,tab_select ; f4
+
+          bit 4,(ix+%00000101):jp z,help_loop ; + H
+
+          ld a,(ix+%00000110)
+          bit 4,a:jp z,set_pc2pcnav ; + G
+          bit 2,a:jp z,ctrlR ; + R
+          add a:jp nc,ctrlV ; + V
+      IF do_break_debug
+          add a:jp nc,break_debug ; + B
+      END
+          ret
+
+; Ctrl OFF
+
+noCtrl
+          bit 2,(ix+%00000110):jp z,trace_until_ret ; "r"
+          bit 5,c:jr nz,noShift
+
+          bit 0,(ix+0):jp z,shift_up_trace
+          bit 2,(ix+0):jp z,shift_down_trace
+          ret
+
+noShift
+          bit 0,(ix+0):jp z,up_trace ; cursor up
+          bit 2,(ix+0):jp z,down_trace ; cursor down
+          ret
+
+tab_select
+;IN: b: source#
+          call .swap_and_select
+          jp maj_visu
+
+.swap_and_select
+          ld a,b:ld (source#),a
+          call swap_workzone_big
+          ld a,(source#)
+          push iy
+          CALL_EXT(org_select)
+          pop iy
+          jp swap_user_big
+
+      MACRO maj_src_full
+; DE= line
+; B=  nb lines
+
+affSrc
+          CHECK_BK_BASE()
+          ld hl,tmp_buf
+          call getSrc
+          inc de:jr nc,affSrc ; discard empty line
+
+          push de
+          ld d,ixh:ld e,1
+          ld c,2*r1-1-1
+affLine   ld a,(hl)
+          or a:jr z,$+3:inc l ; If 0: stay here
+          call affAsc
+          dec c
+          jr nz,affLine
+
+          ld a,(hl)
+          or a:jr z,$+4:ld a,"\" ; Clipping if still char
+          call affAsc
+
+          inc ixh
+          pop de
+          djnz affSrc
+      ENDM
+
+;        Initialise tableau de bord
+
+
+iniTr
+          call set_full
+          ld hl,reg
+          call affReg
+
+;   Affiche [5] "'" empiles  (dump separator avec 4 bytes)
+; Disabled since overwritten by space anyway.
+
+      IF 0
+          ld de,y0+1*256+39
+          ld ixl,5
+affAp_lp
+          ld a,"'"
+          call affAsc
+          dec e
+          inc d
+          dec ixl
+          jr nz,affAp_lp
+      END
+
+          xor a
+          ld (nb_adr_buf_explore),a
+          ld hl,buf_explore_
+          ld (pnt_buf_explore),hl
+
+          ld a,(last_com)
+          call disp_last_com_
+
+          ld hl,(sp_)
+          call call_stack ; before swap! since copyHere
+;To: if Z: display '--- orgams call ---'
+          ld (endFrame),de
+
+          call disp_call_stack ; before Stack itself
+
+          call majDump
+          call maj_trace_code_history
+
+      MACRO IS_VISU
+; Carry if visu source
+          ld a,(flag_visu_source)
+ ; or a ;ndmd: only test bit 0, since flag is never initialized
+          rra
+      ENDM
+
+maj_trace_nav
+; refresh navigation related: code (full) and source
+
+          call maj_trace_code_full
+;enchaine 
+maj_visu
+            ; Maj lignes src or dump
+
+;First, display nops 
+;Done here to be activated for all commands (T is handled specially)
+reg_tm = &7D28          ; defined by tr.o   
+          ld de,bufDisa
+          push de
+          ld hl,reg_tm:ld b,4
+          CALL_DISP(put_deci_long)
+          xor a:ld (de),a
+          pop hl
+          call set_full
+          ld de,[y0tr-1]*&0100 + xnops
+          call affText
+          ld hl,nops_suffix
+          call affText
+
+          IS_VISU()
+          jr nc,visu_dump
+
+          call swap_workzone ; workzone for ass
+          call visu_source
+;enchaine
+swap_user               ; !! Don't call. Use jp
+;put back user memory
+;!! Don't use call here.
+;!! must be called at same level hierarchy than swap_workzone
+;!! Then ret one level higher.
+          ld sp,(tmp_save_sp)
+      IF vaa
+; Restore.
+          ld hl,vt_rom_firmflag
+          ld (hl),vt_rom_firmenable
+      END
+;enchaine!!
+_swap
+          ld de,&5800
+          ld c,8
+_swap_com
+          CALL_ED(ext_swap)
+          ret
+
+swap_user_big           ;  !! Don't call. Use jp (since restore sp)
+          ld sp,(tmp_save_sp)
+      IF vaa
+; Restore.
+          ld hl,vt_rom_firmflag
+          ld (hl),vt_rom_firmenable
+      END
+;enchaine!!
+_swap_big
+          ld de,&4000
+          ld c,&20
+          jr _swap_com
+
+swap_workzone_big
+; For org_select which use 8b00.. for temp copy and other.
+; We copy all, as it doesn't change much.
+          push de
+          call _swap_big
+          jr sw_com
+
+swap_workzone
+; use 9800-9fff for ass workzone and stack. Imply to backup.  
+; !! When workzone is "connected", copyHere won't work.
+          push de
+          call _swap
+sw_com
+; When coming from basic, must setup work zone.
+; NB: it only setup rom#, not int+crtc.
+          CALL_ED(init_workzone)
+          pop de
+
+      IF vaa
+; ROM# mustn't be reported as kl_curr_sel (would corrupt &b8d6)
+          ld hl,vt_rom_firmflag
+          ld (hl),vt_rom_firmforbid
+      END
+
+          pop hl
+          ld (tmp_save_sp),sp
+tmp_stack = &A000
+          ld sp,tmp_stack
+          jp hl
+
+
+visu_dump
+          ld a,markerInDbg
+          ld (flagInDbg),a
+          call set_full
+          xor a
+          call set_cursX
+          call set_cursY
+
+          ld a,7
+          ld hl,(adr_dump)
+dump_lp2
+          push af
+
+          ld ix,copyHere
+          ld de,bufCtxt
+          call dump_one_line
+          call newline
+lng_dump_mon = 8
+          ld bc,lng_dump_mon
+          add hl,bc
+
+          pop af
+          dec a
+          jr nz,dump_lp2
+          ret
+
+
+visu_source
+;In: work zone must be "connected".
+          ld a,markerInDbg
+          ld (flagInDbg),a
+; --- get source line # ---
+          call get_source_line#
+          jr z,no_line_found
+
+; --- get first line to display ---
+
+visu_h = 7
+
+          ld b,visu_h/2
+discard_blank_lines
+          ld c,0        ; nb blank lines
+dbl
+          dec de        ; going upward
+          CHECK_BK_BASE()
+          ld hl,tmp_buf
+          call getSrc   ; just to know if blank
+          jr c,$+3:inc c
+          djnz dbl
+          ld b,c        ; if blank lines, continue 
+          inc b
+          djnz discard_blank_lines
+
+; --- display ---
+
+          ld b,visu_h
+          call set_full
+          ld ixh,0
+          maj_src_full()
+          ld de,3*256
+          ld a,">"
+          call affAsc
+          jr _retvisu
+
+; No line found in source
+
+no_line_found
+
+          call set_full ; meh, iy was destroyed
+
+          ld d,0
+          call cls_line_src
+          ld e,0
+          call cls_line_src3
+          ld de,3*256+22
+msg_src_not_found = 0
+          ld a,msg_src_not_found
+          call aff_paragraph ;even if 1 line
+
+          ld de,3*256+42
+          call cls_line_src2
+          call cls_line_src
+_retvisu
+          xor a
+          ld (flagInDbg),a
+          ret
+
+cls_line_src
+          ld b,3
+.lp
+          push bc
+          ld e,0
+          call cls_line_src2
+          pop bc
+          djnz .lp
+          ret
+cls_line_src2
+          ld l,width
+cls_line_src3
+; DE = y,x
+; L = end_x
+
+          ld a," "
+          call affAsc
+          ld a,e
+          cp l
+          jr nz,cls_line_src3
+          inc d
+          ret
+
+
+maj_trace_code_full
+
+          call set_full
+          ld d,y0tr+nbPCbck
+          ld b,h_disa
+          ld hl,(pc_nav)
+mtcf_lp
+          push bc
+
+          ld c,4
+          call get_context
+          call trCode_one_line
+
+          pop bc
+          djnz mtcf_lp
+
+          ret
+
+
+maj_trace_code_history
+
+; display opcodes already executed (in grey)
+
+          call set_gris
+          ld d,y0tr
+          ld b,nbPCbck
+          ld hl,opcode_history
+mtch_lp
+          push bc
+          push hl
+          ld a,(hl):inc hl:or a:jr z,mtch_nosep
+
+          ld e,0
+lngSep
+          ld a,"-":call affAsc:ld a,e:cp x3:jr nz,lngSep
+          inc d
+          jr mtch_next
+
+mtch_nosep
+          ld a,(hl):inc hl
+          ld c,l:ld b,h:inc bc ; bc: buf opcode
+          ld h,(hl):ld l,a ; hl: pc
+          call trCode_one_line
+mtch_next
+          pop hl
+          ld bc,oh_size:add hl,bc
+          pop bc
+          djnz mtch_lp
+          ret
+
+
+disp_call_stack
+;In: de = end in bufBT
+
+          call swap_workzone ; Needed to get labels
+          ex de,hl
+          ld ixh,y3
+dcs_lp
+          2 ** dec hl   ; Skip ret address
+          dec hl:ld d,(hl) ; NB: garbage pre-first entry. Nevermind
+          dec hl:ld e,(hl)
+
+          call set_gris
+          ld a,(pntFrame):cp l:call z,set_full
+
+          ld a,l:cp bufBT AND &FF
+          jr c,dcs_end
+
+          push hl
+          push ix
+          push iy       ; needed?
+          CALL_ASS(adr_to_id)
+          pop iy
+          pop ix
+          ld d,ixh:ld e,x3+1
+          jr c,dcs_ok
+
+          ld a,"?":call affAsc
+          jr dcs_nxt
+
+dcs_ok
+          push de
+          ex de,hl
+          CHECK_BK_BASE()
+          ld hl,tmp_buf
+          push hl
+          push iy       ; needed?
+          CALL_BRIC(aap_getkey)
+          pop iy
+          pop hl
+          pop de
+
+          call affText
+dcs_nxt
+          inc ixh
+          pop hl
+          jr dcs_lp
+
+dcs_end
+          call set_full
+          jp swap_user
+
+
+call_stack
+;---------
+
+; Store call entry points in bufBT.
+
+; Given:     call aa   ; 1
+       ;     ... 
+
+       ; aa  ...       ; 2
+       ;     call bb   ; 3
+       ;     ...
+
+       ; bb  ...       ; 4
+       ;     BRK       ; 5 
+
+; bufBT will contains:  4, 3, 2, 1
+; Nb: 5 is current $.
+
+;In: hl=stack
+;Out: de=past last entry (oldest).
+    ;  z if main entry point met
+
+max_stack = 8           ; max calls reported.
+peek_stack = &40        ; Estimation: how much stack we need to look at.
+
+          CHECK_BK_BASE()
+          ld de,tmp_buf
+          push de
+          ld c,peek_stack
+          call copyHere
+
+          pop hl
+          ld de,bufBT
+          ld a,e:ld (pntFrame),a
+          ld b,peek_stack/2
+cs_lp
+          ld a,(hl):inc hl ; First to save 'inc hl'
+          push bc:push hl:push de
+          ld h,(hl):ld l,a ; hl= entry in stack
+
+bt_pre = 3              ; prefix context (call nn)
+          ld e,l:ld d,h ; ret address (caller)
+          bt_pre ** dec hl
+          ld c,bt_pre + 4 ; 4: context for is_orgams_ret
+          call get_context
+
+          ld hl,bufCtxt+bt_pre
+          call is_call_ret:jr z,cs_call
+
+          call is_orgams_ret
+          pop de:pop hl:pop bc
+          ret z
+cs_nxt
+          inc hl
+          djnz cs_lp
+          inc b         ;nz
+          ret
+
+cs_call
+;here hl=callee address.
+    ; de=caller (ret address).
+; Put hl, de in bufBT
+
+          ex de,hl
+          ex (sp),hl    ; bufBT
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+          pop de
+          ld (hl),e:inc l
+          ld (hl),d:inc l
+
+          ex de,hl
+          pop hl:pop bc
+          ld a,e
+          cp bufBT_ AND &FF
+          jr nz,cs_nxt
+;We got enough
+          inc b         ;nz
+          ret
+
+get_context
+;in: HL: adr
+   ;  c: size
+;out: BC: bufCtxt
+    ; DE and HL preserved
+
+          push de
+          ld de,bufCtxt
+          push de
+          push hl
+          call copyHere
+          pop hl        ; pc
+          pop bc        ; bufCtxt
+          pop de        ; Y
+          ret
+
+
+;
+;  Display one line 'PC    instr    opcodes' 
+;              e.g  '1001  cpl      2F'
+
+;  IN:    HL = PC
+     ;    D  = Y
+     ;    BC = buffer opcode
+     ;    IY = adr JP affAsc
+; OUT;    HL = next PC (post opcodes)
+     ;    D = Y+1
+
+trCode_one_line
+
+          push de
+          push bc
+
+          ld e,0
+
+;        a. Aff PC
+
+          call hexw2asc
+
+          push hl
+          ld a," ":call affAsc ; Clean '-' in case of separator
+          ld a,d:cp y0tr+nbPCbck
+          ld a," ":jr nz,$+4:ld a,">"
+          call affAsc
+
+          ld a," "
+          ld bc,(pc_)
+          or a:sbc hl,bc
+          jr nz,no_aff_pc:ld a,"$"
+no_aff_pc
+          call affAsc
+          pop bc        ; PC
+          pop hl        ; buf opcodes
+
+;        b. Aff already fetched opcodes
+
+          push hl
+          push de
+
+          ld de,bufDisa
+          call getDisa_from_opcodes
+
+          pop de
+          ex (sp),hl    ; pop buf opcodes, push next PC
+
+          ld b,a        ; nbr Opcodes
+          ld c,a
+          ld a,e:and %11000000:or x2:ld e,a
+nxtOpc
+          ld a,(hl):inc hl:call hex2asc
+          ld a," ":call affAsc
+          djnz nxtOpc
+
+          ld a,4*3:3 ** sub c ; padding
+          ld b,a:call nz,spaces
+
+;        d. Aff instructions
+
+          ld a,e:and %11000000:or x1:ld e,a
+
+          ld hl,bufDisa
+          ld b,lngBufC+2 ; +2 to clean "--" 
+nxtBuf
+          ld a,(hl):or a:jr nz,noEndIns
+          ld a," ":dec hl
+noEndIns
+          inc hl
+          call affAsc
+          djnz nxtBuf
+
+          pop hl        ; next PC
+          pop de
+          inc d
+          ret
+
+
+help_loop
+          call clsScr
+          ld de,&00
+msg_help_trace = 4
+          ld a,msg_help_trace
+          call aff_paragraph
+          call keyWaitDown
+          pop af        ;discard ret 
+          jp trace_scr
+
+
+ctrlE                   ; Upper rom
+          ld a,8
+      BYTE &21          ; Hack: ld hl,nn to eat 'ld a,4'
+ctrlR                   ; Lower rom
+          ld a,4
+          ld hl,valRMR
+          xor (hl):ld (hl),a
+          call select_lower_rom_hard ; Done even for ctrlE. Nevermind
+_majMem
+; Refresh dump (bug #d9)
+; Don't refresh if source: too slow and unchanged anyway (for now).
+          ld a,(flag_visu_source)
+          rra           ; bit 0
+          call nc,visu_dump
+
+          call maj_trace_code_full
+;enchaine
+majDump
+
+;        1. Ligne 1 [AF, AF', I, R]
+
+affLng1
+          call set_full
+          ld ix,posXy0
+          ld hl,idxReg2
+          ld b,0
+          ld d,y0
+lng1
+          ld e,(ix+0)
+          inc ix
+          ld c,(hl)
+          inc hl
+          push hl
+          ld hl,valZ80
+          add hl,bc
+          ld a,(hl)
+          call hex2asc
+          pop hl
+          ld a,(hl)
+          or a
+          jr nz,lng1
+
+;        PC
+
+          ld hl,(pc_)
+          ld d,y0-2
+          ld e,55
+          call hexw2asc
+
+;        ROM et BNK
+
+affRom
+; LRAM
+          call set_full
+          ld a,(valRMR)
+          bit 2,a
+          jr z,lrom
+          ld a,"A"
+          jr affL
+lrom
+          ld a,"O"
+affL
+          ld de,y0b*256+54
+          call affAsc
+; URAM
+          ld a,(valRMR)
+          bit 3,a
+          jr z,urom
+          ld hl,txtURAM
+          call affReg
+          jr affU
+urom
+          ld hl,txtUROM
+          call affReg
+          ld a,(valROM)
+          ld de,y0b*256+60
+          call hex2asc
+affU
+; nBNK
+          ld de,y0b+1*256+55
+          ld hl,(valMMR)
+          call hexw2asc
+
+
+;        2. AdrReg / Mini-dump / ASCii
+
+
+affDump
+
+          ld hl,idxReg
+          ld de,y0+1*256+24
+          ld a,5
+dump
+          push af
+          ld b,0
+          ld c,(hl)
+          inc hl
+          inc hl
+          push hl
+          ld hl,valZ80
+          add hl,bc
+          ld c,(hl)
+          inc hl
+          ld b,(hl)
+          push bc
+          push de
+
+          call afflng
+
+          pop de
+          pop bc
+          pop hl
+          inc d
+          pop af
+          dec a
+          jr nz,dump
+
+
+;        3. Stack [8+8]
+
+
+affStk
+          call set_full
+
+          ld hl,(sp_)
+          ld de,y0b+8*256+x4
+          call hexw2asc
+
+          ld bc,10
+          or a
+          sbc hl,bc
+          ld de,bufCtxt
+          ld c,lngCtxt
+          push de
+          call copyHere
+
+          pop bc
+          call set_gris
+          ld de,y0b+3*256+x4+1
+          ld ixl,11
+nxtStk
+          ld a,(bc):inc bc:ld l,a
+          ld a,(bc):inc bc:ld h,a
+          call hexw2asc
+          dec e
+          dec e
+          dec e
+          dec e
+          inc d
+          ld a,ixl
+          cp 7
+          jr nz,no9
+          inc d
+          call set_full
+no9
+          dec ixl
+          jr nz,nxtStk
+
+
+;        4. Flags [SZ.H.VCN]
+
+
+affFlg
+          ld ix,flgAsc
+          ld de,y0*256+5
+          ld hl,f_
+          ld c,(hl)
+
+          ld b,8
+affF
+          sla c
+          jr nc,noFlg
+          ld a,(ix+0)
+          jr flgOk
+noFlg
+          ld a,"."
+flgOk
+          inc ix
+          push bc
+          call affAsc
+          pop bc
+          djnz affF
+
+          ret
+
+; ------------------------------
+
+select_lower_rom_hard
+          ld a,(valRMR)
+;really (un)select lower ROM
+          and 4
+modeSys = 2
+          or &80+modeSys
+          ld b,&7F:out (c),a
+          ret
+
+
+jump
+;     Jump : repass en exec z80
+
+; (restore standard screen size)
+; TODO : use collected VGA & CRTC registers
+
+          ld a,"J":call move_check
+
+          call crtc_trace2firm
+          jp mtrBack
+
+
+trace_until_ret
+;        Avance jusqu'au retour(ret)
+
+          ld a,"R":call move_check
+
+          call mtrRet
+          jr tr_com
+
+next
+;        Avance d'une ligne dans la trace
+
+          ld a,"N":call move_check
+
+          call mtrNext
+
+;revert bugfix #70: trop lent!
+   ;      CALL clsScr
+   ;      CALL iniTr
+          jr tr_com
+
+step
+;        Avance d'une instruction dans la trace
+
+          ld a,"S":call move_check
+
+          call mtrStep  ; with exec
+tr_com
+          ld hl,(pc_)   ; new pc
+          ld (pc_nav),hl
+
+; add history separator if neeed 
+          ld de,(check_sep)
+          or a
+          sbc hl,de
+          jr z,.nosep
+
+          call shift_history
+          ld hl,oh_last
+          ld (hl),h     ; <>0 flag separator
+.nosep
+          call maj_visu
+          call maj_trace_code_history
+          jp _majMem
+
+
+shift_history
+          push hl
+          ld hl,opcode_history + oh_size
+          ld de,opcode_history
+          ld bc,nbPCbck-1 * oh_size
+          ldir
+          pop hl
+          ret
+
+; Cursor Up
+
+up_trace
+
+          ld b,1
+          jr _up_trace
+
+shift_up_trace
+          ld b,h_disa*4
+          jr _up_trace
+
+; Ctrl Up
+
+ctrl_up_trace
+
+          ld b,h_disa
+_up_trace
+          ld hl,(pc_nav)
+          call getPCbck
+          jr _update_nav
+
+; Cursor Down
+
+down_trace
+          ld b,1
+          jr _down_trace
+
+shift_down_trace
+          ld b,h_disa*4
+          jr _down_trace
+
+; Ctrl Down
+
+ctrl_down_trace
+
+          ld b,h_disa
+_down_trace
+          ld hl,(pc_nav)
+sd_lp
+          push bc
+          call _getDisa
+          pop bc
+          djnz sd_lp
+
+_update_nav
+; after left/right [control] up/down: MAJ nav and GOTO wa
+;in: HL: new pc_nav
+          ld (pc_nav),hl
+          jp maj_trace_nav
+
+_getDisa
+          ld de,bufDisa
+          ld bc,bufCtxt
+          jp getDisa
+
+
+; Enter in sub-routine
+
+enter
+          ld hl,(pc_nav)
+          push hl
+;Adr is extraced by mDisa
+
+          call _getDisa
+          ld de,(adr_met_in_operand)
+          ld a,(was_adr_met)
+          or a
+          pop hl
+          ret z         ; no address found
+
+          push de       ; new PC
+          ex de,hl      ; de:old pc
+          call push_explore
+          pop hl
+          jr _update_nav
+
+
+; Go back to main routine
+
+return
+          ld a,(nb_adr_buf_explore)
+          or a
+          ret z
+          dec a
+          ld (nb_adr_buf_explore),a
+
+          call pop_explore
+          jr _update_nav
+
+frameUp
+          ld hl,(pntFrame)
+          ld a,l
+          add szBT      ; hack. Otherwise, past oldest frame!?!
+          cp h
+          ret nc
+          ld a,l
+          cp bufBT AND &FF:jr nz,fu_not0
+
+          ld hl,(pc_nav)
+          ld (navFrame0),hl
+          ld l,a
+fu_not0
+          ld h,bufBT/&0100
+          2 ** inc l
+          ld e,(hl):inc l ; Ret address
+          ld d,(hl):inc l
+_frameCom
+          ld a,l:ld (pntFrame),a
+          push de
+          ld de,(endFrame)
+          call disp_call_stack
+          pop hl
+          jr _update_nav
+
+frameDown
+          ld a,(pntFrame)
+          dec a
+          cp bufBT AND &FF
+          ret c
+          ld l,a
+          ld h,bufBT/&0100
+          ld d,(hl):dec l ; Ret address
+          ld e,(hl):dec l
+          dec l
+          ld a,l
+          cp bufBT AND &FF
+          jr nz,_frameCom
+
+          ld de,(navFrame0)
+          jr _frameCom
+
+push_explore
+; in :  DE = previous PC to save
+
+          ld a,(nb_adr_buf_explore)
+          cp 16
+          jr z,buf_explore_full
+          inc a
+          ld (nb_adr_buf_explore),a
+buf_explore_full
+
+          ld hl,(pnt_buf_explore)
+          ld bc,buf_explore
+          or a
+          sbc hl,bc
+          jr nz,no_end_push
+          ld hl,buf_explore_
+          ld bc,0
+no_end_push
+          add hl,bc
+          dec hl
+          ld (hl),d
+          dec hl
+          ld (hl),e
+          ld (pnt_buf_explore),hl
+
+          ret
+
+
+; Maj PC with lastest adr
+
+
+pop_explore
+
+          ld hl,(pnt_buf_explore)
+          ld bc,buf_explore_
+          or a
+          sbc hl,bc
+          jr nz,no_end_pop
+          ld hl,buf_explore
+          ld bc,0
+no_end_pop
+          add hl,bc
+          ld e,(hl)
+          inc hl
+          ld d,(hl)
+          inc hl
+          ld (pnt_buf_explore),hl
+          ex de,hl
+          ret
+
+      MACRO org_get_callee
+
+; [IN]  HL = adr PC
+
+; [OUT] DE = adr to explore
+;       NZ : saut ! Sinon : pas d'adresse sur la ligne
+
+;Adr is extraced by mDisa
+
+          call _getDisa
+          ld de,(adr_met_in_operand)
+          ld a,(was_adr_met)
+          or a
+      ENDM
+
+goto_pcnav
+          ld a,"T":call disp_last_com
+
+          ld hl,(pc_nav) ; adr retour
+          call mtrGoto
+
+          ld hl,(pc_)
+          ld (pc_nav),hl
+bug70
+          pop af        ; discard ret and...
+          jp trace_scr  ; ...refresh (c.f. retour de CTRL+H)
+
+goto_pc_
+          ld hl,(pc_):jp _update_nav
+
+set_pc2pcnav
+          ld hl,(pc_nav)
+          ld (pc_),hl
+          jp _majMem    ; update PC field and $ marker
+
+
+esc_key
+; In: C = (ix+%10)
+          bit 7,c       ; CRTL?
+          jp nz,mon_from_trace ; No
+; transition propre
+bug51
+          call clsScr
+; If already visu mode, line_num_src is up to date
+          IS_VISU()
+          call nc,_line_for_ed
+          or a
+          ld de,(line_num_src)
+          jp ed_from_trace
+
+_line_for_ed
+          call swap_workzone
+          call get_source_line#
+          jp swap_user  ; !! Don't call. Use jp
+
+
+get_source_line#
+; Out: NZ & DE: line
+          ld bc,(pc_nav)
+          push iy       ;needed ?
+          CALL_ASS(get_line_from_pc)
+          pop iy
+          ld (line_num_src),de
+          ld a,d
+          or e
+          ret
+
+
+
+trace_cold_init
+;Might be EI here (at least for nrts).
+          ld hl,opcode_history
+          ld b,nbPCbck * oh_size
+          ld a,1        ; flag sep
+fill      ld (hl),a:inc l:djnz fill
+          ret
+
+
+setup_history
+; We don't have history per se. Gather previous opcode instead.
+
+          di            ; !! No firm. Why?
+          ld hl,(pc_)
+          ld b,nbPCbck
+          push bc
+          call getPCbck
+          pop bc
+          ld de,opcode_history
+init_hist
+          push bc
+          push de
+          ex de,hl
+          ld (hl),0:inc hl ; nosep
+          ld (hl),e:inc hl ; addr
+          ld (hl),d:inc hl
+          ld c,l:ld b,h
+          ex de,hl      ; hl:addr
+          ld de,bufDisa ; discarded
+          call getDisa
+          pop de
+          pop bc
+          ld a,e:add oh_size:ld e,a
+          djnz init_hist
+          ret
+
+      IF do_break_debug
+break_debug
+; BRK trace itself to debug visu. We force to &ff to avoid conflit.
+; That means that it should only be used from non &ff install.
+
+          ld a,&FF:ld (&BE25),a
+
+          call swap_workzone ; workzone for ass
+          call &BE00
+          jp visu_source
+      END
+
+ctrlV
+          call set_full
+          ld d,0
+ctrlV_cls
+          push af
+          ld e,0
+          ld b,width
+          call spaces
+          pop af
+          inc d
+          ld a,d
+          cp 7
+          jr nz,ctrlV_cls
+
+          ld a,(flag_visu_source)
+          xor 1
+          ld (flag_visu_source),a
+
+          jp maj_visu
+
+
+afflng
+          push de
+          ld hl,-anteDump:add hl,bc
+          ld de,bufCtxt
+          push de
+          push bc
+anteDump = 4
+postDump = 8
+lngDump = anteDump+postDump
+          ld c,lngDump
+          call copyHere
+          pop bc
+          pop hl
+          pop de
+          jp afflng_
+
+affReg
+;        Affiche les noms des registres
+          ld a,(hl)
+          cp &FF
+          ret z
+          ld d,a
+          inc hl
+          ld e,(hl)
+          inc hl
+nxtCar
+          ld a,(hl)
+          and &7F
+          call affAsc
+          bit 7,(hl)
+          inc hl
+          jr z,nxtCar
+          jr affReg
+
+disp_last_com
+          ld (last_com),a
+disp_last_com_
+          ld de,[y0tr-1]*256+xlast+6
+          jp affAsc
+
+nops_suffix BYTE " nops----",0 ; 9 chrs to overwrite trailing
+
+savepc = $
+saveobj = $$
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+
+      ORG &7600
+
+; ****** **  trace related var  ** ******
+; (cannot be put in page 8000, even for tmp var)
+
+nbPCbck = 6
+oh_size = 7             ;flag sep, pc, opcodes
+h_disa = 17 - nbPCbck
+
+opcode_history nbPCbck-1 * oh_size ** BYTE 
+oh_last   oh_size ** BYTE 
+      IF $/&0100 - opcode_history/&0100
+error     MSB(changed)
+      END
+
+lngBufC = 16            ; Max opcode length "res 7,(ix+127),b"
+bufDisa   lngBufC ** BYTE 
+lngCtxt = 32            ; lng_max du buffer "copyHere"
+bufCtxt   lngCtxt ** BYTE 
+
+      IF bufDisa - &762A
+  !!! shared with monhelp
+      END
+
+tmp_save_sp WORD        ; NB: could move at 9xxx (after swap)
+
+; pour callee/caller (right/left) navigation
+nb_adr_buf_explore BYTE 
+pnt_buf_explore WORD 
+buf_explore 16 ** WORD 
+buf_explore_
+
+line_num_src WORD 
+pc_nav WORD 
+check_sep WORD 
+flag_visu_source BYTE 
+last_com BYTE 
+
+      IF $-&7687
+  !!! NO MORE ROOM. keyBuf here
+      END
+
+adr_dump = &76E2        ;m address for memory dump (set by mon)
+
+      ORG &7ED0
+szBT  = 4               ; size of one entry
+bufBT SKIP max_stack*szBT ; See call_stack
+bufBT_
+pntFrame BYTE           ; Current frame (end = younger)
+endFrame WORD           ; Mark past the of end of call stack
+navFrame0 WORD          ; Retain > pos in youngest frame
+flagInDbg BYTE          ; "B" if already in debug
+source# BYTE 
+
+      SKIP &7EFC-$      ; cocopy
+
+      IF endFrame - 1 - pntFrame
+ !! must be contiguous
+      END
+
+      ORG savepc,saveobj ; for host (truinrt.o)
+
+

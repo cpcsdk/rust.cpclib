@@ -1,0 +1,47 @@
+; Install "count.o" in room
+
+      ORG &1000
+      ENT burn
+
+      IMPORT "assmap.i"
+      IMPORT "burnrsx.o"
+
+rom   = &1D
+codedest = count
+limit = count_
+
+
+; ------- main code --------------
+
+code  ORG codedest,$$
+
+      IMPORT "count.o"
+
+hi
+realsize = $$-code
+      FILL limit-$,&F7
+codesize = $$-code
+
+      ORG code+codesize
+
+; ------- jump table --------------
+
+jps   ORG count_jp,$$
+          jp count_tm
+      FILL symb_jp-$,&F7 ; already full!
+codesize2 = $$-jps
+
+      ORG jps+codesize2
+
+; ------- install --------------
+
+burn
+          ld ix,burnpara:call burn_rsx
+          ld ix,burnpara2:call burn_rsx
+          call &BB06
+          ret
+
+burnpara WORD rom,codesize,count,code
+burnpara2 WORD rom,codesize2,count_jp,jps
+
+

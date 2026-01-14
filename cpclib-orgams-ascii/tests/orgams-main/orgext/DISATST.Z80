@@ -1,0 +1,455 @@
+; <<<<<< Automated tests for disa.o and decexp.o >>>>>>
+main_rom = &0A
+ext_rom = &1A
+rom   = ext_rom
+todo  = 1
+
+; \/\/\/\/ 2025 \/\/\/\/\/\/\/\/\/\/
+; Jul
+; --- HH Beta 2 ---
+   ; 18: Extracted from disa and decexp
+       ; Add test save / savea
+
+      IF todo
+; !!! move those tests with disa? For now we call /decode/ in rom
+; !!! -> ROM version instead of dev version
+      END
+
+      ORG &1040         ; Must be &40 aligned
+      ENT tests
+
+      IMPORT "disa.o"
+      IMPORT "decexp.o"
+
+bk_dev = &C7            ; Temporary orgams instance will use c4-c7
+
+nrt_buf = &3000
+tst_source = &3E00
+tst_result = &3F00
+
+; ---- In main rom ------------------------------------------------
+setup_custom = &E839    ; Trust me on this
+
+; ---- In ORGEXT.ROM (use CALL_ORG to call those routines) ---------
+
+org   = &C008
+org_init = org
+org_get_lines# = org+3
+org_get_line = org+6
+org_set_line = org+9    ; out: hl trashed!
+org_insert_line = org+12 ; out: hl post nt string.
+org_delete_line = org+15
+connect_source_begin = org+&81 ; !! unsafe since sp not saved
+
+
+; --- Handy aliases -------------------------------------------------
+fail  = &BE00           ; Breakpoint on failures
+kl_rom_select = &B90F
+
+; --- Helpers -------------------------------------------------------
+
+      MACRO CALL_ORG rout
+      IF rom - ext_rom
+ !! todo call ext_from_###
+      ELSE
+          call rout
+      END
+      ENDM
+
+      MACRO INSERT_LINE num,string
+          ld de,num
+          ld hl,string
+          CALL_ORG(org_insert_line)
+          call nc,fail  ; Should return Carry (success)
+      ENDM
+
+      MACRO CHECK_HL_EQ val
+          push de
+          ld de,val
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+          pop de
+      ENDM
+
+      MACRO CHECK_NB_LINES total
+          CALL_ORG(org_get_lines#)
+          ld hl,total
+          or a:sbc hl,de:add hl,de:call nz,fail ; Break if <>
+      ENDM
+
+      MACRO CHECK_LINE num,string
+          ld de,num
+          ld hl,nrt_buf
+          CALL_ORG(org_get_line):call nc,fail
+          ld hl,nrt_buf
+          ld de,string
+          call compare_string
+      ENDM
+
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+
+compare_string
+; Compare nt string
+; In: HL & DE = strings to compare
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          or a:ret z
+          inc de:inc hl
+          jr compare_string
+
+; -------------------------------------------------------------------
+;====
+tests
+;====
+          call nrt_init
+          call test_decode
+          call test_labelpick
+          call nrt_init:call test_escape
+          call nrt_init:call decode_test
+          call nrt_init:call codec_test
+          call nrt_init:call test_get_pc_backward
+          ret
+
+;=======
+nrt_init
+;=======
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+          ld a,bk_dev:call setup_custom
+
+          ld c,rom:call kl_rom_select
+
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+test_decode
+          ld hl,tstlines
+dtst_lp
+          ld a,">":call &BB5A
+
+;decoding doesn't add terminating '0', so we clear the buffer
+          xor a
+          ld de,nrt_buf
+dtst_clr  ld (de),a:inc e:jr nz,dtst_clr
+
+          ld de,nrt_buf
+          push hl:pop ix
+          call _deco_exp
+          push ix:pop hl
+
+          ld de,nrt_buf
+          call compare_string
+
+          inc hl
+          ld a,(hl)
+          or a
+          jr nz,dtst_lp
+          ret
+
+tstlines
+      BYTE 12           ; Decimal < 32: coded as is.
+      BYTE "12",0
+
+      BYTE &35:WORD &CAFE ; Encoding for hex 16 bits.
+      BYTE "&CAFE",0
+
+      BYTE "B",2,"+",4,"E" ; Encoding for compound expression.
+      BYTE "2+4",0
+
+      BYTE &38,&3F      ; Encoding for 8 bits binary
+      BYTE "%00111111",0
+
+      BYTE &39:WORD &0FFF ; Encoding for 16 bits binary
+      BYTE "%0000111111111111",0
+
+      BYTE 0
+
+test_labelpick
+;TODO: move in decexp instead
+
+          ld hl,nrtpick
+          call nrt_set_source
+
+; copy outside bank
+          CALL_ORG(connect_source_begin)
+          ld de,tst_source
+          ld bc,&0100
+          ldir
+
+          ld a,"="
+          call &BB5A
+
+          ld bc,&7F00+bk_dev
+          out (c),c
+
+          ld hl,nrtpickref
+lpt_lp
+          ld a,(hl):ld (vd_cursor_pos),a
+          inc hl:push hl
+          ld hl,vd_first_from_cursor
+          ld b,6
+lpt_clr   ld (hl),&FF:inc hl:djnz lpt_clr
+
+          ld hl,tst_source
+          ld de,nrt_buf
+          call decode
+          call nc,&BE00
+
+          pop hl
+          ld de,vd_first_from_cursor
+          ld bc,6
+          call compare
+          ld a,(hl)
+          or a
+          jr nz,lpt_lp
+          ret
+
+nrtpick
+           ;01234567890123456789012345678901
+      BYTE "lab0      ld   a,lab1+lab2 ;toto",0
+      BYTE "lab1",0
+      BYTE "lab2",0
+      BYTE 0
+
+nrtpickref
+; Input: cursor pos. Ref: picked, picked_nondef, last met
+      BYTE 1:WORD 0,1,2
+      BYTE 38:WORD -1,-1,2 ; in comment: pick last met
+      BYTE 0
+
+decode_test
+          ld de,1
+          ld hl,decode_src
+          CALL_ORG(org_insert_line)
+
+          ld hl,decode_byte
+          ld de,tst_result
+          call decode
+
+          ld hl,decode_ref
+          ld de,tst_result
+          call compare_ntstr
+          ret
+
+decode_src BYTE "cc = 1",0 ; To have the label registered
+decode_byte             ; "cc = cc"  Nevermind
+      BYTE &64          ; def
+      BYTE &60          ; label (cc)
+      BYTE 1            ; expression size
+      BYTE &60
+      BYTE &4A          ; eol
+      BYTE &2B,&60      ; garbage
+decode_ref BYTE "cc    = cc",0
+
+
+test_escape
+; Bug #f9: spurious opcode after directive.
+
+          ld de,1
+          ld hl,escape_src
+          CALL_ORG(org_insert_line)
+
+          ld a,1:ld (vd_cursor_pos),a
+          ld hl,-1:ld (vd_first_from_cursor_nondef),hl
+          ld hl,escape_byte
+          ld de,tst_result
+          call decode
+
+          ld hl,escape_ref
+          ld de,tst_result
+          call compare_ntstr
+          ret
+
+escape_src BYTE "if yes",0 ; To have the label registered
+escape_byte
+      BYTE &7F,9        ; if 
+      BYTE 1            ; expression size
+      BYTE &60          ; label
+      BYTE &4A          ; eol
+escape_ref BYTE "      IF yes",0
+
+codec_test
+; We encode lines to have labels registered,
+; then decode back.
+          ld hl,.tstlines
+.lp
+          push hl
+
+          ld a,":"
+          call &BB5A
+
+          ld de,1
+          CALL_ORG(org_delete_line)
+          pop hl
+          ld a,">"
+          call &BB5A
+
+          ld de,1
+          CALL_ORG(org_insert_line)
+          call nc,&BE00
+          push hl
+
+; move outside bank
+          CALL_ORG(connect_source_begin)
+          ld de,tst_source
+          ld bc,&0100
+          ldir
+
+          ld a,"="
+          call &BB5A
+
+          ld bc,&7F00+bk_dev
+          out (c),c
+          ld hl,tst_source
+          ld de,tst_result
+          call decode
+
+          ld a,"."
+          call &BB5A
+
+          pop hl
+          ld de,tst_result
+          call compare_ntstr
+          inc hl
+          ld a,(hl)
+          or a
+          jr nz,.lp
+          ret
+
+.tstlines
+      IF 1
+      BYTE "ld  a,b",0
+      FILL tab_instr," "
+      BYTE "ld a,b",0   ; No padding
+
+      BYTE "org &1000",0
+      FILL tab_command," "
+      BYTE "ORG &1000",0
+
+      BYTE "else:ei",0
+      FILL tab_command," "
+      BYTE "ELSE:ei",0
+
+      BYTE "4 ** [b]",0
+      FILL tab_command," "
+      BYTE "4 ** [BYTE ]",0 ; meh
+
+      BYTE "bit toto,(hl)",0
+      FILL tab_instr," "
+      BYTE "bit toto,(hl)",0
+
+; macro def
+      BYTE "macro x",0
+      FILL tab_command," "
+      BYTE "MACRO x",0
+
+bug1i
+      BYTE "4 ** halt",0
+      FILL tab_instr," "
+      BYTE "4 ** halt",0
+
+      BYTE "load ",34,"yeah",34,0
+      FILL tab_command," "
+      BYTE "LOAD ",34,"yeah",34,0
+
+;local label
+      BYTE ".loco nop",0 ; nop to detect line was properly parsed 
+      BYTE ".loco     nop",0
+
+;local ref
+      BYTE " jr .nc",0
+      FILL tab_instr," "
+      BYTE "jr .nc",0
+
+;save  
+      BYTE "save",34,"xx",34,",&4000,size",0
+      FILL tab_command," "
+      BYTE "SAVE ",34,"xx",34,",&4000,size",0
+      END
+
+;binary op
+      BYTE "b 0<1",0
+      FILL tab_command," "
+      BYTE "BYTE 0<1",0
+
+      BYTE 0
+
+test_get_pc_backward
+;-------------------
+          ld hl,&0700
+.mark     ld (hl),l:inc l:jr nz,.mark
+
+          ld hl,&070F
+          ld b,11       ; trui.h_disa
+          call get_pc_backward
+
+          ld hl,&0700
+.check    ld a,(hl):cp l:call nz,&BE00
+          inc l
+          jr nz,.check
+          ret
+
+nrt_set_source
+          ld de,1
+nss_lp
+          ld a,"/"
+          call &BB5A
+
+          push de
+          CALL_ORG(org_insert_line)
+          pop de
+          inc de
+
+          ld a,(hl)
+          or a
+          jr nz,nss_lp
+          ret
+
+compare
+          ld a,c
+          or b
+          ret z
+drtst_comp
+          ld a,(de)
+          cp (hl)
+          call nz,fail
+
+          inc de
+          inc hl
+          dec bc
+          ld a,c
+          or b
+          jr nz,drtst_comp
+
+          ret
+
+
+compare_ntstr
+          ld a,(de)
+          cp (hl)
+          call nz,fail
+
+          or a
+          ret z
+
+          inc hl
+          inc de
+          jr compare_ntstr
+
+
+

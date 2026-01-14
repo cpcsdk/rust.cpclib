@@ -1,0 +1,589 @@
+; SCAN routines. scan_label (for CTRL-*)
+inRom = 1
+rom   = &1D
+main_rom = &0A          ; nrt
+todo  = 1
+
+      IF todo
+; what happens if ass_entry0 raise exception?
+      END
+
+      IMPORT "assmap.i"
+
+; --- 2025 ---
+; --- HH Beta 2 ---
+; Jul
+    ; 18 v9: Skip operators < <= > >= = !=
+
+; --- HH Beta 1 ---
+    ; 10 v8: [Adapt rom ass] Use CALL_EXT / pagefirm
+
+; --- GG Beta J
+; Apr  9 v7: Use "extmap.i"
+
+; --- 2021 ---
+
+; Sep 28 v6: Hook ass_amorce_: don't correct SP by hand!!
+           ; Stack has changed in ass-do.
+
+; Jan 21 v5: Handle local labels. See /read_local/
+
+; --- 2020 ---
+
+; Apr 15 v4: move vartmp to &97fa  To make room for int (screen.o)
+           ; fix nrt itself: Must use nrt setup.
+                           ; Now macro must use ().
+
+; --- 2019 ---
+
+; 06 Jul v3: move to &fa00
+; 28 Jun v2: move to &fb00
+; 23 Jun  Extracted from assaw + slight refactor. Requires assax.
+
+codedest = scan         ; after visue
+limit = symb2
+codedest2 = scan_jp     ; after ass
+limit2 = scan_jp_
+
+code  = &0800           ; arbitrary, after nrts.
+
+vartmp = &97FA
+
+      ORG &0100
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests
+      END
+
+; ========== in this rom (ORGASS) =========
+
+ass   = &FE20
+read_label = ass + 24
+exp_fail = ass + 33
+ass_amorce_ = ass + 36  ; handle exception itself
+ass_entry0 = ass + 39
+
+connect_bk_base = pagefirm_jp ; All regs saved
+
+farcall = &FF12
+;call_ed_from_ass = farcall  
+call_ext_from_ass = farcall + 6
+;call_bric_from_ass = farcall + 12
+
+; ========== in ext rom (ORGASS) =========
+
+org   = &C008           ;JumpTable main
+seek_source_begin = org+66
+; pour NRT ----
+connect_line = org+57
+org_insert_line = org+12
+;org_load = org+18
+
+; ============ constants ===============
+
+short_decimal_max = 31  ;code 0 a 31 inclus
+short_label = &60       ;de $60 a $df : 128 first labels
+long_label = &E0        ;from $E000 to $ffff : 8192 other labels
+
+e__start = &20
+e_end = "E"             ;end multi-terms
+
+e_paren_close = ")"
+
+err_notimplemented = 13
+err_unexpectedendofexp = 17
+err_unexpectedclosingparen = 18
+
+; ----------------------------------------------
+      MACRO CALL_EXT ad
+          call call_ext_from_ass:WORD ad
+      ENDM
+; ----------------------------------------------
+
+
+      IF inRom
+burn
+;
+;install in rom
+;          
+          ld ix,param_burn
+          call burn_
+          ld ix,param_burn2
+          call burn_
+          call &BB06
+          ret
+burn_
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+      ELSE
+
+tests
+bk_dev = &C7
+          ld a,bk_dev
+          call nrt_setup
+          call scantest
+          ret
+
+compare_sized
+; In: HL & DE = zones to compare
+    ; B = size
+; Return if OK, break otherwise
+          ld a,(de):cp (hl):call nz,fail
+          inc de:inc hl
+          djnz compare_sized
+          ret
+fail  = &BE00
+
+; -------------------------------------------------------------------
+
+nrt_setup
+; IN: A = bk_dev
+          push af
+kl_rom_select = &B90F
+          ld c,main_rom:call kl_rom_select
+
+; -- Check this is Orgams ROM. If fail: correct main_rom
+          ld hl,(&C004)
+          ld de,signature
+          ld b,signature_
+          call compare_sized
+
+; -- Setup Orgams (install in bank etc...)
+setup_custom = &E839    ; Trust me on this
+          pop af:call setup_custom
+
+; -- Work rom --
+          ld c,rom:call kl_rom_select
+          ret
+
+signature BYTE "Orgams"
+signature_ = $ - signature
+
+; ============================
+
+scantest
+; CTRL-*
+          ld hl,nrtscansource
+          call nrtsetsource
+;fill chunk
+          ld b,12
+stfill
+          push bc
+          push de
+          ld hl,nrtcomment
+          call nrt_insert_line
+          pop de
+          pop bc
+          inc de
+          djnz stfill
+
+          ld hl,nrtnewlab
+          call nrt_insert_line
+
+          ld ix,nrtscantests
+scantestlp
+          ld b,0
+          ld d,0
+          ld h,0
+          ld c,(ix+0)
+          ld e,(ix+1)
+          ld l,(ix+2)
+          ld a,e
+          or a
+          ret z
+
+          call checkscantest
+          ld bc,3
+          add ix,bc
+          jr scantestlp
+
+nrtcomment BYTE "; comment",0
+
+nrtscansource
+
+      BYTE "lab1=42",0
+      BYTE " ld a,lab2",0
+      BYTE ";toto",0
+      BYTE " .byte [1+lab4]",0
+      BYTE "lab5 ld a,sin(-lab1)/$+lab2",0
+      BYTE " ld hl,lab5+lab4",0
+      BYTE "w aba",0
+      BYTE "cac",0
+      BYTE " bit aba,(hl)",0
+      BYTE " bit 4,(iy+cac)",0 ;10
+      BYTE " org aba",0
+      BYTE " ent $+cac",0
+      BYTE " if aba",0
+      BYTE " cac ** inc c",0
+      BYTE "aba ** [",0
+      BYTE "fill cac,2",0
+      BYTE "fill 0,aba",0
+      BYTE "macro x n",0 ;18  id 6 & 7
+      BYTE "y(m,n)",0   ;     id 8 & 9
+; local labels. explicit to generic
+      BYTE ".loc",0     ;20 id 10
+      BYTE ".luc",0     ;   id 11
+      BYTE "jr loc",0
+; explicit to explicit
+      BYTE "word .luc",0
+; --- end ---
+      BYTE 0
+
+nrtnewlab
+      BYTE "kingu ;comment"
+      BYTE 0
+
+nrtscantests            ;label id, start ligne, expected line
+      BYTE 0,1,1
+      BYTE 0,2,5
+      BYTE 0,6,1
+      BYTE 1,1,2
+      BYTE 1,2,2
+      BYTE 1,3,5
+      BYTE 2,1,4
+      BYTE 2,4,4
+      BYTE 2,5,6
+      BYTE 3,1,5
+      BYTE 3,5,5
+      BYTE 3,6,6
+      BYTE 3,7,5
+      BYTE 24,1,0
+      BYTE 4,6,7
+      BYTE 4,8,9
+      BYTE 4,10,11
+      BYTE 4,12,13
+      BYTE 4,14,15
+      BYTE 4,16,17
+      BYTE 5,7,8
+      BYTE 5,9,10
+      BYTE 5,11,12
+      BYTE 5,13,14
+      BYTE 5,15,16
+      BYTE 6,10,18
+      BYTE 8,10,19
+      BYTE 7,10,18
+      BYTE 7,19,19
+      BYTE 9,10,19
+;.loc              
+      BYTE 10,1,20
+      BYTE 10,21,22
+      BYTE 10,23,20
+;.luc
+      BYTE 11,1,21
+      BYTE 11,22,23
+      BYTE 11,24,21
+; last label
+      BYTE 12,15,36
+; stop
+      BYTE 0,0,0
+
+checkscantest
+          push ix
+          push hl
+          push bc
+          push de
+          CALL_EXT(connect_line)
+          call connect_bk_base
+          pop de
+          pop bc
+          call scan_label
+          pop hl
+          or a
+          sbc hl,de:add hl,de
+          pop ix
+          ret z
+      BRK
+; Here ix point on failing triplet.
+          ld bc,&BADA
+
+nrtsetsource
+;in: hl = source
+          ld de,1
+nss_
+          ld bc,0       ;no comments between lines
+atlnlp
+          push bc:push de
+          push hl:call display_text_hl:pop hl
+          push hl:call nrt_insert_line:pop de ; for debug: show lines
+          ld a,"/":call &BB5A
+          pop de:pop bc
+          inc de
+          push bc:push hl
+atlnlpc
+          ld a,c:or b:jr z,atlnend
+          push bc
+          push de
+          ld hl,nrtcomment
+          call nrt_insert_line
+          pop de
+          call nc,&BE00
+          inc de
+          pop bc
+          dec bc
+          jr atlnlpc
+atlnend
+          pop hl:pop bc
+          ld a,(hl)
+          or a
+          jr nz,atlnlp
+          ret
+
+nrt_insert_line
+          CALL_EXT(org_insert_line)
+          call nc,fail
+          ret
+
+
+display_text_hl
+          push af
+dt_lp
+          ld a,(hl)
+          inc hl
+          call &BB5A
+          or a
+          jr nz,dt_lp
+          pop af
+          ret
+
+
+      END
+
+; ========================================
+
+      IF inRom
+code2
+      ORG codedest2,$$
+jpTable
+          jp scan_label ; called by ed?
+          jp collect_label ; called by ass in phase3
+          jp read_exp   ; idem
+          jp _read_exp_a_loaded ; idem
+      FILL limit2-$,&FF
+codesize2 = $-jpTable
+      END
+
+      SKIP code-$$
+
+      IF inRom
+      ORG codedest,code
+      END
+
+read_jumptable
+; !!! If updated, must update asseva:jump_table as well. !!!
+      IF $ AND &FF
+ !! error align
+      END
+;$20
+; !"#$%&'  
+      WORD read_skip,read_op2,read_string,read_op2
+      WORD read_skip,read_op2,read_op2,notimpl
+;()*+,-./
+      WORD read_paren_open,read_paren_close,read_op2,read_op2
+      WORD notimpl,read_op2,read_local,read_op2
+;$30
+      WORD read_byte,read_word,read_long,notimpl
+      WORD read_byte,read_word,read_long,notimpl
+      WORD read_byte,read_word,read_long,notimpl
+;<=>?
+      WORD read_op2,read_op2,read_op2,notimpl
+;$40 @ABC
+      WORD read_op2,read_end_exp,read_begin_exp,read_fun
+;DEFG
+      WORD read_skip,read_end_exp,read_skip,read_skip
+;HIJK
+      WORD notimpl,read_skip,read_skip,read_skip
+;LMNO
+      WORD read_op2,read_op2,read_op2,notimpl
+;PQRS
+      WORD notimpl,notimpl,notimpl,read_fun
+;TUVW
+      WORD notimpl,notimpl,read_fun,notimpl
+;XYZ[
+      WORD notimpl,notimpl,notimpl,notimpl
+;\]^_
+      WORD notimpl,notimpl,notimpl,notimpl
+
+
+read_exp
+;Main routine: called by ass in phase3 mode
+
+;Parcourt exp et collect label rencontre
+          inc l
+          ld a,(hl):or a:ret z ;special case (ix)
+          push bc
+          push ix
+          call _read_exp
+          pop ix
+          pop bc
+          ret
+
+_read_exp
+;retour :
+;  HL= last opcode seen
+          inc l
+_read_exp_cur
+          ld a,(hl)
+read_op2
+read_fun
+_read_exp_a_loaded
+          cp short_decimal_max+1
+          ret c
+          cp short_label
+          jr nc,_collect_label
+
+          sub e__start
+          add a
+          ld ixl,a
+          ld ixh,read_jumptable/&0100
+          ld c,(ix+0)
+          ld b,(ix+1)
+          inc l
+          ld a,(hl)
+          push bc
+          ret
+
+read_local
+_collect_label
+          dec l
+collect_label
+          push de
+          call read_label
+          push hl
+          ld hl,(vs_target_label)
+          or a
+          sbc hl,de
+          jr nz,colab_nope
+          ld de,(vs_target_rout)
+          ld a,e
+          or d
+          jr z,colab_nope
+          pop hl
+          pop hl
+          ex de,hl
+          jp hl
+
+colab_nope
+          pop hl
+          pop de
+          ret
+
+read_skip
+          dec l         ;compense pre-fetch : no param here
+read_byte
+          ret
+read_word
+          inc l
+          ret
+
+read_long
+read_string
+          add l
+          ld l,a
+          ret
+
+
+read_begin_exp
+          ld a,(hl)
+          cp e_end
+          ret z
+          call _read_exp_cur
+          inc l
+          jr read_begin_exp
+
+read_paren_open
+          ld a,(hl)
+          cp e_paren_close
+          ret z
+          call _read_exp_cur
+          inc l
+          jr read_paren_open
+
+read_end_exp
+;musn't be met directly
+          ld a,err_unexpectedendofexp
+          jp exp_fail
+read_paren_close
+;itoo
+          ld a,err_unexpectedclosingparen
+          jp exp_fail
+
+notimpl
+          ld a,err_notimplemented
+          jp exp_fail
+
+
+scan_label
+; CTRL-*
+;In: bc = id label to find
+   ; de = line to start search
+   ; hl = pointe sur source
+; Call /fatal/ if corrupted
+          ld (vs_target_label),bc
+          ld bc,sl_found
+          ld (vs_target_rout),bc
+
+          ld b,1        ;nb rewind try
+sl_linelp_0
+          push bc
+          ld (vs_savesp),sp
+          ld ix,sl_ret
+          ld a,3        ;phase 3
+          call ass_amorce_
+          jr sl_rewind
+sl_ret
+          inc l
+          ld sp,(vs_savesp)
+          inc de
+;hl=pos code
+          call ass_entry0
+sl_rewind
+          call connect_bk_base
+          pop bc
+          dec b
+          ld de,0
+          ret nz        ; not found
+
+          CALL_EXT(seek_source_begin)
+          ld de,1
+          jr sl_linelp_0
+
+sl_found
+          call connect_bk_base
+          ld sp,(vs_savesp)
+          pop bc        ;discard BC
+          scf
+          ret
+
+      IF inRom
+realsize = $-codedest
+      FILL limit-$,&FF
+codesize = $-codedest
+      END
+
+
+      ORG vartmp
+
+vs_target_label WORD 
+vs_target_rout WORD 
+vs_savesp WORD 
+

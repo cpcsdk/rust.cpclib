@@ -1,0 +1,5 @@
+      MACRO ASSERT pred
+      IF pred:ELSE
+  !! fail
+      END
+      ENDM

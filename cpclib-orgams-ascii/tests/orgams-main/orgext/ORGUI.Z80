@@ -1,0 +1,308 @@
+inRom = 1
+todo  = 1
+; <<< ORG UI. Just display messages for now. >>>
+
+; Used by: Org, Import, (TODO: impexp)
+; Uses: Org (for exit_mess), Disp, Vdisp
+
+; TOC:
+     ; get_len
+     ; print_file_op
+     ; print_tag 
+     ; print_phase
+     ; print_import_status
+     ; print_msg
+     ; print_msg_nl
+     ; print_txt_sized
+     ; print_char
+     ; print_space
+     ; print_nl
+
+; 2025
+; ----- HH Beta i -----
+  ; Nov
+      ;26 v5: print_tag: remove vo_this_bk
+; ----- HH Beta ? -----
+; Apr 10: v4 New farcall (via orgcall.jp)
+; 2024
+; Sep 14: No-change. Use extmap.i
+; 2023
+; ----- Release FF -----
+ ; May
+  ; 3rd Use txt_nl to fix bug#131 and bug#132
+
+; 2021                 
+  ; Dec
+    ; 20. v2: Cosmetic: space before tags.
+  ; Nov 
+    ; 22. v1: Extracted routine for org-fi.
+              ; Rationale:
+                ; - No more room in org jumptable.
+                ; - Org.o too big already.
+                ; - Also used by import.
+
+      IF inRom
+      ORG &2000
+      IMPORT "extmap.i"
+      IMPORT "memmap.i"
+      IMPORT "burnrsx.o"
+      ENT burn
+
+rom   = &1A
+codedest = orgui        ; after ass
+limit = org4
+codedest2 = orgui_jp    ; after free
+limit2 = visu_jp
+
+; ------ in main rom ------
+ch    = &C100
+;cls   = ch+51           ; clear screen and reset offset
+
+txt_get_msg = &CA0E
+
+; ----- in this rom -------
+
+      IMPORT "orgcall.jp"
+
+org   = &C008
+exit_mess = org + &27
+
+; ----- in bricbrac -------
+string = &FD82
+bric_get_len = string
+
+disp  = &FF14
+disp_chr = disp+15
+disp_text = disp+&1B
+; disp_nl = disp+&42  !! use txt_nl to sync with firmware
+disp_deci_a = disp+&48
+
+txtfirm = &FCEE
+txt_nl = txtfirm + 6
+
+macros
+      MACRO CALL_BRIC ad
+          call far_call_bric:WORD ad
+      ENDM
+
+      MACRO CALL_ED ad
+          call far_call_ed:WORD ad
+      ENDM
+
+; ========================================
+burn
+          ld ix,param_burn
+          call burn_rsx
+          ld ix,param_burn2
+          call burn_rsx
+          jp &BB06
+
+param_burn WORD rom,codesize,codedest,code
+param_burn2 WORD rom,codesize2,codedest2,code2
+
+      ELSE
+; Safety: meant to be imported by string.nrt
+      ENT $
+      BRK
+      END
+
+; ========================================
+
+code  = $$
+
+      IF inRom
+      ORG codedest,$$
+      END
+
+;--------------------
+print_file_op
+;------------
+; Display: Loading TOTO.O
+         ; Saving TOTO.O
+         ; Importing TOTO.O  (for import.o. TODO: for impexp.o)
+
+;NB: We print "Loading" here rather than from ch/ed,
+   ; so it is also printed for imported files.
+   ; For symetry, we do it as well for "Saving".
+
+;in: A = msg #         
+   ; HL = filename   
+;out: HL preserved, other registers trashed.
+
+          call print_msg
+          call print_space
+;enchaine  (print_nl already done before printing tag
+print_txt
+;--------
+;Print nt line. Can be in rom.
+;Out: HL preserved.
+          push hl
+.lp       ld a,(hl):or a:jr z,.fin
+          call print_chr
+          inc hl
+          jr .lp
+.fin
+          pop hl
+          ret
+          call print_txt
+          ret
+
+
+print_tag
+;--------
+          push bc:push de
+          push af
+          push ix:push iy
+
+ ; Sanity: must be in base bk
+      IF todo
+; factorize with checks.o
+      END
+          ld a,i:ld b,a
+          ld a,(vo_basebk) ; only definied in base bk itself!
+          cp b
+; call nz,exit_mess  !!! no, returns bogus error message (like mem full)
+          call nz,&BE00
+
+          call print_nl
+          call print_space
+          ld b,3        ;"ORG" "SRC" "LBL" "ChC"
+          call print_txt_sized
+
+; -- reset progress bar --
+          push hl
+          ld hl,(vdisp_scrpos)
+          inc hl:ld (progress_adr),hl
+          xor a:ld (progress_pix),a
+          pop hl
+          pop af
+          pop iy:pop ix
+          jr _ret_de_bc
+
+msg_cache = 6
+msg_phase = 7
+msg_ok = 9
+
+print_phase
+;----------
+; Display phase number, to have a sense of progress.
+; In: A phase 1/2
+          push bc:push de
+          push af
+          ld a,msg_phase:call print_msg
+          pop af
+          CALL_BRIC(disp_deci_a)
+          call print_nl
+_ret_de_bc
+          pop de:pop bc
+          ret
+
+print_msg
+;--------
+;Decrunch and disp, without NL
+;in: A = msg #
+          push hl
+          CALL_ED(txt_get_msg)
+          ld c,l:ld b,h
+          CALL_BRIC(disp_text)
+          pop hl
+          ret
+
+
+
+print_txt_sized
+;--------------
+;Print b chars from hl  
+;Out: HL preserved.
+          push hl
+ptlp      ld a,(hl):inc hl
+          call print_chr
+          djnz ptlp
+          pop hl
+          ret
+
+print_space
+;----------
+          ld a," "
+;enchaine
+print_chr
+;--------
+; IN: a= char
+          push hl
+          CALL_BRIC(disp_chr)
+          pop hl
+          ret
+
+print_import_status
+;------------------
+; If  Z: Print "Ok"
+; If NZ: Print "Using cache"
+          ld a,msg_ok
+          jr z,.ok
+          ld a,msg_cache
+.ok
+;enchaine
+print_msg_nl
+;-----------
+; print_msg + new line
+          call print_msg
+;enchaine           
+print_nl
+;-------              
+;New line **with firmware sync**
+          push af
+          push hl
+          call far_call_bric:WORD txt_nl
+          pop hl
+          pop af
+          ret
+
+get_text_len
+;-----------
+          CALL_BRIC(bric_get_len)
+          ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&F7
+      END
+codesize = $$-code
+
+; ------------------
+code2 = $$
+
+      IF inRom
+      ORG codedest2,$$
+      END
+
+jps
+          jp get_text_len
+          jp print_file_op
+          3 ** BRK      ; room for disp "in tab N"
+          jp print_tag
+          jp print_phase
+          jp print_import_status
+          jp print_msg
+          jp print_msg_nl
+          jp print_txt
+          3 ** BRK      ; room for print_fast
+          jp print_txt_sized
+          3 ** BRK      ; room for print_txt_pad
+          jp print_chr
+          jp print_space
+          jp print_nl
+
+hi2
+      IF inRom
+      FILL limit2-$,&F7
+      END
+codesize2 = $$-code2
+
+vdisp = &7CC0
+vdisp_scrpos = vdisp+2  ; For progress bar
+
+progress = &8A00        ; shared with aap
+progress_adr = progress
+progress_pix = progress+2
+

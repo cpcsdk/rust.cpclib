@@ -1,0 +1,2505 @@
+; UI and common helpers for monograms and trace
+; !!! fix NRT !!!!! (was crashing)
+
+inRom = 1
+rom   = &1B
+dev_checks = 1
+todo  = 1
+need_room = 1
+use_smart_transit = 0
+
+nrtbuf = &3000
+fail  = &BE00
+
+;TODO: factorize mon_from_trace with restore_and_goto_ed (firm_restore)
+;TODO: (c4) Replace bricbrac firm by nofirm (with speed test to ensure
+     ; fimware is still running). + DI/EI forcing.
+
+; TODO: keep sp @ &a000 for all orgams? 
+      ; - a bit less intrusive.
+      ; - doesn't need to get_firm_stack (until return to basic).
+      ; Con: don't fix what's not broken.
+
+; TODO: move clear_line in DISP
+      ; in fact, move all scroll/offset handling in DISP (harder)
+
+      IMPORT "monomap.i"
+      IMPORT "memmap.i"
+      IMPORT "const.i"
+
+; //// 2025 //////////////////////
+ ; -- HH Beta J --
+ ; Dec
+    ;28 by Use txt_beta_date (new location to make room for mon.o)
+ ; -- HH Beta I --
+ ; Nov
+    ;26 bx check_i: doesn't use vo_this_bk or vo_base_bk anymore
+ ; -- HH Beta G --
+    ;13 bw Use ch.goto_basic_quiet
+         ; firm_init: don't setup keys (done by ch) 
+    ;13 bv Add keyWaitDown: anti test key
+ ; -- HH Beta E --
+ ; Oct
+    ;25 bu restore_and_goto_ed: restore poked address
+ ; -- HH Beta 5 --
+ ; Aug
+    ;10 love + NickyOne
+ ; -- HH Beta 4 --
+    ; 7 clear_asic: fix typo PPI
+                   ; use f4 rather than f6 (wth?)
+       ; Expose is_amstrad_plus_halt
+              ; is_amstrad_plus
+ ; -- HH Beta ? --
+ ; Jun 16 restore_and_goto_ed: unpage asic (not burned?)
+        ; clear_asic 
+  ;Apr  
+ ; ------ GG beta L -------
+     ;22 bq dump_one_line_custom: use dump_hexa_shaded/dump_ascii_shaded 
+               ; (so x displays odd lines shaded)
+
+ ; ------ GG beta K -------
+     ;20 bp dump_one_line_custom: Rollback dump_hex / dump_ascii
+                ; Otherwise DI for too long
+ ; ------ GG beta J -------
+     ;13 bo Add put_hexa_a (copy/paste from disp, for fast dump) 
+          ; Add copy_nt    (copy/paste from string, to copy from rom)
+          ; dump_one_line_custom: bufferize for faster display
+       ; bn affBufCom: call set_full (needed since new farcall
+                                     ;doesn't preserve IY)
+          ; remove print_exp (now in mon.o)
+     ;11 bm [nochange] Use "memmap.i" 
+
+ ; ------ GG beta I -------
+     ; 5 bl Add keyWaitDi (for trui/CTRL-H)
+     ; 1 bk Fix #1b5 CTRL-H mustn't hold
+          ; scrollUp_if_needed fix page wrap handling
+ ; ------ GG beta H -------
+ ; Mar   
+   ; 28 bj Use monomap.i
+         ; Expose dump_one_line_custom
+   ; 27 bi Expose locate_inc
+ ; ------ GG beta F -------
+   ;  9 bh Fix bug introduced by bg: clear screen after rsx 
+   ;  7 bg Use scr_set_mode instead of mc_set_mode (bug #1ab)
+         ; Expose goto_ed_routine for direct jump (mon)
+
+ ; Jan 
+   ; 17 bf crtc_trace2firm/crtc_firm2trace: r2 transition for OSCC
+         ; [cosmetic] Replace put_crtc by put_crtc_inline
+; //// 2024 //////////////////////
+ ; ------ GG betaB -------
+ ; Sep 
+   ; 30 be Add test_dump_one_line' (fails to reproduce bug#1a4)
+
+ ; ------ GG beta3 -------
+ ; Mar
+   ; 5th bd Introduce keyCheckDi
+                    ; is_control_pressed
+                    ; is_shift_pressed
+                    ; get_pressed_keycode
+   ; 3rd bc Introduce goto_basic_quiet for |orgload
+
+; //// 2023 //////////////////////
+
+ ; ------ FF Release -------
+ ; Dec               
+   ; 30th bb Use /decrunchTxt/ in monogams ROM.
+   ; 22th ba Introduce locate_left, print_range        
+   ; 20th az' Move "Ext &xx" to accomodate amstrad PLUS.
+   ; 15th az Adaptation to hwikaa bandeau
+              ; -> Move "&7fc0    LRAM  URAM" to left
+           ; Clean-up obsolete (previous) logo code
+ ; June
+   ; 5th ay. TODO #110 Remove spurious blank lines
+           ; Review printing logic: From Pre-NL to Post-NL
+           ; - dump_one_line_: remove inc_cursY.
+           ; - cmdCrNl/inc_cursY: don't call scrollUp_if_needed:
+                   ; now that dump_one_line does post-CrNl,
+                   ; we don't want a blank line when we reach bottom
+           ; - dump_one_line_: call scrollUp_if_needed,
+                   ; now that CrNl is done post-ly.
+           ; - print_exp/disp_ellipsis: likewise
+           ; (that is: post CrNl rather than pre)
+    ; It shouldn't be done first: spurious blank line for m command
+                         ; last: mon still have to dump gr on same line
+    ; Also, it was useless for TR
+
+ ; May
+   ; 3rd ax. Extract locate_firmare/orgams to txtfirm.o
+           ; (so that orgui can use them to fix bug#131 and #132) 
+
+ ; ------ FF Beta I -------
+ ; Apr
+   ; 19 aw Remove no_command:
+             ; - if command not recognized, try RSX
+             ; - no more 'help' command, shadowing |help without gain
+           ; Add /cmdCrNL_if_needed/
+           ; s/unknowCom/print_inline
+           ; Optimise jump block
+           ; /locate_monagams/  Restore cursX as well. 
+           ; /goto_basic/ Reset offset for "restore display"
+
+     ; 18 av unknowCom: don't inc cursY a la barbare:
+             ; - superfluous blank line in case of unknown RSX
+             ; - prepare for transition to use "scroll.o"
+
+     ; 16 au Remove residual ced logo handling.
+           ; Fix bug #14a garbage in status bar at fisrt invocation.
+
+ ; Jan 13 at Move edStart @ c115 (out of rsx table)
+
+; //// 2021 //////////////////////
+ ; Nov 29 as Move date to leave room for extended credits.
+ ; Jul 18 ar Fix test_welcome britleness.
+            ; force set_gris in /welcome/ anyway
+           ; Expose print_hl ("extracted" from dump_one_line_)
+
+        ; aq Simplification. Remove orgScreen2. 
+           ; Fix offset in locate_firmware/locate_monogams
+           ; Add /affNewLine/
+
+     ; 14 ap Add locate_firmware/locate_monogams (WIP regarding offset)
+ ; Jan 13 ao Don't decrunch logo!
+           ; Display /welcome/ before pause and outside status bar
+           ; (as Demomakers Delight)
+
+; //// 2020 //////////////////////
+
+; May  5 an Fix crash post logo: don't use firm far call (EI).
+          ; def_crtc: also set r1, r2, so proper format at RET time.
+
+      ;3 am Boulet!! Don't use firm for crtc calls in bricbrac.
+          ; /ed_from_trace: Also setup_workzone. + screen_init
+      ;3 al Call setup_workzone to fix #101. See /test_from_basic/
+; May  1 ak Firm sync for BRK outside orgams (bug #101).
+
+    ; 27 aj Remove dead data /fast_crtc/.
+    ; 23 ai expose /firm_init/ for post rsx init.
+
+    ; 16 ah Proper crtc transition in /ed_from_exec/
+
+    ; 11 ag Pre logo: assume shifted screen
+          ; Post logo: go to shifted screen.
+          ; !! requires screens.
+; Apr  2 af Move Jps from FE00 to F900 to make common room.
+
+; Mar 30 ae Move code2 at the end (no-op).
+          ; Meant to help trace visu, but still lost (try d&ea91)
+
+       ; ad optimize in size.
+          ; Welcome message in status bar.
+; Jan 18 ac status_disp: use dedicated bar (require dispf)
+
+; /////                  
+
+     ; vab Only display logo first time.
+         ; Move @ 
+
+     ; vaa New logo: requires crulogom
+
+     ; vz CTRL-ESC: Move edSetLine# *after* restore firm.
+                  ; Needed since ed-bps
+        ; Set this rom# in restore_firm
+     ; vy export/import. 
+        ; Oups must still set r12=&30.
+  ; 22 vx Expose clsSrc_from_tr which won't reset off7screen (@ 9cfe)
+        ; TODO: ; -move all that in disp anyway
+                ; -once trui use work memory from the start
+
+     ;  vw  Robust is_ei check
+     ;  vv  More CHECK_EI()
+     ;  vu  NRT test_speed3 for status_disp
+     ;  vt' NRT test_speed2 for dump_one_line_
+         ; More EI via affAsc.
+         ; full/gris: no need to save ix and bc (!!requires disp8)
+     ;  vt: file corrupted!
+     ;  vs NRT test_speed for unkown_com_
+         ; More EI in status_disp via hex2asc and from_right.
+     ;  vr EI in print.
+     ;  vq Don't refresh r12r13 in scrollUp -> done by screen.
+         ; Remove di in txt_get_mon (decrunch txt).
+     ;  vp  Use affTextEi for status + pour EIs.    
+    ; 9 vo  Don't set firm_int. (requires crulogok who does it instead)
+         ;  off7screen @ 9cfe (for screen.o)
+            ; !! Shared state. 
+      ; vn  Reprise. Use str_pad_ei (from disp5) for monac. 
+; Sep 7 vm' Boulet! Must use iy for ed_far_call (mirror*)
+; Aug 8 vm Export dmp* in disp (faster!).
+
+    ;28 vl Use mirror in rom ed.
+         ; Yet new rom#.
+    ;20 vk Use new rom#. test_dump_one_line
+         ; Reorder code.
+         ; force ink 1 after logo raster
+      ; vJ Slight adjust.
+    ;12 vI Welcome text at bottom for new screen setup.
+    ;12 vH Welcome text at bottom. OK.
+         ; + screen_init (to be removed when offset delegated to disp).
+    ;12 vG Align right for status.
+         ; Welcome text at bottom. WIP!
+         ; Move @ f180 
+         ; Basic restore message at correct pos.
+    ;11 vF Add dev check.                 
+         ; vo_baseBk wasn't set in dev_init.
+      ; vE Welcome message after logo.
+      ; vD Fix welcome message. aff_paragraph takes DE for pos.
+;10   ; vC dump_one_line_ now really dumps one line.
+         ; sanity check iy  
+         ; revert aff_paragraph for TR.
+      ; vB Fix bricbrac_firm_call usage (changed in monhelp3).
+      ; vA Fix afflng.
+      ; v9 Done #c4/a. No firm for disp call (DCALL), since used by tr.
+      ; v8 Import restore_and_goto_ed + goto_ed
+            ; Rationale: - Called by both mon and trui.
+                       ; - Related to other routines here.
+            ; If we want to move that to ORG ROM,
+            ; we'll have to change RESTORE at the same time.
+              ; -> NOT NOW (baby steps).
+          ; Import goto_basic for similar reasons.
+
+      ; v7 Remove io_dispatch & co (not used anymore by field_editor)
+         ; Expose spaces, afflng, keyCheck.
+         ; New Jump Block method: whole &fe00 chunk
+
+       ; v6 Adapt to default screen dimension (buf width remains 62)
+          ; inc_cursY factorization
+          ; clear_line: handle page
+          ; New JPs: crtc_unknown2trace, set_cursX/Y
+
+       ; v5 Use disp in rom BricBrac.
+       ; v4 Export far calls in monhelp.
+          ; Remove references to buffers (must be passed instead).
+       ; v3 Add dumps.
+          ; Simplify afflng. Replace dmpAscii8 by call to dmpAscii
+       ; v2 Add JPs.
+; Jul 07 v1 RAW. Extracted from monoai 
+
+
+      ORG &1000
+      IF inRom
+      ENT burn
+      ELSE
+      ENT tests         ; No test yet
+      END
+
+codedest = monui_rom
+limit = monhelp_rom
+codedest2 = monui_rom'
+limit2 = mon_rom'
+
+
+;-- In *this* ROM ------------
+monhelp = &FFC0
+;          jp   copyHereMirror = monhelp + 6 ; Mon
+;          jp   copyThereMirror ; Mon
+;          jp   copyHere ;tr
+
+copyHere = monhelp+12   ; NRT
+copyHereMirror = monhelp+6 ; NRT
+
+decrunchTxt = &D900+8
+
+monogams = &E003
+
+;NB: no reason to use the firm version,
+; since BRICBRAC doesn't have dependencies in other ROM
+; (so we don't have to sync kl curr sel).
+;bricbrac_far_call_firm = monhelp + 36
+ed_far_call_1b = monhelp + 39 ; preserve iy
+ed_far_call_firm = monhelp + 42 ; preserve iy
+ext_far_call_firm = monhelp + 45 ; preserve iy
+bricbrac_far_call = monhelp + 48 ; NO JP!! (cf todo #c3) !! mind swap
+;          jp   ext_far_call ;tr
+ed_far_call = monhelp + 54
+
+init  = &E830
+setup_workzone = init+12
+
+;-- In BricBrac ROM ----------
+histrion = &FDAC
+
+mirror = &E7F2
+restore_8000 = mirror+9
+ext_swap_8000 = mirror+12
+
+screen = &FE4E
+status_init = screen+21
+firm2shift = screen+24
+tr2shift = screen+39
+;clearstatus_monogams = screen+12
+
+firm2status = screen    ; for nrt
+status2firm = screen+3  ; for nrt
+
+;status2tr = screen+6
+;tr2status = screen+9
+;clearstatus = screen+18 ; clear 8000-8fff zone
+;status_on = screen+30
+;status_off = screen+33
+;logo_off = status_off   ; This only amounts to disable custom ints!
+
+;-- In Org ROM ----------
+
+edStart = &C115
+edSetLine# = &D20F
+
+goto_basic_quiet = &C186 ; ch
+
+      IF inRom
+palette_firm = &DFFA
+palette_vga = palette_firm + 3
+      ELSE
+palette_firm BYTE 1,14,0
+palette_vga BYTE &44,&5F,&54
+      END
+
+r1    = 40
+r2    = 46
+r3    = &8E
+r4    = 38
+r6    = 25
+r7d   = 30
+
+lngCom = 64-1           ; for '>'   TODO: consolidate with mon
+
+; for trace
+r1'   = 32
+r2'   = 42
+r6'   = 32
+r7'   = 34
+
+disp_r1 = &7CCA         ; dynamic
+
+mtr   = &C100
+mtrInit = mtr
+
+
+burnPalette = 0         ; 0 = doesn't change palette when burning
+
+install_farcall = &DF24
+
+txtfirm = &FCEE
+set_offset = txtfirm + 15
+
+disp  = &FF14
+disp_init = disp        ; NRT. Each client calls it with proper R1
+disp_cls = disp+3
+disp_locate_scr = disp+6
+disp_locate_x = disp+9
+disp_locate_inc = disp+&0C
+disp_chr = disp+&0F
+disp_chr_at = disp+&12
+disp_chr_shaded = disp+&15
+disp_chr_shaded_at = disp+&18
+disp_text = disp+&1B    ; bc=nt str
+;disp_text_at = disp+&1E ; bc=nt str, de=offset
+disp_text_shaded = disp+&21 ; bc=nt str
+disp_text_nl = disp+&2D
+ ;XXX disp_inline_at = disp+&39  ; Cannot work trans-rom.
+;disp_deci_a = disp+&48
+;disp_deci_a_inv = disp+&4B
+;disp_deci_a_shaded = disp+&4E
+disp_deci_hl = disp+&51
+;disp_deci_hl_inv = disp+&54
+;disp_deci_hl_shaded = disp+&57
+disp_hexa_a = disp+&5A
+;disp_hexa_a_inv = disp+&5D
+disp_hexa_a_shaded = disp+&60
+disp_hexa_hl = disp+&63
+;disp_hexa_hl_inv = disp+&66
+;disp_hexa_hl_shaded = disp+&69
+;put_deci_a = disp+&6C
+;put_deci_hl = disp+&6F
+;put_hexa_a = disp+&72
+dump_ascii = disp+&78
+dump_ascii_shaded = disp+&7B
+dump_hexa = disp+&7E
+dump_hexa_shaded = disp+&81
+;str_pad = disp+&30
+;str_pad_ei = disp+&33
+str_pad_at = disp+&84
+str_pad_at_ei = disp+&87
+
+ds    = &FE78           ; display status
+status_set_cursor = ds
+
+status_char_at = ds + 3
+;          jp status_str_at
+;          jp status_pad_at
+;          jp status_deci_a_at
+;          jp status_deci_hl_at
+;          jp status_hexa_a_at
+;          jp status_hexa_hl_at
+; No shaded/inv version yet since i plan to play with rasters instead
+
+status_char = ds + 24
+;          jp status_str
+;          jp status_pad
+;          jp status_deci_a
+;          jp status_deci_hl
+status_hexa_a = ds + 39
+status_hexa_hl = ds + 42
+
+
+xi_curs = 1
+yi_curs0 = 5            ; under welcome message
+yi_curs = 3
+y_bnk = yi_curs+3       ; pos_y bank de travail dans "welcome home"
+x_bnk = xi_curs+14      ; idem x
+
+modeSys = 2
+
+kl_l_rom_disable = &B909
+kl_rom_select = &B90F
+kl_curr_select = &B912
+kl_ldir = &B91B
+mc_set_mode = &BD1C     ; safety after rsx command
+scr_set_mode = &BC0E    ; For first invocation (bug #1ab)
+
+msg_wrong_parameter = 1
+msg_welcome = 2
+msg_help_mon = 3
+
+; ------                  
+      MACRO DCALL adr
+;!!! warning. cannot use new farcall, since called (e.g clsScr by trui)
+;!!! while user mem still here  
+          call bricbrac_far_call:WORD adr
+      ENDM
+; ------
+
+tests
+          call dev_init
+
+          call test_welcome
+          call test_from_basic ; status musn't be on!
+          call test_status
+      IF 1
+          call test_welcome
+          call test_dump_one_line
+          call test_dump_one_line'
+
+; -- manuel tests ---
+          call manual
+          call test_speed
+          call test_speed2
+      END
+          ret
+
+dev_init
+; Clean to make sure we don't rely on pre-installed stuff.
+          ld a,&FF:ld c,bk_dev:call clean_bk
+          ld a,&F7:ld c,bk_dev-1:call clean_bk
+
+          ld c,rom:call kl_rom_select
+
+bk_dev = &C7            ; <>#ff pour eviter conflit
+          ld b,&7F
+          ld a,bk_dev:out (c),a
+          ld i,a
+
+          ld hl,valRMR
+          set 2,(hl)    ; RAM at page 0000, since dev code is here
+
+romOrg_dev = &0A
+romExt_dev = &1A
+romBric_dev = &1C
+
+          ld a,rom:ld (vo_romMon),a
+;must be called before org_init 
+install_farcall = &DF24
+          call install_farcall
+          ld a,romExt_dev:ld (vo_romExt),a
+          ld a,romOrg_dev:ld (vo_romEd),a
+          ld a,romBric_dev:ld (vo_romBric),a
+
+mtr   = &C100
+mtrInit = mtr
+; TODO: call setup instead?
+
+          call mtrInit  ; For i=bk base
+;          call mon_cold_init
+
+;          ld   a,bk_dev
+;          ld   c,&30    ;nb chunk for source
+;          call ext_far_call_firm:WORD org_init_custom
+
+;          call trace_cold_init
+          ret
+
+clean_bk
+          ld b,&7F:out (c),c
+          ld hl,&4000
+          ld de,&4001
+          ld bc,&3FFF
+          ld (hl),a
+          ldir
+          ret
+
+test_dump_one_line
+;Not check yet (must return without 
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+          ld hl,&C000
+          ld ix,nrtret
+          ld iy,full
+          ld de,nrtbuf
+;          call dump_one_line_
+
+          ld hl,&C000
+          ld ix,copyHereMirror
+          ld de,nrtbuf
+          call dump_one_line_
+
+          ld hl,&C000
+          ld ix,copyHereMirror
+          ld de,nrtbuf
+          call dump_one_line_
+
+          call &BB06
+nrtret
+          ret
+
+test_dump_one_line'
+; Try to reproduce bug#1a4
+  ; use copyHere (like trui) 
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+
+          ld hl,&0700
+.mark     ld (hl),l:inc l:jr nz,.mark
+
+          ld hl,&0730
+          ld ix,copyHere
+          ld de,nrtbuf
+          call dump_one_line_
+
+          ld hl,&0700
+.check    ld a,(hl):cp l:call nz,&BE00
+          inc l
+          jr nz,.check
+          ret
+
+
+test_welcome
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+          ei
+          call monui_refresh
+          DCALL(firm2status)
+    ;      call &BB06
+          DCALL(status2firm)
+          ret
+
+manual
+          ld a,r1':DCALL(disp_init)
+          call clsScr
+          ld bc,&1234
+          ld de,&16
+          call afflng
+          call &BB06
+          ret
+
+test_speed
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+          DCALL(firm2status)
+          ld iy,full
+tslp
+          ld hl,nrttext
+          ld (nrtsp),sp
+          call print_inline
+nrtshortcut
+          ld sp,(nrtsp)
+          call &BB1B:ret c
+          jr tslp
+
+test_speed2
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+          DCALL(firm2status)
+          ld iy,full
+tslp2
+       ;   ld   hl,&C000
+          ld a,r:ld h,a
+          ld ix,copyHereMirror
+          ld de,nrtbuf
+          ld (nrtsp),sp
+          call dump_one_line_
+;          call status_disp
+nrtshortcut2
+          ld sp,(nrtsp)
+          call &BB1B:ret c
+          jr tslp2
+
+test_status
+          call common_init
+          call monui_init
+          ld a,r1:DCALL(disp_init)
+          DCALL(firm2status)
+
+          call welcome
+
+          ld iy,full
+          call status_disp
+          call &BB06
+          ret
+
+
+nrttext BYTE "Syntax error",0 ; Normally f rom evacom
+nrtsp WORD 0            ; for shortcut
+
+test_from_basic
+; Mimic coming from basic: mirror doesn't have int+ctrc+roms "installed"
+; since it's user ram.
+
+; Prepare exit: must be done first, to be stored in mirror bank.
+          ld hl,tfb_ret:push hl
+          ld (firm_save_sp),sp ; for exit
+
+          call fake_basic_context
+
+          ld sp,&8000
+          jp mon_from_trace
+tfb_ret
+; -- Rom# must be setup.
+          ld a,(&9D01):cp "0":call nz,&BE00
+; -- Firm rom# must be in sync.
+          call kl_curr_select
+          cp rom:call nz,&BE00
+          ret
+
+fake_basic_context
+; Mimic comming from basic:
+;  - bank mirror contains:
+   ; - firmware (stored at first invocation)
+   ; - user mem (here f7)
+          ld bc,&7F00+bk_dev-1:out (c),c
+          ld hl,&A000:ld de,&6000:ld bc,&2000:ldir
+          ld hl,&4800:ld de,&4801:ld bc,&17FF:ld (hl),&F7:ldir
+
+;  - mem at 8000-A600 is also user's (restored at ctrl-b).
+          ld bc,&7F00+bk_dev:out (c),c
+          ld hl,0:ld de,&7F00:ld bc,&40:ldir
+          ld hl,&8800:ld de,&8801:ld bc,&17FF:ld (hl),&F7:ldir
+
+; Rom is set by BRK routine via port DFxx,
+; but firmware may be out of sync.
+          ld c,&80:call kl_rom_select
+          di
+          ld bc,&DF00+rom:out (c),c
+
+          ret
+
+
+; ----------------------------------
+
+      IF inRom
+burn
+          ld ix,param_burn:call burn_
+          ld ix,param_burn2:call burn_
+          call &BB06
+          ret
+
+burn_
+;
+;install in rom
+;                 
+          push ix
+          ld hl,nburn
+          call &BCD4
+          pop ix
+          ret nc
+
+          ld a,4
+          call &1B
+          ret
+
+nburn BYTE "BURN"+&80
+param_burn
+      WORD rom
+      WORD codesize
+      WORD codedest
+      WORD code
+param_burn2
+      WORD rom
+      WORD codesize2
+      WORD codedest2
+      WORD code2
+
+      END
+
+; ------
+
+code  = $$
+      IF inRom
+      ORG codedest,$$
+      END
+
+common_init
+
+; !! Here : work bank must be connected
+; Non-firmware init (since call be called from breakpoint)
+; BUT! Don't change mode
+
+          call mtrInit  ;Init Partie Madram (set I and rmr/mrm)
+
+; Check: di, bk is connected and I is set.
+; do it here so we can more easily see a loop.
+      IF dev_checks
+          call check_i
+      END
+
+          call install_farcall
+
+          ld a,&08
+mute_ay
+          ld b,&F4:out (c),a
+          ld bc,&F6C0:out (c),c:out (c),0
+          ld b,&F4:out (c),0
+          ld bc,&F680:out (c),c:out (c),0
+          inc a
+          cp 11
+          jr c,mute_ay
+
+;put_ga
+;!! OUT: BC=&7f01, A=(palette_vga) !!
+
+;!! DO NOT CHANGE !!
+          ld hl,palette_vga+2
+          ld bc,&7F10
+          out (c),c:outd
+          ld c,1
+          out (c),c:outd
+          ld a,(hl)     ;used by caller
+          out (c),0:out (c),a
+          ret
+
+      IF dev_checks
+; Make sure I properly set.
+check_i
+          ld a,i:and &C5:cp &C5:call nz,&BE00
+          ret
+      END
+
+
+;------------------
+restore_and_goto_ed
+;------------------
+;Called by RESTORE 
+
+; tmp address was destroyed (see ass.ass_restore)
+          ld (hl),e:inc hl
+          ld (hl),d
+;Enchaine
+ret_and_goto_ed
+;-------------- 
+;Called by RET 
+;Unpage ASIC. Ok for OLD: LROM/UROM
+          ld a,&A0:out (c),a
+;Reconnect work bk, since coming from arbitrary location.
+          out (c),c
+          ld a,c:ld i,a
+          scf
+
+;TODO : factorize with restore_and_goto_monitor
+;-----------
+ed_from_trace
+;-----------
+;In: Carry if coming from RESTORE (unknown crtc config)
+   ; NC    if coming from trace. DE = line
+
+; That's the last remaining case where we have to put stack in bank:
+; 1/ Current SP from exec is arbitrary.
+; 2/ We don't want to trash memory before having mirrored it (swap).
+   ; One alternative would be to swap without stack. 
+     ; -> Require swap to be in same rom and use e.g. IY for ret. MEH
+
+prgpile = &8000
+          ld sp,prgpile
+          di
+
+          push de
+
+; From exec: restore CTRC first thing 
+  ; - if already firmware settings, noop.
+  ; - otherwise, sane defaults and ensure VSYNC
+; Also clean ASIC page (before palette change in common init)
+          push af
+          call c,def_crtc_and_asic
+          pop af
+          push af
+
+; Install farcall & work before other CRTC stuff (since in BRIC)
+          call common_init
+          call work_restore
+
+          pop af
+          push af
+          call c,crtc_firm2shift
+          call nc,crtc_tr2shift
+
+; For status bar. NB: ed could init itself, nevermind.
+          call bricbrac_far_call:WORD status_init
+
+          pop af
+          pop de
+          ld hl,edStart
+          jr goto_ed_
+
+;------
+goto_ed
+;------              
+; Coming from mon: Carry flag like RESTORE.
+          ld hl,edStart
+goto_ed_routine
+          scf           ; disable call to edSetLine#
+goto_ed_
+; Here: DE = line (if NC)
+      ; HL = routine to call in ed rom.
+; A passed to routine (if NC. If Carry, N/A as we go to edStart
+          push af
+          push hl
+          call get_firm_stack
+          pop bc
+          pop af
+          ld sp,hl
+          push bc
+; If from trace: jump to visu line 
+; (ok if 0 or garbage, set_line will do nothing)
+
+; Nb: We must use firm far_call, since ed also use firm far_call
+    ; to call org_getlines#.
+; Otherwise the ED rom# isn't saved: crash when returning from ORG.
+          ld hl,edSetLine#:call nc,ed_far_call_1b
+
+          pop hl
+          jp ed_far_call_1b
+
+;-------------
+mon_from_trace
+;-------------
+;TODO : factorize with restore_and_goto_ed
+
+          di
+
+;Restore firmware from backup
+          call work_restore
+;TODO!! Check if firmware backup actually ok (bug #103).
+
+          call get_firm_stack
+          ld sp,hl
+
+          call crtc_tr2shift
+      IF inRom
+          jp monogams
+      ELSE
+          ret
+      END
+
+goto_basic
+          ld a,2:call &BC0E ;no cls here, for proper display
+          call screen_init ; for "restore " display on top.
+
+
+; indicate firmware zone "restored" (from user point of view)
+          ld de,&00
+          ld hl,t_restore:call affText
+          ld hl,(firm_rommem)
+          ld de,&BFFF
+          call print_range
+          ld a,10:call txt_output ; firmware (for "Ready")
+
+          call ed_far_call_firm:WORD goto_basic_quiet ; !! NO RETURN
+
+t_restore BYTE "Restore: ",0
+
+get_firm_stack
+          ld hl,(firm_save_sp)
+          ld a,h:cp &BF:ret z
+          ld hl,&C000
+          ret
+
+print_range
+;Print XXXX-XXXX (hl-de) 
+          push de
+          DCALL(disp_hexa_hl)
+          ld a,"-":DCALL(disp_chr)
+          pop hl
+          DCALL(disp_hexa_hl)
+          ret
+
+firm_save_sp = &79FC
+firm_rommem = &79FE     ; ROM work zone, aka himem+1
+
+work_restore
+; Restore firmware and workzone.
+
+          im 1
+          xor a:ld bc,&7F86
+; NB: connect lower RAM:
+; - needed by ed_from_exec or mon_from_trace for consistency. (really?)
+          out (c),c
+          ex af,af:exx
+; Enchaine
+
+          ld iy,ext_swap_8000
+          call ed_far_call
+
+;Firmware may has been saved in another context
+;On doit prevenir le systeme !
+; Exemple in goto_ed: we use firm far_call.
+; Would crash at return otherwise (wrong rom#)
+          ld a,(vo_romMon)
+          ld c,a
+          call kl_rom_select
+
+;When BRK is invoked from basic, mirror bank contains user ram.
+;We have restored firmware, but not orgams' workzone.
+          call ed_far_call_firm:WORD setup_workzone
+          ret
+
+      MACRO IS_EI_SIMPLE
+          ld a,i        ;pe:ei  po:di
+      ENDM
+
+      MACRO CHECK_EI
+; Try to detect dangling DI
+      IF 1-inRom
+ ;         push af:call is_ei:call po,&BE00:pop  af
+      END
+      ENDM
+
+      MACRO CHECK_PO
+; Try to detect dangling DI
+      IF 1-inRom
+;          call po,&BE00
+      END
+      ENDM
+
+
+aff_paragraph
+; IN: A = code paragraph
+    ; DE = cursor
+
+          call txt_get_mon
+          call convert_nl
+aflp
+          push de
+          call affText  ; Cannot use EI (also called from trace)
+          call set_gris ; Other lines in gray
+          pop de
+          ld a,(hl)
+          inc a
+          ret z
+;NB: call inc_cursY would peek cursY which hasn't been set.
+   ; Also, it's safer since this routine is called by TR and we don't 
+   ; want to scroll, display status, ...
+          inc d
+          jr aflp
+
+disp_ellipsis
+          push hl
+          ld de,(cursXY)
+          ld hl,ellipsis:call affText
+          call cmdCrNl
+          pop hl
+          ret
+
+;        -- MONITEUR --
+
+monui_init
+          call screen_init
+          call offset_init
+
+firm_init
+; Entry point post RSX: we want proper colors and key,
+; without clearing screen.
+
+; !! No: must be done only once (by ch)
+  ;        ld hl,edSysConfig ;redefinition touches
+  ;        call ed_far_call_1b
+
+modeSys = 2
+          ld a,modeSys
+;CLS fait plus haut. 
+          call mc_set_mode
+
+km_reset = &BB03
+km_wait_key = &BB18
+km_test_key = &BB1B
+txt_output = &BB5A
+txt_set_cursor = &BB75  ;only af / hl corrupt
+txt_get_cursor = &BB78
+scr_set_offset = &BC05  ;only af / hl corrupt
+scr_get_position = &BC0B
+
+          call km_reset
+
+          ld bc,(palette_firm+0):ld b,c:xor a:call &BC32
+          ld bc,(palette_firm+1):ld b,c:ld a,1:call &BC32
+          ld bc,(palette_firm+2):ld b,c
+          jp &BC38
+
+;--------------------------
+
+monui_refresh
+; In:  Screen shifted. Int installed.
+; Out: A = key code
+
+          call kl_l_rom_disable ; Needed to patch &39 in screen?
+          call set_full
+          ld hl,yi_curs0*&0100 + xi_curs
+          ld (cursXY),hl
+          xor a
+          ret
+
+
+affBufCom
+;in: hl=buffer
+          call scrollUp_if_needed
+          call set_full
+
+          ld a,(cursY)
+          ld d,a
+          ld e,0
+          ld a,">"
+          call affAsc
+
+          ld b,lngCom   ; Refresh all line
+
+          call convScr
+          push iy
+          DCALL(str_pad_at_ei)
+          pop iy
+          ret
+
+affNewLine
+;like affBufCom without prompt and clipping!
+          push bc:push iy
+          call scrollUp_if_needed
+          call locate_left
+          ld c,l
+          ld b,h
+          DCALL(disp_text_nl)
+          pop iy:pop bc
+          ret
+
+_print_inline
+          ld a,(cursY)
+          ld d,a
+          ld e,0
+affInline
+;Less optimized than ^^, but still needed for inline ROM text
+;!! Just for disp_error
+; status_text_* use affTextEi directly.
+; other messages are decrunched in rom.
+
+; Here: HL=message
+      ; DE=pos
+          call scrollUp_if_needed
+          call affText
+          jp cmdCrNl
+
+scrollUp_if_needed
+; TODO: move in txtfirm when there is a bit more room in bricbrac
+; Only scroll if cursor has reached bottom.
+; Do it only before actually printing something,
+; so that we don't scroll by just sending NL.
+; Humm... this is negated by calling this routine via comCrNl!
+          ld a,(cursY)
+val_scroll
+          cp r6
+          ret c
+
+          push hl
+          push de
+          push bc
+
+          dec a:ld (cursY),a
+
+      IF 0
+;Test and fix that!
+          call frame_
+          ld bc,9       ; sinon se mange le balayage
+bug_frame2
+          djnz $
+          dec c
+          jr nz,bug_frame2
+      END
+
+          ld hl,(orgScreen)
+          push hl
+          ld bc,r1*2
+          add hl,bc
+      ;    res 3,h   ; Done by set_offset
+          DCALL(set_offset)
+          pop hl
+          ld bc,r6*r1*2
+          add hl,bc
+          res 3,h
+          call clear_line
+
+          pop bc
+          pop de
+          pop hl
+          jr scrollUp_if_needed ; Scroll while y is back in 0:r6 range
+
+clear_line
+
+;By char to handle page wrap. Mustn't di.
+;Todo: move to disp / txtfirm
+
+          ld b,r1*2
+          xor a
+.lp
+          ld (hl),a
+          set 3,h:ld (hl),a
+          set 4,h:ld (hl),a
+          res 3,h:ld (hl),a
+          set 5,h:ld (hl),a
+          set 3,h:ld (hl),a
+          res 4,h:ld (hl),a
+          res 3,h:ld (hl),a
+          res 5,h
+          inc hl
+          res 3,h       ; handle page wrap
+          djnz .lp
+          ret
+
+ellipsis
+      BYTE "...",0
+status_text_used
+      BYTE "Used:",0
+status_text_lram
+      BYTE "LRAM",0
+status_text_lrom
+      BYTE "LROM",0
+status_text_uram
+      BYTE "URAM   ",0
+status_text_ext
+      BYTE "EXT &",0
+
+status_disp
+
+          CHECK_EI()
+
+; --- Bank --- 
+r1status = 48
+
+pos_ram_info = 1
+pos_used_info = r1status*2 - 13 ; align right
+
+
+;!!! Do this one first due to ret nz below
+          ld de,pos_used_info * &0100
+          ld hl,status_text_used
+          call status_print
+
+          ld h,&7F
+          ld a,i
+          ld l,a
+          DCALL(status_hexa_hl)
+
+
+          ld de,pos_ram_info * &0100
+          ld a,"&"
+          DCALL(status_char_at)
+          ld hl,(valMMR)
+          DCALL(status_hexa_hl)
+
+          ld de,pos_ram_info+6 * &0100
+          call get_lramrom
+          call status_print
+
+          ld de,pos_ram_info+11 * &0100
+          call get_hramrom
+          push af
+          call status_print
+          pop af
+          ret nz        ; !! early exit
+          DCALL(status_hexa_a)
+          ret
+
+
+status_print
+;in: de=pos cursor
+   ; hl=nt string
+          DCALL(status_set_cursor)
+;TODO: use external str routine instead.
+     ; !!! But: cannot have inline text in rom anymore.
+     ; !!! So: should use compressed text beforehand (txt_get_mon).
+splp
+          ld a,(hl)
+          inc hl
+          or a
+          ret z
+          DCALL(status_char)
+          jr splp
+
+
+gr_status_disp
+          ld de,64-&18
+          ld hl,(valMMR)
+          call print_hexa_hl
+
+          ld a,e:add 4:ld e,a
+          call get_lramrom
+          call affText
+
+          ld a,e
+          add 2
+          ld e,a
+          call get_hramrom
+          push af
+          call affText
+          pop af
+          ret nz
+          jp hex2asc
+
+get_lramrom
+          ld hl,status_text_lram
+          ld a,(valRMR)
+          bit 2,a
+          ret nz
+          ld hl,status_text_lrom
+          ret
+
+get_hramrom
+          ld a,(valRMR)
+          bit 3,a
+          ld hl,status_text_uram
+          ret nz
+          ld hl,status_text_ext
+          ld a,(valROM)
+          ret
+
+keyWaitDown
+; anti testkey so we don't return too fast from help
+; crude version: check no key is pressed 
+          call keyCheck
+          ld b,10
+.lp       dec hl:ld a,(hl)
+          inc a:jr nz,keyWaitDown
+          djnz .lp
+;enchaine
+keyWait
+; just wait for a key. Doesn't tell which, though
+          call keyCheck
+          ld b,10
+.lp       dec hl:ld a,(hl)
+          inc a:ret nz
+          djnz .lp
+          jr keyWait
+
+keyCheck
+; km_test_key maison
+; Return ix = keyBuf
+       ; hl = keyBuf+10
+;Don't put DI here! (i don't remember why)
+
+          ld bc,&F400+14
+          out (c),c
+          ld bc,&F6C0
+          out (c),c
+          out (c),0
+          ld bc,&F792
+          out (c),c
+
+          ld hl,keyBuf
+          push hl
+          ld bc,&F640
+fillKey1
+          out (c),c
+          ld a,&F4
+          in a,(0)
+          out (c),0
+          ld (hl),a
+          inc hl
+          inc c
+          ld a,c
+          cp &4A
+          jr nz,fillKey1
+
+          ld bc,&F782
+          out (c),c
+          pop ix
+          ret
+
+get_pressed_keycode
+; In: keyCheck[di] must have been called
+; Out: If any keyboard code pressed (that is not shift or control)
+            ; -> Carry, A = first key scanned (e.g. 1 = Cursor Right)
+      ; Otherwise, NC
+      ; BC, HL trashed     
+          ld hl,keyBuf
+          ld bc,&0B00   ; 10 lines+1, C=0 to force reload
+          ld a,-1       ; code -1 to compensate inc 
+.lp
+          inc a
+          srl c:jr nz,.ok
+          djnz .line
+          or a
+          ret           ; NC: exit, no key
+.line
+          ld c,(hl):inc hl:scf:rr c
+.ok
+          jr c,.lp
+          cp 21:jr z,.lp ; skip shift
+          cp 23:jr z,.lp ; skip control
+          scf
+          ret
+
+afflng
+;        Affiche une ligne : adrReg + dump + ASCii  for in-trace DUMP
+; In: HL = bufCtxt rempli.
+    ; DE = pos cursor.
+    ; BC = adr
+;WARNING : called from trace. No firm here
+; Out: all regs trashed.
+
+affl
+
+;        adrReg
+
+          push de
+          push hl
+
+          ld h,b
+          ld l,c
+          call hexw2asc ;This set the cursor
+
+anteDump = 4
+postDump = 8
+lngDump = anteDump+postDump
+
+; --- dump + ASCii ----
+; We do it first since already placed.
+; Shaded so it's not too blocky.
+
+          2 ** call locate_inc
+
+          pop de
+          push de
+          anteDump ** inc de
+          ld b,postDump
+          push de
+          DCALL(dump_hexa_shaded)
+          call locate_inc
+          pop de
+          ld b,postDump
+          DCALL(dump_ascii_shaded)
+
+; --- ASCII + dump (ante) -----
+
+; Disp design mistake. disp_locate_x won't work 
+; after disp_locate_scr called by hex2asc.
+
+          pop hl        ; buffer
+          pop de        ; cursor
+          ld e,1
+          call set_disp_cursor_
+
+          ex de,hl
+          ld b,anteDump
+          push de
+          DCALL(dump_ascii)
+          2 ** call locate_inc
+          pop de
+
+          ld b,anteDump
+; Enchaine
+dmpHex
+          push iy
+          call is_full
+          jr z,.full
+          DCALL(dump_hexa_shaded)
+          jr popiy_ret
+.full
+          DCALL(dump_hexa)
+          jr popiy_ret
+
+dmpAsc
+          push iy
+          call is_full
+          jr z,dmpAsc_full
+          DCALL(dump_ascii_shaded)
+          jr popiy_ret
+
+dmpAsc_full
+          DCALL(dump_ascii)
+popiy_ret
+          pop iy
+          ret
+
+is_full
+          ld a,iyl:cp full AND &FF
+          ret
+
+set_disp_cursor
+          ld de,(cursXY)
+set_disp_cursor_
+          call convScr
+          jp locate_scr
+
+
+dump_one_line_
+; in: HL: address to dump
+    ; DE: buffer
+    ; IX: copyhere routine (mirror for mon, raw for tr)
+
+          push hl
+          push de
+lng_dump_mon = 8
+          ld bc,lng_dump_mon
+          call jp_ix
+          pop de
+          pop hl
+          ld b,lng_dump_mon
+;enchaine
+dump_one_line_custom
+; in: HL: address 
+    ; DE: pnt to bytes
+    ;  B: nb bytes
+
+          push hl
+          push bc
+          push de
+; ------
+          ld de,(cursXY)
+; 1. Address   
+          call print_hexa_hl_left
+
+; 2. Dump hexa
+          CHECK_EI()
+
+          2 ** call locate_inc
+          pop de
+          pop bc
+          push bc
+          push de
+          call dmpHex
+
+; 3. Dump ASCii
+          ld e,8 + lng_dump_mon*3 + 1:call locate_x
+; ----
+          pop de
+          pop bc
+          push iy
+          call dmpAsc
+;          DCALL(dump_ascii)
+          pop iy
+          pop hl
+          ret
+
+      IF 0
+get_dump_chr
+;Chr pour dump (#01-#1f -> ".")
+          cp &20
+          ret nc
+          or a
+          ret z
+          ld a,"."
+          ret
+
+tabulation
+; Fill 0 until desired pos
+;In: de=cur pos in buffer
+   ;  c=pos tab
+;Out: if E < C, E := C
+    ; E unchanged otherwise (already past tab)
+          ld a,e
+          cp c
+          ret nc
+          xor a:ld (de),a:inc e
+          jr tabulation
+      END
+
+replace_0_by_space
+; Since put_hexa* and co write 0, we replace them by spaces
+;!! First 0 in buffer isn't replaced
+
+;In: de=end of string to print > xx00 (empty string not handled)
+       ;!! in confined buffer
+;Out:de=start of string
+
+      IF dev_checks
+;Check not empty string (all buf would be filled with " ")
+          inc e:dec e:call z,fail
+      END
+          xor a:ld (de),a
+.replace  dec e
+          ret z
+          ld a,(de):or a
+          jr nz,.replace
+          ld a," ":ld (de),a
+          jr .replace
+
+print_text_dispatch
+;In: bc: nt string
+          IS_EI_SIMPLE()
+          push af
+          call set_disp_cursor
+          ld a,iyl:cp full AND &FF
+          jr nz,.pgris
+          DCALL(disp_text)
+          jr .pret
+.pgris
+          DCALL(disp_text_shaded)
+.pret
+; Retablish EI for monogams (otherwise bandeau flickers)
+; Must keep DI for trace
+          pop af
+          ret po
+          ei
+          ret
+
+jp_ix     jp ix
+
+      IF dev_checks
+safe_jp_iy
+          push af
+          ld a,iyh:cp full/&0100:call nz,&BE00
+          ld a,iyl:cp full AND &FF:jr z,sjp_ok
+          ld a,iyl:cp gris AND &FF:call nz,&BE00
+sjp_ok
+          pop af
+          jp iy         ;gris or full
+      END
+
+
+mon_field_editor
+;In:  A: key
+   ; HL: field buffer
+   ; IX: history struct
+;OUT: carry if handled by field editor.
+          ld bc,(cursX) ; c=cursX without trashing A
+          ld b,lngCom-1 ; Room for cursor
+          ld e,0        ; No pre-selection
+          call bricbrac_far_call:WORD histrion
+          ld b,a        ; Save Key
+          ld a,c:ld (cursX),a
+          ld a,b
+          ret
+
+      ; -- HELP --
+
+help_mon_ui
+
+          call clsScr
+
+;decrunch text help
+
+          ld de,&8000   ; bit7 D=1
+          ld a,msg_help_mon
+          call txt_disp_paragraph
+
+          jp km_wait_key
+
+
+txt_disp_paragraph
+;in A=num message
+;   DE=pos cursor.
+
+          call txt_get_mon
+          call convert_nl
+          jr next_help_disp
+
+
+convert_nl
+nl    = 10
+
+;convert nl to 0 (and count them)
+;TODO? gerer ca a la volee dans io_* 
+
+          push hl
+          ld b,0
+          dec hl
+tdp_lp    inc hl:ld a,(hl):or a:jr z,tdp_end
+          sub nl:jr nz,tdp_lp
+          inc b:ld (hl),a
+          jr tdp_lp
+
+tdp_end
+          inc hl:ld (hl),&FF ;end of help text
+          pop hl
+          ret
+
+
+next_help_disp
+          ld a,(hl)
+          inc hl
+next_car_help
+          or a
+          jr z,next_line_help
+          call affAsc
+          jr next_help_disp
+next_line_help
+          ld a,(hl)
+          inc hl
+          cp &FF
+          ret z
+          inc d
+          ld e,0
+          jr next_car_help
+
+
+;firm_to_mon_crtc
+
+def_crtc_and_asic
+          call clear_asic
+;enchaine
+def_crtc
+          call put_crtc_inline
+; defauts sains
+      BYTE 0,63,5,0,8,0,9,7
+; default tout court: value used while source is redisplayed.
+      BYTE 3,r3,4,r4,1,r1,2,r2,6,r6,7,r7d
+      BYTE -1
+          ret
+
+crtc_firm2shift
+; From exec/restore
+; Don't use firm call!!
+; -> Used from tr
+; Also, there is no reason to.
+          push af       ; keep flag trace vs restore
+          call bricbrac_far_call:WORD firm2shift
+          pop af
+          ret
+
+crtc_tr2shift
+          call bricbrac_far_call:WORD tr2shift
+          ret
+
+crtc_trace2firm
+;Note: copy paste from screen.o which only have trace2shift.
+; We don't want to use screen.o as it would require to restore workzone
+; for farcall and then swith back again. Too clunky!
+;Also, screen.o uses EI 
+          call frame
+dr2   = r2-r2'
+          call put_crtc_inline
+      BYTE 0,63-dr2,4,r7'+r4-r7d,6,r6 ; r2 transition needed for OSCC
+      BYTE 2,r2,0,63,1,r1,-1
+          call waitlines ;use b=#bd
+;finalize transition    
+          call put_crtc_inline
+      BYTE 4,r4,7,r7d,-1
+          ret
+
+
+crtc_firm2trace
+          call frame
+crtc_com
+          call def_crtc
+          call put_crtc_inline
+      BYTE 0,63+dr2,4,r7d+r4-r7',6,r6' ; r2 transition needed for OSCC
+      BYTE 2,r2',0,63,1,r1'
+      BYTE 12,&30,13,0,-1
+          call waitlines ;use b=#bd
+          call put_crtc_inline
+      BYTE 4,r4,7,r7',-1
+          ret
+
+
+crtc_unknown2trace
+      IF use_smart_transit
+;A debugguer --madram
+          call antiframe
+          call frame_timeout
+; Avance rapide jusqu'a C4 = 0
+          call put_crtc_inline
+;R0 & R9 a 1 pour CTRC 2 (plutot que 0)
+      BYTE 0,1,1,r1,2,r2,3,&8E,5,0,8,0,9,1,-1
+          ld hl,mon_crtc_pre:call put_crtc  !! lost
+          ld b,15:call waitlines ; consomme R0+R9 OVF + Rab
+          ld hl,&0400:call set_crtc
+          ld b,16:call waitlines ; consomme R4 OVF
+          ld hl,&3F:call set_crtc
+          ld hl,&0907:call set_crtc
+          call waitoneline ; CTRC 0
+
+          ld b,8:call waitlines ;First line of new screen
+          ld hl,mon_crtc
+      BRK
+;!!! what now?
+      ELSE
+          call frame_timeout
+          jr crtc_com
+      END
+
+
+put_crtc_inline
+;Stop at -1
+;out: b=&bd
+;With call: +10us
+          pop hl
+.crtclp
+;20us /iter
+          ld b,&BD:outi
+          ld b,&BE:outi
+          ld a,(hl)
+          inc a
+          jr nz,.crtclp
+          inc hl
+          jp hl
+
+
+set_crtc
+          ld b,&BC:out (c),h
+          inc b:out (c),l
+          ret
+
+clear_asic
+; First check it is a plus, otherwise 7fb8 would connect hi-ram
+          di
+          call is_amstrad_plus
+          ret z         ; OLD: return
+
+;unlock asic
+      IF need_room
+;share with cocopy
+      END
+          ld bc,&BCFF
+          out (c),c
+          out (c),0
+          ld hl,%1001000011101010
+
+loop
+          out (c),c
+          ld a,h:rlca:ld h,l:ld l,a
+          srl c
+          xor c:and &88:xor c
+          ld c,a
+          cp &4D
+          jr nz,loop
+
+          ld a,&CD      ; a = #CD for unlock, another value for lock
+          out (c),a:out (c),a
+
+          ld bc,&7FB8:out (c),c
+; zoom at 0: disable sprites
+          ld hl,&6004
+          ld c,0
+.razspr   ld (hl),c
+          ld a,l:add 8:ld l,a
+          jp p,.razspr
+; other raz
+          ld hl,&6800
+          ld (hl),c     ; pri
+          inc l
+          ld (hl),c     ; splt
+          ld l,4
+          ld (hl),c     ; sscr
+          ld hl,&6C0F
+          ld (hl),c     ; dcsr
+          ld c,&A0:out (c),c
+          ret
+
+is_amstrad_plus_halt
+          halt
+;enchaine
+is_amstrad_plus
+;In: Must di or halt 
+;Return NZ if plus
+      ;  Z if OLD
+      IF 1
+          ld bc,&F601:out (c),c
+          ld bc,&F782:out (c),c
+          dec b
+      ELSE
+          ld bc,&F401:out (c),c
+          ld bc,&F782:out (c),c
+          ld b,&F4
+      END
+          in 0,(c)      ; set Z/NZ without touching A
+          ret
+
+
+      IF 0              ; Pas besoin --madram
+setR2_46to42
+
+          call frame
+;7
+          ld bc,&BC00+67
+          out (c),0
+          inc b
+          out (c),c
+;+12=19
+          ld bc,&BC02
+          out (c),c
+          ld bc,&BD00+42
+          out (c),c
+;+14=33
+          ld b,10
+          djnz $
+;+41=10
+          ld bc,&BC00+63
+          out (c),0
+          inc b
+          out (c),c
+
+          ret
+
+setR2_42to46
+
+          call frame
+
+          ld bc,&BC00+59
+          out (c),0
+          inc b
+          out (c),c
+
+          ld bc,&BC02
+          out (c),c
+          ld bc,&BD00+46
+          out (c),c
+
+          ld b,10
+          djnz $
+
+          ld bc,&BC00+63
+          out (c),0
+          inc b
+          out (c),c
+
+          ret
+      END
+
+; GATE ARRAY
+
+
+put_ga
+;!! OUT: BC=&7f01, A=(palette_vga) !!
+
+;!! DO NOT CHANGE !!
+          ld hl,palette_vga+2
+          ld bc,&7F10
+          out (c),c:outd
+          ld c,1
+          out (c),c:outd
+          ld a,(hl)     ;used by caller
+          out (c),0:out (c),a
+          ret
+
+welcome
+;In: de= cursor
+
+          call set_gris
+
+      IF dev_checks
+          call check_i
+      END
+
+         ; call status_disp   !! No room. Must use status bar.
+
+          CHECK_EI()
+          ld a,msg_welcome
+          call txt_get_mon
+          call convert_nl
+
+welpos = &0101
+          ld de,welpos
+          call affBlock
+
+; --- Heart credits ----
+          ld hl,hearttxt
+heartpos = 64
+          ld de,heartpos
+          call affBlock
+
+; --- DATE ---              
+          ld de,welpos + 15
+          ld hl,txt_beta_date
+          jp affText
+
+refresh_line
+;reaffiche ligne courante moniteur *with* cursor
+
+          call affBufCom
+
+; display curs 
+          ld de,(cursXY)
+cheatCursor
+          inc e
+          call convScr
+          ld a,d:add 8*7:ld d,a
+          ex de,hl
+          rst &20:or &AA:ld (hl),a
+          ret
+
+
+clsScr
+          call clsScr_from_tr
+offset_init
+          push hl
+          ld hl,&3000:ld (off7screen),hl
+          pop hl
+          ret
+
+clsScr_from_tr
+;clear screen and reset offset (makes things simpler for gr)
+
+          push bc:push de:push hl
+; Don't use firm call since called from trace.
+; Also, we want to move all disp calls to no_firm (TODO #C4)
+
+; This routine DI, but we mustn't EI !
+          DCALL(disp_cls)
+
+          call screen_init
+
+          pop hl:pop de:pop bc
+          ret
+
+screen_init
+;call by tr via clsScr: mustn't touch off7screen
+                      ; since ram user connected.
+;i.e. Don't use set_offset.
+
+          ld hl,&C000
+          ld (orgScreen),hl
+; set r12/r13. normally done by screen.O via off7screen
+; But coming from clsScr no more int, and from tr no more rupture!
+          ld h,13:call set_crtc
+          dec h:ld l,&30:call set_crtc
+          ret
+
+
+;        Anti-frame / Frame
+
+antiframe
+          ld b,&F5
+antifr    in a,(c):rra:ret nc:jr antifr
+
+frame
+          call antiframe
+frame_
+          ld b,&F5
+attfr     in a,(c):rra:ret c:jr attfr
+
+frame_timeout
+;out: Carry qd frame NC sinon
+          ld c,&00
+;512*39 = 312 lines
+          call attfrto
+attfrto   ld b,&F5:in a,(c):rra:ret c
+          ld b,&07:djnz $:dec c:jr nz,attfrto ;40 us
+          ret
+
+      IF 0
+waitoneline
+          ld b,1
+      END
+waitlines
+;in: B = nb lines
+          push bc
+          ld b,13:djnz $
+          pop bc
+          djnz waitlines
+          ret
+
+      IF inRom
+      FILL -$ AND &FF,&F7
+      ELSE
+pad2  FILL 0,0
+      END
+
+gris
+          push hl
+          ld l,a
+          call is_ei:push af
+          ld a,l
+          CHECK_EI()
+          push iy
+
+          DCALL(disp_chr_shaded_at)
+
+          jr full_ret
+
+full
+          push hl
+          ld l,a
+          call is_ei:push af
+          ld a,l
+          CHECK_EI()
+          push iy
+
+          DCALL(disp_chr_at)
+
+full_ret
+          pop iy
+          pop af
+          CHECK_PO()
+          jp po,full_di
+          ei
+full_di
+          pop hl
+          pop de
+          inc e
+          ret
+
+      IF full/&0100 - gris/&0100
+  !! error msb
+      END
+
+      IF inRom
+      IF gris/&0100 - &F7
+   !! shared with ???.  or not
+      END
+      END
+
+hexa_a_dispatch
+;E corrupted
+          ld e,a
+          call is_ei
+          push af
+          CHECK_EI()
+          ld a,iyl:cp gris AND &FF ;hackish
+          ld a,e
+          jr nz,_hexa_a
+
+          DCALL(disp_hexa_a_shaded)
+          jr _hexa_ret
+
+_hexa_a
+          DCALL(disp_hexa_a)
+_hexa_ret
+          pop af
+          ret po
+          ei
+          ret
+
+convScrX
+; in: E = X
+;out: DE = scr address at current cursY 
+    ; A modified                        
+          ld a,(cursY):ld d,a
+convScr
+; in: DE = Y,X  (0 based)
+;out: DE = scr address
+
+; TODO: move that in DISP, together with scroll handling.
+; Or better: DO NOT KEEP TRACK of cursY ourselves!
+
+          push af
+          push hl
+          xor a
+      2 ** [srl d:rra]  ; da = Y * &40
+          ld l,a
+          ld a,(disp_r1)
+          cp 32
+          ld a,l
+          jr z,oky
+          ld h,d        ; hl = Y * &40
+      2 ** [srl d:rra]  ; da = Y * &10
+          add l:jr nc,$+3:inc h
+          add e:ld e,a
+          ld a,d:adc h:ld d,a ; de := da+hl+e
+          jr oky_
+
+oky
+          add e
+          ld e,a
+oky_
+          ld hl,(orgScreen)
+          add hl,de
+          ld a,h
+          and 7
+          or &C0
+          ld h,a
+          ex de,hl
+          pop hl
+          pop af
+          ret
+
+put_hexa_hl
+          push af
+          ld a,h:call put_hexa_a
+          ld a,l:call put_hexa_a
+          pop af
+          ret
+
+put_hexa_a
+          push af
+          call put_hexa_qh
+          pop af
+          push af
+          call put_hexa_ql
+          xor a
+          ld (de),a
+          pop af
+          ret
+
+put_hexa_qh
+          rrca
+          rrca
+          rrca
+          rrca
+put_hexa_ql
+          and &0F
+          or a
+          daa
+          add &F0
+          adc &40
+          or &20        ;lowercase
+          ld (de),a
+          inc de
+          ret
+
+copy_nt
+;------
+;in: HL=source, DE=dest
+          ld a,(hl)
+          ld (de),a
+          or a
+          ret z
+          inc hl
+          inc de
+          jr copy_nt
+
+affBlock
+; Display several lines at same starting column.
+; Ok for inline (in ROM) text.
+
+; in: hl= lines (0 separated, then final 0). Can be inline
+    ; de= pos
+.lp
+          push de
+          call affText
+          pop de
+          ld a,(hl)
+          inc a
+          ret z
+          inc d
+          jr .lp
+
+is_ei
+      IF need_room
+;Expose it for mon
+      END
+;out: PE if yes
+          ld a,i:ret pe
+; Must double check to counteract z80 EI/PV glitch.
+          ld a,i:ret
+
+hi
+realsize = $$-code
+      IF inRom
+      FILL limit-$,&FF
+      END
+codesize = $$-code
+
+; ================================================
+
+code2 = $$
+      IF inRom
+      ORG codedest2,$$
+      END
+
+      MACRO MUST_BE offset
+      IF inRom
+      IF $ - [jps+offset]
+ !! error align         
+      END
+      END
+      ENDM
+
+      IF need_room
+; Include monui from mon/tr, no more indirections
+      END
+
+jps
+          jp common_init
+          jp monui_init
+          jp monui_refresh
+
+          jp firm_init
+
+          jp mon_field_editor
+
+          MUST_BE(15)
+
+wait_key_exit
+; Typically for dump/diff (m/x)
+; Return NC if exit (ESC or Q)
+          call km_wait_key
+is_exit   MUST_BE(18)
+          cp &FC:ret z  ;esc
+          cp "Q":ret z
+          cp "q":ret z  ; Mustn't change A, since might be used
+          scf
+          ret
+
+m         jp goto_ed_routine
+keyCheckDi
+          MUST_BE(32)
+          di
+          MUST_BE(33)
+          jp keyCheck
+locate_left MUST_BE(36) ; mon
+          ld e,0
+locate_x  MUST_BE(38)   ; mon
+          call convScrX
+locate_scr
+          DCALL(disp_locate_scr)
+          ret
+          2 ** BRK
+
+wrong_param MUST_BE(49) ;mon
+          ld a,msg_wrong_parameter
+          call txt_get_mon
+;enchaine
+print_inline MUST_BE(54) ;mon. HL = message
+          jp _print_inline
+cmdCrNl_if_needed MUST_BE(57) ; mon
+;NewLine only if not at left column (like BASIC for READY).
+;TODO: Do that instead before printing message or new '>'?
+          ld a,(cursX)
+          or a
+          ret z
+; Enchaine
+cmdCrNl   MUST_BE(62)   ;mon
+;OUT: DE = curs  (E=0)
+          xor a
+          ld (cursX),a
+; Enchaine
+inc_cursY
+;OUT: DE = curs
+          ld de,(cursXY)
+          inc d
+          ld (cursXY),de
+          ret
+          1 ** BRK
+is_control_pressed      ; used by ed
+          MUST_BE(&4D)
+; In: keyCheck[di] must have been called
+;Out: Z if pressed
+    ; A trahsed
+          ld a,(keyBuf+2)
+          bit 7,a
+          ret
+is_shift_pressed        ; used by ed
+          MUST_BE(&53)
+; In: keyCheck[di] must have been called
+;Out: Z if pressed
+    ; A trahsed
+          ld a,(keyBuf+2)
+          bit 5,a
+          ret
+          MUST_BE(&59)
+          jp clear_asic ; mon.cold_init/trace_from_brk
+          jp scrollUp_if_needed ; Mon.dump_one_line
+          jp dump_one_line_ ;  TR, mon
+          jp afflng     ; TR (shaded)
+          jp help_mon_ui
+          jp dump_one_line_custom ; mon (x)
+          jp keyWait    ; trui (help)
+
+          jp clsScr     ; mon
+          jp clsScr_from_tr
+set_full  MUST_BE(&74)  ;mon tr
+          ld iy,full:ret
+      BRK
+set_gris  MUST_BE(&7A)
+          ld iy,gris:ret
+      BRK
+          MUST_BE(&80)
+          ld (cursX),a:ret
+          MUST_BE(&84)
+          ld (cursY),a:ret
+          MUST_BE(&88)
+          jp is_amstrad_plus_halt
+spaces    MUST_BE(&8B)  ;tr
+          push bc
+          ld a," "
+          call affAsc
+          pop bc
+          djnz spaces
+          ret
+          MUST_BE(&95)
+          jp get_pressed_keycode
+affAsc    MUST_BE(&98)
+;        Affiche un caractere ASCII
+
+;        IN: A = code ASCII
+;            DE = Y,X             
+
+; TODO: replace looped call to affAsc.
+
+; NdMdrm : we convert Y,X to screen adr,
+         ; and let common routine disp_chr_at do the job.
+         ; Afterward, we may call disp_chr directly 
+         ; without passing cursor position.
+
+          push de
+          call convScr
+
+      IF dev_checks
+          jp safe_jp_iy
+          2 ** BRK
+      ELSE
+          jp iy         ;gris or full
+          3 ** BRK
+      END
+affText   MUST_BE(&A1)  ; de=pos, hl=string
+;TODO: use external str routine instead.
+     ; !!! But: cannot have inline text in rom anymore.
+     ; !!! So: should use compressed text beforehand (txt_get_mon).
+;Used indirectly by trace for "Source not found" via affParagraph.
+          ld a,(hl)
+          inc hl
+          or a
+          ret z
+          call affAsc
+          jr affText
+
+          MUST_BE(&AA)
+          jp affBufCom
+          jp aff_paragraph ; TR "Source not found"
+          jp affNewLine
+
+hexw2asc  MUST_BE(&B3)
+;Like hex2asc for word (HL)
+          ld a,h:call hex2asc
+          ld a,l
+;Enchaine
+;        Hexa2ascii
+; 
+;        IN :   A = #xx
+;               DE = pos ecr y,x
+
+;        OUT :  affiche 2 chr ascii en DE
+
+hex2asc   MUST_BE(&B8)
+          push de
+          call set_disp_cursor_
+          call hexa_a_dispatch
+          pop de
+          inc e:inc e
+          ret
+          5 ** BRK
+
+          MUST_BE(&C8)
+          jp welcome
+          jp gr_status_disp
+          jp refresh_line
+          jp status_disp
+          jp disp_ellipsis
+
+          jp crtc_trace2firm ; trui: jump and reset
+          jp crtc_firm2trace ; TODO: wgi uses that?
+          jp crtc_unknown2trace ; idem
+
+          jp convScrX
+bc26_de   MUST_BE(&E3)  ;mon.gr (r1=32)
+          ld a,d:add 8:ld d,a
+          ret nc
+          ld a,e:add r1'*2:ld e,a ;used by gr
+          ld a,d:adc &C0:ld d,a
+          ret
+
+          MUST_BE(&F1)
+          jp restore_and_goto_ed
+          jp ed_from_trace ; also used by ch
+          jp goto_ed
+          jp goto_basic
+          jp mon_from_trace
+
+print_hexa_hl_left MUST_BE(&0100)
+      IF todo
+; who use this routines externally?
+      END
+; Well, leave 1 space (akaleft margin).
+          ld e,1
+print_hexa_hl MUST_BE(&0102)
+          ld a,"&":call affAsc ; Also set cursor
+          jp hexw2asc
+          3 ** BRK      ; was goto_basic_quiet, now in ch
+locate_inc MUST_BE(&010D)
+          DCALL(disp_locate_inc)
+          ret
+          MUST_BE(&0113)
+          jp put_hexa_a
+          jp put_hexa_hl
+          jp replace_0_by_space
+          jp copy_nt
+          MUST_BE(&011F)
+          jp ret_and_goto_ed
+          MUST_BE(&0122)
+          jp is_amstrad_plus
+          MUST_BE(&0125)
+          jp keyWaitDown
+
+; --- not called directly?
+txt_get_mon
+; Put decrunched txt at &7100 (return HL=&7100)
+; in: A = num message.
+          push bc
+          ld c,a
+          call decrunchTxt
+          pop bc
+          ret
+
+
+
+hearttxt
+      BYTE " tOMs    /CED.",0
+      BYTE "Vanity  Hwikaa",0
+      BYTE "Bombseb/RoudD'",0
+      BYTE "NickyOne/DBT'",0
+      BYTE " Overlander'",0
+      BYTE "  'Camillo'",0
+      BYTE "    Drill",0
+      BYTE "     Ast",0
+      BYTE "      !",0
+      BYTE 0
+hi2
+      IF inRom
+      FILL limit2-$,&FF
+      END
+
+codesize2 = $$-code2
+
+
+; ================================================
+val   = &7D80
+valRMR = val+6
+valMMR = val+7
+valROM = val+&1B
+;valZ80 = val+&1C
+
+
+vo_romEd = &7CF9        ;nrt
+vo_romExt = &7CFA       ;nrt
+vo_romBric = &7CFF      ;nrt
+
+vo_romMon = &7CFB
+
+; ================================================
+
+      ORG monui_var
+keyBuf    10 ** BYTE 
+      SKIP mon_var - $
+
+; --- Defined in memmap.i since shared with mon ---
+;      ORG monui_var'
+;TODO: move all the handling in DISP
+;orgScreen WORD          ;need by tr, which cannot access off7screen
+;I.e. when called from tr, all disp routines must use this var,  
+    ; which happen to remain at C000 (no scroll).
+;cursX BYTE 
+;cursY BYTE 
+;cursXY = cursX          ;(To load both)
+;      SKIP monui_var'_ - $
+
+off7screen = &9CFE      ; !!! shared (read by screen.o). 
+;this one is needed since screen.o doesn't have access to orgScreen
+;(bk base not connected at interruption time)
+
