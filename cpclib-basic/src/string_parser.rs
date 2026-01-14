@@ -3,7 +3,7 @@ use cpclib_common::winnow::ascii::{Caseless, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, eof, not, opt, peek, preceded, repeat, terminated
 };
-use cpclib_common::winnow::error::{ContextError, StrContext};
+use cpclib_common::winnow::error::{ContextError, ErrMode, StrContext};
 use cpclib_common::winnow::stream::{AsChar, Stream};
 use cpclib_common::winnow::token::{one_of, take_while};
 /// ! Locomotive basic parser routines.
@@ -3866,139 +3866,26 @@ generate_numeric_functions! {
     }
 }
 
-// implementation stolen to https://github.com/EdouardBERGE/rasm/blob/master/rasm.c#L2295
-pub fn f32_to_amstrad_float(nb: f64) -> Result<[u8; 5], BasicError> {
-    let mut bits = [false; 32];
-    let mut res = [0; 5];
-
-    let (is_pos, nb) = if nb >= 0f64 { (true, nb) } else { (false, -nb) };
-
-    let deci = nb.trunc() as u64;
-    let _fract = nb.fract();
-
-    let mut bitpos = 0;
-    let mut exp: i32 = 0;
-    let mut mantissa: u64;
-    let mut mask: u64;
-
-    if deci >= 1 {
-        // nb is >=1
-        mask = 0x80000000;
-
-        // search for the first (from the left) bit to 1
-        while (deci & mask) == 0 {
-            mask /= 2;
-        }
-        // count the number of ContextErroraining bits
-        while mask > 0 {
-            exp += 1;
-            mask /= 2;
-        }
-        // build the mantissa part of the decimal value
-        mantissa = (nb * 2f64.powi(32 - exp) + 0.5) as _;
-        if (mantissa & 0xFF00000000) != 0 {
-            mantissa = 0xFFFFFFFF
-        };
-
-        mask = 0x80000000;
-        while mask != 0 {
-            bits[bitpos] = (mantissa & mask) != 0;
-            bitpos += 1;
-            mask /= 2;
-        }
-    }
-    else {
-        // <1
-        if nb == 0.0 {
-            exp = -128;
-        }
-        else {
-            mantissa = (nb * 4294967296.0 + 0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
-            if (mantissa & 0xFF00000000) != 0 {
-                mantissa = 0xFFFFFFFF;
-            }
-
-            mask = 0x80000000;
-            // find first significant bit of fraction part
-            while (mantissa & mask) == 0 {
-                mask /= 2;
-                exp -= 1;
-            }
-
-            mantissa = (nb * 2.0f64.powi(32 - exp) + 0.5) as _; // as v is ALWAYS <1.0 we never reach the 32 bits maximum
-            if (mantissa & 0xFF00000000) != 0 {
-                mantissa = 0xFFFFFFFF;
-            }
-
-            mask = 0x80000000;
-            while mask != 0 {
-                bits[bitpos] = (mantissa & mask) != 0;
-                bitpos += 1;
-                mask /= 2;
-            }
-        }
-    }
-
-    {
-        // generate the mantissa bytes
-        let mut ib: usize = 3;
-        let mut ibb: u8 = 0x80;
-        for (j, &bit) in bits.iter().enumerate().take(bitpos) {
-            if bit {
-                res[ib] |= ibb;
-            }
-            ibb /= 2;
-            if ibb == 0 {
-                ibb = 0x80;
-                if ib != 0 {
-                    ib -= 1
-                }
-                else {
-                    debug_assert!(j == bitpos - 1);
-                }
-            }
-        }
-    }
-
-    {
-        // generate the exponent
-        exp += 128;
-        if !(0..=255).contains(&exp) {
-            return Err(BasicError::ExponentOverflow);
-        }
-        else {
-            res[4] = exp as _;
-        }
-    }
-
-    {
-        // Generate the sign bit
-        if is_pos {
-            res[3] &= 0x7F;
-        }
-        else {
-            res[3] |= 0x80;
-        }
-    }
-
-    Ok(res)
+/// Convert f64 to Amstrad BASIC floating-point format
+/// Delegates to BasicFloat::try_from()
+pub fn f64_to_amstrad_float(nb: f64) -> Result<BasicFloat, BasicError> {
+    BasicFloat::try_from(nb)
 }
 
 pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    let nb = (opt('-'), dec_u16_inner, '.', dec_u16_inner)
+    let float_str = (opt('-'), dec_u16_inner, '.', dec_u16_inner)
         .take()
-        .map(|nb| f32_to_amstrad_float(nb.parse::<f64>().unwrap()))
-        .verify(|res| res.is_ok())
-        .context(StrContext::Label("Unable to parse float"))
         .parse_next(input)?;
 
-    let bytes = nb.unwrap();
-    let res = BasicToken::Constant(
-        BasicTokenNoPrefix::ValueFloatingPoint,
-        BasicValue::Float(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4])
-    );
-
-    Ok(res)
+    match BasicFloat::try_from(float_str) {
+        Ok(basic_float) => {
+            Ok(BasicToken::Constant(
+                BasicTokenNoPrefix::ValueFloatingPoint,
+                BasicValue::Float(basic_float)
+            ))
+        },
+        Err(_) => Err(ErrMode::Cut(ContextError::new()))
+    }
 }
 
 pub fn parse_integer_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
@@ -4788,5 +4675,94 @@ mod test {
         
         // Test exact line 122
         check_line_tokenisation("1220 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:LOCATE i,sy:a$=a$+COPYCHR$(#0):NEXT:PAPER cpuclr:PEN ctx:LOCATE sx,sy:PRINT a$:PAPER cbg:PEN cpuclr:CLEAR INPUT:CALL &BB18\n");
+    }
+    
+    /// Helper function to test round-trip: parse then reconstruct source code
+    fn check_roundtrip(code: &str) {
+        let original = code.trim_end();  // Remove trailing newline for comparison
+        let parsed = parse_basic_line.parse(code);
+        match parsed {
+            Ok(line) => {
+                let reconstructed = line.to_string();
+                assert_eq!(
+                    original, 
+                    reconstructed,
+                    "\nOriginal:      {}\nReconstructed: {}\n",
+                    original,
+                    reconstructed
+                );
+            },
+            Err(e) => {
+                panic!("Failed to parse: {:?}", e);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_copychr_roundtrip() {
+        // Test COPYCHR$ with different stream numbers
+        check_roundtrip("10 a$=COPYCHR$(#0)\n");
+        check_roundtrip("20 a$=COPYCHR$(#1)\n");
+        check_roundtrip("30 a$=COPYCHR$(#9)\n");
+        
+        // Test in context
+        check_roundtrip("40 LOCATE 1,2:a$=COPYCHR$(#0)\n");
+        check_roundtrip("50 FOR i=1 TO 10:a$=a$+COPYCHR$(#0):NEXT\n");
+    }
+    
+    #[test]
+    fn test_numeric_roundtrip() {
+        // Test numeric expressions and functions
+        check_roundtrip("10 x=0\n");
+        check_roundtrip("20 x=10\n");
+        check_roundtrip("30 x=x+1\n");
+        check_roundtrip("40 LOCATE 1,2\n");
+        check_roundtrip("50 FOR i=1 TO 10:NEXT\n");
+        check_roundtrip("60 PAPER 0:PEN 1\n");
+    }
+    
+    // Note: Full string literal reconstruction requires handling ValueQuotedString tokens
+    // which contain embedded string data. This is a known limitation of the current Display implementation.
+    #[test]
+    #[ignore]
+    fn test_string_functions_roundtrip() {
+        // Test all string functions
+        check_roundtrip("10 a$=CHR$(65)\n");
+        check_roundtrip("20 a$=LEFT$(b$,5)\n");
+        check_roundtrip("30 a$=RIGHT$(b$,3)\n");
+        check_roundtrip("40 a$=MID$(b$,2,4)\n");
+        check_roundtrip("50 a$=MID$(b$,2)\n");
+        check_roundtrip("60 a$=SPACE$(10)\n");
+        check_roundtrip("70 a$=STR$(123)\n");
+        check_roundtrip("80 a$=LOWER$(b$)\n");
+        check_roundtrip("90 a$=UPPER$(b$)\n");
+        check_roundtrip("100 a$=BIN$(255)\n");
+        check_roundtrip("110 a$=DEC$(123)\n");
+        check_roundtrip("120 a$=HEX$(255)\n");
+        check_roundtrip("130 a$=STRING$(5,\"*\")\n");
+        check_roundtrip("140 a$=INKEY$(50)\n");
+    }
+    
+    #[test]
+    #[ignore]
+    fn test_stream_syntax_roundtrip() {
+        // Test various commands with #stream syntax
+        check_roundtrip("10 PRINT #1,\"hello\"\n");
+        check_roundtrip("20 PEN #2,3\n");
+        check_roundtrip("30 PAPER #3,4\n");
+        check_roundtrip("40 CLS #0\n");
+        check_roundtrip("50 LOCATE #1,5,10\n");
+        check_roundtrip("60 TAG #2\n");
+        check_roundtrip("70 TAGOFF #3\n");
+        check_roundtrip("80 WINDOW #0,1,40,1,25\n");
+        check_roundtrip("90 LINE INPUT #4,a$\n");
+        check_roundtrip("100 WRITE #5,x,y\n");
+    }
+    
+    #[test]
+    #[ignore]
+    fn test_complex_line_roundtrip() {
+        // Test the complex line 122 from sectfgt.bas
+        check_roundtrip("1220 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:LOCATE i,sy:a$=a$+COPYCHR$(#0):NEXT:PAPER cpuclr:PEN ctx:LOCATE sx,sy:PRINT a$:PAPER cbg:PEN cpuclr:CLEAR INPUT:CALL &BB18\n");
     }
 }

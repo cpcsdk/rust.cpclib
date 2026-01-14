@@ -31,7 +31,9 @@ pub enum BasicError {
     #[error("{}", msg)]
     ParseError { msg: String },
     #[error("Exponent Overflow")]
-    ExponentOverflow
+    ExponentOverflow,
+    #[error("Invalid floating-point number")]
+    InvalidFloat
 }
 
 /// Basic line of code representation
