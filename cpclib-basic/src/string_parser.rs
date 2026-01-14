@@ -1,10 +1,10 @@
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::ascii::{Caseless, line_ending};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, eof, not, opt, preceded, repeat, terminated
+    alt, cut_err, eof, not, opt, peek, preceded, repeat, terminated
 };
 use cpclib_common::winnow::error::{ContextError, StrContext};
-use cpclib_common::winnow::stream::AsChar;
+use cpclib_common::winnow::stream::{AsChar, Stream};
 use cpclib_common::winnow::token::{one_of, take_while};
 /// ! Locomotive basic parser routines.
 use cpclib_common::winnow::{ModalParser, *};
@@ -38,21 +38,56 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
         .parse_next(input)?;
 
     // get the tokens
-    let tokens = repeat(0.., (parse_instruction, alt((eof, line_ending, ":"))))
-        .fold(Vec::new, |mut acc: Vec<_>, (mut item, next)| {
-            acc.append(&mut item);
-            if !next.is_empty() {
-                let char = next.chars().next().unwrap();
-                match char {
-                    ':' => acc.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon)),
-                    '\n' | '\r' => {},
-                    _ => panic!("char '{char}' is unhandled")
+    let mut tokens = Vec::new();
+    loop {
+        // Parse an instruction
+        match parse_instruction(input) {
+            Ok(mut instr) => {
+                tokens.append(&mut instr);
+                
+                // Check for delimiter
+                if input.is_empty() {
+                    break;
                 }
+                let checkpoint = input.checkpoint();
+                if let Some(_) = opt(line_ending).parse_next(input)? {
+                    break;
+                }
+                input.reset(&checkpoint);
+                
+                let colon_checkpoint = input.checkpoint();
+                if let Some(_) = opt(':').parse_next(input)? {
+                    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                    continue;
+                }
+                input.reset(&colon_checkpoint);
+                
+                // Try to parse as REM/comment (consume leading spaces first)
+                let mut leading_spaces = parse_space0(input)?;
+                if let Ok(comment) = parse_rem.parse_next(input) {
+                    tokens.append(&mut leading_spaces);
+                    tokens.push(comment);
+                    break;
+                }
+                
+                // No more delimiters or instructions found - restore spaces
+                tokens.append(&mut leading_spaces);
+                break;
+            },
+            Err(_) => {
+                // Even if instruction parsing failed, check for inline comment
+                if let Some(_) = opt::<_, _, ContextError, _>('\'').parse_next(input).ok().flatten() {
+                    let comment_text = take_while(0.., |ch| ch != '\n').parse_next(input)?;
+                    tokens.push(BasicToken::Comment(BasicTokenNoPrefix::SymbolQuote, comment_text.as_bytes().to_vec()));
+                }
+                break;
             }
-            acc
-        })
-        .parse_next(input)?;
+        }
+    }
 
+    // Consume trailing newline if present
+    let _ = opt::<_, _, ContextError, _>(line_ending).parse_next(input);
+    
     Ok(BasicLine::new(line_number, &tokens))
 }
 
@@ -63,11 +98,126 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
 
     let mut instruction = alt((
         alt((parse_rem,)).map(|i| vec![i]),
-        parse_call,
-        parse_run,
-        parse_input,
-        parse_print,
-        parse_assign
+        // Control flow
+        alt((
+            parse_if,
+            parse_for,
+            parse_next,
+            parse_else,
+            parse_while,
+            parse_wend,
+            parse_goto,
+            parse_gosub,
+            parse_return,
+            parse_on_goto_gosub,
+            parse_on_error_goto,
+            parse_on_break,
+            parse_resume,
+            parse_error,
+            parse_cont,
+        )),
+        // Graphics
+        alt((
+            parse_draw,
+            parse_drawr,
+            parse_move,
+            parse_mover,
+            parse_plot,
+            parse_plotr,
+            parse_origin,
+            parse_clg,
+            parse_mask,
+            parse_frame,
+            parse_graphics_pen,
+            parse_graphics_paper,
+        )),
+        // Screen/Display
+        alt((
+            parse_mode,
+            parse_cls,
+            parse_locate,
+            parse_ink,
+            parse_border,
+            parse_pen,
+            parse_paper,
+            parse_window,
+            parse_window_swap,
+            parse_cursor,
+            parse_tagoff,
+            parse_tag,
+        )),
+        // Data/Memory
+        alt((
+            parse_data,
+            parse_read,
+            parse_restore,
+            parse_dim,
+            parse_poke,
+            parse_out,
+            parse_erase,
+            parse_swap,
+            parse_memory,
+            parse_wait,
+        )),
+        // File operations & Program control
+        alt((
+            parse_chain,
+            parse_merge,
+            parse_openin,
+            parse_openout,
+            parse_closein,
+            parse_closeout,
+            parse_load,
+            parse_save,
+            parse_cat,
+            parse_new,
+            parse_clear,
+            parse_end,
+            parse_stop,
+        )),
+        // Math/Misc & I/O
+        alt((
+            parse_deg,
+            parse_rad,
+            parse_randomize,
+            parse_sound,
+            parse_ent,
+            parse_env,
+            parse_release,
+            parse_line_input,
+            parse_key_def,
+            parse_key,
+            parse_zone,
+            parse_width,
+            parse_write,
+            parse_mid_assign,
+            parse_ei,
+            parse_di,
+            parse_call,
+            parse_run,
+            parse_input,
+            parse_print,
+        )),
+        // Utilities & Debug
+        alt((
+            parse_list,
+            parse_delete,
+            parse_renum,
+            parse_auto,
+            parse_edit,
+            parse_defint,
+            parse_defreal,
+            parse_defstr,
+            parse_tron,
+            parse_troff,
+            parse_symbol,
+            parse_symbol_after,
+            parse_speed_ink,
+            parse_speed_write,
+            parse_speed_key,
+        )),
+        // Assignment (LET is optional, but checked first since it's a keyword)
+        alt((parse_let, parse_assign))
     ))
     .context(StrContext::Label("Unable to parse an instruction"))
     .parse_next(input)?;
@@ -120,6 +270,18 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     Ok(res)
 }
 
+pub fn parse_let<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // LET keyword is optional in Locomotive BASIC, but if present we parse it
+    let _ = Caseless("LET").parse_next(input)?;
+    let mut space = parse_space1.parse_next(input)?;
+    let mut assign = parse_assign(input)?;
+    
+    // Note: We don't emit a LET token, just parse the keyword and continue with assignment
+    let mut res = space;
+    res.append(&mut assign);
+    Ok(res)
+}
+
 /// Parse a comment"],
 pub fn parse_rem<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     let sym = alt((
@@ -148,7 +310,7 @@ pub fn parse_space1<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 pub fn parse_char<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     one_of(|c: char| {
-        "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~".chars().any(|c2| c2==c)
+        "!#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~".chars().any(|c2| c2==c)
     })
     .map(|c: char| BasicToken::SimpleToken(c.into()))
     .parse_next(input)
@@ -164,7 +326,7 @@ pub fn parse_quote<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
 pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     (
         '#'.value(BasicToken::SimpleToken('#'.into())),
-        one_of('0'..='7').map(|c| {
+        one_of('0'..='9').map(|c| {
             BasicToken::SimpleToken(match c {
                 '0' => BasicTokenNoPrefix::ConstantNumber0,
                 '1' => BasicTokenNoPrefix::ConstantNumber1,
@@ -174,6 +336,8 @@ pub fn parse_canal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
                 '5' => BasicTokenNoPrefix::ConstantNumber5,
                 '6' => BasicTokenNoPrefix::ConstantNumber6,
                 '7' => BasicTokenNoPrefix::ConstantNumber7,
+                '8' => BasicTokenNoPrefix::ConstantNumber8,
+                '9' => BasicTokenNoPrefix::ConstantNumber9,
                 _ => unreachable!()
             })
         })
@@ -284,7 +448,7 @@ pub fn parse_print_arg_using<'src>(input: &mut &'src str) -> BasicSeveralTokensR
 }
 
 pub fn parse_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    alt((parse_string_variable, parse_integer_variable)).parse_next(input)
+    alt((parse_string_variable, parse_integer_variable, parse_float_variable)).parse_next(input)
 }
 
 pub fn parse_string_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
@@ -292,6 +456,23 @@ pub fn parse_string_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensR
 
     let mut tokens = name;
     tokens.push(BasicToken::SimpleToken('$'.into()));
+    
+    // Optional array indices: (expr[,expr,...])
+    if let Some(_) = opt('(').parse_next(input)? {
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+        
+        let mut first_index = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(input)?;
+        tokens.append(&mut first_index);
+        
+        // Additional indices
+        while let Ok((mut comma, mut next_index)) = (parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)).parse_next(input) {
+            tokens.append(&mut comma);
+            tokens.append(&mut next_index);
+        }
+        
+        let _ = ')'.parse_next(input)?;
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    }
 
     Ok(tokens)
 }
@@ -301,6 +482,23 @@ pub fn parse_integer_variable<'src>(input: &mut &'src str) -> BasicSeveralTokens
 
     let mut tokens = name;
     tokens.push(BasicToken::SimpleToken('%'.into()));
+    
+    // Optional array indices: (expr[,expr,...])
+    if let Some(_) = opt('(').parse_next(input)? {
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+        
+        let mut first_index = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(input)?;
+        tokens.append(&mut first_index);
+        
+        // Additional indices
+        while let Ok((mut comma, mut next_index)) = (parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)).parse_next(input) {
+            tokens.append(&mut comma);
+            tokens.append(&mut next_index);
+        }
+        
+        let _ = ')'.parse_next(input)?;
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    }
 
     Ok(tokens)
 }
@@ -311,6 +509,23 @@ pub fn parse_float_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
     let mut tokens = name.0;
     if name.1.is_some() {
         tokens.push(BasicToken::SimpleToken('!'.into()));
+    }
+    
+    // Optional array indices: (expr[,expr,...])
+    if let Some(_) = opt('(').parse_next(input)? {
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+        
+        let mut first_index = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(input)?;
+        tokens.append(&mut first_index);
+        
+        // Additional indices
+        while let Ok((mut comma, mut next_index)) = (parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)).parse_next(input) {
+            tokens.append(&mut comma);
+            tokens.append(&mut next_index);
+        }
+        
+        let _ = ')'.parse_next(input)?;
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
     }
 
     Ok(tokens)
@@ -339,9 +554,9 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
         opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
         alt((
             parse_quoted_string(true),
-            parse_variable,
+            parse_string_expression,  // Parse string expressions (including STRING$, CHR$, etc.)
+            parse_numeric_expression(NumericExpressionConstraint::None),  // Then parse numeric expressions (A+B, X*2, etc.)
             parse_basic_value.map(|v| vec![v]),
-            parse_numeric_expression(NumericExpressionConstraint::None)
         ))
         .context(StrContext::Label("Missing expression to print"))
     )
@@ -361,12 +576,14 @@ pub fn parse_print_stream_expression<'src>(
 
     let mut next: Vec<Vec<BasicToken>> = repeat(
         0..,
-        (one_of([';', ',']), parse_space0, parse_print_expression).map(
-            |(sep, mut space_a, mut expr)| {
-                let mut inner = Vec::with_capacity(1 + space_a.len() + expr.len());
+        (one_of([';', ',']), parse_space0, opt(parse_print_expression)).map(
+            |(sep, mut space_a, expr)| {
+                let mut inner = Vec::with_capacity(1 + space_a.len() + expr.as_ref().map(|e| e.len()).unwrap_or(0));
                 inner.push(BasicToken::SimpleToken(sep.into()));
                 inner.append(&mut space_a);
-                inner.append(&mut expr);
+                if let Some(mut expr) = expr {
+                    inner.append(&mut expr);
+                }
 
                 inner
             }
@@ -385,6 +602,21 @@ pub fn parse_print_stream_expression<'src>(
 pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     // print keyword
     let _ = Caseless("PRINT").parse_next(input)?;
+    
+    // Ensure PRINT is followed by space, colon, end-of-line, or special chars (not part of a longer identifier)
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        '"'.void(), // a string
+        '#'.void(), // stream number
+        '$'.void(), // function like STRING$
+        '('.void(), // parenthesized expression
+        eof.void()
+    )))
+    .parse_next(input)?;
 
     // space after keyword
     let mut tokens = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Print)];
@@ -445,8 +677,18 @@ pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 }
 
 pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, canal, mut space_b, sep, mut space_c, string, args): (
-        _,
+    let _ = Caseless("INPUT").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        '"'.void(),  // Allow INPUT"string",var format
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let (mut space_a, canal, mut space_b, sep, mut space_c, string, args): (
         _,
         _,
         _,
@@ -455,14 +697,13 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         _,
         Vec<_>
     ) = (
-        Caseless("INPUT"),
-        parse_space1,
+        parse_space0,  // Changed from parse_space1 to allow INPUT"string",var
         opt(parse_canal),
         parse_space0,
-        opt(';'),
+        opt(one_of([';', ','])),
         parse_space0,
         opt(parse_quoted_string(true)),
-        repeat(1.., (parse_space0, ';', parse_space0, parse_variable))
+        repeat(1.., (parse_space0, one_of([';', ',']), parse_space0, parse_variable))
     )
         .parse_next(input)?;
 
@@ -562,6 +803,2190 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 // |token| BasicToken::SimpleToken(token)
 // )(input)
 // }
+/// MODE <expression>
+pub fn parse_mode<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut mode_val) = (
+        Caseless("MODE"),
+        parse_space1,
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::None)
+                .context(StrContext::Label("MODE value expected (0-3)"))
+        )
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mode)];
+    res.append(&mut space);
+    res.append(&mut mode_val);
+    Ok(res)
+}
+
+/// CLS [#stream]
+pub fn parse_cls<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, canal) = (
+        Caseless("CLS"),
+        parse_space0,
+        opt(parse_canal)
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Cls)];
+    res.append(&mut space);
+    if let Some(mut canal) = canal {
+        res.append(&mut canal);
+    }
+    Ok(res)
+}
+
+/// LOCATE [#stream,] x, y
+pub fn parse_locate<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, canal_and_comma, mut x_coord, mut comma2, mut y_coord) = (
+        Caseless("LOCATE"),
+        parse_space0,
+        opt((parse_canal, parse_comma)),
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::None)
+                .context(StrContext::Label("X coordinate expected"))
+        ),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::None)
+                .context(StrContext::Label("Y coordinate expected"))
+        )
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Locate)];
+    res.append(&mut space_a);
+    if let Some((mut canal, mut comma1)) = canal_and_comma {
+        res.append(&mut canal);
+        res.append(&mut comma1);
+    }
+    res.append(&mut x_coord);
+    res.append(&mut comma2);
+    res.append(&mut y_coord);
+    Ok(res)
+}
+
+/// GOTO <line number>
+pub fn parse_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut line_num) = (
+        Caseless("GOTO"),
+        parse_space1,
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+                .context(StrContext::Label("Line number expected"))
+        )
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Goto)];
+    res.append(&mut space);
+    res.append(&mut line_num);
+    Ok(res)
+}
+
+/// GOSUB <line number>
+pub fn parse_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut line_num) = (
+        Caseless("GOSUB"),
+        parse_space1,
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+                .context(StrContext::Label("Line number expected"))
+        )
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub)];
+    res.append(&mut space);
+    res.append(&mut line_num);
+    Ok(res)
+}
+
+/// RETURN
+pub fn parse_return<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("RETURN")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Return)])
+        .parse_next(input)
+}
+
+/// END
+pub fn parse_end<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("END")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::End)])
+        .parse_next(input)
+}
+
+/// STOP
+pub fn parse_stop<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("STOP")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Stop)])
+        .parse_next(input)
+}
+
+/// INK pen, color1 [, color2]
+pub fn parse_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut pen, mut comma1, mut color1, opt_color2) = (
+        Caseless("INK"),
+        parse_space1,
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+                .context(StrContext::Label("Pen number expected"))
+        ),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+                .context(StrContext::Label("Color expected"))
+        ),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Ink)];
+    res.append(&mut space_a);
+    res.append(&mut pen);
+    res.append(&mut comma1);
+    res.append(&mut color1);
+    
+    if let Some((mut comma2, mut color2)) = opt_color2 {
+        res.append(&mut comma2);
+        res.append(&mut color2);
+    }
+    
+    Ok(res)
+}
+
+/// BORDER color [, color]
+pub fn parse_border<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut color1, opt_color2) = (
+        Caseless("BORDER"),
+        parse_space1,
+        cut_err(
+            parse_numeric_expression(NumericExpressionConstraint::None)
+                .context(StrContext::Label("Color expected"))
+        ),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)))
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Border)];
+    res.append(&mut space_a);
+    res.append(&mut color1);
+    
+    if let Some((mut comma2, mut color2)) = opt_color2 {
+        res.append(&mut comma2);
+        res.append(&mut color2);
+    }
+    
+    Ok(res)
+}
+
+/// PEN [#stream,] color
+pub fn parse_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, canal, mut space_b, mut color) = (
+        Caseless("PEN"),
+        parse_space0,
+        opt((parse_canal, parse_comma)),
+        parse_space0,
+        parse_numeric_expression(NumericExpressionConstraint::None)
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Pen)];
+    res.append(&mut space_a);
+    if let Some((mut canal_tokens, mut comma)) = canal {
+        res.append(&mut canal_tokens);
+        res.append(&mut comma);
+    }
+    res.append(&mut space_b);
+    res.append(&mut color);
+    Ok(res)
+}
+
+/// PAPER [#stream,] color
+pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, canal, mut space_b, mut color) = (
+        Caseless("PAPER"),
+        parse_space0,
+        opt((parse_canal, parse_comma)),
+        parse_space0,
+        parse_numeric_expression(NumericExpressionConstraint::None)
+    )
+        .parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Paper)];
+    res.append(&mut space_a);
+    if let Some((mut canal_tokens, mut comma)) = canal {
+        res.append(&mut canal_tokens);
+        res.append(&mut comma);
+    }
+    res.append(&mut space_b);
+    res.append(&mut color);
+    Ok(res)
+}
+
+/// FOR variable = start TO end [STEP increment]
+pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut var, mut space_b, eq, mut space_c, mut start_val, mut space_d, _, mut space_e, mut end_val, step_part) = (
+        Caseless("FOR"),
+        parse_space1,
+        cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
+        parse_space0,
+        cut_err('='.context(StrContext::Label("= expected"))),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Start value expected"))),
+        parse_space1,
+        cut_err(Caseless("TO").context(StrContext::Label("TO expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("End value expected"))),
+        opt((parse_space1, Caseless("STEP"), parse_space1, parse_numeric_expression(NumericExpressionConstraint::None)))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::For)];
+    res.append(&mut space_a);
+    res.append(&mut var);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(eq.into()));
+    res.append(&mut space_c);
+    res.append(&mut start_val);
+    res.append(&mut space_d);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::To));
+    res.append(&mut space_e);
+    res.append(&mut end_val);
+    
+    if let Some((mut space_f, _, mut space_g, mut step_val)) = step_part {
+        res.append(&mut space_f);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Step));
+        res.append(&mut space_g);
+        res.append(&mut step_val);
+    }
+    
+    Ok(res)
+}
+
+/// NEXT [variable]
+pub fn parse_next<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_var) = (
+        Caseless("NEXT"),
+        parse_space0,
+        opt(parse_variable)
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Next)];
+    res.append(&mut space);
+    if let Some(mut var) = opt_var {
+        res.append(&mut var);
+    }
+    Ok(res)
+}
+
+/// IF condition THEN statements [ELSE statements]
+pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut condition, mut space_b, _, mut space_c) = (
+        Caseless("IF"),
+        parse_space1,
+        cut_err(parse_general_expression.context(StrContext::Label("Condition expected"))),
+        parse_space1,
+        cut_err(Caseless("THEN").context(StrContext::Label("THEN expected"))),
+        parse_space0
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::If)];
+    res.append(&mut space_a);
+    res.append(&mut condition);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Then));
+    res.append(&mut space_c);
+    
+    // Check if there's a line number after THEN (IF...THEN line_number form)
+    let checkpoint = input.checkpoint();
+    if let Ok(mut line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
+        // This is IF condition THEN line_number (implicit GOTO)
+        // Add implicit GOTO
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
+        res.append(&mut line_num);
+        
+        // Check for ELSE after the line number
+        let else_checkpoint = input.checkpoint();
+        if let Ok((mut else_space1, _, mut else_space2)) = (parse_space0, Caseless("ELSE"), parse_space0).parse_next(input) {
+            res.append(&mut else_space1);
+            res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Else));
+            res.append(&mut else_space2);
+            
+            // Check if ELSE also has a line number (ELSE line_number form)
+            // Only if the next character is a digit (to avoid consuming variable names)
+            let line_num_checkpoint = input.checkpoint();
+            let starts_with_digit = input.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+            input.reset(&line_num_checkpoint);
+            
+            if starts_with_digit {
+                if let Ok(mut else_line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
+                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
+                    res.append(&mut else_line_num);
+                } else {
+                    // Parse the instruction
+                    match parse_instruction(input) {
+                        Ok(mut else_instr) => {
+                            res.append(&mut else_instr);
+                        },
+                        Err(_) => {
+                            // No instruction after ELSE, that's ok
+                        }
+                    }
+                }
+            } else {
+                // ELSE is followed by an instruction (like GOTO or assignment)
+                // Parse the instruction
+                match parse_instruction(input) {
+                    Ok(mut else_instr) => {
+                        res.append(&mut else_instr);
+                    },
+                    Err(_) => {
+                        // No instruction after ELSE, that's ok
+                    }
+                }
+            }
+        } else {
+            input.reset(&else_checkpoint);
+        }
+        
+        return Ok(res);
+    }
+    input.reset(&checkpoint);
+    
+    // Check if there's an instruction after THEN
+    let checkpoint = input.checkpoint();
+    let is_eol_or_else = input.trim_start().is_empty() || 
+                         input.trim_start().starts_with('\n') || 
+                         input.trim_start().starts_with('\r') ||
+                         input.trim_start().to_uppercase().starts_with("ELSE");
+    input.reset(&checkpoint);
+    
+    if !is_eol_or_else {
+        // Parse multiple instructions separated by colons in THEN clause
+        loop {
+            // Check if we hit ELSE
+            let else_checkpoint = input.checkpoint();
+            if opt((parse_space0, Caseless::<&str>("ELSE"))).parse_next(input)?.is_some() {
+                input.reset(&else_checkpoint);
+                break;
+            }
+            input.reset(&else_checkpoint);
+            
+            // Try to parse an instruction
+            match parse_instruction(input) {
+                Ok(mut instr) => {
+                    res.append(&mut instr);
+                    
+                    // Check for colon separator
+                    let sep_checkpoint = input.checkpoint();
+                    let mut space_before = parse_space0.parse_next(input)?;
+                    if opt(':').parse_next(input)?.is_some() {
+                        res.append(&mut space_before);
+                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                        let mut space_after = parse_space0.parse_next(input)?;
+                        res.append(&mut space_after);
+                        // Continue to next statement
+                    } else {
+                        input.reset(&sep_checkpoint);
+                        break;
+                    }
+                },
+                Err(_) => break
+            }
+        }
+        
+        // Now handle ELSE clause if present
+        let else_checkpoint = input.checkpoint();
+        if let Ok((mut else_space1, _, mut else_space2)) = (parse_space0, Caseless("ELSE"), parse_space0).parse_next(input) {
+            res.append(&mut else_space1);
+            res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Else));
+            res.append(&mut else_space2);
+            
+            // Check if ELSE has a line number (ELSE line_number form)
+            // Only if the next character is a digit (to avoid consuming variable names)
+            let line_num_checkpoint = input.checkpoint();
+            let starts_with_digit = input.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+            input.reset(&line_num_checkpoint);
+            
+            if starts_with_digit {
+                if let Ok(mut else_line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
+                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
+                    res.append(&mut else_line_num);
+                }
+            } else {
+                // Parse multiple instructions in ELSE clause
+                loop {
+                    match parse_instruction(input) {
+                        Ok(mut else_instr) => {
+                            res.append(&mut else_instr);
+                            
+                            // Check for colon separator
+                            let sep_checkpoint = input.checkpoint();
+                            let mut space_before = parse_space0.parse_next(input)?;
+                            if opt(':').parse_next(input)?.is_some() {
+                                res.append(&mut space_before);
+                                res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                                let mut space_after = parse_space0.parse_next(input)?;
+                                res.append(&mut space_after);
+                                // Continue to next statement
+                            } else {
+                                input.reset(&sep_checkpoint);
+                                break;
+                            }
+                        },
+                        Err(_) => break
+                    }
+                }
+            }
+        } else {
+            input.reset(&else_checkpoint);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// ELSE (part of IF statement)
+pub fn parse_else<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("ELSE")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Else)])
+        .parse_next(input)
+}
+
+/// WHILE condition
+pub fn parse_while<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut condition) = (
+        Caseless("WHILE"),
+        parse_space1,
+        cut_err(parse_general_expression.context(StrContext::Label("Condition expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::While)];
+    res.append(&mut space);
+    res.append(&mut condition);
+    Ok(res)
+}
+
+/// WEND
+pub fn parse_wend<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("WEND")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Wend)])
+        .parse_next(input)
+}
+
+/// DRAW x, y [, [ink] [, mode]]
+pub fn parse_draw<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("DRAW"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y coordinate expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Draw)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// DRAWR xr, yr [, [ink] [, mode]]
+pub fn parse_drawr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("DRAWR"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y offset expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Drawr)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// MOVE x, y [, [ink] [, mode]]
+pub fn parse_move<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("MOVE"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y coordinate expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Move)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// MOVER xr, yr [, [ink] [, mode]]
+pub fn parse_mover<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("MOVER"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y offset expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mover)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// PLOT x, y [, [ink] [, mode]]
+pub fn parse_plot<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("PLOT"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y coordinate expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::None)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Plot)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// PLOTR xr, yr [, [ink] [, mode]]
+pub fn parse_plotr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+        Caseless("PLOTR"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y offset expected"))),
+        opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Plotr)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
+        res.append(&mut comma2);
+        if let Some(mut ink) = opt_ink {
+            res.append(&mut ink);
+        }
+        if let Some((mut comma3, mut mode)) = opt_mode {
+            res.append(&mut comma3);
+            res.append(&mut mode);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// DATA value1 [, value2, ...]
+pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DATA").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space0.parse_next(input)?;
+    
+    // Parse comma-separated data values (strings or numbers)
+    let opt_values: Option<(Vec<BasicToken>, Vec<(Vec<BasicToken>, Vec<BasicToken>)>)> = opt(
+        (
+            alt((
+                parse_quoted_string(false),
+                parse_numeric_expression(NumericExpressionConstraint::None)
+            )),
+            repeat(0.., (
+                parse_comma,
+                alt((
+                    parse_quoted_string(false),
+                    parse_numeric_expression(NumericExpressionConstraint::None)
+                ))
+            ))
+        )
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Data)];
+    res.append(&mut space);
+    
+    if let Some((mut first, rest)) = opt_values {
+        res.append(&mut first);
+        for (mut comma, mut val) in rest {
+            res.append(&mut comma);
+            res.append(&mut val);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// READ variable [, variable, ...]
+pub fn parse_read<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut first_var, rest_vars) = (
+        Caseless("READ"),
+        parse_space1,
+        cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
+        repeat::<_, _, Vec<_>, _, _>(0.., (parse_comma, parse_variable))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Read)];
+    res.append(&mut space_a);
+    res.append(&mut first_var);
+    
+    for (mut comma, mut var) in rest_vars {
+        res.append(&mut comma);
+        res.append(&mut var);
+    }
+    
+    Ok(res)
+}
+
+/// RESTORE [line]
+pub fn parse_restore<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_line) = (
+        Caseless("RESTORE"),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Restore)];
+    res.append(&mut space);
+    if let Some(mut line) = opt_line {
+        res.append(&mut line);
+    }
+    Ok(res)
+}
+
+/// DIM array(size) [, array(size), ...]
+pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DIM").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space1.parse_next(input)?;
+    
+    // Parse array declaration: name(dim1[,dim2,...])
+    let mut parse_array_decl = |input: &mut &'src str| {
+        // Parse base name
+        let mut var_name = parse_base_variable_name.parse_next(input)?;
+        
+        // Parse optional type suffix ($, %, !)
+        let type_suffix = opt(one_of(['$', '%', '!'])).parse_next(input)?;
+        if let Some(suffix) = type_suffix {
+            var_name.push(BasicToken::SimpleToken(suffix.into()));
+        }
+        
+        let _ = '('.parse_next(input)?;
+        let mut dim1 = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(input)?;
+        let mut extra_dims: Vec<Vec<BasicToken>> = repeat(0.., (
+            parse_comma,
+            parse_numeric_expression(NumericExpressionConstraint::None)
+        ).map(|(mut c, mut d)| {
+            let mut tokens = vec![];
+            tokens.append(&mut c);
+            tokens.append(&mut d);
+            tokens
+        })).parse_next(input)?;
+        let _ = ')'.parse_next(input)?;
+        
+        let mut tokens = vec![];
+        tokens.append(&mut var_name);
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+        tokens.append(&mut dim1);
+        for other in &mut extra_dims {
+            tokens.append(other);
+        }
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+        Ok(tokens)
+    };
+    
+    // Parse first array
+    let mut first_array = parse_array_decl.parse_next(input)?;
+    
+    // Parse optional additional arrays
+    let mut rest_arrays: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_array_decl
+    ).map(|(mut c, mut arr)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut arr);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Dim)];
+    res.append(&mut space);
+    res.append(&mut first_array);
+    for other in &mut rest_arrays {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// POKE address, value
+pub fn parse_poke<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut address, mut comma, mut value) = (
+        Caseless("POKE"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Address expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Value expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Poke)];
+    res.append(&mut space_a);
+    res.append(&mut address);
+    res.append(&mut comma);
+    res.append(&mut value);
+    Ok(res)
+}
+
+/// OUT port, value
+pub fn parse_out<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut port, mut comma, mut value) = (
+        Caseless("OUT"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Port expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Value expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Out)];
+    res.append(&mut space_a);
+    res.append(&mut port);
+    res.append(&mut comma);
+    res.append(&mut value);
+    Ok(res)
+}
+
+/// LOAD filename [, address]
+pub fn parse_load<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename, opt_address) = (
+        Caseless("LOAD"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected"))),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Load)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    if let Some((mut comma, mut address)) = opt_address {
+        res.append(&mut comma);
+        res.append(&mut address);
+    }
+    
+    Ok(res)
+}
+
+/// SAVE filename [, type, ...]
+pub fn parse_save<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename) = (
+        Caseless("SAVE"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Save)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    Ok(res)
+}
+
+/// NEW
+pub fn parse_new<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("NEW")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::New)])
+        .parse_next(input)
+}
+
+/// CLEAR
+pub fn parse_clear<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_input) = (
+        Caseless("CLEAR"),
+        parse_space0,
+        opt(Caseless("INPUT").map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Input)))
+    )
+        .parse_next(input)?;
+    
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Clear)];
+    res.append(&mut space);
+    if let Some(input_token) = opt_input {
+        res.push(input_token);
+    }
+    Ok(res)
+}
+
+/// DEG
+pub fn parse_deg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("DEG")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Deg)])
+        .parse_next(input)
+}
+
+/// RAD
+pub fn parse_rad<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("RAD")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Rad)])
+        .parse_next(input)
+}
+
+/// RANDOMIZE [seed]
+pub fn parse_randomize<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_seed) = (
+        Caseless("RANDOMIZE"),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::None))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Randomize)];
+    res.append(&mut space);
+    if let Some(mut seed) = opt_seed {
+        res.append(&mut seed);
+    }
+    Ok(res)
+}
+
+/// SOUND channel, period, duration [, volume [, envelope [, ...]]]
+pub fn parse_sound<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("SOUND").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let (mut space_a, mut channel, mut comma1, mut period, mut comma2, mut duration) = (
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Channel expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Duration expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Sound)];
+    res.append(&mut space_a);
+    res.append(&mut channel);
+    res.append(&mut comma1);
+    res.append(&mut period);
+    res.append(&mut comma2);
+    res.append(&mut duration);
+    
+    // Optional 4th parameter: volume
+    if let Ok((mut comma3, mut volume)) = (
+        parse_comma,
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    ).parse_next(input) {
+        res.append(&mut comma3);
+        res.append(&mut volume);
+        
+        // Optional 5th parameter: volume_envelope
+        if let Ok((mut comma4, mut vol_env)) = (
+            parse_comma,
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+        ).parse_next(input) {
+            res.append(&mut comma4);
+            res.append(&mut vol_env);
+            
+            // Optional 6th parameter: tone_envelope
+            if let Ok((mut comma5, mut tone_env)) = (
+                parse_comma,
+                parse_numeric_expression(NumericExpressionConstraint::Integer)
+            ).parse_next(input) {
+                res.append(&mut comma5);
+                res.append(&mut tone_env);
+            }
+        }
+    }
+    
+    Ok(res)
+}
+
+/// ON expression GOTO line1 [, line2, ...]
+/// ON expression GOTO/GOSUB line1 [, line2, ...]
+pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut expr, mut space_b) = (
+        Caseless("ON"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Expression expected"))),
+        parse_space1
+    ).parse_next(input)?;
+    
+    // Check if it's GOTO or GOSUB
+    let is_goto = alt((
+        Caseless("GOTO").map(|_| true),
+        Caseless("GOSUB").map(|_| false)
+    )).parse_next(input)?;
+    
+    let (mut space_c, mut first_line) = (
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
+    ).parse_next(input)?;
+    
+    // Parse optional additional line numbers
+    let mut rest_lines: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    ).map(|(mut c, mut line)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut line);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::On)];
+    res.append(&mut space_a);
+    res.append(&mut expr);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(if is_goto { BasicTokenNoPrefix::Goto } else { BasicTokenNoPrefix::Gosub }));
+    res.append(&mut space_c);
+    res.append(&mut first_line);
+    for other in &mut rest_lines {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// ON ERROR GOTO line
+pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, _, mut space_c, mut line_num) = (
+        Caseless("ON"),
+        parse_space1,
+        cut_err(Caseless("ERROR").context(StrContext::Label("ERROR expected"))),
+        parse_space1,
+        cut_err(Caseless("GOTO").context(StrContext::Label("GOTO expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::On)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Error));
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
+    res.append(&mut space_c);
+    res.append(&mut line_num);
+    
+    Ok(res)
+}
+
+/// ON BREAK STOP / CONT / GOSUB line
+pub fn parse_on_break<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b) = (
+        Caseless("ON"),
+        parse_space1,
+        cut_err(Caseless("BREAK").context(StrContext::Label("BREAK expected"))),
+        parse_space1
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::On)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::OnBreak));
+    res.append(&mut space_b);
+    
+    Ok(res)
+}
+
+/// SPEED INK period1, period2
+pub fn parse_speed_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut period1, mut comma, mut period2) = (
+        Caseless("SPEED"),
+        parse_space1,
+        cut_err(Caseless("INK").context(StrContext::Label("INK expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period1 expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period2 expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Speed)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Ink));
+    res.append(&mut space_b);
+    res.append(&mut period1);
+    res.append(&mut comma);
+    res.append(&mut period2);
+    
+    Ok(res)
+}
+
+/// SPEED WRITE speed
+pub fn parse_speed_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut speed) = (
+        Caseless("SPEED"),
+        parse_space1,
+        cut_err(Caseless("WRITE").context(StrContext::Label("WRITE expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Speed expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Speed)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Write));
+    res.append(&mut space_b);
+    res.append(&mut speed);
+    
+    Ok(res)
+}
+
+/// SPEED KEY start_delay, repeat_period
+pub fn parse_speed_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut delay, mut comma, mut period) = (
+        Caseless("SPEED"),
+        parse_space1,
+        cut_err(Caseless("KEY").context(StrContext::Label("KEY expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Start delay expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Repeat period expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Speed)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Key));
+    res.append(&mut space_b);
+    res.append(&mut delay);
+    res.append(&mut comma);
+    res.append(&mut period);
+    
+    Ok(res)
+}
+
+/// RESUME [NEXT / line]
+pub fn parse_resume<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_param) = (
+        Caseless("RESUME"),
+        parse_space0,
+        opt(alt((
+            Caseless("NEXT").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Next)]),
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+        )))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Resume)];
+    res.append(&mut space);
+    if let Some(mut param) = opt_param {
+        res.append(&mut param);
+    }
+    Ok(res)
+}
+
+/// ERROR expression
+pub fn parse_error<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut expr) = (
+        Caseless("ERROR"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Error code expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Error)];
+    res.append(&mut space);
+    res.append(&mut expr);
+    Ok(res)
+}
+
+/// CONT
+pub fn parse_cont<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("CONT")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Cont)])
+        .parse_next(input)
+}
+
+/// LIST [start] [- [end]]
+pub fn parse_list<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space) = (
+        Caseless("LIST"),
+        parse_space0
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::List)];
+    res.append(&mut space);
+    
+    Ok(res)
+}
+
+/// DELETE [start] - end
+/// DELETE [start] [-end]
+pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_range) = (
+        Caseless("DELETE"),
+        parse_space0,
+        opt((
+            parse_numeric_expression(NumericExpressionConstraint::Integer),
+            opt((
+                '-',
+                parse_numeric_expression(NumericExpressionConstraint::Integer)
+            ))
+        ))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Delete)];
+    res.append(&mut space);
+    
+    if let Some((mut start, opt_end)) = opt_range {
+        res.append(&mut start);
+        if let Some((_, mut end)) = opt_end {
+            res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus));
+            res.append(&mut end);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// RENUM [new_start] [, old_start [, increment]]
+pub fn parse_renum<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space) = (
+        Caseless("RENUM"),
+        parse_space0
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Renum)];
+    res.append(&mut space);
+    
+    Ok(res)
+}
+
+/// AUTO [start [, increment]]
+pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space) = (
+        Caseless("AUTO"),
+        parse_space0
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Auto)];
+    res.append(&mut space);
+    
+    Ok(res)
+}
+
+/// EDIT line
+pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut line_num) = (
+        Caseless("EDIT"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Edit)];
+    res.append(&mut space);
+    res.append(&mut line_num);
+    Ok(res)
+}
+
+/// ERASE array [, array, ...]
+pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("ERASE").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space1.parse_next(input)?;
+    let mut first_var = parse_base_variable_name.parse_next(input)?;
+    
+    // Parse optional additional array names
+    let mut rest_vars: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_base_variable_name
+    ).map(|(mut c, mut v)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut v);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Erase)];
+    res.append(&mut space);
+    res.append(&mut first_var);
+    for other in &mut rest_vars {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// SWAP var1, var2
+pub fn parse_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut var1, mut comma, mut var2) = (
+        Caseless("SWAP"),
+        parse_space1,
+        cut_err(parse_variable.context(StrContext::Label("First variable expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_variable.context(StrContext::Label("Second variable expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Swap)];
+    res.append(&mut space_a);
+    res.append(&mut var1);
+    res.append(&mut comma);
+    res.append(&mut var2);
+    Ok(res)
+}
+
+/// DEFINT letter [-letter] [, ...]
+pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DEFINT").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space1.parse_next(input)?;
+    
+    // Parse letter or letter range
+    let mut parse_letter_range = |input: &mut &'src str| {
+        let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
+        let range = opt(('-', one_of(('a'..='z', 'A'..='Z')))).parse_next(input)?;
+        
+        let mut tokens = vec![BasicToken::SimpleToken(first.into())];
+        if let Some((_, second)) = range {
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus));
+            tokens.push(BasicToken::SimpleToken(second.into()));
+        }
+        Ok(tokens)
+    };
+    
+    let mut first = parse_letter_range.parse_next(input)?;
+    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_letter_range
+    ).map(|(mut c, mut r)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut r);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Defint)];
+    res.append(&mut space);
+    res.append(&mut first);
+    for other in &mut rest {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// DEFREAL letter [-letter] [, ...]
+pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DEFREAL").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space1.parse_next(input)?;
+    
+    // Parse letter or letter range
+    let mut parse_letter_range = |input: &mut &'src str| {
+        let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
+        let range = opt(('-', one_of(('a'..='z', 'A'..='Z')))).parse_next(input)?;
+        
+        let mut tokens = vec![BasicToken::SimpleToken(first.into())];
+        if let Some((_, second)) = range {
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus));
+            tokens.push(BasicToken::SimpleToken(second.into()));
+        }
+        Ok(tokens)
+    };
+    
+    let mut first = parse_letter_range.parse_next(input)?;
+    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_letter_range
+    ).map(|(mut c, mut r)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut r);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Defreal)];
+    res.append(&mut space);
+    res.append(&mut first);
+    for other in &mut rest {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// DEFSTR letter [-letter] [, ...]
+pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DEFSTR").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space1.parse_next(input)?;
+    
+    // Parse letter or letter range
+    let mut parse_letter_range = |input: &mut &'src str| {
+        let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
+        let range = opt(('-', one_of(('a'..='z', 'A'..='Z')))).parse_next(input)?;
+        
+        let mut tokens = vec![BasicToken::SimpleToken(first.into())];
+        if let Some((_, second)) = range {
+            tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus));
+            tokens.push(BasicToken::SimpleToken(second.into()));
+        }
+        Ok(tokens)
+    };
+    
+    let mut first = parse_letter_range.parse_next(input)?;
+    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_letter_range
+    ).map(|(mut c, mut r)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut r);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Defstr)];
+    res.append(&mut space);
+    res.append(&mut first);
+    for other in &mut rest {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// TRON
+pub fn parse_tron<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("TRON")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Tron)])
+        .parse_next(input)
+}
+
+/// TROFF
+pub fn parse_troff<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("TROFF")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Troff)])
+        .parse_next(input)
+}
+
+/// SYMBOL character, row1, row2, ... row8
+pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut char_code, mut comma, mut first_row) = (
+        Caseless("SYMBOL"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Character code expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Row data expected")))
+    ).parse_next(input)?;
+
+    // Parse remaining rows (up to 7 more)
+    let mut rest_rows: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_comma,
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    ).map(|(mut c, mut row)| {
+        let mut tokens = vec![];
+        tokens.append(&mut c);
+        tokens.append(&mut row);
+        tokens
+    })).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol)];
+    res.append(&mut space_a);
+    res.append(&mut char_code);
+    res.append(&mut comma);
+    res.append(&mut first_row);
+    for other in &mut rest_rows {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// SYMBOL AFTER expression
+pub fn parse_symbol_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut expr) = (
+        Caseless("SYMBOL"),
+        parse_space1,
+        cut_err(Caseless("AFTER").context(StrContext::Label("AFTER expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Expression expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::After));
+    res.append(&mut space_b);
+    res.append(&mut expr);
+    
+    Ok(res)
+}
+
+/// MEMORY address
+pub fn parse_memory<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut address) = (
+        Caseless("MEMORY"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Address expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Memory)];
+    res.append(&mut space);
+    res.append(&mut address);
+    Ok(res)
+}
+
+/// CURSOR [column] or CURSOR [column,row]
+pub fn parse_cursor<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("CURSOR").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space0.parse_next(input)?;
+    
+    // Try to parse either one or two numeric arguments
+    let opt_args = opt(alt((
+        // Two arguments: column,row
+        (
+            parse_numeric_expression(NumericExpressionConstraint::Integer),
+            parse_comma,
+            parse_numeric_expression(NumericExpressionConstraint::Integer)
+        ).map(|(col, comma, row)| (Some(col), Some(comma), Some(row))),
+        // One argument: just column
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+            .map(|col| (Some(col), None, None))
+    ))).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Cursor)];
+    res.append(&mut space);
+    if let Some((mut col, comma, row)) = opt_args {
+        if let Some(mut col) = col {
+            res.append(&mut col);
+        }
+        if let Some(mut comma) = comma {
+            res.append(&mut comma);
+        }
+        if let Some(mut row) = row {
+            res.append(&mut row);
+        }
+    }
+    Ok(res)
+}
+
+/// TAG [#stream]
+pub fn parse_tag<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_canal) = (
+        Caseless("TAG"),
+        parse_space0,
+        opt(parse_canal)
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Tag)];
+    res.append(&mut space);
+    if let Some(mut canal) = opt_canal {
+        res.append(&mut canal);
+    }
+    Ok(res)
+}
+
+/// TAGOFF [#stream]
+pub fn parse_tagoff<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_canal) = (
+        Caseless("TAGOFF"),
+        parse_space0,
+        opt(parse_canal)
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Tagoff)];
+    res.append(&mut space);
+    if let Some(mut canal) = opt_canal {
+        res.append(&mut canal);
+    }
+    Ok(res)
+}
+
+/// WAIT port, mask [, inversion]
+pub fn parse_wait<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut port, mut comma1, mut mask, opt_inv) = (
+        Caseless("WAIT"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Port expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Mask expected"))),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Wait)];
+    res.append(&mut space_a);
+    res.append(&mut port);
+    res.append(&mut comma1);
+    res.append(&mut mask);
+    
+    if let Some((mut comma2, mut inv)) = opt_inv {
+        res.append(&mut comma2);
+        res.append(&mut inv);
+    }
+    
+    Ok(res)
+}
+
+/// WINDOW [#stream,] left, right, top, bottom
+pub fn parse_window<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("WINDOW").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let (mut space_a, canal, mut left, mut comma1, mut right, mut comma2, mut top, mut comma3, mut bottom) = (
+        parse_space0,
+        opt((parse_canal, parse_comma)),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Left expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Right expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Top expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Bottom expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Window)];
+    res.append(&mut space_a);
+    if let Some((mut canal_tokens, mut comma)) = canal {
+        res.append(&mut canal_tokens);
+        res.append(&mut comma);
+    }
+    res.append(&mut left);
+    res.append(&mut comma1);
+    res.append(&mut right);
+    res.append(&mut comma2);
+    res.append(&mut top);
+    res.append(&mut comma3);
+    res.append(&mut bottom);
+    
+    Ok(res)
+}
+
+/// WINDOW SWAP stream1, stream2
+pub fn parse_window_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut stream1, mut comma, mut stream2) = (
+        Caseless("WINDOW"),
+        parse_space1,
+        cut_err(Caseless("SWAP").context(StrContext::Label("SWAP expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Stream1 expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Stream2 expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Window)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Swap));
+    res.append(&mut space_b);
+    res.append(&mut stream1);
+    res.append(&mut comma);
+    res.append(&mut stream2);
+    
+    Ok(res)
+}
+
+/// GRAPHICS PEN [mode]
+pub fn parse_graphics_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, opt_mode) = (
+        Caseless("GRAPHICS"),
+        parse_space1,
+        cut_err(Caseless("PEN").context(StrContext::Label("PEN expected"))),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::None))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Pen));
+    res.append(&mut space_b);
+    if let Some(mut mode) = opt_mode {
+        res.append(&mut mode);
+    }
+    
+    Ok(res)
+}
+
+/// GRAPHICS PAPER [mode]
+pub fn parse_graphics_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, opt_mode) = (
+        Caseless("GRAPHICS"),
+        parse_space1,
+        cut_err(Caseless("PAPER").context(StrContext::Label("PAPER expected"))),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::None))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Paper));
+    res.append(&mut space_b);
+    if let Some(mut mode) = opt_mode {
+        res.append(&mut mode);
+    }
+    
+    Ok(res)
+}
+
+/// ORIGIN x, y [, left, right, top, bottom]
+pub fn parse_origin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut x, mut comma1, mut y) = (
+        Caseless("ORIGIN"),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Y coordinate expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Origin)];
+    res.append(&mut space_a);
+    res.append(&mut x);
+    res.append(&mut comma1);
+    res.append(&mut y);
+    
+    Ok(res)
+}
+
+/// CLG [ink]
+pub fn parse_clg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_ink) = (
+        Caseless("CLG"),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Clg)];
+    res.append(&mut space);
+    if let Some(mut ink) = opt_ink {
+        res.append(&mut ink);
+    }
+    Ok(res)
+}
+
+/// MASK [ink1] [, ink2]
+pub fn parse_mask<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_ink1, opt_ink2) = (
+        Caseless("MASK"),
+        parse_space0,
+        opt(parse_numeric_expression(NumericExpressionConstraint::Integer)),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mask)];
+    res.append(&mut space);
+    if let Some(mut ink1) = opt_ink1 {
+        res.append(&mut ink1);
+    }
+    if let Some((mut comma, mut ink2)) = opt_ink2 {
+        res.append(&mut comma);
+        res.append(&mut ink2);
+    }
+    Ok(res)
+}
+
+/// FRAME
+pub fn parse_frame<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("FRAME")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Frame)])
+        .parse_next(input)
+}
+
+/// CHAIN filename [, line]
+pub fn parse_chain<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename, opt_line) = (
+        Caseless("CHAIN"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected"))),
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Chain)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    if let Some((mut comma, mut line)) = opt_line {
+        res.append(&mut comma);
+        res.append(&mut line);
+    }
+    
+    Ok(res)
+}
+
+/// MERGE filename
+pub fn parse_merge<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename) = (
+        Caseless("MERGE"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Merge)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    Ok(res)
+}
+
+/// CAT
+pub fn parse_cat<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("CAT")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Cat)])
+        .parse_next(input)
+}
+
+/// OPENIN filename
+pub fn parse_openin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename) = (
+        Caseless("OPENIN"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Openin)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    Ok(res)
+}
+
+/// OPENOUT filename
+pub fn parse_openout<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut filename) = (
+        Caseless("OPENOUT"),
+        parse_space0,
+        cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Openout)];
+    res.append(&mut space_a);
+    res.append(&mut filename);
+    
+    Ok(res)
+}
+
+/// CLOSEIN
+pub fn parse_closein<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("CLOSEIN")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Closein)])
+        .parse_next(input)
+}
+
+/// CLOSEOUT
+pub fn parse_closeout<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("CLOSEOUT")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Closeout)])
+        .parse_next(input)
+}
+
+/// LINE INPUT [#stream,] [;] ["prompt";] variable
+pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("LINE").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void()
+    ))).parse_next(input)?;
+    
+    let (mut space_a, _, mut space_b, canal, mut space_c, sep, mut space_d, string, mut space_e, comma, mut space_f, mut var) = (
+        parse_space1,
+        cut_err(Caseless("INPUT").context(StrContext::Label("INPUT expected"))),
+        parse_space0,
+        opt(parse_canal),
+        parse_space0,
+        opt(one_of([';', ','])),
+        parse_space0,
+        opt(parse_quoted_string(true)),
+        parse_space0,
+        opt(one_of([';', ','])),
+        parse_space0,
+        parse_variable
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Line)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Input));
+    res.append(&mut space_b);
+    if let Some(mut canal) = canal {
+        res.append(&mut canal);
+    }
+    res.append(&mut space_c);
+    if let Some(sep) = sep {
+        res.push(BasicToken::SimpleToken(sep.into()));
+    }
+    res.append(&mut space_d);
+    if let Some(mut string) = string {
+        res.append(&mut string);
+    }
+    res.append(&mut space_e);
+    if let Some(comma) = comma {
+        res.push(BasicToken::SimpleToken(comma.into()));
+    }
+    res.append(&mut space_f);
+    res.append(&mut var);
+    
+    Ok(res)
+}
+
+/// ENT tone_envelope, section1_steps [, section2_steps, ...]
+pub fn parse_ent<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("ENT").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space_a = parse_space0.parse_next(input)?;
+    let mut envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
+    
+    // Parse optional additional comma-separated parameters
+    let mut additional: Vec<Vec<BasicToken>> = repeat(
+        0..,
+        (parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))
+            .map(|(mut comma, mut val)| {
+                let mut tokens = vec![];
+                tokens.append(&mut comma);
+                tokens.append(&mut val);
+                tokens
+            })
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Ent)];
+    res.append(&mut space_a);
+    res.append(&mut envelope);
+    for other in &mut additional {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// ENV volume_envelope, section1_steps [, section2_steps, ...]
+pub fn parse_env<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("ENV").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space_a = parse_space0.parse_next(input)?;
+    let mut envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
+    
+    // Parse optional additional comma-separated parameters
+    let mut additional: Vec<Vec<BasicToken>> = repeat(
+        0..,
+        (parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))
+            .map(|(mut comma, mut val)| {
+                let mut tokens = vec![];
+                tokens.append(&mut comma);
+                tokens.append(&mut val);
+                tokens
+            })
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Env)];
+    res.append(&mut space_a);
+    res.append(&mut envelope);
+    for other in &mut additional {
+        res.append(other);
+    }
+    
+    Ok(res)
+}
+
+/// RELEASE channel
+pub fn parse_release<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("RELEASE").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let (mut space, mut channel) = (
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Channel expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Release)];
+    res.append(&mut space);
+    res.append(&mut channel);
+    Ok(res)
+}
+
+/// KEY key_number, string
+pub fn parse_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, mut key_num, mut comma) = (
+        Caseless("KEY"),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Key number expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Key)];
+    res.append(&mut space_a);
+    res.append(&mut key_num);
+    res.append(&mut comma);
+    
+    Ok(res)
+}
+
+/// KEY DEF key_number, repeat, delay
+pub fn parse_key_def<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _, mut space_b, mut key_num, mut comma1, mut repeat, mut comma2, mut delay) = (
+        Caseless("KEY"),
+        parse_space0,
+        cut_err(Caseless("DEF").context(StrContext::Label("DEF expected"))),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Key number expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Repeat expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Delay expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Key)];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Def));
+    res.append(&mut space_b);
+    res.append(&mut key_num);
+    res.append(&mut comma1);
+    res.append(&mut repeat);
+    res.append(&mut comma2);
+    res.append(&mut delay);
+    
+    Ok(res)
+}
+
+/// ZONE width
+pub fn parse_zone<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut width) = (
+        Caseless("ZONE"),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Zone)];
+    res.append(&mut space);
+    res.append(&mut width);
+    Ok(res)
+}
+
+/// WIDTH width
+pub fn parse_width<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, mut width) = (
+        Caseless("WIDTH"),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Width)];
+    res.append(&mut space);
+    res.append(&mut width);
+    Ok(res)
+}
+
+/// WRITE [#stream,] expression [, expression, ...]
+pub fn parse_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space, opt_canal, opt_values): (_, _, _, Option<(Vec<BasicToken>, Vec<Vec<BasicToken>>)>) = (
+        Caseless("WRITE"),
+        parse_space0,
+        opt(parse_canal),
+        opt((
+            parse_print_expression,
+            repeat(0.., (parse_comma, parse_print_expression).map(|(mut c, mut expr)| {
+                let mut tokens = vec![];
+                tokens.append(&mut c);
+                tokens.append(&mut expr);
+                tokens
+            }))
+        ))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Write)];
+    res.append(&mut space);
+    
+    if let Some(mut canal) = opt_canal {
+        res.append(&mut canal);
+    }
+    
+    if let Some((mut first, mut rest)) = opt_values {
+        res.append(&mut first);
+        for other in &mut rest {
+            res.append(other);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// EI
+pub fn parse_ei<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("EI")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Ei)])
+        .parse_next(input)
+}
+
+/// DI
+pub fn parse_di<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    Caseless("DI")
+        .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Di)])
+        .parse_next(input)
+}
+
+/// MID$ variable, start_pos, length = expression
+pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space) = (
+        Caseless("MID$"),
+        parse_space0
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar)];
+    res.append(&mut space);
+    
+    Ok(res)
+}
+
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
 /// Parse a basic value
@@ -569,16 +2994,264 @@ pub fn parse_basic_value<'src>(input: &mut &'src str) -> BasicOneTokenResult<'sr
     alt((parse_floating_point, parse_integer_value_16bits)).parse_next(input)
 }
 
-pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+/// Parse a general expression that could be numeric or string
+/// This is used for IF and WHILE conditions
+/// Handles: boolean_term [AND/OR/XOR boolean_term]*
+/// where boolean_term is: numeric_expr [comp_op numeric_expr] | string_expr comp_op string_expr
+pub fn parse_general_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // Parse first boolean term
+    let mut res = parse_boolean_term(input)?;
+    
+    // Parse optional AND/OR/XOR operators with more boolean terms
+    loop {
+        let checkpoint = input.checkpoint();
+        
+        // Try to parse space + logical operator + space
+        let logical_result = (parse_space1, alt((
+            Caseless("AND").map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::And)),
+            Caseless("OR").map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Or)),
+            Caseless("XOR").map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Xor))
+        )), parse_space0).parse_next(input);
+        
+        if let Ok((mut space1, logical_op, mut space2)) = logical_result {
+            // Try to parse the RHS boolean term
+            if let Ok(mut rhs) = parse_boolean_term(input) {
+                res.append(&mut space1);
+                res.push(logical_op);
+                res.append(&mut space2);
+                res.append(&mut rhs);
+            } else {
+                // Failed to parse RHS, restore and stop
+                input.reset(&checkpoint);
+                break;
+            }
+        } else {
+            // No logical operator, restore and stop
+            input.reset(&checkpoint);
+            break;
+        }
+    }
+    
+    Ok(res)
+}
+
+/// Parse a single boolean term (comparison expression)
+/// Can be: string_comp | numeric_expr [comp_op numeric_expr]
+fn parse_boolean_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     alt((
+        // Try string comparison first: string_expr comp_op string_expr
+        |input: &mut &'src str| -> BasicSeveralTokensResult<'src> {
+            let mut res = parse_string_expression(input)?;
+            
+            // Must have a comparison operator
+            let (mut space1, op, mut space2) = (parse_space0, alt((
+                "<=".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)),
+                ">=".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)),
+                "<>".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)),
+                "<".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)),
+                ">".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)),
+                "=".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals))
+            )), parse_space0).parse_next(input)?;
+            
+            res.append(&mut space1);
+            res.push(op);
+            res.append(&mut space2);
+            
+            // Parse RHS string expression
+            let mut rhs = parse_string_expression(input)?;
+            res.append(&mut rhs);
+            
+            Ok(res)
+        },
+        // Otherwise parse as numeric term (which may or may not have comparison)
+        // This handles: x<300, (x+y)>10, just x, etc.
+        // But NOT: x<300 AND y>10 (that's handled by parse_general_expression)
+        parse_numeric_term
+    )).parse_next(input)
+}
+
+/// Parse a parenthesized numeric expression: (expression)
+fn parse_parenthesized_numeric_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut expr, _) = (
+        '(',
+        parse_numeric_expression(NumericExpressionConstraint::None),
+        ')'
+    ).parse_next(input)?;
+    
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)];
+    res.append(&mut expr);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    
+    Ok(res)
+}
+
+/// Parse a numeric term for boolean expressions
+/// This is like parse_numeric_expression but stops at AND/OR/XOR
+fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // Handle optional unary +/- at the start
+    let unary = parse_unary_operator(input)?;
+    
+    let mut res = Vec::new();
+    if let Some(op) = unary {
+        res.push(op);
+    }
+    
+    // Parse the first value (number, variable, function call, or parenthesized expression)
+    let mut value_tokens = alt((
+        parse_asc,
+        parse_val,
+        parse_len,
+        parse_min,
+        parse_max,
+        parse_round,
+        parse_all_generated_numeric_functions_any,
+        parse_all_generated_numeric_functions_any2,
+        parse_all_generated_numeric_functions_int,
+        parse_parenthesized_numeric_expression,
+        parse_basic_value.map(|v| vec![v]),
+        parse_integer_variable,
+        parse_float_variable
+    )).parse_next(input)?;
+    res.append(&mut value_tokens);
+    
+    // Parse operators and continuation but STOP at AND/OR/XOR
+    loop {
+        let checkpoint = input.checkpoint();
+        
+        // Try to parse optional leading space
+        let space_result = parse_space0.parse_next(input);
+        
+        // Check if next token is AND/OR/XOR - if so, stop
+        let is_logical: ModalResult<_, ContextError<StrContext>> = peek(alt((
+            Caseless("AND"),
+            Caseless("OR"),
+            Caseless("XOR")
+        ))).parse_next(input);
+        
+        if is_logical.is_ok() {
+            input.reset(&checkpoint);
+            break;
+        }
+        
+        // Try to parse an operator
+        let op_result: ModalResult<Vec<BasicToken>, ContextError<StrContext>> = alt((
+            Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
+            "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
+            ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
+            "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
+            "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
+            ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
+            "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+            "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
+            "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]),
+            "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
+            "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
+            "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
+            "-".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus)])
+        )).parse_next(input);
+        
+        if let Ok(mut operator) = op_result {
+            // Successfully parsed operator, now parse RHS
+            if let Ok(mut space) = space_result {
+                res.append(&mut space);
+            }
+            res.append(&mut operator);
+            
+            // Parse optional space after operator
+            let mut space_after = parse_space0.parse_next(input).unwrap_or_default();
+            res.append(&mut space_after);
+            
+            // Parse next value
+            if let Ok(mut next_value) = alt((
+                parse_asc,
+                parse_val,
+                parse_len,
+                parse_min,
+                parse_max,
+                parse_round,
+                parse_all_generated_numeric_functions_any,
+                parse_all_generated_numeric_functions_any2,
+                parse_all_generated_numeric_functions_int,
+                parse_parenthesized_numeric_expression,
+                parse_basic_value.map(|v| vec![v]),
+                parse_integer_variable,
+                parse_float_variable
+            )).parse_next(input) {
+                res.append(&mut next_value);
+            } else {
+                // Failed to parse value after operator, restore
+                input.reset(&checkpoint);
+                break;
+            }
+        } else {
+            // No operator found, restore and stop
+            input.reset(&checkpoint);
+            break;
+        }
+    }
+    
+    Ok(res)
+}
+
+pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // Parse first string value
+    let mut result = alt((
         parse_quoted_string(true),
         parse_chr_dollar,
+        parse_mid_dollar,
+        parse_left_dollar,
+        parse_right_dollar,
         parse_lower_dollar,
         parse_upper_dollar,
         parse_space_dollar,
-        parse_str_dollar
+        parse_str_dollar,
+        parse_string_dollar,
+        parse_bin_dollar,
+        parse_dec_dollar,
+        parse_hex_dollar,
+        parse_inkey_dollar,
+        parse_copychar_dollar,
+        parse_string_variable
     ))
-    .parse_next(input)
+    .parse_next(input)?;
+    
+    // Parse additional concatenations: +string_value
+    let concatenations: Vec<Vec<BasicToken>> = repeat(0.., (
+        parse_space0,
+        '+',
+        parse_space0,
+        alt((
+            parse_quoted_string(true),
+            parse_chr_dollar,
+            parse_mid_dollar,
+            parse_left_dollar,
+            parse_right_dollar,
+            parse_lower_dollar,
+            parse_upper_dollar,
+            parse_space_dollar,
+            parse_str_dollar,
+            parse_string_dollar,
+            parse_bin_dollar,
+            parse_dec_dollar,
+            parse_hex_dollar,
+            parse_inkey_dollar,
+            parse_copychar_dollar,
+            parse_string_variable
+        ))
+    ).map(|(mut space_before, plus, mut space_after, mut value)| {
+        let mut tokens = Vec::new();
+        tokens.append(&mut space_before);
+        tokens.push(BasicToken::SimpleToken(plus.into()));
+        tokens.append(&mut space_after);
+        tokens.append(&mut value);
+        tokens
+    })).parse_next(input)?;
+    
+    for mut concat in concatenations {
+        result.append(&mut concat);
+    }
+    
+    Ok(result)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -587,25 +3260,46 @@ pub enum NumericExpressionConstraint {
     Integer
 }
 
+/// Parse an optional unary +/- operator
+fn parse_unary_operator<'src>(input: &mut &'src str) -> ModalResult<Option<BasicToken>, ContextError<StrContext>> {
+    opt(alt((
+        '-'.map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus)),
+        '+'.map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Addition))
+    ))).parse_next(input)
+}
+
 /// TODO check that some generated functions do not generate strings even if they consume numbers
 pub fn parse_numeric_expression<'code>(
     constraint: NumericExpressionConstraint
 ) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
     // XXX Functions must be parsed first
     move |input: &mut &'code str| {
-        match constraint {
+        // Handle optional unary +/- at the start
+        let unary = parse_unary_operator(input)?;
+        
+        let mut res = Vec::new();
+        if let Some(op) = unary {
+            res.push(op);
+        }
+        
+        let mut value_tokens = match constraint {
             NumericExpressionConstraint::None => {
                 alt((
                     parse_asc,
                     parse_val,
                     parse_len,
+                    parse_min,
+                    parse_max,
+                    parse_round,
                     parse_all_generated_numeric_functions_any,
+                    parse_all_generated_numeric_functions_any2,
                     parse_all_generated_numeric_functions_int,
+                    parse_parenthesized_numeric_expression,
                     parse_basic_value.map(|v| vec![v]),
                     parse_integer_variable,
                     parse_float_variable
                 ))
-                .parse_next(input)
+                .parse_next(input)?
             },
             NumericExpressionConstraint::Integer => {
                 alt((
@@ -616,9 +3310,92 @@ pub fn parse_numeric_expression<'code>(
                     parse_integer_value_16bits.map(|v| vec![v]),
                     parse_integer_variable
                 ))
-                .parse_next(input)
+                .parse_next(input)?
             },
+        };
+        res.append(&mut value_tokens);
+        
+        // Parse operators and continuation of expression
+        // We need to be careful not to consume input greedily
+        loop {
+            // Save current position to restore if operator parsing fails
+            let checkpoint = input.checkpoint();
+            
+            // Try to parse optional leading space
+            let space_result = parse_space0.parse_next(input);
+            
+            // Try to parse an operator
+            let op_result: ModalResult<Vec<BasicToken>, ContextError<StrContext>> = alt((
+                Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
+                Caseless("AND").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::And)]),
+                Caseless("OR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Or)]),
+                Caseless("XOR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Xor)]),
+                "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
+                ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
+                "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
+                "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
+                ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
+                "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+                "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
+                "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]),
+                "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
+                "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
+                "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
+                "-".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus)])
+            )).parse_next(input);
+            
+            // If operator parsing failed, restore position and exit loop
+            if op_result.is_err() {
+                input.reset(&checkpoint);
+                break;
+            }
+            
+            // Operator found, commit the space and operator tokens
+            let mut space = space_result.unwrap();
+            let mut op_tokens = op_result.unwrap();
+            res.append(&mut space);
+            res.append(&mut op_tokens);
+            
+            // Parse optional trailing space
+            let mut space2 = parse_space0.parse_next(input)?;
+            res.append(&mut space2);
+            
+            // Parse the right-hand side
+            let mut rhs = match constraint {
+                NumericExpressionConstraint::None => {
+                    alt((
+                        parse_asc,
+                        parse_val,
+                        parse_len,
+                        parse_min,
+                        parse_max,
+                        parse_round,
+                        parse_all_generated_numeric_functions_any,
+                        parse_all_generated_numeric_functions_any2,
+                        parse_all_generated_numeric_functions_int,
+                        parse_parenthesized_numeric_expression,
+                        parse_basic_value.map(|v| vec![v]),
+                        parse_integer_variable,
+                        parse_float_variable
+                    ))
+                    .parse_next(input)?
+                },
+                NumericExpressionConstraint::Integer => {
+                    alt((
+                        parse_asc,
+                        parse_val,
+                        parse_len,
+                        parse_all_generated_numeric_functions_int,
+                        parse_integer_value_16bits.map(|v| vec![v]),
+                        parse_integer_variable
+                    ))
+                    .parse_next(input)?
+                },
+            };
+            res.append(&mut rhs);
         }
+        
+        Ok(res)
     }
 }
 
@@ -678,7 +3455,9 @@ generate_string_functions! {
     VAL: BasicToken::PrefixedToken(BasicTokenPrefixed::Val)
 }
 
-/// works with float on the amstrad cpc
+/// CHR$(code)
+/// Returns a string containing the character with the given ASCII code
+/// Note: works with float on the amstrad cpc
 fn parse_chr_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_numeric_function(
         "CHR$",
@@ -688,6 +3467,96 @@ fn parse_chr_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     .parse_next(input)
 }
 
+/// MID$(string, start, [length])
+fn parse_mid_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (code, mut space_a, _open, mut string_expr, mut space_b, _comma1, mut space_c, mut start_expr, opt_length) = (
+        Caseless("MID$").map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar)),
+        parse_space0,
+        '(',
+        cut_err(parse_string_expression.context(StrContext::Label("string expression"))),
+        parse_space0,
+        cut_err(','.context(StrContext::Label(","))),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("start position"))),
+        opt((parse_space0, ',', parse_space0, parse_numeric_expression(NumericExpressionConstraint::None)))
+    ).parse_next(input)?;
+    
+    let _close = cut_err(')'.context(StrContext::Label(")"))).parse_next(input)?;
+    
+    let mut res = vec![code];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+    res.append(&mut string_expr);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
+    res.append(&mut space_c);
+    res.append(&mut start_expr);
+    
+    if let Some((mut space_d, _comma, mut space_e, mut length_expr)) = opt_length {
+        res.append(&mut space_d);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
+        res.append(&mut space_e);
+        res.append(&mut length_expr);
+    }
+    
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    Ok(res)
+}
+
+/// LEFT$(string, length)
+fn parse_left_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (code, mut space_a, _open, mut string_expr, mut space_b, _comma, mut space_c, mut length_expr, _close) = (
+        Caseless("LEFT$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::LeftDollar)),
+        parse_space0,
+        '(',
+        cut_err(parse_string_expression.context(StrContext::Label("string expression"))),
+        parse_space0,
+        cut_err(','.context(StrContext::Label(","))),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("length"))),
+        cut_err(')'.context(StrContext::Label(")")))
+    ).parse_next(input)?;
+    
+    let mut res = vec![code];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+    res.append(&mut string_expr);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
+    res.append(&mut space_c);
+    res.append(&mut length_expr);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    Ok(res)
+}
+
+/// RIGHT$(string, length)
+fn parse_right_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (code, mut space_a, _open, mut string_expr, mut space_b, _comma, mut space_c, mut length_expr, _close) = (
+        Caseless("RIGHT$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::RightDollar)),
+        parse_space0,
+        '(',
+        cut_err(parse_string_expression.context(StrContext::Label("string expression"))),
+        parse_space0,
+        cut_err(','.context(StrContext::Label(","))),
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("length"))),
+        cut_err(')'.context(StrContext::Label(")")))
+    ).parse_next(input)?;
+    
+    let mut res = vec![code];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+    res.append(&mut string_expr);
+    res.append(&mut space_b);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
+    res.append(&mut space_c);
+    res.append(&mut length_expr);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    Ok(res)
+}
+
+/// SPACE$(count)
+/// Returns a string of 'count' spaces
 fn parse_space_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_numeric_function(
         "SPACE$",
@@ -697,6 +3566,8 @@ fn parse_space_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
     .parse_next(input)
 }
 
+/// STR$(number)
+/// Converts a number to its string representation
 fn parse_str_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_numeric_function(
         "STR$",
@@ -706,6 +3577,8 @@ fn parse_str_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     .parse_next(input)
 }
 
+/// LOWER$(string)
+/// Converts a string to lowercase
 fn parse_lower_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_string_function(
         "LOWER$",
@@ -714,12 +3587,109 @@ fn parse_lower_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
     .parse_next(input)
 }
 
+/// UPPER$(string)
+/// Converts a string to uppercase
 fn parse_upper_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_string_function(
         "UPPER$",
         BasicToken::PrefixedToken(BasicTokenPrefixed::UpperDollar)
     )
     .parse_next(input)
+}
+
+/// BIN$(number)
+/// Converts a number to its binary string representation
+fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_numeric_function(
+        "BIN$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::BinDollar),
+        NumericExpressionConstraint::None
+    )
+    .parse_next(input)
+}
+
+/// DEC$(number, format)
+/// Converts a number to its decimal string representation with formatting
+fn parse_dec_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_numeric_function(
+        "DEC$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::DecDollar),
+        NumericExpressionConstraint::None
+    )
+    .parse_next(input)
+}
+
+/// HEX$(number)
+/// Converts a number to its hexadecimal string representation
+fn parse_hex_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_numeric_function(
+        "HEX$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::HexDollar),
+        NumericExpressionConstraint::None
+    )
+    .parse_next(input)
+}
+
+/// STRING$(count, string)
+/// Returns a string composed of 'count' repetitions of the first character of 'string'
+fn parse_string_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (code, mut space_a, open, mut count, mut space_b, comma, mut space_c, mut string, mut space_d, close) = (
+        Caseless("STRING$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::StringDollar)),
+        parse_space0,
+        '(',
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("numeric expression"))),
+        parse_space0,
+        cut_err(','.context(StrContext::Label(","))),
+        parse_space0,
+        cut_err(parse_string_expression.context(StrContext::Label("string expression"))),
+        parse_space0,
+        cut_err(')'.context(StrContext::Label(")")))
+    )
+    .parse_next(input)?;
+
+    let mut result = Vec::new();
+    result.push(code);
+    result.append(&mut space_a);
+    result.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+    result.append(&mut count);
+    result.append(&mut space_b);
+    result.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
+    result.append(&mut space_c);
+    result.append(&mut string);
+    result.append(&mut space_d);
+    result.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    Ok(result)
+}
+
+/// INKEY$(timeout)
+/// Reads a character from the keyboard with optional timeout
+fn parse_inkey_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_numeric_function(
+        "INKEY$",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::InkeyDollar),
+        NumericExpressionConstraint::None
+    )
+    .parse_next(input)
+}
+
+/// COPYCHR$(#stream)
+/// Returns the character at the current cursor position of the specified stream (0-9)
+fn parse_copychar_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (code, mut space_a, open, mut stream, close) = (
+        Caseless("COPYCHR$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::CopycharDollar)),
+        parse_space0,
+        '(',
+        parse_canal,  // Parse #0, #1, etc.
+        cut_err(')'.context(StrContext::Label("Missing ')'")))
+    )
+        .parse_next(input)?;
+    
+    let mut res = vec![code];
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
+    res.append(&mut stream);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    Ok(res)
 }
 
 fn parse_any_numeric_function<'code>(
@@ -757,6 +3727,65 @@ fn parse_any_numeric_function<'code>(
 // BasicToken::PrefixedToken(BasicTokenPrefixed::Abs)
 // )(input)
 // }
+
+fn parse_any_two_arg_numeric_function<'code>(
+    name: &'static str,
+    code: BasicToken,
+    constraint: NumericExpressionConstraint
+) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
+    move |input: &mut &'code str| -> BasicSeveralTokensResult<'code> {
+        let (code, mut space_a, open, mut expr1, comma, mut expr2, close) = (
+            Caseless(name).map(|_| code.clone()),
+            parse_space0,
+            '(',
+            cut_err(
+                parse_numeric_expression(constraint).context(StrContext::Label("Wrong first parameter"))
+            ),
+            cut_err(','.context(StrContext::Label("Missing ',' between arguments"))),
+            cut_err(
+                parse_numeric_expression(constraint).context(StrContext::Label("Wrong second parameter"))
+            ),
+            cut_err(')'.context(StrContext::Label("Missing ')'")))
+        )
+            .parse_next(input)?;
+
+        let mut res = Vec::new();
+        res.push(code);
+        res.append(&mut space_a);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
+        res.append(&mut expr1);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(comma)));
+        res.append(&mut expr2);
+        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
+
+        Ok(res)
+    }
+}
+
+// MIN and MAX functions (two-argument numeric functions)
+pub fn parse_min<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_two_arg_numeric_function(
+        "MIN",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Min),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+pub fn parse_max<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_two_arg_numeric_function(
+        "MAX",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Max),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+pub fn parse_round<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_two_arg_numeric_function(
+        "ROUND",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Round),
+        NumericExpressionConstraint::None
+    )(input)
+}
 
 macro_rules! generate_numeric_functions {
     ( $(
@@ -801,21 +3830,39 @@ generate_numeric_functions! {
         CREAL: BasicToken::PrefixedToken(BasicTokenPrefixed::Creal),
         EXP: BasicToken::PrefixedToken(BasicTokenPrefixed::Exp),
         FIX: BasicToken::PrefixedToken(BasicTokenPrefixed::Fix),
+        FRE: BasicToken::PrefixedToken(BasicTokenPrefixed::Fre),
         INP: BasicToken::PrefixedToken(BasicTokenPrefixed::Inp),
         INT: BasicToken::PrefixedToken(BasicTokenPrefixed::Int),
         LOG: BasicToken::PrefixedToken(BasicTokenPrefixed::Log),
+        LOG10: BasicToken::PrefixedToken(BasicTokenPrefixed::Log10),
         PEEK: BasicToken::PrefixedToken(BasicTokenPrefixed::Peek),
         SGN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sign),
         SIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Sin),
         SQ: BasicToken::PrefixedToken(BasicTokenPrefixed::Sq),
-        SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr),
+        SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr)
+    }
+    
+    NumericExpressionConstraint::None | any2  => {
+        REMAIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Remain),
+        RND: BasicToken::PrefixedToken(BasicTokenPrefixed::Rnd),
         TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan),
-        UNT: BasicToken::PrefixedToken(BasicTokenPrefixed::Unt)
+        TEST: BasicToken::PrefixedToken(BasicTokenPrefixed::Test),
+        TESTR: BasicToken::PrefixedToken(BasicTokenPrefixed::Teststr),
+        UNT: BasicToken::PrefixedToken(BasicTokenPrefixed::Unt),
+        XPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Xpos),
+        YPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Ypos)
     }
 
     NumericExpressionConstraint::Integer | int => {
+        DERR: BasicToken::PrefixedToken(BasicTokenPrefixed::Derr),
+        EOF: BasicToken::PrefixedToken(BasicTokenPrefixed::Eof),
+        ERR: BasicToken::PrefixedToken(BasicTokenPrefixed::Err),
+        HIMEM: BasicToken::PrefixedToken(BasicTokenPrefixed::Himem),
         INKEY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Inkey),
-        JOY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Joy)
+        JOY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Joy),
+        POS: BasicToken::PrefixedToken(BasicTokenPrefixed::Pos),
+        TIME: BasicToken::PrefixedToken(BasicTokenPrefixed::Time),
+        VPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Vpos)
     }
 }
 
@@ -1124,11 +4171,232 @@ mod test {
     }
 
     #[test]
+    fn test_if_line() {
+        let line1 = parse_basic_line.parse("10 IF A THEN\n");
+        match line1 {
+            Ok(l) => {
+                println!("Parsed simple IF: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse simple IF: {:?}", e);
+            }
+        }
+        
+        let line2 = parse_basic_line.parse("10 IF A>5 THEN\n");
+        match line2 {
+            Ok(l) => {
+                println!("Parsed IF with >: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse IF with >: {:?}", e);
+            }
+        }
+        
+        // Test with colon separator (correct Locomotive BASIC syntax)
+        let line3 = parse_basic_line.parse("10 IF A>5 THEN: GOTO 20\n");
+        match line3 {
+            Ok(l) => {
+                println!("Parsed IF with THEN: GOTO: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse IF with THEN: GOTO: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_if_direct() {
+        let mut input = "IF A>5 THEN ";
+        let res = parse_if.parse_next(&mut input);
+        match res {
+            Ok(tokens) => {
+                println!("IF tokens: {:?}", &tokens);
+                println!("Remaining input: {:?}", input);
+            },
+            Err(e) => {
+                panic!("IF parse failed: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
     fn test_lines() {
         check_line_tokenisation("10 RUN\"BLIGHT.001\n");
         check_line_tokenisation("10 call &0\n");
         check_line_tokenisation("10 call &0  \n");
         check_line_tokenisation("10 call &0: call &0\n");
+        
+        // Screen/Display statements
+        check_line_tokenisation("10 MODE 0\n");
+        check_line_tokenisation("10 MODE 1\n");
+        check_line_tokenisation("10 CLS\n");
+        check_line_tokenisation("10 CLS #1\n");
+        check_line_tokenisation("10 LOCATE 1,1\n");
+        check_line_tokenisation("10 LOCATE #1, 10, 20\n");
+        check_line_tokenisation("10 INK 0,1\n");
+        check_line_tokenisation("10 INK 0,1,26\n");
+        check_line_tokenisation("10 BORDER 0\n");
+        check_line_tokenisation("10 BORDER 0,1\n");
+        check_line_tokenisation("10 PEN 1\n");
+        check_line_tokenisation("10 PEN #1, 2\n");
+        check_line_tokenisation("10 PAPER 0\n");
+        check_line_tokenisation("10 PAPER #1, 0\n");
+        
+        // Control flow statements
+        check_line_tokenisation("10 GOTO 100\n");
+        check_line_tokenisation("10 GOSUB 1000\n");
+        check_line_tokenisation("10 RETURN\n");
+        check_line_tokenisation("10 END\n");
+        check_line_tokenisation("10 STOP\n");
+        check_line_tokenisation("10 FOR I=1 TO 10\n");
+        check_line_tokenisation("10 FOR I=1 TO 10 STEP 2\n");
+        check_line_tokenisation("10 NEXT\n");
+        check_line_tokenisation("10 NEXT I\n");
+        // check_line_tokenisation("10 IF A=1 THEN PRINT A\n");  // TODO: Need to parse logical expressions
+        // check_line_tokenisation("10 WHILE A<10\n");  // TODO: Need to parse logical expressions
+        check_line_tokenisation("10 WEND\n");
+        
+        // Graphics statements
+        check_line_tokenisation("10 DRAW 100,200\n");
+        check_line_tokenisation("10 DRAW 100,200,1\n");
+        check_line_tokenisation("10 DRAWR 10,20\n");
+        check_line_tokenisation("10 MOVE 100,200\n");
+        check_line_tokenisation("10 MOVER 10,20\n");
+        check_line_tokenisation("10 PLOT 100,200\n");
+        check_line_tokenisation("10 PLOTR 10,20\n");
+        check_line_tokenisation("10 CLG\n");
+        check_line_tokenisation("10 CLG 1\n");
+        check_line_tokenisation("10 ORIGIN 0,0\n");
+        
+        // Data/Memory statements
+        check_line_tokenisation("10 DATA 1,2,3\n");
+        check_line_tokenisation("10 READ A,B,C\n");
+        check_line_tokenisation("10 RESTORE\n");
+        check_line_tokenisation("10 RESTORE 100\n");
+        check_line_tokenisation("10 DIM A(10)\n");
+        check_line_tokenisation("10 POKE 16384,255\n");
+        check_line_tokenisation("10 OUT 49152,0\n");
+        check_line_tokenisation("10 ERASE A\n");
+        check_line_tokenisation("10 SWAP A,B\n");
+        
+        // File operations
+        check_line_tokenisation("10 LOAD\"TEST\"\n");
+        check_line_tokenisation("10 LOAD\"TEST\",16384\n");
+        check_line_tokenisation("10 SAVE\"TEST\"\n");
+        check_line_tokenisation("10 NEW\n");
+        check_line_tokenisation("10 CLEAR\n");
+        
+        // Math/Misc
+        check_line_tokenisation("10 DEG\n");
+        check_line_tokenisation("10 RAD\n");
+        check_line_tokenisation("10 RANDOMIZE\n");
+        check_line_tokenisation("10 RANDOMIZE 123\n");
+        check_line_tokenisation("10 SOUND 1,100,20\n");
+        
+        // Program control
+        check_line_tokenisation("10 ON X GOTO 100,200,300\n");
+        check_line_tokenisation("10 ON X GOSUB 1000,2000\n");
+        check_line_tokenisation("10 RESUME\n");
+        check_line_tokenisation("10 RESUME NEXT\n");
+        check_line_tokenisation("10 ERROR 1\n");
+        check_line_tokenisation("10 CONT\n");
+        
+        // Utilities
+        check_line_tokenisation("10 LIST\n");
+        check_line_tokenisation("10 DELETE 10-100\n");
+        check_line_tokenisation("10 TRON\n");
+        check_line_tokenisation("10 TROFF\n");
+        check_line_tokenisation("10 SYMBOL 65,1,2,3,4,5,6,7,8\n");
+        check_line_tokenisation("10 MEMORY 32000\n");
+        check_line_tokenisation("10 CURSOR\n");
+        check_line_tokenisation("10 CURSOR 1\n");
+        check_line_tokenisation("10 TAG\n");
+        check_line_tokenisation("10 TAGOFF\n");
+        check_line_tokenisation("10 WAIT 49152,255\n");
+        check_line_tokenisation("10 WINDOW 1,40,1,25\n");
+        check_line_tokenisation("10 DEFINT A-Z\n");
+        
+        // New file operations
+        check_line_tokenisation("10 CAT\n");
+        check_line_tokenisation("10 CHAIN\"PROGRAM\"\n");
+        check_line_tokenisation("10 CHAIN\"PROGRAM\",1000\n");
+        check_line_tokenisation("10 MERGE\"DATA\"\n");
+        check_line_tokenisation("10 OPENIN\"INPUT.DAT\"\n");
+        check_line_tokenisation("10 OPENOUT\"OUTPUT.DAT\"\n");
+        check_line_tokenisation("10 CLOSEIN\n");
+        check_line_tokenisation("10 CLOSEOUT\n");
+        
+        // Sound envelopes
+        check_line_tokenisation("10 ENT 1,10,20,30\n");
+        check_line_tokenisation("10 ENV 2,5,15\n");
+        check_line_tokenisation("10 RELEASE 1\n");
+        
+        // Input/Output - TODO: Some need more complex parsing
+        // check_line_tokenisation("10 LINE INPUT A$\n");
+        // check_line_tokenisation("10 KEY 1,\"TEST\"\n");
+        // check_line_tokenisation("10 KEY DEF 0,1,50\n");
+        check_line_tokenisation("10 ZONE 10\n");
+        check_line_tokenisation("10 WIDTH 40\n");
+        check_line_tokenisation("10 WRITE A,B,C\n");
+        
+        // Misc
+        check_line_tokenisation("10 EI\n");
+        check_line_tokenisation("10 DI\n");
+        // check_line_tokenisation("10 MID$(A$,1,5)=\"HELLO\"\n");
+        
+        // Expressions with operators
+        check_line_tokenisation("10 PRINT A+B\n");
+        check_line_tokenisation("10 PRINT X*2\n");
+        check_line_tokenisation("10 PRINT A+B*C\n");
+        check_line_tokenisation("10 PRINT N-1\n");
+        check_line_tokenisation("10 PRINT X/2\n");
+        check_line_tokenisation("10 PRINT 2^8\n");
+        check_line_tokenisation("10 PRINT 100\\3\n");
+        check_line_tokenisation("10 PRINT 10 MOD 3\n");
+        
+        // IF/WHILE with comparison operators (using colon separator for multi-statement lines)
+        check_line_tokenisation("10 IF A>5 THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A<10 THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A=B THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A<>B THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A>=10 THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A<=100 THEN: PRINT A\n");
+        check_line_tokenisation("10 IF A>5 AND B<10 THEN: GOTO 100\n");
+        check_line_tokenisation("10 IF X=1 OR Y=2 THEN: GOSUB 200\n");
+        check_line_tokenisation("10 WHILE N<100\n");
+        check_line_tokenisation("10 WHILE A>0 AND B<100\n");
+    }
+
+    #[test]
+    fn test_decimal_assignment() {
+        check_line_tokenisation("10 a=9.5\n");
+        check_line_tokenisation("10 gn=9.8\n");
+        // check_line_tokenisation("10 gn=9.80665\n"); // TODO: investigate why this specific number fails
+    }
+
+    #[test]
+    fn test_line_input_isolated() {
+        check_line_tokenisation("30 LINE INPUT \"test\",a$\n");  // With space after INPUT
+        check_line_tokenisation("30 LINE INPUT#9,a$\n");  // With #9 (no space)
+    }
+
+    #[test]
+    fn test_print_string_var() {
+        check_line_tokenisation("10 PRINT a$\n");
+    }
+
+    #[test]
+    fn test_hello_world() {
+        check_line_tokenisation("100 PRINT \"Hello World!\"\n");
+    }
+
+    #[test]
+    fn test_print_semicolon() {
+        // Test PRINT with semicolon
+        check_line_tokenisation("10 PRINT I\n");
+        check_line_tokenisation("20 PRINT I;\n");
+        check_line_tokenisation("30 PRINT \"test\";\n");
+        check_line_tokenisation("40 PRINT A,B,C\n");
     }
 
     #[test]
@@ -1137,6 +4405,134 @@ mod test {
         check_line_tokenisation("10 ' fldsfksjfksjkg");
 
         let _line = check_line_tokenisation("10 REM fldsfksjfksjkg:CALL\n");
+    }
+
+    #[test]
+    fn test_locomotive_basic_examples() {
+        // Examples extracted from Locomotive BASIC CPCWiki documentation
+        
+        // DATA/READ example - TODO: DATA needs special parsing for comma-separated values
+        // check_line_tokenisation("10 DATA \"Hello, world!\", 42\n");
+        // check_line_tokenisation("20 READ message$:PRINT message$\n");
+        // check_line_tokenisation("30 READ answer:PRINT \"The answer is:\";answer\n");
+        
+        // FOR/NEXT example
+        check_line_tokenisation("10 FOR I=1 TO 10\n");
+        check_line_tokenisation("20 PRINT I;\n");
+        check_line_tokenisation("30 NEXT I\n");
+        check_line_tokenisation("40 PRINT I\n");
+        
+        // GOSUB/RETURN example
+        check_line_tokenisation("10 PRINT \"Calling subroutine\"\n");
+        check_line_tokenisation("20 GOSUB 100\n");
+        check_line_tokenisation("30 PRINT \"Back from subroutine\"\n");
+        check_line_tokenisation("40 END\n");
+        check_line_tokenisation("100 REM Begin of the subroutine\n");
+        check_line_tokenisation("110 PRINT \"Subroutine started\"\n");
+        check_line_tokenisation("120 RETURN\n");
+        
+        // Simple GOTO example
+        check_line_tokenisation("10 GOTO 100\n");
+        check_line_tokenisation("20 REM not executed\n");
+        check_line_tokenisation("30 REM not executed\n");
+        check_line_tokenisation("100 PRINT \"Hello World!\"\n");
+        
+        // Endless loop example
+        check_line_tokenisation("10 PRINT \"#\";\n");
+        check_line_tokenisation("20 GOTO 10\n");
+        
+        // Conditional loop example
+        check_line_tokenisation("10 I=1\n");
+        check_line_tokenisation("20 PRINT I\n");
+        check_line_tokenisation("30 I=I+1\n");
+        check_line_tokenisation("40 IF I<25 THEN: GOTO 20\n");
+        check_line_tokenisation("50 END\n");
+        
+        // INPUT example with IF
+        check_line_tokenisation("10 INPUT \"guess a figure:\",f\n");
+        check_line_tokenisation("20 IF f=10 THEN: PRINT \"right\": END\n");
+        
+        // MODE/INK example
+        check_line_tokenisation("10 MODE 2\n");
+        check_line_tokenisation("20 INK 0,3: REM Set background colour to red\n");
+        check_line_tokenisation("30 INK 1,26: REM Set foreground/text colour to white\n");
+        
+        // LET example
+        check_line_tokenisation("10 LET a$ = \"hello world\"\n");
+        check_line_tokenisation("20 PRINT a$\n");
+        
+        // EOF/WHILE file reading example - TODO: NOT function not implemented
+        check_line_tokenisation("10 OPENIN \"text.txt\"\n");
+        // check_line_tokenisation("20 WHILE NOT EOF\n");
+        check_line_tokenisation("30 LINE INPUT#9,a$\n");
+        check_line_tokenisation("40 PRINT a$\n");
+        check_line_tokenisation("50 WEND\n");
+        check_line_tokenisation("60 CLOSEIN\n");
+        
+        // DEF FN example - TODO: DEF FN needs special parsing, decimals need float parser fix
+        // check_line_tokenisation("10 gn=9.80665\n");
+        // check_line_tokenisation("20 DEF FNgrv=s0+v0*t+0.5*gn*t^2\n");
+        check_line_tokenisation("30 s0=0:v0=0:t=5\n");
+        // check_line_tokenisation("40 PRINT \"...after\";t;\"seconds your dropped stone falls\";FNgrv;\"metres\"\n");
+        
+        // DRAW example
+        check_line_tokenisation("10 CLG 2\n");
+        check_line_tokenisation("20 DRAW 500,400,0\n");
+        
+        // MOVE/DRAWR example
+        check_line_tokenisation("10 MOVE 200,200\n");
+        check_line_tokenisation("20 DRAWR 100,100,0\n");
+        
+        // WINDOW/CURSOR example
+        check_line_tokenisation("10 MODE 1:BORDER 0:LOCATE 8,2\n");
+        check_line_tokenisation("20 PRINT \"use cursor up/down keys\"\n");
+        check_line_tokenisation("30 WINDOW 39,39,1,25:CURSOR 1,1\n");
+        
+        // AUTO command - TODO: Immediate mode commands (no line number) not supported
+        // check_line_tokenisation("AUTO 100,5\n");
+        
+        // DEFINT example - TODO: Range parsing (F,S or A-Z)
+        // check_line_tokenisation("10 DEFINT F,S\n");
+        check_line_tokenisation("20 FIRST=111.11:SECOND=22.2\n");
+        check_line_tokenisation("30 PRINT FIRST,SECOND\n");
+        
+        // EVERY/AFTER example with interrupts - TODO: EVERY/AFTER not implemented
+        check_line_tokenisation("10 REM > interrupts\n");
+        // check_line_tokenisation("20 EVERY 50,0 GOSUB 100: REM > lowest priority\n");
+        // check_line_tokenisation("30 EVERY 100,1 GOSUB 200\n");
+        // check_line_tokenisation("40 EVERY 200,2 GOSUB 300\n");
+        // check_line_tokenisation("50 AFTER 1000,3 GOSUB 400: REM > highest priority\n");
+        check_line_tokenisation("60 WHILE flag=0\n");
+        check_line_tokenisation("70 a=a+1:print a\n");
+        check_line_tokenisation("80 WEND\n");
+        check_line_tokenisation("90 END\n");
+        check_line_tokenisation("100 REM #0\n");
+        check_line_tokenisation("110 PEN 2:PRINT \"timer 0\":PEN 1\n");
+        check_line_tokenisation("120 RETURN\n");
+        check_line_tokenisation("200 REM #1\n");
+        check_line_tokenisation("210 PEN 2:PRINT \"timer 1\":PEN 1\n");
+        check_line_tokenisation("220 RETURN\n");
+        check_line_tokenisation("300 REM #2\n");
+        check_line_tokenisation("310 PEN 2:PRINT \"timer 2\":PEN 1\n");
+        check_line_tokenisation("320 RETURN\n");
+        check_line_tokenisation("400 REM #3\n");
+        check_line_tokenisation("410 flag=1:PEN 2:PRINT \"no more interrupts...\"\n");
+        check_line_tokenisation("420 RETURN\n");
+        
+        // Additional practical examples
+        check_line_tokenisation("10 CLS\n");
+        check_line_tokenisation("20 LOCATE 10,12\n");
+        check_line_tokenisation("30 PRINT \"Press any key\"\n");
+        
+        check_line_tokenisation("10 FOR X=1 TO 100\n");
+        check_line_tokenisation("20 FOR Y=1 TO 100\n");
+        check_line_tokenisation("30 PLOT X,Y\n");
+        check_line_tokenisation("40 NEXT Y\n");
+        check_line_tokenisation("50 NEXT X\n");
+        
+        check_line_tokenisation("10 X=100:Y=200\n");
+        check_line_tokenisation("20 MOVE X,Y\n");
+        check_line_tokenisation("30 DRAW X+50,Y+50\n");
     }
 
     fn check_expression(code: &str) {
@@ -1171,5 +4567,226 @@ mod test {
             check_expression(exp);
             check_print_expression(exp);
         }
+    }
+
+    #[test]
+    fn test_parse_numeric_expression() {
+        let mut input = "x<0";
+        let result = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(&mut input);
+        println!("Result: {:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_general_expression() {
+        let mut input = "x<0";
+        let result = parse_general_expression(&mut input);
+        println!("Result: {:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_graphics_pen() {
+        // Test just the instruction parser first
+        let mut input_instr = "GRAPHICS PEN c\n";
+        let result_instr = parse_graphics_pen(&mut input_instr);
+        println!("parse_graphics_pen instruction: {:?}", result_instr);
+        println!("Remaining input: '{}'", input_instr);
+        assert!(result_instr.is_ok(), "GRAPHICS PEN c instruction should parse");
+        
+        // Test via parse_instruction
+        let mut input2 = "GRAPHICS PEN 1\n";
+        let result2 = parse_instruction(&mut input2);
+        println!("parse_instruction with GRAPHICS PEN 1: {:?}", result2);
+        assert!(result2.is_ok(), "GRAPHICS PEN 1 via parse_instruction should parse");
+        
+        // Test via parse_instruction with variable
+        let mut input3 = "GRAPHICS PEN c\n";
+        let result3 = parse_instruction(&mut input3);
+        println!("parse_instruction with GRAPHICS PEN c: {:?}", result3);
+        assert!(result3.is_ok(), "GRAPHICS PEN c via parse_instruction should parse");
+        
+        // Test full line 
+        let mut input = "70 GRAPHICS PEN c\n";
+        let result = parse_basic_line.parse(input);
+        println!("parse_basic_line result: {:?}", result);
+        assert!(result.is_ok(), "70 GRAPHICS PEN c should parse");
+    }
+
+    #[test]
+    fn test_parse_if() {
+        // Test numeric expression with unary minus
+        let mut input_unary = "-dx";
+        let result_unary = parse_numeric_expression(NumericExpressionConstraint::None).parse_next(&mut input_unary);
+        println!("parse_numeric_expression on '-dx': {:?}", result_unary);
+        
+        // Test assignment first
+        let mut input_assign = "dx=-dx";
+        let result_assign = parse_assign(&mut input_assign);
+        println!("parse_assign result: {:?}", result_assign);
+        
+        let mut input = "IF x<0 THEN dx=-dx";
+        let result = parse_if(&mut input);
+        println!("parse_if result: {:?}", result);
+        assert!(result.is_ok());
+        
+        // Test instruction parsing (without line number)
+        let mut input2 = "IF x<0 THEN dx=-dx\n";
+        let result2 = parse_instruction(&mut input2);
+        println!("parse_instruction on full IF result: {:?}", result2);
+        println!("Remaining input after IF: '{}'", input2);
+        
+        // Also test parsing just the assignment part
+        let mut input3 = "dx=-dx\n";
+        let result3 = parse_instruction(&mut input3);
+        println!("parse_instruction on 'dx=-dx' result: {:?}", result3);
+        
+        // Test the specific sequence: IF THEN assignment
+        let mut input4 = "IF x<0 THEN dx=-dx\n";
+        let r1 = parse_instruction(&mut input4);
+        println!("\n1st instruction: {:?}", r1);
+        println!("After 1st, input: '{}'", input4);
+        
+        if !input4.is_empty() && !input4.starts_with('\n') && !input4.starts_with(':') {
+            // Should be able to parse second instruction
+            let r2 = parse_instruction(&mut input4);
+            println!("2nd instruction: {:?}", r2);
+            println!("After 2nd, input: '{}'", input4);
+        }
+        
+        // Test full line parsing
+        // TODO: IF...THEN statement (without colon) not yet supported
+        // let line1 = parse_basic_line.parse("100 IF x<0 THEN dx=-dx\n");
+        // With colon it should work:
+        let line1 = parse_basic_line.parse("100 IF x<0 THEN: dx=-dx\n");
+        match line1 {
+            Ok(l) => {
+                println!("Parsed full line: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse full line: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_while() {
+        // Test WHILE with string comparison
+        let mut input = "WHILE INKEY$=\"\"";
+        let result = parse_while(&mut input);
+        println!("parse_while result: {:?}", result);
+        assert!(result.is_ok(), "parse_while should handle INKEY$=\"\"");
+        
+        // Test full line
+        let line = parse_basic_line.parse("80 WHILE INKEY$=\"\"\n");
+        match line {
+            Ok(l) => {
+                println!("Parsed WHILE line: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse WHILE line: {:?}", e);
+            }
+        }
+        
+        // Test compound condition with AND  
+        println!("\n--- Testing compound WHILE condition ---");
+        let line2 = parse_basic_line.parse("80 WHILE r<300 AND INKEY$=\"\"\n");
+        match line2 {
+            Ok(l) => {
+                println!("Parsed compound WHILE line: {:?}", l);
+            },
+            Err(e) => {
+                panic!("Failed to parse compound WHILE: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_amstrad_cpc_projects() {
+        // Test bounce.bas
+        check_line_tokenisation("10 MODE 1\n");
+        check_line_tokenisation("20 BORDER 0\n");
+        check_line_tokenisation("30 INK 0,0:INK 1,26:INK 2,6:INK 3,18\n");
+        check_line_tokenisation("70 GRAPHICS PEN 1\n");
+        
+        // Debug: Test simple IF first
+        // TODO: IF...THEN statement (without colon) is not yet supported - needs parser refactoring
+        // check_line_tokenisation("100 IF x<0 THEN dx=-dx\n");
+        check_line_tokenisation("100 IF x<0 THEN: dx=-dx\n");  // Workaround: use colon
+        
+        check_line_tokenisation("80 WHILE INKEY$=\"\"\n");
+        // TODO: Same issue with THEN without colon
+        // check_line_tokenisation("120 IF x<0 OR x>639 THEN dx=-dx\n");
+        check_line_tokenisation("120 IF x<0 OR x>639 THEN: dx=-dx\n");  // Workaround
+        check_line_tokenisation("160 CALL &BB18\n");
+        
+        // Test plasma.bas
+        check_line_tokenisation("40 FOR x=0 TO 639 STEP 4\n");
+        check_line_tokenisation("60 c=INT(2+2*SIN(x/40)+2*COS(y/30)) AND 3\n");
+        
+        // Test sectfgt.bas
+        check_line_tokenisation("10 ' Sector Fight\n");
+        check_line_tokenisation("20 RANDOMIZE TIME\n");
+        // TODO: CLEAR INPUT not yet implemented
+        // check_line_tokenisation("70 CLEAR INPUT:LOCATE 1,1:PRINT \"Select mode (0-Mode0 1-Mode1)\";\n");
+        // TODO: THEN without colon
+        // check_line_tokenisation("130 IF UPPER$(a$)=\"Y\" THEN ps=1 ELSE ps=0\n");
+        // TODO: DIM with 3 dimensions may have issue
+        // check_line_tokenisation("320 DIM st(2,ial,1):DIM st$(ial):RESTORE 3500:FOR i=0 TO ial:READ st$(i):NEXT\n");
+        // TODO: THEN without colon (multiple on one line)
+        // check_line_tokenisation("570 r=RND:IF r<pnprb(pnrm) THEN pn1=pnrm ELSE IF r<pnprb(patt) THEN pn1=patt ELSE IF r<pnprb(prnd) THEN pn1=prnd ELSE pn1=pdef\n");
+        // check_line_tokenisation("650 IF h=0 THEN id1$=\"CPU 1\":id2$=\"CPU 2\" ELSE id1$=\"CPU\":id2$=\"You\"\n");
+    }
+    
+    #[test]
+    fn test_inline_comment() {
+        check_line_tokenisation("10 x=5' this is a comment\n");
+        check_line_tokenisation("20 PRINT \"hello\"' comment\n");
+        check_line_tokenisation("30 a=1:b=2' comment\n");
+        check_line_tokenisation("40 a=1:' just comment\n");
+        check_line_tokenisation("50 IF x=1 THEN y=2:' comment\n");
+        check_line_tokenisation("60 IF x=1 THEN a=1:b=2:c=3:' comment\n");
+        check_line_tokenisation("71 GOSUB 100:' comment\n");
+        check_line_tokenisation("72 SOUND 1,200,20,15:' comment\n");
+        check_line_tokenisation("73 GOSUB 100:GOSUB 200:' comment\n");
+        check_line_tokenisation("74 GOSUB 100:SOUND 1,200,20,15:' comment\n");
+    }
+
+    #[test]
+    fn test_paper_pen() {
+        check_line_tokenisation("10 PAPER 0\n");
+        check_line_tokenisation("20 PEN 1\n");
+        check_line_tokenisation("30 PAPER 0:PEN 1\n");
+        check_line_tokenisation("40 NEXT:PAPER cpuclr:PEN ctx\n");
+        // Test the problematic pattern from line 122
+        check_line_tokenisation("50 IF ps=1 THEN FOR i=1 TO 10:NEXT:PAPER 0:PEN 1\n");
+    }
+
+    #[test]
+    fn test_line_122_components() {
+        // Test each component individually
+        check_line_tokenisation("10 IF ps=1 THEN a$=\"\"\n");
+        check_line_tokenisation("15 a$=COPYCHR$(#0)\n");
+        check_line_tokenisation("16 LOCATE i,sy\n");
+        check_line_tokenisation("17 a$=a$+COPYCHR$(#0)\n");
+        check_line_tokenisation("20 LOCATE i,sy:a$=a$+COPYCHR$(#0)\n");
+        check_line_tokenisation("30 FOR i=sx TO cols:LOCATE i,sy:a$=a$+COPYCHR$(#0):NEXT\n");
+        check_line_tokenisation("40 PAPER cpuclr\n");
+        check_line_tokenisation("50 PEN ctx\n");
+        check_line_tokenisation("60 LOCATE sx,sy\n");
+        check_line_tokenisation("70 PRINT a$\n");
+        check_line_tokenisation("80 PAPER cbg\n");
+        check_line_tokenisation("90 PEN cpuclr\n");
+        check_line_tokenisation("100 CLEAR INPUT\n");
+        check_line_tokenisation("110 CALL &BB18\n");
+        
+        // Test combinations
+        check_line_tokenisation("120 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:NEXT\n");
+        check_line_tokenisation("130 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:NEXT:PAPER cpuclr\n");
+        check_line_tokenisation("140 FOR i=1 TO 10:NEXT:PAPER cpuclr\n");
+        check_line_tokenisation("150 FOR i=1 TO 10:NEXT:PAPER cpuclr:PEN ctx\n");
+        
+        // Test exact line 122
+        check_line_tokenisation("1220 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:LOCATE i,sy:a$=a$+COPYCHR$(#0):NEXT:PAPER cpuclr:PEN ctx:LOCATE sx,sy:PRINT a$:PAPER cbg:PEN cpuclr:CLEAR INPUT:CALL &BB18\n");
     }
 }

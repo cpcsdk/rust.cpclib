@@ -1,0 +1,2577 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="client-js" data-lt-installed="true"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><script async="" src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/google-analytics_analytics.js"></script>
+<meta charset="UTF-8">
+<title>Locomotive BASIC - CPCWiki</title>
+<meta name="generator" content="MediaWiki 1.25.1">
+<link rel="shortcut icon" href="https://www.cpcwiki.eu/favicon.ico">
+<link rel="search" type="application/opensearchdescription+xml" href="https://www.cpcwiki.eu/opensearch_desc.php" title="CPCWiki - THE Amstrad CPC encyclopedia! (en)">
+<link rel="EditURI" type="application/rsd+xml" href="https://www.cpcwiki.eu/api.php?action=rsd">
+<link rel="alternate" hreflang="x-default" href="https://www.cpcwiki.eu/index.php/Locomotive_BASIC">
+<link rel="copyright" href="https://www.cpcwiki.eu/index.php/MediaWiki:Copyright">
+<link rel="alternate" type="application/atom+xml" title="CPCWiki - THE Amstrad CPC encyclopedia! Atom feed" href="https://www.cpcwiki.eu/index.php?title=Special:RecentChanges&amp;feed=atom">
+<link rel="stylesheet" href="Locomotive%20BASIC%20-%20CPCWiki_fichiers/load.css">
+<style>
+.mw-collapsible-toggle{float:right;-moz-user-select:none;-webkit-user-select:none;-ms-user-select:none;user-select:none}  .mw-content-ltr .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr .mw-collapsible-toggle{float:right} .mw-content-rtl .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl .mw-collapsible-toggle{float:left}.mw-customtoggle,.mw-collapsible-toggle{cursor:pointer} caption .mw-collapsible-toggle,.mw-content-ltr caption .mw-collapsible-toggle,.mw-content-rtl caption .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr caption .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl caption .mw-collapsible-toggle{float:none} li .mw-collapsible-toggle,.mw-content-ltr li .mw-collapsible-toggle,.mw-content-rtl li .mw-collapsible-toggle,.mw-content-rtl .mw-content-ltr li .mw-collapsible-toggle,.mw-content-ltr .mw-content-rtl li .mw-collapsible-toggle{float:none} .mw-collapsible-toggle-li{list-style:none}
+/* cache key: wikidb:resourceloader:filter:minify-css:7:e1ffd603cbaaa5f1a36e0d13fe843535 */
+.suggestions{overflow:hidden;position:absolute;top:0;left:0;width:0;border:none;z-index:1099;padding:0;margin:-1px 0 0 0}.suggestions-special{position:relative;background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0;margin-top:-2px;display:none;padding:0.25em 0.25em;line-height:1.25em}.suggestions-results{background-color:white;cursor:pointer;border:solid 1px #aaaaaa;padding:0;margin:0}.suggestions-result{color:black;margin:0;line-height:1.5em;padding:0.01em 0.25em;text-align:left; overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}.suggestions-result-current{background-color:#4C59A6;color:white}.suggestions-special .special-label{color:gray;text-align:left}.suggestions-special .special-query{color:black;font-style:italic;text-align:left}.suggestions-special .special-hover{background-color:silver}.suggestions-result-current .special-label,.suggestions-result-current .special-query{color:white}.highlight{font-weight:bold}
+/* cache key: wikidb:resourceloader:filter:minify-css:7:f8d0c6895ce3ae14434c16b8fca59432 */
+.postedit-container{margin:0 auto;position:fixed;top:0;height:0;left:50%;z-index:1000;font-size:13px}.postedit-container:hover{cursor:pointer}.postedit{position:relative;top:0.6em;left:-50%;padding:.6em 3.6em .6em 1.1em;line-height:1.5625em;color:#626465;background-color:#f4f4f4;border:1px solid #dcd9d9;text-shadow:0 0.0625em 0 rgba(255,255,255,0.5);border-radius:5px;box-shadow:0 2px 5px 0 #ccc;-webkit-transition:all 0.25s ease-in-out;-moz-transition:all 0.25s ease-in-out;-ms-transition:all 0.25s ease-in-out;-o-transition:all 0.25s ease-in-out;transition:all 0.25s ease-in-out}.skin-monobook .postedit{top:6em !important}.postedit-faded{opacity:0}.postedit-icon{padding-left:41px;  line-height:25px;background-repeat:no-repeat;background-position:8px 50%}.postedit-icon-checkmark{background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABblBMVEUAAAD///////9PfTf///80aRdTgjn///9Feij///////////9Rfzf///////////9PfjZRgDh1o1xOfTb///////+bwYqLtnj///////9PfTa82K////9WhT6YxIL///9QgDdTgzr////////j7uDl7eLq8efi693k7OH///////9UhjuBr2rp9uRUhjr///9YljVKgir///9WiTlYjT3////9/v57vFlbkT5PjC9dlD/5/fhuq09stUTs9uhxuElctCpfnT1huDFloEZloUZmpENmvDZpvDxpvTxqvjxrvT5rvT9rwTxsqktswD5uwkBvuUdxw0NztFBztU9ztVBzwkp0tlJ1xkd2t1R3uVR4w1F4xk54x014yE15uVZ5v1R5xVB6v1R7yFJ8wVh9xVl9yFR9yVd9ylN+xVh+yFd/x1l/yFeAylmEx1+Ny2uY0Hqe04Wj1Ymv3Ze33qLD47TJ5L3O6cPU7Mrq9eb2+/Q4j37OAAAAQHRSTlMAAQIEBAUFBQwPFB4fJCUoKiosQEhJS01RUlZZXmdydXaChYuSlJSWmJmoq6uur8LExcvM19fg5ejt8fX2+Pr7SljgewAAAKpJREFUGBkFwQNCAwAAAMDLtl3LtrG4rWXbtvX77gAgZ6grFwC0bhwNVgKgdPZx8b0dgLi+s7Wn0VoAqpfOI9+BNADZI7fLrz2pSEwGHZuH+78lSK8ZLkLezF3ooyUG3VPXq2USei9WngeyoG195yBYWDF3E/2pAhl1e9Gr8bGT+bfOFCC2fnvh4X7rcqIAQNNu+HT6sxkAjceTL/2ZAIhv+PorBwBJxfkA//dFHSCBy/UTAAAAAElFTkSuQmCC);background-image:url(/resources/src/mediawiki.action/images/green-checkmark.png?2015-05-25T21:00:00Z)!ie;background-position:left}.postedit-close{position:absolute;padding:0 .8em;right:0;top:0;font-size:1.25em;font-weight:bold;line-height:2.3em;color:black;text-shadow:0 0.0625em 0 white;text-decoration:none;opacity:0.2;filter:alpha(opacity=20)}.postedit-close:hover{color:black;text-decoration:none;opacity:0.4;filter:alpha(opacity=40)}
+/* cache key: wikidb:resourceloader:filter:minify-css:7:aaa32eab72036f8bdcbe3d96b08999c1 */</style><style>
+.suggestions a.mw-searchSuggest-link,.suggestions a.mw-searchSuggest-link:hover,.suggestions a.mw-searchSuggest-link:active,.suggestions a.mw-searchSuggest-link:focus{color:black;text-decoration:none}.suggestions-result-current a.mw-searchSuggest-link,.suggestions-result-current a.mw-searchSuggest-link:hover,.suggestions-result-current a.mw-searchSuggest-link:active,.suggestions-result-current a.mw-searchSuggest-link:focus{color:white}.suggestions a.mw-searchSuggest-link .special-query{ overflow:hidden;-o-text-overflow:ellipsis; text-overflow:ellipsis;white-space:nowrap}
+/* cache key: wikidb:resourceloader:filter:minify-css:7:ae3fa4570b5ac0c6cf7b3776c8ae4d6f */</style><meta name="ResourceLoaderDynamicStyles" content="">
+<style>a:lang(ar),a:lang(kk-arab),a:lang(mzn),a:lang(ps),a:lang(ur){text-decoration:none}
+/* cache key: wikidb:resourceloader:filter:minify-css:7:b36fd1c042133c9c9b60260f7c29b237 */</style>
+<script src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/load.php"></script><script src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/load_002.php"></script>
+<script>if(window.mw){
+mw.config.set({"wgCanonicalNamespace":"","wgCanonicalSpecialPageName":false,"wgNamespaceNumber":0,"wgPageName":"Locomotive_BASIC","wgTitle":"Locomotive BASIC","wgCurRevisionId":126886,"wgRevisionId":126886,"wgArticleId":2773,"wgIsArticle":true,"wgIsRedirect":false,"wgAction":"view","wgUserName":null,"wgUserGroups":["*"],"wgCategories":["Programming","BASIC","CPC Internal Components","Operating System","Software","Programming software"],"wgBreakFrames":false,"wgPageContentLanguage":"en","wgPageContentModel":"wikitext","wgSeparatorTransformTable":["",""],"wgDigitTransformTable":["",""],"wgDefaultDateFormat":"dmy","wgMonthNames":["","January","February","March","April","May","June","July","August","September","October","November","December"],"wgMonthNamesShort":["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wgRelevantPageName":"Locomotive_BASIC","wgRelevantArticleId":2773,"wgIsProbablyEditable":false,"wgRestrictionEdit":[],"wgRestrictionMove":[],"wgWikiEditorEnabledModules":{"toolbar":true,"dialogs":true,"hidesig":true,"preview":true,"publish":false}});
+}</script><script>if(window.mw){
+mw.loader.implement("user.options",function($,jQuery){mw.user.options.set({"variant":"en"});});mw.loader.implement("user.tokens",function($,jQuery){mw.user.tokens.set({"editToken":"+\\","patrolToken":"+\\","watchToken":"+\\"});});
+/* cache key: wikidb:resourceloader:filter:minify-js:7:a5c52c063dc436c1ca7c9f456936a5e9 */
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.page.startup","mediawiki.legacy.wikibits","mediawiki.legacy.ajax","skins.vector.js"]);
+}</script><script src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/load_003.php"></script>
+<!--[if lt IE 7]><style type="text/css">body{behavior:url("/skins/Vector/csshover.min.htc")}</style><![endif]-->
+</head>
+<body class="mediawiki ltr sitedir-ltr ns-0 ns-subject page-Locomotive_BASIC skin-vector action-view">
+		<div id="mw-page-base" class="noprint"></div>
+		<div id="mw-head-base" class="noprint"></div>
+		<div id="content" class="mw-body" role="main">
+			<a id="top"></a>
+
+						<div class="mw-indicators">
+</div>
+			<h1 id="firstHeading" class="firstHeading" lang="en">Locomotive BASIC</h1>
+						<div id="bodyContent" class="mw-body-content">
+									<div id="siteSub">From CPCWiki - THE Amstrad CPC encyclopedia!</div>
+								<div id="contentSub"></div>
+												<div id="jump-to-nav" class="mw-jump">
+					Jump to:					<a href="#mw-head">navigation</a>, 					<a href="#p-search">search</a>
+				</div>
+				<div id="mw-content-text" lang="en" dir="ltr" class="mw-content-ltr"><p>For other BASIC language versions see the <a href="https://www.cpcwiki.eu/index.php/Category:BASIC" title="Category:BASIC">Category:BASIC</a>
+</p><p><br>
+</p>
+<div class="thumb tright"><div class="thumbinner" style="width:302px;"><a href="https://www.cpcwiki.eu/index.php/File:Screenshots-CPC_Start_screen.jpg" class="image"><img alt="" src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/300px-Screenshots-CPC_Start_screen.jpg" width="300" height="211" class="thumbimage" srcset="Locomotive%20BASIC%20-%20CPCWiki_fichiers/450px-Screenshots-CPC_Start_screen.jpg 1.5x, Locomotive%20BASIC%20-%20CPCWiki_fichiers/600px-Screenshots-CPC_Start_screen.jpg 2x"></a>  <div class="thumbcaption"><div class="magnify"><a href="https://www.cpcwiki.eu/index.php/File:Screenshots-CPC_Start_screen.jpg" class="internal" title="Enlarge"></a></div>CPC Start Screen showing Locomotive copyright and BASIC version</div></div></div>
+<p>Locomotive BASIC was a <a class="external text" href="https://en.wikipedia.org/wiki/BASIC_programming_language">BASIC</a> interpreter for the Amstrad CPC range of computers.
+</p><p>It was availlable directly from in-built ROMs on <a href="https://www.cpcwiki.eu/index.php/CPC_old_generation" title="CPC old generation">CPC old generation</a> and on the <a href="https://www.cpcwiki.eu/index.php/Plus_System_Cartridge" title="Plus System Cartridge">Plus System Cartridge</a> for the <a href="https://www.cpcwiki.eu/index.php/Plus" title="Plus">Plus</a> range. <a class="external text" href="https://benchmarko.github.io/CPCBasic/">Online Interpreter</a>
+</p>
+<div id="toc" class="toc"><div id="toctitle"><h2>Contents</h2><span class="toctoggle">&nbsp;[<a href="#" id="togglelink">hide</a>]&nbsp;</span></div>
+<ul>
+<li class="toclevel-1 tocsection-1"><a href="#Description"><span class="tocnumber">1</span> <span class="toctext">Description</span></a></li>
+<li class="toclevel-1 tocsection-2"><a href="#History"><span class="tocnumber">2</span> <span class="toctext">History</span></a></li>
+<li class="toclevel-1 tocsection-3"><a href="#Variables"><span class="tocnumber">3</span> <span class="toctext">Variables</span></a>
+<ul>
+<li class="toclevel-2 tocsection-4"><a href="#Real_.28Floating_Point.29_Numbers"><span class="tocnumber">3.1</span> <span class="toctext">Real (Floating Point) Numbers</span></a></li>
+<li class="toclevel-2 tocsection-5"><a href="#Signed_16-bit_Integers"><span class="tocnumber">3.2</span> <span class="toctext">Signed 16-bit Integers</span></a></li>
+<li class="toclevel-2 tocsection-6"><a href="#Strings"><span class="tocnumber">3.3</span> <span class="toctext">Strings</span></a></li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-7"><a href="#Type_Conversions"><span class="tocnumber">4</span> <span class="toctext">Type Conversions</span></a></li>
+<li class="toclevel-1 tocsection-8"><a href="#Command_list"><span class="tocnumber">5</span> <span class="toctext">Command list</span></a>
+<ul>
+<li class="toclevel-2 tocsection-9"><a href="#Commands_and_operators"><span class="tocnumber">5.1</span> <span class="toctext">Commands and operators</span></a>
+<ul>
+<li class="toclevel-3 tocsection-10"><a href="#AFTER_.E2.80.B9time_delay.E2.80.BA.5B.2C.E2.80.B9timer_number.E2.80.BA.5D_GOSUB_.E2.80.B9line_number.E2.80.BA"><span class="tocnumber">5.1.1</span> <span class="toctext">AFTER ‹time delay›[,‹timer number›] GOSUB ‹line number›</span></a></li>
+<li class="toclevel-3 tocsection-11"><a href="#AUTO_.5B.E2.80.B9line_number.E2.80.BA.5D.5B.2C.E2.80.B9increment.E2.80.BA.5D"><span class="tocnumber">5.1.2</span> <span class="toctext">AUTO [‹line number›][,‹increment›]</span></a></li>
+<li class="toclevel-3 tocsection-12"><a href="#BORDER_.E2.80.B9colour.E2.80.BA.5B.2C.E2.80.B9colour.E2.80.BA.5D"><span class="tocnumber">5.1.3</span> <span class="toctext">BORDER ‹colour›[,‹colour›]</span></a></li>
+<li class="toclevel-3 tocsection-13"><a href="#CALL_.E2.80.B9address_expression.E2.80.BA.5B.2C.E2.80.B9list_of:_parameter.E2.80.BA.5D"><span class="tocnumber">5.1.4</span> <span class="toctext">CALL ‹address expression›[,‹list of: parameter›]</span></a></li>
+<li class="toclevel-3 tocsection-14"><a href="#CAT"><span class="tocnumber">5.1.5</span> <span class="toctext">CAT</span></a></li>
+<li class="toclevel-3 tocsection-15"><a href="#CHAIN_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9line_number_expression.E2.80.BA.5D"><span class="tocnumber">5.1.6</span> <span class="toctext">CHAIN ‹file name›[,‹line number expression›]</span></a></li>
+<li class="toclevel-3 tocsection-16"><a href="#CHAIN_MERGE_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9line_number_expression.E2.80.BA_.7C_.5B.2C.5B.E2.80.B9line_number_expression.E2.80.BA.5D.2CDELETE_.E2.80.B9line_number_range.E2.80.BA.5D.5D"><span class="tocnumber">5.1.7</span> <span class="toctext">CHAIN MERGE ‹file name›[,‹line number expression› | [,[‹line number expression›],DELETE ‹line number range›]]</span></a></li>
+<li class="toclevel-3 tocsection-17"><a href="#CLEAR"><span class="tocnumber">5.1.8</span> <span class="toctext">CLEAR</span></a></li>
+<li class="toclevel-3 tocsection-18"><a href="#CLG_.5B.E2.80.B9masked_ink.E2.80.BA.5D"><span class="tocnumber">5.1.9</span> <span class="toctext">CLG [‹masked ink›]</span></a></li>
+<li class="toclevel-3 tocsection-19"><a href="#CLOSEIN"><span class="tocnumber">5.1.10</span> <span class="toctext">CLOSEIN</span></a></li>
+<li class="toclevel-3 tocsection-20"><a href="#CLOSEOUT"><span class="tocnumber">5.1.11</span> <span class="toctext">CLOSEOUT</span></a></li>
+<li class="toclevel-3 tocsection-21"><a href="#CLS_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D"><span class="tocnumber">5.1.12</span> <span class="toctext">CLS [#‹stream expression›]</span></a></li>
+<li class="toclevel-3 tocsection-22"><a href="#CONT"><span class="tocnumber">5.1.13</span> <span class="toctext">CONT</span></a></li>
+<li class="toclevel-3 tocsection-23"><a href="#CURSOR_.E2.80.B9expression.E2.80.BA"><span class="tocnumber">5.1.14</span> <span class="toctext">CURSOR ‹expression›</span></a></li>
+<li class="toclevel-3 tocsection-24"><a href="#DATA_x1.5B.2Cx2.2Cx3....5D"><span class="tocnumber">5.1.15</span> <span class="toctext">DATA x1[,x2,x3...]</span></a></li>
+<li class="toclevel-3 tocsection-25"><a href="#DEF"><span class="tocnumber">5.1.16</span> <span class="toctext">DEF</span></a></li>
+<li class="toclevel-3 tocsection-26"><a href="#DEFINT_.E2.80.B9letter_range.E2.80.BA"><span class="tocnumber">5.1.17</span> <span class="toctext">DEFINT ‹letter range›</span></a></li>
+<li class="toclevel-3 tocsection-27"><a href="#DEFREAL_.E2.80.B9letter_range.E2.80.BA"><span class="tocnumber">5.1.18</span> <span class="toctext">DEFREAL ‹letter range›</span></a></li>
+<li class="toclevel-3 tocsection-28"><a href="#DEFSTR_.E2.80.B9letter_range.E2.80.BA"><span class="tocnumber">5.1.19</span> <span class="toctext">DEFSTR ‹letter range›</span></a></li>
+<li class="toclevel-3 tocsection-29"><a href="#DEG"><span class="tocnumber">5.1.20</span> <span class="toctext">DEG</span></a></li>
+<li class="toclevel-3 tocsection-30"><a href="#DELETE_.5Bfirst_line.5D.5B-.5Blast_line.5D.5D"><span class="tocnumber">5.1.21</span> <span class="toctext">DELETE [first line][-[last line]]</span></a></li>
+<li class="toclevel-3 tocsection-31"><a href="#DI"><span class="tocnumber">5.1.22</span> <span class="toctext">DI</span></a></li>
+<li class="toclevel-3 tocsection-32"><a href="#DIM_a.5B.25.7C.21.7C.24.5D.28d1.5B.2Cd2.5B.2C....5D.5D.29"><span class="tocnumber">5.1.23</span> <span class="toctext">DIM a[%|!|$](d1[,d2[,...]])</span></a></li>
+<li class="toclevel-3 tocsection-33"><a href="#DRAW_x.2Cy.5B.2C.5Bi1.5D.5B.2Ci2.5D.5D"><span class="tocnumber">5.1.24</span> <span class="toctext">DRAW x,y[,[i1][,i2]]</span></a></li>
+<li class="toclevel-3 tocsection-34"><a href="#EDIT_.E2.80.B9line.E2.80.BA"><span class="tocnumber">5.1.25</span> <span class="toctext">EDIT ‹line›</span></a></li>
+<li class="toclevel-3 tocsection-35"><a href="#EI"><span class="tocnumber">5.1.26</span> <span class="toctext">EI</span></a></li>
+<li class="toclevel-3 tocsection-36"><a href="#END"><span class="tocnumber">5.1.27</span> <span class="toctext">END</span></a></li>
+<li class="toclevel-3 tocsection-37"><a href="#ENT_.E2.80.B9tone_envelope_number.E2.80.BA.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D"><span class="tocnumber">5.1.28</span> <span class="toctext">ENT
+ ‹tone envelope number›[,‹tone env. section›][,‹tone env. 
+section›][,‹tone env. section›][,‹tone env. section›][,‹tone env. 
+section›]</span></a></li>
+<li class="toclevel-3 tocsection-38"><a href="#ENV_.E2.80.B9volume_envelope_number.E2.80.BA.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D"><span class="tocnumber">5.1.29</span> <span class="toctext">ENV
+ ‹volume envelope number›[,‹volume env. section›][,‹volume env. 
+section›][,‹volume env. section›][,‹volume env. section›][,‹volume env. 
+section›]</span></a></li>
+<li class="toclevel-3 tocsection-39"><a href="#ERASE_v1.5B.25_.7C_.21_.7C_.24.5D.5B.2Cv2.5B.25_.7C_.21_.7C_.24.5D.5B.2C....5D.5D"><span class="tocnumber">5.1.30</span> <span class="toctext">ERASE v1[% |&nbsp;! | $][,v2[% |&nbsp;! | $][,...]]</span></a></li>
+<li class="toclevel-3 tocsection-40"><a href="#ERL"><span class="tocnumber">5.1.31</span> <span class="toctext">ERL</span></a></li>
+<li class="toclevel-3 tocsection-41"><a href="#ERROR_i"><span class="tocnumber">5.1.32</span> <span class="toctext">ERROR i</span></a></li>
+<li class="toclevel-3 tocsection-42"><a href="#EVERY_i.5B.2Ct.5D_GOSUB_ln"><span class="tocnumber">5.1.33</span> <span class="toctext">EVERY i[,t] GOSUB ln</span></a></li>
+<li class="toclevel-3 tocsection-43"><a href="#FILL_i"><span class="tocnumber">5.1.34</span> <span class="toctext">FILL i</span></a></li>
+<li class="toclevel-3 tocsection-44"><a href="#FN"><span class="tocnumber">5.1.35</span> <span class="toctext">FN</span></a></li>
+<li class="toclevel-3 tocsection-45"><a href="#FOR_TO_STEP_NEXT"><span class="tocnumber">5.1.36</span> <span class="toctext">FOR TO STEP NEXT</span></a></li>
+<li class="toclevel-3 tocsection-46"><a href="#FRAME"><span class="tocnumber">5.1.37</span> <span class="toctext">FRAME</span></a></li>
+<li class="toclevel-3 tocsection-47"><a href="#GOSUB_i"><span class="tocnumber">5.1.38</span> <span class="toctext">GOSUB i</span></a></li>
+<li class="toclevel-3 tocsection-48"><a href="#GOTO_i"><span class="tocnumber">5.1.39</span> <span class="toctext">GOTO i</span></a></li>
+<li class="toclevel-3 tocsection-49"><a href="#GRAPHICS"><span class="tocnumber">5.1.40</span> <span class="toctext">GRAPHICS</span></a></li>
+<li class="toclevel-3 tocsection-50"><a href="#IF_THEN_ELSE"><span class="tocnumber">5.1.41</span> <span class="toctext">IF THEN ELSE</span></a></li>
+<li class="toclevel-3 tocsection-51"><a href="#INK_.E2.80.B9pen.E2.80.BA.2C.E2.80.B9colour.E2.80.BA.2C.5B.E2.80.B9second_colour.E2.80.BA.5D"><span class="tocnumber">5.1.42</span> <span class="toctext">INK ‹pen›,‹colour›,[‹second colour›]</span></a></li>
+<li class="toclevel-3 tocsection-52"><a href="#INPUT.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><span class="tocnumber">5.1.43</span> <span class="toctext">INPUT[#‹stream expression›][,]</span></a></li>
+<li class="toclevel-3 tocsection-53"><a href="#KEY"><span class="tocnumber">5.1.44</span> <span class="toctext">KEY</span></a></li>
+<li class="toclevel-3 tocsection-54"><a href="#LET"><span class="tocnumber">5.1.45</span> <span class="toctext">LET</span></a></li>
+<li class="toclevel-3 tocsection-55"><a href="#LINE_INPUT_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D.E2.80.B9variable.E2.80.BA.5B.2C.E2.80.B9variable.E2.80.BA.5D"><span class="tocnumber">5.1.46</span> <span class="toctext">LINE INPUT [#‹stream expression›][,]‹variable›[,‹variable›]</span></a></li>
+<li class="toclevel-3 tocsection-56"><a href="#LIST_.5B.E2.80.B9line_number.E2.80.BA.5D.5B-.5B.E2.80.B9line_number.E2.80.BA.5D.5D.2C_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D"><span class="tocnumber">5.1.47</span> <span class="toctext">LIST [‹line number›][-[‹line number›]], [#‹stream expression›]</span></a></li>
+<li class="toclevel-3 tocsection-57"><a href="#LOAD_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9address.E2.80.BA.5D"><span class="tocnumber">5.1.48</span> <span class="toctext">LOAD ‹file name›[,‹address›]</span></a></li>
+<li class="toclevel-3 tocsection-58"><a href="#LOCATE.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D_x.2Cy"><span class="tocnumber">5.1.49</span> <span class="toctext">LOCATE[#‹stream expression›][,] x,y</span></a></li>
+<li class="toclevel-3 tocsection-59"><a href="#MASK_.5Bi1.5D.5B.2Ci2.5D"><span class="tocnumber">5.1.50</span> <span class="toctext">MASK [i1][,i2]</span></a></li>
+<li class="toclevel-3 tocsection-60"><a href="#MEMORY_.E2.80.B9memory_address.E2.80.BA"><span class="tocnumber">5.1.51</span> <span class="toctext">MEMORY ‹memory address›</span></a></li>
+<li class="toclevel-3 tocsection-61"><a href="#MERGE"><span class="tocnumber">5.1.52</span> <span class="toctext">MERGE</span></a></li>
+<li class="toclevel-3 tocsection-62"><a href="#MID.24_.28.E2.80.B9string.E2.80.BA.2C.E2.80.B9start_position.E2.80.BA.5B.2C.E2.80.B9length_of_substring.E2.80.BA.5D.29"><span class="tocnumber">5.1.53</span> <span class="toctext">MID$ (‹string›,‹start position›[,‹length of substring›])</span></a></li>
+<li class="toclevel-3 tocsection-63"><a href="#MODE"><span class="tocnumber">5.1.54</span> <span class="toctext">MODE</span></a></li>
+<li class="toclevel-3 tocsection-64"><a href="#MOVE_x.2Cy_.5B.5B.2Ci1.5D.5B.2Ci2.5D.5D"><span class="tocnumber">5.1.55</span> <span class="toctext">MOVE x,y [[,i1][,i2]]</span></a></li>
+<li class="toclevel-3 tocsection-65"><a href="#MOVER_xr.2Cyr.5B.2C.5Bi1.5D.5B.2Ci2.5D.5D"><span class="tocnumber">5.1.56</span> <span class="toctext">MOVER xr,yr[,[i1][,i2]]</span></a></li>
+<li class="toclevel-3 tocsection-66"><a href="#NEW"><span class="tocnumber">5.1.57</span> <span class="toctext">NEW</span></a></li>
+<li class="toclevel-3 tocsection-67"><a href="#ON_BREAK_CONT"><span class="tocnumber">5.1.58</span> <span class="toctext">ON BREAK CONT</span></a></li>
+<li class="toclevel-3 tocsection-68"><a href="#ON_BREAK_GOSUB_ln"><span class="tocnumber">5.1.59</span> <span class="toctext">ON BREAK GOSUB ln</span></a></li>
+<li class="toclevel-3 tocsection-69"><a href="#ON_BREAK_STOP"><span class="tocnumber">5.1.60</span> <span class="toctext">ON BREAK STOP</span></a></li>
+<li class="toclevel-3 tocsection-70"><a href="#ON_ERROR_GOTO_ln"><span class="tocnumber">5.1.61</span> <span class="toctext">ON ERROR GOTO ln</span></a></li>
+<li class="toclevel-3 tocsection-71"><a href="#ON_variable_GOTO_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><span class="tocnumber">5.1.62</span> <span class="toctext">ON variable GOTO ln x1, x2, x3, x4, ...</span></a></li>
+<li class="toclevel-3 tocsection-72"><a href="#ON_variable_GOSUB_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><span class="tocnumber">5.1.63</span> <span class="toctext">ON variable GOSUB ln x1, x2, x3, x4, ...</span></a></li>
+<li class="toclevel-3 tocsection-73"><a href="#ON_SQ.28x.29_GOSUB_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><span class="tocnumber">5.1.64</span> <span class="toctext">ON SQ(x) GOSUB ln x1, x2, x3, x4, ...</span></a></li>
+<li class="toclevel-3 tocsection-74"><a href="#OPENIN_.E2.80.B9filename.E2.80.BA"><span class="tocnumber">5.1.65</span> <span class="toctext">OPENIN ‹filename›</span></a></li>
+<li class="toclevel-3 tocsection-75"><a href="#OPENOUT_.E2.80.B9filename.E2.80.BA"><span class="tocnumber">5.1.66</span> <span class="toctext">OPENOUT ‹filename›</span></a></li>
+<li class="toclevel-3 tocsection-76"><a href="#ORIGIN_x.2Cy.5B.2Cl.2Cr.2Ct.2Cb.5D"><span class="tocnumber">5.1.67</span> <span class="toctext">ORIGIN x,y[,l,r,t,b]</span></a></li>
+<li class="toclevel-3 tocsection-77"><a href="#OUT_.E2.80.B9address.E2.80.BA.2C.E2.80.B9value.E2.80.BA"><span class="tocnumber">5.1.68</span> <span class="toctext">OUT ‹address›,‹value›</span></a></li>
+<li class="toclevel-3 tocsection-78"><a href="#PAPER.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><span class="tocnumber">5.1.69</span> <span class="toctext">PAPER[#‹stream expression›][,]</span></a></li>
+<li class="toclevel-3 tocsection-79"><a href="#PEN.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><span class="tocnumber">5.1.70</span> <span class="toctext">PEN[#‹stream expression›][,]</span></a></li>
+<li class="toclevel-3 tocsection-80"><a href="#PLOT"><span class="tocnumber">5.1.71</span> <span class="toctext">PLOT</span></a></li>
+<li class="toclevel-3 tocsection-81"><a href="#PLOTR"><span class="tocnumber">5.1.72</span> <span class="toctext">PLOTR</span></a></li>
+<li class="toclevel-3 tocsection-82"><a href="#POKE_add"><span class="tocnumber">5.1.73</span> <span class="toctext">POKE add</span></a></li>
+<li class="toclevel-3 tocsection-83"><a href="#PRINT.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><span class="tocnumber">5.1.74</span> <span class="toctext">PRINT[#‹stream expression›][,]</span></a></li>
+<li class="toclevel-3 tocsection-84"><a href="#RAD"><span class="tocnumber">5.1.75</span> <span class="toctext">RAD</span></a></li>
+<li class="toclevel-3 tocsection-85"><a href="#RANDOMIZE_.5Bseed.5D"><span class="tocnumber">5.1.76</span> <span class="toctext">RANDOMIZE [seed]</span></a></li>
+<li class="toclevel-3 tocsection-86"><a href="#READ_variable"><span class="tocnumber">5.1.77</span> <span class="toctext">READ variable</span></a></li>
+<li class="toclevel-3 tocsection-87"><a href="#RELEASE_chanel"><span class="tocnumber">5.1.78</span> <span class="toctext">RELEASE chanel</span></a></li>
+<li class="toclevel-3 tocsection-88"><a href="#REM_.5Bany_text.5D"><span class="tocnumber">5.1.79</span> <span class="toctext">REM [any text]</span></a></li>
+<li class="toclevel-3 tocsection-89"><a href="#RENUM_.5B.E2.80.B9newLine.E2.80.BA.5D.5B.2C.E2.80.B9oldLine.E2.80.BA_.7C_.2C.5B.E2.80.B9oldLine.E2.80.BA.5D.2C.E2.80.B9step.E2.80.BA.5D"><span class="tocnumber">5.1.80</span> <span class="toctext">RENUM [‹newLine›][,‹oldLine› | ,[‹oldLine›],‹step›]</span></a></li>
+<li class="toclevel-3 tocsection-90"><a href="#RESTORE_.5Bline.5D"><span class="tocnumber">5.1.81</span> <span class="toctext">RESTORE [line]</span></a></li>
+<li class="toclevel-3 tocsection-91"><a href="#RESUME_.5Bline.5D_or_NEXT"><span class="tocnumber">5.1.82</span> <span class="toctext">RESUME [line] or NEXT</span></a></li>
+<li class="toclevel-3 tocsection-92"><a href="#RETURN"><span class="tocnumber">5.1.83</span> <span class="toctext">RETURN</span></a></li>
+<li class="toclevel-3 tocsection-93"><a href="#RUN_.5Bline.5D_or_.22filename.22"><span class="tocnumber">5.1.84</span> <span class="toctext">RUN [line] or "filename"</span></a></li>
+<li class="toclevel-3 tocsection-94"><a href="#SAVE_.22filename.22_.5B.2Cfiletype.5D.5B.2Cparameter1.2Cparameter2.2Cparameter3.5D"><span class="tocnumber">5.1.85</span> <span class="toctext">SAVE "filename" [,filetype][,parameter1,parameter2,parameter3]</span></a></li>
+<li class="toclevel-3 tocsection-95"><a href="#SOUND"><span class="tocnumber">5.1.86</span> <span class="toctext">SOUND</span></a></li>
+<li class="toclevel-3 tocsection-96"><a href="#SPC_.3Cn.3E"><span class="tocnumber">5.1.87</span> <span class="toctext">SPC &lt;n&gt;</span></a></li>
+<li class="toclevel-3 tocsection-97"><a href="#SPEED_INK_.3Cn1.2Cn2.3E"><span class="tocnumber">5.1.88</span> <span class="toctext">SPEED INK &lt;n1,n2&gt;</span></a></li>
+<li class="toclevel-3 tocsection-98"><a href="#SPEED_KEY_.3Cstart.2Crepeat.3E"><span class="tocnumber">5.1.89</span> <span class="toctext">SPEED KEY &lt;start,repeat&gt;</span></a></li>
+<li class="toclevel-3 tocsection-99"><a href="#SPEED_WRITE_.3Cn.3E"><span class="tocnumber">5.1.90</span> <span class="toctext">SPEED WRITE &lt;n&gt;</span></a></li>
+<li class="toclevel-3 tocsection-100"><a href="#SQ_.28channel.29"><span class="tocnumber">5.1.91</span> <span class="toctext">SQ (channel)</span></a></li>
+<li class="toclevel-3 tocsection-101"><a href="#STOP"><span class="tocnumber">5.1.92</span> <span class="toctext">STOP</span></a></li>
+<li class="toclevel-3 tocsection-102"><a href="#SWAP"><span class="tocnumber">5.1.93</span> <span class="toctext">SWAP</span></a></li>
+<li class="toclevel-3 tocsection-103"><a href="#SYMBOL_n.2Ci1.5B.2Ci2.2Ci3.2Ci4.2Ci5.2Ci6.2Ci7.2Ci8.5D"><span class="tocnumber">5.1.94</span> <span class="toctext">SYMBOL n,i1[,i2,i3,i4,i5,i6,i7,i8]</span></a></li>
+<li class="toclevel-3 tocsection-104"><a href="#SYMBOL_AFTER_n"><span class="tocnumber">5.1.95</span> <span class="toctext">SYMBOL AFTER n</span></a></li>
+<li class="toclevel-3 tocsection-105"><a href="#TAB"><span class="tocnumber">5.1.96</span> <span class="toctext">TAB</span></a></li>
+<li class="toclevel-3 tocsection-106"><a href="#TAG_.5B.23st.5D"><span class="tocnumber">5.1.97</span> <span class="toctext">TAG [#st]</span></a></li>
+<li class="toclevel-3 tocsection-107"><a href="#TAGOFF_.5B.23st.5D"><span class="tocnumber">5.1.98</span> <span class="toctext">TAGOFF [#st]</span></a></li>
+<li class="toclevel-3 tocsection-108"><a href="#TROFF"><span class="tocnumber">5.1.99</span> <span class="toctext">TROFF</span></a></li>
+<li class="toclevel-3 tocsection-109"><a href="#TRON"><span class="tocnumber">5.1.100</span> <span class="toctext">TRON</span></a></li>
+<li class="toclevel-3 tocsection-110"><a href="#USING"><span class="tocnumber">5.1.101</span> <span class="toctext">USING</span></a></li>
+<li class="toclevel-3 tocsection-111"><a href="#WAIT_add.2C_i1.5B.2Ci2.5D"><span class="tocnumber">5.1.102</span> <span class="toctext">WAIT add, i1[,i2]</span></a></li>
+<li class="toclevel-3 tocsection-112"><a href="#WHILE_WEND"><span class="tocnumber">5.1.103</span> <span class="toctext">WHILE WEND</span></a></li>
+<li class="toclevel-3 tocsection-113"><a href="#WIDTH"><span class="tocnumber">5.1.104</span> <span class="toctext">WIDTH</span></a></li>
+<li class="toclevel-3 tocsection-114"><a href="#WINDOW.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.2C.5BL.5D.2C.5BR.5D.2C.5BT.5D.2C.5BB.5D"><span class="tocnumber">5.1.105</span> <span class="toctext">WINDOW[#‹stream expression›],[L],[R],[T],[B]</span></a></li>
+<li class="toclevel-3 tocsection-115"><a href="#WRITE_.5B.23st.2C.5D_v.5B.24.5D.2C_v.5B.24.5D"><span class="tocnumber">5.1.106</span> <span class="toctext">WRITE [#st,] v[$], v[$]</span></a></li>
+<li class="toclevel-3 tocsection-116"><a href="#ZONE_i"><span class="tocnumber">5.1.107</span> <span class="toctext">ZONE i</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-117"><a href="#Operators"><span class="tocnumber">5.2</span> <span class="toctext">Operators</span></a>
+<ul>
+<li class="toclevel-3 tocsection-118"><a href="#AND"><span class="tocnumber">5.2.1</span> <span class="toctext">AND</span></a></li>
+<li class="toclevel-3 tocsection-119"><a href="#MOD"><span class="tocnumber">5.2.2</span> <span class="toctext">MOD</span></a></li>
+<li class="toclevel-3 tocsection-120"><a href="#NOT"><span class="tocnumber">5.2.3</span> <span class="toctext">NOT</span></a></li>
+<li class="toclevel-3 tocsection-121"><a href="#OR"><span class="tocnumber">5.2.4</span> <span class="toctext">OR</span></a></li>
+<li class="toclevel-3 tocsection-122"><a href="#XOR"><span class="tocnumber">5.2.5</span> <span class="toctext">XOR</span></a></li>
+</ul>
+</li>
+<li class="toclevel-2 tocsection-123"><a href="#Functions"><span class="tocnumber">5.3</span> <span class="toctext">Functions</span></a>
+<ul>
+<li class="toclevel-3 tocsection-124"><a href="#ABS_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.1</span> <span class="toctext">ABS (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-125"><a href="#ASC_.28.3Cstring_expression.3E.29"><span class="tocnumber">5.3.2</span> <span class="toctext">ASC (&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-126"><a href="#ATN_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.3</span> <span class="toctext">ATN (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-127"><a href="#BIN.24_.28.3Cunsigned_integer_expression.3E.2C.5B.3Cinteger_expression.3E.5D.29"><span class="tocnumber">5.3.4</span> <span class="toctext">BIN$ (&lt;unsigned integer expression&gt;,[&lt;integer expression&gt;])</span></a></li>
+<li class="toclevel-3 tocsection-128"><a href="#CHR.24_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.5</span> <span class="toctext">CHR$ (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-129"><a href="#CINT_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.6</span> <span class="toctext">CINT (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-130"><a href="#COPYCHR.24_.28.23stream.29"><span class="tocnumber">5.3.7</span> <span class="toctext">COPYCHR$ (#stream)</span></a></li>
+<li class="toclevel-3 tocsection-131"><a href="#COS_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.8</span> <span class="toctext">COS (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-132"><a href="#CREAL_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.9</span> <span class="toctext">CREAL (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-133"><a href="#DEC.24.28.3Cnumeric_expression.3E.2C_.3Cformat_template.3E.29"><span class="tocnumber">5.3.10</span> <span class="toctext">DEC$(&lt;numeric expression&gt;, &lt;format template&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-134"><a href="#DERR"><span class="tocnumber">5.3.11</span> <span class="toctext">DERR</span></a></li>
+<li class="toclevel-3 tocsection-135"><a href="#EOF"><span class="tocnumber">5.3.12</span> <span class="toctext">EOF</span></a></li>
+<li class="toclevel-3 tocsection-136"><a href="#ERR"><span class="tocnumber">5.3.13</span> <span class="toctext">ERR</span></a></li>
+<li class="toclevel-3 tocsection-137"><a href="#EXP_.28.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.14</span> <span class="toctext">EXP (&lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-138"><a href="#FIX_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.15</span> <span class="toctext">FIX (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-139"><a href="#FRE_.28.3Cnumeric_expression.3E.2F.3Cstring_expression.3E.29"><span class="tocnumber">5.3.16</span> <span class="toctext">FRE (&lt;numeric expression&gt;/&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-140"><a href="#HEX.24_.28.3Cunsigned_integer_expression.3E.2C_.3Cfield_width.3E.29"><span class="tocnumber">5.3.17</span> <span class="toctext">HEX$ (&lt;unsigned integer expression&gt;, &lt;field width&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-141"><a href="#HIMEM"><span class="tocnumber">5.3.18</span> <span class="toctext">HIMEM</span></a></li>
+<li class="toclevel-3 tocsection-142"><a href="#INKEY_.28.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.19</span> <span class="toctext">INKEY (&lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-143"><a href="#INKEY.24"><span class="tocnumber">5.3.20</span> <span class="toctext">INKEY$</span></a></li>
+<li class="toclevel-3 tocsection-144"><a href="#INP_.28.E2.80.B9port_number.E2.80.BA.29"><span class="tocnumber">5.3.21</span> <span class="toctext">INP (‹port number›)</span></a></li>
+<li class="toclevel-3 tocsection-145"><a href="#INSTR_.28.5B.E2.80.B9startposition.E2.80.BA.2C.5D.E2.80.B9searched_string.E2.80.BA.2C_.E2.80.B9searched_for_string.E2.80.BA.29"><span class="tocnumber">5.3.22</span> <span class="toctext">INSTR ([‹startposition›,]‹searched string›, ‹searched for string›)</span></a></li>
+<li class="toclevel-3 tocsection-146"><a href="#INT_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.23</span> <span class="toctext">INT (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-147"><a href="#JOY_.28.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.24</span> <span class="toctext">JOY (&lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-148"><a href="#LEFT.24_.28.3Cstring_expression.3E.2C_.3Crequired_length.3E.29"><span class="tocnumber">5.3.25</span> <span class="toctext">LEFT$ (&lt;string expression&gt;, &lt;required length&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-149"><a href="#LEN_.28.3Cstring_expression.3E.29"><span class="tocnumber">5.3.26</span> <span class="toctext">LEN (&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-150"><a href="#LOG_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.27</span> <span class="toctext">LOG (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-151"><a href="#LOG10_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.28</span> <span class="toctext">LOG10 (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-152"><a href="#LOWER.24_.28.3Cstring_expression.3E.29"><span class="tocnumber">5.3.29</span> <span class="toctext">LOWER$ (&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-153"><a href="#MAX_.28.3Clist_of:_numeric_expression.3E.29"><span class="tocnumber">5.3.30</span> <span class="toctext">MAX (&lt;list of: numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-154"><a href="#MIN_.28.3Clist_of:_numeric_expression.3E.29"><span class="tocnumber">5.3.31</span> <span class="toctext">MIN (&lt;list of: numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-155"><a href="#PEEK_.28.3Caddress_expression.3E.29"><span class="tocnumber">5.3.32</span> <span class="toctext">PEEK (&lt;address expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-156"><a href="#PI"><span class="tocnumber">5.3.33</span> <span class="toctext">PI</span></a></li>
+<li class="toclevel-3 tocsection-157"><a href="#POS_.28.23.3Cstream_expression.3E.29"><span class="tocnumber">5.3.34</span> <span class="toctext">POS (#&lt;stream expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-158"><a href="#REMAIN_.28.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.35</span> <span class="toctext">REMAIN (&lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-159"><a href="#RIGHT.24_.28.3Cstring_expression.3E.2C_.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.36</span> <span class="toctext">RIGHT$ (&lt;string expression&gt;, &lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-160"><a href="#RND_.5B.28.3Cnumeric_expression.3E.29.5D"><span class="tocnumber">5.3.37</span> <span class="toctext">RND [(&lt;numeric expression&gt;)]</span></a></li>
+<li class="toclevel-3 tocsection-161"><a href="#ROUND_.28.3Cnumeric_expression.3E.5B.2C.3Cinteger_expression.3E.5D.29"><span class="tocnumber">5.3.38</span> <span class="toctext">ROUND (&lt;numeric expression&gt;[,&lt;integer expression&gt;])</span></a></li>
+<li class="toclevel-3 tocsection-162"><a href="#SGN_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.39</span> <span class="toctext">SGN (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-163"><a href="#SIN_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.40</span> <span class="toctext">SIN (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-164"><a href="#SPACE.24.28.3Cinteger_expression.3E.29"><span class="tocnumber">5.3.41</span> <span class="toctext">SPACE$(&lt;integer expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-165"><a href="#SQ_.28.3Cchannel.3E.29"><span class="tocnumber">5.3.42</span> <span class="toctext">SQ (&lt;channel&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-166"><a href="#SQR_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.43</span> <span class="toctext">SQR (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-167"><a href="#STR.24_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.44</span> <span class="toctext">STR$ (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-168"><a href="#STRING.24_.28.3Clength.3E.2C.3Ccharacter_specifier.3E.29"><span class="tocnumber">5.3.45</span> <span class="toctext">STRING$ (&lt;length&gt;,&lt;character specifier&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-169"><a href="#TAN_.28.3Cnumeric_expression.3E.29"><span class="tocnumber">5.3.46</span> <span class="toctext">TAN (&lt;numeric expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-170"><a href="#TEST_.28.3Cx_co-ordinate.3E.2C.3Cy_co-ordinate.3E.29"><span class="tocnumber">5.3.47</span> <span class="toctext">TEST (&lt;x co-ordinate&gt;,&lt;y co-ordinate&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-171"><a href="#TESTR_.28.3Cx_offset.3E.2C.3Cy_offset.3E.29"><span class="tocnumber">5.3.48</span> <span class="toctext">TESTR (&lt;x offset&gt;,&lt;y offset&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-172"><a href="#TIME"><span class="tocnumber">5.3.49</span> <span class="toctext">TIME</span></a></li>
+<li class="toclevel-3 tocsection-173"><a href="#UNT_.28.3Caddress_expression.3E.29"><span class="tocnumber">5.3.50</span> <span class="toctext">UNT (&lt;address expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-174"><a href="#UPPER.24.28.3Cstring_expression.3E.29"><span class="tocnumber">5.3.51</span> <span class="toctext">UPPER$(&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-175"><a href="#VAL.28.3Cstring_expression.3E.29"><span class="tocnumber">5.3.52</span> <span class="toctext">VAL(&lt;string expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-176"><a href="#VPOS_.28.23.3Cstream_expression.3E.29"><span class="tocnumber">5.3.53</span> <span class="toctext">VPOS (#&lt;stream expression&gt;)</span></a></li>
+<li class="toclevel-3 tocsection-177"><a href="#XPOS"><span class="tocnumber">5.3.54</span> <span class="toctext">XPOS</span></a></li>
+<li class="toclevel-3 tocsection-178"><a href="#YPOS"><span class="tocnumber">5.3.55</span> <span class="toctext">YPOS</span></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toclevel-1 tocsection-179"><a href="#Other_Basic_Dialects_available_for_the_CPC"><span class="tocnumber">6</span> <span class="toctext">Other Basic Dialects available for the CPC</span></a></li>
+<li class="toclevel-1 tocsection-180"><a href="#Technical_Information"><span class="tocnumber">7</span> <span class="toctext">Technical Information</span></a></li>
+<li class="toclevel-1 tocsection-181"><a href="#Web_links"><span class="tocnumber">8</span> <span class="toctext">Web links</span></a></li>
+</ul>
+</div>
+
+<h2><span class="mw-headline" id="Description">Description</span></h2>
+<p>Locomotive BASIC, was one of the best and fastest BASIC 
+implementations of the era. The language benefited both from a clean, 
+well-thought out implementation of the core language by Locomotive, and 
+by the excellent <a href="https://www.cpcwiki.eu/index.php/Firmware" title="Firmware">firmware</a> of the CPC, which lent most of its advanced features to the BASIC.
+</p><p>Unlike the competing <a href="https://www.cpcwiki.eu/index.php/Commodore_64" title="Commodore 64">Commodore 64</a>,
+ it featured a comprehensive graphic capabilities with its PLOT, DRAW, 
+PAPER, INK, PEN, BORDER and (in BASIC 1.1) FILL commands. It had 
+extensive sound commands, granting control of the <a href="https://www.cpcwiki.eu/index.php/AY-3-8912" title="AY-3-8912" class="mw-redirect">AY-3-8912</a>
+ via the firmware's volume and tone envelope system. With the SOUND 
+command, you could select channels, set envelopes, pitch, noise and 
+volume. That was something unmatched by other computers of that era.
+</p><p>Also there was simple interface for memory management, with 
+MEMORY and LOAD commands. The latter allowed for loading of raw screen 
+data, thus providing easy picture showing. Both through this (combined 
+with CALL, PEEK and POKE) and the firmware's <a href="https://www.cpcwiki.eu/index.php/RSX" title="RSX">RSX</a>
+ system, it was easy to mix BASIC and assembly code, thereby speeding up
+ programs by coding the slowest parts directly in machine code. Many 
+successful programs, including games such as <a href="https://www.cpcwiki.eu/index.php/Radzone" title="Radzone">Radzone</a> and applications such as <a href="https://www.cpcwiki.eu/index.php/PowerPage" title="PowerPage">PowerPage</a>, made use of this technique.
+</p><p>With DEF FN, ON variable GOTO and ON variable GOSUB, Locomotive 
+BASIC provided the rudiments of "structured programming", though nowhere
+ near the extent of the PROCedures of <a href="https://www.cpcwiki.eu/index.php/BBC_Basic" title="BBC Basic">BBC Basic</a>.
+</p><p>All in all, if you compare BASIC interpreters of that era, the 
+Locomotive's seems to be the best 'all-rounder' regarding the 
+combination of speed and complexity, and still some of its features were
+ unmatched by others.
+</p><p>If you are interested in more information about the different 
+versions of the CPC's BASIC and the technical details, you can have a 
+look at the article "<a href="https://www.cpcwiki.eu/index.php/Technical_information_about_Locomotive_BASIC" title="Technical information about Locomotive BASIC">Technical information about Locomotive BASIC</a>".
+</p><p>Another helpful and further resource of information about BASIC 
+and a similar comprehension to this is Grimware's Website about the CPC <a class="external free" href="http://www.grimware.org/doku.php/documentations/software/locomotive.basic/start">http://www.grimware.org/doku.php/documentations/software/locomotive.basic/start</a>
+</p>
+<h2><span class="mw-headline" id="History">History</span></h2>
+<p>The CPC implementation of Locomotive BASIC was developed directly from <a href="https://www.cpcwiki.eu/index.php/Locomotive_Software" title="Locomotive Software">Locomotive Software</a>'s existing Z80 BASIC. The existence of this is cited as one of the reasons Locomotive requested that <a href="https://www.cpcwiki.eu/index.php/Amstrad" title="Amstrad">Amstrad</a> change the CPC's processor from a 6502 to a <a href="https://www.cpcwiki.eu/index.php/Z80" title="Z80">Z80</a>.
+</p><p>The 464 and Spanish 472 shipped with BASIC 1.0 on ROM.
+</p><p>The language was revised and debugged for the 472 (British), 664,
+ 6128 and Plus machines to become BASIC 1.1. Changes were minor but 
+significant for the programmer, and included:
+</p>
+<ul><li> DEC$ bug removed (in BASIC 1.0, it required two opening brackets and was undocumented)</li>
+<li> Better handling of string arguments to RSXs (|DIR,"*.BAS" rather than a$="*.BAS":|DIR,@a$)</li>
+<li> DATA statements can appear anywhere within a line; in BASIC 1.0, they had to be at the end of a line</li>
+<li> FILL command (fill area with solid colour)</li>
+<li> COPYCHR$ function (fetch character from screen)</li>
+<li> Better garbage collection</li>
+<li> Some number-handling bugs removed (e.g. in FOR loops with negative start/end values)</li>
+<li> FRAME (CALL &amp;BD19)</li>
+<li> Extra, optional 'plotting mode' parameter for DRAW/PLOT commands (supported only through control codes on BASIC 1.0)</li>
+<li> GRAPHICS PAPER, GRAPHICS PEN commands</li>
+<li> ON BREAK CONT (disable ESCape)</li>
+<li> CLEAR INPUT (flush keyboard buffer)</li>
+<li> The AUTO command show the whole line if it exist, it only printed a * on the 464</li></ul>
+<p>Some parts of 'BASIC' were actually housed in the firmware ROM, but 
+were not officially accessible to other programs. This included the line
+ editor.
+</p><p>The 'pure BASIC' parts of Locomotive BASIC - i.e. those not 
+concerned with CPC-specific firmware and hardware features - were 
+upgraded to become <a href="https://www.cpcwiki.eu/index.php/Mallard_BASIC" title="Mallard BASIC">Mallard BASIC</a>, the CP/M language shipped with the <a href="https://www.cpcwiki.eu/index.php/PCW" title="PCW">PCW</a>. This also featured exceptionally advanced random-access file handling, a feature missing from the CPC.
+</p>
+<h2><span class="mw-headline" id="Variables">Variables</span></h2>
+<p>Many contemporary BASIC interpreters only supported the first few characters of a variable name as a discriminator. For example <code>WATER$</code> and <code>WALDO$</code>
+ would refer to the same variable on a Commodore 64 or Apple II. But 
+Locomotive BASIC allowed variable names up to 40 characters in length, 
+so <code>THEQUICKBROWNFOXJUMPEDOVERTHELAZYDOGFAST$</code> and <code>THEQUICKBROWNFOXJUMPEDOVERTHELAZYDOGFATS$</code> could be use as separate variables.
+</p>
+<h3><span class="mw-headline" id="Real_.28Floating_Point.29_Numbers">Real (Floating Point) Numbers</span></h3>
+<p>This is the default type for a Locomotive BASIC variables, but can be clarified using <code>!</code> after the variable name, e.g., <code>real!=500.0</code>. 
+You can force all variables starting with specific letters to be this type by using the <code>DEFREAL</code>
+ keyword. 
+In many cases you don't want to use these, as they are slower than using
+ the integer type, and use more memory (5 bytes, as opposed to 2).
+</p>
+<h3><span class="mw-headline" id="Signed_16-bit_Integers">Signed 16-bit Integers</span></h3>
+<p>Defined using <code>%</code> after the variable name, e.g., <code>integer%=500</code>. 
+You can force all variables starting with specific letters to be this type by using the <code>DEFINT</code> keyword. 
+These can store values between -32,768 and 32,767.
+To assign a 16-bit value to a signed integer directly, you should give the number in a hexadecimal format, e.g., <code>uint=&amp;c0000</code>. 
+</p>
+<h3><span class="mw-headline" id="Strings">Strings</span></h3>
+<p>These are defined by using <code>$</code> after the variable name, e.g., <code>str$="Hello"</code>. 
+You can force all variables starting with specific letters to be this type by using the <code>DEFSTR</code> keyword. 
+A String can be up to 255 characters long.
+</p>
+<h2><span class="mw-headline" id="Type_Conversions">Type Conversions</span></h2>
+<p>The BASIC functions <code>ROUND</code>, <code>INT</code>, <code>CINT</code> and <code>FIX</code> can be used to convert real numbers into integers taking some care about rounding. The difference is in rounding mode - <code>ROUND</code> rounds to nearest, <code>FIX</code> rounds to zero, <code>INT</code> always rounds down, and <code>CINT</code>rounds up. e.g., <code>value%=INT(3.14)</code>.  Note that if you don't specify the&nbsp;% you will actually get a real number still.
+</p><p>To convert an integer to a real number, you can use the <code>UNT</code> function which will take the value supplied and return the two's complement number. e.g., <code>real=UNT(&amp;ABCD)</code>.
+</p>
+<pre>w=UNT(50000)
+Ready
+PRINT w
+-15536
+Ready
+█
+</pre>
+<p>If you want an integer result from division, use the <code>\</code> integer division operator. e.g., <code>int=value\divisor</code>. This is as opposed to the standard <code>/</code> division operator, that can create a real number.
+</p>
+<h2><span class="mw-headline" id="Command_list">Command list</span></h2>
+<h3><span class="mw-headline" id="Commands_and_operators">Commands and operators</span></h3>
+<h4><span class="mw-headline" id="AFTER_.E2.80.B9time_delay.E2.80.BA.5B.2C.E2.80.B9timer_number.E2.80.BA.5D_GOSUB_.E2.80.B9line_number.E2.80.BA"><code>AFTER ‹time delay›[,‹timer number›] GOSUB ‹line number› </code></span></h4>
+<dl><dd> Waits for ‹time delay›/50 seconds and then jumps NON-RECURRING to the subroutine at ‹line number› (see also <code>"EVERY i[,t] GOSUB line"</code>).</dd></dl>
+<h4><span class="mw-headline" id="AUTO_.5B.E2.80.B9line_number.E2.80.BA.5D.5B.2C.E2.80.B9increment.E2.80.BA.5D"><code>AUTO [‹line number›][,‹increment›] </code></span></h4>
+<dl><dd> Automatically generates line numbers starting at ‹line number› with ‹increment› after each entered line number. Use <b>[ESC]</b> to leave AUTO mode. Default values for ‹line number› and ‹increment› are 10.</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>AUTO 100,5&nbsp;:REM generates line numbers 100, 105, 110...</pre>
+<h4><span class="mw-headline" id="BORDER_.E2.80.B9colour.E2.80.BA.5B.2C.E2.80.B9colour.E2.80.BA.5D"><code>BORDER ‹colour›[,‹colour›] </code></span></h4>
+<dl><dd> Changes the colour of the border. If the second argument is supplied the border flashes between the two colours.</dd></dl>
+<h4><span class="mw-headline" id="CALL_.E2.80.B9address_expression.E2.80.BA.5B.2C.E2.80.B9list_of:_parameter.E2.80.BA.5D"><code>CALL ‹address expression›[,‹list of: parameter›] </code></span></h4>
+<dl><dd> Allows a machine code routine to be called by BASIC. Variables,
+ string values and constants can be passed to the routine. Values of any
+ supported type can be passed back by supplying a variable with <code>@</code> in front of it. This passes the address of the variable to the routine although it doesn't implicitly know the data type.</dd>
+<dd> Example:</dd></dl>
+<pre>CALL 0&nbsp;:REM resets the computer completely</pre>
+<h4><span class="mw-headline" id="CAT"><code>CAT</code></span></h4>
+<dl><dd> Displays the names of the files on the tape or disc. Tape files
+ are displayed in the order they are encountered. Disc files are sorted 
+alphabetically by ASCII code. Only files matching the current user are 
+displayed. Files marked as system are not displayed.</dd>
+<dd> Examples:</dd></dl>
+<pre>CAT&nbsp;:REM lists all disc files in alpha-numeric (ASCII) order</pre>
+<pre>|TAPE&nbsp;:CAT&nbsp;:REM lists names of all tape files in their storage order</pre>
+<h4><span class="mw-headline" id="CHAIN_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9line_number_expression.E2.80.BA.5D"><code>CHAIN ‹file name›[,‹line number expression›] </code></span></h4>
+<dl><dd>Enables the specified program to be loaded and RUN 
+automatically. If the optional parameter ‹line number expression› is 
+specified, the program execution will commence from that line.</dd></dl>
+<h4><span class="mw-headline" id="CHAIN_MERGE_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9line_number_expression.E2.80.BA_.7C_.5B.2C.5B.E2.80.B9line_number_expression.E2.80.BA.5D.2CDELETE_.E2.80.B9line_number_range.E2.80.BA.5D.5D"><code>CHAIN MERGE ‹file name›[,‹line number expression› | [,[‹line number expression›],DELETE ‹line number range›]] </code></span></h4>
+<dl><dd>Loads the specified program from tape or disc, merges it into 
+the program in memory, and starts execution of the merged program. The 
+parameter <code>DELETE</code> ‹line number range› is used to delete part of the original program before running it, if required.</dd></dl>
+<h4><span class="mw-headline" id="CLEAR"><code>CLEAR</code></span></h4>
+<dl><dd> Clears all variables from memory, leaving the program in memory unchanged. All open files are abandoned.</dd>
+<dd> The command clear inside a subroutine (<code>GOSUB</code>... <code>RETURN</code>)
+ will also clear the "stack pointer" address of the gosub heap. That 
+means that a RETURN won't work and a GOTO has to be used instead.</dd></dl>
+<h4><span class="mw-headline" id="CLG_.5B.E2.80.B9masked_ink.E2.80.BA.5D"><code>CLG [‹masked ink›] </code></span></h4>
+<dl><dd> Clears the graphics screen to colour specified by <code>‹masked ink›</code>. If parameter <code>‹masked ink›</code> is not specified then the graphics screen is cleared to the colour specified by the GRAPHICS PAPER statement.</dd></dl>
+<h4><span class="mw-headline" id="CLOSEIN"><code>CLOSEIN</code></span></h4>
+<dl><dd> Closes any input file (tape or disc).</dd></dl>
+<h4><span class="mw-headline" id="CLOSEOUT"><code>CLOSEOUT</code></span></h4>
+<dl><dd> Closes any output file (tape or disc).</dd></dl>
+<h4><span class="mw-headline" id="CLS_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D"><code>CLS [#‹stream expression›]</code></span></h4>
+<dl><dd> Clears the window specified by ‹stream expression›. If ‹stream 
+expression› is omitted it defaults to #0 (usually the whole screen). The
+ text cursor of the stream is moved to the upper left corner.</dd></dl>
+<h4><span class="mw-headline" id="CONT"><code>CONT</code></span></h4>
+<dl><dd> CONTinues program execution interrupted either by [ESC] [ESC] 
+or as a result of STOP within a program. A program cannot be continued 
+after being modified.</dd></dl>
+<h4><span class="mw-headline" id="CURSOR_.E2.80.B9expression.E2.80.BA"><code>CURSOR ‹expression› </code></span></h4>
+<dl><dd> <code>‹expression›</code> must be either 0 or 1.</dd></dl>
+<h4><span class="mw-headline" id="DATA_x1.5B.2Cx2.2Cx3....5D"><code>DATA x1[,x2,x3...]</code></span></h4>
+<dl><dd> Defines a data <i>section</i> to be used by <tt>READ</tt> calls.</dd>
+<dd> Data values can be of any type (integer, real or string) as long as the corresponding <tt>READ</tt> calls use a variable of the right type.</dd></dl>
+<dl><dd>Example:</dd></dl>
+<pre>10 DATA "Hello, world!", 42
+20 READ message$:PRINT message$
+30 READ answer:PRINT "The answer is:";answer
+</pre>
+<dl><dd><i>See also:</i> <tt>READ</tt>, <tt>RESTORE</tt></dd></dl>
+<h4><span class="mw-headline" id="DEF"><code>DEF</code></span></h4>
+<dl><dd> DEF means "define" and comes along with defining a function in 
+case of DEF FN or defining variables in case of DEFREAL, DEFINT or 
+DEFSTR.</dd>
+<dd> DEF FN must come before using the statement FN.</dd>
+<dd> DEF with a variable declaration should come before using a variable.</dd>
+<dd> (see also FN)</dd></dl>
+<h4><span class="mw-headline" id="DEFINT_.E2.80.B9letter_range.E2.80.BA"><code>DEFINT ‹letter range›</code></span></h4>
+<dl><dd>Forces all variables(s) starting with the specified letter(s) to
+ be integer variables. Singular letters could be defined or a range by a
+ minus symbol between two letters.</dd></dl>
+<dl><dd>Examples:</dd></dl>
+<pre>20 DEFINT a-z:' sets all variables starting with an A until Z as integer.
+</pre>
+<p>or
+</p>
+<pre>10 DEFINT F,S ..... (or 10 DEFINT A-Z)
+20 FIRST=111.11:SECOND=22.2
+30 PRINT FIRST,SECOND:' prints out 111      22
+</pre>
+<h4><span class="mw-headline" id="DEFREAL_.E2.80.B9letter_range.E2.80.BA"><code>DEFREAL ‹letter range›</code></span></h4>
+<dl><dd> Sets the default for variable(s) with the specified first letter(s) to a floating point figure.</dd></dl>
+<h4><span class="mw-headline" id="DEFSTR_.E2.80.B9letter_range.E2.80.BA"><code>DEFSTR ‹letter range›</code></span></h4>
+<dl><dd> Sets the default for variable(s) with the specified first letter(s) to string(s) variables.</dd></dl>
+<h4><span class="mw-headline" id="DEG"><code>DEG</code></span></h4>
+<dl><dd> Switch to degrees mode for trigonometric functions (<tt>SIN</tt>, <tt>COS</tt>...).</dd>
+<dd> <i>See also:</i> <tt>RAD</tt></dd></dl>
+<h4><span class="mw-headline" id="DELETE_.5Bfirst_line.5D.5B-.5Blast_line.5D.5D"><code>DELETE [first line][-[last line]]</code></span></h4>
+<dl><dd> Deletes the current program completely (without arguments) or only the given line or line range. Even</dd>
+<dd> <code>DELETE -</code></dd>
+<dd> is legal, it has the same effect as</dd>
+<dd> <code>DELETE</code></dd>
+<dd> The lines specified do not have to exist, all lines matching the 
+range will be deleted and having no matches does not cause an error.</dd></dl>
+<h4><span class="mw-headline" id="DI"><code>DI</code></span></h4>
+<dl><dd> Disables interrupts (but not[ESC]) until re-enabled by EI command or by RETURN at end of an interrupts service routine.</dd>
+<dd> This means that DI (if it's activated in a subroutine) is useful 
+helping a low-priority-interrupt not to be stopped by a 
+higher-priority-interrupt. RETURN then re-enable the interrupt without 
+EI.</dd></dl>
+<h4><span class="mw-headline" id="DIM_a.5B.25.7C.21.7C.24.5D.28d1.5B.2Cd2.5B.2C....5D.5D.29"><code>DIM a[%|!|$](d1[,d2[,...]])</code></span></h4>
+<dl><dd> Creates array <code>a</code> with single or multiple dimensions. You may optionally specify integer (<code>%</code>), real (<code>!</code>) or string (<code>$</code>) type otherwise it defaults to the current type set for the first letter of the array name. <code>d1</code> is size of first dimension-1, <code>d2</code> is size of second dimension-1 and so on. <code>DIM x(10)</code> will create an array with 11 elements, <code>x(0)</code> is the first element, <code>x(10)</code>
+ is the eleventh and last. You can specify as many dimensions as will 
+fit on one 255 character line, which is a maximum of 125. Trying to 
+create an array that already exists will generate an <code>Array already dimensioned</code> error. If an array is not specified by <code>DIM</code> before being accessed, each dimension value defaults to 10. The maximum dimensions that can be created this way is three.</dd></dl>
+<h4><span class="mw-headline" id="DRAW_x.2Cy.5B.2C.5Bi1.5D.5B.2Ci2.5D.5D"><code>DRAW x,y[,[i1][,i2]]</code></span></h4>
+<dl><dd> Draws a line from the current cursor position to position x,y. i1 specifies colour, i2 is the drawing style.</dd></dl>
+<dl><dd> 4 drawing styles:</dd></dl>
+<pre>i2 = 0 normal colour
+i2 = 1 XOR colour
+i2 = 2 AND colour
+i2 = 3 OR colour
+</pre>
+<dl><dd> Example:</dd></dl>
+<pre>CLG 2
+DRAW 500,400,0&nbsp;:REM draws a line from 0,0 to 500,400
+</pre>
+<p><code>DRAWR xr,yr[,[i1][,i2]]</code> ====
+</p>
+<dl><dd> Draws a line from current graphics cursor position to current 
+cursor x position + xr, current cursor y position + yr. i1 and i2 as 
+DRAW.</dd>
+<dd>Example:</dd></dl>
+<pre>Move 200,200
+DRAWR 100,100,0 - draws a line from 200,200 to 300,300
+</pre>
+<h4><span class="mw-headline" id="EDIT_.E2.80.B9line.E2.80.BA"><code>EDIT ‹line›</code></span></h4>
+<dl><dd> Display 1 program line for editing. </dd></dl>
+<p>The following keys can be used in editing mode, or during typing in BASIC:
+</p>
+<pre>CTRL+TAB - toggle overwrite/insert mode
+CTRL+CURSOR LEFT or CTRL+CURSOR UP - go to start of line
+CTRL+CURSOR RIGHT or CTRL+CURSOR DOWN - go to end of line
+CURSOR LEFT - move left one character
+CURSOR RIGHT - move right one character
+ESC - quit editing and do not accept changes
+ENTER/RETURN - quit editing and accept changes
+SHIFT + CURSOR UP/DOWN/LEFT/RIGHT - enter copy mode. You can move the cursor to where you want to copy from. Hold SHIFT and cursors to move copy cursor. 
+COPY - copy character covered by copy cursor.
+DEL - delete character and go back a char
+CLR - delete character under cursor
+CTRL + CAPS LOCK - toggle shift lock.
+</pre>
+<h4><span class="mw-headline" id="EI"><code>EI</code></span></h4>
+<dl><dd> Enable interrupts which have been disabled by DI</dd></dl>
+<h4><span class="mw-headline" id="END"><code>END</code></span></h4>
+<dl><dd> Indicates end of program</dd></dl>
+<h4><span class="mw-headline" id="ENT_.E2.80.B9tone_envelope_number.E2.80.BA.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D.5B.2C.E2.80.B9tone_env._section.E2.80.BA.5D"><code>ENT
+ ‹tone envelope number›[,‹tone env. section›][,‹tone env. 
+section›][,‹tone env. section›][,‹tone env. section›][,‹tone env. 
+section›]</code></span></h4>
+<dl><dd>The ENT command define the TONE shape of a sound which means manipulating the frequency in a certain range.</dd>
+<dd>The command could looks like:</dd></dl>
+<pre>ENT NUMBER,STEPS?,VERTICAL?,HORIZONTAL?
+</pre>
+<dl><dd>It is possible to define 15 different envelope shapes. So <b>NUMBER</b> could be 1-15.</dd></dl>
+<dl><dd>Each <b>?</b> stands for up to five sections (1-5), where each STEP&lt;&gt;VERTICAL&lt;&gt;HORIZONTAL with the same <b>?</b> are belong together.</dd></dl>
+<dl><dd><b>STEP:</b> means how many steps in each section (0-127) &gt; one step is 1/100 of a second!</dd>
+<dd><b>VERTICAL</b>: means how big is the step size from bottom to top (-128 to 127)</dd>
+<dd><b>HORIZONTAL</b>: means how big is the step size from left to right (0-255)</dd></dl>
+<h4><span class="mw-headline" id="ENV_.E2.80.B9volume_envelope_number.E2.80.BA.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D.5B.2C.E2.80.B9volume_env._section.E2.80.BA.5D"><code>ENV
+ ‹volume envelope number›[,‹volume env. section›][,‹volume env. 
+section›][,‹volume env. section›][,‹volume env. section›][,‹volume env. 
+section›]</code></span></h4>
+<dl><dd>The ENV command define the VOLUME shape of a sound which means manipulating the loudness in a certain range.</dd>
+<dd>The command could looks like:</dd></dl>
+<pre>ENV NUMBER,STEPS?,VERTICAL?,HORIZONTAL?
+</pre>
+<dl><dd>It is possible to define 15 different envelope shapes. So <b>NUMBER</b> could be 1-15.</dd></dl>
+<dl><dd>Each <b>?</b> stands for up to five sections (1-5), where each STEP&lt;&gt;VERTICAL&lt;&gt;HORIZONTAL with the same <b>?</b> are belong together.</dd></dl>
+<dl><dd><b>STEP:</b> means how many steps in each section (0-127) &gt; one step is 1/100 of a second!</dd>
+<dd><b>VERTICAL</b>: means how big is the step size from bottom to top (-128 to 127)</dd>
+<dd><b>HORIZONTAL</b>: means how big is the step size from left to right (0-255)</dd></dl>
+<h4><span class="mw-headline" id="ERASE_v1.5B.25_.7C_.21_.7C_.24.5D.5B.2Cv2.5B.25_.7C_.21_.7C_.24.5D.5B.2C....5D.5D"><code>ERASE v1[% |&nbsp;! | $][,v2[% |&nbsp;! | $][,...]]</code></span></h4>
+<dl><dd> Erases the specified array(s) and frees the memory used. Must specify existing array(s) or an <code>Improper argument</code> error will be generated.</dd></dl>
+<h4><span class="mw-headline" id="ERL"><code>ERL</code></span></h4>
+<dl><dd> Returns the line number of the last error encountered.</dd></dl>
+<h4><span class="mw-headline" id="ERROR_i"><code>ERROR i</code></span></h4>
+<dl><dd> Returns the error message whose error code number is i.</dd></dl>
+<h4><span class="mw-headline" id="EVERY_i.5B.2Ct.5D_GOSUB_ln"><code>EVERY i[,t] GOSUB ln</code></span></h4>
+<dl><dd> BASIC branches to the subroutine at line ln EVERY (reccuring) i/50 seconds. (see also "AFTER i[,t] GOSUB line")</dd></dl>
+<dl><dd> There are 4 delay timers from 0 to 3 which can be specified with ‹timer number›. If omitted ‹timer number› defaults to 0.</dd>
+<dd> In the case of parallel task has 3 the highest and 0 the lowest priority.</dd>
+<dd> With DI or EI you can disable or enable the timing interrupt. With 
+REMAIN &lt;timer number&gt; you can also disable an AFTER or EVERY 
+construct and stores the "remaining" time (&gt; REMAIN)</dd>
+<dd> Interrupts run as long as the main loop / program runs, even the main programm is paused &gt; press ESC only <b>once</b> not twice for a break.</dd>
+<dd> It is important to know or realise that low-priority-interrupts 
+which occurs simultanously to higher-priority-interrupts are not lost. 
+Their task remains or handled again after finishing the higher-prio 
+interrupt.</dd></dl>
+<pre>10 REM &gt; interrupts
+20 EVERY 50,0 GOSUB 100: REM &gt; lowest priority
+30 EVERY 100,1 GOSUB 200
+40 EVERY 200,2 GOSUB 300:
+50 AFTER 1000,3 GOSUB 400: REM &gt; highest priority
+60 WHILE flag=0
+70 a=a+1:print a
+80 WEND
+90 END
+100 REM #0
+110 PEN 2:PRINT "timer 0":PEN 1
+120 RETURN
+200 REM #1
+210 PEN 2:PRINT "timer 1":PEN 1
+220 RETURN
+300 REM #2
+310 PEN 2:PRINT "timer 2":PEN 1
+320 RETURN
+400 REM #3
+410 flag=1:PEN 2:PRINT "no more interrupts..."
+420 RETURN
+</pre>
+<dl><dd> Hint: Timing with interrupts is important, especially if more 
+than one interrupts run. If the interval of a subroutine driven by an 
+interrupt is too long than the processor can never get back to deal the 
+main program again. Work out timing by measuring the subroutine or by 
+trial and error.</dd>
+<dd> There are system internal interrupts (highest level) which cannot 
+be influenced by BASIC interrupts (e.g. keyboard scan &gt; BREAK key.)</dd>
+<dd> The next level of sytem internal interrupts CAN be influenced by 
+BASIC interrupts. For example the sound queue which will be created by 
+"ON SQ &lt;chanel&gt; GOSUB &lt;line&gt;". Those sound interrupts have 
+an independent time tricker but their priority is parallel to the second
+ priority times of BASICs interrupts. Therefore interrupts with timer 3 
+could "interrupt" them.</dd></dl>
+<h4><span class="mw-headline" id="FILL_i"><code>FILL i</code></span></h4>
+<dl><dd> Fills an area of a graphics screen i colour i (0-15). Default 
+value of i is the current graphics pen colour. Only available in Basic 
+1.1.</dd></dl>
+<h4><span class="mw-headline" id="FN"><code>FN</code></span></h4>
+<dl><dd>BASIC allows the program to define and use simple value 
+returning functions. DEF FuNction is the definition part of this 
+mechanism and creates program-specific function which works within the</dd>
+<dd>program in the same way as a function such a COS operates as a 
+built-in function of BASIC. It may be invoked throughout the program. 
+Variable types must be consistent and the DEF FN</dd>
+<dd>command should be written in part of the program outside the execution loop.</dd></dl>
+<dl><dd>Syntax&nbsp;: <code>DEF FN&lt;name&gt;[(&lt;formal parameters&gt;)]=&lt;general expression&gt;</code></dd></dl>
+<dl><dd>Example: <i>"with the definition of..."</i></dd></dl>
+<pre>10 gn=9.80665
+20 DEF FNgrv=s0+v0*t+0.5*gn*t^2
+30 s0=0:v0=0:t=5
+40 PRINT "...after";t;"seconds your dropped stone falls";FNgrv;"metres"
+</pre>
+<dl><dd><i>"the results are..."</i></dd></dl>
+<pre>:...after 5 seconds your dropped stone falls 122.58315 metres
+</pre>
+<h4><span class="mw-headline" id="FOR_TO_STEP_NEXT"><code>FOR TO STEP NEXT</code></span></h4>
+<dl><dd> Creating a counting loop (control strucutre) with a starting 
+condition. Inside the counting loop one or more commands will be 
+executed.</dd>
+<dd> The loop consists of of following specifications:</dd></dl>
+<dl><dd> 1. FOR</dd>
+<dd> 2. <i>a control variable</i></dd>
+<dd> 3. =</dd>
+<dd> 4. <i>starting value</i></dd>
+<dd> 5. TO</dd>
+<dd> 6. <i>target value</i></dd>
+<dd> 7. STEP [optional]</dd>
+<dd> 8. <i>increment / step size</i></dd>
+<dd> <i>... instructions between</i></dd>
+<dd> 9. NEXT</dd>
+<dd> 10. <i>control variable</i> [optional]</dd></dl>
+<dl><dd> You have to use the command STEP if you wish to count backwards. It's good to name the <i>control variable</i> after NEXT for readability and better program style.</dd>
+<dd> After each loop the computer checks internaly if the <i>target value</i>
+ has been reached (like an IF ... THEN ... ELSE instruction). If the 
+target value is reached NEXT closes the loop and calculates another 
+step, so the <i>control variable</i> will be changed last time.</dd>
+<dd> The default STEP value - if not specified - is one (1).</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>10 FOR I=1 TO 10
+20 PRINT I;
+30 NEXT I
+40 PRINT I
+RUN
+1   2   3   4   5   6   7   8   9   10   11
+READY
+</pre>
+<h4><span class="mw-headline" id="FRAME"><code>FRAME</code></span></h4>
+<dl><dd> Smooths character and graphics movement and reduces flicker 
+(waits for a VSYNC signal). Only available in Basic 1.1. On a CPC 464 
+you can use CALL &amp;BD19 instead.</dd></dl>
+<h4><span class="mw-headline" id="GOSUB_i"><code>GOSUB i</code></span></h4>
+<dl><dd> Jumps to subroutine which is given as argument.</dd>
+<dd> <i>Example:</i></dd></dl>
+<pre>10 PRINT "Calling subroutine"
+20 GOSUB 100
+30 PRINT "Back from subroutine"
+40 END
+100 REM Begin of the subroutine
+110 PRINT "Subroutine started"
+120 RETURN
+</pre>
+<h4><span class="mw-headline" id="GOTO_i"><code>GOTO i</code></span></h4>
+<dl><dd> Jumps to the line number which is given as argument.</dd>
+<dd> <i>Example:</i></dd></dl>
+<pre>10 GOTO 100
+20 REM not executed
+30 REM not executed
+100 PRINT "Hello World!"
+</pre>
+<dl><dd> GOTO is the simplest form of a jump or creating a loop <b>without</b> condition controll.</dd>
+<dd> <i>Example: (unconditional and endless loop)</i></dd></dl>
+<pre>10 PRINT "#";
+20 GOTO 10
+</pre>
+<dl><dd> Combine the GOTO command with an IF...THEN...ELSE instruction for creating a condition-controlled loop with the <b>test at the end</b>. Helpful because the Locomotive Basic has no practical DO...WHILE... loop.</dd>
+<dd> <i>Example: (condition at the end)</i></dd></dl>
+<pre>10 I=1
+20 PRINT I
+30 I=I+1
+40 IF I&lt;25 THEN GOTO 20
+50 END
+</pre>
+<h4><span class="mw-headline" id="GRAPHICS"><code>GRAPHICS</code></span></h4>
+<dl><dd> ...works only in combination with the command <code>PEN</code> or <code>PAPER</code> to set the plotting/drawing pen or background colour.</dd>
+<dd> If the <code>TAG</code> command is used to set text at the graphics cursor <code>GRAPHICS PEN</code> or <code>GRAPHICS PAPER</code> instead of the regular <code>PEN</code> or <code>PAPER</code>is necessary to colour the text.</dd></dl>
+<h4><span class="mw-headline" id="IF_THEN_ELSE"><code>IF THEN ELSE</code></span></h4>
+<dl><dd> Asks for a choice with the <b>IF...THEN...ELSE</b> statement.</dd>
+<dd> <b>IF</b> compares the entry condition in a logical way</dd>
+<dd> <b>THEN</b> contains instruction if the comparison is true</dd>
+<dd> <b>ELSE</b> contains instruction if it's false.</dd>
+<dd> <b>Example:</b></dd></dl>
+<pre>10 INPUT "guess a figure:",f
+20 IF f=10 THEN PRINT "right": END: ELSE GOTO 10
+</pre>
+<dl><dd> In case of nested choices there's a possibility to that with an IF...THEN instruction but not very recommended:</dd></dl>
+<pre>10 INPUT "guess a figure:",f
+20 IF f=10 THEN PRINT "right": END: ELSE IF f&lt;10 THEN PRINT "too small" ELSE PRINT "too big"
+30 GOTO 10
+</pre>
+<dl><dd>Other nested structures like IF...THEN...<b>ELSE...ELSE</b> 
+won't work first because the Locomotive Basic only looks after the first
+ ELSE instruction found and can't execute more single commands as a 
+block for a certain condition in comparision to e.g. "PASCAL" &gt; 
+begin...end-block, "C" &gt; {...}-block.</dd></dl>
+<h4><span class="mw-headline" id="INK_.E2.80.B9pen.E2.80.BA.2C.E2.80.B9colour.E2.80.BA.2C.5B.E2.80.B9second_colour.E2.80.BA.5D"><code>INK ‹pen›,‹colour›,[‹second colour›]</code></span></h4>
+<dl><dd> Used to set the colour palette for each of the 16 available inks.</dd>
+<dd> pen specifies the pen slot to use.</dd>
+<dd> colour specifies the system colour to use (0..27.)</dd>
+<dd> if the second colour is provided, Locomotive Basic will blink between the colour and second colour.</dd>
+<dd> In MODE 0, all 16 pens are available. In MODE 1, only 4 pens are available (0..3). In MODE 2, only 2 pens are available (0..1.)</dd>
+<dd> By default, pen 0 is the background colour and pen 1 is the foreground/text colour.</dd>
+<dd> Examples:</dd></dl>
+<pre>10 MODE 2
+20 INK 0,3: REM Set background colour to red
+30 INK 1,26: REM Set foreground/text colour to white
+</pre>
+<h4><span class="mw-headline" id="INPUT.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><code>INPUT[#‹stream expression›][,]</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="KEY"><code>KEY</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="LET"><code>LET</code></span></h4>
+<dl><dd> Used to define variables. You don't need to use the <i>LET</i> command because it is just a command which was added for compatibility reasons.</dd>
+<dd> <i>Example:</i></dd></dl>
+<pre>10 LET a$ = "hello world"
+20 PRINT a$
+</pre>
+<h4><span class="mw-headline" id="LINE_INPUT_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D.E2.80.B9variable.E2.80.BA.5B.2C.E2.80.B9variable.E2.80.BA.5D"><code>LINE INPUT [#‹stream expression›][,]‹variable›[,‹variable›] </code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="LIST_.5B.E2.80.B9line_number.E2.80.BA.5D.5B-.5B.E2.80.B9line_number.E2.80.BA.5D.5D.2C_.5B.23.E2.80.B9stream_expression.E2.80.BA.5D"><code>LIST [‹line number›][-[‹line number›]], [#‹stream expression›]</code></span></h4>
+<dl><dd> A command for listing the Basic program code.</dd>
+<dd> Possibility for manipulating display is using line numbers with a minus symbol.</dd>
+<dd> Example:</dd></dl>
+<pre>LIST 100-
+</pre>
+<dl><dd> List every line after line number 100.</dd></dl>
+<pre>LIST -100
+</pre>
+<dl><dd> List every line until line number 100 has reached.</dd></dl>
+<pre>LIST 100-200
+</pre>
+<dl><dd> List every line between line number 100 and 200 included</dd></dl>
+<dl><dd> With the help of separate window definitions it is possible to 
+print out long listings, better differentiate parts / slices of it into 
+different window predefined</dd>
+<dd> Example:</dd></dl>
+<pre>LIST 1000-1100,#1
+LIST 3000-3100,#2
+</pre>
+<dl><dd> ...prints out two parts of one program out into two windows (if they are defined well)</dd></dl>
+<h4><span class="mw-headline" id="LOAD_.E2.80.B9file_name.E2.80.BA.5B.2C.E2.80.B9address.E2.80.BA.5D"><code>LOAD ‹file name›[,‹address›] </code></span></h4>
+<p>With this directive you may load any file in memory
+</p><p>Basic files (extension .BAS) are loaded in Basic memory, you cannot choose loading address
+</p><p>Binary files are loaded to the default address location stored in
+ the AMSDOS header but you may force loading address (&amp;C000 for a 
+screen)
+</p><p>TAPE convention:
+</p><p>When loading tape files, the basic display a message every block 
+which may cause trouble. Message output may be disabled by using prefix 
+"!" before the filename.
+</p><p>It's also possible to load the next file disregarding his name using only "!" =&gt; <code>LOAD "!"</code>
+</p>
+<h4><span class="mw-headline" id="LOCATE.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D_x.2Cy"><code>LOCATE[#‹stream expression›][,] x,y</code></span></h4>
+<dl><dd> Moves the text cursor to the x,y location. </dd></dl>
+<dl><dd> x starts at 1 on the left and goes up to 20 (in mode 0), 40 (in mode 1) or 80 (in mode 2).</dd></dl>
+<dl><dd> y starts at 1 at the top and ends at 25 at the bottom.</dd></dl>
+<h4><span class="mw-headline" id="MASK_.5Bi1.5D.5B.2Ci2.5D"><code>MASK [i1][,i2]</code></span></h4>
+<dl><dd> Sets bits in each adjacent group of 8 pixel on (1) or off (0) 
+according to binary value of i1 (0-255). i2 determines whether the first
+ point of the line is to plotted (1) or not (0).</dd></dl>
+<dl><dd>Example:</dd></dl>
+<pre>10 CLG 2:MASK 1:MOVE 0,0:DRAW 500,400
+20 MASK 15:MOVE 0,0:DRAW 500,400
+</pre>
+<h4><span class="mw-headline" id="MEMORY_.E2.80.B9memory_address.E2.80.BA"><code>MEMORY ‹memory address›</code></span></h4>
+<dl><dd> Allocates the amount of memory to be used by BASIC by setting the <a href="https://www.cpcwiki.eu/index.php/Locomotive_BASIC#HIMEM" title="Locomotive BASIC">address of the highest byte</a> it may use.</dd></dl>
+<h4><span class="mw-headline" id="MERGE"><code>MERGE</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="MID.24_.28.E2.80.B9string.E2.80.BA.2C.E2.80.B9start_position.E2.80.BA.5B.2C.E2.80.B9length_of_substring.E2.80.BA.5D.29"><code>MID$ (‹string›,‹start position›[,‹length of substring›])</code></span></h4>
+<dl><dd> With the MID$ command there are two applications possible:</dd></dl>
+<dl><dd> 1. MID$ creates a new substring out of the give ‹string› and 
+starts at the defined position ‹start position› and print the number of 
+given characters by ‹length of substring›.</dd>
+<dd> If no length is defined every character from ‹start position› will be printed out.</dd>
+<dd> If a higher value of ‹start position› or ‹length of substring› than
+ the real length of the initial string is defined a blank string will be
+ printed.</dd>
+<dd> The range of ‹start position› or ‹length of substring› is from 0 up to 255 characters.</dd></dl>
+<dl><dd> 2. With MID$ you're able to manipulates given strings by inserting a new string.</dd>
+<dd> Take care of the two different applications and using in BASIC.</dd></dl>
+<p><br>
+</p>
+<dl><dd> Example for the 1. application:</dd></dl>
+<pre>10 a$="Hello"
+20 PRINT MID$(a$,2,2)
+run
+el
+Ready
+</pre>
+<dl><dd></dd>
+<dd> Example for the 2. application</dd></dl>
+<pre>10 a$="Hello"
+20 MID$(a$,2,3)="ipp"
+30 PRINT a$
+run
+Hippo
+Ready
+</pre>
+<h4><span class="mw-headline" id="MODE"><code>MODE</code></span></h4>
+<dl><dd> Changes the screen mode: MODE 0 is 160×200 in 16 colours, MODE 1
+ is 320×200 4 colours, MODE 2 is 640×200 2 colours and MODE 3 is 160×200
+ in 4 colours.</dd></dl>
+<h4><span class="mw-headline" id="MOVE_x.2Cy_.5B.5B.2Ci1.5D.5B.2Ci2.5D.5D"><code>MOVE x,y [[,i1][,i2]]</code></span></h4>
+<dl><dd> Moves the graphic cursor to position x,y. The parameter i1 may 
+be used to change the pen (drawing) colour. The parameter i2 specifies 
+the logical colour, as in DRAW.</dd></dl>
+<dl><dd> 4 drawing styles: </dd></dl>
+<pre>i2 = 0 normal colour
+i2 = 1 XOR colour
+i2 = 2 AND colour
+i2 = 3 OR colour
+</pre>
+<h4><span class="mw-headline" id="MOVER_xr.2Cyr.5B.2C.5Bi1.5D.5B.2Ci2.5D.5D"><code>MOVER xr,yr[,[i1][,i2]]</code></span></h4>
+<dl><dd> moves the graphic cursor (relative) from current position to 
+current cursor x position + xr, current cursor y position + yr. i1 and 
+i2 as in MOVE.</dd></dl>
+<h4><span class="mw-headline" id="NEW"><code>NEW</code></span></h4>
+<dl><dd> Clears BASIC RAM which means program and variables. Keeps symbol defintion (if defined) and screen mode without clearing.</dd></dl>
+<h4><span class="mw-headline" id="ON_BREAK_CONT"><code>ON BREAK CONT</code></span></h4>
+<dl><dd> Prevents the interruption of program execution by the ESC key.</dd></dl>
+<h4><span class="mw-headline" id="ON_BREAK_GOSUB_ln"><code>ON BREAK GOSUB ln</code></span></h4>
+<dl><dd> Passes control to subroutine at line ln when ESC ESC pressed.</dd></dl>
+<h4><span class="mw-headline" id="ON_BREAK_STOP"><code>ON BREAK STOP</code></span></h4>
+<dl><dd> Restores normal function of ESC key during program execution.</dd></dl>
+<h4><span class="mw-headline" id="ON_ERROR_GOTO_ln"><code>ON ERROR GOTO ln</code></span></h4>
+<dl><dd> Passes the control to line ln if an error is detected in the program.</dd></dl>
+<dl><dd> ON ERROR GOTO 0, Turns of the error trap, and restores normal error processing.</dd></dl>
+<h4><span class="mw-headline" id="ON_variable_GOTO_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><code>ON variable GOTO ln x1, x2, x3, x4, ...</code></span></h4>
+<dl><dd> In case of passing more choices <b>ON variable GOTO ln x1, x2, x3, x4, ...</b> points to a table with the jumping target.</dd>
+<dd> <b>Example:</b></dd></dl>
+<pre>10 PRINT "1. LOAD - 2. SAVE - 3. EXIT"
+20 INPUT choice
+30 ON choice GOTO 1000, 2000, 3000
+40 CLS: GOTO 10
+1000 PRINT "1. LOAD":END
+2000 PRINT "2. SAVE":END
+3000 END
+</pre>
+<dl><dd>In case that the variable <i>choice</i> won't fullfil the 
+condition (in a range between line 0 and 65535) the next instruction 
+will be executed (here: Line 40). If "choice" is smaller than 0 an error
+ will occur.</dd></dl>
+<h4><span class="mw-headline" id="ON_variable_GOSUB_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><code>ON variable GOSUB ln x1, x2, x3, x4, ...</code></span></h4>
+<dl><dd> In case of passing more choices targeting to SUBROUTINES <b>ON variable GOSUB ln x1, x2, x3, x4, ...</b> points to a jumping table.</dd>
+<dd> <b>Example:</b></dd></dl>
+<pre>10 PRINT "1. LOAD - 2. SAVE - 3. EXIT"
+20 INPUT choice
+30 ON choice GOSUB 1000, 2000, 3000
+40 CLS: GOTO 10
+1000 PRINT "1. LOAD":RETURN
+2000 PRINT "2. SAVE":RETURN
+3000 END
+</pre>
+<dl><dd>In case that the variable <i>choice</i> won't fullfil the 
+condition (in a range between line 0 and 65535) the next instruction 
+will be executed (here: Line 40). If "choice" is smaller than 0 an error
+ will occur.</dd></dl>
+<h4><span class="mw-headline" id="ON_SQ.28x.29_GOSUB_ln_x1.2C_x2.2C_x3.2C_x4.2C_..."><code>ON SQ(x) GOSUB ln x1, x2, x3, x4, ...</code></span></h4>
+<dl><dd>ON SQ(x) can trigger an interrupt when e.g. a space or free channel in queue.</dd>
+<dd>Using that command is a one way interrupt trigger and shouldn't be mixed with <code>EVERY</code> or <code>AFTER</code> commands.</dd></dl>
+<dl><dd>See also the <code>SQ(x)</code> command for more details.</dd></dl>
+<h4><span class="mw-headline" id="OPENIN_.E2.80.B9filename.E2.80.BA"><code>OPENIN ‹filename›</code></span></h4>
+<dl><dd> Opens the specified data file for reading. It has to be an ASCII file. ( The command <code>CLOSEIN</code> closes reading data file. )</dd>
+<dd> Read from the file using <code>INPUT #9</code></dd></dl>
+<h4><span class="mw-headline" id="OPENOUT_.E2.80.B9filename.E2.80.BA"><code>OPENOUT ‹filename›</code></span></h4>
+<dl><dd> Opens the specified data file for writing. It writes an ASCII file. (The command <code>CLOSEOUT</code> finishes writing to the file and closes it cleanly.)</dd>
+<dd> Write to the file with PRINT#9.</dd>
+<dd> No file is likely to be written until enough data is written (e.g. 
+2KB) or the file has at least 1 byte written and CLOSEOUT is used.</dd>
+<dd> The following code pattern can be used to set MEMORY and lower 
+HIMEM lower than would normally be allowed. This is often seen in disc 
+loaders. This doesn't cause any file to be written:</dd></dl>
+<pre>OPENOUT"&lt;filename&gt;
+MEMORY address
+CLOSEOUT
+</pre>
+<h4><span class="mw-headline" id="ORIGIN_x.2Cy.5B.2Cl.2Cr.2Ct.2Cb.5D"><code>ORIGIN x,y[,l,r,t,b]</code></span></h4>
+<dl><dd> The command defines the origin ('world reference point') for 
+the graphics coordinate system. Normally the reference origin is in the 
+left, bottom corner of the default screen and has 0,0. So the most left 
+coordinate value could be by default 639 and the most top value 399. 
+Independent from the actual modus (2, 1 or 0) the range for the x 
+coordinate are always 640 points and for the y coordinate 400 points. In
+ theory you are able to address 256,000 pixel but only 128,000 are 
+visible due to the maximal resolution of the hardware.</dd>
+<dd> <code>x,y</code> are the the new coordinates for the 'world reference '.</dd>
+<dd> <code>l,r,t,b</code> are optional and set the borders for the new graphical window (works in the same way like the <code>WINDOW</code> command for a text window). l,r,t,b means left, right, tob and bottom coordinates.</dd>
+<dd> If a new graphical window (borders) is defined every point or drawn line won't be plotted (clipped internally).  </dd></dl>
+<dl><dd> Example (the line drawn will be cutted):</dd></dl>
+<pre>ORIGIN 320,200,250,450,100,300
+DRAW 0,200
+</pre>
+<h4><span class="mw-headline" id="OUT_.E2.80.B9address.E2.80.BA.2C.E2.80.B9value.E2.80.BA"><code>OUT ‹address›,‹value›</code></span></h4>
+<dl><dd> Outputs a value (range of 0-255) to a specific I/O address.</dd>
+<dd> Watch out <a class="external free" href="http://cpcwiki.eu/index.php/I/O_Port_Summary">http://cpcwiki.eu/index.php/I/O_Port_Summary</a></dd></dl>
+<h4><span class="mw-headline" id="PAPER.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><code>PAPER[#‹stream expression›][,]</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="PEN.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><code>PEN[#‹stream expression›][,]</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="PLOT"><code>PLOT</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="PLOTR"><code>PLOTR</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="POKE_add"><code>POKE add</code></span></h4>
+<dl><dd> Alters contents of memory location add to value i (0-255)</dd></dl>
+<h4><span class="mw-headline" id="PRINT.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.5B.2C.5D"><code>PRINT[#‹stream expression›][,]</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="RAD"><code>RAD</code></span></h4>
+<dl><dd> Switch to radians mode for trigonometric functions (<code>SIN</code>, <code>COS</code>...).</dd></dl>
+<dl><dd> <i>See also:</i> <code>DEG</code></dd></dl>
+<h4><span class="mw-headline" id="RANDOMIZE_.5Bseed.5D"><code>RANDOMIZE [seed]</code></span></h4>
+<dl><dd> Resets the pseudo-random generator to the given seed (starting 
+value of the 'random' series). What is strange is that if no seed is 
+given, one is interactively prompted for.</dd></dl>
+<dl><dd> A common idiom to have a <i>random</i> random seed is to do:</dd></dl>
+<pre>RANDOMIZE TIME
+</pre>
+<dl><dd> <code>RANDOMIZE TIME</code> isn't still a 'real' random number but to hit the same series again is pretty hard due to the time elapsed.</dd>
+<dd> The algorithm used for randomizing is the following: the generator 
+starts with the seed, adds 1, multiplies by 75 (fiddle factor), divides 
+by 65537 and then uses the remainder -1.</dd></dl>
+<h4><span class="mw-headline" id="READ_variable"><code>READ variable</code></span></h4>
+<dl><dd> Gets the next data item (from <tt>DATA</tt> commands), stores it in the given variable and moves to the next item.</dd></dl>
+<p>The variable must be of the correct type.
+</p><p><i>See also:</i> <tt>DATA</tt>, <tt>RESTORE</tt>
+</p>
+<h4><span class="mw-headline" id="RELEASE_chanel"><code>RELEASE chanel</code></span></h4>
+<dl><dd> Releases a sound which was hold on (by a SOUND command) before.
+ It uses the same bit matrix like the SOUND command for the first 
+parameter</dd></dl>
+<ol><li> (&amp;x00000001) releases chanel A</li>
+<li> (&amp;x00000010) releases chanel B</li>
+<li> (&amp;x00000011) releases chanel A and B</li>
+<li> (&amp;x00000100) releases chanel C</li>
+<li> (&amp;x00000101) releases chanel A and C</li>
+<li> (&amp;x00000110) releases chanel B and C</li>
+<li> (&amp;x00000111) releases chanel A, B and C</li></ol>
+<dl><dd>Example:</dd></dl>
+<pre>10 SOUND 65,1000,100
+20 PRINT"PRESS R TO LET IT SOUND"
+30 IF INKEY(50)=-1 THEN 30
+40 RELEASE 1
+</pre>
+<h4><span class="mw-headline" id="REM_.5Bany_text.5D"><code>REM [any text]</code></span></h4>
+<dl><dd> Introduces a comment.</dd></dl>
+<h4><span class="mw-headline" id="RENUM_.5B.E2.80.B9newLine.E2.80.BA.5D.5B.2C.E2.80.B9oldLine.E2.80.BA_.7C_.2C.5B.E2.80.B9oldLine.E2.80.BA.5D.2C.E2.80.B9step.E2.80.BA.5D"><code>RENUM [‹newLine›][,‹oldLine› | ,[‹oldLine›],‹step›] </code></span></h4>
+<dl><dd> Renumbers the lines of the current program.</dd></dl>
+<dl><dd> By default, the whole program is renumbered starting at line 10
+ with multiples of ten. Any parameter that is left out defaults to 10. 
+It is important to note that <i>jumps</i> (<code>GOTO</code>, <code>GOSUB</code> and the like) are automatically converted to the new line numbers.</dd></dl>
+<dl><dd> The whole set of parameters can be used to renumber only the last part of a program.</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>10 GOTO 20
+20 GOTO 30
+30 GOTO 10
+</pre>
+<dl><dd> becomes, after calling <code>RENUM 100,20,5</code></dd></dl>
+<pre>10 GOTO 100
+100 GOTO 105
+105 GOTO 10
+</pre>
+<h4><span class="mw-headline" id="RESTORE_.5Bline.5D"><code>RESTORE [line]</code></span></h4>
+<dl><dd> Resets the data pointer used by <tt>READ</tt>. When used 
+without parameters, resets the pointer to the first data in the program.
+ Otherwise, resets the pointer to the given line number.</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>10 DATA 10,11,12,13,14
+20 DATA 20
+READ i:PRINT i
+ 10
+Ready
+READ i:PRINT i
+ 11
+Ready
+RESTORE
+Ready
+READ i:PRINT i
+ 10
+Ready
+RESTORE 20
+Ready
+READ i:PRINT i
+ 20
+Ready
+</pre>
+<p><br>
+</p>
+<dl><dd> <i>See also:</i> <tt>DATA</tt>, <tt>READ</tt></dd></dl>
+<h4><span class="mw-headline" id="RESUME_.5Bline.5D_or_NEXT"><code>RESUME [line] or NEXT</code></span></h4>
+<dl><dd> Command causes the program to resume after an error code  and if it is interrupted by an <b>ON ERROR GOTO</b> jump</dd>
+<dd> So it can either resume</dd></dl>
+<ul><li>(if there's no line number stated) at the same line after error code (and if there are more statements in one line)</li></ul>
+<p>or
+</p>
+<ul><li> at the line number stated (optional)</li></ul>
+<p>or
+</p>
+<ul><li> with the NEXT parameter (optional) ... at the line followed by the error line</li></ul>
+<h4><span class="mw-headline" id="RETURN"><code>RETURN</code></span></h4>
+<dl><dd> Terminates a subroutine and returns control to the line following the GOSUB call (see GOSUB)</dd></dl>
+<h4><span class="mw-headline" id="RUN_.5Bline.5D_or_.22filename.22"><code>RUN [line] or "filename"</code></span></h4>
+<dl><dd>Runs the current program, optionally starting at a given line. If no line number is given, starts at the first line.</dd></dl>
+<dl><dd>If a string is used after RUN command a programm will be loaded 
+and executed from storage medium (e.g. Tape, Disc). With that command 
+protected BASIC programs can be executed.</dd></dl>
+<dl><dd>Exampel:</dd></dl>
+<pre>RUN"disc"
+</pre>
+<h4><span class="mw-headline" id="SAVE_.22filename.22_.5B.2Cfiletype.5D.5B.2Cparameter1.2Cparameter2.2Cparameter3.5D"><code>SAVE "filename" [,filetype][,parameter1,parameter2,parameter3]</code></span></h4>
+<dl><dd> Command saves the current BASIC program / content from RAM onto a storage medium (e.g. Tape, Disc)</dd></dl>
+<dl><dd> Filetype could be:</dd></dl>
+<ul><li> <b>,A</b> for a ASCII file</li>
+<li> <b>,B</b> for a binary file (store RAM content as it is)</li>
+<li> <b>,P</b> for a regular, <i>protected</i> BASIC file</li></ul>
+<dl><dd> without that parameter the content will be stored as a regular BASIC file</dd></dl>
+<dl><dd>The three parameters after filetype could be used in combination with the binary filetype (,B).</dd></dl>
+<ul><li> <i><b>parameter1</b></i> defines the starting address of memory range</li>
+<li> <i><b>parameter2</b></i> defines the length (range of memory)</li>
+<li> <i><b>parameter3</b></i> defines the entry point (optional)</li></ul>
+<h4><span class="mw-headline" id="SOUND"><code>SOUND</code></span></h4>
+<dl><dd> the SOUND command has following shape:</dd>
+<dd> SOUND <b>C</b>hannel,<b>P</b>eriod,<b>D</b>uration,<b>V</b>olume,Volume-<b>Env</b>elope,<b>T</b>one-<b>En</b>velope,<b>N</b>oise</dd></dl>
+<dl><dd><b>C:</b> Selecting channel is done bitwise (combinations are possible of course):</dd></dl>
+<pre>(Bit 0) &amp;x00000001 = 1 = channel A (middle)
+(Bit 1) &amp;x00000010 = 2 = channel B (left)
+(Bit 2) &amp;x00000100 = 4 = channel C (right)
+</pre>
+<dl><dd>more function about channel are</dd></dl>
+<pre>(Bit 3) &amp;x00001000 = 8 = Rendezvous with channel A
+(Bit 4) &amp;x00010000 = 16 = Rendesvous with channel B
+(Bit 5) &amp;x00100000 = 32 = Rendesvous with channel C
+(Bit 6) &amp;x01000000 = 64 = Hold
+(Bit 7) &amp;x10000000 = 128 = Flush
+</pre>
+<dl><dd><b>P:</b> the period number can be a figure between 0 and 4095 
+(2^12-1... 12 means that we have 12 tones (inclusive half-tones) in nine
+ octaves on the CPC in sum and their distance between is the twelves 
+square root of two), where 8 octaves are available. E.g. Octave 0 starts
+ on middle C with number 478.</dd>
+<dd> To calculate the period you can use following formula: <b>period=1,000,000/(16*frequency)</b> or in short <b>period=(62,500/frequency)</b></dd>
+<dd> (e.g. the note "A" with the frequency 440 Hz has the period 142 on the CPC)</dd></dl>
+<dl><dd><b>D:</b> the duration of the note is measured in 1/100th of a 
+second and can be any positive number in the range 1-32,767. 0 and 
+negative number are in combination with ENT and ENV commands usefull. A 
+negative number means repititions.</dd></dl>
+<dl><dd><b>V:</b> the volume number range from 0-7 on a CPC 464 (BASIC 1.0) or 0-15 on a CPC664/6128 (BASIC 1.1)</dd></dl>
+<dl><dd><b>ENV:</b> and <b>ENT:</b> For shaping the sound ENV (Volume) 
+and ENT (Frequency) commands are available. The relation between SOUND 
+and those commands comes with a figure between 1 to 15 for ENV (5th 
+parameter) and 1 to 15 for ENT (6th parameter).</dd></dl>
+<dl><dd><b>N:</b> the seventh parameter can be used for blending in 
+noise between the range of 0-15 (BASIC 1.0) or 0-30 (BASIC 1.1). The 
+higher the number the 'deeper' or 'dirty' is the noise.</dd></dl>
+<h4><span class="mw-headline" id="SPC_.3Cn.3E"><code>SPC &lt;n&gt;</code></span></h4>
+<dl><dd> in conjunction with PRINT the SPC command prints out a certain number (n) of spaces.</dd>
+<dd> Example:</dd></dl>
+<pre>PRINT "Hello";SPC(10);"World";
+Hello          World
+</pre>
+<h4><span class="mw-headline" id="SPEED_INK_.3Cn1.2Cn2.3E"><code>SPEED INK &lt;n1,n2&gt; </code></span></h4>
+<dl><dd> SPEED INK command defines the frequency of colour changes if a 
+colour change was defined. The duration is calculated by n1=... or n2 
+=duration/50 seconds.</dd></dl>
+<h4><span class="mw-headline" id="SPEED_KEY_.3Cstart.2Crepeat.3E"><code>SPEED KEY &lt;start,repeat&gt; </code></span></h4>
+<dl><dd> SPEED KEY command defines the delay after which a key repeat 
+(for keys that do repeat). The first parameter is the delay before the 
+first repeat and the second parameter is the delay between further 
+repeats. Delay is in 1/50th of seconds.</dd></dl>
+<dl><dd>When using it with low values, it is common to associate a key to reset the default speed of 30,2.</dd>
+<dd>For example to associate the key 0 from the numpad:</dd></dl>
+<pre>KEY 0,"SPEED KEY 30,2"+CHR$(13)
+</pre>
+<h4><span class="mw-headline" id="SPEED_WRITE_.3Cn.3E"><code>SPEED WRITE &lt;n&gt; </code></span></h4>
+<dl><dd> SPEED WRITE defines the speed at which data is to be saved or 
+written to a cassette unit. n=1 means 2000 baud, n=0 (default) means 
+1000 baud. When reading from the tape, the correct speed is 
+automatically selected.</dd></dl>
+<h4><span class="mw-headline" id="SQ_.28channel.29"><code>SQ (channel)</code></span></h4>
+<dl><dd> Returns a bit significant integer showing state of the sound queue for specified channel where channel 1,2,3, = A, B, C</dd></dl>
+<dl><dd>Bits 0,1 and 2     Number of free entries in the queue</dd>
+<dd>Bits 3,4 and 5     Redezvous state at head of the queue</dd>
+<dd>Bit 6              Head of the queue is held</dd>
+<dd>Bit 7              Channel is currently active</dd></dl>
+<h4><span class="mw-headline" id="STOP"><code>STOP</code></span></h4>
+<dl><dd> Breaks program execution at line containing the STOP statement. The message <b>BREAK in</b> is output with the line number.</dd></dl>
+<h4><span class="mw-headline" id="SWAP"><code>SWAP</code></span></h4>
+<dl><dd> SWAP works only in combination with the window command. Every 
+error or status messages from the operating system will be displayed 
+normaly on WINDOW#0 (=<i>main</i> window). WINDOW SWAP changes the <i>main</i> window to the desired target window.</dd>
+<dd> Example (if a window with number 4 was defined before...):</dd></dl>
+<pre>WINDOW SWAP 0,4
+</pre>
+<h4><span class="mw-headline" id="SYMBOL_n.2Ci1.5B.2Ci2.2Ci3.2Ci4.2Ci5.2Ci6.2Ci7.2Ci8.5D"><code>SYMBOL n,i1[,i2,i3,i4,i5,i6,i7,i8]</code></span></h4>
+<dl><dd> Redefines the appearance of the character at index n.</dd>
+<dd> Each of the following eight integers defines the contents of one pixel row, starting at the top of the character.</dd>
+<dd> Each character fits in an 8x8 pixel grid.</dd>
+<dd> Missing lines are considered as empty.</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>SYMBOL 255,255,129,129,129,129,129,129,255
+PRINT CHR$(255)
+</pre>
+<dl><dd> Defines character 255 to look like an empty square and prints it.</dd></dl>
+<dl><dd> Initially, only characters with indices ranging from 240 to 255 can be redefined.</dd>
+<dd> See also <tt>SYMBOL AFTER</tt> to allow redefinition of arbitrary characters.</dd></dl>
+<h4><span class="mw-headline" id="SYMBOL_AFTER_n"><code>SYMBOL AFTER n</code></span></h4>
+<dl><dd> Allows the redefinition of character symbols from index n included. </dd></dl>
+<dl><dd> Symbol redefinitions are made using the SYMBOL command above.</dd>
+<dd> Initially, only symbols from index 240 to 255 can be redefined. This initial situation can be restored with <tt>SYMBOL AFTER 240</tt>. Symbol previously redefined are restored to their original appearance.</dd></dl>
+<h4><span class="mw-headline" id="TAB"><code>TAB</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="TAG_.5B.23st.5D"><code>TAG [#st]</code></span></h4>
+<dl><dd> Allows text to print at graphics cursor position.</dd>
+<dd> see TAGOFF</dd></dl>
+<h4><span class="mw-headline" id="TAGOFF_.5B.23st.5D"><code>TAGOFF [#st]</code></span></h4>
+<dl><dd> Directs text to stream st printing it at previous text cursor position.</dd></dl>
+<h4><span class="mw-headline" id="TROFF"><code>TROFF</code></span></h4>
+<dl><dd> Turns off the program flow trace (see TRON)</dd></dl>
+<h4><span class="mw-headline" id="TRON"><code>TRON</code></span></h4>
+<dl><dd> Turns on the program flow trace for debugging. Causes the line number of each statement executed to be displayed.</dd></dl>
+<h4><span class="mw-headline" id="USING"><code>USING</code></span></h4>
+<dl><dd> The USING assignement defines the format of the PRINT output. 
+Its appointment happens by characters where each has a certain meaning.</dd></dl>
+<p><b>Numbers / Figures</b>
+</p>
+<dl><dd> the character: </dd>
+<dd><b>#</b> stands for a figure between 0 - 9</dd>
+<dd><b>.</b> stands for a decimal point</dd>
+<dd><b>+</b> generates a positive sign if the value is positive</dd>
+<dd><b>-</b> generates a negative sign if the value is nagative</dd>
+<dd><b>**</b> generates a asterix for each empty "location" before the printed character</dd>
+<dd><b>$$</b> generates a Dollar characters before the printed character (the same with the pound note)</dd>
+<dd><b>,</b> generates a comma every each three decimals (thousands per 
+figure) and has to be set before the decimal point or at the end if 
+without a decimal point.</dd>
+<dd>^ generates a scientific notation (with exponents) and a the end of the format appointment</dd></dl>
+<p><b>Strings</b>
+</p>
+<dl><dd> the character:</dd>
+<dd><b>!</b> prints out only the first character</dd>
+<dd><b>\xxx\</b> prints out only with x-numbers defined length of the string (from left to right). x means a blank sign made with the space bar</dd>
+<dd><b>&amp;</b> the whole string is printed out as given (unknown function)</dd></dl>
+<dl><dd> a print output (numbers) with "%" in the beginning shows that 
+not enough positions has to be declared (at all or before the decimal 
+point).</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>10 figure=123456789
+20 word$="Hello"
+30 print using "+**,##########";figure
+40 print using "\   \";word$
+
+creates following output:
+
+*****+12,345,679
+Hel
+</pre>
+<h4><span class="mw-headline" id="WAIT_add.2C_i1.5B.2Ci2.5D"><code>WAIT add, i1[,i2]</code></span></h4>
+<dl><dd> Waits until the I/O port at add returns a value (0-255). The 
+value returned is XORed with i2 and the ANDed with i1. This is repeated 
+until a non-zero result occurs.</dd></dl>
+<h4><span class="mw-headline" id="WHILE_WEND"><code>WHILE WEND</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="WIDTH"><code>WIDTH</code></span></h4>
+<dl><dd> [...]</dd></dl>
+<h4><span class="mw-headline" id="WINDOW.5B.23.E2.80.B9stream_expression.E2.80.BA.5D.2C.5BL.5D.2C.5BR.5D.2C.5BT.5D.2C.5BB.5D"><code>WINDOW[#‹stream expression›],[L],[R],[T],[B]</code></span></h4>
+<dl><dd> It is possible to define in BASIC eight (8) independent windows for text output. Overlapping is possible.</dd></dl>
+<dl><dd> #STREAM: eight window are possible. No. zero (0) is the main window where error or status messages were put out by default.</dd>
+<dd> each position is included inside the window</dd>
+<dd> L = left column / R = right column (dependent of the mode 0 = 20 / 1 = 40 / 2 = 80)</dd>
+<dd> T = top row / B = bottom row (always from 1 to 25)</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>MODE 1
+WINDOW#1,1,40,1,6
+</pre>
+<dl><dd> ...defines the first top quarter of the screen for window No. 1</dd></dl>
+<h4><span class="mw-headline" id="WRITE_.5B.23st.2C.5D_v.5B.24.5D.2C_v.5B.24.5D"><code>WRITE [#st,] v[$], v[$]</code></span></h4>
+<dl><dd> Writes the values of the specified variable to the specified stream.</dd></dl>
+<dl><dd> Example:</dd></dl>
+<pre>10 OPENOUT "DUMMY"
+20 INPUT A$,A
+30 WRITE #9,A$,A
+40 CLOSEOUT
+</pre>
+<h4><span class="mw-headline" id="ZONE_i"><code>ZONE i</code></span></h4>
+<dl><dd> Changes the width of the print zone. Default is 13.</dd>
+<dd> Example:</dd></dl>
+<pre>10 MODE 2
+20 PRINT"normal zone (13)"
+30 PRINT 1,2,3,4
+RUN
+normal zone(13)
+1           2            3            4
+READY
+20 PRINT"now with different zone(5)"
+30 ZONE 5
+40 PRINT 1,2,3,4
+RUN
+now with different zone(5)
+1     2     3     4
+READY
+</pre>
+<h3><span class="mw-headline" id="Operators">Operators</span></h3>
+<dl><dd> A logical status in Locomotive Basic will be represented by a "-1" for TRUE and by a "0" for FALSE.</dd>
+<dd> Example:</dd></dl>
+<pre>PRINT (1=1)
+-1
+PRINT (1=2)
+0
+</pre>
+<h4><span class="mw-headline" id="AND"><code>AND</code></span></h4>
+<dl><dd> Possible combinations with the AND Function:</dd></dl>
+<pre>NPUT1	INPUT2	OUTPUT
+======================
+TRUE	TRUE	TRUE
+FALSE	FALSE	FALSE
+TRUE	FALSE	FALSE
+FALSE	TRUE	FALSE
+</pre>
+<dl><dd> Example:</dd></dl>
+<pre>PRINT 128 AND 64
+0
+</pre>
+<dl><dd> looking at the BIT combination for a better understanding:</dd></dl>
+<pre>	10000000
+AND	01000000
+================
+=	00000000
+</pre>
+<dl><dd> even in BASIC it is possible to manipulate single BITs although there are no special commands but AND, OR and XOR.</dd>
+<dd> first an example for a loop with an increasing counter WITHOUT an AND:</dd></dl>
+<pre>10 counter=0
+20 counter=counter+1
+30 IF counter=32 THEN counter=0
+40 GOTO 20
+</pre>
+<dl><dd> then a shorter example WITH and AND:</dd></dl>
+<pre>10 counter=0
+20 counter=(counter+1) AND 31
+30 GOTO 20
+</pre>
+<dl><dd> in the second example all more significant BITs will be deleted (a common method in assembler programming)</dd>
+<dd> Beware: it only works here with BIT/number conditions one figure smaller than 1, 3, 7, 15, 31, 63 and 127</dd></dl>
+<h4><span class="mw-headline" id="MOD"><code>MOD</code></span></h4>
+<dl><dd> <b>MOD</b> returns a (rounded) rest (Modulos) after dividen has been devided by the devisor.</dd>
+<dd></dd>
+<dd><b>Example:</b></dd></dl>
+<pre>32767 mod 256
+255
+</pre>
+<dl><dd> Note: only works with numbers in the range -32768 and 32767 (&amp;8000 &lt; 0 &lt; &amp;7FFF)</dd></dl>
+<h4><span class="mw-headline" id="NOT"><code>NOT</code></span></h4>
+<dl><dd> <b>NOT</b> executes a bit for bit <b>negation</b> of the current value. The output is a 16-Bit-Word.</dd>
+<dd></dd>
+<dd><b>Example:</b></dd></dl>
+<pre>10 value1=1
+20 value2=NOT value1
+30 PRINT value2
+run
+-2
+</pre>
+<dl><dd>for a better understanding...</dd></dl>
+<pre>10 value1=1
+20 PRINT HEX$(value1):PRINT BIN$(value1,8)
+30 value2=NOT value1
+40 PRINT HEX$(value2):PRINT BIN$(value2,8)
+run
+1
+00000001
+FFFE
+1111111111111110
+</pre>
+<h4><span class="mw-headline" id="OR"><code>OR</code></span></h4>
+<dl><dd> Possible combinations with the OR Function:</dd></dl>
+<pre>NPUT1	INPUT2	OUTPUT
+======================
+TRUE	TRUE	TRUE
+FALSE	TRUE	TRUE
+TRUE	FALSE	TRUE
+FALSE	FALSE	FALSE
+</pre>
+<h4><span class="mw-headline" id="XOR"><code>XOR</code></span></h4>
+<dl><dd> Possible combinations with the XOR Function:</dd></dl>
+<pre>NPUT1	INPUT2	OUTPUT
+======================
+TRUE	TRUE	FALSE
+FALSE	TRUE	TRUE
+TRUE	FALSE	TRUE
+FALSE	FALSE	FALSE
+</pre>
+<h3><span class="mw-headline" id="Functions">Functions</span></h3>
+<h4><span class="mw-headline" id="ABS_.28.3Cnumeric_expression.3E.29"><code><big>ABS (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the ABSolute value of the given numeric expression (n). This means that negative numbers are returned as positive.</dd>
+<dd> <b>Associated keywords</b>: SGN</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT ABS(-67.98)
+ 67.98
+</pre>
+<h4><span class="mw-headline" id="ASC_.28.3Cstring_expression.3E.29"><code><big>ASC (&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i> </dd>
+<dd> <b>FUNCTION</b>: Returns the numeric value of the first character in the &lt;string expression&gt; (s).</dd>
+<dd> <b>Associated keywords</b>: CHR$</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT ASC("x")
+ 120
+</pre>
+<h4><span class="mw-headline" id="ATN_.28.3Cnumeric_expression.3E.29"><code><big>ATN (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates the Arc-TaNgent of the &lt;numeric 
+expression&gt; (n) to a real number ranging from -PI/2 to +PI/2 of the 
+value specified.</dd>
+<dd> Note that DEG and RAD can be used to force the result of the below calculation to degrees or radians respectively.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: COS, DEG, RAD, SIN, TAN</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT ATN(1)
+0.785398163
+</pre>
+<h4><span class="mw-headline" id="BIN.24_.28.3Cunsigned_integer_expression.3E.2C.5B.3Cinteger_expression.3E.5D.29"><code><big>BIN$ (&lt;unsigned integer expression&gt;,[&lt;integer expression&gt;])</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Produces a string of BINary digits respresenting 
+the value of the &lt;unsigned integer expression&gt;, using the number 
+of binary digits instruced by the second &lt;integer expression&gt; (in 
+the range of 0 to 16). If the number of digits instructed is too great, 
+the resulting expression will be filled with leading zeros; if the 
+number of digits instructed is too small, the resulting expression will 
+NOT be shortened to the instructed number of digits, but will produced 
+in as many digits as are required.</dd>
+<dd> The &lt;unsigned integer expression&gt; to be converted into binary form must yield a value in the range -32768 to 65535.</dd>
+<dd> <b>Associated keywords</b>: DEC$, HEX$, STR$</dd>
+<dd> <b>Example</b>:</dd></dl>
+<pre>PRINT BIN$(66,8)
+01000000
+</pre>
+<h4><span class="mw-headline" id="CHR.24_.28.3Cnumeric_expression.3E.29"><code><big>CHR$ (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Converts an &lt;integer expression&gt; in the 
+range 0 to 255, to its CHaRacter $tring equivalent, using the AMSTRAD 
+character set shown in the ASCII table or e.g. in the manual part 3.</dd>
+<dd> Note that 0 to 31 are control characters; hence the below example prints CHR$(x) in the range 32 to 255</dd>
+<dd> <b>Associated keywords</b>: ASC, LEFT$, RIGHT$, MID$, STR$</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 FOR X=32 to 255
+20 PRINT X;CHR$(X);
+30 NEXT
+</pre>
+<dl><dd> A further example, try the following basic program&nbsp;:</dd></dl>
+<pre>10 print chr$(208+rnd(2));:goto 10</pre>
+<dl><dd> It will draw a random maze with characters 208 and 209, which are an horizontal and a vertical bar.</dd></dl>
+<dl><dd> Control Codes Table:</dd></dl>
+<pre>===============================================================================
+|  VALUE    | NAME   | PARAMETERS   | EFFECT                                  |
+===============================================================================
+| DEC | HEX |        |              |                                         |
+===============================================================================
+| 0   | &amp;00 | NUL    | NONE         | DOES NOTHING                            |
+| 1   | &amp;01 | SOH    | 0-255        | PRINTS CHARACTER TO SCREEN              |
+| 2   | &amp;02 | STX    | NONE         | TURNS TEXT CURSOR OFF                   |
+| 3   | &amp;03 | ETX    | NONE         | TURNS TEXT CURSOR ON IN IMMEDIATE MODE  |
+| 4   | &amp;04 | EOT    | 0-2          | SET SCREEN MODE                         |
+| 5   | &amp;05 | ENQ    | 0-255        | PRINT CHARACTER AT GRAPHICS CURS.       |
+| 6   | &amp;06 | ACK    | NONE         | TURNS ON TEXT SCREEN (SEE ALSO CHR$(21))|
+| 7   | &amp;07 | BEL    | NONE         | MAKE A SHORT BEEP                       |
+| 8   | &amp;08 | BS     | NONE         | MOVES TEXT CURSOR BACK ONE CHARACTER    |
+| 9   | &amp;09 | TAB    | NONE         | MOVES TEXT CURSOR FORWARD ONE CHARACTER |
+| 10  | &amp;0A | LF     | NONE         | MOVES TEXT CURSOR DOWN ONE CHARACTER    |
+| 11  | &amp;0B | VT     | NONE         | MOVES TEXT CURSOR UP ONE CHARACTER      |
+| 12  | &amp;0C | FF     | NONE         | CLEARS SCREEN OR WINDOWS (= CLS)        |
+| 13  | &amp;0D | CR     | NONE         | MOVES CURSOR TO LEFT EDGE OF WINDOW ON  |
+|     |     |        |              | CURRENT LINE                            |
+| 14  | &amp;0E | SO     | 0-15         | SETS PAPER COLOUR                       |
+| 15  | &amp;0F | SI     | 0-15         | SETS PEN COLOUR                         |
+| 16  | &amp;10 | DLE    | NONE         | DELETES CHARACTER UNDER TEXT CURSOR     |
+| 17  | &amp;11 | DC1    | NONE         | CLEARS LINE FROM LEFT OF WINDOW UP TO   |
+|     |     |        |              | AND INCLUDING CURRENT CHARACTER         |
+| 18  | &amp;12 | DC2    | NONE         | CLEARS FROM CURRENT CHARACTER TO RIGHT  |
+|     |     |        |              | EDGE OF THE WINDOW                      |
+| 19  | &amp;13 | DC3    | NONE         | CLEARS FROM START OF WINDOW UP TO AND   |
+|     |     |        |              | INCLUDING CURRENT CHARACTER             |
+| 20  | &amp;14 | DC4    | NONE         | CLEARS FROM CURRENT CHARACTER TO END OF |
+|     |     |        |              | WINDOW                                  |
+| 21  | &amp;15 | NAK    | NONE         | TURNS OFF TEXT SCREEN (SEE ALSO CHR$(6))|
+| 22  | &amp;16 | SYN    | 0 AND 1      | TURNS TRANSPARENT OPTION OFF AND ON     |
+| 23  | &amp;17 | ETB    | 0-3          | SET GRPAHICS PLOTTING MODE              |
+| 24  | &amp;18 | CAN    | NONE         | CHANGE TO INVERSE CHARACTER DISPLAYING  |
+| 25  | &amp;19 | EM     | NINE PARAM.  | DEFINES A CHARACTER (= SAME AS SYMBOL)  |
+|     |     |        | EACH 0-255   |                                         |
+| 26  | &amp;1A | SUB    | FOUR PARAM.  | DEFINES A TEXT WINDOW (=SAME AS WINDOW) |
+|     |     |        | 1-80, 1-80   | FROM LEFT, RIGHT, TOP TO BOTTOM         |
+|     |     |        | 1-25, 1-25   | FROM LEFT, RIGHT, TOP TO BOTTOM         |
+| 27  | &amp;1B | ESC    | NONE         | DOES NOTHING ON SCREEN (PRINTER SIGNAL) |
+| 28  | &amp;1C | FS     | THREE PARAM. | SETS INK COLOUR TO FLASH BETWEEN TWO    |
+|     |     |        | 0-15, 0-32   | INK NO, COLOUR 1, COLOUR 2              |
+|     |     |        | 0-32         |                                         |
+| 29  | &amp;1D | GS     | TWO PARAM.   | SETS BORDER COLOUR TO FLASH BETWEEN TWO |
+|     |     |        | 0-31, 0-31   | COLOURS                                 |
+| 30  | &amp;1E | RS     | NONE         | HOMES CURSOR TO TOP LEFT OF SCREEN      |
+| 31  | &amp;1F | US     | TWO PARAM.   | MOVES CURSOR TO CELL SPECIFIED BY TWO   |
+|     |     |        | 1-80, 1-25   | PARAMETERS (=SAME AS LOCATE)            |
+===============================================================================
+</pre>
+<h4><span class="mw-headline" id="CINT_.28.3Cnumeric_expression.3E.29"><code><big>CINT (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the value of the &lt;numeric expression&gt; (n), Converting it to a rounded INTeger in the range -32768 to 32767.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CREAL, FIX, INT, ROUND, UNT</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 n=1.9999
+20 PRINT CINT(n)
+run
+ 2
+</pre>
+<h4><span class="mw-headline" id="COPYCHR.24_.28.23stream.29"><code><big>COPYCHR$ (#stream)</big></code></span></h4>
+<dl><dd>&nbsp;: <i>BASIC 1.1</i></dd>
+<dd> <b>FUNCTION</b>: COPies a CHaRacter from the current position in 
+the stream (which MUST be specified). The below program copies a 
+character from location 1,1 (top left), and reproduces it at location 
+1,20.</dd>
+<dd> If the character read is not recognized, a null string is returned.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: LOCATE</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS
+20 PRINT "top corner"
+30 LOCATE 1,1
+40 a$=COPYCHR$(#0)
+50 LOCATE 1,20
+60 PRINT a$
+</pre>
+<h4><span class="mw-headline" id="COS_.28.3Cnumeric_expression.3E.29"><code><big>COS (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates the COSinus of the &lt;numeric expression&gt; (n).</dd>
+<dd> Note that DEG and RAD can be used to force the result of the below calculation to degrees or radians respectively.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ATN, DEG, RAD, SIN</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>DEG
+PRINT COS(45)
+ 0.707106781
+</pre>
+<h4><span class="mw-headline" id="CREAL_.28.3Cnumeric_expression.3E.29"><code><big>CREAL (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the value of the &lt;numeric expression&gt; (n), Converting it to REAL.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CINT</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 a=PI
+20 PRINT CINT(a)
+30 PRINT CREAL(a)
+run
+ 3
+ 3.14159265
+</pre>
+<h4><span class="mw-headline" id="DEC.24.28.3Cnumeric_expression.3E.2C_.3Cformat_template.3E.29"><code><big>DEC$(&lt;numeric expression&gt;, &lt;format template&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.1</i></dd>
+<dd> <b>FUNCTIION</b>: Returns a DECimal string representation of the 
+&lt;numeric expression&gt; (n), using the specified &lt;format 
+template&gt; to control the print format of the resulting string.</dd>
+<dd> The format template may contain ONLY the characters:</dd></dl>
+<dl><dd> + - $ £ * # , . ^</dd></dl>
+<dl><dd> The use of these 'format field specifiers' is described under the keyword PRINT USING.</dd></dl>
+<dl><dd> <b>Associated keyword</b>: BIN$, HEX$, PRINT USING, STR$</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT DEC$(10^7,"££########,.##")
+ £10,000,000.00
+</pre>
+<h4><span class="mw-headline" id="DERR"><code><big>DERR</big></code></span></h4>
+<dl><dd> <i>BASIC 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the last error code returned by the disc 
+filing system. The value of DERR may be used to ascertain the particular
+ Disc ERRor that occurred. See the listing of error messages below.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ERL, ERR, ERROR, ON ERROR GOTO, RESUME</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>LOAD "xyz.abc"
+
+XYZ .ABC not found
+Ready
+PRINT DERR
+ 146
+</pre>
+<dl><dd> <b>Table of Disc ERRor codes</b>:</dd>
+<dd> If AMSDOS has already reported an error, then bit 7 is set, hence the value of DERR is offset by 128.</dd></dl>
+<pre>===============================================================================
+| VALUE | DERR value     | DESCRIPTION                                        |
+===============================================================================
+|   0   | 0 or 22        | [ESC] has been pressed                             |
+|  14   | 142 (128+14)   | The stream is not in a suitable state.             |
+|  15   | 143 (128+15)   | Hard end of file has been reached.                 |
+|  16   | 144 (128+16)   | Bad command, usually an incorrect filename.        |
+|  17   | 145 (128+17)   | File already exists.                               |
+|  18   | 146 (128+18)   | File does not exists.                              |
+|  19   | 147 (128+19)   | Directory is full.                                 |
+|  20   | 148 (128+20)   | Disc is full.                                      |
+|  21   | 149 (128+21)   | Disc changed while file were open.                 |
+|  22   | 150 (128+22)   | File is Read/Only.                                 |
+|  26   | 154 (128+26)   | Soft end of file has been detected.                |
+|       |                |                                                    |
+===============================================================================
+</pre>
+<dl><dd> Other values returned by DERR originate from the disc controller and are bit significant, always with bit 6 set.</dd>
+<dd> The significance of each bit is as follows:</dd></dl>
+<pre>===============================================================================
+| BIT   | Significance                                                        |
+===============================================================================
+|  0    | Address mark missing.                                               |
+|  1    | Not writable - disc is write protected.                             |
+|  2    | No data - can't find the sector.                                    |
+|  3    | Drive not ready - no disc in the drive.                             |
+|  4    | Overrun error.                                                      |
+|  5    | Data error - CRC error.                                             |
+|  6    | Always set to 1 to indicate error from disc controller.             |
+|  7    | Set to 1 if error has already been reported by AMSDOS.              |
+===============================================================================
+</pre>
+<h4><span class="mw-headline" id="EOF"><code><big>EOF</big></code></span></h4>
+<dl><dd> <i>BASIC 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Checks to see if end of specified file has been reached during input. Returns 0 (false) until the end of file, then -1 (true).</dd></dl>
+<dl><dd> <b>Associated keywords</b>: OPENIN, CLOSEIN</dd></dl>
+<dl><dd> This <b>example</b> reads a file from disc and print it out on screen. Like the "TYPE" command in CP/M or "|TYPE,file" of the UTOPIA-ROM.</dd></dl>
+<pre>10 OPENIN "text.txt"
+20 WHILE NOT EOF
+30 LINE INPUT#9,a$
+40 PRINT a$
+50 WEND
+60 CLOSEIN
+</pre>
+<h4><span class="mw-headline" id="ERR"><code><big>ERR</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the number of the last ERRor encountered. 
+See the table below of error messages. In the example below you will see
+ that ERRor number 8 is a 'Line does not exist' error.</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>GOTO 500
+Line does not exist
+Ready
+PRINT ERR
+ 8
+</pre>
+<dl><dd> NOTE: BASIC 1.0 (officially) describes error codes until 30 
+(without an attached floppy disc controller). 31 &amp; 32 are floppy 
+disc error codes.</dd>
+<dd> <b>Table of ERRor codes</b>:</dd></dl>
+<pre>========================================================================================
+| VALUE | NAME                    | DESCRIPTION                                        |
+========================================================================================
+|   1   |Unexpected NEXT          |A NEXT command has been encountered while not in a  |
+|       |                         |FOR loop, or the control variable in the NEXT       |
+|       |                         |command does not match that in the FOR.             |
+|   2   |Syntax Error             |BASIC cannot understand the given line because      |
+|       |                         |a construct within it is not legal.                 |
+|   3   |Unexpected RETURN        |A RETURN command has been encountered when not in a |
+|       |                         |subroutine.                                         |
+|   4   |DATA exhausted           |A READ command has attempted to read beyond the end |
+|       |                         |of the last DATA.                                   |
+|   5   |Improper Argument        |This is a general purpose error. The value of a     |
+|       |                         |function's argument, or a command parameter is      |
+|       |                         |invalid in some way.                                |
+|   6   |Overflow                 |The result of an arithmetic operation has over-     |
+|       |                         |flowed. This may be a floating point overflow, in   |
+|       |                         |which case some operation has yielded a value       |
+|       |                         |greater than 1.7E^38 (approx.). Alternatively, this |
+|       |                         |may be the result of a failed attempt to change a   |
+|       |                         |floating point number to a 16 bit signed integer.   |
+|   7   |Memory full              |The current program or its variables may be simply  |
+|       |                         |too big, or the control structure is too deeply     |
+|       |                         |nested (nested GOUSBs, WHILEs or FORs).             |
+|       |                         |A MEMORY command will give this error if an attempt |
+|       |                         |is made to set the top of BASIC's memory too low, or|
+|       |                         |to an impossible high value. Note that an open file |
+|       |                         |has a buffer allocated to it, and that may restrict |
+|       |                         |the values that MEMORY may use.                     |
+|   8   |Line does not exist      |The line referenced cannot be found.                |
+|   9   |Subcript out of range    |One of the subscripts in an array reference is too  |
+|       |                         |big or too small.                                   |
+|  10   |Array already dimensioned|One of the arrays in a DIM statement has already    |
+|       |                         |been declared.                                      |
+|  11   |Division by zero         |May occur in real division, integer division,       |
+|       |                         |integer modulus or exponentiation.                  |
+|  12   |Invalid direct command   |The last command attempted is not valid in direct   |
+|       |                         |mode.                                               |
+|  13   |Type mismatch            |A numeric value has been presented where a string   |
+|       |                         |value is required or vice versa, or an invalidly    |
+|       |                         |formed number has been found in READ or INPUT.      |
+|  14   |String space full        |So many strings have been created that there is no  |
+|       |                         |further room available, even after 'garbage         |
+|       |                         |collection'.                                        |
+|  15   |String too long          |Strings exceeds 255 characters in length. May be    |
+|       |                         |generated by appending strings together.            |
+|  16   |String expression too    |String expressions may generate a number of         |
+|       |complex                  |intermediate string values. When the number of these|
+|       |                         |values exceeds a reasonable limit, this error       |
+|       |                         |results.                                            |
+|  17   |Cannot CONTinue          |For one reason or another the current program       |
+|       |                         |be restarted using CONT. Note that CONT is intended |
+|       |                         |for restarting after a STOP command, [ESC][ESC],    |
+|       |                         |or an error, and that any alteration of the         |
+|       |                         |program in the meantime makes a restart impossible. |
+|  18   |Unknown user function    |No DEF FN has been executed for the FN just         |
+|       |                         |invoked.                                            |
+|  19   |RESUME missing           |The end of the program has been encountered while   |
+|       |                         |in error processing mode (i.e. in an ON ERROR GOTO  |
+|       |                         |routine).                                           |
+|  20   |Unexpected RESUME        |RESUME is only valid while in error processing mode |
+|       |                         |(i.e. in an ON ERROR GOTO routine).                 |
+|  21   |Direct command found     |When loading a file, a line without a line number   |
+|       |                         |has been found.                                     |
+|  22   |Operand missing          |BASIC has encountered an incomplete expression.     |
+|  23   |Line too long            |A line when converted to BASIC internal-form becomes|
+|       |                         |too big.                                            |
+|  24   |EOF met                  |An attempt has been made to read past end of the    |
+|       |                         |file input stream.                                  |
+|  25   |File type error          |The file being read is not of a suitable type.      |
+|       |                         |OPENIN is only prepared to open ASCII text files.   |
+|       |                         |Similarly, LOAD, RUN, etc, are only prepared to     |
+|       |                         |deal with file types produces by SAVE.              |
+|  26   |NEXT missing             |Cannot find a NEXT to match a FOR command. A line   |
+|       |                         |number accompanying this message indicates the FOR  |
+|       |                         |command to which this error applies.                |
+|  27   |File already open        |An OPENIN or OPENOUT command has been executed      |
+|       |                         |before the previously opened file has been closed.  |
+|  28   |Unknown command          |BASIC cannot find a taker for an external command,  |
+|       |                         |i.e. a command preceded by a bar |.                 |
+|  29   |WEND missing             |Cannot find a WEND to match a WHILE command.        |
+|  30   |Unexpected WEND          |Encountered a WEND when not in a WHILE loop, or a   |
+|       |                         |WEND that does not match the current WHILE loop.    |
+|  31   |File not open            |(see 'Disc ERRors above).                           |
+|       |                         |If access attempted when no file was open.          |
+|  32   |Broken in                |(see 'Disc ERRors above).                           |
+|       |                         |If access attempted when no file was open.          |
+|       |                         |                                                    |
+|       |                         |If value 31 or 32 are stated, DERR could be         |
+|       |                         |interrogate to give more detailed information.      |
+|       |                         |(see example below.)                                |
+========================================================================================
+</pre>
+<dl><dd> <b>Example for ERR 31 / 32</b>:</dd></dl>
+<pre>10 ON ERROR GOTO 1000
+20 OPENOUT "myfile.asc"
+30 WRITE #9,"test-data"
+40 CLOSEOUT
+50 END
+1000 amsdoserr=(DERR AND &amp;7F):REM mask off bit 7
+1010 IF ERR&lt;31 THEN END
+1020 IF ERR=31 THEN PRINT "are you sure you've typed line 20 correctly?":END
+1030 IF amsdoserr=20 THEN PRINT "disc is full, suggest you use a new data disc":END
+1040 IF amsdoserr=&amp;X01001000 THEN PRINT "put a disc in the drive, then press a key":WHILE INKEY$="":WEND:RESUME
+1050 END
+</pre>
+<h4><span class="mw-headline" id="EXP_.28.3Cinteger_expression.3E.29"><code><big>EXP (&lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates 'E' to the power given in the 
+&lt;numeric expression&gt; (i), where 'E' is approximately 2,7182818-the
+ number whose natural logarithm is 1.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: LOG</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT EXP(6.876)
+ 968.743625
+</pre>
+<h4><span class="mw-headline" id="FIX_.28.3Cnumeric_expression.3E.29"><code><big>FIX (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Unlike CINT, FIX merely removes the part of the 
+numeric expression, to the right of the decimal point, and leaves an 
+integer result, rounding towards zero.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CINT, INT, ROUND</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT FIX(9.99999)
+ 9
+</pre>
+<h4><span class="mw-headline" id="FRE_.28.3Cnumeric_expression.3E.2F.3Cstring_expression.3E.29"><code><big>FRE (&lt;numeric expression&gt;/&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Establishes how much FREe memory remains unused by
+ BASIC. The form FRE("") forces a 'GARBAGE COLLECTION' before returning a
+ value for available space.</dd>
+<dd> NOTE: BASIC uses only the first 64K of the memory.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: HIMEM, MEMORY</dd></dl>
+<dl><dd> <b>Examples</b>:</dd></dl>
+<pre>PRINT FRE(0) or PRINT FRE("hello")
+PRINT FRE("")
+</pre>
+<h4><span class="mw-headline" id="HEX.24_.28.3Cunsigned_integer_expression.3E.2C_.3Cfield_width.3E.29"><code><big>HEX$ (&lt;unsigned integer expression&gt;, &lt;field width&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Produces a $tring of HEXadecimal digits 
+representing the value of the &lt;unsigned integer expression&gt;, using
+ the number of hexadecimal digits instructed by the &lt;field width&gt; 
+(in the range 0 to 16). If the number of digits instructed is too great,
+ the resulting expression will be filled with leading zeros; if the 
+number of digits instructed is too small, the resulting expression will 
+NOT be shortened to the instructed number of digits, but will be 
+produced in as many digits as are required.</dd>
+<dd> The &lt;unsigned integer expression&gt; to be converted into hexadecimal form must yield a value in the range -32768 to 65535.</dd></dl>
+<dl><dd> <b>Accociated keywords</b>: BIN$, DEC$, STR$, UNT</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT HEX$(255,4)
+00FF
+</pre>
+<h4><span class="mw-headline" id="HIMEM"><code><big>HIMEM</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the address of the Highest byte of Memory use by BASIC, (which may altered by e.g. the MEMROY command).</dd>
+<dd> Before resetting the highest byte of available memory using the 
+MEMORY command, it is advisable to issue the 'command mm=HIMEM'. You 
+will thereafter be able to return to the previous memory capacity by 
+issuing the command: 'MEMORY mm'</dd>
+<dd> NOTE: BASIC uses only the first 64K of memory.</dd></dl>
+<dl><dd> Associated keywords: FRE, MEMORY, SYMBOL, SYMBOL AFTER.</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<p>...on a CPC464
+</p>
+<pre>PRINT HIMEM
+43903
+</pre>
+<p>...on a CPC6128
+</p>
+<pre>PRINT HIMEM
+42619
+</pre>
+<h4><span class="mw-headline" id="INKEY_.28.3Cinteger_expression.3E.29"><code><big>INKEY (&lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: INterrogates the KEYboard to report which keys are being pressed. The keyboard is scanned every 0.02 (1/50) second.</dd>
+<dd> The function is useful for spotting whether a certain key is down 
+or up, by detecting the returned value of -1 (which occurs regardless of
+ [SHIFT] and [CONTROL] key status).</dd>
+<dd> The example below detects when [SHIFT] and V (key number 55) are 
+pressed together, then ends the program. Refer the manual for the key 
+numbers.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CLEAR INPUT, INKEY$, JOY</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 IF INKEY(55)&lt;&gt;32 THEN 10
+20 PRINT "You've pressed [SHIFT] and V"
+30 CLEAR INPUT
+run
+</pre>
+<dl><dd> The state of [SHIFT] and [CONTROL] in conjunction with the key 
+specified in the &lt;integer expression&gt; is identified as follows:</dd></dl>
+<pre>==============================================================================
+|Value returned          |[SHIFT]        |[CTRL]       |Specified key        |
+==============================================================================
+|-1                      |ignored        |ignored      |up                   |
+|0                       |up             |up           |down                 |
+|32                      |down           |up           |down                 |
+|128                     |up             |down         |down                 |
+|160                     |down           |down         |down                 |
+==============================================================================
+</pre>
+<h4><span class="mw-headline" id="INKEY.24"><code><big>INKEY$</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: INterrogates the KEYboard, returning the current 
+$tring reflecting any key that is pressed. It provides operator 
+interaction without hitting [ENTER] after every answer. If there is a 
+key pressed, then the function responds. If no key is pressed, INKEY$ 
+returns an empty string.</dd>
+<dd> In the example below, lines 40 and 70 tell the program to loop back to line 30 after interrogating the keyboard string.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CLEAR INPUT, INKEY</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS
+20 PRINT "Select Yes or No (Y/N)?"
+30 a$=INKEY$
+40 IF a$="" THEN 30
+50 IF a$="y" OR a$="Y" THEN 80
+60 IF a$="N" OR a$="n" THEN 90
+70 GOTO 30
+80 PRINT "You have selected YES": END
+90 PRINT "You have selected NO":
+run
+</pre>
+<h4><span class="mw-headline" id="INP_.28.E2.80.B9port_number.E2.80.BA.29"><code><big>INP (‹port number›)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the INPut value from the I/O address specified in the &lt;port number&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: OUT, WAIT</dd></dl>
+<dl><dd> Watch out <a class="external free" href="http://cpcwiki.eu/index.php/I/O_Port_Summary">http://cpcwiki.eu/index.php/I/O_Port_Summary</a></dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT INP(&amp;FF00)
+255
+Ready
+</pre>
+<h4><span class="mw-headline" id="INSTR_.28.5B.E2.80.B9startposition.E2.80.BA.2C.5D.E2.80.B9searched_string.E2.80.BA.2C_.E2.80.B9searched_for_string.E2.80.BA.29"><code><big>INSTR ([‹startposition›,]‹searched string›, ‹searched for string›)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Searches the first &lt;searched string&gt; 
+expression to find the first occurance of the &lt;searched for string 
+expression&lt;, and reports the position of its occurance within the 
+&lt;searched string&gt;. If the &lt;searched for string&gt; does not 
+occur within the &lt;searched string&gt;, then 0 is reported.</dd>
+<dd> The position at which to start searching the &lt;searched 
+string&gt; is optionally specifiable using the &lt;start position&gt; 
+parameter which must yield an integer number in the range 1 to 255.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: none</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>a$="ABCD":PRINT INSTR(a$,"C") 
+3
+Ready
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>a$="Hello":IF INSTR(a$,"i")&lt;&gt;0 THEN PRINT "no" else a$
+no
+Ready
+</pre>
+<dl><dd> <b>3. Example</b>:</dd></dl>
+<pre>10 CLS
+20 alphabet$="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+30 INPUT "Enter a letter";a$
+40 b$=UPPER$(a$)
+50 PRINT b$;" is number";
+60 PRINT INSTR(alphabet$,b$);
+70 PRINT "in the alphabet.":PRINT
+80 GOTO 40
+run
+</pre>
+<h4><span class="mw-headline" id="INT_.28.3Cnumeric_expression.3E.29"><code><big>INT (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Rounds the number to the nearest smaller INTeger, 
+removing any fractional part. Returns then same value as FIX for 
+positive number, but returns one less than FIX for negative numbers 
+which are not already integers.</dd></dl>
+<dl><dd> <b>Associated keyword</b>: CINT, FIX, ROUND</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT INT(3.99), INT(-3.99) 
+3       -4
+</pre>
+<h4><span class="mw-headline" id="JOY_.28.3Cinteger_expression.3E.29"><code><big>JOY (&lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: The JOY function reads a bit significant result from the joystick in the &lt;integer expression&gt; (either 0 or 1).</dd></dl>
+<pre>================================
+|Bit       |  Value decimal    |
+================================
+|0(up)     |         1         |
+|1(down)   |         2         |
+|2(left)   |         4         |
+|3(right)  |         8         |
+|4(fire 2) |        16         |
+|5(fire 1) |        32         |
+================================
+</pre>
+<h4><span class="mw-headline" id="LEFT.24_.28.3Cstring_expression.3E.2C_.3Crequired_length.3E.29"><code><big>LEFT$ (&lt;string expression&gt;, &lt;required length&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the number of characters (in the range 0 
+to 255) specified in the &lt;required length&gt; parameter (&lt;integer 
+expression&gt;), after extracting them from the LEFT of the &lt;string 
+expression&gt;. If the &lt;string expression&gt; is shorter than the 
+&lt;required length&gt;, the whole &lt;string expression&gt; is 
+returned.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MID$, RIGHT$</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>A$="ABCDEFG":PRINT LEFT$(A$,3) - prints ABC
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>10 CLS
+20 a$="AMSTRAD"
+30 FOR n=1 to 7
+40 PRINT LEFT$(a$,n)
+50 NEXT
+run
+</pre>
+<h4><span class="mw-headline" id="LEN_.28.3Cstring_expression.3E.29"><code><big>LEN (&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the total number of characters (i.e. the LENgth) of the &lt;string expression&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: none</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 LINE INPUT "Enter a phrase";a$
+20 PRINT "The phrase is";
+30 PRINT LEN(a$);"characters long."
+run
+</pre>
+<h4><span class="mw-headline" id="LOG_.28.3Cnumeric_expression.3E.29"><code><big>LOG (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates the natural LOGarithm (base of <i>e</i>) of &lt;numeric expression&gt; which mustbe greater than zero.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: EXP, LOG10</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT LOG(9999)
+ 9.21024037
+</pre>
+<h4><span class="mw-headline" id="LOG10_.28.3Cnumeric_expression.3E.29"><code><big>LOG10 (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the logarithm to base 10 of &lt;numeric expression&gt; which must be greater than zero.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: EXP, LOG</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT LOG10(9999)
+ 3.99995657
+</pre>
+<h4><span class="mw-headline" id="LOWER.24_.28.3Cstring_expression.3E.29"><code><big>LOWER$ (&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns a new string expression which is a copy of
+ the specified &lt;string expression&gt; but in which all alphabetic 
+characters in the range A to Z are converted to lower case. Useful for 
+processing input where the answers may come in mixed upper/lower case.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: UPPER$</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>A$="AMSTRAD":PRINT A$="AMSTRAD":PRINT LOWER$(A$)
+Amstrad
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>10 a$="SEE HOW THE LETTERS CHANGE TO ... NUMBERS 1234 NOT..."
+20 PRINT LOWER$(a$+"LOWER CASE")
+ see how the letters change to ... numbers 1234 not... LOWER CASE
+</pre>
+<h4><span class="mw-headline" id="MAX_.28.3Clist_of:_numeric_expression.3E.29"><code><big>MAX (&lt;list of: numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the MAXimum value from the &lt;list of: numeric expression&gt;s.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MIN</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 n=66
+20 PRINT MAX(1,n,3,6,4,3)
+run
+ 66
+</pre>
+<h4><span class="mw-headline" id="MIN_.28.3Clist_of:_numeric_expression.3E.29"><code><big>MIN (&lt;list of: numeric expression&gt;)</big></code></span></h4>
+<p><i>BASIC 1.0 &amp; 1.1</i>
+</p>
+<dl><dd> <b>FUNCTION</b>: Returns the MINimum value from the &lt;list of: numeric expression&gt;s.</dd>
+<dd> <b>Associated keywords</b>: MAX</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT MIN (3,6,2.999.8,9,)
+ 2.999
+</pre>
+<h4><span class="mw-headline" id="PEEK_.28.3Caddress_expression.3E.29"><code><big>PEEK (&lt;address expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the contents of the Z80 memory location 
+specified in the &lt;address expression&gt; which should be in the range
+ &amp;0000 to &amp;FFFF (0 to 65535). In all cases PEEK will return the 
+value at the RAM address specified (not the ROM), and will be in the 
+range &amp;00 to &amp;FF (0 to 255)</dd></dl>
+<dl><dd> <b>Associated keywords</b>: POKE</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1: ZONE 7
+20 WINDOW 1,40,1,2:WINDOW #1,1,40,3,25
+30 PRINT "memory-address"
+40 LOCATE 20,1:PRINT "memory-contents"
+50 FOR n=1 to 65535
+60 p=PEEK(n)
+70 PRINT #1,n,"(&amp;";HEX$(n);")";
+80 PRINT #1,TAB(20);p,"(&amp;";HEX$(p);")"
+90 NEXT
+run
+</pre>
+<h4><span class="mw-headline" id="PI"><code><big>PI</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: The value of the ratio between the circumference and the diameter of a circle.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: DEG, RAD</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT PI
+ 3.14159265
+</pre>
+<h4><span class="mw-headline" id="POS_.28.23.3Cstream_expression.3E.29"><code><big>POS (#&lt;stream expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the current horizontal POSition of the 
+text cursor relative to the left edge of the text window. The &lt;stream
+ expression&gt; MUST be specified, and does NOT default to #0.</dd>
+<dd> POS(#8) reports the current horizontal carriage position for the printer, where 1 is the extreme left hand edge.</dd>
+<dd> POS(#9) reports the logical position in the disc file stream, i.e. 
+the number of printing characters sent to the stream since the last 
+carriage return.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: VPOS, WINDOW</dd>
+<dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1: BORDER 0:LOCATE 8,2
+20 PRINT "use cursor left/right keys"
+30 WINDOW 1,40,12,12:CURSOR 1,1
+40 FOR n=1 TO 19:PRINT CHR$(9);:NEXT
+50 IF INKEY(1)&lt;&gt;-1 THEN PRINT CHR$(9);
+60 IF INKEY(8)&lt;&gt;-1 THEN PRINT CHR$(8);
+70 LOCATE #1,2,24
+80 PRINT #1,"text cursor ";
+90 PRINT #1,"horizontal position = ";
+100 PRINT #1,POS(#0):GOTO 50
+run
+</pre>
+<h4><span class="mw-headline" id="REMAIN_.28.3Cinteger_expression.3E.29"><code><big>REMAIN (&lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns count REMAINing count from the delay timer
+ specified in &lt;integer expression&gt; (= timer number in the range 0 
+to 3), and disable it. If the delay timer was not enabled zero will be 
+returned.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: AFTER, DI, EI, EVERY</dd></dl>
+<dl><dd> For the reason that REMAIN is no normal command but a 
+"function" it is necessary in case of a proper functionality to link the
+ command.</dd>
+<dd> an <b>example</b> in combination with an interrupt delay timer 1:</dd></dl>
+<pre>PRINT REMAIN(1)
+</pre>
+<dl><dd> or to stop several/all interrupts at the same time...</dd></dl>
+<pre>A=REMAIN(0)=REMAIN(1)=REMAIN(2)=REMAIN(3)
+</pre>
+<dl><dd> Hint: Take care of interrupts due to parallel working (the same
+ cycle time) or if they are stopped with the BREAK key. Interrupts which
+ were disabled for a certain time will be stored in buffer (for a 
+maximum of 128 entries) and made up their task afterwards in the 
+priorisation as declared.</dd>
+<dd> further <b>example</b>:</dd></dl>
+<pre>10 AFTER 500,1 GOSUB 40
+20 AFTER 100,2 GOSUB 50
+30 PRINT "program running":GOTO 30
+40 REM this GOUSB-Routine will not be called as it is disabled in line 80
+50 PRINT:PRINT "Timer 1 will now be ";
+60 PRINT "disabled by REMAIN."
+70 PRINT "Time-units remaining were:";
+80 PRINT REMAIN(1)
+run
+</pre>
+<h4><span class="mw-headline" id="RIGHT.24_.28.3Cstring_expression.3E.2C_.3Cinteger_expression.3E.29"><code><big>RIGHT$ (&lt;string expression&gt;, &lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the number of characters (in the range 0 
+to 255) specified in the &lt;integer expression&gt; (=required length) 
+parameter, after extracting them from the RIGHT of the &lt;string 
+expression&gt;. If the &lt;string expression&gt; is shorter than the 
+&lt;integer expression&gt;, the whole &lt;string expression&gt; is 
+returned.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: LEFT$, MID$</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1:a$="AMSTRAD computer"
+20 FOR n=1 TO 16:LOCATE 41-n,n
+30 PRINT RIGHT$(a$,n)
+40 NEXT
+</pre>
+<h4><span class="mw-headline" id="RND_.5B.28.3Cnumeric_expression.3E.29.5D"><code><big>RND [(&lt;numeric expression&gt;)]</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the next RaNDom number in sequence if the &lt;numeric expression&gt; has a positive value or is not specified. </dd>
+<dd> If the &lt;numeric expression&gt; yields a value of zero, RND returns a copy of the last random number generated.</dd>
+<dd> If the &lt;numeric expression&gt; yields a negative value, a new 
+random number sequence is started, the first number of which is 
+returned.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: RANDOMIZE</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>PRINT RND(0)
+ 0.536703827
+Ready
+PRINT RND(1)
+ 0.271940658
+Ready
+PRINT RND(0)
+ 0.271940658
+Ready
+</pre>
+<dl><dd> <b>2. Example</b>:</dd>
+<dd> Example for generating an integer random number between 1 and 1000</dd></dl>
+<pre>10 A=INT((RND(1)*1000)+1)
+20 PRINT A
+30 GOTO 10
+</pre>
+<dl><dd> <b>3. Example</b>: </dd>
+<dd> For generating a random number between a lower and higher border</dd></dl>
+<pre>10 INPUT "Low border",low
+20 INPUT "High border",high
+30 A=INT(RND(1)*(high-low))+low
+40 PRINT A
+</pre>
+<dl><dd> <b>4. Example</b>:</dd></dl>
+<pre>10 RANDOMIZE
+20 FOR x=1 TO -1 STEP -1
+30 PRINT "rnd parameter=";x
+40 FOR n=1 TO 6
+50 PRINT RND(x)
+60 NEXT n,x
+run
+</pre>
+<h4><span class="mw-headline" id="ROUND_.28.3Cnumeric_expression.3E.5B.2C.3Cinteger_expression.3E.5D.29"><code><big>ROUND (&lt;numeric expression&gt;[,&lt;integer expression&gt;])</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Rounds &lt;numeric expression&gt; to a number of 
+decimal places or to the power of ten specified by &lt;integer 
+expression&gt;. If &lt;integer expression&gt; less than zero, the 
+&lt;numeric expression&gt; is rounded to give an absolute integer with 
+&lt;integer expression&gt; number of zeros before the decimal point.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ABS, CINT, FIX, INT</dd>
+<dd> <b>1. Example</b>:</dd></dl>
+<pre>PRINT ROUND(1562.357,2),ROUND(1562.375,-2)
+ 1562.36     1600
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>10 FOR n=4 TO -4 STEP -1
+20 PRINT ROUND (1234.5678,n)
+30 PRINT "with integer expression";n
+40 NEXT
+run
+</pre>
+<h4><span class="mw-headline" id="SGN_.28.3Cnumeric_expression.3E.29"><code><big>SGN (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> FUNCTION: Determines the SiGN of the &lt;numeric expression&gt;. 
+Returns -1 if &lt;numeric expression&gt; is less than 0, returns 0 if 
+&lt;numeric expression&gt; = 0, and returns 1 if &lt;numeric 
+expression&gt; is greater than zero.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ABS</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 FOR n=255 to -200 STEP -20
+20 PRINT "SGN returns";
+30 PRINT SGN(n);"for a value of";n
+40 NEXT n
+run
+</pre>
+<h4><span class="mw-headline" id="SIN_.28.3Cnumeric_expression.3E.29"><code><big>SIN (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates the Real value for the Sine of 
+&lt;numeric expression&gt;, defaulting to the Radian (RAD) measure mode 
+unless otherwise declared by a DEG command.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ATN, COS, DEG, RAD, TAN</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS:DEG:ORIGIN 0,20
+20 FOR n=0 to 720
+30 y=SIN(n)
+40 PLOT n*640/720,198*y:NEXT
+50 GOTO 50
+run
+</pre>
+<h4><span class="mw-headline" id="SPACE.24.28.3Cinteger_expression.3E.29"><code><big>SPACE$(&lt;integer expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Creates a string of spaces of the given length, (in the range 0 to 255) specified in the &lt;integer expression&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: SPC, STRING$, TAB</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1
+20 PRINT "Put 9 spaces between me";
+30 PRINT SPACE$(9);
+40 PRINT "and you!"
+run
+</pre>
+<h4><span class="mw-headline" id="SQ_.28.3Cchannel.3E.29"><code><big>SQ (&lt;channel&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the state of the Sound Queue for the 
+specified &lt;channel&gt; which must be an integer expression, yielding 
+one the values:</dd>
+<dd> 1: for channel A</dd>
+<dd> 2: for channel B</dd>
+<dd> 4: for channel C</dd>
+<dd> The SQ function returns a bit significant integer, comprising the following bit settings:</dd>
+<dd> Bit 0,1 and 2: the number of free entries in the queue</dd>
+<dd> Bit 3,4 and 5: the rendezvous state at the head of this queue</dd>
+<dd> Bit 6       &nbsp;: the head of the queue is held</dd>
+<dd> Bit 7       &nbsp;: the channel is currently active</dd>
+<dd> ... where Bit 0 is the least significant bit, and Bit 7 is the most significant bit.</dd>
+<dd> It can be seen, that if Bit 6 is set, Bit 7 cannot be set at the 
+same time, and vice versa. Similarly if Bits 3, 4, or 5 are set, Bit 6 
+and 7 cannot be set.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ON SQ GOSUB, SOUND</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 SOUND 65,100,100
+20 PRINT SQ(1)
+run
+ 67
+</pre>
+<h4><span class="mw-headline" id="SQR_.28.3Cnumeric_expression.3E.29"><code><big>SQR (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the SQuare Root of the specified &lt;numeric expression&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: none</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT SQR(9)
+ 3
+</pre>
+<h4><span class="mw-headline" id="STR.24_.28.3Cnumeric_expression.3E.29"><code><big>STR$ (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Converts the &lt;numeric expression&gt; to a decimal STRing representation.</dd>
+<dd> Useful for converting a number to a string in case of string 
+manipulation. E.g. after converting a figure to a string then the most 
+left character holds the sign: a minus in case the figure is negative 
+and a space in case the figure is positiv.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: BIN$, DEC$, HEX$, VAL</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>10 FIGURE=-1599
+20 FIGURE$=STR$(FIGURE)
+30 PRINT FIGURE$
+-1599
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>10 FIGURE=1769
+20 FIGURE$=STR$(FIGURE)
+30 PRINT FIGURE$
+ 1769
+</pre>
+<dl><dd> <b>NOTE</b>: (there's a blank on the left-hand of the number "1769")</dd>
+<dd> If you want to add e.g. zero before the figure in case of a high 
+score with fix digit-number then you're able to add zero(s) in front of a
+ string instead of a figure.</dd></dl>
+<dl><dd> <b>3. Example</b>:</dd></dl>
+<pre>10 a=&amp;FF:REM 255 hex
+20 b=&amp;x1111:REM 15 binary
+30 c$="***"
+40 PRINT c$+STR$(a+b)+c$
+run
+*** 270***
+</pre>
+<h4><span class="mw-headline" id="STRING.24_.28.3Clength.3E.2C.3Ccharacter_specifier.3E.29"><code><big>STRING$ (&lt;length&gt;,&lt;character specifier&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns a string expression consisting of the 
+&lt;character specifier&gt; repeated the number of time (in the range 0 
+to 255) specified in the &lt;length&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: SPACE$</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>PRINT STRING$(40,"*")
+****************************************
+</pre>
+<dl><dd> <b>2. Example</b>:</dd></dl>
+<pre>PRINT STRING(40,42)
+****************************************
+</pre>
+<dl><dd> <b>NOTE</b>: the &lt;character specifier&gt; 42 refers to the 
+ASCII value of the character '*' and is also equivalent to PRINT 
+STRING$(40,CHR$(42))</dd></dl>
+<h4><span class="mw-headline" id="TAN_.28.3Cnumeric_expression.3E.29"><code><big>TAN (&lt;numeric expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Calculates the TANgent of the &lt;numeric expression&gt;, which must be in the range -200,000 to +200,000.</dd>
+<dd> <b>NOTE</b>: DEG and RAD can be used to force the result of the calculation to degrees or radians respectively.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: ATN, COS, DEG, RAD, SIN</dd></dl>
+<dl><dd> <b>Example</b>: </dd></dl>
+<pre>PRINT TAN(45)
+ 1.61977519
+</pre>
+<h4><span class="mw-headline" id="TEST_.28.3Cx_co-ordinate.3E.2C.3Cy_co-ordinate.3E.29"><code><big>TEST (&lt;x co-ordinate&gt;,&lt;y co-ordinate&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Moves the graphics cursor to the absolute position
+ specified by the &lt;x&gt; and &lt;y co-ordinate&gt;s, and reports the 
+value of the ink at the new location.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MOVE, MOVER, TESTR, XPOS, YPOS</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS
+20 PRINT "Your are using pen number";
+30 PRINT TEST(10,386)
+40 PRINT "Try changing PENs and MODEs";
+50 PRINT "....then RUN again."
+run
+</pre>
+<h4><span class="mw-headline" id="TESTR_.28.3Cx_offset.3E.2C.3Cy_offset.3E.29"><code><big>TESTR (&lt;x offset&gt;,&lt;y offset&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Moves the graphics cursor by the amount specified 
+in the &lt;x&gt; and &lt;y offset&gt;s relative to its current position,
+ and reports the value of the ink at the new location.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MOVE, MOVER, TEST, XPOS, YPOS</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 0:FOR x=1 TO 15:LOCATE 1,x
+20 PEN x:PRINT STRING$(10,143);:NEXT
+30 MOVE 200,400:PEN 1
+40 FOR n=1 TO 23:LOCATE 12,n
+50 PRINT "pen";TESTR(0,-16):NEXT
+run
+</pre>
+<h4><span class="mw-headline" id="TIME"><code><big>TIME</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the elapsed time since the computer was 
+last switched-on or reset, (excluding periods when reading or writing to
+ disc).</dd>
+<dd> Each second of real time is equal to the returned value = TIME/300.</dd></dl>
+<dl><dd> <b>Associated keyword</b>: AFTER, EVERY, WEND, WHILE</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS:REM clock
+20 INPUT "hour";hour
+30 INPUT "minute";minute
+40 INPUT "second";second
+50 CLS:datum=INT(TIME/300)
+60 WHILE hour&lt;13
+70 WHILE minute&lt;60
+80 WHILE tick&lt;60
+90 tick=(INT(TIME/300)-datum)+second
+100 LOCATE 1,1
+110 PRINT USING "## ";hour,minute,tick
+120 WEND
+130 tick=0:second=0:minute=minute+1
+140 GOTO 50
+150 WEND
+160 minute=0:hour=hour+1
+170 WEND
+180 hour=1
+190 GOTO 60
+run
+</pre>
+<h4><span class="mw-headline" id="UNT_.28.3Caddress_expression.3E.29"><code><big>UNT (&lt;address expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Return an integer in the range -32768 to +32767 
+which is the twos-complement equivalent of the unsigned value of the 
+&lt;address expression&gt;.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: CINT, FIX, INT, ROUND</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>PRINT UNT(&amp;FF66)
+-154
+</pre>
+<h4><span class="mw-headline" id="UPPER.24.28.3Cstring_expression.3E.29"><code><big>UPPER$(&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns a new string expression which is a copy of
+ the specified &lt;string expression&gt; but in which all alphabetic 
+characters in the range A to Z are converted to upper case. The function
+ is useful for processing input which may come in mixed upper / lower 
+case.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: LOWER$</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 CLS: a$="my, how you've grown!"
+20 PRINT UPPER$(a$)
+run
+</pre>
+<h4><span class="mw-headline" id="VAL.28.3Cstring_expression.3E.29"><code><big>VAL(&lt;string expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Returns the numeric VALue, (including any negative
+ sign and decimal point) of the first character(s) in the specified 
+&lt;string expression&gt;. </dd>
+<dd>If the first character is not a number, then 0 is returned. If the 
+first character is a negative sign or decimal point followed by 
+non-numeric characters, a 'Type mismatch' error (13) will be reported.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: STR$</dd></dl>
+<dl><dd> <b>1. Example</b>:</dd></dl>
+<pre>PRINT VAL("-12.34x"),VAL("A-12")
+ -12.34     0
+</pre>
+<dl><dd> <b>Exception</b>: if &lt;se&gt; starts with "&amp;" + character
+ (and it's between "A" and "F") the whole character will be handled like
+ a hexadezimal numeric character (...often used in DATA Loaders). The 
+returning numeric value is a &nbsp;signed&nbsp;integer (16-Bit Word). </dd>
+<dd> <b>2. Example</b>:</dd></dl>
+<pre>PRINT VAL("&amp;A")
+ 10
+
+PRINT VAL("&amp;7FFF") 
+ 32767
+
+PRINT VAL("&amp;8000") 
+-32768
+</pre>
+<dl><dd> <b>3. Example</b>:</dd></dl>
+<pre>10 CLS: PRINT "I know my times tables!"
+20 PRINT:PRINT "Press a key (1 to 9)"
+30 a$=INKEY$:IF a$="" THEN 30
+40 n=VAL(a$):if n&lt;1 or n&gt;9 then 30
+50 FOR x=1 to 12
+60 PRINT n;"X";x;"=";n*x
+70 NEXT:GOTO 20
+run
+</pre>
+<h4><span class="mw-headline" id="VPOS_.28.23.3Cstream_expression.3E.29"><code><big>VPOS (#&lt;stream expression&gt;)</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the current vertical POSition of the text 
+cursor relative to the top of the text window. The &lt;stream 
+expression&gt; MUST be specified, and does NOT default to #0.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: POS, WINDOW</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1:BORDER 0:LOCATE 8,2
+20 PRINT "use cursor up/down keys"
+30 WINDOW 39,39,1,25:CURSOR 1,1
+40 LOCATE 1,3
+50 IF INKEY(0)&lt;&gt;-1 THEN PRINT CHR$(11);
+60 IF INKEY(2)&lt;&gt;-1 THEN PRINT CHR$(10);
+70 LOCATE #1,3,24
+80 PRINT #1,"text cursor ";
+90 PRINT #1,"vertical position =";
+100 PRINT #1,VPOS(#0):GOTO 50
+run
+</pre>
+<h4><span class="mw-headline" id="XPOS"><code><big>XPOS</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the current horizontal (X)POSition of the graphics cursor.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MOVE, MOVER, ORIGIN, YPOS</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1:DRAW 320,200
+20 PRINT "graphics cursor X position = ";
+30 PRINT XPOS
+</pre>
+<h4><span class="mw-headline" id="YPOS"><code><big>YPOS</big></code></span></h4>
+<dl><dd> <i>BASIC 1.0 &amp; 1.1</i></dd>
+<dd> <b>FUNCTION</b>: Reports the current vertical (Y)POSition of the graphic cursor.</dd></dl>
+<dl><dd> <b>Associated keywords</b>: MOVE, MOVER, ORIGIN, XPOS</dd></dl>
+<dl><dd> <b>Example</b>:</dd></dl>
+<pre>10 MODE 1:DRAW 320,200
+20 PRINT "graphics cursor Y position = ";
+30 PRINT YPOS
+</pre>
+<h2><span class="mw-headline" id="Other_Basic_Dialects_available_for_the_CPC">Other Basic Dialects available for the CPC</span></h2>
+<ul><li><a href="https://www.cpcwiki.eu/index.php/BBC_Basic" title="BBC Basic">BBC Basic</a></li>
+<li><a href="https://www.cpcwiki.eu/index.php/C_BASIC_Compiler" title="C BASIC Compiler" class="mw-redirect">CBASIC</a></li>
+<li><a href="https://www.cpcwiki.eu/index.php/BASIC-E" title="BASIC-E">BASIC-E</a></li></ul>
+<h2><span class="mw-headline" id="Technical_Information">Technical Information</span></h2>
+<ul><li> <a href="https://www.cpcwiki.eu/index.php/Technical_information_about_Locomotive_BASIC" title="Technical information about Locomotive BASIC">Technical_information_about_Locomotive_BASIC</a></li></ul>
+<h2><span class="mw-headline" id="Web_links">Web links</span></h2>
+<ul><li> <a class="external text" href="http://www.sean.co.uk/books/amstrad/bforbasic.shtm">Locomotive Basic Tutorial by Sean McManus</a></li>
+<li> <a class="external text" href="http://rosettacode.org/wiki/Category:Locomotive_Basic">Code examples at Rosetta Code</a></li></ul>
+<ul><li>  <a class="external text" href="http://cpctech.cpc-live.com/docs/basic.asm">Disassembly of Locomotive BASIC v1.1</a></li></ul>
+
+<!-- 
+NewPP limit report
+CPU time usage: 0.068 seconds
+Real time usage: 0.076 seconds
+Preprocessor visited node count: 1992/1000000
+Preprocessor generated node count: 3548/1000000
+Post‐expand include size: 0/2097152 bytes
+Template argument size: 0/2097152 bytes
+Highest expansion depth: 2/40
+Expensive parser function count: 0/100
+-->
+
+<!-- 
+Transclusion expansion time report (%,ms,calls,template)
+100.00%    0.000      1 - -total
+-->
+
+<!-- Saved in parser cache with key wikidb:pcache:idhash:2773-0!*!0!!en!5!* and timestamp 20260108195701 and revision id 126886
+ -->
+</div>									<div class="printfooter">
+						Retrieved from "<a dir="ltr" href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;oldid=126886">https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;oldid=126886</a>"					</div>
+													<div id="catlinks" class="catlinks"><div id="mw-normal-catlinks" class="mw-normal-catlinks"><a href="https://www.cpcwiki.eu/index.php/Special:Categories" title="Special:Categories">Categories</a>: <ul><li><a href="https://www.cpcwiki.eu/index.php/Category:Programming" title="Category:Programming">Programming</a></li><li><a href="https://www.cpcwiki.eu/index.php/Category:BASIC" title="Category:BASIC">BASIC</a></li><li><a href="https://www.cpcwiki.eu/index.php/Category:CPC_Internal_Components" title="Category:CPC Internal Components">CPC Internal Components</a></li><li><a href="https://www.cpcwiki.eu/index.php/Category:Operating_System" title="Category:Operating System">Operating System</a></li><li><a href="https://www.cpcwiki.eu/index.php/Category:Software" title="Category:Software">Software</a></li><li><a href="https://www.cpcwiki.eu/index.php/Category:Programming_software" title="Category:Programming software">Programming software</a></li></ul></div></div>												<div class="visualClear"></div>
+							</div>
+		</div>
+		<div id="mw-navigation">
+			<h2>Navigation menu</h2>
+
+			<div id="mw-head">
+									<div id="p-personal" role="navigation" class="" aria-labelledby="p-personal-label">
+						<h3 id="p-personal-label">Personal tools</h3>
+						<ul>
+							<li id="pt-login"><a href="https://www.cpcwiki.eu/index.php?title=Special:UserLogin&amp;returnto=Locomotive+BASIC" title="You are encouraged to log in; however, it is not mandatory [Alt+Maj+o]" accesskey="o">Log in</a></li>						</ul>
+					</div>
+									<div id="left-navigation">
+										<div id="p-namespaces" role="navigation" class="vectorTabs" aria-labelledby="p-namespaces-label">
+						<h3 id="p-namespaces-label">Namespaces</h3>
+						<ul>
+															<li id="ca-nstab-main" class="selected"><span><a href="https://www.cpcwiki.eu/index.php/Locomotive_BASIC" title="View the content page [Alt+Maj+c]" accesskey="c">Page</a></span></li>
+															<li id="ca-talk"><span><a href="https://www.cpcwiki.eu/index.php/Talk:Locomotive_BASIC" title="Discussion about the content page [Alt+Maj+t]" accesskey="t">Discussion</a></span></li>
+													</ul>
+					</div>
+										<div id="p-variants" role="navigation" class="vectorMenu emptyPortlet" aria-labelledby="p-variants-label">
+												<h3 id="p-variants-label" tabindex="0"><span>Variants</span><a href="#" tabindex="-1"></a></h3>
+
+						<div class="menu">
+							<ul>
+															</ul>
+						</div>
+					</div>
+									</div>
+				<div id="right-navigation">
+										<div id="p-views" role="navigation" class="vectorTabs" aria-labelledby="p-views-label">
+						<h3 id="p-views-label">Views</h3>
+						<ul>
+															<li id="ca-view" class="selected"><span><a href="https://www.cpcwiki.eu/index.php/Locomotive_BASIC">Read</a></span></li>
+															<li id="ca-viewsource"><span><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;action=edit" title="This page is protected.
+You can view its source [Alt+Maj+e]" accesskey="e">View source</a></span></li>
+															<li id="ca-history" class="collapsible"><span><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;action=history" title="Past revisions of this page [Alt+Maj+h]" accesskey="h">View history</a></span></li>
+													</ul>
+					</div>
+										<div id="p-cactions" role="navigation" class="vectorMenu emptyPortlet" aria-labelledby="p-cactions-label" style="">
+						<h3 id="p-cactions-label" tabindex="0"><span>More</span><a href="#" tabindex="-1"></a></h3>
+
+						<div class="menu">
+							<ul>
+															</ul>
+						</div>
+					</div>
+										<div id="p-search" role="search">
+						<h3>
+							<label for="searchInput">Search</label>
+						</h3>
+
+						<form action="/index.php" id="searchform">
+														<div id="simpleSearch">
+															<input type="search" name="search" placeholder="Search" title="Search CPCWiki - THE Amstrad CPC encyclopedia! [Alt+Maj+f]" accesskey="f" id="searchInput" tabindex="1" autocomplete="off"><input type="hidden" value="Special:Search" name="title"><input type="submit" name="go" value="Go" title="Go to a page with this exact name if exists" id="searchButton" class="searchButton">								</div>
+						</form>
+					</div>
+									</div>
+			</div>
+			<div id="mw-panel">
+				<div id="p-logo" role="banner"><a class="mw-wiki-logo" href="https://www.cpcwiki.eu/index.php/Main_Page" title="Visit the main page"></a></div>
+						<div class="portal" role="navigation" id="p-Contents" aria-labelledby="p-Contents-label">
+			<h3 id="p-Contents-label">Contents</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-mainpage"><a href="https://www.cpcwiki.eu/index.php/Main_Page" title="Visit the main page [Alt+Maj+z]" accesskey="z">Main Page</a></li>
+													<li id="n-Random-page"><a href="https://www.cpcwiki.eu/index.php/Special:Random">Random page</a></li>
+													<li id="n-recentchanges"><a href="https://www.cpcwiki.eu/index.php/Special:RecentChanges" title="A list of recent changes in the wiki [Alt+Maj+r]" accesskey="r">Recent changes</a></li>
+													<li id="n-CPCWiki-portal"><a href="https://www.cpcwiki.eu/index.php/CPCWiki:Portal">CPCWiki portal</a></li>
+													<li id="n-Content-Categories"><a href="https://www.cpcwiki.eu/index.php/Special:Categories">Content Categories</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-Hardware" aria-labelledby="p-Hardware-label">
+			<h3 id="p-Hardware-label">Hardware</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-Amstrad-CPC-Buyers.27-Guide-for-new-users"><a href="https://www.cpcwiki.eu/index.php/Amstrad_CPC_Buyers_Guide">Amstrad CPC Buyers' Guide for new users</a></li>
+													<li id="n-In-short"><a href="https://www.cpcwiki.eu/index.php/CPC">In short</a></li>
+													<li id="n-CPC-464.2F664.2F6128"><a href="https://www.cpcwiki.eu/index.php/CPC_old_generation">CPC 464/664/6128</a></li>
+													<li id="n-CPC.2B.2FGX4000"><a href="https://www.cpcwiki.eu/index.php/Plus">CPC+/GX4000</a></li>
+													<li id="n-Peripherals"><a href="https://www.cpcwiki.eu/index.php/Peripherals">Peripherals</a></li>
+													<li id="n-DIY-.26-Repair"><a href="https://www.cpcwiki.eu/index.php/DIY">DIY &amp; Repair</a></li>
+													<li id="n-Gallery"><a href="https://www.cpcwiki.eu/index.php/Photo_Gallery">Gallery</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-Software" aria-labelledby="p-Software-label">
+			<h3 id="p-Software-label">Software</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-The-Games"><a href="https://www.cpcwiki.eu/index.php/Games">The Games</a></li>
+													<li id="n-Serious-software"><a href="https://www.cpcwiki.eu/index.php/Applications">Serious software</a></li>
+													<li id="n-Programming"><a href="https://www.cpcwiki.eu/index.php/Programming">Programming</a></li>
+													<li id="n-Emulators"><a href="https://www.cpcwiki.eu/index.php/Emulators">Emulators</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-Printed_matter" aria-labelledby="p-Printed_matter-label">
+			<h3 id="p-Printed_matter-label">Printed matter</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-Books.2C-magazines.2C-technical.2C-manuals"><a href="https://www.cpcwiki.eu/index.php/Print">Books, magazines, technical, manuals</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-The_Scene" aria-labelledby="p-The_Scene-label">
+			<h3 id="p-The_Scene-label">The Scene</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-Groups.2FMembers"><a href="https://www.cpcwiki.eu/index.php/Demogroups">Groups/Members</a></li>
+													<li id="n-Parties.2FEvents"><a href="https://www.cpcwiki.eu/index.php/CPC_parties">Parties/Events</a></li>
+													<li id="n-Links"><a href="https://www.cpcwiki.eu/index.php/Links">Links</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-Wiki-related" aria-labelledby="p-Wiki-related-label">
+			<h3 id="p-Wiki-related-label">Wiki-related</h3>
+
+			<div class="body">
+									<ul>
+													<li id="n-Upload"><a href="https://www.cpcwiki.eu/index.php/Special:Upload">Upload file</a></li>
+													<li id="n-Upload-multi-files"><a href="https://www.cpcwiki.eu/index.php/Special:UploadWizard">Upload multi files</a></li>
+													<li id="n-Special-Pages"><a href="https://www.cpcwiki.eu/index.php/Special:SpecialPages">Special Pages</a></li>
+													<li id="n-About---Contribute"><a href="https://www.cpcwiki.eu/index.php/About">About - Contribute</a></li>
+													<li id="n-Statistics"><a href="https://www.cpcwiki.eu/index.php/Special:Statistics">Statistics</a></li>
+													<li id="n-Create-Page"><a href="https://www.cpcwiki.eu/index.php/Loose_lemas">Create Page</a></li>
+													<li id="n-Editing-Help"><a href="https://www.cpcwiki.eu/index.php?title=Help:Editing">Editing Help</a></li>
+													<li id="n-Discussion-forum"><a href="https://www.cpcwiki.eu/forum">Discussion forum</a></li>
+											</ul>
+							</div>
+		</div>
+			<div class="portal" role="navigation" id="p-tb" aria-labelledby="p-tb-label">
+			<h3 id="p-tb-label">Tools</h3>
+
+			<div class="body">
+									<ul>
+													<li id="t-whatlinkshere"><a href="https://www.cpcwiki.eu/index.php/Special:WhatLinksHere/Locomotive_BASIC" title="A list of all wiki pages that link here [Alt+Maj+j]" accesskey="j">What links here</a></li>
+													<li id="t-recentchangeslinked"><a href="https://www.cpcwiki.eu/index.php/Special:RecentChangesLinked/Locomotive_BASIC" title="Recent changes in pages linked from this page [Alt+Maj+k]" accesskey="k">Related changes</a></li>
+													<li id="t-specialpages"><a href="https://www.cpcwiki.eu/index.php/Special:SpecialPages" title="A list of all special pages [Alt+Maj+q]" accesskey="q">Special pages</a></li>
+													<li id="t-print"><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;printable=yes" rel="alternate" title="Printable version of this page [Alt+Maj+p]" accesskey="p">Printable version</a></li>
+													<li id="t-permalink"><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;oldid=126886" title="Permanent link to this revision of the page">Permanent link</a></li>
+													<li id="t-info"><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;action=info" title="More information about this page">Page information</a></li>
+											</ul>
+							</div>
+		</div>
+				</div>
+		</div>
+		<div id="footer" role="contentinfo">
+							<ul id="footer-info">
+											<li id="footer-info-lastmod"> This page was last modified on 2 October 2025, at 08:05.</li>
+											<li id="footer-info-copyright">Content is available under <a href="https://www.cpcwiki.eu/index.php/MediaWiki:Copyright" title="MediaWiki:Copyright"></a> unless otherwise noted.</li>
+									</ul>
+							<ul id="footer-places">
+											<li id="footer-places-privacy"><a href="https://www.cpcwiki.eu/index.php/CPCWiki_-_THE_Amstrad_CPC_encyclopedia!:Privacy_policy" title="CPCWiki - THE Amstrad CPC encyclopedia!:Privacy policy">Privacy policy</a></li>
+											<li id="footer-places-about"><a href="https://www.cpcwiki.eu/index.php/CPCWiki_-_THE_Amstrad_CPC_encyclopedia!:About" title="CPCWiki - THE Amstrad CPC encyclopedia!:About">About CPCWiki - THE Amstrad CPC encyclopedia!</a></li>
+											<li id="footer-places-disclaimer"><a href="https://www.cpcwiki.eu/index.php/CPCWiki_-_THE_Amstrad_CPC_encyclopedia!:General_disclaimer" title="CPCWiki - THE Amstrad CPC encyclopedia!:General disclaimer">Disclaimers</a></li>
+											<li id="footer-places-mobileview"><a href="https://www.cpcwiki.eu/index.php?title=Locomotive_BASIC&amp;mobileaction=toggle_view_mobile" class="noprint stopMobileRedirectToggle">Mobile view</a></li>
+									</ul>
+										<ul id="footer-icons" class="noprint">
+											<li id="footer-poweredbyico">
+															<a href="https://www.mediawiki.org/"><img src="Locomotive%20BASIC%20-%20CPCWiki_fichiers/poweredby_mediawiki_88x31.png" alt="Powered by MediaWiki" srcset="Locomotive%20BASIC%20-%20CPCWiki_fichiers/poweredby_mediawiki_132x47.png 1.5x, Locomotive%20BASIC%20-%20CPCWiki_fichiers/poweredby_mediawiki_176x62.png 2x" width="88" height="31"></a>
+													</li>
+									</ul>
+						<div style="clear:both"></div>
+		</div>
+		<script>if(window.jQuery)jQuery.ready();</script><script>if(window.mw){
+mw.loader.state({"site":"ready","user":"ready","user.groups":"ready"});
+}</script>
+<script>if(window.mw){
+mw.loader.load(["mediawiki.toc","mediawiki.action.view.postEdit","mediawiki.user","mediawiki.hidpi","mediawiki.page.ready","mediawiki.searchSuggest"],null,true);
+}</script>
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-5211067-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+<script>if(window.mw){
+mw.config.set({"wgBackendResponseTime":56});
+}</script>
+	<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9bd57c9e4cf16f99',t:'MTc2ODMxMzUyOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><iframe height="1" width="1" style="position: absolute; top: 0px; left: 0px; border: medium; visibility: hidden;"></iframe>
+
+<div style="display: none; font-size: 13px;" class="suggestions"><div class="suggestions-results"></div><div class="suggestions-special"></div></div></body></html>

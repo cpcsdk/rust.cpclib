@@ -346,6 +346,7 @@ impl From<char> for BasicTokenNoPrefix {
             'y' => BasicTokenNoPrefix::CharLowerY,
             'z' => BasicTokenNoPrefix::CharLowerZ,
 
+            '!' => BasicTokenNoPrefix::CharExclamation,
             '#' => BasicTokenNoPrefix::CharNumber,
             '$' => BasicTokenNoPrefix::CharDollar,
             '%' => BasicTokenNoPrefix::CharPerCent,
@@ -355,8 +356,7 @@ impl From<char> for BasicTokenNoPrefix {
             ')' => BasicTokenNoPrefix::CharCloseParenthesis,
             '*' => BasicTokenNoPrefix::CharAsterix,
             '+' => BasicTokenNoPrefix::CharPlus,
-            ',' => BasicTokenNoPrefix::CharComma,
-            '_' => BasicTokenNoPrefix::CharHyphen,
+            ',' => BasicTokenNoPrefix::CharComma,            '-' => BasicTokenNoPrefix::CharHyphen,            '_' => BasicTokenNoPrefix::CharHyphen,
             '.' => BasicTokenNoPrefix::CharDot,
             '/' => BasicTokenNoPrefix::CharSlash,
             '0' => BasicTokenNoPrefix::Char0,
