@@ -82,6 +82,65 @@ fn peek_keyword_end<'src>(input: &mut &'src str) -> ModalResult<(), ContextError
     ))).parse_next(input)
 }
 
+/// Phase 4: Trait for appending tokens to a list
+/// Handles regular Vec<BasicToken>, Option<Vec<BasicToken>>, and Option<(Vec<BasicToken>, Vec<BasicToken>)>
+trait AppendToTokenList {
+    fn append_to(self, res: &mut Vec<BasicToken>);
+    fn size_hint(&self) -> usize;
+}
+
+impl AppendToTokenList for Vec<BasicToken> {
+    fn append_to(mut self, res: &mut Vec<BasicToken>) {
+        res.append(&mut self);
+    }
+    
+    fn size_hint(&self) -> usize {
+        self.len()
+    }
+}
+
+impl AppendToTokenList for Option<Vec<BasicToken>> {
+    fn append_to(self, res: &mut Vec<BasicToken>) {
+        if let Some(mut tokens) = self {
+            res.append(&mut tokens);
+        }
+    }
+    
+    fn size_hint(&self) -> usize {
+        self.as_ref().map_or(0, |v| v.len())
+    }
+}
+
+impl AppendToTokenList for Option<(Vec<BasicToken>, Vec<BasicToken>)> {
+    fn append_to(self, res: &mut Vec<BasicToken>) {
+        if let Some((mut first, mut second)) = self {
+            res.append(&mut first);
+            res.append(&mut second);
+        }
+    }
+    
+    fn size_hint(&self) -> usize {
+        self.as_ref().map_or(0, |(a, b)| a.len() + b.len())
+    }
+}
+
+/// Phase 4: Token list construction macro
+/// Eliminates repetitive build_tokens_with_base, append_optional, append_optional_pair patterns
+/// Usage: construct_token_list!(base_token, part1, part2, opt_part, opt_pair)
+/// Now with pre-allocation to avoid Vec reallocation!
+macro_rules! construct_token_list {
+    ($base:expr $(, $part:expr)*) => {{
+        // Calculate total capacity needed
+        let capacity = 1 $(+ AppendToTokenList::size_hint(&$part))*;
+        let mut res = Vec::with_capacity(capacity);
+        res.push($base);
+        $(
+            AppendToTokenList::append_to($part, &mut res);
+        )*
+        res
+    }};
+}
+
 /// Macro for simple keyword + expression pattern (keyword SPACE expression)
 /// Example: RANDOMIZE expr, CLEAR expr, WIDTH expr, etc.
 macro_rules! keyword_expr_parser {
@@ -94,9 +153,10 @@ macro_rules! keyword_expr_parser {
                 cut_err(parse_numeric_expression($constraint).context(StrContext::Label($error_msg)))
             ).parse_next(input)?;
             
-            Ok(build_tokens_with_base(
+            Ok(construct_token_list!(
                 BasicToken::SimpleToken(BasicTokenNoPrefix::$token),
-                vec![&mut space, &mut expr]
+                space,
+                expr
             ))
         }
     };
@@ -720,10 +780,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
     // space after keyword
     let mut space = parse_space0.parse_next(input)?;
-    let mut tokens = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Print),
-        vec![&mut space]
-    );
+    let mut tokens = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Print), space);
 
     // canal and space
     let canal = opt(parse_canal).parse_next(input)?;
@@ -750,10 +807,7 @@ pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Run),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Run), space);
     append_optional(&mut res, fname);
     Ok(res)
 }
@@ -815,10 +869,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let more_vars: Vec<_> = repeat(0.., (parse_space0, one_of([';', ',']), parse_space0, parse_variable))
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Input),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Input), space_a);
     if let Some(cr) = suppress_cr {
         res.push(BasicToken::SimpleToken(cr.into()));
     }
@@ -934,10 +985,7 @@ pub fn parse_cls<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Cls),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Cls), space);
     append_optional(&mut res, canal);
     Ok(res)
 }
@@ -960,11 +1008,7 @@ pub fn parse_locate<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Locate),
-        vec![&mut space_a]
-    );
-    append_optional_pair(&mut res, canal_and_comma);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Locate), space_a, canal_and_comma);
     res.append(&mut x_coord);
     res.append(&mut comma2);
     res.append(&mut y_coord);
@@ -1001,11 +1045,7 @@ pub fn parse_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Ink),
-        vec![&mut space_a, &mut pen, &mut comma1, &mut color1]
-    );
-    append_optional_pair(&mut res, opt_color2);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Ink), space_a, pen, comma1, color1, opt_color2);
     Ok(res)
 }
 
@@ -1022,11 +1062,7 @@ pub fn parse_border<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Border),
-        vec![&mut space_a, &mut color1]
-    );
-    append_optional_pair(&mut res, opt_color2);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Border), space_a, color1, opt_color2);
     Ok(res)
 }
 
@@ -1041,11 +1077,7 @@ pub fn parse_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Pen),
-        vec![&mut space_a]
-    );
-    append_optional_pair(&mut res, canal);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Pen), space_a, canal);
     res.append(&mut space_b);
     res.append(&mut color);
     Ok(res)
@@ -1062,11 +1094,7 @@ pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     )
         .parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Paper),
-        vec![&mut space_a]
-    );
-    append_optional_pair(&mut res, canal);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Paper), space_a, canal);
     res.append(&mut space_b);
     res.append(&mut color);
     Ok(res)
@@ -1089,10 +1117,7 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         opt((parse_space1, Caseless("STEP"), parse_space1, parse_numeric_expression(NumericExpressionConstraint::None)))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::For),
-        vec![&mut space_a, &mut var, &mut space_b]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::For), space_a, var, space_b);
     res.push(BasicToken::SimpleToken(eq.into()));
     res.append(&mut space_c);
     res.append(&mut start_val);
@@ -1117,10 +1142,7 @@ pub fn parse_next<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt(parse_variable)
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Next),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Next), space);
     append_optional(&mut res, opt_var);
     Ok(res)
 }
@@ -1136,10 +1158,7 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
         parse_space0
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::If),
-        vec![&mut space_a, &mut condition, &mut space_b]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::If), space_a, condition, space_b);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Then));
     res.append(&mut space_c);
     
@@ -1307,10 +1326,7 @@ pub fn parse_while<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_general_expression.context(StrContext::Label("Condition expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::While),
-        vec![&mut space, &mut condition]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::While), space, condition))
 }
 
 simple_keyword_parser!(parse_wend, "WEND", Wend);
@@ -1328,10 +1344,7 @@ pub fn parse_draw<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Draw),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Draw), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1355,10 +1368,7 @@ pub fn parse_drawr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Drawr),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Drawr), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1382,10 +1392,7 @@ pub fn parse_move<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Move),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Move), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1407,10 +1414,7 @@ pub fn parse_mover<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Mover),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Mover), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1432,10 +1436,7 @@ pub fn parse_plot<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::None)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::None)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Plot),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Plot), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1457,10 +1458,7 @@ pub fn parse_plotr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         opt((parse_comma, opt(parse_numeric_expression(NumericExpressionConstraint::Integer)), opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Plotr),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Plotr), space_a, x, comma1, y);
     
     if let Some((mut comma2, opt_ink, opt_mode)) = opt_params {
         res.append(&mut comma2);
@@ -1502,10 +1500,7 @@ pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         )
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Data),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Data), space);
     if let Some((mut first, rest)) = opt_values {
         res.append(&mut first);
         for (mut comma, mut val) in rest {
@@ -1525,10 +1520,7 @@ pub fn parse_read<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         repeat::<_, _, Vec<_>, _, _>(0.., (parse_comma, parse_variable))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Read),
-        vec![&mut space_a, &mut first_var]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Read), space_a, first_var);
     for (mut comma, mut var) in rest_vars {
         res.append(&mut comma);
         res.append(&mut var);
@@ -1544,10 +1536,7 @@ pub fn parse_restore<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Restore),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Restore), space);
     append_optional(&mut res, opt_line);
     Ok(res)
 }
@@ -1615,10 +1604,7 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Dim),
-        vec![&mut space, &mut first_array]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Dim), space, first_array);
     for other in &mut rest_arrays {
         res.append(other);
     }
@@ -1635,10 +1621,7 @@ pub fn parse_poke<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Value expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Poke),
-        vec![&mut space_a, &mut address, &mut comma, &mut value]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Poke), space_a, address, comma, value))
 }
 
 /// OUT port, value
@@ -1651,10 +1634,7 @@ pub fn parse_out<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Value expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Out),
-        vec![&mut space_a, &mut port, &mut comma, &mut value]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Out), space_a, port, comma, value))
 }
 
 /// LOAD filename [, address]
@@ -1666,11 +1646,7 @@ pub fn parse_load<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Load),
-        vec![&mut space_a, &mut filename]
-    );
-    append_optional_pair(&mut res, opt_address);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Load), space_a, filename, opt_address);
     Ok(res)
 }
 
@@ -1682,10 +1658,7 @@ pub fn parse_save<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Save),
-        vec![&mut space_a, &mut filename]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Save), space_a, filename))
 }
 
 simple_keyword_parser!(parse_new, "NEW", New);
@@ -1699,10 +1672,7 @@ pub fn parse_clear<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     )
         .parse_next(input)?;
     
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Clear),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Clear), space);
     if let Some(input_token) = opt_input {
         res.push(input_token);
     }
@@ -1720,10 +1690,7 @@ pub fn parse_randomize<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
         opt(parse_numeric_expression(NumericExpressionConstraint::None))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Randomize),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Randomize), space);
     append_optional(&mut res, opt_seed);
     Ok(res)
 }
@@ -1749,10 +1716,7 @@ pub fn parse_sound<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Duration expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Sound),
-        vec![&mut space_a, &mut channel, &mut comma1, &mut period, &mut comma2, &mut duration]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Sound), space_a, channel, comma1, period, comma2, duration);
     // Optional 4th parameter: volume
     if let Ok((mut comma3, mut volume)) = (
         parse_comma,
@@ -1815,10 +1779,7 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::On),
-        vec![&mut space_a, &mut expr, &mut space_b]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::On), space_a, expr, space_b);
     res.push(BasicToken::SimpleToken(if is_goto { BasicTokenNoPrefix::Goto } else { BasicTokenNoPrefix::Gosub }));
     res.append(&mut space_c);
     res.append(&mut first_line);
@@ -1840,10 +1801,7 @@ pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::On),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::On), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Error));
     res.append(&mut space_b);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
@@ -1861,10 +1819,7 @@ pub fn parse_on_break<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
         parse_space1
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::On),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::On), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::OnBreak));
     res.append(&mut space_b);
     Ok(res)
@@ -1882,10 +1837,7 @@ pub fn parse_speed_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period2 expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Speed),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Speed), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Ink));
     res.append(&mut space_b);
     res.append(&mut period1);
@@ -1905,10 +1857,7 @@ pub fn parse_speed_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Speed expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Speed),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Speed), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Write));
     res.append(&mut space_b);
     res.append(&mut speed);
@@ -1928,10 +1877,7 @@ pub fn parse_speed_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Repeat period expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Speed),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Speed), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Key));
     res.append(&mut space_b);
     res.append(&mut delay);
@@ -1952,10 +1898,7 @@ pub fn parse_resume<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         )))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Resume),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Resume), space);
     append_optional(&mut res, opt_param);
     Ok(res)
 }
@@ -1992,11 +1935,7 @@ pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Every),
-        vec![&mut space1, &mut period]
-    );
-    append_optional_pair(&mut res, opt_timer);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Every), space1, period, opt_timer);
     res.append(&mut space2);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub));
     res.append(&mut space3);
@@ -2035,11 +1974,7 @@ pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::After),
-        vec![&mut space1, &mut time]
-    );
-    append_optional_pair(&mut res, opt_timer);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::After), space1, time, opt_timer);
     res.append(&mut space2);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub));
     res.append(&mut space3);
@@ -2054,10 +1989,7 @@ pub fn parse_list<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         parse_space0
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::List),
-        vec![&mut space]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::List), space))
 }
 
 /// DELETE [start] - end
@@ -2075,10 +2007,7 @@ pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         ))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Delete),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Delete), space);
     if let Some((mut start, opt_end)) = opt_range {
         res.append(&mut start);
         if let Some((_, mut end)) = opt_end {
@@ -2096,10 +2025,7 @@ pub fn parse_renum<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         parse_space0
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Renum),
-        vec![&mut space]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Renum), space))
 }
 
 /// AUTO [start [, increment]]
@@ -2126,10 +2052,7 @@ pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         None
     };
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Auto),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Auto), space);
     if let Some(mut line) = opt_line {
         res.append(&mut line);
         append_optional_pair(&mut res, opt_increment);
@@ -2180,10 +2103,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         parse_numeric_expression(NumericExpressionConstraint::None)
     )).parse_next(input)?;
     
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Def),
-        vec![&mut space1]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Def), space1);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Fn));
     res.append(&mut space2);
     
@@ -2224,10 +2144,7 @@ pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Edit),
-        vec![&mut space, &mut line_num]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Edit), space, line_num))
 }
 
 /// ERASE array [, array, ...]
@@ -2256,10 +2173,7 @@ pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Erase),
-        vec![&mut space, &mut first_var]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Erase), space, first_var);
     for other in &mut rest_vars {
         res.append(other);
     }
@@ -2276,10 +2190,7 @@ pub fn parse_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         cut_err(parse_variable.context(StrContext::Label("Second variable expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Swap),
-        vec![&mut space_a, &mut var1, &mut comma, &mut var2]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Swap), space_a, var1, comma, var2))
 }
 
 /// DEFINT letter [-letter] [, ...]
@@ -2320,10 +2231,7 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Defint),
-        vec![&mut space, &mut first]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Defint), space, first);
     for other in &mut rest {
         res.append(other);
     }
@@ -2368,10 +2276,7 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Defreal),
-        vec![&mut space, &mut first]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Defreal), space, first);
     for other in &mut rest {
         res.append(other);
     }
@@ -2416,10 +2321,7 @@ pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         tokens
     })).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Defstr),
-        vec![&mut space, &mut first]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Defstr), space, first);
     for other in &mut rest {
         res.append(other);
     }
@@ -2449,10 +2351,7 @@ pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         rows.push((comma, row));
     }
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol),
-        vec![&mut space_a, &mut char_code]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol), space_a, char_code);
     for (mut comma, mut row) in rows {
         res.append(&mut comma);
         res.append(&mut row);
@@ -2470,10 +2369,7 @@ pub fn parse_symbol_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResu
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Expression expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::After));
     res.append(&mut space_b);
     res.append(&mut expr);
@@ -2489,10 +2385,7 @@ pub fn parse_memory<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Address expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Memory),
-        vec![&mut space, &mut address]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Memory), space, address))
 }
 
 /// CURSOR [column] or CURSOR [column,row]
@@ -2522,10 +2415,7 @@ pub fn parse_cursor<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
             .map(|col| (Some(col), None, None))
     ))).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Cursor),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Cursor), space);
     if let Some((mut col, comma, row)) = opt_args {
         append_optional(&mut res, col);
         append_optional(&mut res, comma);
@@ -2542,10 +2432,7 @@ pub fn parse_tag<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         opt(parse_canal)
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Tag),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Tag), space);
     append_optional(&mut res, opt_canal);
     Ok(res)
 }
@@ -2558,10 +2445,7 @@ pub fn parse_tagoff<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         opt(parse_canal)
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Tagoff),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Tagoff), space);
     append_optional(&mut res, opt_canal);
     Ok(res)
 }
@@ -2577,11 +2461,7 @@ pub fn parse_wait<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Wait),
-        vec![&mut space_a, &mut port, &mut comma1, &mut mask]
-    );
-    append_optional_pair(&mut res, opt_inv);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Wait), space_a, port, comma1, mask, opt_inv);
     Ok(res)
 }
 
@@ -2610,10 +2490,7 @@ pub fn parse_window<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Bottom expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Window),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Window), space_a);
     if let Some((mut canal_tokens, mut comma)) = canal {
         res.append(&mut canal_tokens);
         res.append(&mut comma);
@@ -2640,10 +2517,7 @@ pub fn parse_window_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Stream2 expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Window),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Window), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Swap));
     res.append(&mut space_b);
     res.append(&mut stream1);
@@ -2663,10 +2537,7 @@ pub fn parse_graphics_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResu
         opt(parse_numeric_expression(NumericExpressionConstraint::None))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Pen));
     res.append(&mut space_b);
     append_optional(&mut res, opt_mode);
@@ -2684,10 +2555,7 @@ pub fn parse_graphics_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
         opt(parse_numeric_expression(NumericExpressionConstraint::None))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Graphics), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Paper));
     res.append(&mut space_b);
     append_optional(&mut res, opt_mode);
@@ -2717,10 +2585,7 @@ pub fn parse_origin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         ))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Origin),
-        vec![&mut space_a, &mut x, &mut comma1, &mut y]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Origin), space_a, x, comma1, y);
     if let Some((mut c2, mut left, mut c3, mut right, mut c4, mut top, mut c5, mut bottom)) = opt_bounds {
         res.append(&mut c2);
         res.append(&mut left);
@@ -2744,10 +2609,7 @@ pub fn parse_clg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Clg),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Clg), space);
     append_optional(&mut res, opt_ink);
     Ok(res)
 }
@@ -2763,10 +2625,7 @@ pub fn parse_mask<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Mask),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Mask), space);
     append_optional(&mut res, opt_ink1);
     append_optional_pair(&mut res, opt_ink2);
     Ok(res)
@@ -2783,11 +2642,7 @@ pub fn parse_chain<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Chain),
-        vec![&mut space_a, &mut filename]
-    );
-    append_optional_pair(&mut res, opt_line);
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Chain), space_a, filename, opt_line);
     Ok(res)
 }
 
@@ -2799,10 +2654,7 @@ pub fn parse_merge<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Merge),
-        vec![&mut space_a, &mut filename]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Merge), space_a, filename))
 }
 
 simple_keyword_parser!(parse_cat, "CAT", Cat);
@@ -2815,10 +2667,7 @@ pub fn parse_openin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Openin),
-        vec![&mut space_a, &mut filename]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Openin), space_a, filename))
 }
 
 /// OPENOUT filename
@@ -2829,10 +2678,7 @@ pub fn parse_openout<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Openout),
-        vec![&mut space_a, &mut filename]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Openout), space_a, filename))
 }
 
 simple_keyword_parser!(parse_closein, "CLOSEIN", Closein);
@@ -2861,10 +2707,7 @@ pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
         parse_variable
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Line),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Line), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Input));
     res.append(&mut space_b);
     append_optional(&mut res, canal);
@@ -2910,10 +2753,7 @@ pub fn parse_ent<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
             })
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Ent),
-        vec![&mut space_a, &mut envelope]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Ent), space_a, envelope);
     for other in &mut additional {
         res.append(other);
     }
@@ -2947,10 +2787,7 @@ pub fn parse_env<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
             })
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Env),
-        vec![&mut space_a, &mut envelope]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Env), space_a, envelope);
     for other in &mut additional {
         res.append(other);
     }
@@ -2974,10 +2811,7 @@ pub fn parse_release<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Channel expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Release),
-        vec![&mut space, &mut channel]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Release), space, channel))
 }
 
 /// KEY key_number, string
@@ -2989,10 +2823,7 @@ pub fn parse_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         cut_err(parse_comma.context(StrContext::Label("Comma expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Key),
-        vec![&mut space_a, &mut key_num, &mut comma]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Key), space_a, key_num, comma))
 }
 
 /// KEY DEF key_number, repeat, delay
@@ -3009,10 +2840,7 @@ pub fn parse_key_def<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Delay expected")))
     ).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Key),
-        vec![&mut space_a]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Key), space_a);
     res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Def));
     res.append(&mut space_b);
     res.append(&mut key_num);
@@ -3032,10 +2860,7 @@ pub fn parse_zone<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Zone),
-        vec![&mut space, &mut width]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Zone), space, width))
 }
 
 /// WIDTH width
@@ -3046,10 +2871,7 @@ pub fn parse_width<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
     ).parse_next(input)?;
 
-    Ok(build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Width),
-        vec![&mut space, &mut width]
-    ))
+    Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Width), space, width))
 }
 
 /// WRITE [#stream,] expression [, expression, ...]
@@ -3073,10 +2895,7 @@ pub fn parse_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         }))
     )).parse_next(input)?;
 
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::Write),
-        vec![&mut space]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Write), space);
     if let Some((mut canal, mut comma)) = opt_canal_comma {
         res.append(&mut canal);
         res.append(&mut comma);
@@ -3134,10 +2953,7 @@ pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
     // Value to assign (string expression)
     let mut value = cut_err(parse_string_expression.context(StrContext::Label("String expression expected"))).parse_next(input)?;
     
-    let mut res = build_tokens_with_base(
-        BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar),
-        vec![&mut space1]
-    );
+    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar), space1);
     res.push(BasicToken::SimpleToken(open.into()));
     res.append(&mut var);
     res.append(&mut comma1);
