@@ -115,6 +115,8 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
             parse_resume,
             parse_error,
             parse_cont,
+            parse_every,
+            parse_after,
         )),
         // Graphics
         alt((
@@ -148,6 +150,7 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
         )),
         // Data/Memory
         alt((
+            parse_def_fn,
             parse_data,
             parse_read,
             parse_restore,
@@ -217,7 +220,8 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
             parse_speed_key,
         )),
         // Assignment (LET is optional, but checked first since it's a keyword)
-        alt((parse_let, parse_assign))
+        // MID$ assignment is also checked before regular assignment as it's a special form
+        alt((parse_let, parse_mid_assign, parse_assign))
     ))
     .context(StrContext::Label("Unable to parse an instruction"))
     .parse_next(input)?;
@@ -534,8 +538,10 @@ pub fn parse_float_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
 pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
 
+    // Locomotive BASIC allows variable names up to 40 characters total
+    // First char is already consumed, so allow up to 39 more chars
     let next =
-        opt(take_while(0.., ('a'..='z', 'A'..='Z', '0'..='9')).verify(|s: &str| s.len() < 39))
+        opt(take_while(0.., ('a'..='z', 'A'..='Z', '0'..='9')).verify(|s: &str| s.len() <= 39))
             .parse_next(input)?;
 
     // TODO check that it is valid
@@ -550,20 +556,32 @@ pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicSeveralToke
 
 /// Parse a single expression of a print
 pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (prefix, mut expr) = (
-        opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))),
-        alt((
+    let prefix = opt(alt((parse_print_arg_spc_or_tab, parse_print_arg_using))).parse_next(input)?;
+    
+    // If we have a SPC/TAB prefix, the following expression is optional
+    // Otherwise, an expression is required
+    let mut expr = if prefix.is_some() {
+        opt(alt((
             parse_quoted_string(true),
-            parse_string_expression,  // Parse string expressions (including STRING$, CHR$, etc.)
-            parse_numeric_expression(NumericExpressionConstraint::None),  // Then parse numeric expressions (A+B, X*2, etc.)
+            parse_string_expression,
+            parse_numeric_expression(NumericExpressionConstraint::None),
+            parse_basic_value.map(|v| vec![v]),
+        ))).parse_next(input)?
+    } else {
+        Some(alt((
+            parse_quoted_string(true),
+            parse_string_expression,
+            parse_numeric_expression(NumericExpressionConstraint::None),
             parse_basic_value.map(|v| vec![v]),
         ))
         .context(StrContext::Label("Missing expression to print"))
-    )
-        .parse_next(input)?;
+        .parse_next(input)?)
+    };
 
     let mut tokens = prefix.unwrap_or_default();
-    tokens.append(&mut expr);
+    if let Some(mut e) = expr {
+        tokens.append(&mut e);
+    }
 
     Ok(tokens)
 }
@@ -2041,6 +2059,100 @@ pub fn parse_cont<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         .parse_next(input)
 }
 
+/// EVERY <period>[,<timer>] GOSUB <line>
+/// Calls the specified subroutine every <period> 50Hz ticks (0.02s)
+/// Optional timer number (0-3, default 0)
+pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("EVERY").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+
+    let (mut space1, mut period) = (
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period expected")))
+    ).parse_next(input)?;
+
+    // Optional timer number after comma
+    let opt_timer = opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))).parse_next(input)?;
+
+    // GOSUB keyword
+    let (mut space2, _, mut space3, mut line) = (
+        parse_space0,
+        cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Every)];
+    res.append(&mut space1);
+    res.append(&mut period);
+    
+    if let Some((mut comma, mut timer)) = opt_timer {
+        res.append(&mut comma);
+        res.append(&mut timer);
+    }
+    
+    res.append(&mut space2);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub));
+    res.append(&mut space3);
+    res.append(&mut line);
+    
+    Ok(res)
+}
+
+/// AFTER <time>[,<timer>] GOSUB <line>
+/// Calls the specified subroutine after <time> 50Hz ticks (0.02s)
+/// Optional timer number (0-3, default 0)
+pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("AFTER").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+
+    let (mut space1, mut time) = (
+        parse_space0,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Time expected")))
+    ).parse_next(input)?;
+
+    // Optional timer number after comma
+    let opt_timer = opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))).parse_next(input)?;
+
+    // GOSUB keyword
+    let (mut space2, _, mut space3, mut line) = (
+        parse_space0,
+        cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
+        parse_space1,
+        cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
+    ).parse_next(input)?;
+
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::After)];
+    res.append(&mut space1);
+    res.append(&mut time);
+    
+    if let Some((mut comma, mut timer)) = opt_timer {
+        res.append(&mut comma);
+        res.append(&mut timer);
+    }
+    
+    res.append(&mut space2);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub));
+    res.append(&mut space3);
+    res.append(&mut line);
+    
+    Ok(res)
+}
+
 /// LIST [start] [- [end]]
 pub fn parse_list<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let (_, mut space) = (
@@ -2098,13 +2210,116 @@ pub fn parse_renum<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// AUTO [start [, increment]]
 pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space) = (
-        Caseless("AUTO"),
-        parse_space0
-    ).parse_next(input)?;
+    let _ = Caseless("AUTO").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        ':'.void(),
+        '\n'.void(),
+        '\r'.void(),
+        eof.void()
+    ))).parse_next(input)?;
+    
+    let mut space = parse_space0.parse_next(input)?;
+    
+    // Optional line number
+    let opt_line = opt(parse_numeric_expression(NumericExpressionConstraint::Integer)).parse_next(input)?;
+    
+    // Optional increment after comma
+    let opt_increment = if opt_line.is_some() {
+        opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))).parse_next(input)?
+    } else {
+        None
+    };
 
     let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Auto)];
     res.append(&mut space);
+    
+    if let Some(mut line) = opt_line {
+        res.append(&mut line);
+        
+        if let Some((mut comma, mut increment)) = opt_increment {
+            res.append(&mut comma);
+            res.append(&mut increment);
+        }
+    }
+    
+    Ok(res)
+}
+
+/// DEF FN <name>[(<parameters>)]=<expression>
+/// Define a user function
+pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let _ = Caseless("DEF").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void()
+    ))).parse_next(input)?;
+    
+    let (mut space1, _, mut space2) = (
+        parse_space1,
+        cut_err(Caseless("FN").context(StrContext::Label("FN expected after DEF"))),
+        parse_space0
+    ).parse_next(input)?;
+    
+    // Parse function name (must start with valid identifier)
+    let fn_name = take_while(1.., ('a'..='z', 'A'..='Z', '0'..='9')).parse_next(input)?;
+    
+    // Optional parameter list in parentheses
+    let opt_params: Option<(char, Vec<BasicToken>, Option<(Vec<BasicToken>, Vec<(Vec<BasicToken>, Vec<BasicToken>)>)>, Vec<BasicToken>, char)> = opt((
+        '(',
+        parse_space0,
+        opt((
+            parse_base_variable_name,
+            repeat(0.., (parse_comma, parse_base_variable_name)).map(|v: Vec<(Vec<BasicToken>, Vec<BasicToken>)>| v)
+        )),
+        parse_space0,
+        ')'
+    )).parse_next(input)?;
+    
+    // Equal sign
+    let (mut space3, _, mut space4) = (
+        parse_space0,
+        cut_err('='.context(StrContext::Label("= expected in DEF FN"))),
+        parse_space0
+    ).parse_next(input)?;
+    
+    // Expression (can be numeric or string)
+    let mut expression = alt((
+        parse_string_expression,
+        parse_numeric_expression(NumericExpressionConstraint::None)
+    )).parse_next(input)?;
+    
+    let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Def)];
+    res.append(&mut space1);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Fn));
+    res.append(&mut space2);
+    
+    // Add function name as tokens
+    for c in fn_name.chars() {
+        res.push(BasicToken::SimpleToken(c.into()));
+    }
+    
+    if let Some((_, mut sp1, opt_param_list, mut sp2, _)) = opt_params {
+        res.push(BasicToken::SimpleToken('('.into()));
+        res.append(&mut sp1);
+        
+        if let Some((mut first_param, mut rest_params)) = opt_param_list {
+            res.append(&mut first_param);
+            for (mut comma, mut param) in rest_params {
+                res.append(&mut comma);
+                res.append(&mut param);
+            }
+        }
+        
+        res.append(&mut sp2);
+        res.push(BasicToken::SimpleToken(')'.into()));
+    }
+    
+    res.append(&mut space3);
+    res.push(BasicToken::SimpleToken('='.into()));
+    res.append(&mut space4);
+    res.append(&mut expression);
     
     Ok(res)
 }
@@ -3003,26 +3218,31 @@ pub fn parse_width<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// WRITE [#stream,] expression [, expression, ...]
 pub fn parse_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_canal, opt_values): (_, _, _, Option<(Vec<BasicToken>, Vec<Vec<BasicToken>>)>) = (
-        Caseless("WRITE"),
+    let _ = Caseless("WRITE").parse_next(input)?;
+    let _ = peek(alt((' '.void(), '\t'.void(), '#'.void(), ':'.void(), '\n'.void(), '\r'.void(), eof.void()))).parse_next(input)?;
+    
+    let (mut space, opt_canal_comma) = (
         parse_space0,
-        opt(parse_canal),
-        opt((
-            parse_print_expression,
-            repeat(0.., (parse_comma, parse_print_expression).map(|(mut c, mut expr)| {
-                let mut tokens = vec![];
-                tokens.append(&mut c);
-                tokens.append(&mut expr);
-                tokens
-            }))
-        ))
+        opt((parse_canal, parse_comma))
     ).parse_next(input)?;
+    
+    // Parse data values (comma-separated print expressions)
+    let opt_values: Option<(Vec<BasicToken>, Vec<Vec<BasicToken>>)> = opt((
+        parse_print_expression,
+        repeat(0.., (parse_comma, parse_print_expression).map(|(mut c, mut expr)| {
+            let mut tokens = vec![];
+            tokens.append(&mut c);
+            tokens.append(&mut expr);
+            tokens
+        }))
+    )).parse_next(input)?;
 
     let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Write)];
     res.append(&mut space);
     
-    if let Some(mut canal) = opt_canal {
+    if let Some((mut canal, mut comma)) = opt_canal_comma {
         res.append(&mut canal);
+        res.append(&mut comma);
     }
     
     if let Some((mut first, mut rest)) = opt_values {
@@ -3049,15 +3269,65 @@ pub fn parse_di<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
         .parse_next(input)
 }
 
-/// MID$ variable, start_pos, length = expression
+/// MID$(variable, start_pos[, length]) = expression
+/// String assignment that modifies part of a string in place
 pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space) = (
-        Caseless("MID$"),
+    let _ = Caseless("MID$").parse_next(input)?;
+    let _ = peek(alt((
+        ' '.void(),
+        '\t'.void(),
+        '('.void()
+    ))).parse_next(input)?;
+    
+    let (mut space1, open) = (
+        parse_space0,
+        cut_err('('.context(StrContext::Label("( expected after MID$")))
+    ).parse_next(input)?;
+    
+    // String variable
+    let mut var = cut_err(parse_string_variable.context(StrContext::Label("String variable expected"))).parse_next(input)?;
+    
+    // Comma
+    let mut comma1 = cut_err(parse_comma.context(StrContext::Label(", expected"))).parse_next(input)?;
+    
+    // Start position
+    let mut start_pos = cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Start position expected"))).parse_next(input)?;
+    
+    // Optional length after comma
+    let opt_length = opt((
+        parse_comma,
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    )).parse_next(input)?;
+    
+    let (mut space2, close, mut space3, equals, mut space4) = (
+        parse_space0,
+        cut_err(')'.context(StrContext::Label(") expected"))),
+        parse_space0,
+        cut_err('='.context(StrContext::Label("= expected in MID$ assignment"))),
         parse_space0
     ).parse_next(input)?;
-
+    
+    // Value to assign (string expression)
+    let mut value = cut_err(parse_string_expression.context(StrContext::Label("String expression expected"))).parse_next(input)?;
+    
     let mut res = vec![BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar)];
-    res.append(&mut space);
+    res.append(&mut space1);
+    res.push(BasicToken::SimpleToken(open.into()));
+    res.append(&mut var);
+    res.append(&mut comma1);
+    res.append(&mut start_pos);
+    
+    if let Some((mut comma2, mut length)) = opt_length {
+        res.append(&mut comma2);
+        res.append(&mut length);
+    }
+    
+    res.append(&mut space2);
+    res.push(BasicToken::SimpleToken(close.into()));
+    res.append(&mut space3);
+    res.push(BasicToken::SimpleToken(equals.into()));
+    res.append(&mut space4);
+    res.append(&mut value);
     
     Ok(res)
 }
@@ -3065,8 +3335,51 @@ pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
 /// Parse the instructions that do not need a prefix byte
 /// TODO Add all the other instructions"],
 /// Parse a basic value
+/// Parse large integers (>65535) as floating-point values
+/// This handles BASIC's automatic promotion of large integer literals to float
+pub fn parse_large_integer_as_float<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+    let int_str = (opt('-'), take_while(1.., '0'..='9'))
+        .take()
+        .verify(|s: &str| {
+            // Only match if it's a valid integer that's too large for 16-bit
+            // (more than 5 digits, or 5 digits but > 65535)
+            if let Some(stripped) = s.strip_prefix('-') {
+                if stripped.len() > 5 {
+                    return true;
+                }
+                if let Ok(val) = stripped.parse::<u32>() {
+                    return val > 32768;
+                }
+            } else {
+                if s.len() > 5 {
+                    return true;
+                }
+                if let Ok(val) = s.parse::<u32>() {
+                    return val > 65535;
+                }
+            }
+            false
+        })
+        .parse_next(input)?;
+
+    // Convert to float
+    match BasicFloat::try_from(int_str) {
+        Ok(basic_float) => {
+            Ok(BasicToken::Constant(
+                BasicTokenNoPrefix::ValueFloatingPoint,
+                BasicValue::Float(basic_float)
+            ))
+        },
+        Err(_) => Err(ErrMode::Cut(ContextError::new()))
+    }
+}
+
 pub fn parse_basic_value<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    alt((parse_floating_point, parse_integer_value_16bits)).parse_next(input)
+    alt((
+        parse_floating_point,
+        parse_integer_value_16bits,
+        parse_large_integer_as_float
+    )).parse_next(input)
 }
 
 /// Parse a general expression that could be numeric or string
@@ -3338,6 +3651,7 @@ pub enum NumericExpressionConstraint {
 /// Parse an optional unary +/- operator
 fn parse_unary_operator<'src>(input: &mut &'src str) -> ModalResult<Option<BasicToken>, ContextError<StrContext>> {
     opt(alt((
+        (Caseless("NOT"), alt((' ', '\t', '('))).map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Not)),
         '-'.map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::SubstractionOrUnaryMinus)),
         '+'.map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Addition))
     ))).parse_next(input)
@@ -3672,15 +3986,41 @@ fn parse_upper_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
     .parse_next(input)
 }
 
-/// BIN$(number)
-/// Converts a number to its binary string representation
+/// BIN$(number[,width])
+/// Converts a number to its binary string representation with optional width
 fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    parse_any_numeric_function(
-        "BIN$",
-        BasicToken::PrefixedToken(BasicTokenPrefixed::BinDollar),
-        NumericExpressionConstraint::None
-    )
-    .parse_next(input)
+    let (code, mut space_a, open) = (
+        Caseless("BIN$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::BinDollar)),
+        parse_space0,
+        '('
+    ).parse_next(input)?;
+    
+    let mut expr = cut_err(
+        parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Number expected"))
+    ).parse_next(input)?;
+    
+    // Optional second parameter: width
+    let opt_width = opt((
+        parse_comma,
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    )).parse_next(input)?;
+    
+    let close = cut_err(')'.context(StrContext::Label("Missing ')'"))).parse_next(input)?;
+
+    let mut res = Vec::new();
+    res.push(code);
+    res.append(&mut space_a);
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
+    res.append(&mut expr);
+    
+    if let Some((mut comma, mut width)) = opt_width {
+        res.append(&mut comma);
+        res.append(&mut width);
+    }
+    
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
+
+    Ok(res)
 }
 
 /// DEC$(number, format)
@@ -3948,7 +4288,12 @@ pub fn f64_to_amstrad_float(nb: f64) -> Result<BasicFloat, BasicError> {
 }
 
 pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    let float_str = (opt('-'), dec_u16_inner, '.', dec_u16_inner)
+    let float_str = (
+        opt('-'),
+        take_while(1.., '0'..='9'),  // Integer part
+        '.',
+        take_while(1.., '0'..='9')   // Fractional part (no limit)
+    )
         .take()
         .parse_next(input)?;
 
@@ -3964,7 +4309,28 @@ pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<
 }
 
 pub fn parse_integer_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    alt((parse_decimal_value_16bits, parse_hexadecimal_value_16bits)).parse_next(input)
+    alt((
+        parse_binary_value_16bits,
+        parse_hexadecimal_value_16bits,
+        parse_decimal_value_16bits
+    )).parse_next(input)
+}
+
+/// Parse a binary value with &X prefix
+pub fn parse_binary_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+    (
+        opt('-'),
+        preceded(Caseless("&x"), bin_u16_inner)
+    )
+        .map(|(neg, val)| {
+            let val = val as i16;
+
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerBinary16bits,
+                BasicValue::new_integer(if neg.is_some() { -val } else { val })
+            )
+        })
+        .parse_next(input)
 }
 
 /// Parse an hexadecimal value
@@ -3984,7 +4350,6 @@ pub fn parse_hexadecimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTo
         .parse_next(input)
 }
 
-/// TODO: add binary number
 pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
     (opt('-'), terminated(dec_u16_inner, not('.')))
         .map(|(neg, val)| {
@@ -3994,6 +4359,23 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
                 BasicValue::new_integer(if neg.is_some() { -val } else { val })
             )
         })
+        .parse_next(input)
+}
+
+/// Parse binary digits (0-1) into a u16 value
+#[inline]
+pub fn bin_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
+    take_while(1..=16, ('0', '1'))
+        .map(|parsed: &str| {
+            let mut res = 0_u32;
+            for digit in parsed.chars() {
+                let value = if digit == '1' { 1 } else { 0 };
+                res = value + (res * 2);
+            }
+            res
+        })
+        .verify(|res| *res <= u32::from(u16::MAX))
+        .map(|res| res as u16)
         .parse_next(input)
 }
 

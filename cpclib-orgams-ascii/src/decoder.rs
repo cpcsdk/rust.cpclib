@@ -215,14 +215,14 @@ impl From<u8> for Command {
             0x05 => Command::SymbolRef,
             0x06 => Command::StringRef,
             0x07 => Command::NumberRef,
-            EC2_SKIP => Command::LabelRef,  // 0x08 = SKIP (verified mapping)
+            0x08 => Command::LabelRef,      // EC2_SKIP = 0x08 = SKIP directive
             0x09 => Command::MacroUse,      // 0x09 = unknown, possibly macro-related
             0x0a => Command::Else,
-            EC2_END => Command::End,        // 0x0C = END (verified mapping)
+            0x0c => Command::End,           // EC2_END = 0x0C = END directive
             0x10 => Command::MacroDef,
             0x14 => Command::Endm,
-            EC2_IF => Command::If,          // 0x15 = IF (verified mapping) - FIXED!
-            EC2_IMPORT => Command::Import,  // 0x17 = IMPORT (verified mapping)
+            0x15 => Command::If,            // EC2_IF = 0x15 = IF directive
+            0x17 => Command::Import,        // EC2_IMPORT = 0x17 = IMPORT directive
             0x41 => Command::RawOpcode,
             0x45 => Command::CommentMarker,
             other => Command::Unknown(other),
@@ -469,7 +469,12 @@ impl OrgamsDecoder {
                 }
                 
                 ExpressionType::Unknown(b) => {
-                    result.push_str(&format!("[0x{:02x}]", b));
+                    // Check for special expression markers from PARSE.Z80
+                    match b {
+                        0x24 => result.push('$'),   // E_PC - program counter
+                        0x44 => result.push_str("$$"),  // E_OBJC - object counter
+                        _ => result.push_str(&format!("[0x{:02x}]", b)),
+                    }
                 }
                 
                 // Handle remaining formats that aren't fully implemented yet
@@ -761,41 +766,16 @@ impl OrgamsDecoder {
                 if let Some(element) = self.decode_command()? {
                     // For IF command, convert to text immediately 
                     if let DecodedElement::Command { cmd: Command::If, args } = &element {
-                        if !args.is_empty() {
-                            // New format (EC2_IF = 0x15): args = [expression bytes] ending with E_ENDOFDATA
-                            // Decode expression directly from args
-                            let mut line = String::from("      IF ");
-                            
-                            let mut i = 0;
-                            while i < args.len() {
-                                let b = args[i];
-                                if b == E_ENDOFDATA { // End of expression
-                                    break;
-                                } else if (b as u16) >= SHORT_LABEL { // String/label reference
-                                    if let Some(s) = self.string_table.get(&(b as u16)) {
-                                        line.push_str(s);
-                                    } else {
-                                        // Try long label
-                                        if i + 1 < args.len() && (b as u16) >= LONG_LABEL {
-                                            let second_byte = args[i + 1];
-                                            let label_index = (b as u16) + (second_byte as u16);
-                                            if let Some(s) = self.string_table.get(&label_index) {
-                                                line.push_str(s);
-                                            }
-                                            i += 1; // Skip second byte
-                                        }
-                                    }
-                                } else if b >= 0x20 && b < 0x7f { // ASCII printable
-                                    line.push(b as char);
-                                } else if b == E_PC { // $ - program counter
-                                    line.push('$');
-                                }
-                                // Add more expression type handling as needed
-                                i += 1;
-                            }
-                            self.push_text(&mut elements, line);
-                            self.line_state = LineState::HasContent;
-                        }
+                        // Decode IF condition from args using decode_expression
+                        // Remove E_ENDOFDATA if present
+                        let expr_bytes: Vec<u8> = args.iter()
+                            .copied()
+                            .take_while(|&b| b != E_ENDOFDATA)
+                            .collect();
+                        
+                        let condition = self.decode_expression(&expr_bytes);
+                        self.push_text(&mut elements, format!("      IF {}", condition));
+                        self.line_state = LineState::HasContent;
                     } 
                     // For IMPORT command, convert to text immediately
                     else if let DecodedElement::Command { cmd: Command::Import, args } = &element {
@@ -803,6 +783,68 @@ impl OrgamsDecoder {
                         let import_text = format!("      IMPORT \"{}\"", filename);
                         self.push_text(&mut elements, import_text);
                         self.line_state = LineState::HasContent;
+                    }
+                    // For DataRef command with 0x64 assignment marker, decode to text
+                    else if let DecodedElement::Command { cmd: Command::DataRef, args } = &element {
+                        if !args.is_empty() && args[0] == 0x64 {
+                            let mut i = 1;
+                            
+                            // Read label index (1 or 2 bytes)
+                            if i >= args.len() {
+                                elements.push(element);
+                                continue;
+                            }
+                            
+                            let first_byte = args[i];
+                            i += 1;
+                            
+                            let label_index: u16 = if (first_byte as u16) >= LONG_LABEL {
+                                // Long index: add both bytes
+                                if i >= args.len() {
+                                    elements.push(element);
+                                    continue;
+                                }
+                                let second_byte = args[i];
+                                i += 1;
+                                (first_byte as u16) + (second_byte as u16)
+                            } else {
+                                first_byte as u16
+                            };
+                            
+                            // Get variable name from string table
+                            let var_name = self.string_table.get(&label_index)
+                                .cloned()
+                                .unwrap_or_else(|| format!("[label:0x{:02x}]", label_index));
+                            
+                            // Read expression size
+                            if i >= args.len() {
+                                self.push_text(&mut elements, format!("{} = ", var_name));
+                                self.line_state = LineState::HasContent;
+                                continue;
+                            }
+                            
+                            let expr_size = args[i] as usize;
+                            i += 1;
+                            
+                            // Decode expression bytes
+                            let expr_bytes = &args[i..i+expr_size.min(args.len()-i)];
+                            let value_str = self.decode_expression(expr_bytes);
+                            
+                            // Format assignment with aligned =
+                            const MIN_NAME_LEN: usize = 5;
+                            let spaces_before_equals = if var_name.len() <= MIN_NAME_LEN {
+                                MIN_NAME_LEN - var_name.len() + 1
+                            } else {
+                                1
+                            };
+                            let padding = " ".repeat(spaces_before_equals);
+                            
+                            self.push_text(&mut elements, format!("{}{}= {}", var_name, padding, value_str));
+                            self.line_state = LineState::HasContent;
+                        } else {
+                            // Other DataRef usage - keep as command
+                            elements.push(element);
+                        }
                     }
                     // For ORG command with text args (byte count followed by literal text), convert to text
                     else if let DecodedElement::Command { cmd: Command::Org, args } = &element {
@@ -982,20 +1024,40 @@ impl OrgamsDecoder {
         
         match cmd {
             Command::If => {
-                // IF directive (EC2_IF = 0x15) - verified format
-                // Structure: 0x7F 0x15 [expr_size] [expression] 0x41
-                // Example: 7F 15 03 84 85 41 (IF vo0 - &7080)
+                // IF directive: 7F 15 [expr_size] [expression] 41
+                // Read expression size
                 if self.pos < self.content.len() {
-                    let expr_size = self.content[self.pos];
+                    let expr_size = self.content[self.pos] as usize;
                     self.pos += 1;
                     
                     // Read expression bytes (expr_size includes E_ENDOFDATA)
-                    let expr_end = self.pos + expr_size as usize;
-                    while self.pos < expr_end && self.pos < self.content.len() {
-                        args.push(self.content[self.pos]);
-                        self.pos += 1;
+                    for _ in 0..expr_size {
+                        if self.pos < self.content.len() {
+                            args.push(self.content[self.pos]);
+                            self.pos += 1;
+                        }
                     }
                 }
+            }
+            Command::LabelRef => {
+                // SKIP directive: 7F 08 [expr_size] [expression] 41
+                // Same format as IF - read expression size and bytes
+                if self.pos < self.content.len() {
+                    let expr_size = self.content[self.pos] as usize;
+                    self.pos += 1;
+                    
+                    // Read expression bytes
+                    for _ in 0..expr_size {
+                        if self.pos < self.content.len() {
+                            args.push(self.content[self.pos]);
+                            self.pos += 1;
+                        }
+                    }
+                }
+            }
+            Command::End => {
+                // END directive: 7F 0C (no parameters)
+                // Nothing to read, just the command
             }
             Command::Else => {
                 // ELSE: 0x7f 0x0a then 0x4a
@@ -1090,9 +1152,60 @@ impl OrgamsDecoder {
                     }
                 }
             }
+            Command::DataRef => {
+                // DataRef with 0x64 = variable assignment
+                // Format: 7F 03 64 [label_idx] [expr_size] [expr_bytes...]
+                // We need to read ALL the data for assignment decoding
+                if self.pos < self.content.len() && self.content[self.pos] == 0x64 {
+                    args.push(0x64); // Assignment marker
+                    self.pos += 1;
+                    
+                    // Read label index (1 or 2 bytes)
+                    if self.pos < self.content.len() {
+                        let first_byte = self.content[self.pos];
+                        args.push(first_byte);
+                        self.pos += 1;
+                        
+                        // Long label?
+                        if (first_byte as u16) >= LONG_LABEL && self.pos < self.content.len() {
+                            args.push(self.content[self.pos]);
+                            self.pos += 1;
+                        }
+                    }
+                    
+                    // Read expression size
+                    if self.pos < self.content.len() {
+                        let expr_size = self.content[self.pos];
+                        args.push(expr_size);
+                        self.pos += 1;
+                        
+                        // Read expression bytes
+                        for _ in 0..expr_size {
+                            if self.pos < self.content.len() {
+                                args.push(self.content[self.pos]);
+                                self.pos += 1;
+                            }
+                        }
+                    }
+                } else {
+                    // Not an assignment - just read 1-2 bytes like other ref commands
+                    if self.pos < self.content.len() {
+                        args.push(self.content[self.pos]);
+                        self.pos += 1;
+                        
+                        if self.pos < self.content.len() {
+                            let next = self.content[self.pos];
+                            if next >= 0xC0 || (next > 0 && next < 0x20) {
+                                args.push(next);
+                                self.pos += 1;
+                            }
+                        }
+                    }
+                }
+            }
             Command::StringRef | Command::LabelRef | Command::ExprRef | 
-            Command::SymbolRef | Command::NumberRef | Command::DataRef => {
-                // Reference commands: 0x7f 0x06/0x08/0x04/0x05/0x07/0x03 [arg] [string_idx]
+            Command::SymbolRef | Command::NumberRef => {
+                // Reference commands: 0x7f 0x06/0x08/0x04/0x05/0x07 [arg] [string_idx]
                 // Read 1-2 argument bytes
                 if self.pos < self.content.len() {
                     args.push(self.content[self.pos]);
@@ -1152,6 +1265,7 @@ impl OrgamsDecoder {
 /// Convert decoded elements to Z80 source text
 pub fn elements_to_z80_source(elements: &[DecodedElement]) -> String {
     let mut output = String::new();
+    let mut at_line_start = true;
     
     for element in elements {
         match element {
@@ -1162,37 +1276,47 @@ pub fn elements_to_z80_source(elements: &[DecodedElement]) -> String {
                     .collect();
                 if !cleaned.trim().is_empty() {
                     output.push_str(&cleaned);
+                    at_line_start = cleaned.ends_with('\n');
                     if !cleaned.ends_with('\n') {
                         output.push('\n');
+                        at_line_start = true;
                     }
                 }
             }
             DecodedElement::Command { cmd, args } => {
+                // Commands are indented if first on line, otherwise use : separator
+                let prefix = if at_line_start { "      " } else { ":" };
+                
                 match cmd {
                     Command::If => {
                         // IF is now handled during decode and converted to Text
                         // This shouldn't be reached
                     }
                     Command::Else => {
-                        output.push_str("      ELSE\n");
+                        output.push_str(&format!("{}ELSE\n", prefix));
+                        at_line_start = true;
                     }
                     Command::End => {
-                        output.push_str("      END\n");
+                        output.push_str(&format!("{}END\n", prefix));
+                        at_line_start = true;
                     }
                     Command::Import => {
                         let filename = String::from_utf8_lossy(args);
-                        output.push_str(&format!("      IMPORT \"{}\"\n", filename));
+                        output.push_str(&format!("{}IMPORT \"{}\"\n", prefix, filename));
+                        at_line_start = true;
                     }
                     Command::Org => {
                         if args.len() >= 2 {
                             let addr = u16::from_le_bytes([args[0], args[1]]);
-                            output.push_str(&format!("      ORG 0x{:04x}\n", addr));
+                            output.push_str(&format!("{}ORG 0x{:04x}\n", prefix, addr));
+                            at_line_start = true;
                         }
                     }
                     _ => {
                         // Other commands - show as comment for debugging
                         if !args.is_empty() {
                             output.push_str(&format!("; {}({:?})\n", cmd.as_str(), args));
+                            at_line_start = true;
                         }
                     }
                 }

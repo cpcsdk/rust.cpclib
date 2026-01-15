@@ -630,7 +630,16 @@ fn test_all_examples_roundtrip() {
     let mut successful = 0;
     
     for line in &all_lines {
-        match test_basic_line(line) {
+        // Check if line starts with a digit to determine if it's a program line or immediate command
+        let is_program_line = line.trim_start().chars().next().map_or(false, |c| c.is_ascii_digit());
+        
+        let result = if is_program_line {
+            test_basic_line(line)
+        } else {
+            test_immediate_statement(line)
+        };
+        
+        match result {
             Ok(reconstructed) => {
                 successful += 1;
                 println!("✓ {}", line);

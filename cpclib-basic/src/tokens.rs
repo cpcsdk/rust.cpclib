@@ -127,6 +127,12 @@ pub enum BasicTokenNoPrefix {
     CharUpperX,
     CharUpperY,
     CharUpperZ,
+    CharOpenSquareBracket,    // [
+    CharBackslash,            // \
+    CharCloseSquareBracket,   // ]
+    CharCaret,                // ^
+    CharUnderscore,           // _
+    CharBacktick,             // `
 
     CharLowerA = 97,
     CharLowerB,
@@ -155,10 +161,10 @@ pub enum BasicTokenNoPrefix {
     CharLowerY,
     CharLowerZ,
 
-    Pipe = 0x7C,
-
-    Unused7d = 0x7D,
-    Unused7e = 0x7E,
+    CharOpenBrace,     // { (ASCII 123)
+    Pipe = 0x7C,       // | (ASCII 124)
+    CharCloseBrace,    // } (ASCII 125)
+    CharTilde,         // ~ (ASCII 126)
     Unused7f = 0x7F,
 
     After = 0x80,
@@ -284,6 +290,7 @@ pub enum BasicTokenNoPrefix {
     Power,
     IntegerDivision,
     And,
+    Not,
     Mod,
     Or,
     Xor,
@@ -358,7 +365,8 @@ impl From<char> for BasicTokenNoPrefix {
             ')' => BasicTokenNoPrefix::CharCloseParenthesis,
             '*' => BasicTokenNoPrefix::CharAsterix,
             '+' => BasicTokenNoPrefix::CharPlus,
-            ',' => BasicTokenNoPrefix::CharComma,            '-' => BasicTokenNoPrefix::CharHyphen,            '_' => BasicTokenNoPrefix::CharHyphen,
+            ',' => BasicTokenNoPrefix::CharComma,
+            '-' => BasicTokenNoPrefix::CharHyphen,
             '.' => BasicTokenNoPrefix::CharDot,
             '/' => BasicTokenNoPrefix::CharSlash,
             '0' => BasicTokenNoPrefix::Char0,
@@ -378,6 +386,16 @@ impl From<char> for BasicTokenNoPrefix {
             '>' => BasicTokenNoPrefix::CharGreater,
             '?' => BasicTokenNoPrefix::CharQuestionMark,
             '@' => BasicTokenNoPrefix::CharAt,
+            '[' => BasicTokenNoPrefix::CharOpenSquareBracket,
+            '\\' => BasicTokenNoPrefix::CharBackslash,
+            ']' => BasicTokenNoPrefix::CharCloseSquareBracket,
+            '^' => BasicTokenNoPrefix::CharCaret,
+            '_' => BasicTokenNoPrefix::CharUnderscore,
+            '`' => BasicTokenNoPrefix::CharBacktick,
+            '{' => BasicTokenNoPrefix::CharOpenBrace,
+            '|' => BasicTokenNoPrefix::Pipe,
+            '}' => BasicTokenNoPrefix::CharCloseBrace,
+            '~' => BasicTokenNoPrefix::CharTilde,
 
             '\t' => BasicTokenNoPrefix::CharTab,
 
@@ -511,6 +529,7 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::Power => write!(f, "^"),
             Self::IntegerDivision => write!(f, "\\"),
             Self::And => write!(f, " AND "),
+            Self::Not => write!(f, " NOT "),
             Self::Mod => write!(f, " MOD "),
             Self::Or => write!(f, " OR "),
             Self::Xor => write!(f, " XOR "),
@@ -1021,6 +1040,10 @@ impl BasicValue {
         self.as_integer().map(|i| format!("{i}"))
     }
     
+    pub fn int_binary_representation(&self) -> Option<String> {
+        self.as_integer().map(|i| format!("&X{i:b}"))
+    }
+    
     pub fn float_representation(&self) -> Option<String> {
         self.as_float().map(|f| {
             // Format according to BASIC rules
@@ -1074,8 +1097,7 @@ impl fmt::Display for BasicToken {
                         constant.int_decimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerBinary16bits => {
-                        // For binary, we need a binary representation
-                        constant.int_hexdecimal_representation().unwrap() // Fallback to hex for now
+                        constant.int_binary_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueFloatingPoint => {
                         constant.float_representation().unwrap_or_else(|| "<float?>".to_string())
