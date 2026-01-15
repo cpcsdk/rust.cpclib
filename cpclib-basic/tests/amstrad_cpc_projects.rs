@@ -296,6 +296,13 @@ fn test_all_roundtrip() {
         ("tunnel.bas", "tests/amstrad-cpc-projects-master/graphics/tunnel.bas"),
         ("webchaos.bas", "tests/amstrad-cpc-projects-master/graphics/webchaos.bas"),
         ("sectfgt.bas", "tests/amstrad-cpc-projects-master/games/sector-fight/sectfgt.bas"),
+        // Additional classic CPC BASIC samples
+        ("starfield.bas", "tests/samples/starfield.bas"),
+        ("sine_scroller.bas", "tests/samples/sine_scroller.bas"),
+        ("mandelbrot.bas", "tests/samples/mandelbrot.bas"),
+        ("game_of_life.bas", "tests/samples/game_of_life.bas"),
+        ("color_bars.bas", "tests/samples/color_bars.bas"),
+        ("bouncing_ball.bas", "tests/samples/bouncing_ball.bas"),
     ];
     
     let mut total_files = 0;
@@ -386,6 +393,73 @@ fn test_roundtrip_plasma() {
     match test_roundtrip_file("tests/amstrad-cpc-projects-master/graphics/plasma.bas") {
         Ok((total, successful, skipped)) => {
             println!("✓ plasma.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+// Tests for additional classic CPC BASIC samples
+#[test]
+fn test_roundtrip_starfield() {
+    match test_roundtrip_file("tests/samples/starfield.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ starfield.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+#[test]
+fn test_roundtrip_sine_scroller() {
+    match test_roundtrip_file("tests/samples/sine_scroller.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ sine_scroller.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+#[test]
+fn test_roundtrip_mandelbrot() {
+    match test_roundtrip_file("tests/samples/mandelbrot.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ mandelbrot.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+#[test]
+fn test_roundtrip_game_of_life() {
+    match test_roundtrip_file("tests/samples/game_of_life.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ game_of_life.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+#[test]
+fn test_roundtrip_color_bars() {
+    match test_roundtrip_file("tests/samples/color_bars.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ color_bars.bas round-trip: {}/{} lines verified, {} skipped",
+                successful, total, skipped);
+        }
+        Err(e) => panic!("{}", e),
+    }
+}
+
+#[test]
+fn test_roundtrip_bouncing_ball() {
+    match test_roundtrip_file("tests/samples/bouncing_ball.bas") {
+        Ok((total, successful, skipped)) => {
+            println!("✓ bouncing_ball.bas round-trip: {}/{} lines verified, {} skipped",
                 successful, total, skipped);
         }
         Err(e) => panic!("{}", e),

@@ -1,0 +1,13 @@
+10 REM Starfield Effect
+20 MODE 0:INK 0,0:INK 1,26:BORDER 0
+30 DIM x(100),y(100),z(100)
+40 FOR i=1 TO 100
+50 x(i)=RND*640-320:y(i)=RND*400-200:z(i)=RND*255+1
+60 NEXT i
+70 FOR i=1 TO 100
+80 x1=x(i)/z(i)*200+320:y1=y(i)/z(i)*200+200
+90 IF x1>=0 AND x1<640 AND y1>=0 AND y1<400 THEN PLOT x1,y1,1
+100 z(i)=z(i)-5
+110 IF z(i)<1 THEN x(i)=RND*640-320:y(i)=RND*400-200:z(i)=255
+120 NEXT i
+130 GOTO 70

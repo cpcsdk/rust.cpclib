@@ -1,63 +1,6 @@
 use cpclib_basic::string_parser::{parse_basic_line, parse_instruction};
 use cpclib_common::winnow::Parser;
 
-// ============================================================================
-// CPCWiki Locomotive BASIC Examples Test Suite
-// ============================================================================
-//
-// This test suite validates the parser against official examples from the
-// Locomotive BASIC documentation (Amstrad CPC6128 manual).
-//
-// Current Status: 24/46 tests passing (52%)
-//
-// Known parser limitations causing test failures:
-// 
-// 1. Immediate mode commands with incomplete argument parsing:
-//    - AUTO [<line number>][,<increment>] - Example: "AUTO 100,5"
-//      Parser implementation exists but doesn't parse the optional arguments
-//    - CALL <address>[,<list of:<parameter>] - Example: "CALL 0"
-//    - CAT - Simple command, should work without arguments
-//    - MODE <mode number> - Example: "MODE 1"
-//    - RANDOMIZE TIME - Should be recognized as complete statement
-//
-// 2. Graphics commands needing implementation/fixes:
-//    - SYMBOL <char>,<byte1>,<byte2>,...,<byte8> - Define custom character
-//    - ORIGIN <x left>,<x right>,<y top>,<y bottom>,<x>,<y> - Set coordinate system
-//    - WINDOW#<stream>,<left>,<right>,<top>,<bottom> - Define text window
-//
-// 3. I/O statements with optional/variant syntax not fully supported:
-//    - INPUT [#<channel>][;][<prompt> <separator>] <list of:<variable>>
-//      Documentation shows INPUT can omit the prompt: "INPUT choice" is valid
-//      Current parser may require the prompt string
-//    - WRITE #<stream>,<list of items> - File output statement
-//    - LINE INPUT#<stream>,<variable> - Read line from file
-//    - EOF - Test end of file (no argument needed per doc example "WHILE NOT EOF")
-//
-// 4. Numeric literal parsing issues:
-//    - Float literals with many decimal places (e.g., 9.80665)
-//    - Large integers approaching limit (123456789 vs max 32767 for integers)
-//      Note: CPC supports integers -32768 to +32767, reals -1.7E+38 to +1.7E+38
-//
-// 5. Advanced expressions:
-//    - DEF FN with complex expressions: "DEF FNgrv=s0+v0*t+0.5*gn*t^2"
-//    - MID$ as assignment target: "MID$(a$,2,3)='ipp'" (string manipulation)
-//    - Multiple statements with : (e.g., "PRINT HEX$(value1):PRINT BIN$(value1,8)")
-//      May work for some cases but not all
-//
-// 6. Interrupt/timer statements:
-//    - EVERY <period>[,<timer>] GOSUB <line> - Periodic interrupt
-//    - AFTER <delay>[,<timer>] GOSUB <line> - One-shot interrupt
-//
-// 7. Bit operation functions in complex contexts:
-//    - BIN$(<value>,<digits>) - Binary string representation
-//    - HEX$(<value>[,<width>]) - Hexadecimal string
-//    - Expressions like "counter=(counter+1) AND 31"
-//
-// These represent features to be implemented in the parser, not test issues.
-// Each failure points to a specific area where the parser needs enhancement
-// to fully support Locomotive BASIC 1.1 specification.
-// ============================================================================
-
 /// Helper function to test parsing and reconstruction of a BASIC line (with line number)
 fn test_basic_line(line: &str) -> Result<String, String> {
     let line_with_newline = format!("{}\n", line);
